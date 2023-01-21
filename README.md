@@ -1,2 +1,4 @@
 # MQTT Probe
-Cross platform application to sniff MQTT messages. Specifically Sparkplub B messages.
+Cross platform .NET MAUI application to sniff & publish MQTT messages.
+Built with high performance in mind.
+Specifically Sparkplub B messages.

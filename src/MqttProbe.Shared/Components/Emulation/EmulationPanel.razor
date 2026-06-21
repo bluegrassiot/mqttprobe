@@ -1,0 +1,224 @@
+@namespace MqttProbe.Components.Emulation
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@implements IDisposable
+@inject IEmulationService EmulationService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<div class="emu-root">
+    <TabPanelHeader Title="Emulation" Icon="@LucideIcons.Zap">
+        <HeaderChips>
+            @if (NodeCount > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                         Class="emu-count-chip">
+                    @NodeCount node@(NodeCount != 1 ? "s" : "")
+                </MudChip>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                         Class="emu-count-chip">
+                    @DeviceCount device@(DeviceCount != 1 ? "s" : "")
+                </MudChip>
+            }
+            @if (EmulationService.IsRunning)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                         Class="emu-count-chip emu-count-chip--running">
+                    <span class="emu-status-dot emu-status-dot--running"></span>
+                    Running
+                </MudChip>
+            }
+        </HeaderChips>
+        <HeaderActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="app-btn-min"
+                       StartIcon="@LucideIcons.Plus"
+                       title="Add node"
+                       Disabled="@EmulationService.IsRunning"
+                       OnClick="@AddDefaultNodeAsync">
+                Add Node
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" Class="app-btn-min"
+                       StartIcon="@LucideIcons.Trash2"
+                       title="Remove all nodes"
+                       Disabled="@(NodeCount == 0 || EmulationService.IsRunning)"
+                       OnClick="@RemoveAllAsync">
+                Remove All
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Class="app-btn-min"
+                       Color="@(EmulationService.IsRunning ? Color.Error : Color.Success)"
+                       StartIcon="@(EmulationService.IsRunning ? LucideIcons.Square : LucideIcons.Play)"
+                       title="@(EmulationService.IsRunning ? "Stop emulation" : "Start emulation")"
+                       Disabled="@(NodeCount == 0)"
+                       OnClick="@OnStartStopClickAsync">
+                @(EmulationService.IsRunning ? "Stop" : "Start")
+            </MudButton>
+        </HeaderActions>
+    </TabPanelHeader>
+
+    <MudTextField @bind-Value="_filterText" Placeholder="Filter…"
+                  Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
+                  Immediate="true" Clearable="true" Variant="Variant.Outlined"
+                  Margin="Margin.Dense" Class="mb-3 emu-filter-text"/>
+
+    @if (IsHighThroughput)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                  Icon="@LucideIcons.AlertTriangle">
+            High throughput: @ProjectedRate.ToString("0.##") msg/s. Consider fewer metrics or a slower interval.
+        </MudAlert>
+    }
+
+    <MudGrid Spacing="2" Class="mb-2">
+        <MudItem xs="12" sm="5" md="4">
+            <MudNumericField T="int" Value="_intervalMs" Label="Publish interval (ms)"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Min="50"
+                             Disabled="@EmulationService.IsRunning"
+                             HelperText="@IntervalHelperText"
+                             Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Clock"
+                             Class="emu-interval"
+                             ValueChanged="@OnIntervalChanged"/>
+        </MudItem>
+    </MudGrid>
+
+    @if (NodeCount == 0)
+    {
+        <div class="emu-empty d-flex flex-column align-center pa-6">
+            <MudIcon Icon="@LucideIcons.Zap" Size="Size.Large" Color="Color.Secondary"/>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                No emulator nodes configured
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                Add a node to start streaming synthetic telemetry
+            </MudText>
+        </div>
+    }
+    else
+    {
+        <div class="emu-node-list">
+            @if (FilteredNodes().Count > VirtualizeThreshold)
+            {
+                <Virtualize Items="@FilteredNodes()" Context="node" ItemSize="56">
+                    @NodeRow(node)
+                </Virtualize>
+            }
+            else
+            {
+                @foreach (var node in FilteredNodes())
+                {
+                    @NodeRow(node)
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    // Above this count the list virtualizes; below it renders plainly so bUnit (no JS viewport) can assert rows.
+    private const int VirtualizeThreshold = 30;
+
+    private string? _filterText;
+    private int _intervalMs;
+    private Guid? _expandedNodeId;
+
+    private RenderFragment<EmulatorNodeConfig> NodeRow => node =>
+        @<EmulatorNodeCard @key="node.Id" Node="node"
+                           IsExpanded="@(_expandedNodeId == node.Id)"
+                           OnToggleExpand="@(() => ToggleExpand(node.Id))"/>;
+
+    private int NodeCount => EmulationService.Nodes.Count;
+
+    private int DeviceCount => EmulationService.Nodes.Sum(n => n.Devices.Count);
+
+    private List<EmulatorNodeConfig> FilteredNodes() =>
+        EmulationService.Nodes
+            .Where(n => string.IsNullOrWhiteSpace(_filterText)
+                || n.NodeId.Contains(_filterText, StringComparison.OrdinalIgnoreCase)
+                || n.GroupId.Contains(_filterText, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(n => n.GroupId, NaturalStringComparer.Instance)
+            .ThenBy(n => n.NodeId, NaturalStringComparer.Instance)
+            .ToList();
+
+    private double ProjectedRate =>
+        EmulationRateCalculator.ProjectedMessagesPerSecond(EmulationService.Nodes, _intervalMs);
+
+    private bool IsHighThroughput =>
+        NodeCount > 0 && EmulationRateCalculator.IsHighThroughput(ProjectedRate);
+
+    private string IntervalHelperText
+    {
+        get
+        {
+            if (EmulationService.IsRunning) return $"~{ProjectedRate:0.##} msg/s · stop to change";
+            if (NodeCount > 0) return $"~{ProjectedRate:0.##} msg/s · min 50 ms";
+            return "Min 50 ms";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _intervalMs = EmulationService.PublishIntervalMs;
+        EmulationService.StateChanged += OnServiceStateChanged;
+    }
+
+    private void OnServiceStateChanged() => InvokeAsync(StateHasChanged);
+
+    private void ToggleExpand(Guid nodeId) =>
+        _expandedNodeId = _expandedNodeId == nodeId ? null : nodeId;
+
+    private async Task AddDefaultNodeAsync()
+    {
+        var node = CreateDefaultNode();
+        await EmulationService.AddNodeAsync(node);
+        _expandedNodeId = node.Id;
+    }
+
+    private EmulatorNodeConfig CreateDefaultNode()
+    {
+        var n = 1;
+        while (EmulationService.Nodes.Any(x => x.GroupId == "Plant1" && x.NodeId == $"Node-{n}"))
+            n++;
+
+        return new EmulatorNodeConfig
+        {
+            NodeId = $"Node-{n}",
+            Devices =
+            [
+                new EmulatorDeviceConfig
+                {
+                    DeviceId = "Device-1",
+                    Metrics = [new EmulatorMetricConfig()]
+                }
+            ]
+        };
+    }
+
+    private async Task OnIntervalChanged(int value)
+    {
+        _intervalMs = Math.Max(50, value);
+        if (!EmulationService.IsRunning && _intervalMs != EmulationService.PublishIntervalMs)
+            await EmulationService.SetPublishIntervalAsync(_intervalMs);
+    }
+
+    private async Task OnStartStopClickAsync()
+    {
+        if (EmulationService.IsRunning)
+            await EmulationService.StopAsync();
+        else
+            await EmulationService.StartAsync();
+    }
+
+    private async Task RemoveAllAsync()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Remove All Nodes",
+            "This will remove all configured nodes. Continue?",
+            yesText: "Remove all", cancelText: "Cancel",
+            options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (confirmed != true)
+            return;
+
+        await EmulationService.RemoveAllNodesAsync();
+        Snackbar.Add("All nodes removed.", Severity.Success);
+    }
+
+    public void Dispose() => EmulationService.StateChanged -= OnServiceStateChanged;
+}

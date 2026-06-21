@@ -1,0 +1,81 @@
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Logging;
+using MQTTnet;
+using MQTTnet.Extensions.ManagedClient;
+using MqttProbe.Components.Layout;
+using MqttProbe.Services;
+using MqttProbe.Services.Chart;
+using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Emulation;
+using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Platform;
+using MqttProbe.Services.Security;
+using MqttProbe.Services.Sparkplug;
+using MqttProbe.Services.Telemetry;
+using MudBlazor;
+using MudBlazor.Services;
+
+namespace MqttProbe;
+
+public static class MauiProgram
+{
+    public static MauiApp CreateMauiApp()
+    {
+        var builder = MauiApp.CreateBuilder();
+
+        builder
+            .UseMauiApp<App>()
+            .ConfigureFonts(fonts => { fonts.AddFont("Inter-Variable.ttf", "Inter"); });
+
+        builder.Services.AddMudServices(config =>
+        {
+            config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.TopCenter;
+            config.SnackbarConfiguration.RequireInteraction = false;
+            config.SnackbarConfiguration.PreventDuplicates = true;
+            config.SnackbarConfiguration.NewestOnTop = false;
+            config.SnackbarConfiguration.ShowCloseIcon = true;
+            config.SnackbarConfiguration.VisibleStateDuration = 3000;
+            config.SnackbarConfiguration.HideTransitionDuration = 500;
+            config.SnackbarConfiguration.ShowTransitionDuration = 500;
+            config.SnackbarConfiguration.SnackbarVariant = Variant.Filled;
+        });
+        builder.Services.AddMauiBlazorWebView();
+
+#if DEBUG
+        builder.Services.AddBlazorWebViewDeveloperTools();
+        builder.Logging.AddDebug();
+#endif
+
+        // MAUI has one local app session, so MQTT and UI state services are shared across pages.
+        var client = new MqttFactory().CreateManagedMqttClient();
+        builder.Services.AddSingleton(client);
+        builder.Services.AddSingleton<ISessionState, SessionState>();
+        builder.Services.AddSingleton<IEmulationService, EmulationService>();
+        builder.Services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
+        builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
+        builder.Services.AddSingleton<IMqttOptionsBuilder, MqttOptionsBuilder>();
+        builder.Services.AddSingleton<IUxTelemetryService, UxTelemetryService>();
+        builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
+        builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
+        builder.Services.AddAuthorizationCore();
+        builder.Services.AddCascadingAuthenticationState();
+        builder.Services.AddScoped<AuthenticationStateProvider, UnauthenticatedStateProvider>();
+        builder.Services.AddTransient<MainPage>();
+
+        var secretStorage = new MauiSecretStorage();
+        builder.Services.AddSingleton<ISecretStorage>(secretStorage);
+
+        var configPath = Path.Combine(FileSystem.Current.AppDataDirectory, "config", "appsettings.json");
+        var settingsStore = new SettingsStore(configPath, null);
+        builder.Services.AddSingleton<ISettingsStore>(settingsStore);
+
+        builder.Services.AddScoped<IClipboardService, MauiClipboardService>();
+        builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
+        builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
+        builder.Services.AddScoped<IChartDataService, ChartDataService>();
+        builder.Services.AddSingleton<ISparkplugTopologyService, SparkplugTopologyService>();
+        builder.Services.AddScoped<IThemes, Themes>();
+
+        return builder.Build();
+    }
+}

@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <Description>The MQTT diagnostic tool built for IIoT.</Description>
+    <Copyright>Bluegrass IoT</Copyright>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <Authors>Mark Todd</Authors>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

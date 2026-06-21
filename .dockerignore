@@ -1,0 +1,25 @@
+.git/
+.vs/
+.tmp/
+node_modules/
+
+**/bin/
+**/obj/
+**/TestResults/
+**/coverage/
+
+*.user
+*.suo
+*.nupkg
+
+config/
+src/MqttProbe.Web/Config/
+
+# Not needed for Docker build
+src/MqttProbe.Maui/
+tests/
+
+# Docs and IDE config
+**/*.md
+**/*.txt
+.editorconfig

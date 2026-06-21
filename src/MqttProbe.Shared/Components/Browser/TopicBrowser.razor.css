@@ -1,0 +1,71 @@
+.topic-empty {
+    background-image:
+        linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+    background-size: 32px 32px;
+    border-radius: 8px;
+}
+
+.topic-header-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px;
+    margin-bottom: 4px;
+    min-width: 0;
+}
+
+.topic-filter-wrap {
+    width: 100%;
+    margin-bottom: 4px;
+}
+
+.topic-filter-wrap ::deep .mud-input-control {
+    margin: 0;
+}
+
+.topic-filter-field {
+    font-size: 0.85rem;
+}
+
+.topic-tree-wrap {
+    max-height: none;
+    overflow: auto;
+}
+
+/* The tree root must be able to grow wider than its container */
+.topic-tree-wrap ::deep .mud-treeview {
+    min-width: max-content;
+}
+
+/* Each item row must not wrap and must be as wide as its content */
+.topic-tree-wrap ::deep .mud-treeview-item-content {
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    min-width: max-content;
+}
+
+.topic-tree-wrap ::deep .mud-treeview-item-label {
+    font-size: 0.78rem;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+}
+
+.topic-tree-wrap ::deep .mud-treeview-item-content.mud-treeview-item-content-selected {
+    background: rgba(249, 115, 22, 0.15);
+    border-radius: 4px;
+}
+
+.topic-tree-wrap ::deep .topic-depth-0 .mud-treeview-item-label { font-weight: 600; }
+.topic-tree-wrap ::deep .topic-depth-1 .mud-treeview-item-label { opacity: 0.95; }
+.topic-tree-wrap ::deep .topic-depth-2 .mud-treeview-item-label { opacity: 0.88; }
+.topic-tree-wrap ::deep .topic-depth-3 .mud-treeview-item-label { opacity: 0.82; }
+
+
+.topic-tree-wrap ::deep .mud-treeview-item-endtext {
+    margin-left: 6px;
+    font-size: 0.7rem;
+    opacity: 0.55;
+    flex-shrink: 0;
+}
+

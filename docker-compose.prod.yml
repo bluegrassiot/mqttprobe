@@ -1,0 +1,118 @@
+# Production setup with TLS (via Caddy) and all MQTT transports.
+# Before starting: copy .env.example to .env and set MQTTPROBE_HOST to the
+# hostname or IP other machines will use to reach this server.
+
+services:
+  mqttprobe:
+    image: bluegrassiot/mqttprobe:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      # Plain-HTTP access for the Docker host itself. Browsers on other
+      # machines must go through the caddy proxy below — the Secure auth
+      # cookie is only accepted over HTTPS (localhost is exempt).
+      - "8080:8080"
+    volumes:
+      # Persists credentials, Data Protection keys, configurations, and encrypted MQTT broker passwords.
+      - mqttprobe-config:/app/config
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      # Host filtering answers 400 to any Host header not listed here, so
+      # MQTTPROBE_HOST (.env) must match the name or IP browsers use.
+      - AllowedHosts=${MQTTPROBE_HOST:-localhost};localhost;127.0.0.1;[::1]
+      # Trust X-Forwarded-* from caddy; the compose subnet is pinned below
+      # because container IPs are not stable across restarts.
+      - ForwardedHeaders__KnownNetworks__0=172.28.0.0/24
+    restart: unless-stopped
+    # Allow outbound connections to LAN MQTT/MQTTS brokers.
+    # On Linux hosts, prefer network_mode: host (comment out ports above if using it).
+    # On Windows/macOS Docker Desktop, keep the bridge network below.
+    networks:
+      - mqttprobe-net
+    extra_hosts:
+      # Allows the container to reach services running on the Docker host itself.
+      - "host.docker.internal:host-gateway"
+
+  # TLS termination so MQTT Probe can be reached from other machines:
+  # browse https://<MQTTPROBE_HOST> (port 80 redirects to HTTPS).
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      # Adjust the host side if 80/443 are already taken on this machine.
+      - "80:80"
+      - "443:443"
+    environment:
+      - MQTTPROBE_HOST=${MQTTPROBE_HOST:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - mqttprobe-net
+    restart: unless-stopped
+
+  # Optional: include a local Mosquitto MQTT broker.
+  # WARNING: allow_anonymous true is for local evaluation only. Do not expose
+  # this broker to untrusted networks.
+  # For production, configure Mosquitto users with password_file:
+  # https://mosquitto.org/man/mosquitto-conf-5.html
+  # Remove this section if you're connecting to an external broker.
+  mosquitto:
+    image: eclipse-mosquitto:2
+    entrypoint:
+      - sh
+      - -c
+      - |
+        apk add --no-cache openssl > /dev/null 2>&1
+        openssl req -x509 -newkey rsa:2048 -keyout /tmp/server.key \
+          -out /tmp/server.crt -days 3650 -nodes -subj '/CN=mosquitto' \
+          > /dev/null 2>&1
+        chmod 644 /tmp/server.key /tmp/server.crt
+        cat > /tmp/mosquitto.conf << 'CONF'
+        listener 1883
+        allow_anonymous true
+
+        listener 8883
+        allow_anonymous true
+        certfile /tmp/server.crt
+        keyfile /tmp/server.key
+
+        listener 9001
+        protocol websockets
+        allow_anonymous true
+
+        listener 9002
+        protocol websockets
+        allow_anonymous true
+        certfile /tmp/server.crt
+        keyfile /tmp/server.key
+
+        log_dest stdout
+        CONF
+        exec mosquitto -c /tmp/mosquitto.conf
+    ports:
+      - "1883:1883"   # Plain MQTT
+      - "8883:8883"   # MQTT over TLS (MQTTS)
+      - "9001:9001"   # MQTT over WebSocket
+      - "9002:9002"   # MQTT over WebSocket + TLS (WSS)
+    networks:
+      - mqttprobe-net
+    restart: unless-stopped
+
+volumes:
+  mqttprobe-config:
+  caddy-data:
+  caddy-config:
+
+networks:
+  mqttprobe-net:
+    driver: bridge
+    driver_opts:
+      # Lower MTU to avoid packet fragmentation through Docker Desktop's
+      # WSL2 virtual network adapter, which causes MQTTS/TLS handshakes to fail.
+      com.docker.network.driver.mtu: "1400"
+    ipam:
+      config:
+        # Pinned so the app can trust forwarded headers from caddy by subnet.
+        - subnet: 172.28.0.0/24

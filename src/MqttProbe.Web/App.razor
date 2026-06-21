@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link href="_content/MqttProbe.Shared/css/fonts.css" rel="stylesheet" />
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    <link href="_content/MqttProbe.Shared/css/components.css" rel="stylesheet" />
+    <link href="_content/Blazor-ApexCharts/index.css" rel="stylesheet" />
+    <link href="MqttProbe.Web.styles.css" rel="stylesheet" />
+    <style>
+        #blazor-error-ui {
+            display: none;
+            background: lightyellow;
+            bottom: 0;
+            box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+            left: 0;
+            padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+            position: fixed;
+            width: 100%;
+            z-index: 1000;
+        }
+        #blazor-error-ui .dismiss { float: right; cursor: pointer; }
+    </style>
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+
+<body>
+    <Routes @rendermode="InteractiveServer" />
+    <script src="_framework/blazor.web.js"></script>
+    <script src="_content/CurrieTechnologies.Razor.Clipboard/clipboard.min.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <div id="blazor-error-ui">
+        An error has occurred. This application may no longer respond until reloaded.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+</body>
+
+</html>

@@ -1,0 +1,193 @@
+.app-shell-container {
+    padding-top: calc(8px + env(safe-area-inset-top));
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+}
+
+.app-shell {
+    min-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.app-shell-body {
+    min-height: 0;
+    flex: 1 1 auto;
+    padding-top: 12px;
+}
+
+.reconnect-message {
+    padding-top: 48px;
+}
+
+.signal-connecting {
+    width: 104px;
+    height: 104px;
+    animation: signal-breathe 1.8s ease-in-out infinite;
+}
+
+/* Defined here (the always-present layout) so connecting indicators in other
+   components can share it — CSS isolation bundles keyframes globally. */
+@keyframes signal-breathe {
+    0%, 100% { opacity: 0.4; transform: scale(0.94); }
+    50%      { opacity: 1; transform: scale(1.05); }
+}
+
+.reconnect-stop-btn {
+    margin-top: 16px;
+}
+
+::deep .app-chrome-panel {
+    background: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-lines-default);
+}
+
+::deep .panel-border {
+    border: 1px solid var(--mud-palette-lines-default);
+}
+
+::deep .telemetry-compact {
+    font-size: 0.82rem;
+    line-height: 1.2;
+}
+
+::deep .telemetry-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--mud-palette-text-secondary);
+}
+
+::deep .telemetry-time {
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+    color: #64748B;
+}
+
+::deep .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+}
+
+@media (min-width: 960px) {
+    .app-shell {
+        gap: 8px;
+    }
+}
+
+/* ApexCharts tooltip — adapt to MudBlazor light/dark theme variables.
+   ::deep because ApexCharts elements are rendered by child components. */
+::deep .apexcharts-tooltip {
+    background: var(--mud-palette-surface) !important;
+    color: var(--mud-palette-text-primary) !important;
+    border: 1px solid var(--mud-palette-lines-default) !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
+}
+
+::deep .apexcharts-tooltip-title {
+    background: var(--mud-palette-background-grey) !important;
+    color: var(--mud-palette-text-primary) !important;
+    border-bottom: 1px solid var(--mud-palette-lines-default) !important;
+}
+
+::deep .apexcharts-tooltip-text,
+::deep .apexcharts-tooltip-text-y-value,
+::deep .apexcharts-tooltip-text-y-label,
+::deep .apexcharts-tooltip-text-z-value {
+    color: var(--mud-palette-text-primary) !important;
+}
+
+/* ── ApexCharts toolbar buttons ─────────────────────────────────────────────
+   Ghost-button pattern (brand guide §6 Buttons > Ghost):
+   transparent background, Slate Gray icon, Off White on hover.
+   Signal Orange for the selected/active state.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ApexCharts may set a background-color on the toolbar and individual button
+   containers. Reset all to transparent so button fills don't obscure icons. */
+::deep .apexcharts-toolbar,
+::deep .apexcharts-toolbar > div {
+    background: transparent !important;
+}
+
+/* Selected button: subtle Signal Orange tint instead of a hard filled background */
+::deep .apexcharts-toolbar .apexcharts-selected {
+    background: rgba(249, 115, 22, 0.12) !important;
+    border-radius: 4px !important;
+}
+
+/* Default icon colour — Slate Gray (#94A3B8).
+   IMPORTANT: exclude paths with fill="none" (ApexCharts uses transparent
+   bounding-box paths like <path d="M0 0h24v24H0z" fill="none"/>).
+   Without :not([fill="none"]) the !important override turns those invisible
+   rectangles into solid-colored blocks that hide the actual icon. */
+::deep .apexcharts-toolbar svg path:not([fill="none"]) {
+    fill: #94A3B8 !important;
+}
+
+/* Explicitly preserve transparent placeholder paths */
+::deep .apexcharts-toolbar svg path[fill="none"] {
+    fill: none !important;
+}
+
+/* Hover: brighten to Off White (#F1F5F9) */
+::deep .apexcharts-toolbar > div:hover svg path:not([fill="none"]) {
+    fill: #F1F5F9 !important;
+}
+
+/* Selected/active: Signal Orange (#F97316, primary accent per brand guide) */
+::deep .apexcharts-toolbar .apexcharts-selected svg path:not([fill="none"]) {
+    fill: #F97316 !important;
+}
+
+/* Download/options dropdown menu */
+::deep .apexcharts-menu {
+    background: var(--mud-palette-surface) !important;
+    border: 1px solid var(--mud-palette-lines-default) !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.35) !important;
+}
+
+::deep .apexcharts-menu-item {
+    color: var(--mud-palette-text-primary) !important;
+    font-size: 0.82rem !important;
+    line-height: 1.25 !important;
+}
+
+::deep .apexcharts-menu-item:hover {
+    background: var(--mud-palette-action-hover) !important;
+    color: var(--mud-palette-text-primary) !important;
+}
+
+/* ── §11 Border Radius ───────────────────────────────────────────────────── */
+
+/* 11.1 Tables and data-dense elements: 0px */
+::deep .mud-table,
+::deep .mud-table-root,
+::deep .mud-simple-table {
+    border-radius: 0 !important;
+}
+
+/* 11.2 Chips/tags: 4px (small badges) */
+::deep .mud-chip {
+    border-radius: 4px !important;
+}
+
+/* Cards, panels, modals: 8px — already handled by LayoutProperties.DefaultBorderRadius */
+::deep .mud-input-outlined .mud-input-slot {
+    border-radius: 4px;
+}
+
+/* Focus border is Signal Orange automatically via Primary palette token */
+
+/* 5.1 No drop shadows — rely on border for visual separation */
+::deep .mud-paper,
+::deep .mud-card {
+    box-shadow: none !important;
+}
+
+/* 5.1 Border on all cards/panels (app-chrome-panel already provides this
+       via var(--mud-palette-lines-default) which now resolves to #334155) */
+::deep .mud-card {
+    border: 1px solid var(--mud-palette-lines-default);
+}

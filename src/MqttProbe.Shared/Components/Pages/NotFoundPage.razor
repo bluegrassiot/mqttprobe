@@ -1,0 +1,16 @@
+@page "/not-found"
+
+<PageTitle>Not found</PageTitle>
+<LayoutView Layout="@typeof(MainLayout)">
+    <MudContainer MaxWidth="MaxWidth.Small" Class="d-flex flex-column align-center justify-center gap-3 pa-8">
+        <MudIcon Icon="@LucideIcons.AlertTriangle" Size="Size.Large" Color="Color.Warning" />
+        <MudText Typo="Typo.h4" Align="Align.Center">Page not found</MudText>
+        <MudText role="alert" Typo="Typo.body1" Color="Color.Secondary" Align="Align.Center">
+            Sorry, there's nothing at this address.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="app-btn-min"
+                   StartIcon="@LucideIcons.ArrowLeft" Href="/">
+            Back to home
+        </MudButton>
+    </MudContainer>
+</LayoutView>

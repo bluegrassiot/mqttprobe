@@ -1,0 +1,41 @@
+@namespace MqttProbe.Components.Emulation
+
+<MudDialog>
+    <DialogContent>
+        <MudNumericField T="int" Value="_copies" Label="Copies"
+                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                         Min="1" Max="50"
+                         ValueChanged="@OnCopiesChanged"/>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-3 d-block">
+            Resulting node IDs
+        </MudText>
+        <div class="pa-1">
+            @foreach (var name in PreviewNames)
+            {
+                <div class="telemetry-mono">@name</div>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton title="Cancel duplicate" OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   title="Create copies"
+                   OnClick="@(() => MudDialog.Close(DialogResult.Ok(_copies)))">
+            Create
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public EmulatorNodeConfig Source { get; set; } = null!;
+    [Parameter] public IReadOnlyList<EmulatorNodeConfig> ExistingNodes { get; set; } = [];
+
+    private int _copies = 1;
+
+    private IReadOnlyList<string> PreviewNames =>
+        EmulationService.GenerateCopyNames(Source.NodeId, Source.GroupId, ExistingNodes, _copies);
+
+    private void OnCopiesChanged(int value) => _copies = Math.Clamp(value, 1, 50);
+}

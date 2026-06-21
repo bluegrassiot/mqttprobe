@@ -1,0 +1,358 @@
+@using ApexCharts
+@using Microsoft.JSInterop
+@using AppChartType = MqttProbe.Models.Chart.ChartType
+@inject IChartDataService ChartDataService
+@implements IAsyncDisposable
+
+<MudCard Elevation="0" Class="app-chrome-panel">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.subtitle1" Style="font-weight:600">@Configuration.Name</MudText>
+            <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">
+                @Configuration.Series.Count series · max @Configuration.MaxPoints pts
+                @if (Configuration.TimeWindowMinutes.HasValue)
+                {
+                    <span> · last @Configuration.TimeWindowMinutes min</span>
+                }
+            </MudText>
+            <div class="d-flex align-center gap-1 mt-1">
+                <MudChip T="string" Size="MudBlazor.Size.Small" Variant="Variant.Outlined" Color="@StatusColor">
+                    @StatusLabel
+                </MudChip>
+                <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">
+                    Last update: <span class="app-mono">@LastUpdateText</span>
+                </MudText>
+            </div>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudIconButton Icon="@(_live && !_hovering ? LucideIcons.PauseCircle : LucideIcons.PlayCircle)"
+                           Color="@(_live && !_hovering ? MudBlazor.Color.Inherit : MudBlazor.Color.Success)"
+                           title="@(_live && !_hovering ? "Pause live updates (enables zoom/pan/export)" : "Resume live updates")"
+                           Size="MudBlazor.Size.Small"
+                            OnClick="ToggleLive" />
+            <MudIconButton Icon="@LucideIcons.Pencil" Color="MudBlazor.Color.Inherit"
+                           title="Edit chart" Size="MudBlazor.Size.Small"
+                           OnClick="() => OnEdit.InvokeAsync(Configuration)" />
+            <MudIconButton Icon="@LucideIcons.Trash2" Color="MudBlazor.Color.Error"
+                           title="Delete chart" Size="MudBlazor.Size.Small"
+                           OnClick="() => OnDelete.InvokeAsync(Configuration)" />
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent Class="pa-2">
+        @if (!Configuration.Series.Any())
+        {
+            <MudText Typo="Typo.body2" Color="MudBlazor.Color.Secondary" Class="pa-4 text-center">
+                No series added. Edit this chart to add data series.
+            </MudText>
+        }
+        else
+        {
+            <div @onmouseover="OnMouseOver" @onmouseleave="OnMouseLeave">
+                <ApexChart TItem="ChartDataPoint"
+                           Options="_options"
+                           @ref="_chart"
+                           Height="300">
+                    @foreach (var series in Configuration.Series)
+                    {
+                        var s = series;
+                        <ApexPointSeries TItem="ChartDataPoint"
+                                         Items="@GetPoints(s.Id)"
+                                         Name="@s.DisplayName"
+                                         SeriesType="@GetSeriesType()"
+                                         XValue="@(p => (decimal)new DateTimeOffset(p.Timestamp).ToUnixTimeMilliseconds())"
+                                         YValue="@(p => (decimal)p.Value)"
+                                         Color="@s.Color" />
+                    }
+                </ApexChart>
+            </div>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired] public ChartConfiguration Configuration { get; set; } = null!;
+    [Parameter] public EventCallback<ChartConfiguration> OnEdit { get; set; }
+    [Parameter] public EventCallback<ChartConfiguration> OnDelete { get; set; }
+    [CascadingParameter(Name = "IsDarkMode")] public bool IsDarkMode { get; set; }
+
+    private ApexChart<ChartDataPoint>? _chart;
+    private ApexChartOptions<ChartDataPoint> _options = null!;
+    private Timer? _updateTimer;
+    private bool _chartReady;
+    private bool _disposed;
+    private bool _pendingUpdate;
+    private bool _pendingOptionsUpdate;
+    private bool _hasNewData;
+    private bool _live = true;
+    private bool _hovering;
+    private bool _isStale;
+    private DateTime _lastRender = DateTime.MinValue;
+    private static readonly TimeSpan RenderThrottle = TimeSpan.FromMilliseconds(200);
+    private const int StaleAfterSeconds = 10;
+    private int _lastSeriesCount = -1;
+    private string _lastConfigFingerprint = "";
+    private bool _lastIsDarkMode;
+
+    // Last arrival across all series, ignoring the display window — this is the true
+    // "has the feed gone quiet?" signal that drives the stale indicator and the readout.
+    private DateTime LastPointUtc => Configuration.Series
+        .SelectMany(s => ChartDataService.GetPoints(s.Id))
+        .Select(p => p.Timestamp)
+        .DefaultIfEmpty()
+        .Max();
+
+    private string LastUpdateText
+    {
+        get
+        {
+            var last = LastPointUtc;
+            return last == default ? "No data yet" : last.ToLocalTime().ToString("HH:mm:ss");
+        }
+    }
+
+    private string StatusLabel
+    {
+        get
+        {
+            if (!_live || _hovering) return "Paused";
+            return _isStale ? "Stale" : "Live";
+        }
+    }
+
+    private MudBlazor.Color StatusColor
+    {
+        get
+        {
+            if (!_live || _hovering) return MudBlazor.Color.Default;
+            return _isStale ? MudBlazor.Color.Warning : MudBlazor.Color.Success;
+        }
+    }
+
+    private string GetConfigFingerprint() =>
+        $"{Configuration.Type}|{string.Join(",", Configuration.Series.Select(s => $"{s.Id}:{s.DisplayName}:{s.Color}"))}";
+
+    protected override void OnInitialized()
+    {
+        _options = new ApexChartOptions<ChartDataPoint>
+        {
+            Chart = new Chart
+            {
+                Type = GetApexChartType(),
+                Toolbar = new Toolbar { Show = true },
+                Animations = new Animations { Enabled = false },
+                ForeColor = IsDarkMode ? "#F1F5F9" : "#0F172A",
+                FontFamily = "var(--font-mono)"
+            },
+            Colors = Configuration.Series.Count > 0
+                ? Configuration.Series.Select(s => s.Color).ToList()
+                : null,
+            Grid = new Grid
+            {
+                StrokeDashArray = 4,
+                Xaxis = new GridXAxis { Lines = new Lines { Show = true } },
+                Yaxis = new GridYAxis { Lines = new Lines { Show = true } }
+            },
+            Xaxis = new XAxis
+            {
+                Type = XAxisType.Datetime,
+                Labels = new XAxisLabels { DatetimeUTC = false, Style = new AxisLabelStyle { FontSize = "11px" } },
+                AxisBorder = new AxisBorder { Show = true },
+                AxisTicks = new AxisTicks { Show = true }
+            },
+            Stroke = new Stroke { Curve = Curve.Smooth, Width = [2] },
+            Tooltip = new Tooltip
+            {
+                X = new TooltipX { Format = "HH:mm:ss" },
+                Theme = IsDarkMode ? Mode.Dark : Mode.Light
+            },
+            Yaxis = [new YAxis
+            {
+                DecimalsInFloat = 2,
+                Labels = new YAxisLabels { Style = new AxisLabelStyle { FontSize = "11px" } },
+                AxisBorder = new AxisBorder { Show = true },
+                AxisTicks = new AxisTicks { Show = true }
+            }],
+            Legend = new Legend { Show = Configuration.Series.Count > 1 }
+        };
+        ApplyAxisTheme();
+        _lastSeriesCount = Configuration.Series.Count;
+        _lastConfigFingerprint = GetConfigFingerprint();
+        _lastIsDarkMode = IsDarkMode;
+
+        ChartDataService.OnDataUpdated += OnDataUpdated;
+    }
+
+    private void ApplyAxisTheme()
+    {
+        var labelColor = IsDarkMode ? "#94A3B8" : "#475569";
+        var lineColor = IsDarkMode ? "#334155" : "#CBD5E1";
+
+        _options.Grid.BorderColor = lineColor;
+        _options.Xaxis.Labels.Style.Colors = labelColor;
+        _options.Xaxis.AxisBorder.Color = lineColor;
+        _options.Xaxis.AxisTicks.Color = lineColor;
+
+        var yaxis = _options.Yaxis[0];
+        yaxis.Labels.Style.Colors = labelColor;
+        yaxis.AxisBorder.Color = lineColor;
+        yaxis.AxisTicks.Color = lineColor;
+    }
+
+    protected override void OnParametersSet()
+    {
+        var darkModeChanged = IsDarkMode != _lastIsDarkMode;
+        var fingerprint = GetConfigFingerprint();
+        var configChanged = fingerprint != _lastConfigFingerprint;
+
+        if (!darkModeChanged && !configChanged) return;
+
+        _lastIsDarkMode = IsDarkMode;
+        _lastConfigFingerprint = fingerprint;
+
+        if (darkModeChanged)
+        {
+            _options.Chart.ForeColor = IsDarkMode ? "#F1F5F9" : "#0F172A";
+            _options.Tooltip.Theme = IsDarkMode ? Mode.Dark : Mode.Light;
+            ApplyAxisTheme();
+        }
+
+        if (configChanged)
+        {
+            _options.Chart.Type = GetApexChartType();
+
+            if (Configuration.Series.Count != _lastSeriesCount)
+            {
+                _lastSeriesCount = Configuration.Series.Count;
+                _options.Colors = Configuration.Series.Count > 0
+                    ? Configuration.Series.Select(s => s.Color).ToList()
+                    : null;
+                _options.Legend = new Legend { Show = Configuration.Series.Count > 1 };
+            }
+        }
+
+        _pendingOptionsUpdate = true;
+        if (configChanged) _pendingUpdate = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _chartReady = true;
+            _updateTimer = new Timer(
+                _ => InvokeAsync(Tick),
+                null,
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(1));
+        }
+
+        if (_pendingOptionsUpdate && _chartReady && !_disposed && _chart is not null)
+        {
+            _pendingOptionsUpdate = false;
+            try { await _chart.UpdateOptionsAsync(false, false, false); }
+            catch (Exception ex) when (ex is ArgumentNullException or JSException)
+            {
+                // Chart component disposed mid-render; these exceptions are expected during teardown.
+                _ = ex;
+            }
+        }
+
+        if (_pendingUpdate && _chartReady && !_disposed && _chart is not null)
+        {
+            _pendingUpdate = false;
+            try { await _chart.UpdateSeriesAsync(animate: false); }
+            catch (Exception ex) when (ex is ArgumentNullException or JSException)
+            {
+                // Chart component disposed mid-render; these exceptions are expected during teardown.
+                _ = ex;
+            }
+        }
+    }
+
+    private List<ChartDataPoint> GetPoints(Guid seriesId)
+    {
+        var points = ChartDataService.GetPoints(seriesId);
+        if (!Configuration.TimeWindowMinutes.HasValue) return [.. points];
+        var cutoff = DateTime.UtcNow.AddMinutes(-Configuration.TimeWindowMinutes.Value);
+        return [.. points.Where(p => p.Timestamp >= cutoff)];
+    }
+
+    private SeriesType GetSeriesType() => Configuration.Type switch
+    {
+        AppChartType.Area => SeriesType.Area,
+        AppChartType.Bar => SeriesType.Bar,
+        _ => SeriesType.Line
+    };
+
+    private ApexCharts.ChartType GetApexChartType() => Configuration.Type switch
+    {
+        AppChartType.Area => ApexCharts.ChartType.Area,
+        AppChartType.Bar => ApexCharts.ChartType.Bar,
+        _ => ApexCharts.ChartType.Line
+    };
+
+    private void OnDataUpdated()
+    {
+        _hasNewData = true;
+        InvokeAsync(RefreshChart);
+    }
+
+    // Timer fires periodically to detect staleness and serve as a fallback render trigger.
+    private void Tick()
+    {
+        var stale = ComputeStale();
+        if (stale != _isStale)
+        {
+            _isStale = stale;
+            StateHasChanged();
+        }
+
+        RefreshChart();
+    }
+
+    private bool ComputeStale()
+    {
+        var last = LastPointUtc;
+        return _live && last != default && (DateTime.UtcNow - last).TotalSeconds > StaleAfterSeconds;
+    }
+
+    private void RefreshChart()
+    {
+        if (_disposed || !_chartReady || !_live || !_hasNewData || _hovering) return;
+
+        var now = DateTime.UtcNow;
+        if (now - _lastRender < RenderThrottle) return;
+        _lastRender = now;
+
+        _hasNewData = false;
+        _pendingUpdate = true;
+        StateHasChanged();
+    }
+
+    private void ToggleLive()
+    {
+        _live = !_live;
+
+        if (_live) { _hasNewData = true; RefreshChart(); }
+        StateHasChanged();
+    }
+
+    private void OnMouseOver()
+    {
+        _hovering = true;
+        StateHasChanged();
+    }
+
+    private void OnMouseLeave()
+    {
+        _hovering = false;
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        ChartDataService.OnDataUpdated -= OnDataUpdated;
+        if (_updateTimer is not null) await _updateTimer.DisposeAsync();
+    }
+}

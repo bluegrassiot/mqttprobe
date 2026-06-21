@@ -1,0 +1,14 @@
+<button class="json-chart-btn" @onclick="HandleClick" @onclick:stopPropagation="true" title="Add to chart">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+        @((MarkupString)LucideIcons.ChartLine)
+    </svg>
+    <span class="json-chart-btn__label">ADD TO CHART</span>
+</button>
+
+@code {
+    [Parameter, EditorRequired] public string JsonPath { get; set; } = "";
+    [Parameter] public string? SeriesName { get; set; }
+    [Parameter] public EventCallback<ChartFieldSelection> OnAddToChart { get; set; }
+
+    private Task HandleClick() => OnAddToChart.InvokeAsync(new ChartFieldSelection(JsonPath, SeriesName));
+}

@@ -1,0 +1,98 @@
+@implements IDisposable
+@using System.Text.Json
+@using Microsoft.Extensions.Logging
+@inject ILogger<JsonTreeView> Logger
+
+@if (_doc != null)
+{
+    <div class="json-tree-root">
+        <JsonTreeNode @key="_renderKey" Element="_doc.RootElement" Depth="0" AutoExpandDepth="@_autoExpandDepth"
+                      JsonPath="" OnAddToChart="OnAddToChart"/>
+    </div>
+}
+else if (_parseFailed)
+{
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="json-tree-error">
+        Payload is not valid JSON.
+    </MudText>
+}
+
+@code {
+    private const int DefaultAutoExpandDepth = 2;
+
+    [Parameter] public string? Json { get; set; }
+    [Parameter] public EventCallback<ChartFieldSelection> OnAddToChart { get; set; }
+
+    private JsonDocument? _doc;
+    private int _renderKey;
+    private string? _lastJson;
+    private bool _parseFailed;
+    private int _autoExpandDepth = DefaultAutoExpandDepth;
+
+    public bool HasExpandableContent => _doc is { } doc && doc.RootElement.ValueKind switch
+    {
+        JsonValueKind.Object => doc.RootElement.EnumerateObject().Any(),
+        JsonValueKind.Array  => doc.RootElement.EnumerateArray().Any(),
+        _                    => false
+    };
+
+    public static bool IsExpandableJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.ValueKind switch
+            {
+                JsonValueKind.Object => doc.RootElement.EnumerateObject().Any(),
+                JsonValueKind.Array  => doc.RootElement.EnumerateArray().Any(),
+                _                    => false
+            };
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    public void ExpandAll()
+    {
+        // Bump the render key so JsonTreeNode remounts and re-runs its
+        // `Depth < AutoExpandDepth` initialization against the new depth.
+        _autoExpandDepth = int.MaxValue;
+        _renderKey++;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void CollapseAll()
+    {
+        _autoExpandDepth = 0;
+        _renderKey++;
+        InvokeAsync(StateHasChanged);
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Json == _lastJson) return;
+        _lastJson = Json;
+        _doc?.Dispose();
+        _doc = null;
+        _parseFailed = false;
+        _renderKey++;
+        // New payload restarts at the default depth so the user's last
+        // Expand-all / Collapse-all choice does not bleed across messages.
+        _autoExpandDepth = DefaultAutoExpandDepth;
+        if (string.IsNullOrWhiteSpace(Json)) return;
+        try
+        {
+            _doc = JsonDocument.Parse(Json);
+        }
+        catch (JsonException ex)
+        {
+            _parseFailed = true;
+            Logger.LogDebug(ex, "Payload could not be parsed as JSON for tree rendering");
+        }
+    }
+
+    public void Dispose() => _doc?.Dispose();
+}

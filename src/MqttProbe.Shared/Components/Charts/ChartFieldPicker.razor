@@ -1,0 +1,186 @@
+@inject IChartFieldRegistry FieldRegistry
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Add Series to Chart</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_search" Label="Search topics or fields"
+                      Variant="Variant.Outlined" Immediate="true"
+                      Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
+                      Class="mb-3" />
+
+        @{
+            var topics = FieldRegistry.GetTopics().Where(TopicMatchesSearch).ToList();
+        }
+
+        @if (!topics.Any())
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                @if (FieldRegistry.GetTopics().Count == 0)
+                {
+                    <span>No JSON fields discovered yet. Receive some JSON messages on a subscribed topic first.</span>
+                }
+                else
+                {
+                    <span>No topics or fields match your search.</span>
+                }
+            </MudAlert>
+        }
+        else
+        {
+            <div class="chart-field-list">
+                @foreach (var topic in topics)
+                {
+                    var t = topic;
+                    var fields = FieldRegistry.GetFields(t).Where(f => FieldMatchesSearch(t, f)).ToList();
+
+                    <!-- Topic header -->
+                    <div class="px-2 pt-2 pb-1 d-flex align-center gap-1">
+                        <MudIcon Icon="@LucideIcons.Hash" Size="Size.Small"
+                                 Style="color:var(--mud-palette-text-secondary); font-size:14px"/>
+                        <MudText Typo="Typo.caption"
+                                 Style="font-weight:700; font-family:var(--font-mono); color:var(--mud-palette-text-secondary)">
+                            @t
+                        </MudText>
+                    </div>
+
+                    @foreach (var field in fields)
+                    {
+                        var f = field;
+                        var key = FieldKey(f);
+                        var isSelected = _selected.ContainsKey(key);
+                        var label = GetShortLabel(f.JsonPath);
+                        var showFullPath = !string.Equals(label, f.JsonPath, StringComparison.Ordinal);
+                        var isExpanded = _expanded.Contains(key);
+
+                        <div class="@($"px-2 py-1 mx-1 mb-1 rounded")"
+                             role="button" tabindex="0"
+                             style="@RowStyle(isSelected) cursor:pointer"
+                             @onclick="() => ToggleField(key, f)"
+                             @onkeydown="(e => HandleFieldKeySelection(e, key, f))">
+                            <div class="d-flex align-center">
+                                <MudCheckBox T="bool" Value="@isSelected" ReadOnly="true"
+                                             Dense="true" Color="Color.Primary" Class="mr-2"
+                                             @onclick:stopPropagation="true"/>
+                                <div class="flex-grow-1" style="min-width:0">
+                                    <MudText Typo="Typo.body2" Style="font-weight:600">@label</MudText>
+                                    @if (showFullPath)
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary"
+                                                 Style="font-family:var(--font-mono); display:block">@f.JsonPath</MudText>
+                                    }
+                                </div>
+                                <div class="text-right ml-3 mr-1" style="flex-shrink:0">
+                                    <MudText Typo="Typo.body2" Style="font-family:var(--font-mono); font-weight:500">
+                                        @FormatValue(f.LastValue)
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="display:block">
+                                        @DisplayHelpers.GetRelativeTime(f.LastSeen)
+                                    </MudText>
+                                </div>
+                                @if (f.ContextJson != null)
+                                {
+                                    <span @onclick:stopPropagation="true">
+                                        <MudIconButton Icon="@(isExpanded ? LucideIcons.ChevronUp : LucideIcons.ChevronDown)"
+                                                       Size="Size.Small" Color="Color.Inherit"
+                                                       title="Show full metric context"
+                                                       OnClick="() => ToggleExpand(key)" />
+                                    </span>
+                                }
+                            </div>
+                            @if (isExpanded && f.ContextJson != null)
+                            {
+                                <pre class="chart-field-context-pre">@f.ContextJson</pre>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" Color="Color.Default" Class="app-btn-min" OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Class="app-btn-min"
+                   Disabled="@(_selected.Count == 0)"
+                   OnClick="Confirm">
+            Add @(_selected.Count > 0 ? $"{_selected.Count} Selected" : "Selected")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private string _search = "";
+    private readonly Dictionary<string, (DiscoveredField Field, string Color)> _selected = new();
+    private readonly HashSet<string> _expanded = [];
+    private static readonly string[] Colors = ChartPalette.Series;
+    private int _colorIndex;
+
+    private bool TopicMatchesSearch(string topic) =>
+        string.IsNullOrEmpty(_search) ||
+        topic.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+        FieldRegistry.GetFields(topic).Any(f => FieldMatchesSearch(topic, f));
+
+    private bool FieldMatchesSearch(string topic, DiscoveredField f) =>
+        string.IsNullOrEmpty(_search) ||
+        topic.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+        f.JsonPath.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+        GetShortLabel(f.JsonPath).Contains(_search, StringComparison.OrdinalIgnoreCase);
+
+    private static string FieldKey(DiscoveredField f) => $"{f.Topic}|{f.JsonPath}";
+
+    private void ToggleField(string key, DiscoveredField field)
+    {
+        if (!_selected.Remove(key))
+        {
+            var color = Colors[_colorIndex % Colors.Length];
+            _colorIndex++;
+            _selected[key] = (field, color);
+        }
+    }
+
+    private void ToggleExpand(string key)
+    {
+        if (!_expanded.Add(key)) _expanded.Remove(key);
+    }
+
+    private void HandleFieldKeySelection(KeyboardEventArgs e, string key, DiscoveredField field)
+    {
+        if (e.Key is "Enter" or " ")
+            ToggleField(key, field);
+    }
+
+    private void Confirm()
+    {
+        var seriesList = _selected.Values.Select(entry => new ChartSeries
+        {
+            DisplayName = GetShortLabel(entry.Field.JsonPath),
+            Topic = entry.Field.Topic,
+            JsonPath = entry.Field.JsonPath,
+            Color = entry.Color
+        }).ToList();
+        MudDialog.Close(DialogResult.Ok(seriesList));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    internal static string GetShortLabel(string jsonPath)
+    {
+        var lastDot = jsonPath.LastIndexOf('.');
+        return lastDot >= 0 ? jsonPath[(lastDot + 1)..] : jsonPath;
+    }
+
+    internal static string FormatValue(double v)
+    {
+        const double Epsilon = 1e-9;
+        if (Math.Abs(v) >= 1_000_000 || (Math.Abs(v) > Epsilon && Math.Abs(v) < 0.001))
+            return v.ToString("G4");
+        return Math.Abs(v % 1) < Epsilon ? v.ToString("N0") : v.ToString("G6");
+    }
+
+    internal static string RowStyle(bool selected) => selected
+        ? "background:var(--mud-palette-primary-lighten); border:1px solid var(--mud-palette-primary); "
+        : "border:1px solid transparent; ";
+}

@@ -1,0 +1,12 @@
+# Normalize all files to LF in the repo; Git checks out platform-native endings.
+*           text=auto
+
+# Shell scripts must use LF so they execute correctly on Linux/macOS and in CI.
+*.sh        text eol=lf
+*.cs        text eol=lf
+*.razor     text eol=lf
+*.csproj    text eol=lf
+*.sln       text eol=lf
+*.cshtml    text eol=lf
+pre-push    text eol=lf
+pre-commit  text eol=lf

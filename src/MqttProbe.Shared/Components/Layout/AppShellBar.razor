@@ -1,0 +1,173 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using MQTTnet.Extensions.ManagedClient
+@inject IManagedMqttClient MqttClient
+@inject IMessageStoreManager MessageStoreManagerService
+@inject IDialogService DialogService
+@inject IAppInfoService AppInfoService
+@inject NavigationManager NavigationManager
+@inject ISessionState SessionState
+@implements IAsyncDisposable
+
+<MudAppBar Fixed="false" Elevation="2" Class="mt-0 app-shell-appbar app-chrome-panel">
+    <MudImage title="@_version" Src="favicon.svg" Height="34" Class="mr-2" />
+    <span class="app-wordmark app-wordmark-mqtt">MQTT</span><span class="app-wordmark app-wordmark-probe">Probe</span>
+
+    @if (MqttClient.IsConnected && SessionState.SelectedConnection.Host != null)
+    {
+        <MudChip T="string" Size="Size.Small" Class="ml-3 broker-chip status-chip status-chip--connected"
+                 Variant="Variant.Outlined" Color="Color.Inherit">
+            <span class="status-dot status-dot--connected"></span>
+            @SessionState.SelectedConnection.Name
+        </MudChip>
+    }
+    else if (MqttClient.IsStarted)
+    {
+        <MudChip T="string" Size="Size.Small" Class="ml-3 broker-chip status-chip status-chip--reconnecting status-pulse"
+                 Variant="Variant.Outlined" Color="Color.Warning">
+            <span class="status-dot status-dot--reconnecting"></span>
+            Reconnecting…
+        </MudChip>
+    }
+    else
+    {
+        <MudChip T="string" Size="Size.Small" Class="ml-3 broker-chip status-chip status-chip--disconnected"
+                 Variant="Variant.Outlined" Color="Color.Error">
+            <span class="status-dot status-dot--disconnected"></span>
+            Disconnected
+        </MudChip>
+    }
+
+    <MudSpacer/>
+
+    <div class="app-actions app-actions-wide">
+        <MudButton Disabled="@(!MqttClient.IsConnected)" Size="Size.Small" Variant="Variant.Text"
+                   StartIcon="@(MessageStoreManagerService.IsListening ? LucideIcons.Pause : LucideIcons.Play)"
+                   Color="@CaptureButtonColor"
+                   OnClick="@(MessageStoreManagerService.IsListening ? MessageStoreManagerService.Stop : MessageStoreManagerService.Start)">
+            @(MessageStoreManagerService.IsListening ? "Pause" : "Capture")
+        </MudButton>
+
+        <MudButton Size="Size.Small" Variant="Variant.Text"
+                   StartIcon="@(MqttClient.IsConnected ? LucideIcons.WifiOff : LucideIcons.Wifi)"
+                   Color="Color.Inherit"
+                   OnClick="@(_ => ConnectionToggle())">
+            @(MqttClient.IsConnected ? "Disconnect" : "Connect")
+        </MudButton>
+
+        @if (AppInfoService.RequiresAuthentication)
+        {
+            <AuthorizeView>
+                <Authorized>
+                    <form method="post" action="/Logout" class="logout-action-form">
+                        <AntiforgeryToken />
+                        <MudButton ButtonType="ButtonType.Submit"
+                                   Size="Size.Small"
+                                   Variant="Variant.Text"
+                                   StartIcon="@LucideIcons.LogOut"
+                                   Color="Color.Inherit">
+                            Logout
+                        </MudButton>
+                    </form>
+                </Authorized>
+            </AuthorizeView>
+        }
+    </div>
+
+    <div class="app-actions app-actions-compact">
+        <MudIconButton Class="touch-target" Disabled="@(!MqttClient.IsConnected)" Size="Size.Medium"
+                       title="@(MessageStoreManagerService.IsListening ? "Pause capture" : "Resume capture")"
+                       Icon="@(MessageStoreManagerService.IsListening ? LucideIcons.Pause : LucideIcons.Play)"
+                       Color="@CaptureButtonColor"
+                       OnClick="@(MessageStoreManagerService.IsListening ? MessageStoreManagerService.Stop : MessageStoreManagerService.Start)"/>
+
+        <MudIconButton Class="touch-target" Size="Size.Medium"
+                       title="@(MqttClient.IsConnected ? "Connected — click to disconnect" : "Click to connect")"
+                       Icon="@(MqttClient.IsConnected ? LucideIcons.Wifi : LucideIcons.WifiOff)"
+                       Color="@(MqttClient.IsConnected ? Color.Success : Color.Inherit)"
+                       OnClick="@(_ => ConnectionToggle())"/>
+
+        <MudMenu Icon="@LucideIcons.MoreVertical" Dense="true" Color="Color.Inherit"
+                 AriaLabel="More actions">
+            @if (AppInfoService.RequiresAuthentication)
+            {
+                <AuthorizeView>
+                    <Authorized>
+                        <form method="post" action="/Logout" class="logout-menu-form">
+                            <AntiforgeryToken />
+                            <button type="submit" class="logout-menu-button">
+                                <span class="logout-menu-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24">@((MarkupString)LucideIcons.LogOut)</svg>
+                                </span>
+                                <span>Logout</span>
+                            </button>
+                        </form>
+                    </Authorized>
+                </AuthorizeView>
+            }
+        </MudMenu>
+    </div>
+</MudAppBar>
+
+@code {
+    private string? _version;
+    private Func<EventArgs, Task>? _connectionStateChangedHandler;
+    private bool _disposed;
+
+    private Color CaptureButtonColor
+    {
+        get
+        {
+            if (!MqttClient.IsConnected) return Color.Inherit;
+            return MessageStoreManagerService.IsListening ? Color.Error : Color.Success;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _version = AppInfoService.GetVersion();
+
+        _connectionStateChangedHandler = OnConnectionStateChangedAsync;
+        MqttClient.ConnectionStateChangedAsync += _connectionStateChangedHandler;
+    }
+
+    private Task OnConnectionStateChangedAsync(EventArgs args)
+    {
+        if (!_disposed)
+            return InvokeAsync(StateHasChanged);
+        return Task.CompletedTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !MqttClient.IsStarted && !MqttClient.IsConnected)
+            await OpenConnectForm();
+    }
+
+    internal async Task ConnectionToggle()
+    {
+        if (MqttClient.IsConnected)
+            await MqttClient.StopAsync();
+        else
+            await OpenConnectForm();
+    }
+
+    private async Task OpenConnectForm()
+    {
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+        await DialogService.ShowAsync<ConnectionDialog>("Setup Connection", options);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        if (_connectionStateChangedHandler is not null)
+            MqttClient.ConnectionStateChangedAsync -= _connectionStateChangedHandler;
+        return ValueTask.CompletedTask;
+    }
+}

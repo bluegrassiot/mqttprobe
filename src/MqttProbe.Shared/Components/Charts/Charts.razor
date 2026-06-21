@@ -1,0 +1,107 @@
+@using MqttProbe.Services.Configuration
+@inject ISettingsStore SettingsStore
+@inject IChartDataService ChartDataService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IUxTelemetryService? UxTelemetry
+@implements IAsyncDisposable
+
+<TabPanelHeader Title="Charts" Icon="@LucideIcons.Activity">
+    <HeaderActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@LucideIcons.Plus" OnClick="CreateChart">
+            Configure New
+        </MudButton>
+    </HeaderActions>
+</TabPanelHeader>
+
+@if (!SettingsStore.Charts.Any())
+{
+    <div class="d-flex flex-column align-center justify-center charts-empty-state">
+        <MudIcon Icon="@LucideIcons.Activity" Style="font-size:64px; color:var(--mud-palette-text-disabled)"/>
+        <MudText Typo="Typo.h6" Color="Color.Secondary">No charts yet</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Style="max-width:380px">
+            Open a JSON message in the <strong>Browse</strong> tab, then click a numeric field
+            to create a chart or add it to an existing one.
+        </MudText>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Style="max-width:420px">
+            <MudText Typo="Typo.caption">
+                Look for the <MudIcon Icon="@LucideIcons.ChartLine" Style="font-size:14px; vertical-align:middle"/> icon next to numeric fields in the payload viewer.
+            </MudText>
+        </MudAlert>
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            Choose <strong>Create New Chart</strong> to start fresh or <strong>Add to Existing</strong> to append a series.
+        </MudText>
+    </div>
+}
+else
+{
+    <MudStack Spacing="4">
+        @foreach (var config in SettingsStore.Charts)
+        {
+            <ChartCard @key="config.Id"
+                       Configuration="config"
+                       OnEdit="EditChart"
+                       OnDelete="DeleteChart" />
+        }
+    </MudStack>
+}
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await ChartDataService.StartAsync();
+            SettingsStore.ChartsChanged += OnConfigurationsChanged;
+    }
+
+    private void OnConfigurationsChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task CreateChart()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<AddEditChartDialog>("Create Chart", options);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: ChartConfiguration created })
+        {
+                await SettingsStore.AddChartAsync(created);
+            UxTelemetry?.RecordChartFunnel("charts-tab", createdNewChart: true);
+            Snackbar.Add($"Chart created: {created.Name}", Severity.Success);
+        }
+    }
+
+    private async Task EditChart(ChartConfiguration config)
+    {
+        var parameters = new DialogParameters<AddEditChartDialog>
+        {
+            { d => d.Configuration, config }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<AddEditChartDialog>("Edit Chart", parameters, options);
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: ChartConfiguration updated })
+        {
+                await SettingsStore.UpdateChartAsync(updated);
+            Snackbar.Add($"Chart updated: {updated.Name}", Severity.Success);
+        }
+    }
+
+    private async Task DeleteChart(ChartConfiguration config)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete Chart",
+            $"Delete '{config.Name}'?",
+            yesText: "Delete", cancelText: "Cancel",
+            options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (confirmed == true)
+        {
+                await SettingsStore.RemoveChartAsync(config.Id);
+            StateHasChanged();
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+            SettingsStore.ChartsChanged -= OnConfigurationsChanged;
+        return ValueTask.CompletedTask;
+    }
+}

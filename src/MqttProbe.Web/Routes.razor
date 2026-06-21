@@ -1,0 +1,23 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using MqttProbe.Components.Layout
+@using MqttProbe.Components.Pages
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="@typeof(App).Assembly"
+            AdditionalAssemblies="[typeof(MqttProbe.Components.Pages.Index).Assembly]"
+            NotFoundPage="typeof(NotFoundPage)">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                <NotAuthorized>
+                    @{
+                        Navigation.NavigateTo("/Login", forceLoad: true);
+                    }
+                </NotAuthorized>
+            </AuthorizeRouteView>
+        </Found>
+    </Router>
+</CascadingAuthenticationState>
+
+@code {
+    [Inject] NavigationManager Navigation { get; set; } = null!;
+}

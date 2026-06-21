@@ -1,0 +1,35 @@
+.app-tabpanel-header {
+    padding: 24px 0;
+    border-bottom: 1px solid var(--mud-palette-divider);
+    margin-bottom: 24px;
+}
+
+.app-tabpanel-header__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.app-tabpanel-header__title {
+    margin: 0;
+}
+
+.app-tabpanel-header__chips {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.app-tabpanel-header__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.app-tabpanel-header__filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 16px;
+}

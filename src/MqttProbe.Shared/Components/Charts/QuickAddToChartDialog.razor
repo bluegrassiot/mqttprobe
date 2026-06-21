@@ -1,0 +1,195 @@
+@using MqttProbe.Services.Configuration
+@inject ISettingsStore SettingsStore
+@inject IUxTelemetryService? UxTelemetry
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@LucideIcons.ChartLine" Class="mr-2"/>
+            Add field to chart
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <!-- Field info -->
+        <MudPaper Elevation="0" Class="pa-2 mb-3 rounded"
+                  Style="background:var(--mud-palette-background-grey); border:1px solid var(--mud-palette-lines-default)">
+            <MudText Typo="Typo.subtitle2" Style="font-weight:600">@SeriesName</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-family:var(--font-mono)">
+                @Topic › @JsonPath
+            </MudText>
+        </MudPaper>
+
+        <MudTextField @bind-Value="_displayName" Label="Line Label" Variant="Variant.Outlined"
+                      Immediate="true" MaxLength="80" Class="mb-3"
+                      HelperText="The name shown on the chart — defaults to the field name." />
+        <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Class="mb-3">
+            Choose whether to create a new chart with this series or add this series to an existing chart.
+        </MudAlert>
+
+        <!-- Mode toggle (only show if charts exist) -->
+        @if (SettingsStore.Charts.Any())
+        {
+            <MudToggleGroup T="ChartMode" @bind-Value="_mode" Class="mb-3" Color="Color.Primary"
+                            SelectionMode="SelectionMode.SingleSelection">
+                <MudToggleItem Value="ChartMode.AddToExisting">Add to Existing Chart</MudToggleItem>
+                <MudToggleItem Value="ChartMode.CreateNew">Create New Chart</MudToggleItem>
+            </MudToggleGroup>
+        }
+
+        <!-- Add to existing chart -->
+        @if (_mode == ChartMode.AddToExisting && SettingsStore.Charts.Any())
+        {
+            @foreach (var chart in SettingsStore.Charts)
+            {
+                var c = chart;
+                var isSelected = _selectedChartId == c.Id;
+                <div class="pa-2 mb-1 rounded"
+                     role="button" tabindex="0"
+                     style="cursor:pointer; border:2px solid @(isSelected ? "var(--mud-palette-primary)" : "var(--mud-palette-lines-default)"); background:@(isSelected ? "var(--mud-palette-action-default-hover)" : "transparent")"
+                     @onclick="() => _selectedChartId = c.Id"
+                     @onkeydown="(e => HandleChartKeySelection(e, c.Id))">
+                    <div class="d-flex align-center gap-2">
+                        <MudIcon Icon="@LucideIcons.Activity" Size="Size.Small"
+                                 Color="@(isSelected ? Color.Primary : Color.Secondary)"/>
+                        <div>
+                            <MudText Typo="Typo.body2" Style="font-weight:600">@c.Name</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @c.Series.Count series · @c.Type
+                            </MudText>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+
+        <!-- Create new chart -->
+        @if (_mode == ChartMode.CreateNew)
+        {
+            <MudTextField @bind-Value="_newChartName" Label="Chart Name" Variant="Variant.Outlined"
+                          Immediate="true" MaxLength="100" AutoFocus="true"
+                          HelperText="A new line chart will be created with this field as its first series." />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" Color="Color.Default" Class="app-btn-min" OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Class="app-btn-min"
+                   Disabled="@(!CanSubmit)"
+                   OnClick="Submit">
+            @(_mode == ChartMode.CreateNew ? "Create Chart" : "Add Series")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private enum ChartMode { AddToExisting, CreateNew }
+
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string Topic { get; set; } = "";
+    [Parameter] public string JsonPath { get; set; } = "";
+    [Parameter] public string SeriesName { get; set; } = "";
+
+    private static readonly string[] SeriesColors = ChartPalette.Series;
+
+    private ChartMode _mode;
+    private Guid _selectedChartId;
+    private string _newChartName = "";
+    private string _displayName = "";
+
+    protected override void OnInitialized()
+    {
+        _displayName = SeriesName;
+        _newChartName = DefaultChartName(Topic, SeriesName);
+        if (!SettingsStore.Charts.Any())
+        {
+            _mode = ChartMode.CreateNew;
+        }
+        else
+        {
+            _mode = ChartMode.AddToExisting;
+            if (SettingsStore.Charts.Count == 1)
+                _selectedChartId = SettingsStore.Charts[0].Id;
+        }
+    }
+
+    private bool CanSubmit => _mode == ChartMode.CreateNew
+        ? !string.IsNullOrWhiteSpace(_newChartName)
+        : _selectedChartId != Guid.Empty;
+
+    internal static string DefaultChartName(string topic, string seriesName) =>
+        TryGetSparkplugTopicTitle(topic, out var topicTitle) ? topicTitle : seriesName;
+
+    private static bool TryGetSparkplugTopicTitle(string topic, out string title)
+    {
+        title = string.Empty;
+        var segments = topic.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < 4 || !string.Equals(segments[0], "spBv1.0", StringComparison.Ordinal))
+            return false;
+
+        var groupId = segments[1];
+        var nodeId = segments[3];
+        if (string.IsNullOrWhiteSpace(groupId) || string.IsNullOrWhiteSpace(nodeId))
+            return false;
+
+        title = segments.Length >= 5 && !string.IsNullOrWhiteSpace(segments[4])
+            ? $"{groupId} {nodeId} {segments[4]}"
+            : $"{groupId} {nodeId}";
+        return true;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void HandleChartKeySelection(KeyboardEventArgs e, Guid chartId)
+    {
+        if (e.Key is "Enter" or " ")
+            _selectedChartId = chartId;
+    }
+
+    private async Task Submit()
+    {
+        if (_mode == ChartMode.CreateNew)
+        {
+            var series = new ChartSeries
+            {
+                DisplayName = _displayName.Trim().Length > 0 ? _displayName.Trim() : SeriesName,
+                Topic = Topic,
+                JsonPath = JsonPath,
+                Color = SeriesColors[0]
+            };
+            var newChart = new ChartConfiguration
+            {
+                Name = _newChartName.Trim(),
+                Series = [series]
+            };
+            await SettingsStore.AddChartAsync(newChart);
+            UxTelemetry?.RecordChartFunnel("payload-quick-add", createdNewChart: true);
+            MudDialog.Close(DialogResult.Ok($"Chart created: {newChart.Name}"));
+        }
+        else
+        {
+            var chart = SettingsStore.Charts.FirstOrDefault(c => c.Id == _selectedChartId);
+            if (chart == null) { MudDialog.Cancel(); return; }
+
+            var color = SeriesColors[chart.Series.Count % SeriesColors.Length];
+            var newSeries = new ChartSeries
+            {
+                DisplayName = _displayName.Trim().Length > 0 ? _displayName.Trim() : SeriesName,
+                Topic = Topic,
+                JsonPath = JsonPath,
+                Color = color
+            };
+            // Persist a clone so the in-memory chart is untouched if the update fails.
+            var updated = new ChartConfiguration
+            {
+                Id = chart.Id,
+                Name = chart.Name,
+                Type = chart.Type,
+                MaxPoints = chart.MaxPoints,
+                TimeWindowMinutes = chart.TimeWindowMinutes,
+                Series = [.. chart.Series, newSeries]
+            };
+            await SettingsStore.UpdateChartAsync(updated);
+            UxTelemetry?.RecordChartFunnel("payload-quick-add", createdNewChart: false);
+            MudDialog.Close(DialogResult.Ok($"Series added to chart: {chart.Name}"));
+        }
+    }
+}

@@ -1,0 +1,100 @@
+@namespace MqttProbe.Components.Emulation
+@using System.Text.Json
+@inject IEmulationService EmulationService
+
+<div class="emu-device-row @(IsExpanded ? "emu-device-row--expanded" : "")"
+     @onclick="@(() => OnToggleExpand.InvokeAsync())">
+    <MudIcon Icon="@(IsExpanded ? LucideIcons.ChevronDown : LucideIcons.ChevronRight)" Size="Size.Small"/>
+    <span class="emu-device-id">@Device.DeviceId</span>
+    <span class="emu-device-secondary">
+        @Device.Metrics.Count metric@(Device.Metrics.Count != 1 ? "s" : "")
+    </span>
+    <span @onclick:stopPropagation="true">
+        <MudIconButton Icon="@LucideIcons.Copy" Size="Size.Small"
+                       title="Duplicate device"
+                       Disabled="@EmulationService.IsRunning"
+                       OnClick="@DuplicateAsync"/>
+        <MudIconButton Icon="@LucideIcons.Trash2" Size="Size.Small" Color="Color.Error"
+                       title="Delete device"
+                       Disabled="@EmulationService.IsRunning"
+                       OnClick="@DeleteAsync"/>
+    </span>
+</div>
+
+@if (IsExpanded)
+{
+    <div class="emu-device-detail">
+        <MudTextField @bind-Value="Device.DeviceId" @bind-Value:after="NotifyChangedAsync"
+                      Label="Device ID" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Disabled="@EmulationService.IsRunning"
+                      Error="@(DeviceIdError != null)" ErrorText="@DeviceIdError"
+                      Class="emu-id-field"/>
+
+        <div class="emu-subsection-header">Metrics (@Device.Metrics.Count)</div>
+
+        @foreach (var metric in Device.Metrics)
+        {
+            <EmulatorMetricRow @key="metric.Id" Node="@Node" Device="@Device" Metric="@metric"
+                               OnChanged="@NotifyChangedAsync"/>
+        }
+
+        <MudButton Variant="Variant.Outlined" StartIcon="@LucideIcons.Plus" Size="Size.Small" Class="mt-2"
+                   title="Add metric"
+                   Disabled="@EmulationService.IsRunning"
+                   OnClick="@AddMetricAsync">
+            Add metric
+        </MudButton>
+    </div>
+}
+
+@code {
+    [Parameter] public EmulatorNodeConfig Node { get; set; } = null!;
+    [Parameter] public EmulatorDeviceConfig Device { get; set; } = null!;
+    [Parameter] public bool IsExpanded { get; set; }
+    [Parameter] public EventCallback OnToggleExpand { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private static readonly char[] IllegalIdChars = ['/', '+', '#'];
+
+    private string? DeviceIdError
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Device.DeviceId)) return "Required";
+            if (Device.DeviceId.IndexOfAny(IllegalIdChars) >= 0) return "Must not contain / + #";
+            if (Device.DeviceId.StartsWith('$')) return "Must not start with $";
+            if (Node.Devices.Any(d => d.Id != Device.Id && d.DeviceId == Device.DeviceId))
+                return "Device ID already used on this node";
+            return null;
+        }
+    }
+
+    private async Task AddMetricAsync()
+    {
+        var n = 1;
+        while (Device.Metrics.Any(m => m.Name == $"Metric-{n}"))
+            n++;
+        Device.Metrics.Add(new EmulatorMetricConfig { Name = $"Metric-{n}" });
+        await NotifyChangedAsync();
+    }
+
+    private async Task DuplicateAsync()
+    {
+        var clone = JsonSerializer.Deserialize<EmulatorDeviceConfig>(JsonSerializer.Serialize(Device))!;
+        clone.Id = Guid.NewGuid();
+        foreach (var metric in clone.Metrics)
+            metric.Id = Guid.NewGuid();
+        clone.DeviceId = Services.Emulation.EmulationService.GenerateCopyNames(
+            Device.DeviceId, Node.Devices.Select(d => d.DeviceId), copies: 1).Single();
+        Node.Devices.Add(clone);
+        await NotifyChangedAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        Node.Devices.Remove(Device);
+        await NotifyChangedAsync();
+    }
+
+    private Task NotifyChangedAsync() => OnChanged.InvokeAsync();
+}

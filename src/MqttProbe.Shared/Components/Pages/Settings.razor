@@ -1,0 +1,140 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using MqttProbe.Services.Configuration
+@inject ISettingsStore SettingsStore
+@inject IThemes Themes
+@inject IAppInfoService AppInfoService
+
+<TabPanelHeader Title="Settings" Icon="@LucideIcons.Settings"/>
+
+<div class="tab-panel-content">
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4 app-chrome-panel">
+                <MudText Typo="Typo.h6" Class="mb-3">Appearance</MudText>
+
+                <MudSelect T="string" Label="Theme"
+                           Value="@SettingsStore.Config.Ui.Theme"
+                           ValueChanged="@OnThemeSelectionChanged"
+                           Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("light")">Light</MudSelectItem>
+                    <MudSelectItem Value="@("dark")">Dark</MudSelectItem>
+                </MudSelect>
+
+                <MudSelect T="string" Label="Font"
+                           Value="@(SettingsStore.Config.Ui.FontAccessible ? "open-dyslexic" : "inter")"
+                           ValueChanged="@OnFontSelectionChanged"
+                           Variant="Variant.Outlined" Class="mt-3">
+                    <MudSelectItem Value="@("inter")">Inter</MudSelectItem>
+                    <MudSelectItem Value="@("open-dyslexic")">OpenDyslexic</MudSelectItem>
+                </MudSelect>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4 app-chrome-panel">
+                <MudText Typo="Typo.h6" Class="mb-3">Subscriptions</MudText>
+
+                <MudSwitch T="bool" Value="@SettingsStore.Config.Ui.AutoResubscribe"
+                           ValueChanged="@OnAutoResubscribeChanged"
+                           Color="Color.Primary"
+                           Label="Auto-resubscribe on connect" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    When enabled, saved subscriptions are automatically re-subscribed when connecting to a broker.
+                </MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4 app-chrome-panel">
+                <MudText Typo="Typo.h6" Class="mb-3">Performance</MudText>
+
+                <MudNumericField T="int" Label="Max stored messages"
+                                 Value="@SettingsStore.Config.Performance.MaxStoredMessages"
+                                 ValueChanged="@OnMaxStoredMessagesChanged"
+                                 Min="100" Max="100000" Step="1000"
+                                 Variant="Variant.Outlined" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    Maximum messages retained in memory per topic. Higher values use more memory.
+                </MudText>
+
+                <MudNumericField T="int" Label="Max messages per second"
+                                 Value="@SettingsStore.Config.Performance.MaxMessagesPerSecond"
+                                 ValueChanged="@OnMaxMessagesPerSecondChanged"
+                                 Min="100" Max="1000000" Step="1000"
+                                 Variant="Variant.Outlined" Class="mt-3" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    Rate limit for inbound messages. Messages exceeding this limit are dropped.
+                </MudText>
+            </MudPaper>
+        </MudItem>
+
+        @if (AppInfoService.RequiresAuthentication)
+        {
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="0" Class="pa-4 app-chrome-panel">
+                    <MudText Typo="Typo.h6" Class="mb-3">Account</MudText>
+
+                    <AuthorizeView>
+                        <Authorized>
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Primary"
+                                       StartIcon="@LucideIcons.Lock"
+                                       Href="/change-password"
+                                       Class="app-btn-min">
+                                Change password
+                            </MudButton>
+                        </Authorized>
+                    </AuthorizeView>
+                </MudPaper>
+            </MudItem>
+        }
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4 app-chrome-panel">
+                <MudText Typo="Typo.h6" Class="mb-3">About</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    MQTT Probe — the MQTT diagnostic tool built for IIoT.
+                </MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    Version @_version
+                </MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</div>
+
+@code {
+    [CascadingParameter(Name = "IsDarkMode")] public bool IsDarkMode { get; set; }
+
+    private string _version = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        _version = AppInfoService.GetVersion();
+    }
+
+    private void OnThemeSelectionChanged(string value)
+    {
+        Themes.SetTheme(value == "dark");
+    }
+
+    private void OnFontSelectionChanged(string value)
+    {
+        Themes.SetFontAccessible(value == "open-dyslexic");
+    }
+
+    private async Task OnAutoResubscribeChanged(bool value)
+    {
+        await SettingsStore.SetAutoResubscribeAsync(value);
+    }
+
+    private async Task OnMaxStoredMessagesChanged(int value)
+    {
+        await SettingsStore.SetMaxStoredMessagesAsync(value);
+    }
+
+    private async Task OnMaxMessagesPerSecondChanged(int value)
+    {
+        await SettingsStore.SetMaxMessagesPerSecondAsync(value);
+    }
+}

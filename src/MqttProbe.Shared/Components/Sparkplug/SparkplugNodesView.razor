@@ -1,0 +1,512 @@
+@using Microsoft.Extensions.Logging
+@using MqttProbe.Models.Sparkplug
+@inject ISparkplugTopologyService TopologyService
+@inject ILogger<SparkplugNodesView> Logger
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@implements IAsyncDisposable
+
+<TabPanelHeader Title="Nodes" Icon="@LucideIcons.Network">
+    <HeaderChips>
+        @if (TotalNodeCount > 0)
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                     Class="spb-count-chip">
+                @TotalNodeCount nodes
+            </MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                     Class="spb-count-chip spb-count-chip--online">
+                @OnlineNodeCount online
+            </MudChip>
+            @if (OfflineNodeCount > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                         Class="spb-count-chip spb-count-chip--offline">
+                    @OfflineNodeCount offline
+                </MudChip>
+            }
+        }
+    </HeaderChips>
+    <HeaderActions>
+        @if (TotalNodeCount > 0)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" Class="app-btn-min"
+                       StartIcon="@LucideIcons.Trash2" Size="Size.Medium"
+                       Disabled="@(OfflineNodeCount == 0)"
+                       OnClick="@ConfirmRemoveAllOfflineAsync"
+                       aria-label="Remove all offline nodes">
+                Prune offline
+            </MudButton>
+        }
+    </HeaderActions>
+    <HeaderFilters>
+        <MudSelect T="string?" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                   Value="@_selectedGroupId"
+                   ValueChanged="@OnGroupFilterChanged"
+                   Class="spb-filter-select" Label="Group">
+            <MudSelectItem T="string?" Value="@((string?)null)">All</MudSelectItem>
+            @foreach (var g in TopologyService.Groups.Keys.OrderBy(k => k, NaturalStringComparer.Instance))
+            {
+                <MudSelectItem T="string?" Value="@g">@g</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudTextField @bind-Value="_filterText" Placeholder="Filter…"
+                      Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
+                      Immediate="true" Clearable="true" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Class="spb-filter-text"/>
+    </HeaderFilters>
+</TabPanelHeader>
+
+<div class="spb-split">
+    <div class="spb-split__nodes">
+        @{
+            var grouped = GroupedNodes.ToList();
+        }
+        @if (!grouped.Any())
+        {
+            @if (string.IsNullOrWhiteSpace(_filterText) && _selectedGroupId == null)
+            {
+                <div class="d-flex flex-column align-center pa-6">
+                    <MudIcon Icon="@LucideIcons.Network" Size="Size.Large" Color="Color.Secondary"/>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                        No Sparkplug B nodes observed
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Subscribe to spBv1.0/# to begin receiving node traffic
+                    </MudText>
+                </div>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-3">
+                    No nodes match "@_filterText"
+                </MudText>
+            }
+        }
+        else
+        {
+            @foreach (var grp in grouped)
+            {
+                <div class="spb-group-header">@grp.Key.ToUpperInvariant()</div>
+                @foreach (var node in grp.OrderBy(n => n.NodeId, NaturalStringComparer.Instance))
+                {
+                    <div @key="node.NodeId" class="spb-node-row @(IsSelected(node) ? "spb-node-row--selected" : "")"
+                         @onclick="() => SelectNode(node)">
+                        <div class="d-flex align-center justify-space-between">
+                            <div class="d-flex align-center gap-1">
+                                <span class="spb-status-dot" style="background:@NodeStatusColor(node)"></span>
+                                <span class="spb-node-id">@node.NodeId</span>
+                                <span class="spb-status-label spb-status-label--node" style="color:@NodeStatusColor(node)">
+                                    @NodeStatusLabel(node)
+                                </span>
+                            </div>
+                            @if (node.Status == SpbNodeStatus.Offline)
+                            {
+                                <span @onclick:stopPropagation="true">
+                                    <MudIconButton Icon="@LucideIcons.Trash2"
+                                                   Color="Color.Error"
+                                                   Size="Size.Small"
+                                                   title="Remove node from view"
+                                                   OnClick="@(() => RemoveNodeAsync(node))" />
+                                </span>
+                            }
+                        </div>
+                        <div class="spb-node-secondary">
+                            @NodeSecondaryText(node)
+                        </div>
+                    </div>
+                }
+            }
+        }
+    </div>
+
+    <div class="spb-split__detail">
+        @if (_selectedNode == null)
+        {
+            <div class="d-flex flex-column align-center justify-center spb-empty-detail">
+                <MudIcon Icon="@LucideIcons.Network" Size="Size.Large"/>
+                <MudText Typo="Typo.body2" Class="mt-2">Select a node to view details</MudText>
+            </div>
+        }
+        else
+        {
+            <MudPaper Elevation="0" Class="spb-detail-panel">
+                <MudHidden Breakpoint="Breakpoint.MdAndUp">
+                    <MudButton StartIcon="@LucideIcons.ArrowLeft" Variant="Variant.Text"
+                               Color="Color.Inherit" OnClick="@ClearSelection" Class="mb-2">
+                        Back
+                    </MudButton>
+                </MudHidden>
+
+                <div class="d-flex align-center flex-wrap gap-2 mb-1">
+                    <MudText Class="spb-detail-title">
+                        @_selectedNode.NodeId
+                    </MudText>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                             Class="spb-group-chip">
+                        @_selectedNode.GroupId
+                    </MudChip>
+                    <span class="spb-status-dot" style="background:@NodeStatusColor(_selectedNode)"></span>
+                    <span class="spb-status-label" style="color:@NodeStatusColor(_selectedNode)">
+                        @NodeStatusLabel(_selectedNode)
+                    </span>
+                    @if (IsStale(_selectedNode))
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+                                   Size="Size.Small" Class="app-btn-min"
+                                   StartIcon="@LucideIcons.RefreshCw"
+                                   OnClick="@(() => RequestRebirthAsync(_selectedNode))">
+                            Request Rebirth
+                        </MudButton>
+                    }
+                </div>
+
+                <div class="spb-timestamps d-flex flex-wrap gap-3 mb-3">
+                    @if (_selectedNode.LastBirthAt != null)
+                    {
+                        <span>
+                            Birth:
+                            <span class="telemetry-mono">
+                                @_selectedNode.LastBirthAt.Value.ToLocalTime().ToString("HH:mm:ss")
+                            </span>
+                        </span>
+                    }
+                    @if (_selectedNode.LastDataAt != null)
+                    {
+                        <span>
+                            Last data:
+                            <span class="telemetry-mono">
+                                @_selectedNode.LastDataAt.Value.ToLocalTime().ToString("HH:mm:ss")
+                            </span>
+                            @if (_selectedNode.Status == SpbNodeStatus.Online)
+                            {
+                                <span class="spb-relative-time">(@DisplayHelpers.GetRelativeTime(_selectedNode.LastDataAt))</span>
+                            }
+                        </span>
+                    }
+                    @if (_selectedNode.LastDeathAt != null && _selectedNode.Status == SpbNodeStatus.Offline)
+                    {
+                        <span>
+                            Death:
+                            <span class="telemetry-mono">
+                                @_selectedNode.LastDeathAt.Value.ToLocalTime().ToString("HH:mm:ss")
+                            </span>
+                        </span>
+                    }
+                    @if (_selectedNode.LastRebirthRequestAt != null)
+                    {
+                        <span>
+                            Rebirth requested:
+                            <span class="telemetry-mono">
+                                @_selectedNode.LastRebirthRequestAt.Value.ToLocalTime().ToString("HH:mm:ss")
+                            </span>
+                        </span>
+                    }
+                </div>
+
+                <div class="spb-subsection-header">
+                    Metrics (@_selectedNode.Metrics.Count)
+                </div>
+
+                @if (_selectedNode.Metrics.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                        No metrics received yet
+                    </MudText>
+                }
+                else
+                {
+                    <MudTable Items="@_selectedNode.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
+                              Dense="true" Hover="true" Elevation="0"
+                              Breakpoint="Breakpoint.None" Class="mb-3">
+                        <HeaderContent>
+                            <MudTh>
+                                <MudTableSortLabel SortBy="new Func<SpbMetricSnapshot, object>(m => m.Name)">
+                                    Name
+                                </MudTableSortLabel>
+                            </MudTh>
+                            <MudTh>Type</MudTh>
+                            <MudTh Class="spb-th-right">Value</MudTh>
+                            <MudTh>Updated</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd Class="spb-td-name">@context.Name</MudTd>
+                            <MudTd Class="spb-td-type">@context.DataType</MudTd>
+                            <MudTd Class="spb-td-value" Style="@($"color:{ValueColor(context)}")">
+                                @context.Value
+                            </MudTd>
+                            <MudTd Class="spb-td-updated">
+                                @context.LastUpdated.ToLocalTime().ToString("HH:mm:ss")
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+
+                <div class="spb-subsection-header">
+                    Devices (@_selectedNode.Devices.Count)
+                </div>
+
+                @if (_selectedNode.Devices.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">No devices observed</MudText>
+                }
+                else
+                {
+                    @foreach (var device in _selectedNode.Devices.Values.OrderBy(d => d.DeviceId, NaturalStringComparer.Instance))
+                    {
+                        <div @key="device.DeviceId" class="spb-device-row @(IsDeviceExpanded(device) ? "spb-device-row--expanded" : "")"
+                             @onclick="() => ToggleDevice(device)">
+                            <span class="spb-status-dot" style="background:@StatusColor(device.Status)"></span>
+                            <span class="spb-device-id">@device.DeviceId</span>
+                            <span class="spb-status-label spb-status-label--device" style="color:@StatusColor(device.Status)">
+                                @StatusLabel(device.Status)
+                            </span>
+                            <span class="spb-device-secondary">
+                                @DeviceSecondaryText(device)
+                            </span>
+                        </div>
+
+                        @if (IsDeviceExpanded(device))
+                        {
+                            <div class="spb-device-metrics">
+                                @if (device.Metrics.Count == 0)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        No metrics received yet
+                                    </MudText>
+                                }
+                                else
+                                {
+                                    <MudTable Items="@device.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
+                                              Dense="true" Hover="true" Elevation="0"
+                                              Breakpoint="Breakpoint.None">
+                                        <HeaderContent>
+                                            <MudTh>Name</MudTh>
+                                            <MudTh>Type</MudTh>
+                                            <MudTh Class="spb-th-right">Value</MudTh>
+                                            <MudTh>Updated</MudTh>
+                                        </HeaderContent>
+                                        <RowTemplate>
+                                            <MudTd Class="spb-td-name">@context.Name</MudTd>
+                                            <MudTd Class="spb-td-type">@context.DataType</MudTd>
+                                            <MudTd Class="spb-td-value" Style="@($"color:{ValueColor(context)}")">
+                                                @context.Value
+                                            </MudTd>
+                                            <MudTd Class="spb-td-updated">
+                                                @context.LastUpdated.ToLocalTime().ToString("HH:mm:ss")
+                                            </MudTd>
+                                        </RowTemplate>
+                                    </MudTable>
+                                }
+                            </div>
+                        }
+                    }
+                }
+            </MudPaper>
+        }
+    </div>
+</div>
+
+@code {
+    private SpbNode? _selectedNode;
+    private SpbDevice? _selectedDevice;
+    private string? _filterText;
+    private string? _selectedGroupId;
+    private Timer? _updateTimer;
+    private bool _disposed;
+
+    private int TotalNodeCount =>
+        TopologyService.Groups.Values.Sum(g => g.Nodes.Count);
+
+    private int OnlineNodeCount =>
+        TopologyService.Groups.Values
+            .SelectMany(g => g.Nodes.Values)
+            .Count(n => n.Status == SpbNodeStatus.Online);
+
+    private int OfflineNodeCount =>
+        TopologyService.Groups.Values
+            .SelectMany(g => g.Nodes.Values)
+            .Count(n => n.Status == SpbNodeStatus.Offline);
+
+    private IEnumerable<SpbNode> FilteredNodes =>
+        TopologyService.Groups.Values
+            .SelectMany(g => g.Nodes.Values)
+            .Where(n => _selectedGroupId == null || n.GroupId == _selectedGroupId)
+            .Where(n => string.IsNullOrWhiteSpace(_filterText)
+                || n.NodeId.Contains(_filterText, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<IGrouping<string, SpbNode>> GroupedNodes =>
+        FilteredNodes.GroupBy(n => n.GroupId).OrderBy(g => g.Key, NaturalStringComparer.Instance);
+
+    protected override void OnInitialized()
+    {
+        TopologyService.TopologyChanged += OnTopologyChanged;
+        _updateTimer = new Timer(_ =>
+        {
+            if (_disposed) return;
+#pragma warning disable CS4014 // Intentional fire-and-forget from Timer callback
+            RequestRenderSafelyAsync();
+#pragma warning restore CS4014
+        }, null, 1_000, 1_000);
+    }
+
+    private async Task RequestRenderSafelyAsync()
+    {
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException) when (_disposed)
+        {
+            // The circuit was torn down between the timer tick and the dispatch; nothing to render.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "SparkplugNodesView timer render update failed");
+        }
+    }
+
+    private void OnTopologyChanged()
+    {
+        if (_selectedNode is not null
+            && (!TopologyService.Groups.TryGetValue(_selectedNode.GroupId, out var g)
+                || !g.Nodes.ContainsKey(_selectedNode.NodeId)))
+        {
+            _selectedNode = null;
+            _selectedDevice = null;
+        }
+
+        if (_selectedGroupId is not null && !TopologyService.Groups.ContainsKey(_selectedGroupId))
+            _selectedGroupId = null;
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void SelectNode(SpbNode node)
+    {
+        _selectedNode = node;
+        _selectedDevice = null;
+    }
+
+    private async Task RemoveNodeAsync(SpbNode node)
+    {
+        if (TopologyService.RemoveNode(node.GroupId, node.NodeId))
+            Snackbar.Add($"Removed node {node.GroupId}/{node.NodeId}.", Severity.Info);
+        else
+            Snackbar.Add("Node not found.", Severity.Warning);
+
+        await Task.CompletedTask;
+    }
+
+    private async Task ConfirmRemoveAllOfflineAsync()
+    {
+        var count = TopologyService.Groups
+            .Values.SelectMany(g => g.Nodes.Values)
+            .Count(n => n.Status == SpbNodeStatus.Offline);
+
+        if (count == 0) return;
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Remove offline nodes",
+            $"Remove {count} offline node{(count != 1 ? "s" : "")} from the view?\n\n" +
+            "If the nodes send NBIRTH again they will reappear here.",
+            yesText: "Remove", cancelText: "Cancel", options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        if (confirmed != true) return;
+
+        var removed = TopologyService.RemoveOfflineNodes();
+        if (removed > 0)
+            Snackbar.Add($"Removed {removed} offline node{(removed != 1 ? "s" : "")}.", Severity.Success);
+    }
+
+    private void ClearSelection() => _selectedNode = null;
+
+    private void ToggleDevice(SpbDevice device)
+    {
+        _selectedDevice = _selectedDevice == device ? null : device;
+    }
+
+    private void OnGroupFilterChanged(string? groupId)
+    {
+        _selectedGroupId = groupId;
+        _selectedNode = null;
+    }
+
+    private bool IsSelected(SpbNode node) => _selectedNode == node;
+
+    private bool IsDeviceExpanded(SpbDevice device) => _selectedDevice == device;
+
+    private static string NodeSecondaryText(SpbNode node)
+    {
+        var lastSeen = node.Status switch
+        {
+            SpbNodeStatus.Online  => DisplayHelpers.GetRelativeTime(node.LastDataAt ?? node.LastBirthAt),
+            SpbNodeStatus.Offline => DisplayHelpers.GetRelativeTime(node.LastDeathAt),
+            _                    => null
+        };
+        var parts = new List<string>();
+        if (lastSeen != null) parts.Add(lastSeen);
+        parts.Add($"{node.Metrics.Count} metric{(node.Metrics.Count != 1 ? "s" : "")}");
+        parts.Add($"{node.Devices.Count} device{(node.Devices.Count != 1 ? "s" : "")}");
+        return string.Join(" · ", parts);
+    }
+
+    private static string DeviceSecondaryText(SpbDevice device)
+    {
+        if (device.Status == SpbNodeStatus.Offline && device.LastDeathAt != null)
+            return DisplayHelpers.GetRelativeTime(device.LastDeathAt);
+        if (device.LastDataAt != null)
+            return DisplayHelpers.GetRelativeTime(device.LastDataAt);
+        return $"{device.Metrics.Count} metric{(device.Metrics.Count != 1 ? "s" : "")}";
+    }
+
+    private static string ValueColor(SpbMetricSnapshot metric) =>
+        IsNumericType(metric.DataType) ? "var(--mud-palette-success)" : "var(--mud-palette-text-secondary)";
+
+    private async Task RequestRebirthAsync(SpbNode node)
+    {
+        await TopologyService.RequestNodeRebirthAsync(node.GroupId, node.NodeId);
+        Snackbar.Add($"Rebirth requested for {node.GroupId}/{node.NodeId}.", Severity.Info);
+    }
+
+    internal static bool IsStale(SpbNode node) =>
+        node.Status != SpbNodeStatus.Online && node.LastBirthAt == null && node.LastDataAt != null;
+
+    internal static string NodeStatusColor(SpbNode node) =>
+        IsStale(node) ? "var(--mud-palette-warning)" : StatusColor(node.Status);
+
+    internal static string NodeStatusLabel(SpbNode node) =>
+        IsStale(node) ? "STALE" : StatusLabel(node.Status);
+
+    internal static string StatusColor(SpbNodeStatus status) => status switch
+    {
+        SpbNodeStatus.Online  => "var(--mud-palette-success)",
+        SpbNodeStatus.Offline => "var(--mud-palette-error)",
+        _                    => "var(--mud-palette-text-secondary)"
+    };
+
+    internal static string StatusLabel(SpbNodeStatus status) => status switch
+    {
+        SpbNodeStatus.Online  => "ONLINE",
+        SpbNodeStatus.Offline => "OFFLINE",
+        _                    => "UNKNOWN"
+    };
+
+    internal static bool IsNumericType(string dataType) =>
+        dataType is "int8" or "int16" or "int32" or "int64"
+            or "uint8" or "uint16" or "uint32" or "uint64"
+            or "float" or "double";
+
+    internal void SetGroupFilterForTest(string? value) => _selectedGroupId = value;
+
+    internal string? GetGroupFilterForTest() => _selectedGroupId;
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        TopologyService.TopologyChanged -= OnTopologyChanged;
+        if (_updateTimer != null)
+            await _updateTimer.DisposeAsync();
+    }
+}

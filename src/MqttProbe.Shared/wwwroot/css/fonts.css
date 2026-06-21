@@ -1,0 +1,101 @@
+/* Standard font roles (brand default).
+   MudBlazor typography is set separately in Components/Layout/Themes.cs. */
+:root {
+    --font-ui: 'OpenDyslexic', system-ui, sans-serif;
+    --font-mono: 'OpenDyslexic Mono', monospace;
+    --font-display: 'OpenDyslexic', sans-serif;
+}
+
+/* Accessible font overrides — class applied by the font-mode toggle */
+.font-accessible {
+    --font-ui: 'OpenDyslexic', system-ui, sans-serif;
+    --font-mono: 'OpenDyslexic Mono', monospace;
+    --font-display: 'OpenDyslexic', sans-serif;
+}
+
+/* OpenDyslexic ships only 400/700 faces; the wide weight ranges below map the
+   app's 500/600 usages onto real faces instead of browser-synthesized bold */
+@font-face {
+    font-family: 'OpenDyslexic';
+    src: url('../fonts/OpenDyslexicNerdFont-Regular.woff2') format('woff2');
+    font-weight: 100 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'OpenDyslexic';
+    src: url('../fonts/OpenDyslexicNerdFont-Bold.woff2') format('woff2');
+    font-weight: 600 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'OpenDyslexic';
+    src: url('../fonts/OpenDyslexicNerdFont-Italic.woff2') format('woff2');
+    font-weight: 100 500;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'OpenDyslexic Mono';
+    src: url('../fonts/OpenDyslexicMNerdFontMono-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* Brand typefaces (standard font mode) */
+
+/* Inter — variable font, covers all weights 100–900 */
+@font-face {
+    font-family: 'Inter';
+    src: url('../fonts/InterVariable.woff2') format('woff2-variations');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* JetBrains Mono — static weights used in the app */
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('../fonts/JetBrainsMono-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('../fonts/JetBrainsMono-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* Chakra Petch — display face for the wordmark and headings only */
+@font-face {
+    font-family: 'Chakra Petch';
+    src: url('../fonts/ChakraPetch-500.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Chakra Petch';
+    src: url('../fonts/ChakraPetch-600.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Chakra Petch';
+    src: url('../fonts/ChakraPetch-700.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}

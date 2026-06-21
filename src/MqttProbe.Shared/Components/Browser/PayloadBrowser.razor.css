@@ -1,0 +1,67 @@
+.payload-detail-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--mud-palette-surface);
+}
+
+.payload-detail-meta-sticky {
+    position: sticky;
+    top: 40px;
+    z-index: 2;
+    background: var(--mud-palette-surface);
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+.payload-detail-body {
+    max-height: calc(100% - 40px);
+    overflow: auto;
+}
+
+::deep .payload-row td {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+@media (max-width: 959.98px) {
+    ::deep .payload-row td {
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+}
+
+.payload-section-divider {
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+::deep colgroup col:nth-child(1) { width: 13%; }
+::deep colgroup col:nth-child(2) { width: 28%; }
+::deep colgroup col:nth-child(3) { width: 54%; }
+::deep colgroup col:nth-child(4) { width: 5%; }
+
+::deep .sortable-th {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ── Detail meta table (static styling extracted from inline) ────────────── */
+
+/* td/span are authored in this component, so they carry the scope attribute —
+   no ::deep needed. Mono font comes from the global .app-mono utility. */
+.pb-meta-label {
+    width: 120px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.78rem;
+}
+
+.pb-meta-value {
+    font-size: 0.85rem;
+}
+
+.pb-topic {
+    font-size: 0.85rem;
+    word-break: break-all;
+}

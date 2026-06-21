@@ -1,0 +1,203 @@
+@using System.Runtime.InteropServices
+@using System.Text.Json
+@using MQTTnet
+@using MQTTnet.Extensions.ManagedClient
+@using MQTTnet.Protocol
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.Extensions.Logging
+@using MqttProbe.Models
+@using MqttProbe.Services.Security
+@inject IManagedMqttClient ManagedMqttClient
+@inject ILogger<Publishers> Logger
+@inject ISnackbar Snackbar
+@inject IAppInfoService AppInfoService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IUxTelemetryService? UxTelemetry
+
+<TabPanelHeader Title="Publish" Icon="@LucideIcons.Send">
+    <HeaderActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="app-btn-min"
+                   StartIcon="@LucideIcons.Send" Size="Size.Medium"
+                   title="Publish"
+                   Disabled="@string.IsNullOrWhiteSpace(_message.Topic)"
+                   OnClick="PublishMessage">
+            Publish Message
+        </MudButton>
+    </HeaderActions>
+</TabPanelHeader>
+
+<MudGrid Spacing="2">
+    @if (AppInfoService.IsNative || RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+    {
+        <MudItem xs="12">
+            <MudButton Variant="Variant.Text" Color="Color.Primary"
+                       StartIcon="@LucideIcons.ClipboardPaste"
+                       OnClick="SetMessageFromClipBoard">
+                Paste from clipboard
+            </MudButton>
+        </MudItem>
+    }
+
+    <MudItem xs="12">
+        <MudTextField T="string" Label="Topic" Variant="Variant.Outlined"
+                      @bind-Text="@_message.Topic" Lines="1"
+                      Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.ChevronRight"/>
+    </MudItem>
+
+    <MudItem xs="12">
+        <MudTextField T="string" Label="Payload" Variant="Variant.Outlined"
+                      @bind-Text="@_message.Payload" Lines="6" Sizing="InputSizing.Auto" MaxLines="20"/>
+        <div class="d-flex gap-2 mt-1 flex-wrap">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                       StartIcon="@LucideIcons.Sparkles" OnClick="FormatJsonPayload">
+                Format
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                       StartIcon="@LucideIcons.Minimize2" OnClick="MinifyJsonPayload">
+                Minify
+            </MudButton>
+        </div>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+            Tip: valid JSON is optional, but validating helps avoid malformed payload issues.
+        </MudText>
+    </MudItem>
+
+    <MudItem xs="12" sm="6">
+        <MudSelect Variant="Variant.Outlined" @bind-Value="_message.QualityOfServiceLevel" Label="QoS Level">
+            @foreach (MqttQualityOfServiceLevel item in Enum.GetValues(typeof(MqttQualityOfServiceLevel)))
+            {
+                <MudSelectItem Value="@item">@item</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" Class="d-flex align-center">
+        <MudSwitch Label="Retained" @bind-Value="@_message.RetainedMessage" Color="Color.Primary"/>
+    </MudItem>
+    @if (_message.RetainedMessage)
+    {
+        <MudItem xs="12">
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                Retained publish is enabled. This payload will be stored by the broker and delivered to new subscribers.
+            </MudAlert>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    [Inject] public required IClipboardService Clipboard { get; set; }
+
+    private static readonly JsonSerializerOptions _indentedJsonOptions = new() { WriteIndented = true };
+
+    private MqttMessage _message = new();
+
+    private async Task PublishMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_message.Topic)) return;
+
+        if (!await IsAuthorizedToPublish())
+        {
+            Snackbar.Add("You do not have permission to publish messages.", Severity.Error);
+            return;
+        }
+
+        var appMsg = new MqttApplicationMessageBuilder()
+            .WithTopic(_message.Topic)
+            .WithPayload(_message.Payload)
+            .WithQualityOfServiceLevel(_message.QualityOfServiceLevel)
+            .WithRetainFlag(_message.RetainedMessage)
+            .Build();
+
+        try
+        {
+            await ManagedMqttClient.EnqueueAsync(appMsg);
+            UxTelemetry?.RecordPublishOutcome(success: true);
+
+            Snackbar.Add($"Published to {_message.Topic}", Severity.Success,
+                cfg => { cfg.ShowCloseIcon = true; cfg.VisibleStateDuration = 2000; });
+        }
+        catch (Exception ex)
+        {
+            UxTelemetry?.RecordPublishOutcome(success: false);
+            Logger.LogError(ex, "Failed to publish message to topic {Topic}", _message.Topic);
+            Snackbar.Add("Publish failed. Confirm broker connection and payload format.", Severity.Error);
+        }
+    }
+
+    private async Task<bool> IsAuthorizedToPublish()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        return user.IsInRole(AppRoles.Admin) || user.IsInRole(AppRoles.Operator);
+    }
+
+    public async Task SetMessageFromClipBoard()
+    {
+        string? jsonString;
+        try
+        {
+            jsonString = await Clipboard.GetTextAsync();
+        }
+        catch (Exception e)
+        {
+            Logger.LogWarning(e, "Failed to read clipboard");
+            Snackbar.Add("Could not read clipboard — try pasting into the Payload field directly", Severity.Warning);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(jsonString))
+        {
+            try
+            {
+                _message = JsonSerializer.Deserialize<MqttMessage>(jsonString) ?? new MqttMessage();
+            }
+            catch (Exception e)
+            {
+                Logger.LogWarning(e, "Failed to deserialize clipboard content as MqttMessage");
+                Snackbar.Add("Clipboard content is not a valid MQTT message. Paste JSON manually and use Format JSON.", Severity.Warning);
+            }
+        }
+    }
+
+    internal void FormatJsonPayload()
+    {
+        if (string.IsNullOrWhiteSpace(_message.Payload))
+        {
+            Snackbar.Add("Payload is empty.", Severity.Info);
+            return;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(_message.Payload);
+            _message.Payload = JsonSerializer.Serialize(doc, _indentedJsonOptions);
+            Snackbar.Add("Payload formatted.", Severity.Success);
+        }
+        catch (JsonException ex)
+        {
+            Logger.LogWarning(ex, "Cannot format invalid JSON payload");
+            Snackbar.Add("Invalid JSON — fix syntax before publishing.", Severity.Warning);
+        }
+    }
+
+    internal void MinifyJsonPayload()
+    {
+        if (string.IsNullOrWhiteSpace(_message.Payload))
+        {
+            Snackbar.Add("Payload is empty.", Severity.Info);
+            return;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(_message.Payload);
+            _message.Payload = JsonSerializer.Serialize(doc);
+            Snackbar.Add("Payload minified.", Severity.Success);
+        }
+        catch (JsonException ex)
+        {
+            Logger.LogWarning(ex, "Cannot minify invalid JSON payload");
+            Snackbar.Add("Invalid JSON — fix syntax before publishing.", Severity.Warning);
+        }
+    }
+}

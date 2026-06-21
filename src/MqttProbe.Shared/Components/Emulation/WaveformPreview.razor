@@ -1,0 +1,78 @@
+@namespace MqttProbe.Components.Emulation
+@using System.Globalization
+@using System.Text
+
+<div class="emu-waveform">
+    <svg viewBox="0 0 220 48" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"
+         role="img" aria-label="Waveform preview for @Metric.Name">
+        <line x1="0" y1="24" x2="220" y2="24" stroke="var(--mud-palette-divider)" stroke-width="1"/>
+        <polyline points="@_points" fill="none" stroke="@ChartPalette.Series[2]" stroke-width="1.5"
+                  vector-effect="non-scaling-stroke"/>
+    </svg>
+    <span class="emu-waveform__label emu-waveform__label--max">@_maxLabel</span>
+    <span class="emu-waveform__label emu-waveform__label--min">@_minLabel</span>
+</div>
+
+@code {
+    [Parameter] public EmulatorMetricConfig Metric { get; set; } = null!;
+
+    private string _points = string.Empty;
+    private string _minLabel = string.Empty;
+    private string _maxLabel = string.Empty;
+
+    private static bool IsBooleanKind(WaveformKind kind) =>
+        kind is WaveformKind.FixedBoolean or WaveformKind.Toggle or WaveformKind.RandomBoolean;
+
+    protected override void OnParametersSet()
+    {
+        var samples = WaveformSampler.PreviewSamples(Metric);
+        var lo = samples.Min();
+        var hi = samples.Max();
+        // One decimal: 64 samples never land exactly on a sine peak, so finer precision would
+        // show 59.99 for a 0..60 wave instead of the configured bound.
+        _minLabel = lo.ToString("0.#", CultureInfo.InvariantCulture);
+        _maxLabel = hi.ToString("0.#", CultureInfo.InvariantCulture);
+
+        // Labels stay truthful to the sampled range; geometry pads flat traces so they draw on the midline,
+        // and boolean kinds use the fixed 0..1 range so a constant true sits at the top, not mid-glyph.
+        var geomLo = lo;
+        var geomHi = hi;
+        if (IsBooleanKind(Metric.Waveform))
+        {
+            geomLo = 0;
+            geomHi = 1;
+        }
+        else if (geomHi - geomLo < 1e-12)
+        {
+            geomLo -= 1;
+            geomHi += 1;
+        }
+
+        _points = BuildPoints(samples, geomLo, geomHi, IsBooleanKind(Metric.Waveform));
+    }
+
+    private static string BuildPoints(double[] samples, double lo, double hi, bool stepTrace)
+    {
+        var sb = new StringBuilder(samples.Length * 12);
+        var lastY = 0.0;
+        for (var i = 0; i < samples.Length; i++)
+        {
+            var x = samples.Length > 1 ? 220.0 * i / (samples.Length - 1) : 0.0;
+            var y = 48.0 - (samples[i] - lo) / (hi - lo) * 48.0;
+            if (stepTrace && i > 0 && Math.Abs(y - lastY) > 1e-9)
+                AppendPoint(sb, x, lastY);
+            AppendPoint(sb, x, y);
+            lastY = y;
+        }
+
+        return sb.ToString();
+    }
+
+    private static void AppendPoint(StringBuilder sb, double x, double y)
+    {
+        if (sb.Length > 0) sb.Append(' ');
+        sb.Append(x.ToString("0.##", CultureInfo.InvariantCulture));
+        sb.Append(',');
+        sb.Append(y.ToString("0.##", CultureInfo.InvariantCulture));
+    }
+}

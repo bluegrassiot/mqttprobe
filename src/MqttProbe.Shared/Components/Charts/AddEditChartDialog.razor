@@ -1,0 +1,121 @@
+@using AppChartType = MqttProbe.Models.Chart.ChartType
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@LucideIcons.Activity" Class="mr-2"/>
+            @(Configuration == null ? "New Chart" : "Edit Chart")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_name" Label="Chart Name" Variant="Variant.Outlined"
+                          Immediate="true" Required="true" MaxLength="100" />
+            <MudSelect @bind-Value="_type" Label="Chart Type" Variant="Variant.Outlined">
+                @foreach (AppChartType t in Enum.GetValues<AppChartType>())
+                {
+                    <MudSelectItem Value="@t">@t</MudSelectItem>
+                }
+            </MudSelect>
+            <MudNumericField @bind-Value="_maxPoints" Label="Max Points Per Series"
+                             Variant="Variant.Outlined" Min="10" Max="5000" Step="100" />
+            <MudSelect @bind-Value="_timeWindow" Label="Time Window" Variant="Variant.Outlined"
+                       Clearable="true">
+                <MudSelectItem Value="@((int?)5)">Last 5 minutes</MudSelectItem>
+                <MudSelectItem Value="@((int?)10)">Last 10 minutes</MudSelectItem>
+                <MudSelectItem Value="@((int?)30)">Last 30 minutes</MudSelectItem>
+                <MudSelectItem Value="@((int?)60)">Last 1 hour</MudSelectItem>
+                <MudSelectItem Value="@((int?)null)">All retained points</MudSelectItem>
+            </MudSelect>
+
+            <MudDivider />
+            <MudText Typo="Typo.subtitle2">Series review (@_series.Count selected)</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Confirm display names and field mappings before saving.
+            </MudText>
+
+            @foreach (var series in _series)
+            {
+                var s = series;
+                <MudPaper Elevation="0" Class="pa-2 app-chrome-panel">
+                    <div class="d-flex align-center gap-2">
+                        <div style="width:16px; height:16px; border-radius:3px; background:@s.Color; flex-shrink:0"></div>
+                        <div class="flex-grow-1">
+                            <MudTextField @bind-Value="s.DisplayName" Variant="Variant.Text"
+                                          Margin="Margin.Dense" Immediate="true"
+                                          Placeholder="Series name" Style="font-weight:600"/>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary"
+                                     Class="app-mono">
+                                @s.Topic › @s.JsonPath
+                            </MudText>
+                        </div>
+                        <MudIconButton Icon="@LucideIcons.Trash2" Size="Size.Small"
+                                       Color="Color.Error" title="Remove series"
+                                       OnClick="() => _series.Remove(s)" />
+                    </div>
+                </MudPaper>
+            }
+
+            @if (!_series.Any())
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-center pa-2">
+                    No series yet. Open a JSON message in the Browser tab and click a field to add it here.
+                </MudText>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" Color="Color.Default" Class="app-btn-min" OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Class="app-btn-min"
+                   Disabled="@(string.IsNullOrWhiteSpace(_name))"
+                   OnClick="Submit">
+            @(Configuration == null ? "Create Chart" : "Save Chart")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public ChartConfiguration? Configuration { get; set; }
+
+    private string _name = "";
+    private AppChartType _type = AppChartType.Line;
+    private int _maxPoints = 500;
+    private int? _timeWindow;
+    private List<ChartSeries> _series = [];
+
+    protected override void OnParametersSet()
+    {
+        if (Configuration != null)
+        {
+            _name = Configuration.Name;
+            _type = Configuration.Type;
+            _maxPoints = Configuration.MaxPoints;
+            _timeWindow = Configuration.TimeWindowMinutes;
+            _series = [.. Configuration.Series.Select(s => new ChartSeries
+            {
+                Id = s.Id,
+                DisplayName = s.DisplayName,
+                Topic = s.Topic,
+                JsonPath = s.JsonPath,
+                Color = s.Color
+            })];
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        var config = new ChartConfiguration
+        {
+            Name = _name,
+            Type = _type,
+            MaxPoints = _maxPoints,
+            TimeWindowMinutes = _timeWindow,
+            Series = _series
+        };
+        if (Configuration != null)
+            config.Id = Configuration.Id;
+        MudDialog.Close(DialogResult.Ok(config));
+    }
+}

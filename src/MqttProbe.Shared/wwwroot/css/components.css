@@ -1,0 +1,104 @@
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+/* Brand 6px button radius; MudBlazor's theme applies a flat 8px DefaultBorderRadius.
+   Must load after MudBlazor.min.css to win on equal specificity. Cosmetic only. */
+.mud-button-root {
+    border-radius: 6px !important;
+}
+
+/* Opt-in width floor so a short label (e.g. Cancel) balances a wider primary and
+   standalone primary actions are not cramped. Never applied to icon, group, ghost,
+   or FullWidth buttons — those derive width from their container. */
+.app-btn-min {
+    min-width: 96px;
+}
+
+/* ── Brand button colors (BRAND_GUIDE §6) ──────────────────────────────────── */
+
+/* These rules MUST live in the global stylesheet (not in MainLayout.razor.css
+   under ::deep) because MudDialog renders its content through a portal — outside
+   MainLayout's DOM subtree, so scoped CSS doesn't reach it. The dialog's Connect
+   button is the regression that taught us this. */
+
+/* Primary filled: dark text on Signal Orange (per brand guide; MudBlazor's
+   auto-contrast would otherwise pick white in dark contexts). */
+.mud-button-filled.mud-button-filled-primary {
+    color: #0F172A !important;
+}
+
+/* Primary filled hover: brand-guide hover color. */
+.mud-button-filled.mud-button-filled-primary:hover {
+    background-color: #EA6C0A !important;
+}
+
+/* Primary outlined hover: 10% orange background. */
+.mud-button-outlined.mud-button-outlined-primary:hover {
+    background-color: rgba(249, 115, 22, 0.1) !important;
+}
+
+/* Disabled buttons: 40% opacity (brand guide). */
+.mud-button-root.mud-disabled {
+    opacity: 0.4 !important;
+}
+
+/* Ghost (text) button colors — only for default/inherit color buttons. Both rules
+   are needed: the button-root rule covers text labels, the icon-root rule overrides
+   MudIcon's own .mud-icon-default class which pulls ActionDefault (Signal Orange)
+   from the palette and wins over currentColor inheritance. */
+.mud-button-text-inherit,
+.mud-button-text-default {
+    color: #94A3B8 !important;
+}
+
+.mud-button-text-inherit:hover,
+.mud-button-text-default:hover {
+    color: #F1F5F9 !important;
+}
+
+.mud-button-text-inherit .mud-icon-root,
+.mud-button-text-default .mud-icon-root {
+    color: #94A3B8 !important;
+}
+
+.mud-button-text-inherit:hover .mud-icon-root,
+.mud-button-text-default:hover .mud-icon-root {
+    color: #F1F5F9 !important;
+}
+
+/* ── Data text ───────────────────────────────────────────────────────────── */
+
+/* Shared monospace data display (BRAND_GUIDE Code and Data Display). */
+.app-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── AppShellBar status chips ────────────────────────────────────────────── */
+
+/* Global because the MudChip root never receives AppShellBar's CSS-isolation
+   attribute, so these cannot live in AppShellBar.razor.css. */
+.mud-appbar .status-chip {
+    font-weight: 600;
+}
+
+/* The appbar stays slate-dark in both palettes, but an outlined Color.Inherit
+   chip falls back to the page text color — near-black in light mode. */
+.mud-appbar .status-chip--connected {
+    color: var(--mud-palette-appbar-text);
+}
+
+.mud-appbar .broker-chip .mud-chip-content {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mud-appbar .status-pulse {
+    animation: status-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+}

@@ -1,0 +1,35 @@
+@namespace MqttProbe.Components.Shared
+
+<div class="app-tabpanel-header">
+    <div class="app-tabpanel-header__row">
+        @if (!string.IsNullOrEmpty(Icon))
+        {
+            <MudIcon Icon="@Icon" Size="Size.Small" Color="Color.Primary" />
+        }
+        <h6 class="mud-typography mud-typography-h6 app-tabpanel-header__title">@Title</h6>
+        @if (HeaderChips is not null)
+        {
+            <div class="app-tabpanel-header__chips">@HeaderChips</div>
+        }
+        @if (HeaderActions is not null)
+        {
+            <div class="app-tabpanel-header__actions">@HeaderActions</div>
+        }
+    </div>
+    @if (HeaderFilters is not null)
+    {
+        <div class="app-tabpanel-header__filters">@HeaderFilters</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public string? Icon { get; set; }
+
+    [Parameter] public RenderFragment? HeaderChips { get; set; }
+
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+
+    [Parameter] public RenderFragment? HeaderFilters { get; set; }
+}

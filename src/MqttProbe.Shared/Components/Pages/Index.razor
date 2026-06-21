@@ -1,0 +1,273 @@
+@page "/"
+@using Microsoft.AspNetCore.Components.Authorization
+@using MqttProbe.Services.Configuration
+@attribute [Authorize]
+@implements IDisposable
+@inject IMessageStoreManager MessageStoreManager
+@inject ISettingsStore SettingsStore
+@inject ISubscriptionManager SubscriptionManager
+@inject IEmulationService EmulationService
+@inject ISparkplugTopologyService TopologyService
+@inject NavigationManager NavigationManager
+
+<PageTitle>MQTTProbe</PageTitle>
+
+<MudTabs ActivePanelIndex="@_activeTabIndex"
+         ActivePanelIndexChanged="@OnActivePanelChanged"
+         IconColor="Color.Inherit" Elevation="0" Rounded="true"
+         TabPanelsClass="tab-shell" SliderColor="Color.Primary"
+         KeepPanelsAlive="true" Centered="true">
+
+    <MudTabPanel Icon="@LucideIcons.Eye" Text="@BrowserTabLabel">
+        <TabPanelHeader Title="Browser" Icon="@LucideIcons.Eye">
+            <HeaderChips>
+                @if (MessageStoreManager.MessageStores.Any())
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                             Style="height:20px; font-size:0.7rem; padding:0 6px;">
+                        @MessageStoreManager.MessageStores.Count
+                    </MudChip>
+                }
+            </HeaderChips>
+        </TabPanelHeader>
+        <div class="tab-panel-content">
+            @if (!MessageStoreManager.MessageStores.Any() && !SettingsStore.IsHintDismissed("browser"))
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-2"
+                          ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("browser"))">
+                    <strong>Start here:</strong> connect to a broker, then select or add subscriptions to begin receiving topics.
+                </MudAlert>
+            }
+            <ErrorBoundary ErrorContent="_sectionError">
+                <div class="browser-split">
+                    <div class="browser-split__topics browser-pane-topics mobile-hide">
+                        <TopicBrowser/>
+                    </div>
+                    <div class="mobile-topics-collapse mobile-show">
+                        <div class="mobile-topics-header" @onclick="ToggleMobileTopics">
+                            <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary"/>
+                            <MudText Typo="Typo.subtitle2" Style="font-weight:600">Topics</MudText>
+                            @if (MessageStoreManager.MessageStores.Any())
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                                         Style="height:20px; font-size:0.7rem; padding:0 6px;">
+                                    @MessageStoreManager.MessageStores.Count
+                                </MudChip>
+                            }
+                            <MudSpacer/>
+                            <MudIcon Icon="@(_mobileTopicsExpanded ? LucideIcons.ChevronUp : LucideIcons.ChevronDown)"
+                                     Size="Size.Small" Color="Color.Primary"/>
+                        </div>
+                        <MudCollapse Expanded="@_mobileTopicsExpanded">
+                            <div class="mobile-topics-content">
+                                <TopicBrowser/>
+                            </div>
+                        </MudCollapse>
+                    </div>
+                    <div class="browser-split__messages browser-pane-messages">
+                        <PayloadBrowser/>
+                    </div>
+                </div>
+            </ErrorBoundary>
+        </div>
+    </MudTabPanel>
+
+    @if (TopologyService.Groups.Any())
+    {
+        <MudTabPanel Icon="@LucideIcons.Network" Text="@NodesTabLabel">
+            <div class="tab-panel-content">
+                <ErrorBoundary ErrorContent="_sectionError">
+                    <SparkplugNodesView />
+                </ErrorBoundary>
+            </div>
+        </MudTabPanel>
+    }
+
+    <MudTabPanel Icon="@LucideIcons.Activity" Text="@ChartsTabLabel">
+        <div class="tab-panel-content">
+            @if (!SettingsStore.Charts.Any() && !SettingsStore.IsHintDismissed("charts"))
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                          ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("charts"))">
+                    <strong>Start here:</strong> open a JSON message in Browser and choose a numeric field to create your first chart.
+                </MudAlert>
+            }
+            <ErrorBoundary ErrorContent="_sectionError">
+                <Charts/>
+            </ErrorBoundary>
+        </div>
+    </MudTabPanel>
+
+    <MudTabPanel Icon="@LucideIcons.Layers" Text="@SubscriptionsTabLabel">
+        <div class="tab-panel-content">
+            @if (!SubscriptionManager.Topics.Any() && !SettingsStore.IsHintDismissed("subscriptions"))
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                          ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("subscriptions"))">
+                    <strong>Start here:</strong> subscribe to a topic (for example <code>#</code>) to begin collecting matching messages.
+                </MudAlert>
+            }
+            <ErrorBoundary ErrorContent="_sectionError">
+                <Subscriptions/>
+            </ErrorBoundary>
+        </div>
+    </MudTabPanel>
+
+    <MudTabPanel Icon="@LucideIcons.Send" Text="Publish">
+        <div class="tab-panel-content">
+            @if (!SettingsStore.IsHintDismissed("publish"))
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                          ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("publish"))">
+                    <strong>Start here:</strong> set a topic and payload, then publish to verify broker writes and downstream subscribers.
+                </MudAlert>
+            }
+            <ErrorBoundary ErrorContent="_sectionError">
+                <AuthorizeView Roles="Admin,Operator">
+                    <Authorized>
+                        <Publishers/>
+                    </Authorized>
+                    <NotAuthorized>
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                            Operator role required to publish messages.
+                        </MudAlert>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </ErrorBoundary>
+        </div>
+    </MudTabPanel>
+
+    <MudTabPanel Icon="@LucideIcons.Zap" Text="@EmulationTabLabel">
+        <div class="tab-panel-content">
+            @if (EmulationService.Nodes.Count == 0 && !SettingsStore.IsHintDismissed("emulation"))
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                          ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("emulation"))">
+                    <strong>Start here:</strong> add an emulator node, then start emulation to stream synthetic telemetry.
+                </MudAlert>
+            }
+            <ErrorBoundary ErrorContent="_sectionError">
+                <AuthorizeView Roles="Admin,Operator">
+                    <Authorized>
+                        <EmulationPanel/>
+                    </Authorized>
+                    <NotAuthorized>
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                            Operator role required to run emulations.
+                        </MudAlert>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </ErrorBoundary>
+        </div>
+    </MudTabPanel>
+
+    <MudTabPanel Icon="@LucideIcons.Settings" Text="Settings">
+        <div class="tab-panel-content">
+            <ErrorBoundary ErrorContent="_sectionError">
+                <Settings/>
+            </ErrorBoundary>
+        </div>
+    </MudTabPanel>
+
+</MudTabs>
+
+@code {
+    private string BrowserTabLabel =>
+        MessageStoreManager.MessageStores.Count > 0 ? $"Browser ({MessageStoreManager.MessageStores.Count})" : "Browser";
+
+    private string ChartsTabLabel =>
+        SettingsStore.Charts.Count > 0 ? $"Charts ({SettingsStore.Charts.Count})" : "Charts";
+
+    private string SubscriptionsTabLabel =>
+        SubscriptionManager.Topics.Count > 0 ? $"Subscriptions ({SubscriptionManager.Topics.Count})" : "Subscriptions";
+
+    private string NodesTabLabel
+    {
+        get
+        {
+            var count = TopologyService.Groups.Values.Sum(g => g.Nodes.Count);
+            return count > 0 ? $"Nodes ({count})" : "Nodes";
+        }
+    }
+
+    private string EmulationTabLabel =>
+        EmulationService.Nodes.Count > 0 ? $"Emulation ({EmulationService.Nodes.Count})" : "Emulation";
+
+    private bool _mobileTopicsExpanded = false;
+
+    private readonly RenderFragment<Exception> _sectionError = _ => @<SectionError />;
+
+    private int _activeTabIndex = 0;
+    private bool _suppressUrlUpdate;
+
+    private static readonly Dictionary<string, int> TabSlugs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["browser"] = 0,
+        ["nodes"] = 1,
+        ["charts"] = 2,
+        ["subscriptions"] = 3,
+        ["publish"] = 4,
+        ["emulation"] = 5,
+        ["settings"] = 6,
+    };
+
+    protected override void OnInitialized()
+    {
+        TopologyService.TopologyChanged += OnTopologyChanged;
+        _activeTabIndex = ResolveTabFromUrl();
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnTopologyChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        TopologyService.TopologyChanged -= OnTopologyChanged;
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+
+    private void ToggleMobileTopics() => _mobileTopicsExpanded = !_mobileTopicsExpanded;
+
+    private async Task DismissHint(string hintId)
+    {
+        await SettingsStore.DismissHintAsync(hintId);
+        StateHasChanged();
+    }
+
+    private int ResolveTabFromUrl()
+    {
+        var uri = new Uri(NavigationManager.Uri);
+        var query = uri.Query.TrimStart('?');
+        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var eq = pair.IndexOf('=');
+            if (eq <= 0) continue;
+            var key = pair[..eq];
+            if (string.Equals(key, "tab", StringComparison.OrdinalIgnoreCase))
+            {
+                var value = Uri.UnescapeDataString(pair[(eq + 1)..]);
+                if (TabSlugs.TryGetValue(value, out var idx)) return idx;
+            }
+        }
+        return 0;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        if (_suppressUrlUpdate) return;
+        var idx = ResolveTabFromUrl();
+        if (idx != _activeTabIndex) _activeTabIndex = idx;
+    }
+
+    private void OnActivePanelChanged(int index)
+    {
+        if (index < 0 || index >= TabSlugs.Count) return;
+        _activeTabIndex = index;
+        if (_suppressUrlUpdate) return;
+        var slug = TabSlugs.First(kv => kv.Value == index).Key;
+        var newUrl = NavigationManager.GetUriWithQueryParameter("tab", slug);
+        _suppressUrlUpdate = true;
+        try { NavigationManager.NavigateTo(newUrl, forceLoad: false); }
+        finally { _suppressUrlUpdate = false; }
+    }
+}

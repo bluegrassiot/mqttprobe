@@ -1,0 +1,24 @@
+services:
+  mqttprobe:
+    image: bluegrassiot/mqttprobe:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - mqttprobe-config:/app/config
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    restart: unless-stopped
+
+  # Optional: remove this section if you have an existing MQTT broker to connect to.
+  # WARNING: allow_anonymous true is for local evaluation only.
+  mosquitto:
+    image: eclipse-mosquitto:2
+    command: >
+      sh -c "printf 'listener 1883\nallow_anonymous true\nlog_dest stdout\n'
+      > /tmp/mosquitto.conf && mosquitto -c /tmp/mosquitto.conf"
+    ports:
+      - "1883:1883"
+    restart: unless-stopped
+
+volumes:
+  mqttprobe-config:

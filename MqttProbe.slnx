@@ -1,0 +1,48 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/docker/">
+    <File Path=".dockerignore" />
+    <File Path=".env.example" />
+    <File Path="docker-compose.yml" />
+    <File Path="docker-compose.prod.yml" />
+    <File Path="Dockerfile" />
+  </Folder>
+  <Folder Name="/docs/">
+    <File Path="CONTRIBUTING.md" />
+    <File Path="LICENSE" />
+    <File Path="NOTICES" />
+    <File Path="README.md" />
+    <File Path="SECURITY.md" />
+  </Folder>
+  <Folder Name="/general/">
+    <File Path=".editorconfig" />
+    <File Path=".gitattributes" />
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="dotnet-tools.json" />
+    <File Path="global.json" />
+  </Folder>
+  <Folder Name="/github/">
+    <File Path=".github/workflows/ci.yml" />
+    <File Path=".github/workflows/release.yml" />
+  </Folder>
+  <Folder Name="/scripts/">
+    <File Path="scripts/coverage.py" />
+    <File Path="scripts/format-check.py" />
+    <File Path="scripts/reset-password.py" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/MqttProbe.Maui/MqttProbe.Maui.csproj">
+      <Deploy Solution="*|Any CPU" />
+    </Project>
+    <Project Path="src/MqttProbe.Shared/MqttProbe.Shared.csproj" />
+    <Project Path="src/MqttProbe.Web/MqttProbe.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj" />
+  </Folder>
+</Solution>

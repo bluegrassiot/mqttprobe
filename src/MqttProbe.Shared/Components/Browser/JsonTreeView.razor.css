@@ -1,0 +1,7 @@
+.json-tree-root {
+    padding: 8px;
+    overflow: auto;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.6;
+}

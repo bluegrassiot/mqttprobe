@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <Format>opencover</Format>
+          <!-- Exclude test assemblies and untestable auto-generated Web host infrastructure -->
+          <Exclude>[MqttProbe.Tests]*,[MqttProbe.IntegrationTests]*,[MqttProbe.E2ETests]*,[MqttProbe.Web]Program*,[MqttProbe.Web]MqttProbe.Routes,[MqttProbe.Web]AspNetCoreGeneratedDocument.*,[MqttProbe.Web]MqttProbe.Web.Services.WebClipboardService</Exclude>
+          <ExcludeByFile>**/SparkplugBProtobuf.cs,**/*.g.cs,**/*.Designer.cs</ExcludeByFile>
+          <!-- Include only production assemblies -->
+          <Include>[MqttProbe.Shared]*,[MqttProbe.Web]*</Include>
+          <SingleHit>false</SingleHit>
+          <UseSourceLink>true</UseSourceLink>
+          <IncludeTestAssembly>false</IncludeTestAssembly>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+  <NUnit>
+    <DefaultTimeout>30000</DefaultTimeout>
+  </NUnit>
+</RunSettings>

@@ -1,0 +1,413 @@
+@inject IMessageStoreManager MessageStoreManager
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@using System.Globalization
+@using System.Text.Json
+@using System.Xml.Linq
+@implements IAsyncDisposable
+
+@if (_selectedMessage != null)
+{
+    var msg = _selectedMessage;
+    <MudPaper Elevation="0" Class="pa-0 app-chrome-panel">
+        <div class="d-flex align-center px-2 py-1 payload-detail-toolbar payload-section-divider">
+            <MudIconButton Icon="@LucideIcons.ArrowLeft" Size="Size.Small"
+                           Color="Color.Primary" title="Back to message list"
+                           OnClick="ClearSelection"/>
+            <MudText Typo="Typo.subtitle2" Style="font-weight:600" Class="ml-1">Message Details</MudText>
+            <MudIconButton Icon="@LucideIcons.ChevronLeft" Size="Size.Small"
+                           Disabled="@(!CanNavigatePrevious)" Color="Color.Primary"
+                           title="Previous message" OnClick="SelectPreviousMessage"/>
+            <MudIconButton Icon="@LucideIcons.ChevronRight" Size="Size.Small"
+                           Disabled="@(!CanNavigateNext)" Color="Color.Primary"
+                           title="Next message" OnClick="SelectNextMessage"/>
+            <MudSpacer/>
+            <MudIconButton title="Copy full message" Size="Size.Small"
+                           Icon="@LucideIcons.Copy" Color="Color.Primary"
+                           @onclick="() => CopyToClipboard(JsonSerializer.Serialize(_selectedMessage))"/>
+        </div>
+        <div class="payload-detail-meta-sticky">
+            <MudSimpleTable Dense="true" FixedHeader="true" Style="overflow: auto;" Class="mb-0">
+                <tbody>
+                    <tr>
+                        <td class="pb-meta-label">Topic</td>
+                        <td>
+                            <div class="d-flex align-center gap-1">
+                                <span class="app-mono pb-topic">@msg.Topic</span>
+                                <MudIconButton title="Copy topic" Size="Size.Small"
+                                               Icon="@LucideIcons.Copy" Color="Color.Primary"
+                                               @onclick="() => CopyToClipboard(msg.Topic!)"/>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="pb-meta-label">Received</td>
+                        <td class="pb-meta-value">
+                            @msg.DateTimeReceived.ToString("yyyy-MM-dd HH:mm:ss.fff")
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="display:inline; margin-left:6px">
+                                @DisplayHelpers.GetRelativeTime(msg.DateTimeReceived)
+                            </MudText>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="pb-meta-label">QoS</td>
+                        <td class="pb-meta-value">@((int)msg.QualityOfServiceLevel) — @msg.QualityOfServiceLevel</td>
+                    </tr>
+                    <tr>
+                        <td class="pb-meta-label">Retained</td>
+                        <td>
+                            @if (msg.RetainedMessage)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                                         Style="height:20px; font-size:0.72rem">Retained</MudChip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">No</MudText>
+                            }
+                        </td>
+                    </tr>
+                </tbody>
+            </MudSimpleTable>
+        </div>
+
+        <MudPaper Outlined="true" Class="ma-2 pa-1 payload-detail-body">
+            @{
+                var payloadType = GetPayloadType(msg.Payload);
+                var (typeLabel, typeColor) = payloadType switch
+                {
+                    PayloadType.Json    => ("JSON",    Color.Success),
+                    PayloadType.Xml     => ("XML",     Color.Info),
+                    PayloadType.Number  => ("Number",  Color.Warning),
+                    PayloadType.Boolean => ("Boolean", Color.Secondary),
+                    PayloadType.Empty   => ("Empty",   Color.Default),
+                    _                  => ("Text",    Color.Default)
+                };
+            }
+            <div class="d-flex align-center px-1 py-1 payload-section-divider">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Payload</MudText>
+                <MudChip T="string" Size="Size.Small" Color="@typeColor" Variant="Variant.Text"
+                         Style="height:20px; font-size:0.72rem; margin-left:6px">@typeLabel</MudChip>
+                <MudSpacer/>
+                @if (payloadType == PayloadType.Json && JsonTreeView.IsExpandableJson(msg.Payload))
+                {
+                    <div class="d-flex align-center payload-action-group">
+                        <MudIconButton title="Expand all" Size="Size.Small"
+                                       Icon="@LucideIcons.Maximize2" Color="Color.Primary"
+                                       Class="json-expand-all-btn"
+                                       @onclick="() => _jsonTreeView!.ExpandAll()"/>
+                        <MudIconButton title="Collapse all" Size="Size.Small"
+                                       Icon="@LucideIcons.Minimize2" Color="Color.Primary"
+                                       Class="json-collapse-all-btn"
+                                       @onclick="() => _jsonTreeView!.CollapseAll()"/>
+                    </div>
+                }
+                <MudIconButton title="Copy payload" Size="Size.Small"
+                               Icon="@LucideIcons.Copy" Color="Color.Primary"
+                               @onclick="() => CopyToClipboard(msg.Payload ?? string.Empty)"/>
+            </div>
+            @if (payloadType == PayloadType.Json)
+            {
+                <JsonTreeView @ref="_jsonTreeView" Json="@msg.Payload" OnAddToChart="HandleAddToChart"/>
+            }
+            else if (payloadType == PayloadType.Xml)
+            {
+                <pre style="margin:0; padding:8px; overflow:auto; font-size:0.82rem"><code>@(TryFormatXml(msg.Payload!) ?? msg.Payload)</code></pre>
+            }
+            else if (payloadType == PayloadType.Number)
+            {
+                <div class="d-flex justify-center align-center pa-4">
+                    <MudText Typo="Typo.h5" Style="font-family:var(--font-mono); color:var(--mud-palette-success); letter-spacing:0.05em">@msg.Payload?.Trim()</MudText>
+                </div>
+            }
+            else if (payloadType == PayloadType.Boolean)
+            {
+                var boolTrue = msg.Payload!.Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
+                <div class="d-flex justify-center align-center pa-4">
+                    <MudChip T="string" Color="@(boolTrue ? Color.Success : Color.Error)"
+                             Variant="Variant.Filled" Size="Size.Large">
+                        @msg.Payload.Trim().ToLowerInvariant()
+                    </MudChip>
+                </div>
+            }
+            else if (payloadType == PayloadType.Empty)
+            {
+                <div class="d-flex justify-center align-center pa-4">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Style="font-style:italic">Empty payload</MudText>
+                </div>
+            }
+            else
+            {
+                <pre style="margin:0; padding:8px; overflow:auto; font-size:0.82rem; white-space:pre-wrap; word-break:break-word"><code>@msg.Payload</code></pre>
+            }
+        </MudPaper>
+    </MudPaper>
+}
+else
+{
+    <MudPaper Elevation="0" Class="pa-0 app-chrome-panel">
+        @if (_messageList.Count > 0)
+        {
+            <div class="d-flex align-center px-3 py-1 payload-section-divider">
+                <MudIcon Icon="@LucideIcons.ChevronRight" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
+                <MudText Typo="Typo.subtitle2" Style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+                    @_messageList.FirstOrDefault()?.Topic
+                </MudText>
+                <MudSpacer/>
+                @if (_messageList.Count >= MaxMessageCount)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Warning" Class="mr-2 payload-truncation-note">
+                        Showing latest @MaxMessageCount
+                    </MudText>
+                }
+            </div>
+        }
+        <MudTable HorizontalScrollbar="true" Dense="true"
+                  SelectedItem="_selectedMessage" SelectedItemChanged="MessageChanged" T="MqttMessage"
+                  Filter="new Func<MqttMessage, bool>(FilterFunc)" Items="_messageList"
+                  Hover="true" Breakpoint="Breakpoint.None" Virtualize="true" FixedHeader="true" Striped="true"
+                  RowClassFunc="GetRowClass">
+            <ToolBarContent>
+                <MudTextField @bind-Value="_searchStringTerm" Placeholder="Search messages…"
+                              Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
+                              Immediate="true" Clearable="true" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" Class="mt-0"/>
+                <MudSpacer/>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                           StartIcon="@LucideIcons.Trash2"
+                           Color="Color.Error"
+                           OnClick="ClearAllMessages">
+                    Clear Messages
+                </MudButton>
+            </ToolBarContent>
+            <ColGroup>
+                <col/>
+                <col/>
+                <col/>
+                <col/>
+            </ColGroup>
+            <HeaderContent>
+                <MudTh>
+                    <span class="sortable-th" @onclick="ToggleSortOrder"
+                          title="@(_newestFirst ? "Sort: oldest first" : "Sort: newest first")">
+                        Time
+                        <MudIcon Icon="@(_newestFirst ? Icons.Material.Filled.ArrowDownward : Icons.Material.Filled.ArrowUpward)"
+                                 Size="Size.Small" Color="Color.Inherit" />
+                    </span>
+                </MudTh>
+                <MudTh>Topic</MudTh>
+                <MudTh>Payload</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Time" Class="telemetry-time">
+                    @context.DateTimeReceived.ToString("HH:mm:ss.fff")
+                </MudTd>
+                <MudTd DataLabel="Topic" Class="telemetry-mono telemetry-compact" Style="word-break:break-all">@context.Topic</MudTd>
+                <MudTd DataLabel="Payload" Class="telemetry-mono telemetry-compact">
+                    @(context.Payload is { Length: > 250 } ? $"{context.Payload[..250]}…" : context.Payload)
+                </MudTd>
+                <MudTd DataLabel="">
+                    @if (context.RetainedMessage)
+                    {
+                        <MudIcon Icon="@LucideIcons.Bookmark" Size="Size.Small" Color="Color.Warning" title="Retained"/>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <div class="d-flex flex-column align-center pa-6">
+                    <MudIcon Icon="@LucideIcons.Inbox" Size="Size.Large" Color="Color.Secondary"/>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">Select a topic to see messages</MudText>
+                </div>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+}
+
+@code {
+    [Inject] public required IClipboardService Clipboard { get; set; }
+
+    private const int MaxMessageCount = 500;
+    internal string? _searchStringTerm;
+    private List<MqttMessage> _messageList = [];
+    private MqttMessage? _selectedMessage;
+    private Timer? _updateTimer;
+    private JsonTreeView? _jsonTreeView;
+    internal bool _disposed;
+    private DateTime _lastMessageTimestamp;
+    private MessageStore? _currentSelectedStore;
+    private bool _newestFirst = true;
+    private bool CanNavigatePrevious => _selectedMessage != null && _messageList.IndexOf(_selectedMessage) >= 1;
+    private bool CanNavigateNext => _selectedMessage != null && _messageList.IndexOf(_selectedMessage) < _messageList.Count - 1;
+
+    protected override Task OnInitializedAsync()
+    {
+        _updateTimer = new Timer(async _ =>
+        {
+            if (_disposed) return;
+            var currentStore = MessageStoreManager.SelectedMessageStore;
+            var messages = await MessageStoreManager.GetMessagesForSelectedTopic();
+            if (_disposed) return;
+
+            var list = messages.Take(MaxMessageCount).ToList();
+            if (!_newestFirst)
+                list.Reverse();
+            var newestTimestamp = list.Count > 0 ? list[0].DateTimeReceived : DateTime.MinValue;
+
+            var storeChanged = !ReferenceEquals(currentStore, _currentSelectedStore);
+            if (storeChanged)
+            {
+                _currentSelectedStore = currentStore;
+                _selectedMessage = null;
+            }
+            else if (newestTimestamp <= _lastMessageTimestamp && list.Count == _messageList.Count)
+            {
+                return;
+            }
+
+            _lastMessageTimestamp = newestTimestamp;
+            _messageList = list;
+            // Guard against the circuit being torn down between the _disposed check
+            // above and the actual invocation — ObjectDisposedException is expected here.
+            try { await InvokeAsync(StateHasChanged); }
+            catch (Exception) when (_disposed)
+            {
+                // expected when the Blazor circuit is torn down between the _disposed check and the invocation
+            }
+        }, null, 0, 500);
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        if (_updateTimer != null)
+            await _updateTimer.DisposeAsync();
+    }
+
+    internal static bool IsJson(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var trimmed = value.TrimStart();
+        if (trimmed.Length == 0 || (trimmed[0] != '{' && trimmed[0] != '[')) return false;
+        try { using var doc = JsonDocument.Parse(trimmed); return true; }
+        catch { return false; }
+    }
+
+    internal enum PayloadType { Json, Xml, Number, Boolean, Text, Empty }
+
+    internal static PayloadType GetPayloadType(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload)) return PayloadType.Empty;
+        var trimmed = payload.Trim();
+        if (IsJson(trimmed)) return PayloadType.Json;
+        if (trimmed.StartsWith('<')) return PayloadType.Xml;
+        if (bool.TryParse(trimmed, out _)) return PayloadType.Boolean;
+        if (double.TryParse(trimmed, NumberStyles.Any, CultureInfo.InvariantCulture, out _)) return PayloadType.Number;
+        return PayloadType.Text;
+    }
+
+    internal static string? TryFormatXml(string value)
+    {
+        try { return XDocument.Parse(value).ToString(); }
+        catch { return null; }
+    }
+
+    internal static string ChartShortLabel(string jsonPath)
+    {
+        var dot = jsonPath.LastIndexOf('.');
+        return dot >= 0 ? jsonPath[(dot + 1)..] : jsonPath;
+    }
+
+    private async Task HandleAddToChart(ChartFieldSelection selection)
+    {
+        if (_selectedMessage is null) return;
+        await AddToChart(selection.JsonPath, ChartLabel(selection), _selectedMessage.Topic!);
+    }
+
+    internal static string ChartLabel(ChartFieldSelection selection) =>
+        string.IsNullOrWhiteSpace(selection.SeriesName)
+            ? ChartShortLabel(selection.JsonPath)
+            : selection.SeriesName;
+
+    internal async Task AddToChart(string jsonPath, string label, string topic)
+    {
+        var parameters = new DialogParameters<QuickAddToChartDialog>
+        {
+            { x => x.Topic, topic },
+            { x => x.JsonPath, jsonPath },
+            { x => x.SeriesName, label }
+        };
+        var dialog = await DialogService.ShowAsync<QuickAddToChartDialog>(
+            "Chart Field", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: string message })
+            Snackbar.Add(message, Severity.Success);
+    }
+    internal bool FilterFunc(MqttMessage msg)
+    {
+        if (string.IsNullOrWhiteSpace(_searchStringTerm)) return true;
+        if (msg.Topic != null && msg.Topic.Contains(_searchStringTerm, StringComparison.OrdinalIgnoreCase)) return true;
+        return msg.Payload != null && msg.Payload.Contains(_searchStringTerm, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetRowClass(MqttMessage _, int __) => "payload-row";
+
+    internal void ClearSelection()
+    {
+        _selectedMessage = null;
+        _jsonTreeView = null;
+        StateHasChanged();
+    }
+
+    internal void MessageChanged(MqttMessage? message)
+    {
+        _selectedMessage = message;
+        StateHasChanged();
+    }
+
+    internal void ToggleSortOrder()
+    {
+        _newestFirst = !_newestFirst;
+        _messageList.Reverse();
+        StateHasChanged();
+    }
+
+    internal async Task ClearAllMessages()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Clear All Messages",
+            "This will remove all stored topics and messages. Continue?",
+            yesText: "Clear all", cancelText: "Cancel", options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (confirmed != true)
+            return;
+
+        await MessageStoreManager.ClearAllMessages();
+        _currentSelectedStore = null;
+        _lastMessageTimestamp = DateTime.MinValue;
+        _messageList = [];
+        ClearSelection();
+        Snackbar.Add("All stored messages cleared.", Severity.Success);
+    }
+
+    private void SelectPreviousMessage()
+    {
+        if (_selectedMessage == null) return;
+        var index = _messageList.IndexOf(_selectedMessage);
+        if (index <= 0) return;
+        _selectedMessage = _messageList[index - 1];
+        StateHasChanged();
+    }
+
+    private void SelectNextMessage()
+    {
+        if (_selectedMessage == null) return;
+        var index = _messageList.IndexOf(_selectedMessage);
+        if (index < 0 || index >= _messageList.Count - 1) return;
+        _selectedMessage = _messageList[index + 1];
+        StateHasChanged();
+    }
+
+    private async Task CopyToClipboard(string text) => await Clipboard.WriteTextAsync(text);
+}

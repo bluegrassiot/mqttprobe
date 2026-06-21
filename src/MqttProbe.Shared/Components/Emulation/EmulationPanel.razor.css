@@ -1,0 +1,213 @@
+.emu-root {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.emu-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px;
+    margin-bottom: 8px;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
+.emu-node-list {
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
+.emu-session-hint {
+    font-size: 11px;
+    color: var(--mud-palette-text-secondary);
+    padding: 8px 4px 0;
+}
+
+.emu-empty {
+    color: var(--mud-palette-text-secondary);
+}
+
+/* ── Header chips and filter ─────────────────────────────────────────────── */
+
+/* ::deep because MudChip/MudText render the elements */
+::deep .emu-section-title { font-weight: 600; }
+
+::deep .emu-count-chip {
+    height: 20px;
+    font-size: 0.7rem;
+    padding: 0 6px;
+}
+
+::deep .emu-count-chip--running { color: var(--mud-palette-success); }
+
+::deep .emu-filter-text { min-width: 160px; font-size: 0.85rem; }
+
+/* ── Interval helper renders the projected msg/s figure (data → mono) ────── */
+
+::deep .emu-interval .mud-input-helper-text {
+    font-family: var(--font-mono);
+}
+
+/* ── Node rows (rendered by child components → ::deep) ───────────────────── */
+
+::deep .emu-node-row {
+    border-bottom: 1px solid var(--mud-palette-divider);
+    box-shadow: inset 3px 0 0 transparent;
+    transition: background 0.15s;
+}
+
+::deep .emu-node-row__main {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+::deep .emu-node-row__main:hover { background: var(--mud-palette-action-default-hover); }
+
+::deep .emu-node-row--expanded {
+    background: var(--mud-palette-action-default-hover);
+    box-shadow: inset 3px 0 0 var(--mud-palette-primary);
+}
+
+::deep .emu-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+::deep .emu-status-dot--running { background: var(--mud-palette-success); }
+
+::deep .emu-status-label { font-size: 12px; font-weight: 500; margin-left: 4px; }
+
+::deep .emu-node-id {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--mud-palette-text-primary);
+}
+
+::deep .emu-node-secondary {
+    font-size: 12px;
+    color: var(--mud-palette-text-secondary);
+    margin-top: 2px;
+    margin-left: 14px;
+}
+
+::deep .emu-node-editor {
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--mud-palette-divider);
+    background: var(--mud-palette-background-grey);
+}
+
+/* ── Node editor ─────────────────────────────────────────────────────────── */
+
+::deep .emu-subsection-header {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+    margin: 12px 0 4px;
+}
+
+::deep .emu-topic-preview {
+    font-size: 12px;
+    color: var(--mud-palette-text-secondary);
+    padding: 2px 0;
+}
+
+::deep .emu-id-field input { font-family: var(--font-mono); }
+
+/* ── Device rows ─────────────────────────────────────────────────────────── */
+
+::deep .emu-device-row {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+::deep .emu-device-row:hover { background: var(--mud-palette-action-default-hover); }
+::deep .emu-device-row--expanded { background: var(--mud-palette-action-default-hover); }
+
+::deep .emu-device-id {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--mud-palette-text-primary);
+    margin-left: 6px;
+}
+
+::deep .emu-device-secondary {
+    font-size: 12px;
+    color: var(--mud-palette-text-secondary);
+    margin-left: auto;
+    margin-right: 8px;
+}
+
+::deep .emu-device-detail {
+    padding: 8px 8px 12px 28px;
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+/* ── Metric rows ─────────────────────────────────────────────────────────── */
+
+::deep .emu-metric-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+::deep .emu-metric-row__fields {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+}
+
+::deep .emu-metric-row__side {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+::deep .emu-metric-field { min-width: 110px; flex: 0 1 auto; }
+::deep .emu-metric-field--name { min-width: 160px; flex: 1 1 160px; }
+::deep .emu-metric-field--num { max-width: 130px; }
+
+/* ── Waveform preview (synthetic sketch glyph — not live data) ───────────── */
+
+::deep .emu-waveform {
+    position: relative;
+    width: 220px;
+    height: 48px;
+    flex-shrink: 0;
+}
+
+::deep .emu-waveform svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+::deep .emu-waveform__label {
+    position: absolute;
+    left: 2px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1;
+    color: var(--mud-palette-text-secondary);
+    pointer-events: none;
+}
+
+::deep .emu-waveform__label--max { top: 2px; }
+::deep .emu-waveform__label--min { bottom: 2px; }

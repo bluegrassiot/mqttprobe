@@ -1,0 +1,196 @@
+MQTT Probe
+Copyright 2026 Bluegrass IoT
+Licensed under the Apache License, Version 2.0 — see LICENSE.
+
+---
+
+This product includes the following third-party components:
+
+## Sparkplug B Protocol Buffer Generated Code
+
+File: src/MqttProbe.Shared/Models/SparkplugBProtobuf.cs
+
+  Copyright (c) 2015, 2018 Cirrus Link Solutions and others
+
+  Source: https://github.com/eclipse/tahu/blob/master/c_sharp/core/src/SparkplugBCSharp.cs
+
+  Licensed under the Eclipse Public License 2.0 (EPL-2.0):
+  https://www.eclipse.org/legal/epl-2.0/
+
+  SPDX-License-Identifier: EPL-2.0
+
+  This file is the unmodified official generated C# file distributed
+  by the Eclipse Tahu project and must not be edited or reformatted.
+
+## Inter Variable — SIL Open Font License 1.1
+
+Files: src/MqttProbe.Shared/wwwroot/fonts/InterVariable.woff2
+       src/MqttProbe.Maui/Resources/Fonts/Inter-Variable.ttf
+
+  Copyright 2016 The Inter Project Authors
+
+  Source: https://github.com/rsms/inter
+
+  Licensed under the SIL Open Font License, Version 1.1 (OFL-1.1):
+  https://scripts.sil.org/OFL
+
+## JetBrains Mono — SIL Open Font License 1.1
+
+Files: src/MqttProbe.Shared/wwwroot/fonts/JetBrainsMono-Regular.woff2
+       src/MqttProbe.Shared/wwwroot/fonts/JetBrainsMono-Medium.woff2
+
+  Copyright 2020 JetBrains s.r.o.
+
+  Source: https://github.com/JetBrains/JetBrainsMono
+
+  Licensed under the SIL Open Font License, Version 1.1 (OFL-1.1):
+  https://scripts.sil.org/OFL
+
+## Chakra Petch — SIL Open Font License 1.1
+
+Files: src/MqttProbe.Shared/wwwroot/fonts/ChakraPetch-500.woff2
+       src/MqttProbe.Shared/wwwroot/fonts/ChakraPetch-600.woff2
+       src/MqttProbe.Shared/wwwroot/fonts/ChakraPetch-700.woff2
+
+  Copyright 2020 Cadson Demak
+
+  Source: https://github.com/cadsondemak/chakra-petch
+
+  Licensed under the SIL Open Font License, Version 1.1 (OFL-1.1):
+  https://scripts.sil.org/OFL
+
+## OpenDyslexic (Nerd Font) — Bitstream License
+
+Files: src/MqttProbe.Shared/wwwroot/fonts/OpenDyslexicNerdFont-Regular.woff2
+       src/MqttProbe.Shared/wwwroot/fonts/OpenDyslexicNerdFont-Bold.woff2
+       src/MqttProbe.Shared/wwwroot/fonts/OpenDyslexicNerdFont-Italic.woff2
+       src/MqttProbe.Shared/wwwroot/fonts/OpenDyslexicMNerdFontMono-Regular.woff2
+
+  Copyright (c) 2003 by Bitstream, Inc. All Rights Reserved.
+  Bitstream Vera is a trademark of Bitstream, Inc.
+
+  OpenDyslexic is based on Bitstream Vera, modified by Abelardo
+  González and others.
+
+  Permission is hereby granted, free of charge, to any person
+  obtaining a copy of the fonts accompanying this license ("Fonts")
+  and associated documentation files (the "Font Software"), to
+  reproduce and distribute the Font Software, including without
+  limitation the rights to use, copy, merge, publish, distribute,
+  and/or sell copies of the Font Software, and to permit persons to
+  whom the Font Software is furnished to do so, subject to the
+  following conditions:
+
+  The above copyright and trademark notices and this permission
+  notice shall be included in all copies of one or more of the Font
+  Software typefaces.
+
+  THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+  KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY
+  WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE
+  AND NONINFRINGEMENT OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER
+  RIGHT. IN NO EVENT SHALL BITSTREAM OR THE GNOME FOUNDATION BE
+  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, INCLUDING ANY
+  GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES,
+  WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM OTHER
+  DEALINGS IN THE FONT SOFTWARE.
+
+## NuGet Dependencies
+
+AwesomeAssertions — Apache-2.0
+  Copyright Dennis Doomen 2010-2025, AwesomeAssertions 2025-
+
+BenchmarkDotNet — MIT
+  .NET Foundation and contributors
+
+Blazor-ApexCharts — MIT
+  Copyright 2022 (c) Joakim Dangården
+
+Blazor.Lucide — MIT
+
+bunit — MIT
+  Egil Hansen
+
+coverlet.collector — MIT
+  (c) 2018 Toni Solarin-Sodara
+
+CurrieTechnologies.Razor.Clipboard — MIT
+  Michael J. Currie
+
+FluentValidation — Apache-2.0
+  Copyright (c) Jeremy Skinner, .NET Foundation, and contributors 2008-2025
+
+Google.Protobuf — BSD-3-Clause
+  Copyright 2015, Google Inc.
+
+JunitXml.TestLogger — MIT
+  Copyright 2016 Spekt Inc.
+
+MessagePack — MIT
+  (c) Yoshifumi Kawai and contributors
+
+Microsoft.AspNetCore.Components.Authorization — MIT
+  (c) Microsoft Corporation
+
+Microsoft.AspNetCore.Components.Web — MIT
+  (c) Microsoft Corporation
+
+Microsoft.AspNetCore.Components.WebView.Maui — MIT
+  (c) Microsoft Corporation
+
+Microsoft.AspNetCore.Mvc.Testing — MIT
+  (c) Microsoft Corporation
+
+Microsoft.Extensions.Logging.Abstractions — MIT
+  (c) Microsoft Corporation
+
+Microsoft.Extensions.Logging.Debug — MIT
+  (c) Microsoft Corporation
+
+Microsoft.Extensions.TimeProvider.Testing — MIT
+  (c) Microsoft Corporation
+
+Microsoft.Maui.Controls — MIT
+  (c) Microsoft Corporation
+
+Microsoft.Maui.Controls.Compatibility — MIT
+  (c) Microsoft Corporation
+
+Microsoft.Maui.Essentials — MIT
+  (c) Microsoft Corporation
+
+Microsoft.NET.Test.Sdk — MIT
+  (c) Microsoft Corporation
+
+Microsoft.Playwright.NUnit — MIT
+  (c) Microsoft Corporation
+
+MQTTnet — MIT
+  .NET Foundation and Contributors
+
+MQTTnet.Extensions.ManagedClient — MIT
+  .NET Foundation and Contributors
+
+MudBlazor — MIT
+  Copyright 2026 MudBlazor
+
+NSubstitute — BSD-3-Clause
+
+NUnit — MIT
+  Copyright (c) Charlie Poole, Rob Prouse and Contributors
+
+NUnit.Analyzers — MIT
+  Copyright (c) 2018-2026 NUnit project
+
+NUnit3TestAdapter — MIT
+  Copyright (c) 2011-2021 Charlie Poole, 2014-2026 Terje Sandstrom
+
+SparkplugNet — MIT
+  Copyright (c) Hämmer Electronics
+
+System.Threading.RateLimiting — MIT
+  (c) Microsoft Corporation
+
+Testcontainers — MIT
+  Copyright (c) 2019-2026 Andre Hofmeister and other authors

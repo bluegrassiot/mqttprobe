@@ -1,0 +1,133 @@
+:root {
+    --signal-orange: #F97316;
+    --slate-black: #0F172A;
+    --slate-dark: #1E293B;
+    --slate-border: #334155;
+    --off-white: #F1F5F9;
+    --slate-gray: #94A3B8;
+    --signal-red: #EF4444;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: var(--font-ui);
+    background-color: var(--slate-black);
+    background-image:
+        radial-gradient(ellipse 90% 65% at 50% 34%, rgba(249, 115, 22, 0.07), transparent 70%),
+        linear-gradient(rgba(148, 163, 184, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.045) 1px, transparent 1px);
+    background-size: 100% 100%, 38px 38px, 38px 38px;
+    color: var(--off-white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100dvh;
+    padding: 1rem;
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: url(/_content/MqttProbe.Shared/img/signal-motif.svg) no-repeat center / min(640px, 80vmin);
+    opacity: 0.14;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.auth-card {
+    position: relative;
+    z-index: 1;
+    background: var(--slate-dark);
+    border: 1px solid var(--slate-border);
+    border-radius: 8px;
+    padding: 2rem 1.75rem;
+    width: 100%;
+    max-width: 380px;
+}
+
+.auth-card h1 {
+    margin: 0 0 .5rem;
+    font-size: 1.5rem;
+    font-family: var(--font-display);
+    color: var(--off-white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.auth-card h1 .brand-mqtt { color: var(--signal-orange); font-weight: 700; }
+.auth-card h1 .brand-probe { color: var(--off-white); font-weight: 500; }
+.auth-card h1 img { margin-right: .5rem; }
+
+.subtitle { margin: 0 0 1.25rem; text-align: center; color: var(--slate-gray); font-size: .9rem; }
+
+label { display: block; margin-bottom: .25rem; font-size: .85rem; color: var(--slate-gray); }
+
+input[type=text], input[type=password] {
+    width: 100%;
+    padding: .62rem .78rem;
+    padding-right: 2.75rem;
+    background: var(--slate-black);
+    border: 1px solid var(--slate-border);
+    border-radius: 4px;
+    color: var(--off-white);
+    font-size: 1rem;
+    margin-bottom: 0;
+}
+
+input:focus { outline: none; border-color: var(--signal-orange); box-shadow: 0 0 0 2px rgba(249, 115, 22, .2); }
+
+.field { margin-bottom: 1rem; }
+
+.remember-field { display: flex; align-items: center; gap: .5rem; margin: -.25rem 0 1rem; }
+.remember-field input { width: 1rem; height: 1rem; accent-color: var(--signal-orange); }
+.remember-field label { margin: 0; cursor: pointer; }
+
+.password-wrapper { position: relative; }
+
+.password-toggle {
+    position: absolute;
+    right: .5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: auto;
+    padding: .25rem;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--slate-gray);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0;
+}
+
+.password-toggle:hover { background: transparent; color: var(--off-white); }
+
+button[type=submit] {
+    width: 100%;
+    padding: .7rem;
+    background: var(--signal-orange);
+    color: var(--slate-black);
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+button[type=submit]:hover { background: #EA6C0A; }
+
+.error {
+    background: rgba(239, 68, 68, .14);
+    border: 1px solid var(--signal-red);
+    color: #991B1B;
+    border-radius: 6px;
+    padding: .5rem .75rem;
+    margin-bottom: 1rem;
+    font-size: .875rem;
+}

@@ -1,0 +1,34 @@
+{
+  "profiles": {
+    "Android (Debug)": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      },
+      "framework": "net10.0-android",
+      "dotnetRunMessages": true
+    },
+    "iOS (Debug)": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      },
+      "framework": "net10.0-ios",
+      "dotnetRunMessages": true
+    },
+    "Android (Release)": {
+      "commandName": "Project",
+      "framework": "net10.0-android",
+      "dotnetRunMessages": true
+    },
+    "iOS (Release)": {
+      "commandName": "Project",
+      "framework": "net10.0-ios",
+      "dotnetRunMessages": true
+    },
+    "Windows Machine": {
+      "commandName": "MsixPackage",
+      "nativeDebugging": false
+    }
+  }
+}

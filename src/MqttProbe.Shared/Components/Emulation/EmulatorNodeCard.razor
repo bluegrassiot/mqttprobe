@@ -1,0 +1,82 @@
+@namespace MqttProbe.Components.Emulation
+@inject IEmulationService EmulationService
+@inject IDialogService DialogService
+
+<div class="emu-node-row @(IsExpanded ? "emu-node-row--expanded" : "")">
+    <div class="emu-node-row__main" @onclick="@(() => OnToggleExpand.InvokeAsync())">
+        <div class="d-flex align-center gap-1">
+            <span class="emu-status-dot" style="background:@StatusColor()"></span>
+            <span class="emu-node-id">@Node.NodeId</span>
+            <span class="emu-status-label" style="color:@StatusColor()">@StatusLabel()</span>
+            <MudSpacer/>
+            <span @onclick:stopPropagation="true">
+                <MudIconButton Icon="@LucideIcons.Copy" Size="Size.Small"
+                               title="Duplicate node"
+                               Disabled="@EmulationService.IsRunning"
+                               OnClick="@OpenDuplicateDialogAsync"/>
+                <MudIconButton Icon="@LucideIcons.Trash2" Size="Size.Small" Color="Color.Error"
+                               title="Delete node"
+                               Disabled="@EmulationService.IsRunning"
+                               OnClick="@(() => EmulationService.RemoveNodeAsync(Node.Id))"/>
+            </span>
+        </div>
+        <div class="emu-node-secondary">@SecondaryText</div>
+    </div>
+    @if (IsExpanded)
+    {
+        <div class="emu-node-editor">
+            <EmulatorNodeEditor Node="@Node"/>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public EmulatorNodeConfig Node { get; set; } = null!;
+    [Parameter] public bool IsExpanded { get; set; }
+    [Parameter] public EventCallback OnToggleExpand { get; set; }
+
+    private string SecondaryText
+    {
+        get
+        {
+            var deviceCount = Node.Devices.Count;
+            var metricCount = Node.Devices.Sum(d => d.Metrics.Count);
+            var rate = EmulationRateCalculator.ProjectedMessagesPerSecond([Node], EmulationService.PublishIntervalMs);
+            var type = Node.Type == EmulatorNodeType.SparkplugB ? "SparkplugB" : "Generic";
+            return $"{type} · {Node.GroupId} · {deviceCount} device{(deviceCount != 1 ? "s" : "")}"
+                + $" · {metricCount} metric{(metricCount != 1 ? "s" : "")} · ~{rate:0.##} msg/s";
+        }
+    }
+
+    private NodeRuntimeStatus Status =>
+        EmulationService.IsRunning ? EmulationService.GetStatus(Node.Id) : NodeRuntimeStatus.Idle;
+
+    private string StatusColor() => Status switch
+    {
+        NodeRuntimeStatus.Connected => "var(--mud-palette-success)",
+        NodeRuntimeStatus.Error => "var(--mud-palette-error)",
+        _ => "var(--mud-palette-text-secondary)"
+    };
+
+    private string StatusLabel() => Status switch
+    {
+        NodeRuntimeStatus.Connected => "CONNECTED",
+        NodeRuntimeStatus.Connecting => "CONNECTING",
+        NodeRuntimeStatus.Error => "ERROR",
+        _ => "IDLE"
+    };
+
+    private async Task OpenDuplicateDialogAsync()
+    {
+        var parameters = new DialogParameters<DuplicateNodeDialog>
+        {
+            { x => x.Source, Node },
+            { x => x.ExistingNodes, EmulationService.Nodes }
+        };
+        var dialog = await DialogService.ShowAsync<DuplicateNodeDialog>($"Duplicate {Node.NodeId}", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: int copies and > 0 })
+            await EmulationService.DuplicateNodeAsync(Node.Id, copies);
+    }
+}

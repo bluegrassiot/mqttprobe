@@ -1,0 +1,8 @@
+.charts-empty-state {
+    min-height: 300px;
+    gap: 16px;
+    background-image:
+        linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+    background-size: 32px 32px;
+}

@@ -1,0 +1,158 @@
+/* Signal Orange is never a background; the strip stays a Slate surface and orange
+   appears only on the active indicator and label. */
+::deep .mud-tabs-tabbar {
+    border: 1px solid var(--mud-palette-lines-default);
+}
+
+/* Evenly distribute tabs across the full bar — instrument-panel aesthetic.
+   Each tab gets equal width regardless of label length. */
+::deep .mud-tab {
+    flex: 1 1 0;
+    transition: color 150ms ease-out;
+}
+
+::deep .mud-tab.mud-tab-active {
+    color: var(--mud-palette-primary);
+    font-weight: 600;
+    text-shadow: 0 0 12px rgba(249, 115, 22, 0.45);
+}
+
+::deep .mud-tab:hover {
+    color: var(--mud-palette-text-primary);
+}
+
+/* Remove inner scrollbar from MudTabs panels — the outer .app-shell-body
+   already handles page scrolling. MudBlazor may set overflow-y via JS on
+   .mud-tabs-panels which creates a confusing nested scroll container.
+   !important overrides any inline styles set by MudBlazor interop. */
+::deep .mud-tabs-panels {
+    overflow-y: visible !important;
+    max-height: none !important;
+    height: auto !important;
+}
+
+::deep .mud-tab-panel {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+}
+
+::deep .tab-shell {
+    padding: 8px 8px 8px 8px;
+}
+
+.tab-panel-content {
+    padding-top: 8px;
+}
+
+@media (min-width: 600px) {
+    ::deep .tab-shell {
+        padding: 12px 12px 8px 12px;
+    }
+
+    .tab-panel-content {
+        padding-top: 8px;
+    }
+}
+
+@media (min-width: 960px) {
+    ::deep .tab-shell {
+        padding: 16px 16px 8px 16px;
+    }
+
+    .tab-panel-content {
+        padding-top: 8px;
+    }
+}
+
+@media (min-width: 1280px) {
+    ::deep .tab-shell {
+        padding: 16px 16px 8px 16px;
+    }
+
+    .tab-panel-content {
+        padding-top: 8px;
+    }
+}
+
+/* Split-pane browser layout — desktop */
+.browser-split {
+    display: grid;
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+    column-gap: 12px;
+    min-height: 0;
+    height: 100%;
+}
+
+.browser-split__topics {
+    min-height: 0;
+    overflow: auto;
+}
+
+.browser-split__messages {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Mobile show/hide classes */
+.mobile-show {
+    display: none;
+}
+
+.mobile-hide {
+    display: block;
+}
+
+/* sm and down — stack vertically */
+@media (max-width: 959.98px) {
+    .browser-split {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        height: 100%;
+        gap: 12px;
+    }
+
+    .browser-split__messages {
+        overflow: auto;
+    }
+
+    .browser-split__topics {
+        max-height: 38vh;
+        overflow: auto;
+    }
+
+    .mobile-show {
+        display: block;
+    }
+
+    .mobile-hide {
+        display: none;
+    }
+}
+
+/* Mobile topics collapse styles */
+.mobile-topics-collapse {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borders);
+    overflow: hidden;
+}
+
+.mobile-topics-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    background: var(--mud-palette-surface);
+    transition: background-color 150ms ease-out;
+}
+
+.mobile-topics-header:hover {
+    background: var(--mud-palette-surface-hover);
+}
+
+.mobile-topics-content {
+    max-height: 50vh;
+    overflow-y: auto;
+}

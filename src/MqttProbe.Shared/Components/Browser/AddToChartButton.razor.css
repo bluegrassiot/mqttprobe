@@ -1,0 +1,26 @@
+button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: 1px solid var(--mud-palette-warning);
+    cursor: pointer;
+    color: var(--mud-palette-warning);
+    opacity: 0.45;
+    padding: 1px 5px;
+    margin-left: 12px;
+    vertical-align: middle;
+    border-radius: 3px;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.json-chart-btn__label {
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+button:hover {
+    opacity: 1;
+    background: var(--mud-palette-warning-hover);
+}

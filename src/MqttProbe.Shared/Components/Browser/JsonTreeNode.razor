@@ -1,0 +1,238 @@
+@using System.Globalization
+@using System.Text.Json
+
+@switch (Element.ValueKind)
+{
+    case JsonValueKind.Object:
+    {
+        var props = Element.EnumerateObject().ToList();
+        var metricName = TryGetMetricName(Element);
+        if (props.Count == 0)
+        {
+            <span class="json-bracket">{ }</span>
+        }
+        else
+        {
+            <button type="button" class="json-toggle" @onclick="Toggle" @onclick:stopPropagation="true"
+                    title="@(IsExpanded ? "Collapse" : "Expand")"
+                    aria-label="@(IsExpanded ? "Collapse" : "Expand")"
+                    aria-expanded="@IsExpanded.ToString().ToLowerInvariant()">
+                <svg class="json-toggle__icon" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                    @if (IsExpanded)
+                    {
+                        <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    }
+                    else
+                    {
+                        <path d="M9 18l6-6-6-6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    }
+                </svg>
+            </button>
+            @if (IsExpanded)
+            {
+                <span class="json-bracket">{</span>
+                @foreach (var prop in props)
+                {
+                    var childPath = BuildChildPath(JsonPath, prop.Name);
+                    var chartPath = GetChildChartPath(childPath, JsonPath, prop.Name, metricName);
+                    <div class="json-row" style="margin-left: @((Depth + 1) * 14)px">
+                        <span class="json-key">"@prop.Name"</span><span class="json-colon">: </span><JsonTreeNode Element="prop.Value" Depth="@(Depth + 1)" AutoExpandDepth="@AutoExpandDepth"
+                              JsonPath="@chartPath" SeriesName="@GetChildSeriesName(prop.Name, metricName)" OnAddToChart="OnAddToChart"/>
+                    </div>
+                }
+                <div style="margin-left: @(Depth * 14)px"><span class="json-bracket">}</span></div>
+            }
+            else
+            {
+                <span class="json-preview">@GetCollapsedPreview(Element)</span>
+            }
+        }
+        break;
+    }
+    case JsonValueKind.Array:
+    {
+        var items = Element.EnumerateArray().ToList();
+        if (items.Count == 0)
+        {
+            <span class="json-bracket">[ ]</span>
+        }
+        else
+        {
+            <button type="button" class="json-toggle" @onclick="Toggle" @onclick:stopPropagation="true"
+                    title="@(IsExpanded ? "Collapse" : "Expand")"
+                    aria-label="@(IsExpanded ? "Collapse" : "Expand")"
+                    aria-expanded="@IsExpanded.ToString().ToLowerInvariant()">
+                <svg class="json-toggle__icon" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                    @if (IsExpanded)
+                    {
+                        <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    }
+                    else
+                    {
+                        <path d="M9 18l6-6-6-6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    }
+                </svg>
+            </button>
+            @if (IsExpanded)
+            {
+                <span class="json-bracket">[</span>
+                @for (var i = 0; i < items.Count; i++)
+                {
+                    var item = items[i];
+                    var isLast = i == items.Count - 1;
+                    var itemPath = $"{JsonPath}[{i}]";
+                    <div class="json-row" style="margin-left: @((Depth + 1) * 14)px">
+                        <JsonTreeNode Element="item" Depth="@(Depth + 1)" AutoExpandDepth="@AutoExpandDepth"
+                                      JsonPath="@itemPath" OnAddToChart="OnAddToChart"/>@(!isLast ? "," : "")
+                    </div>
+                }
+                <div style="margin-left: @(Depth * 14)px"><span class="json-bracket">]</span></div>
+            }
+            else
+            {
+                <span class="json-preview">@GetCollapsedPreview(Element)</span>
+            }
+        }
+        break;
+    }
+    case JsonValueKind.String:
+        <span class="json-string">"@Element.GetString()"</span>
+        @if (ShouldShowChartButton && IsNumericString(Element))
+        {
+            <AddToChartButton JsonPath="@JsonPath" SeriesName="@SeriesName" OnAddToChart="OnAddToChart"/>
+        }
+        break;
+    case JsonValueKind.Number:
+        <span class="json-number">@Element.GetRawText()</span>
+        @if (ShouldShowChartButton)
+        {
+            <AddToChartButton JsonPath="@JsonPath" SeriesName="@SeriesName" OnAddToChart="OnAddToChart"/>
+        }
+        break;
+    case JsonValueKind.True:
+        <span class="json-bool json-true">true</span>
+        @if (ShouldShowChartButton)
+        {
+            <AddToChartButton JsonPath="@JsonPath" SeriesName="@SeriesName" OnAddToChart="OnAddToChart"/>
+        }
+        break;
+    case JsonValueKind.False:
+        <span class="json-bool json-false">false</span>
+        @if (ShouldShowChartButton)
+        {
+            <AddToChartButton JsonPath="@JsonPath" SeriesName="@SeriesName" OnAddToChart="OnAddToChart"/>
+        }
+        break;
+    case JsonValueKind.Null:
+        <span class="json-null">null</span>
+        break;
+}
+
+@code {
+    [Parameter] public JsonElement Element { get; set; }
+    [Parameter] public int Depth { get; set; }
+    [Parameter] public int AutoExpandDepth { get; set; } = 2;
+    [Parameter] public string JsonPath { get; set; } = "";
+    [Parameter] public string? SeriesName { get; set; }
+    [Parameter] public EventCallback<ChartFieldSelection> OnAddToChart { get; set; }
+
+    private bool _isExpanded;
+    private bool _initialized;
+
+    private bool IsExpanded => _isExpanded;
+    private bool ShouldShowChartButton => OnAddToChart.HasDelegate && !IsSparkplugDatatypePath(JsonPath);
+
+    protected override void OnParametersSet()
+    {
+        if (_initialized) return;
+        _isExpanded = Depth < AutoExpandDepth;
+        _initialized = true;
+    }
+
+    private void Toggle() => _isExpanded = !_isExpanded;
+
+    private static bool IsNumericString(JsonElement element) =>
+        element.GetString() is { } s &&
+        double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+
+    private static string BuildChildPath(string parent, string key) =>
+        string.IsNullOrEmpty(parent) ? key : $"{parent}.{key}";
+
+    private static string? GetChildSeriesName(string propertyName, string? metricName) =>
+        metricName is not null && IsMetricValueFieldName(propertyName) ? metricName : null;
+
+    private static string GetChildChartPath(
+        string childPath,
+        string parentPath,
+        string propertyName,
+        string? metricName) =>
+        metricName is not null && IsMetricValueFieldName(propertyName)
+            ? BuildMetricPath(parentPath, metricName)
+            : childPath;
+
+    private static string BuildMetricPath(string parentPath, string metricName)
+    {
+        var indexStart = parentPath.LastIndexOf('[');
+        var prefix = indexStart >= 0 && parentPath.EndsWith("]", StringComparison.Ordinal)
+            ? parentPath[..indexStart]
+            : parentPath;
+
+        return string.IsNullOrEmpty(prefix) ? metricName : $"{prefix}.{metricName}";
+    }
+
+    private static string? TryGetMetricName(JsonElement element)
+    {
+        if (!element.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String)
+            return null;
+
+        var name = nameElement.GetString();
+        return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
+
+    private static bool IsSparkplugDatatypePath(string jsonPath) =>
+        jsonPath.EndsWith(".datatype", StringComparison.Ordinal) ||
+        string.Equals(jsonPath, "datatype", StringComparison.Ordinal);
+
+    private static bool IsMetricValueFieldName(string propertyName) =>
+        propertyName is "value" or "int_value" or "float_value" or "double_value" or "long_value" or "boolean_value"
+            or "intValue" or "floatValue" or "doubleValue" or "longValue" or "booleanValue";
+
+    internal static string GetCollapsedPreview(JsonElement element, int maxItems = 3)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            var taken = element.EnumerateObject().Take(maxItems + 1).ToList();
+            var shown = taken.Take(maxItems);
+            var hasMore = taken.Count > maxItems;
+            var parts = shown.Select(p => $"\"{p.Name}\": {PrimitivePreview(p.Value)}");
+            var inner = string.Join(", ", parts);
+            return hasMore ? $"{{ {inner}, … }}" : $"{{ {inner} }}";
+        }
+        else
+        {
+            var taken = element.EnumerateArray().Take(maxItems + 1).ToList();
+            var shown = taken.Take(maxItems);
+            var hasMore = taken.Count > maxItems;
+            var parts = shown.Select(PrimitivePreview);
+            var inner = string.Join(", ", parts);
+            return hasMore ? $"[ {inner}, … ]" : $"[ {inner} ]";
+        }
+    }
+
+    private static string TruncateString(string s) =>
+        s.Length > 15 ? s[..15] + "…" : s;
+
+    private static string PrimitivePreview(JsonElement el) => el.ValueKind switch
+    {
+        JsonValueKind.String => el.GetString() is { } s
+            ? $"\"{TruncateString(s)}\""
+            : "null",
+        JsonValueKind.Number  => el.GetRawText(),
+        JsonValueKind.True    => "true",
+        JsonValueKind.False   => "false",
+        JsonValueKind.Null    => "null",
+        JsonValueKind.Object  => "{…}",
+        JsonValueKind.Array   => "[…]",
+        _                     => "…"
+    };
+}

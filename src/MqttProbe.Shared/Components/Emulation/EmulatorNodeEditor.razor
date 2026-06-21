@@ -1,0 +1,142 @@
+@namespace MqttProbe.Components.Emulation
+@inject IEmulationService EmulationService
+
+<MudGrid Spacing="2">
+    <MudItem xs="12" sm="4">
+        <MudSelect T="EmulatorNodeType" @bind-Value="Node.Type" @bind-Value:after="SaveAsync"
+                   Label="Type" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                   Disabled="@EmulationService.IsRunning">
+            <MudSelectItem T="EmulatorNodeType" Value="EmulatorNodeType.SparkplugB">Sparkplug B</MudSelectItem>
+            <MudSelectItem T="EmulatorNodeType" Value="EmulatorNodeType.Generic">Generic MQTT</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudTextField @bind-Value="Node.GroupId" @bind-Value:after="SaveAsync"
+                      Label="Group ID" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Disabled="@EmulationService.IsRunning"
+                      Error="@(GroupIdError != null)" ErrorText="@GroupIdError"
+                      Class="emu-id-field"/>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudTextField @bind-Value="Node.NodeId" @bind-Value:after="SaveAsync"
+                      Label="Node ID" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Disabled="@EmulationService.IsRunning"
+                      Error="@(NodeIdError != null)" ErrorText="@NodeIdError"
+                      Class="emu-id-field"/>
+    </MudItem>
+
+    @if (Node.Type == EmulatorNodeType.Generic)
+    {
+        <MudItem xs="12" sm="4">
+            <MudSelect T="GenericPayloadFormat" @bind-Value="Node.PayloadFormat" @bind-Value:after="SaveAsync"
+                       Label="Payload format" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                       Disabled="@EmulationService.IsRunning">
+                <MudSelectItem T="GenericPayloadFormat" Value="GenericPayloadFormat.Json">JSON</MudSelectItem>
+                <MudSelectItem T="GenericPayloadFormat" Value="GenericPayloadFormat.PlainText">Plain text</MudSelectItem>
+                <MudSelectItem T="GenericPayloadFormat" Value="GenericPayloadFormat.Hex">Hex</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="8">
+            <MudTextField @bind-Value="Node.TopicTemplate" @bind-Value:after="SaveAsync"
+                          Label="Topic template" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Disabled="@EmulationService.IsRunning"
+                          HelperText="Tokens: {group} {node} {device} {metric}"
+                          Class="emu-id-field"/>
+        </MudItem>
+        <MudItem xs="12" Class="pt-0">
+            @foreach (var error in TemplateErrors)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Error" Class="d-block">@error</MudText>
+            }
+            @if (ResolvedTopicPreview != null)
+            {
+                <div class="emu-topic-preview">
+                    Topic: <span class="telemetry-mono">@ResolvedTopicPreview</span>
+                </div>
+            }
+        </MudItem>
+    }
+</MudGrid>
+
+<div class="emu-subsection-header">Devices (@Node.Devices.Count)</div>
+
+@if (Node.Devices.Count == 0 && Node.Type == EmulatorNodeType.Generic)
+{
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1">
+        A Generic node with no devices publishes nothing.
+    </MudText>
+}
+
+@foreach (var device in Node.Devices)
+{
+    <EmulatorDeviceEditor @key="device.Id" Node="@Node" Device="@device"
+                          IsExpanded="@(_expandedDeviceId == device.Id)"
+                          OnToggleExpand="@(() => ToggleDevice(device.Id))"
+                          OnChanged="@SaveAsync"/>
+}
+
+<MudButton Variant="Variant.Outlined" StartIcon="@LucideIcons.Plus" Size="Size.Small" Class="mt-2"
+           title="Add device"
+           Disabled="@EmulationService.IsRunning"
+           OnClick="@AddDeviceAsync">
+    Add device
+</MudButton>
+
+@code {
+    [Parameter] public EmulatorNodeConfig Node { get; set; } = null!;
+
+    private Guid? _expandedDeviceId;
+
+    private static readonly char[] IllegalIdChars = ['/', '+', '#'];
+
+    private string? GroupIdError => ValidateIdentifier(Node.GroupId);
+
+    private string? NodeIdError =>
+        ValidateIdentifier(Node.NodeId)
+        ?? (EmulationService.Nodes.Any(n => n.Id != Node.Id && n.GroupId == Node.GroupId && n.NodeId == Node.NodeId)
+            ? "Node ID already used in this group"
+            : null);
+
+    private static string? ValidateIdentifier(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "Required";
+        if (value.IndexOfAny(IllegalIdChars) >= 0) return "Must not contain / + #";
+        if (value.StartsWith('$')) return "Must not start with $";
+        return null;
+    }
+
+    private IReadOnlyList<string> TemplateErrors => TopicTemplateRenderer.Validate(Node);
+
+    private string? ResolvedTopicPreview
+    {
+        get
+        {
+            var device = Node.Devices.FirstOrDefault();
+            if (device == null) return null;
+            if (Node.PayloadFormat == GenericPayloadFormat.Json)
+                return TopicTemplateRenderer.RenderDeviceTopic(Node, device.DeviceId);
+            var metric = device.Metrics.FirstOrDefault();
+            return metric == null ? null : TopicTemplateRenderer.RenderMetricTopic(Node, device.DeviceId, metric.Name);
+        }
+    }
+
+    private void ToggleDevice(Guid deviceId) =>
+        _expandedDeviceId = _expandedDeviceId == deviceId ? null : deviceId;
+
+    private async Task AddDeviceAsync()
+    {
+        var n = 1;
+        while (Node.Devices.Any(d => d.DeviceId == $"Device-{n}"))
+            n++;
+        var device = new EmulatorDeviceConfig { DeviceId = $"Device-{n}" };
+        Node.Devices.Add(device);
+        _expandedDeviceId = device.Id;
+        await SaveAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (EmulationService.IsRunning) return;
+        await EmulationService.UpdateNodeAsync(Node);
+    }
+}

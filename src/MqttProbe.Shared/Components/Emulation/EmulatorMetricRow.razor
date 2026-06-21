@@ -1,0 +1,171 @@
+@namespace MqttProbe.Components.Emulation
+@inject IEmulationService EmulationService
+
+<div class="emu-metric-row">
+    <div class="emu-metric-row__fields">
+        <MudTextField @bind-Value="Metric.Name" @bind-Value:after="NotifyAsync"
+                      Label="Name" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Disabled="@EmulationService.IsRunning"
+                      Error="@(NameError != null)" ErrorText="@NameError"
+                      Class="emu-metric-field emu-metric-field--name emu-id-field"/>
+
+        <MudSelect T="MetricValueType" Value="Metric.ValueType" ValueChanged="@OnValueTypeChangedAsync"
+                   Label="Type" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                   Disabled="@EmulationService.IsRunning" Class="emu-metric-field">
+            <MudSelectItem T="MetricValueType" Value="MetricValueType.Double">Double</MudSelectItem>
+            <MudSelectItem T="MetricValueType" Value="MetricValueType.Int64">Int64</MudSelectItem>
+            <MudSelectItem T="MetricValueType" Value="MetricValueType.Boolean">Boolean</MudSelectItem>
+        </MudSelect>
+
+        <MudSelect T="WaveformKind" @bind-Value="Metric.Waveform" @bind-Value:after="NotifyAsync"
+                   Label="Generator" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                   Disabled="@EmulationService.IsRunning" Class="emu-metric-field">
+            @foreach (var kind in AvailableWaveforms)
+            {
+                <MudSelectItem T="WaveformKind" Value="@kind">@KindLabel(kind)</MudSelectItem>
+            }
+        </MudSelect>
+
+        @if (UsesRange)
+        {
+            <MudNumericField T="double" @bind-Value="Metric.Min" @bind-Value:after="NotifyAsync"
+                             Label="Min" Variant="Variant.Outlined" Margin="Margin.Dense"
+                             Disabled="@EmulationService.IsRunning"
+                             Class="emu-metric-field emu-metric-field--num"/>
+            <MudNumericField T="double" @bind-Value="Metric.Max" @bind-Value:after="NotifyAsync"
+                             Label="Max" Variant="Variant.Outlined" Margin="Margin.Dense"
+                             Disabled="@EmulationService.IsRunning"
+                             Error="@(MaxError != null)"
+                             Class="emu-metric-field emu-metric-field--num"/>
+        }
+        @if (UsesPeriod)
+        {
+            <MudNumericField T="double" @bind-Value="Metric.PeriodSeconds" @bind-Value:after="NotifyAsync"
+                             Label="Period (s)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                             Disabled="@EmulationService.IsRunning"
+                             Error="@(PeriodError != null)"
+                             Class="emu-metric-field emu-metric-field--num"/>
+        }
+        @if (UsesStep)
+        {
+            <MudNumericField T="double" @bind-Value="Metric.StepAmplitude" @bind-Value:after="NotifyAsync"
+                             Label="Step amplitude" Variant="Variant.Outlined" Margin="Margin.Dense"
+                             Disabled="@EmulationService.IsRunning"
+                             Error="@(StepError != null)"
+                             Class="emu-metric-field emu-metric-field--num"/>
+        }
+        @if (UsesConstant)
+        {
+            <MudNumericField T="double" @bind-Value="Metric.ConstantValue" @bind-Value:after="NotifyAsync"
+                             Label="Value" Variant="Variant.Outlined" Margin="Margin.Dense"
+                             Disabled="@EmulationService.IsRunning"
+                             Class="emu-metric-field emu-metric-field--num"/>
+        }
+        @if (UsesBooleanValue)
+        {
+            <MudSwitch T="bool" @bind-Value="Metric.BooleanValue" @bind-Value:after="NotifyAsync"
+                       Label="Value" Color="Color.Primary" Size="Size.Small"
+                       Disabled="@EmulationService.IsRunning"
+                       Class="emu-metric-field"/>
+        }
+        @if (UsesProbability)
+        {
+            <MudNumericField T="double" @bind-Value="Metric.TrueProbability" @bind-Value:after="NotifyAsync"
+                             Label="True probability" Variant="Variant.Outlined" Margin="Margin.Dense"
+                             Min="0" Max="1" Step="0.05"
+                             Disabled="@EmulationService.IsRunning"
+                             Error="@(ProbabilityError != null)"
+                             Class="emu-metric-field emu-metric-field--num"/>
+        }
+        @* MudNumericField resets an externally supplied ErrorText while processing its value,
+           so parameter messages render as a caption line instead of inline field error text. *@
+        @foreach (var error in ParameterErrors)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Error" Class="emu-metric-row__error d-block">@error</MudText>
+        }
+    </div>
+    <div class="emu-metric-row__side">
+        <WaveformPreview Metric="@Metric"/>
+        <MudIconButton Icon="@LucideIcons.Trash2" Size="Size.Small" Color="Color.Error"
+                       title="Delete metric"
+                       Disabled="@EmulationService.IsRunning"
+                       OnClick="@DeleteAsync"/>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EmulatorNodeConfig Node { get; set; } = null!;
+    [Parameter] public EmulatorDeviceConfig Device { get; set; } = null!;
+    [Parameter] public EmulatorMetricConfig Metric { get; set; } = null!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private static readonly WaveformKind[] NumericKinds =
+        [WaveformKind.Sine, WaveformKind.Ramp, WaveformKind.RandomWalk, WaveformKind.Constant];
+
+    private static readonly WaveformKind[] BooleanKinds =
+        [WaveformKind.FixedBoolean, WaveformKind.Toggle, WaveformKind.RandomBoolean];
+
+    private static readonly char[] IllegalTopicChars = ['/', '+', '#'];
+
+    private WaveformKind[] AvailableWaveforms =>
+        Metric.ValueType == MetricValueType.Boolean ? BooleanKinds : NumericKinds;
+
+    private bool UsesRange => Metric.Waveform is WaveformKind.Sine or WaveformKind.Ramp or WaveformKind.RandomWalk;
+    private bool UsesPeriod => Metric.Waveform is WaveformKind.Sine or WaveformKind.Ramp or WaveformKind.Toggle;
+    private bool UsesStep => Metric.Waveform is WaveformKind.RandomWalk;
+    private bool UsesConstant => Metric.Waveform is WaveformKind.Constant;
+    private bool UsesBooleanValue => Metric.Waveform is WaveformKind.FixedBoolean;
+    private bool UsesProbability => Metric.Waveform is WaveformKind.RandomBoolean;
+
+    private string? NameError
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Metric.Name)) return "Required";
+            if (Device.Metrics.Any(m => m.Id != Metric.Id && m.Name == Metric.Name))
+                return "Name already used in this device";
+            if (Node.Type == EmulatorNodeType.Generic && Metric.Name.IndexOfAny(IllegalTopicChars) >= 0)
+                return "Must not contain / + #";
+            return null;
+        }
+    }
+
+    private string? MaxError =>
+        UsesRange && Metric.Max <= Metric.Min ? "Must be greater than Min" : null;
+
+    private string? PeriodError =>
+        UsesPeriod && Metric.PeriodSeconds <= 0 ? "Must be greater than 0" : null;
+
+    private string? StepError =>
+        UsesStep && Metric.StepAmplitude <= 0 ? "Must be greater than 0" : null;
+
+    private string? ProbabilityError =>
+        UsesProbability && Metric.TrueProbability is < 0 or > 1 ? "Must be between 0 and 1" : null;
+
+    private IEnumerable<string> ParameterErrors =>
+        new[] { MaxError, PeriodError, StepError, ProbabilityError }.Where(e => e != null)!;
+
+    private static string KindLabel(WaveformKind kind) => kind switch
+    {
+        WaveformKind.RandomWalk => "Random walk",
+        WaveformKind.FixedBoolean => "Fixed",
+        WaveformKind.RandomBoolean => "Random",
+        _ => kind.ToString()
+    };
+
+    private async Task OnValueTypeChangedAsync(MetricValueType value)
+    {
+        Metric.ValueType = value;
+        if (!AvailableWaveforms.Contains(Metric.Waveform))
+            Metric.Waveform = AvailableWaveforms[0];
+        await NotifyAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        Device.Metrics.Remove(Metric);
+        await NotifyAsync();
+    }
+
+    private Task NotifyAsync() => OnChanged.InvokeAsync();
+}

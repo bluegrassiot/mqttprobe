@@ -1,0 +1,10 @@
+{
+  "solution": {
+    "path": "MqttProbe.slnx",
+    "projects": [
+      "src\\MqttProbe.Shared\\MqttProbe.Shared.csproj",
+      "src\\MqttProbe.Web\\MqttProbe.Web.csproj",
+      "tests\\MqttProbe.Tests\\MqttProbe.Shared.Tests.csproj"
+    ]
+  }
+}

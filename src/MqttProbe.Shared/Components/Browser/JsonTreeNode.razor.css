@@ -1,0 +1,74 @@
+.json-row {
+    display: block;
+    white-space: nowrap;
+}
+
+.json-key {
+    color: var(--mud-palette-text-primary);
+    font-weight: 600;
+}
+
+.json-string {
+    color: var(--mud-palette-success);
+}
+
+.json-number {
+    color: var(--mud-palette-info);
+}
+
+.json-bool.json-true {
+    color: var(--mud-palette-success);
+}
+
+.json-bool.json-false {
+    color: var(--mud-palette-error);
+}
+
+.json-null {
+    color: var(--mud-palette-error);
+    font-style: italic;
+}
+
+.json-bracket,
+.json-colon {
+    color: var(--mud-palette-text-secondary);
+}
+
+.json-toggle {
+    cursor: pointer;
+    color: var(--mud-palette-primary);
+    background: transparent;
+    border: 0;
+    padding: 2px;
+    margin: 0 2px 0 0;
+    border-radius: 3px;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    line-height: 1;
+    vertical-align: -2px;
+    transition: background-color 0.12s ease;
+}
+
+.json-toggle:hover {
+    background: color-mix(in srgb, var(--mud-palette-primary) 15%, transparent);
+}
+
+.json-toggle:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 1px;
+}
+
+.json-toggle__icon {
+    display: block;
+    pointer-events: none;
+}
+
+.json-preview {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.78rem;
+}
+

@@ -1,0 +1,16 @@
+# TLS-terminating reverse proxy for MQTT Probe.
+# MQTTPROBE_HOST is the hostname or IP browsers use to reach this machine;
+# set it in a .env file next to docker-compose.yml (defaults to localhost).
+{
+	# Clients connecting to a literal IP send no SNI; without this, Caddy
+	# cannot pick a certificate and aborts the handshake.
+	default_sni {$MQTTPROBE_HOST:localhost}
+}
+
+{$MQTTPROBE_HOST:localhost} {
+	# LAN hostnames and IPs cannot obtain public certificates, so Caddy
+	# issues one from its own local CA. Trust that CA on client machines
+	# to remove the browser warning (see README "Access from other machines").
+	tls internal
+	reverse_proxy mqttprobe:8080
+}

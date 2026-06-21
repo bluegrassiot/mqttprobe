@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <!-- MqttProbe connecting motif — on-brand orange node burst with outgoing signal pulse -->
+  <defs>
+    <style>
+      .spoke { stroke:#EE822A; stroke-width:8; stroke-linecap:round; }
+      .node  { fill:#EE822A; }
+      .tip   { fill:#EE822A; }
+    </style>
+  </defs>
+
+  <!-- expanding signal rings (the "probe") -->
+  <g fill="none" stroke="#EE822A" stroke-width="3">
+    <circle cx="200" cy="200" r="28" opacity="0">
+      <animate attributeName="r" values="28;165" dur="2.4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.55;0" dur="2.4s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="200" cy="200" r="28" opacity="0">
+      <animate attributeName="r" values="28;165" dur="2.4s" begin="0.8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.55;0" dur="2.4s" begin="0.8s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="200" cy="200" r="28" opacity="0">
+      <animate attributeName="r" values="28;165" dur="2.4s" begin="1.6s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.55;0" dur="2.4s" begin="1.6s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- primary spokes -->
+  <g class="spoke">
+    <line x1="200" y1="200" x2="200" y2="58"/>
+    <line x1="200" y1="200" x2="328" y2="98"/>
+    <line x1="200" y1="200" x2="350" y2="200"/>
+    <line x1="200" y1="200" x2="312" y2="312"/>
+    <line x1="200" y1="200" x2="200" y2="348"/>
+    <line x1="200" y1="200" x2="96" y2="316"/>
+    <line x1="200" y1="200" x2="52" y2="196"/>
+    <line x1="200" y1="200" x2="100" y2="82"/>
+  </g>
+
+  <!-- end nodes (pulse outward in sequence as the signal "arrives") -->
+  <g class="node">
+    <circle cx="200" cy="58"  r="11"><animate attributeName="r" values="9;13;9" dur="2.4s" begin="0.30s" repeatCount="indefinite"/></circle>
+    <circle cx="328" cy="98"  r="11"><animate attributeName="r" values="9;13;9" dur="2.4s" begin="0.45s" repeatCount="indefinite"/></circle>
+    <circle cx="350" cy="200" r="11"><animate attributeName="r" values="9;13;9" dur="2.4s" begin="0.60s" repeatCount="indefinite"/></circle>
+    <circle cx="312" cy="312" r="11"><animate attributeName="r" values="9;13;9" dur="2.4s" begin="0.75s" repeatCount="indefinite"/></circle>
+    <circle cx="200" cy="348" r="11"><animate attributeName="r" values="9;13;9" dur="2.4s" begin="0.90s" repeatCount="indefinite"/></circle>
+    <circle cx="96"  cy="316" r="11"><animate attributeName="r" values="9;13;9" dur="2.4s" begin="1.05s" repeatCount="indefinite"/></circle>
+    <circle cx="52"  cy="196" r="11"><animate attributeName="r" values="9;13;9" dur="2.4s" begin="1.20s" repeatCount="indefinite"/></circle>
+    <circle cx="100" cy="82"  r="11"><animate attributeName="r" values="9;13;9" dur="2.4s" begin="1.35s" repeatCount="indefinite"/></circle>
+  </g>
+
+  <!-- central hub -->
+  <circle cx="200" cy="200" r="26" fill="#EE822A">
+    <animate attributeName="r" values="24;28;24" dur="2.4s" repeatCount="indefinite"/>
+  </circle>
+</svg>

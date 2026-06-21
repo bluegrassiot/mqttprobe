@@ -1,0 +1,359 @@
+@using Microsoft.Extensions.Logging
+@using MQTTnet.Client
+@using MQTTnet.Extensions.ManagedClient
+@using MudBlazor.Utilities
+@using MqttProbe.Services.Configuration
+@implements IAsyncDisposable
+@inject IMessageStoreManager MessageStoreManagerService
+@inject IManagedMqttClient ManagedMqttClient
+@inject ISettingsStore SettingsStore
+@inject ISubscriptionManager SubscriptionManager
+@inject ILogger<ConnectionDialog> Logger
+@inject ISessionState SessionState
+@inject IMqttOptionsBuilder MqttOptionsBuilder
+@inject IChartDataService ChartDataService
+@inject IUxTelemetryService? UxTelemetry
+@inject IDialogService DialogService
+
+<MudDialog>
+    <DialogContent>
+        <div class="connection-dialog-content">
+
+            <div class="connection-dialog-header">
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Style="flex-shrink:0">Connection:</MudText>
+                <MudSelect T="Connection?"
+                           Value="@_savedConnectionForSelector"
+                           ValueChanged="@(async (Connection? v) => { if (v is not null) await ConnectionChanged(v); })"
+                           Placeholder="Select a saved connection..."
+                           ToStringFunc="@(c => c?.Name ?? string.Empty)"
+                           Dense="true"
+                           Variant="Variant.Outlined"
+                           Style="flex:1">
+                    @foreach (var connection in SettingsStore.Config.Connections)
+                    {
+                        <MudSelectItem T="Connection?" Value="@((Connection?)connection)">@connection.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudIconButton Icon="@LucideIcons.Plus" Color="Color.Inherit" Size="Size.Medium"
+                               title="New connection" OnClick="@Add" />
+                <MudIconButton Icon="@LucideIcons.Save" Color="Color.Inherit" Size="Size.Medium"
+                               title="Save connection" Disabled="@(!_canSave)"
+                               OnClick="@(async () => await Save())" />
+                <MudIconButton Icon="@LucideIcons.Trash2" Color="Color.Error" Size="Size.Medium"
+                               title="Delete connection" Disabled="@(!_canDelete)"
+                               OnClick="@(async () => await Delete())" />
+            </div>
+
+            <MudForm Model="@_selectedConnection" @ref="@_form"
+                     Validation="@_connectionValidator.ValidateValue" ValidationDelay="0"
+                     IsValidChanged="@FormValidationChanged" FieldChanged="@FormChanged">
+
+                <MudTabs @bind-ActivePanelIndex="_activeTabIndex"
+                         KeepPanelsAlive="true"
+                         Elevation="0"
+                         Class="connection-tabs">
+
+                    <MudTabPanel Text="Identity">
+                        <MudGrid Spacing="2" Class="mt-2">
+                            <MudItem xs="12" sm="6">
+                                <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.Name"
+                                              For="@(() => _selectedConnection.Name)" Immediate="true" Label="Name" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.ClientId"
+                                              For="@(() => _selectedConnection.ClientId)" Immediate="true" Label="Client ID" />
+                            </MudItem>
+                        </MudGrid>
+                    </MudTabPanel>
+
+                    <MudTabPanel Text="Transport">
+                        <MudGrid Spacing="2" Class="mt-2">
+                            <MudItem xs="12" sm="6">
+                                <MudSelect Variant="Variant.Outlined" T="Protocol" @bind-Value="_selectedConnection.Protocol"
+                                           Label="Protocol" AnchorOrigin="Origin.BottomCenter">
+                                    <MudSelectItem Value="@(Protocol.Mqtt)" />
+                                    <MudSelectItem Value="@(Protocol.WebSocket)" />
+                                </MudSelect>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                    @ProtocolHelperText
+                                </MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect Variant="Variant.Outlined" T="MqttVersion" @bind-Value="_selectedConnection.MqttVersion"
+                                           Label="MQTT Version" AnchorOrigin="Origin.BottomCenter">
+                                    <MudSelectItem Value="@(MqttVersion.V311)">3.1.1</MudSelectItem>
+                                    <MudSelectItem Value="@(MqttVersion.V5)">5.0</MudSelectItem>
+                                </MudSelect>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                    @MqttVersionHelperText
+                                </MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.Port"
+                                              For="@(() => _selectedConnection.Port)" Immediate="true"
+                                              Label="Port"
+                                              HelperText="MQTT defaults: 1883 (plain), 8883 (TLS). WebSocket defaults: 8083/8084." />
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.Host"
+                                              For="@(() => _selectedConnection.Host)" Immediate="true" Label="Host" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.User"
+                                              For="@(() => _selectedConnection.User)" Immediate="true" Label="User" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <PasswordField Connection="@_selectedConnection" />
+                            </MudItem>
+                            @if (_selectedConnection.Protocol == Protocol.WebSocket)
+                            {
+                                <MudItem xs="12">
+                                    <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.WebsocketBasePath"
+                                                  Immediate="true" Label="WebSocket Base Path"
+                                                  HelperText="Use the broker WebSocket endpoint path (for example /mqtt)." />
+                                </MudItem>
+                            }
+                            <MudItem xs="12">
+                                <MudStack Spacing="2">
+                                    <MudCheckBox @bind-Value="@_selectedConnection.UseTls" Color="Color.Primary">
+                                        Use TLS
+                                    </MudCheckBox>
+                                    @if (_selectedConnection.UseTls)
+                                    {
+                                        <div class="security-warning-group">
+                                            <MudCheckBox @bind-Value="@_selectedConnection.AllowUntrustedCertificate" Color="Color.Warning">
+                                                <MudIcon Icon="@LucideIcons.AlertTriangle" Size="Size.Small" Class="mr-1" />
+                                                Allow untrusted certificate
+                                            </MudCheckBox>
+                                            <MudText Typo="Typo.caption" Color="Color.Error" Class="ml-8">
+                                                Insecure — dev/lab only. Do not use in production.
+                                            </MudText>
+                                        </div>
+                                    }
+                                </MudStack>
+                            </MudItem>
+                        </MudGrid>
+                    </MudTabPanel>
+
+                    <MudTabPanel Text="On Connect">
+                        <MudStack Spacing="1" Class="mt-2">
+                            <MudCheckBox @bind-Value="@_subscribeToEverything" Color="Color.Primary">
+                                Subscribe to Sparkplug B topics on connect (spBv1.0/#)
+                            </MudCheckBox>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-8">
+                                Auto-subscribes to all Sparkplug B messages when connection is established.
+                            </MudText>
+                        </MudStack>
+                    </MudTabPanel>
+
+                </MudTabs>
+
+                <div class="connection-actions-footer">
+                    @if (_connectionState == ConnectionState.Connecting)
+                    {
+                        <div class="d-flex align-center gap-2">
+                            <img class="signal-connecting-sm" src="/_content/MqttProbe.Shared/img/signal-motif.svg" alt="" />
+                            <MudText Typo="Typo.subtitle1">Connecting...</MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="connection-actions-footer-cta">
+                            <MudButton Variant="Variant.Filled" title="Connect" Color="Color.Primary" Class="app-btn-min"
+                                       StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect)"
+                                       OnClick="@(async () => await Connect())">
+                                Connect
+                            </MudButton>
+                        </div>
+                    }
+
+                    @if (_connectionState == ConnectionState.Failed)
+                    {
+                        <MudAlert Class="mt-2" Severity="Severity.Error" Variant="Variant.Outlined">
+                            Connection failed. Verify broker, credentials, and transport settings.
+                        </MudAlert>
+                    }
+                </div>
+            </MudForm>
+        </div>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public required IMudDialogInstance MudDialog { get; set; }
+    [Parameter] public EventCallback<bool> OnComplete { get; set; }
+
+    private MudForm _form = new();
+    private readonly ConnectionValidator _connectionValidator = new();
+    private ConnectionState _connectionState;
+    private Connection? _savedConnectionForSelector;
+    private Connection _selectedConnection = new();
+    private bool _subscribeToEverything = true;
+    private bool _canConnect;
+    private bool _canSave;
+    private bool _canDelete;
+    private bool _isFormValid;
+    private bool _formReportsValid = true;
+    private int _activeTabIndex;
+
+    private string ProtocolHelperText => _selectedConnection.Protocol == Protocol.WebSocket
+        ? "WebSocket transport usually requires a path such as /mqtt and uses ws:// or wss://."
+        : "MQTT TCP transport uses host + port directly and does not require a WebSocket path.";
+
+    private string MqttVersionHelperText => _selectedConnection.MqttVersion == MqttVersion.V5
+        ? "MQTT 5.0 adds features like shared subscriptions, message expiry, and user properties."
+        : "MQTT 3.1.1 is required for Sparkplug B compatibility.";
+
+    public void FormValidationChanged(bool isValid)
+    {
+        _formReportsValid = isValid;
+        UpdateActionStates();
+        StateHasChanged(); // ensure DOM updates when called externally (e.g. from tests)
+    }
+
+    protected override void OnInitialized()
+    {
+        ManagedMqttClient.ConnectingFailedAsync += OnConnectingFailed;
+        ManagedMqttClient.ConnectedAsync += OnConnected;
+        base.OnInitialized();
+    }
+
+    private async Task OnConnectingFailed(ConnectingFailedEventArgs _)
+    {
+        _connectionState = ConnectionState.Failed;
+        UxTelemetry?.RecordConnectFailure();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnConnected(MqttClientConnectedEventArgs _)
+    {
+        _connectionState = ConnectionState.Connected;
+        UxTelemetry?.RecordConnectSuccess();
+        Logger.LogInformation("Connected to broker {Host}:{Port}", _selectedConnection.Host, _selectedConnection.Port);
+        await MessageStoreManagerService.Start();
+        await ChartDataService.StartAsync();
+        if (_subscribeToEverything)
+        {
+            // Deferred from Connect(): IManagedMqttClient.StartAsync only kicks off the
+            // connection — actual subscribe must wait until the broker is confirmed
+            // reachable, otherwise the snackbar lies and the topic is "subscribed" on a
+            // dead client.
+            await SubscriptionManager.Add("spBv1.0/#");
+        }
+        await InvokeAsync(() => MudDialog.Close(DialogResult.Ok(true)));
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        ManagedMqttClient.ConnectingFailedAsync -= OnConnectingFailed;
+        ManagedMqttClient.ConnectedAsync -= OnConnected;
+        return ValueTask.CompletedTask;
+    }
+
+    private void FormChanged(FormFieldChangedEventArgs args) => UpdateActionStates();
+
+    // MudForm starts out valid and IsValidChanged only fires on transitions, so a fresh
+    // dialog filled with valid input never receives the event. Validity is therefore
+    // derived from the model on every field change; the form's own report still vetoes
+    // value-conversion errors (e.g. non-numeric Port input) the model never sees.
+    private void UpdateActionStates()
+    {
+        _isFormValid = _formReportsValid && _connectionValidator.Validate(_selectedConnection).IsValid;
+        _canConnect = _isFormValid;
+        UpdateCanSave();
+    }
+
+    private void UpdateCanSave()
+    {
+        var isDirty = !SettingsStore.Config.Connections.Any(conn => conn.Equals(_selectedConnection));
+        _canSave = isDirty && _isFormValid;
+    }
+
+    private async Task Connect()
+    {
+        if (!await ValidateForm()) return;
+
+        // _canSave is exactly "valid and differs from every saved connection", so the
+        // prompt covers new connections and unsaved edits but never nags on a clean
+        // reconnect to a saved one.
+        if (_canSave)
+        {
+            var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+            var choice = await DialogService.ShowMessageBoxAsync(
+                "Unsaved changes",
+                "This connection has unsaved changes. Save before connecting?",
+                yesText: "Save & Connect",
+                noText: "Connect anyway",
+                cancelText: "Cancel",
+                options);
+
+            if (choice is null) return;
+            if (choice == true) await Save();
+        }
+
+        try
+        {
+            UxTelemetry?.RecordConnectAttempt();
+            _connectionState = ConnectionState.Connecting;
+            SessionState.SelectedConnection = _selectedConnection;
+            if (ManagedMqttClient.IsStarted)
+            {
+                await ManagedMqttClient.StopAsync();
+            }
+
+            var managedClientOptions = MqttOptionsBuilder.Build(_selectedConnection);
+            await ManagedMqttClient.StartAsync(managedClientOptions);
+        }
+        catch (Exception ex)
+        {
+            _connectionState = ConnectionState.Failed;
+            Logger.LogError(ex, "Failed to connect.");
+        }
+    }
+
+    private async Task<bool> ValidateForm()
+    {
+        await _form.ValidateAsync();
+        return _form.IsValid;
+    }
+
+    private async Task Save()
+    {
+        if (!await ValidateForm()) return;
+        await SettingsStore.AddConnectionAsync(_selectedConnection);
+        Logger.LogInformation("Connection saved: {Name} ({Host}:{Port})", _selectedConnection.Name, _selectedConnection.Host, _selectedConnection.Port);
+        _savedConnectionForSelector = SettingsStore.Config.Connections[^1];
+        _selectedConnection = _savedConnectionForSelector.Clone();
+        _canDelete = true;
+        UpdateActionStates();
+    }
+
+    internal async Task ConnectionChanged(Connection value)
+    {
+        await _form.ResetValidationAsync();
+        _savedConnectionForSelector = value;
+        _selectedConnection = value.Clone();
+        _activeTabIndex = 0;
+        _formReportsValid = true;
+        _canDelete = true;
+        UpdateActionStates();
+        StateHasChanged(); // ensure DOM updates when called externally (e.g. from tests)
+    }
+
+    private async Task Delete()
+    {
+        Logger.LogInformation("Connection deleted: {Name} ({Host}:{Port})", _selectedConnection.Name, _selectedConnection.Host, _selectedConnection.Port);
+        await SettingsStore.RemoveConnectionAsync(_selectedConnection);
+        Add();
+    }
+
+    private void Add()
+    {
+        _savedConnectionForSelector = null;
+        _selectedConnection = new Connection();
+        _activeTabIndex = 0;
+        _formReportsValid = true;
+        _canDelete = false;
+        UpdateActionStates();
+    }
+}

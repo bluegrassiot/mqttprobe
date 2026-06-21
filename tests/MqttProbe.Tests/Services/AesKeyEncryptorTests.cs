@@ -6,13 +6,13 @@ namespace MqttProbe.Shared.Tests.Services;
 [TestFixture]
 public class AesKeyEncryptorTests
 {
-    private static readonly byte[] Kek = new byte[32]; // 256-bit zero key — valid AES-256 key for tests
+    private static readonly byte[] _kek = new byte[32]; // 256-bit zero key — valid AES-256 key for tests
 
     [Test]
     public void Encrypt_ThenDecrypt_ReturnsOriginalElement()
     {
-        var encryptor = new AesKeyEncryptor(Kek);
-        var decryptor = new AesKeyDecryptor(Kek);
+        var encryptor = new AesKeyEncryptor(_kek);
+        var decryptor = new AesKeyDecryptor(_kek);
         var original = new XElement("Key", "some-secret-material");
 
         var info = encryptor.Encrypt(original);
@@ -24,7 +24,7 @@ public class AesKeyEncryptorTests
     [Test]
     public void Encrypt_DecryptorType_IsAesKeyDecryptor()
     {
-        var info = new AesKeyEncryptor(Kek).Encrypt(new XElement("Key", "v"));
+        var info = new AesKeyEncryptor(_kek).Encrypt(new XElement("Key", "v"));
 
         info.DecryptorType.Should().Be(typeof(AesKeyDecryptor));
     }
@@ -32,7 +32,7 @@ public class AesKeyEncryptorTests
     [Test]
     public void Encrypt_ProducesNonPlaintextOutput()
     {
-        var info = new AesKeyEncryptor(Kek).Encrypt(new XElement("Key", "secret-value"));
+        var info = new AesKeyEncryptor(_kek).Encrypt(new XElement("Key", "secret-value"));
 
         info.EncryptedElement.ToString().Should().NotContain("secret-value");
     }
@@ -40,7 +40,7 @@ public class AesKeyEncryptorTests
     [Test]
     public void Encrypt_ProducesUniqueIvEachCall()
     {
-        var encryptor = new AesKeyEncryptor(Kek);
+        var encryptor = new AesKeyEncryptor(_kek);
         var element = new XElement("Key", "same-content");
 
         var info1 = encryptor.Encrypt(element);

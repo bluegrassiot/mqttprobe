@@ -6,12 +6,12 @@ namespace MqttProbe.Shared.Tests.Services;
 [TestFixture]
 public class AesKeyDecryptorTests
 {
-    private static readonly byte[] Kek = new byte[32];
+    private static readonly byte[] _kek = new byte[32];
 
     [Test]
     public void Decrypt_MissingIvElement_ThrowsInvalidOperationException()
     {
-        var decryptor = new AesKeyDecryptor(Kek);
+        var decryptor = new AesKeyDecryptor(_kek);
         var element = new XElement("EncryptedKey",
             new XElement("CipherData", Convert.ToBase64String(new byte[16])));
 
@@ -24,7 +24,7 @@ public class AesKeyDecryptorTests
     [Test]
     public void Decrypt_MissingCipherDataElement_ThrowsInvalidOperationException()
     {
-        var decryptor = new AesKeyDecryptor(Kek);
+        var decryptor = new AesKeyDecryptor(_kek);
         var element = new XElement("EncryptedKey",
             new XElement("IV", Convert.ToBase64String(new byte[16])));
 

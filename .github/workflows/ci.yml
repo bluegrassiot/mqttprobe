@@ -43,10 +43,9 @@ jobs:
 
       - name: Format check
         run: |
-          dotnet format MqttProbe.slnx --verify-no-changes \
+          dotnet format MqttProbe.NoMaui.slnf --verify-no-changes \
             --exclude "**/LucideIcons.cs" \
-            --exclude "**/SparkplugBProtobuf.cs" \
-            --exclude "src/MqttProbe.Maui/**"
+            --exclude "**/SparkplugBProtobuf.cs"
 
       - name: Unit tests
         run: |

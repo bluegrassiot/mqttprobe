@@ -183,18 +183,35 @@ jobs:
     needs: [build-blazor, build-docker, build-maui-windows]
     runs-on: ubuntu-latest
     steps:
-      - name: Download all artifacts
+      - name: Download blazor-linux-x64
         uses: actions/download-artifact@v4
+        with:
+          name: blazor-linux-x64
+
+      - name: Download blazor-linux-arm64
+        uses: actions/download-artifact@v4
+        with:
+          name: blazor-linux-arm64
+
+      - name: Download blazor-win-x64
+        uses: actions/download-artifact@v4
+        with:
+          name: blazor-win-x64
+
+      - name: Download maui-windows
+        uses: actions/download-artifact@v4
+        with:
+          name: maui-windows
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            blazor-linux-x64/mqttprobe-blazor-linux-x64-${{ github.ref_name }}.zip
-            blazor-linux-arm64/mqttprobe-blazor-linux-arm64-${{ github.ref_name }}.zip
-            blazor-win-x64/mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip
-            maui-windows/mqttprobe-windows-${{ github.ref_name }}.zip
+            mqttprobe-blazor-linux-x64-${{ github.ref_name }}.zip
+            mqttprobe-blazor-linux-arm64-${{ github.ref_name }}.zip
+            mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip
+            mqttprobe-windows-${{ github.ref_name }}.zip
           body: |
             ## MQTT Probe ${{ github.ref_name }}
 

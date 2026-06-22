@@ -8,8 +8,7 @@
     <!-- ============================================================ -->
     <PackageVersion Include="Blazor-ApexCharts" Version="6.1.0" />
     <PackageVersion Include="Blazor.Lucide" Version="1.0.6" />
-    <PackageVersion Include="CurrieTechnologies.Razor.Clipboard" Version="1.6.0" />
-    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+<PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
     <PackageVersion Include="MessagePack" Version="3.1.7" />
     <PackageVersion Include="MudBlazor" Version="9.5.0" />

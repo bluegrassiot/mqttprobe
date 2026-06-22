@@ -16,10 +16,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="CurrieTechnologies.Razor.Clipboard" />
-    </ItemGroup>
-
-    <ItemGroup>
       <ProjectReference Include="..\MqttProbe.Shared\MqttProbe.Shared.csproj" />
     </ItemGroup>
 
@@ -27,6 +23,16 @@
       <Content Update="wwwroot\favicon.svg">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </Content>
+    </ItemGroup>
+
+    <!-- Runtime-generated config — never publish credentials or key material -->
+    <ItemGroup>
+      <Content Remove="Config\appsettings.json" />
+      <Content Remove="Config\secrets.dat" />
+      <Content Remove="Config\dp-keys\**" />
+      <None Include="Config\appsettings.json" />
+      <None Include="Config\secrets.dat" />
+      <None Include="Config\dp-keys\**" />
     </ItemGroup>
 
 </Project>

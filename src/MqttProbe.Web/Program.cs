@@ -1,5 +1,4 @@
 using System.Net;
-using CurrieTechnologies.Razor.Clipboard;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.XmlEncryption;
@@ -87,7 +86,6 @@ builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
 builder.Services.AddScoped<IMqttOptionsBuilder, MqttOptionsBuilder>();
 builder.Services.AddScoped<IUxTelemetryService, UxTelemetryService>();
 builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
-builder.Services.AddClipboard();
 builder.Services.AddScoped<IClipboardService, WebClipboardService>();
 
 var configDir = Path.Combine(builder.Environment.ContentRootPath, "config");

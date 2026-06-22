@@ -63,12 +63,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           cd publish/blazor
-          zip ../../mqttprobe-blazor-${{ matrix.rid }}-${{ github.ref_name }}.zip MqttProbe.Web
+          zip -r ../../mqttprobe-blazor-${{ matrix.rid }}-${{ github.ref_name }}.zip .
 
       - name: Archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path publish/blazor/MqttProbe.Web.exe -DestinationPath mqttprobe-blazor-${{ matrix.rid }}-${{ github.ref_name }}.zip -Force
+        run: Compress-Archive -Path publish/blazor/* -DestinationPath mqttprobe-blazor-${{ matrix.rid }}-${{ github.ref_name }}.zip -Force
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

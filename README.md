@@ -8,20 +8,22 @@ Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
 
----
+![MQTTProbe demo — connecting to a broker, browsing topics, and decoding Sparkplug B messages](docs/images/demo.gif)
 
 ## Features
+
+![MQTTProbe interface](docs/images/screenshot-browser.png)
 
 - **Topic Browser** — live tree view of all topics received from the broker, with recursive hierarchy navigation
 - **Payload Browser** — structured JSON viewer for message payloads, with topic/payload copy-to-clipboard
 - **Subscriptions** — add and remove MQTT topic subscriptions (including wildcards) at runtime; subscriptions persist per connection and auto-resubscribe on reconnect (configurable)
 - **Publish** — send messages to any topic with configurable QoS level
 - **MQTT/Sparkplug B Emulator** — simulate multiple Edge Nodes publishing telemetry data at a configurable rate with and without Sparkplug B
+- **Sparkplug B EoN dashboard** — live view of all Edge of Network nodes, devices, and metrics; automatically requests Birth certificates for newly discovered nodes
 - **Multiple Connections** — save and switch between multiple broker configurations
 - **TLS / MQTTS** — connect to brokers over TLS (port 8883) or plain MQTT (port 1883), with optional untrusted certificate override
 - **WebSocket support** — connect via `ws://` or `wss://` in addition to raw TCP
 - **Charts** — live time-series visualization of JSON payload fields with configurable field selection; chart configurations are saved across sessions
-- **Dark / Light mode** — persisted theme toggle
 - **Authentication** — cookie-based login with PBKDF2-SHA256 hashed passwords; first-run setup wizard, in-app password change
 - **Secure credential storage** — MQTT broker passwords stored in platform-native secure storage (iOS Keychain / Android Keystore / ASP.NET Data Protection); never written in plaintext
 
@@ -53,6 +55,8 @@ docker compose up -d
 Open **http://localhost:8080** in your browser. On first launch you will be taken to a setup page to create your admin password.
 
 > **Data persistence:** Config, encrypted broker passwords, and Data Protection keys are stored in a named Docker volume (`mqttprobe-config`) and survive container restarts and re-deployments.
+
+> **Broker access without exposing ports:** MQTTProbe connects to brokers by container name on the same Docker network — no need to expose broker ports to the host or external network. If your broker (e.g., Mosquitto) is on a shared Docker network, MQTTProbe can reach it directly using the container hostname.
 
 ### Access from other machines
 

@@ -77,7 +77,7 @@
 
     <PropertyGroup>
         <ServerGarbageCollection>false</ServerGarbageCollection>
-        <DefaultLanguage>en</DefaultLanguage>
+        <DefaultLanguage>en-US</DefaultLanguage>
         <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
         <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
         <PackageCertificateThumbprint></PackageCertificateThumbprint>

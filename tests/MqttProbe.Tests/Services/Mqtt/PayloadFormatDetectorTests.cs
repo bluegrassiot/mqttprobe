@@ -57,12 +57,12 @@ public class PayloadFormatDetectorTests
     }
 
     [Test]
-    public void Detect_SparkplugTopic_WithValidUtf8Payload_FallsThroughToNormalDetection()
+    public void Detect_SparkplugTopic_WithValidUtf8Payload_ReturnsSparkplug()
     {
-        // The Sparkplug guard only fires when the payload is NOT valid UTF-8;
-        // valid UTF-8 must fall through to the regular detectors.
+        // The topic prefix alone is the authoritative Sparkplug B indicator;
+        // valid UTF-8 payload bytes must still be treated as Sparkplug protobuf.
         PayloadFormatDetector.Detect(MakeArgs("spBv1.0/group/NDATA/eon1", "42.5"))
-            .Should().Be(DetectedPayloadFormat.PlainText);
+            .Should().Be(DetectedPayloadFormat.Sparkplug);
     }
 
     [Test]

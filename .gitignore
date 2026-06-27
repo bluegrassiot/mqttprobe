@@ -283,3 +283,4 @@ appsettings.Local.json
 # Git worktrees (per-feature isolation during execution)
 /.worktrees/
 /.github/copilot-instructions.md
+/.claude

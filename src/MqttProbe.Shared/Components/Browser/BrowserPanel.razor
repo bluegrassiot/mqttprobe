@@ -18,7 +18,6 @@
         <MudButton Variant="Variant.Outlined" Size="Size.Medium"
                    StartIcon="@LucideIcons.Trash2"
                    Color="Color.Error" Class="app-btn-min"
-                   Disabled="@(!MessageStoreManager.MessageStores.Any())"
                    OnClick="ClearAllMessages">
             Clear Messages
         </MudButton>
@@ -33,43 +32,39 @@
         </MudAlert>
     }
     <ErrorBoundary ErrorContent="_sectionError">
-        <div class="browser-split">
-            <div class="browser-split__topics browser-pane-topics mobile-hide">
-                <TopicBrowser/>
-            </div>
-            <div class="mobile-topics-collapse mobile-show">
-                <div class="mobile-topics-header" @onclick="ToggleMobileTopics">
-                    <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary"/>
-                    <MudText Typo="Typo.subtitle2" Style="font-weight:600">Topics</MudText>
-                    @if (MessageStoreManager.MessageStores.Any())
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
-                                 Style="height:20px; font-size:0.7rem; padding:0 6px;">
-                            @MessageStoreManager.MessageStores.Count
-                        </MudChip>
-                    }
-                    <MudSpacer/>
-                    <MudIcon Icon="@(_mobileTopicsExpanded ? LucideIcons.ChevronUp : LucideIcons.ChevronDown)"
-                             Size="Size.Small" Color="Color.Primary"/>
-                </div>
-                <MudCollapse Expanded="@_mobileTopicsExpanded">
-                    <div class="mobile-topics-content">
+        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            <div class="browser-split-wrap">
+                <MudSplitPanel Class="browser-split-panel"
+                               FirstPanelInitialSize="320" MinPanelSize="220"
+                               PanelGap="6" ResetOnDoubleClick="true" Transparent="true">
+                    <FirstPanel>
                         <TopicBrowser/>
-                    </div>
-                </MudCollapse>
+                    </FirstPanel>
+                    <SecondPanel>
+                        <PayloadBrowser/>
+                    </SecondPanel>
+                </MudSplitPanel>
             </div>
-            <div class="browser-split__messages browser-pane-messages">
-                <PayloadBrowser/>
+        </MudHidden>
+        <MudHidden Breakpoint="Breakpoint.MdAndUp">
+            <div class="browser-split-wrap">
+                <MudSplitPanel Class="browser-split-panel" Horizontal="true"
+                               FirstPanelInitialSize="260" MinPanelSize="120"
+                               PanelGap="6" ResetOnDoubleClick="true" Transparent="true">
+                    <FirstPanel>
+                        <TopicBrowser/>
+                    </FirstPanel>
+                    <SecondPanel>
+                        <PayloadBrowser/>
+                    </SecondPanel>
+                </MudSplitPanel>
             </div>
-        </div>
+        </MudHidden>
     </ErrorBoundary>
 </div>
 
 @code {
-    private bool _mobileTopicsExpanded;
     private readonly RenderFragment<Exception> _sectionError = _ => @<SectionError />;
-
-    private void ToggleMobileTopics() => _mobileTopicsExpanded = !_mobileTopicsExpanded;
 
     private async Task ClearAllMessages()
     {

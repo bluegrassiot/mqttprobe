@@ -3,7 +3,7 @@
 @using Microsoft.Extensions.Logging
 @implements IAsyncDisposable
 
-<MudPaper Elevation="1" Class="pa-2 app-chrome-panel" Style="height:100%; display:flex; flex-direction:column; overflow:hidden; box-sizing:border-box;">
+<MudPaper Elevation="1" Class="pa-2 app-chrome-panel" Style="flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; box-sizing:border-box;">
     <div class="topic-header-row">
         <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary"/>
         <MudText Typo="Typo.subtitle2" Style="font-weight:600">Topics</MudText>
@@ -22,7 +22,7 @@
                       Margin="Margin.Dense" Class="topic-filter-field"/>
     </div>
 
-    <div class="topic-tree-wrap" style="flex:1; overflow-y:auto; min-height:0;">
+    <div class="topic-tree-wrap" style="flex:1 1 auto; min-height:0; overflow:auto;">
         @if (FilteredStores.Any())
         {
             <MudTreeView SelectedValue="@MessageStoreManagerService.SelectedMessageStore"

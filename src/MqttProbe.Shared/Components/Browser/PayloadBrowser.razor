@@ -9,7 +9,7 @@
 @if (_selectedMessage != null)
 {
     var msg = _selectedMessage;
-    <MudPaper Elevation="0" Class="pa-0 app-chrome-panel">
+    <MudPaper Elevation="0" Class="pa-0 app-chrome-panel" Style="display:flex; flex-direction:column; flex:1 1 auto; min-height:0; overflow:hidden;">
         <div class="d-flex align-center px-2 py-1 payload-detail-toolbar payload-section-divider">
             <MudIconButton Icon="@LucideIcons.ArrowLeft" Size="Size.Small"
                            Color="Color.Primary" title="Back to message list"
@@ -26,8 +26,8 @@
                            Icon="@LucideIcons.Copy" Color="Color.Primary"
                            @onclick="() => CopyToClipboard(JsonSerializer.Serialize(_selectedMessage))"/>
         </div>
-        <div class="payload-detail-meta-sticky">
-            <MudSimpleTable Dense="true" FixedHeader="true" Style="overflow: auto;" Class="mb-0">
+        <div class="payload-detail-meta">
+            <table class="pb-meta-table">
                 <tbody>
                     <tr>
                         <td class="pb-meta-label">Topic</td>
@@ -68,10 +68,11 @@
                         </td>
                     </tr>
                 </tbody>
-            </MudSimpleTable>
+            </table>
         </div>
 
-        <MudPaper Outlined="true" Class="ma-2 pa-1 payload-detail-body">
+        <MudPaper Outlined="true" Class="ma-2 pa-1 payload-detail-body"
+                  Style="flex:1 1 auto; min-height:0; overflow:auto;">
             @{
                 var payloadType = GetPayloadType(msg.Payload);
                 var (typeLabel, typeColor) = payloadType switch
@@ -145,7 +146,7 @@
 }
 else
 {
-    <MudPaper Elevation="0" Class="pa-0 app-chrome-panel">
+    <MudPaper Elevation="0" Class="pa-0 app-chrome-panel" Style="display:flex; flex-direction:column; flex:1 1 auto; min-height:0; overflow:hidden;">
         @if (_messageList.Count > 0)
         {
             <div class="d-flex align-center px-3 py-1 payload-section-divider">
@@ -162,7 +163,8 @@ else
                 }
             </div>
         }
-        <MudTable HorizontalScrollbar="true" Dense="true"
+        <div style="flex:1 1 auto; min-height:0; overflow:hidden; display:flex; flex-direction:column;">
+            <MudTable HorizontalScrollbar="true" Dense="true"
                   SelectedItem="_selectedMessage" SelectedItemChanged="MessageChanged" T="MqttMessage"
                   Filter="new Func<MqttMessage, bool>(FilterFunc)" Items="_messageList"
                   Hover="true" Breakpoint="Breakpoint.None" Virtualize="true" FixedHeader="true" Striped="true"
@@ -214,6 +216,7 @@ else
                 </div>
             </NoRecordsContent>
         </MudTable>
+        </div>
     </MudPaper>
 }
 

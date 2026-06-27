@@ -5,16 +5,25 @@
     background: var(--mud-palette-surface);
 }
 
-.payload-detail-meta-sticky {
-    position: sticky;
-    top: 40px;
-    z-index: 2;
+.payload-detail-meta {
     background: var(--mud-palette-surface);
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
+/* Plain table replacing MudSimpleTable — no overflow container, no height:100%
+   from FixedHeader, so it renders at natural height and never pushes the
+   payload body off-screen. */
+.pb-meta-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.pb-meta-table td {
+    padding: 4px 12px;
+    vertical-align: middle;
+}
+
 .payload-detail-body {
-    max-height: calc(100% - 40px);
     overflow: auto;
 }
 
@@ -64,4 +73,22 @@
 .pb-topic {
     font-size: 0.85rem;
     word-break: break-all;
+}
+
+/* ── MudTable flex height fix ──────────────────────────────────────────────
+   MudTable's outer .mud-table div is a block element with height:auto by
+   default, so .mud-table-container's height:100% resolves to auto and the
+   table overflows. Make .mud-table a flex column so it gets a definite
+   height from the flex algorithm, then .mud-table-container flex-fills the
+   remaining space after the toolbar and its overflow-y:auto activates. */
+::deep .mud-table {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+::deep .mud-table-container {
+    flex: 1 1 auto;
+    min-height: 0;
 }

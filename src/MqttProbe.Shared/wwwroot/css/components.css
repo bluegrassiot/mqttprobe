@@ -173,3 +173,66 @@
 #components-reconnect-modal.components-reconnect-show .reconnect-message--show { display: block; }
 #components-reconnect-modal.components-reconnect-failed .reconnect-message--failed { display: block; }
 #components-reconnect-modal.components-reconnect-rejected .reconnect-message--rejected { display: block; }
+
+/* ── Viewport-locked app shell ──────────────────────────────────────────────
+   Lock the whole app to the viewport so the page itself never scrolls. Each
+   chain link fills its parent and clips overflow; scrolling happens inside the
+   active tab's content area (.mud-tabs-panels) or, for the Browser tab, inside
+   the topic tree and payload panes. These live in the global sheet (not a
+   scoped ::deep) because MudLayout/MudMainContent/MudContainer roots never
+   carry a component's CSS-isolation attribute. */
+.mud-layout {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.mud-main-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.app-shell-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* The tabs host fills the shell body so its panels area can flex and scroll. */
+.app-shell-body > .mud-tabs {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* The panels area must be a flex column that fills the tabs host and clips
+   overflow. MudBlazor only gives .mud-tabs-panels `flex-grow:1`; without
+   display:flex / min-height:0 / overflow:hidden here, each tab's content
+   collapses to its natural height and overflows the viewport-locked shell
+   instead of scrolling internally. Scoped under .app-shell-body so the
+   connection dialog's MudTabs (rendered in a portal outside the shell) is
+   unaffected. */
+.app-shell-body .mud-tabs-panels {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Each visible tab panel wrapper must fill the panels area and pass a bounded
+   height down to the tab's content (.tab-panel-content), so that content's
+   flex:1 / min-height:0 children can scroll internally. Inactive panels are
+   hidden via .mud-tab-panel-hidden (display:none) so they don't take space. */
+.app-shell-body .mud-tab-panel[role='tabpanel'] {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}

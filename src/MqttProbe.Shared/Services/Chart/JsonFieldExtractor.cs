@@ -16,6 +16,12 @@ public class JsonFieldExtractor : IJsonFieldExtractor
     {
         var result = new Dictionary<string, ExtractedField>();
         if (string.IsNullOrWhiteSpace(jsonPayload)) return result;
+
+        // Skip any leading non-JSON prefix (e.g. "--" framing markers)
+        var jsonStart = jsonPayload.IndexOfAny(['{', '[']);
+        if (jsonStart < 0) return result;
+        if (jsonStart > 0) jsonPayload = jsonPayload[jsonStart..];
+
         try
         {
             using var doc = JsonDocument.Parse(jsonPayload);

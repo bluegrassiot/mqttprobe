@@ -102,3 +102,74 @@
     0%, 100% { opacity: 1; }
     50%       { opacity: 0.3; }
 }
+
+/* ── Circuit reconnect modal ────────────────────────────────────────────────
+   The default framework dialog renders light-gray text on white and ignores the
+   theme. We supply our own #components-reconnect-modal (see App.razor); Blazor
+   toggles the state classes below. Colors are hardcoded to the brand palette
+   rather than --mud-palette-* because the circuit (and thus MudThemeProvider's
+   interactivity) is exactly what's broken when this shows. */
+
+#components-reconnect-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 20000; /* above MudBlazor dialogs/overlays */
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.85); /* slate-black, translucent */
+    backdrop-filter: blur(3px);
+}
+
+/* Blazor shows the modal by swapping -hide for one of these. */
+#components-reconnect-modal.components-reconnect-show,
+#components-reconnect-modal.components-reconnect-failed,
+#components-reconnect-modal.components-reconnect-rejected {
+    display: flex;
+}
+
+#components-reconnect-modal.components-reconnect-hide {
+    display: none;
+}
+
+#components-reconnect-modal .reconnect-card {
+    background: #1E293B; /* slate-dark */
+    border: 1px solid #334155; /* slate-border */
+    border-radius: 8px;
+    padding: 2rem 2.25rem;
+    max-width: 380px;
+    text-align: center;
+    color: #F1F5F9; /* off-white */
+    font-family: var(--font-ui, system-ui, sans-serif);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+}
+
+#components-reconnect-modal .reconnect-motif {
+    width: 96px;
+    height: 96px;
+    margin-bottom: 1rem;
+}
+
+#components-reconnect-modal .reconnect-message {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+    color: #F1F5F9;
+}
+
+#components-reconnect-modal .reconnect-message a {
+    color: #F97316; /* signal-orange */
+    font-weight: 600;
+    text-decoration: none;
+}
+
+#components-reconnect-modal .reconnect-message a:hover {
+    text-decoration: underline;
+}
+
+/* Show only the message matching the current circuit state. */
+#components-reconnect-modal .reconnect-message { display: none; }
+#components-reconnect-modal.components-reconnect-show .reconnect-message--show { display: block; }
+#components-reconnect-modal.components-reconnect-failed .reconnect-message--failed { display: block; }
+#components-reconnect-modal.components-reconnect-rejected .reconnect-message--rejected { display: block; }

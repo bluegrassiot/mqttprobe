@@ -36,6 +36,22 @@
         <a href="" class="reload">Reload</a>
         <a class="dismiss">🗙</a>
     </div>
+
+    @* Custom Blazor circuit reconnect UI. Providing an element with this id
+       suppresses the framework's unstyled default dialog *@
+    <div id="components-reconnect-modal" class="components-reconnect-hide">
+        <div class="reconnect-card">
+            <img class="reconnect-motif"
+                 src="_content/MqttProbe.Shared/img/signal-motif.svg" alt="" />
+            <p class="reconnect-message reconnect-message--show">Rejoining the server&hellip;</p>
+            <p class="reconnect-message reconnect-message--failed">
+                Connection lost. <a href="" onclick="window.Blazor.reconnect(); return false;">Try to reconnect</a>
+            </p>
+            <p class="reconnect-message reconnect-message--rejected">
+                Could not reconnect to the server. <a href="" onclick="location.reload(); return false;">Reload the page</a>
+            </p>
+        </div>
+    </div>
 </body>
 
 </html>

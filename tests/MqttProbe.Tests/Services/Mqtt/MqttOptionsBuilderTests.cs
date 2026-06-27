@@ -155,6 +155,22 @@ public class MqttOptionsBuilderTests
     }
 
     [Test]
+    public void Build_DefaultConnectTimeout_Uses15Seconds()
+    {
+        var options = _builder.Build(TcpConnection());
+        ((MqttClientOptions)options.ClientOptions).Timeout.Should().Be(TimeSpan.FromSeconds(15));
+    }
+
+    [Test]
+    public void Build_CustomConnectTimeout_UsesConfiguredValue()
+    {
+        var conn = TcpConnection();
+        conn.ConnectTimeout = 30;
+        var options = _builder.Build(conn);
+        ((MqttClientOptions)options.ClientOptions).Timeout.Should().Be(TimeSpan.FromSeconds(30));
+    }
+
+    [Test]
     public void Build_NullConnection_ThrowsArgumentNullException()
     {
         var act = () => _builder.Build(null!);

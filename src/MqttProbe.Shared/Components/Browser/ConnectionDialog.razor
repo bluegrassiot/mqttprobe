@@ -74,9 +74,6 @@
                                     <MudSelectItem Value="@(Protocol.Mqtt)" />
                                     <MudSelectItem Value="@(Protocol.WebSocket)" />
                                 </MudSelect>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
-                                    @ProtocolHelperText
-                                </MudText>
                             </MudItem>
                             <MudItem xs="12" sm="6">
                                 <MudSelect Variant="Variant.Outlined" T="MqttVersion" @bind-Value="_selectedConnection.MqttVersion"
@@ -84,15 +81,16 @@
                                     <MudSelectItem Value="@(MqttVersion.V311)">3.1.1</MudSelectItem>
                                     <MudSelectItem Value="@(MqttVersion.V5)">5.0</MudSelectItem>
                                 </MudSelect>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
-                                    @MqttVersionHelperText
-                                </MudText>
                             </MudItem>
                             <MudItem xs="12" sm="6">
                                 <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.Port"
                                               For="@(() => _selectedConnection.Port)" Immediate="true"
-                                              Label="Port"
-                                              HelperText="MQTT defaults: 1883 (plain), 8883 (TLS). WebSocket defaults: 8083/8084." />
+                                              Label="Port" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.ConnectTimeout"
+                                              For="@(() => _selectedConnection.ConnectTimeout)" Immediate="true"
+                                              Label="Connect Timeout (s)" />
                             </MudItem>
                             <MudItem xs="12">
                                 <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.Host"
@@ -137,12 +135,9 @@
 
                     <MudTabPanel Text="On Connect">
                         <MudStack Spacing="1" Class="mt-2">
-                            <MudCheckBox @bind-Value="@_subscribeToEverything" Color="Color.Primary">
+                            <MudCheckBox @bind-Value="@_subscribeToSpb" Color="Color.Primary">
                                 Subscribe to Sparkplug B topics on connect (spBv1.0/#)
                             </MudCheckBox>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-8">
-                                Auto-subscribes to all Sparkplug B messages when connection is established.
-                            </MudText>
                         </MudStack>
                     </MudTabPanel>
 
@@ -188,21 +183,13 @@
     private ConnectionState _connectionState;
     private Connection? _savedConnectionForSelector;
     private Connection _selectedConnection = new();
-    private bool _subscribeToEverything = true;
+    private bool _subscribeToSpb = true;
     private bool _canConnect;
     private bool _canSave;
     private bool _canDelete;
     private bool _isFormValid;
     private bool _formReportsValid = true;
     private int _activeTabIndex;
-
-    private string ProtocolHelperText => _selectedConnection.Protocol == Protocol.WebSocket
-        ? "WebSocket transport usually requires a path such as /mqtt and uses ws:// or wss://."
-        : "MQTT TCP transport uses host + port directly and does not require a WebSocket path.";
-
-    private string MqttVersionHelperText => _selectedConnection.MqttVersion == MqttVersion.V5
-        ? "MQTT 5.0 adds features like shared subscriptions, message expiry, and user properties."
-        : "MQTT 3.1.1 is required for Sparkplug B compatibility.";
 
     public void FormValidationChanged(bool isValid)
     {
@@ -232,7 +219,7 @@
         Logger.LogInformation("Connected to broker {Host}:{Port}", _selectedConnection.Host, _selectedConnection.Port);
         await MessageStoreManagerService.Start();
         await ChartDataService.StartAsync();
-        if (_subscribeToEverything)
+        if (_subscribeToSpb)
         {
             // Deferred from Connect(): IManagedMqttClient.StartAsync only kicks off the
             // connection — actual subscribe must wait until the broker is confirmed

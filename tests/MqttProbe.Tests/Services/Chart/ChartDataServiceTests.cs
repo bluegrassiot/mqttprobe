@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Chart;
@@ -23,6 +24,7 @@ public class ChartDataServiceTests
     private IChartFieldRegistry _registry = null!;
     private ISettingsStore _mockSettingsStore = null!;
     private ChartDataService _service = null!;
+    private Func<MqttApplicationMessageReceivedEventArgs, Task>? _handler;
 
     [SetUp]
     public void Setup()
@@ -31,7 +33,13 @@ public class ChartDataServiceTests
         _extractor = new JsonFieldExtractor();
         _registry = new ChartFieldRegistry();
         _mockSettingsStore = Substitute.For<ISettingsStore>();
-        _mockSettingsStore.Charts.Returns([]);
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns([]);
+
+        _handler = null;
+        _mockClient
+            .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => _handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
         _service = new ChartDataService(_mockClient, _extractor, _registry, _mockSettingsStore);
     }
 
@@ -100,5 +108,92 @@ public class ChartDataServiceTests
         await Task.WhenAll(tasks);
 
         _mockClient.Received(1).ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>();
+    }
+
+    [Test]
+    public async Task SetConnection_ClearsDataBuffers()
+    {
+        var connectionId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        _mockSettingsStore.GetCharts(connectionId).Returns([
+            new ChartConfiguration
+            {
+                Series = [new ChartSeries { Id = seriesId, Topic = "test/topic", JsonPath = "value" }],
+                MaxPoints = 100
+            }
+        ]);
+
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+
+        await _handler!(MakeArgs("test/topic", """{"value": 42}"""));
+
+        _service.GetPoints(seriesId).Should().NotBeEmpty();
+
+        _service.SetConnection(Guid.NewGuid());
+
+        _service.GetPoints(seriesId).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task OnChartsChanged_IgnoresEventForNonMatchingConnectionId()
+    {
+        var connectionId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        _mockSettingsStore.GetCharts(connectionId).Returns([
+            new ChartConfiguration
+            {
+                Series = [new ChartSeries { Id = seriesId, Topic = "test/topic", JsonPath = "value" }],
+                MaxPoints = 100
+            }
+        ]);
+
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+
+        await _handler!(MakeArgs("test/topic", """{"value": 42}"""));
+
+        _service.GetPoints(seriesId).Should().NotBeEmpty();
+
+        _mockSettingsStore.ChartsChanged += Raise.Event<Action<Guid>>(Guid.NewGuid());
+
+        _service.GetPoints(seriesId).Should().NotBeEmpty();
+    }
+
+    [Test]
+    public async Task OnChartsChanged_ClearsBuffersAndFiresOnDataUpdatedForMatchingConnectionId()
+    {
+        var connectionId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        _mockSettingsStore.GetCharts(connectionId).Returns([
+            new ChartConfiguration
+            {
+                Series = [new ChartSeries { Id = seriesId, Topic = "test/topic", JsonPath = "value" }],
+                MaxPoints = 100
+            }
+        ]);
+
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+
+        await _handler!(MakeArgs("test/topic", """{"value": 42}"""));
+
+        _service.GetPoints(seriesId).Should().NotBeEmpty();
+
+        var onUpdated = false;
+        _service.OnDataUpdated += () => onUpdated = true;
+
+        _mockSettingsStore.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
+
+        _service.GetPoints(seriesId).Should().BeEmpty();
+        onUpdated.Should().BeTrue();
+    }
+
+    private static MqttApplicationMessageReceivedEventArgs MakeArgs(string topic, string payload)
+    {
+        var appMsg = new MqttApplicationMessageBuilder()
+            .WithTopic(topic).WithPayload(payload).Build();
+        var packet = new MQTTnet.Packets.MqttPublishPacket { Topic = topic };
+        return new MqttApplicationMessageReceivedEventArgs("test-client", appMsg, packet, null);
     }
 }

@@ -31,7 +31,7 @@ public class ChartDataServiceMessageHandlerTests
         _mockClient = Substitute.For<IManagedMqttClient>();
         _registry = new ChartFieldRegistry();
         _mockSettingsStore = Substitute.For<ISettingsStore>();
-        _mockSettingsStore.Charts.Returns([]);
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns([]);
         _service = new ChartDataService(_mockClient, new JsonFieldExtractor(), _registry, _mockSettingsStore);
 
         _handler = null;
@@ -66,7 +66,7 @@ public class ChartDataServiceMessageHandlerTests
     public async Task MatchingTopicAndPath_AddsPointToBuffer()
     {
         var seriesId = Guid.NewGuid();
-        _mockSettingsStore.Charts.Returns(
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns(
         [
             ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "sensor/temp", JsonPath = "temperature" })
         ]);
@@ -81,7 +81,7 @@ public class ChartDataServiceMessageHandlerTests
     public async Task NonMatchingTopic_NoPointAdded()
     {
         var seriesId = Guid.NewGuid();
-        _mockSettingsStore.Charts.Returns(
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns(
         [
             ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "sensor/temp", JsonPath = "temperature" })
         ]);
@@ -95,7 +95,7 @@ public class ChartDataServiceMessageHandlerTests
     public async Task NonMatchingJsonPath_NoPointAdded()
     {
         var seriesId = Guid.NewGuid();
-        _mockSettingsStore.Charts.Returns(
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns(
         [
             ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "sensor/temp", JsonPath = "pressure" })
         ]);
@@ -109,7 +109,7 @@ public class ChartDataServiceMessageHandlerTests
     public async Task MatchingMessage_OnDataUpdated_Fires()
     {
         var seriesId = Guid.NewGuid();
-        _mockSettingsStore.Charts.Returns(
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns(
         [
             ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "t", JsonPath = "v" })
         ]);
@@ -125,7 +125,7 @@ public class ChartDataServiceMessageHandlerTests
     [Test]
     public async Task NoMatchingSeries_OnDataUpdated_DoesNotFire()
     {
-        _mockSettingsStore.Charts.Returns([]);
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns([]);
 
         var fired = false;
         _service.OnDataUpdated += () => fired = true;
@@ -139,7 +139,7 @@ public class ChartDataServiceMessageHandlerTests
     public async Task BufferExceedsMaxPoints_OldestPointRemoved()
     {
         var seriesId = Guid.NewGuid();
-        _mockSettingsStore.Charts.Returns(
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns(
         [
             ConfigWith(3, new ChartSeries { Id = seriesId, Topic = "t", JsonPath = "v" })
         ]);
@@ -156,7 +156,7 @@ public class ChartDataServiceMessageHandlerTests
     public async Task EmptyPayload_NoPointAdded()
     {
         var seriesId = Guid.NewGuid();
-        _mockSettingsStore.Charts.Returns(
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns(
         [
             ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "t", JsonPath = "v" })
         ]);
@@ -169,7 +169,7 @@ public class ChartDataServiceMessageHandlerTests
     [Test]
     public async Task InvalidJson_DoesNotThrow()
     {
-        _mockSettingsStore.Charts.Returns([]);
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns([]);
 
         var act = async () => await Fire("t", "not json at all!@#");
         await act.Should().NotThrowAsync();
@@ -178,7 +178,7 @@ public class ChartDataServiceMessageHandlerTests
     [Test]
     public async Task MatchingMessage_UpdatesFieldRegistry()
     {
-        _mockSettingsStore.Charts.Returns([]);
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns([]);
 
         await Fire("sensor/data", """{"temp": 22.0, "humidity": 65.0}""");
 
@@ -191,7 +191,7 @@ public class ChartDataServiceMessageHandlerTests
     {
         var id1 = Guid.NewGuid();
         var id2 = Guid.NewGuid();
-        _mockSettingsStore.Charts.Returns(
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns(
         [
             ConfigWith(100,
                 new ChartSeries { Id = id1, Topic = "sensor", JsonPath = "temp" },
@@ -208,7 +208,7 @@ public class ChartDataServiceMessageHandlerTests
     public async Task MultipleMessages_PointsAccumulate()
     {
         var seriesId = Guid.NewGuid();
-        _mockSettingsStore.Charts.Returns(
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns(
         [
             ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "t", JsonPath = "v" })
         ]);
@@ -224,7 +224,7 @@ public class ChartDataServiceMessageHandlerTests
     public async Task NonNumericJsonField_NoPointAdded()
     {
         var seriesId = Guid.NewGuid();
-        _mockSettingsStore.Charts.Returns(
+        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns(
         [
             ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "t", JsonPath = "name" })
         ]);
@@ -243,7 +243,7 @@ public class ChartDataServiceMessageHandlerTests
         registry.When(x => x.Update(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, ExtractedField>>()))
             .Do(_ => throw new InvalidOperationException("registry failed"));
         var configStore = Substitute.For<ISettingsStore>();
-        configStore.Charts.Returns([]);
+        configStore.GetCharts(Arg.Any<Guid>()).Returns([]);
         var logger = new CapturingLogger<ChartDataService>();
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         client

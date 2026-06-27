@@ -91,7 +91,7 @@
                 <div class="spb-group-header">@grp.Key.ToUpperInvariant()</div>
                 @foreach (var node in grp.OrderBy(n => n.NodeId, NaturalStringComparer.Instance))
                 {
-                    <div @key="node.NodeId" class="spb-node-row @(IsSelected(node) ? "spb-node-row--selected" : "")"
+                    <div @key="@($"{node.GroupId}/{node.NodeId}")" class="spb-node-row @(IsSelected(node) ? "spb-node-row--selected" : "")"
                          @onclick="() => SelectNode(node)">
                         <div class="d-flex align-center justify-space-between">
                             <div class="d-flex align-center gap-1">

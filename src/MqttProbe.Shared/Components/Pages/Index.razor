@@ -1,10 +1,12 @@
 @page "/"
 @using Microsoft.AspNetCore.Components.Authorization
 @using MqttProbe.Services.Configuration
+@using MqttProbe.Services.Mqtt
 @attribute [Authorize]
 @implements IDisposable
 @inject IMessageStoreManager MessageStoreManager
 @inject ISettingsStore SettingsStore
+@inject ISessionState SessionState
 @inject ISubscriptionManager SubscriptionManager
 @inject IEmulationService EmulationService
 @inject ISparkplugTopologyService TopologyService
@@ -85,7 +87,7 @@
 
     <MudTabPanel Icon="@LucideIcons.Activity" Text="@ChartsTabLabel">
         <div class="tab-panel-content">
-            @if (!SettingsStore.Charts.Any() && !SettingsStore.IsHintDismissed("charts"))
+            @if (!SettingsStore.GetCharts(SessionState.SelectedConnection.Id).Any() && !SettingsStore.IsHintDismissed("charts"))
             {
                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
                           ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("charts"))">
@@ -176,7 +178,7 @@
         MessageStoreManager.MessageStores.Count > 0 ? $"Browser ({MessageStoreManager.MessageStores.Count})" : "Browser";
 
     private string ChartsTabLabel =>
-        SettingsStore.Charts.Count > 0 ? $"Charts ({SettingsStore.Charts.Count})" : "Charts";
+        SettingsStore.GetCharts(SessionState.SelectedConnection.Id).Count > 0 ? $"Charts ({SettingsStore.GetCharts(SessionState.SelectedConnection.Id).Count})" : "Charts";
 
     private string SubscriptionsTabLabel =>
         SubscriptionManager.Topics.Count > 0 ? $"Subscriptions ({SubscriptionManager.Topics.Count})" : "Subscriptions";

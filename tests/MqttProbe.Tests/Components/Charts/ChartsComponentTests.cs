@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Models.Chart;
+using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Telemetry;
 using MqttProbe.Shared.Tests.TestHelpers;
 using ChartsComponent = MqttProbe.Components.Charts.Charts;
@@ -13,15 +15,20 @@ public class ChartsComponentTests : BunitTestContext
 {
     private ISettingsStore _mockChartStore = null!;
     private IChartDataService _mockChartDataService = null!;
+    private ISessionState _mockSessionState = null!;
+    private static readonly Guid _testConnectionId = Guid.NewGuid();
 
     [SetUp]
     public void SetupMocks()
     {
+        _mockSessionState = Substitute.For<ISessionState>();
+        _mockSessionState.SelectedConnection.Returns(new Connection { Id = _testConnectionId });
+
         _mockChartStore = Substitute.For<ISettingsStore>();
-        _mockChartStore.Charts.Returns([]);
-        _mockChartStore.AddChartAsync(Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
-        _mockChartStore.UpdateChartAsync(Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
-        _mockChartStore.RemoveChartAsync(Arg.Any<Guid>()).Returns(Task.CompletedTask);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([]);
+        _mockChartStore.AddChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
+        _mockChartStore.UpdateChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
+        _mockChartStore.RemoveChartAsync(Arg.Any<Guid>(), Arg.Any<Guid>()).Returns(Task.CompletedTask);
 
         _mockChartDataService = Substitute.For<IChartDataService>();
         _mockChartDataService.StartAsync().Returns(Task.CompletedTask);
@@ -29,6 +36,7 @@ public class ChartsComponentTests : BunitTestContext
 
         Services.AddSingleton(_mockChartStore);
         Services.AddSingleton(_mockChartDataService);
+        Services.AddSingleton(_mockSessionState);
         Services.AddSingleton(Substitute.For<IUxTelemetryService>());
 
         EnsureMudProviders();
@@ -37,7 +45,7 @@ public class ChartsComponentTests : BunitTestContext
     [Test]
     public Task Renders_EmptyState_WhenNoChartsExist()
     {
-        _mockChartStore.Charts.Returns([]);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([]);
 
         var cut = Render<ChartsComponent>();
 
@@ -53,7 +61,7 @@ public class ChartsComponentTests : BunitTestContext
             new() { Name = "Temp Chart" },
             new() { Name = "Pressure Chart" }
         };
-        _mockChartStore.Charts.Returns(configs);
+        _mockChartStore.GetCharts(_testConnectionId).Returns(configs);
 
         var cut = Render<ChartsComponent>();
 
@@ -68,14 +76,14 @@ public class ChartsComponentTests : BunitTestContext
         var a = new ChartConfiguration { Name = "Chart A" };
         var b = new ChartConfiguration { Name = "Chart B" };
         var configs = new List<ChartConfiguration> { a, b };
-        _mockChartStore.Charts.Returns(configs);
+        _mockChartStore.GetCharts(_testConnectionId).Returns(configs);
 
         var cut = Render<ChartsComponent>();
         cut.Markup.Should().Contain("Chart A");
         cut.Markup.Should().Contain("Chart B");
 
         configs.Remove(a);
-        _mockChartStore.ChartsChanged += Raise.Event<Action>();
+        _mockChartStore.ChartsChanged += Raise.Event<Action<Guid>>(_testConnectionId);
 
         cut.Markup.Should().NotContain("Chart A");
         cut.Markup.Should().Contain("Chart B");
@@ -85,7 +93,7 @@ public class ChartsComponentTests : BunitTestContext
     public void ConfigurationsChanged_SubscribedExactlyOnce()
     {
         var subscribeCount = 0;
-        _mockChartStore.When(x => x.ChartsChanged += Arg.Any<Action>())
+        _mockChartStore.When(x => x.ChartsChanged += Arg.Any<Action<Guid>>())
             .Do(_ => subscribeCount++);
 
         Render<ChartsComponent>();
@@ -98,13 +106,13 @@ public class ChartsComponentTests : BunitTestContext
     {
         var config = new ChartConfiguration { Name = "Original" };
         var configs = new List<ChartConfiguration> { config };
-        _mockChartStore.Charts.Returns(configs);
+        _mockChartStore.GetCharts(_testConnectionId).Returns(configs);
 
         var cut = Render<ChartsComponent>();
         cut.Markup.Should().Contain("Original");
 
         config.Name = "Renamed";
-        _mockChartStore.ChartsChanged += Raise.Event<Action>();
+        _mockChartStore.ChartsChanged += Raise.Event<Action<Guid>>(_testConnectionId);
 
         cut.Markup.Should().Contain("Renamed");
     }
@@ -114,7 +122,7 @@ public class ChartsComponentTests : BunitTestContext
     {
         bool unsubscribed = false;
         _mockChartStore
-            .When(x => x.ChartsChanged -= Arg.Any<Action?>())
+            .When(x => x.ChartsChanged -= Arg.Any<Action<Guid>?>())
             .Do(_ => unsubscribed = true);
 
         var cut = Render<ChartsComponent>();

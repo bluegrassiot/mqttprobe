@@ -28,7 +28,8 @@ public static class PayloadFormatDetector
 
         var bytes = segment.Array.AsSpan(segment.Offset, segment.Count);
 
-        if (e.ApplicationMessage.Topic.StartsWith("spBv1.0", StringComparison.Ordinal))
+        if (e.ApplicationMessage.Topic.StartsWith("spBv1.0", StringComparison.Ordinal)
+            && !Utf8.IsValid(bytes))
         {
             return DetectedPayloadFormat.Sparkplug;
         }

@@ -1,5 +1,7 @@
 @using MqttProbe.Services.Configuration
+@using MqttProbe.Services.Mqtt
 @inject ISettingsStore SettingsStore
+@inject ISessionState SessionState
 @inject IUxTelemetryService? UxTelemetry
 
 <MudDialog>
@@ -27,7 +29,8 @@
         </MudAlert>
 
         <!-- Mode toggle (only show if charts exist) -->
-        @if (SettingsStore.Charts.Any())
+        @{ var charts = SettingsStore.GetCharts(SessionState.SelectedConnection.Id); }
+        @if (charts.Any())
         {
             <MudToggleGroup T="ChartMode" @bind-Value="_mode" Class="mb-3" Color="Color.Primary"
                             SelectionMode="SelectionMode.SingleSelection">
@@ -37,9 +40,9 @@
         }
 
         <!-- Add to existing chart -->
-        @if (_mode == ChartMode.AddToExisting && SettingsStore.Charts.Any())
+        @if (_mode == ChartMode.AddToExisting && charts.Any())
         {
-            @foreach (var chart in SettingsStore.Charts)
+            @foreach (var chart in charts)
             {
                 var c = chart;
                 var isSelected = _selectedChartId == c.Id;
@@ -99,15 +102,16 @@
     {
         _displayName = SeriesName;
         _newChartName = DefaultChartName(Topic, SeriesName);
-        if (!SettingsStore.Charts.Any())
+        var charts = SettingsStore.GetCharts(SessionState.SelectedConnection.Id);
+        if (!charts.Any())
         {
             _mode = ChartMode.CreateNew;
         }
         else
         {
             _mode = ChartMode.AddToExisting;
-            if (SettingsStore.Charts.Count == 1)
-                _selectedChartId = SettingsStore.Charts[0].Id;
+            if (charts.Count == 1)
+                _selectedChartId = charts[0].Id;
         }
     }
 
@@ -160,13 +164,13 @@
                 Name = _newChartName.Trim(),
                 Series = [series]
             };
-            await SettingsStore.AddChartAsync(newChart);
+            await SettingsStore.AddChartAsync(SessionState.SelectedConnection.Id, newChart);
             UxTelemetry?.RecordChartFunnel("payload-quick-add", createdNewChart: true);
             MudDialog.Close(DialogResult.Ok($"Chart created: {newChart.Name}"));
         }
         else
         {
-            var chart = SettingsStore.Charts.FirstOrDefault(c => c.Id == _selectedChartId);
+            var chart = SettingsStore.GetCharts(SessionState.SelectedConnection.Id).FirstOrDefault(c => c.Id == _selectedChartId);
             if (chart == null) { MudDialog.Cancel(); return; }
 
             var color = SeriesColors[chart.Series.Count % SeriesColors.Length];
@@ -187,7 +191,7 @@
                 TimeWindowMinutes = chart.TimeWindowMinutes,
                 Series = [.. chart.Series, newSeries]
             };
-            await SettingsStore.UpdateChartAsync(updated);
+            await SettingsStore.UpdateChartAsync(SessionState.SelectedConnection.Id, updated);
             UxTelemetry?.RecordChartFunnel("payload-quick-add", createdNewChart: false);
             MudDialog.Close(DialogResult.Ok($"Series added to chart: {chart.Name}"));
         }

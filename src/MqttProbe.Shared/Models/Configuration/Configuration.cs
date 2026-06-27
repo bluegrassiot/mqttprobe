@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Text.Json.Serialization;
 using MqttProbe.Models.Chart;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Models.Mqtt;
@@ -36,6 +38,18 @@ public class AppConfiguration
     public Auth Auth { get; set; } = new();
     public PerformanceSettings Performance { get; set; } = new();
     public UiPreferences Ui { get; set; } = new();
+
+    public Dictionary<Guid, List<ChartConfiguration>> ChartsByConnection { get; set; } = [];
+
+    public Dictionary<Guid, EmulatorDocument> EmulatorsByConnection { get; set; } = [];
+
+    [JsonPropertyName("charts")]
+    [Obsolete("Use ChartsByConnection")]
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public List<ChartConfiguration> Charts { get; set; } = [];
+
+    [JsonPropertyName("emulators")]
+    [Obsolete("Use EmulatorsByConnection")]
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public EmulatorDocument Emulators { get; set; } = new();
 }

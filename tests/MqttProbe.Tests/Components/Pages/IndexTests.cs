@@ -47,8 +47,11 @@ public class IndexTests : BunitTestContext
         _mockConfig = Substitute.For<ISettingsStore>();
         _mockConfig.IsHintDismissed(Arg.Any<string>()).Returns(false);
 
+        var mockSessionState = Substitute.For<ISessionState>();
+        mockSessionState.SelectedConnection.Returns(new Connection());
+
         _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>());
-        _mockChartStore.Charts.Returns([]);
+        _mockChartStore.GetCharts(Arg.Any<Guid>()).Returns([]);
         _mockSubManager.Topics.Returns(new HashSet<string>());
         _emulatorNodes = [];
         _mockEmulation.Nodes.Returns(_ => _emulatorNodes);
@@ -61,6 +64,7 @@ public class IndexTests : BunitTestContext
         Services.AddSingleton(_mockEmulation);
         Services.AddSingleton(_mockTopology);
         Services.AddSingleton(_mockConfig);
+        Services.AddSingleton(mockSessionState);
         Services.AddSingleton<IThemes>(new Themes());
 
         ComponentFactories.AddStub<TopicBrowser>();

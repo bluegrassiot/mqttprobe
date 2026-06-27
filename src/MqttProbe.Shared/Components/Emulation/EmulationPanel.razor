@@ -4,6 +4,7 @@
 @inject IEmulationService EmulationService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject ISessionState SessionState
 
 <div class="emu-root">
     <TabPanelHeader Title="Emulation" Icon="@LucideIcons.Zap">
@@ -157,7 +158,12 @@
     {
         _intervalMs = EmulationService.PublishIntervalMs;
         EmulationService.StateChanged += OnServiceStateChanged;
+        EmulationService.SetConnection(SessionState.SelectedConnection.Id);
+        SessionState.SelectedConnectionChanged += OnSelectedConnectionChanged;
     }
+
+    private void OnSelectedConnectionChanged(Connection _) =>
+        InvokeAsync(() => EmulationService.SetConnection(SessionState.SelectedConnection.Id));
 
     private void OnServiceStateChanged() => InvokeAsync(StateHasChanged);
 
@@ -220,5 +226,9 @@
         Snackbar.Add("All nodes removed.", Severity.Success);
     }
 
-    public void Dispose() => EmulationService.StateChanged -= OnServiceStateChanged;
+    public void Dispose()
+    {
+        EmulationService.StateChanged -= OnServiceStateChanged;
+        SessionState.SelectedConnectionChanged -= OnSelectedConnectionChanged;
+    }
 }

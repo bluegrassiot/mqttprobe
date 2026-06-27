@@ -47,12 +47,13 @@ public class EmulationServiceTests
         var settingsStore = new SettingsStore(_filePath);
         _settingsStore = settingsStore;
         await settingsStore.LoadAsync();
-        // A long interval keeps the background loop from ticking during a test,
-        // so the single inline tick from StartAsync is the only publish observed.
-        await settingsStore.SetEmulatorPublishIntervalAsync(120_000);
 
         _mockSessionState = Substitute.For<ISessionState>();
         _mockSessionState.SelectedConnection.Returns(new Connection());
+
+        // A long interval keeps the background loop from ticking during a test,
+        // so the single inline tick from StartAsync is the only publish observed.
+        await settingsStore.SetEmulatorPublishIntervalAsync(_mockSessionState.SelectedConnection.Id, 120_000);
         _mockNodeFactory = Substitute.For<ISparkplugNodeFactory>();
         _mockMqttClient = Substitute.For<IManagedMqttClient>();
         _mockMqttClient.EnqueueAsync(Arg.Any<MqttApplicationMessage>()).Returns(Task.CompletedTask);
@@ -70,6 +71,7 @@ public class EmulationServiceTests
             _mockSessionState,
             _mockMqttClient,
             Substitute.For<ILogger<EmulationService>>());
+        _service.SetConnection(_mockSessionState.SelectedConnection.Id);
     }
 
     [TearDown]
@@ -115,7 +117,7 @@ public class EmulationServiceTests
 
         _service.Nodes.Should().HaveCount(1);
         _service.Nodes[0].NodeId.Should().Be("Press-01");
-        _settingsStore.EmulatorNodes.Should().HaveCount(1);
+        _settingsStore.GetEmulatorNodes(_mockSessionState.SelectedConnection.Id).Should().HaveCount(1);
     }
 
     [Test]
@@ -124,7 +126,7 @@ public class EmulationServiceTests
         await _service.SetPublishIntervalAsync(750);
 
         _service.PublishIntervalMs.Should().Be(750);
-        _settingsStore.EmulatorPublishIntervalMs.Should().Be(750);
+        _settingsStore.GetEmulatorPublishIntervalMs(_mockSessionState.SelectedConnection.Id).Should().Be(750);
     }
 
     [Test]
@@ -553,7 +555,7 @@ public class EmulationServiceTests
         var fired = false;
         _service.StateChanged += () => fired = true;
 
-        await _settingsStore.AddEmulatorNodeAsync(new EmulatorNodeConfig());
+        await _settingsStore.AddEmulatorNodeAsync(_mockSessionState.SelectedConnection.Id, new EmulatorNodeConfig());
 
         fired.Should().BeTrue();
     }

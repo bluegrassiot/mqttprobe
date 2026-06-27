@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Models.Chart;
+using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Telemetry;
 using MqttProbe.Shared.Tests.TestHelpers;
 using MudBlazor;
@@ -13,15 +15,20 @@ public class QuickAddToChartDialogTests : BunitTestContext
 {
     private ISettingsStore _mockChartStore = null!;
     private IRenderedComponent<MudDialogProvider> _dialogProvider = null!;
+    private static readonly Guid _testConnectionId = Guid.NewGuid();
 
     [SetUp]
     public void SetupMocks()
     {
+        var mockSessionState = Substitute.For<ISessionState>();
+        mockSessionState.SelectedConnection.Returns(new Connection { Id = _testConnectionId });
+
         _mockChartStore = Substitute.For<ISettingsStore>();
-        _mockChartStore.Charts.Returns([]);
-        _mockChartStore.AddChartAsync(Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
-        _mockChartStore.UpdateChartAsync(Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([]);
+        _mockChartStore.AddChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
+        _mockChartStore.UpdateChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
         Services.AddSingleton(_mockChartStore);
+        Services.AddSingleton(mockSessionState);
         Services.AddSingleton(Substitute.For<IUxTelemetryService>());
 
         EnsureMudProviders();
@@ -52,7 +59,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
     [Test]
     public async Task OnInitialized_WithNoExistingCharts_DefaultsToCreateNewMode()
     {
-        _mockChartStore.Charts.Returns([]);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([]);
 
         await OpenDialog();
 
@@ -64,7 +71,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
     public async Task OnInitialized_WithOneExistingChart_DefaultsToAddToExistingMode_AndSelectsIt()
     {
         var existingChart = new ChartConfiguration { Name = "Existing Chart" };
-        _mockChartStore.Charts.Returns([existingChart]);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([existingChart]);
 
         await OpenDialog();
 
@@ -79,7 +86,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
     [Test]
     public async Task CanSubmit_CreateNew_FalseWhenNameIsEmpty()
     {
-        _mockChartStore.Charts.Returns([]);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([]);
 
         // Pass empty seriesName so _newChartName defaults to "" → CanSubmit = false
         await OpenDialog(seriesName: "");
@@ -96,7 +103,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
         // Two charts so none is auto-selected
         var chart1 = new ChartConfiguration { Name = "Chart A" };
         var chart2 = new ChartConfiguration { Name = "Chart B" };
-        _mockChartStore.Charts.Returns([chart1, chart2]);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([chart1, chart2]);
 
         await OpenDialog();
 
@@ -115,7 +122,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
     [Test]
     public async Task OnInitialized_CreateNew_WithSparkplugDeviceTopic_DefaultsChartNameToGroupNodeDevice()
     {
-        _mockChartStore.Charts.Returns([]);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([]);
 
         await OpenDialog(
             topic: "spBv1.0/Plant1/DDATA/Node-2/Device-1",
@@ -129,7 +136,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
     [Test]
     public async Task SwitchingToCreateNew_WithSparkplugDeviceTopic_DefaultsChartNameToGroupNodeDevice()
     {
-        _mockChartStore.Charts.Returns([new ChartConfiguration { Name = "Existing Chart" }]);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([new ChartConfiguration { Name = "Existing Chart" }]);
 
         await OpenDialog(
             topic: "spBv1.0/Plant1/DDATA/Node-2/Device-1",
@@ -145,9 +152,9 @@ public class QuickAddToChartDialogTests : BunitTestContext
     [Test]
     public async Task Submit_CreateNew_WithSparkplugDeviceTopic_UsesDefaultTopicTitle()
     {
-        _mockChartStore.Charts.Returns([]);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([]);
         ChartConfiguration? captured = null;
-        _mockChartStore.AddChartAsync(Arg.Do<ChartConfiguration>(c => captured = c)).Returns(Task.CompletedTask);
+        _mockChartStore.AddChartAsync(Arg.Any<Guid>(), Arg.Do<ChartConfiguration>(c => captured = c)).Returns(Task.CompletedTask);
 
         await OpenDialog(
             topic: "spBv1.0/Plant1/DDATA/Node-2/Device-1",
@@ -164,7 +171,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
     [Test]
     public async Task Submit_CreateNew_CallsChartStoreAddAsync()
     {
-        _mockChartStore.Charts.Returns([]);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([]);
 
         await OpenDialog(seriesName: "myField");
 
@@ -173,30 +180,30 @@ public class QuickAddToChartDialogTests : BunitTestContext
         inputs[inputs.Count - 1].Input("My Chart");
         _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Create Chart")).Click();
 
-        await _mockChartStore.Received(1).AddChartAsync(Arg.Any<ChartConfiguration>());
+        await _mockChartStore.Received(1).AddChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>());
     }
 
     [Test]
     public async Task Submit_AddToExisting_CallsChartStoreUpdateAsync()
     {
         var existingChart = new ChartConfiguration { Name = "Existing Chart" };
-        _mockChartStore.Charts.Returns([existingChart]);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([existingChart]);
 
         await OpenDialog();
 
         // With 1 chart, it's auto-selected — click the submit button directly
         _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Add Series")).Click();
 
-        await _mockChartStore.Received(1).UpdateChartAsync(Arg.Any<ChartConfiguration>());
+        await _mockChartStore.Received(1).UpdateChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>());
     }
 
     [Test]
     public async Task Submit_AddToExisting_AddsExactlyOneSeries_WithoutMutatingOriginal()
     {
         var existingChart = new ChartConfiguration { Name = "Existing Chart" };
-        _mockChartStore.Charts.Returns([existingChart]);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([existingChart]);
         ChartConfiguration? captured = null;
-        _mockChartStore.UpdateChartAsync(Arg.Do<ChartConfiguration>(c => captured = c)).Returns(Task.CompletedTask);
+        _mockChartStore.UpdateChartAsync(Arg.Any<Guid>(), Arg.Do<ChartConfiguration>(c => captured = c)).Returns(Task.CompletedTask);
 
         await OpenDialog();
         _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Add Series")).Click();
@@ -211,8 +218,8 @@ public class QuickAddToChartDialogTests : BunitTestContext
     public async Task Submit_AddToExisting_WhenUpdateFails_LeavesOriginalChartUnchanged()
     {
         var existingChart = new ChartConfiguration { Name = "Existing Chart" };
-        _mockChartStore.Charts.Returns([existingChart]);
-        _mockChartStore.UpdateChartAsync(Arg.Any<ChartConfiguration>())
+        _mockChartStore.GetCharts(_testConnectionId).Returns([existingChart]);
+        _mockChartStore.UpdateChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>())
             .Returns(Task.FromException(new InvalidOperationException("save failed")));
 
         await OpenDialog();
@@ -232,7 +239,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
     [Test]
     public async Task Cancel_ClosesDialog()
     {
-        _mockChartStore.Charts.Returns([]);
+        _mockChartStore.GetCharts(_testConnectionId).Returns([]);
         var dialogRef = await OpenDialog();
 
         _dialogProvider.FindAll("button").First(b => b.TextContent.Trim() == "Cancel").Click();

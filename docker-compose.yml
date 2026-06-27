@@ -7,18 +7,56 @@ services:
       - mqttprobe-config:/app/config
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+    networks:
+      - mqttprobe-net
     restart: unless-stopped
 
   # Optional: remove this section if you have an existing MQTT broker to connect to.
   # WARNING: allow_anonymous true is for local evaluation only.
   mosquitto:
     image: eclipse-mosquitto:2
-    command: >
-      sh -c "printf 'listener 1883\nallow_anonymous true\nlog_dest stdout\n'
-      > /tmp/mosquitto.conf && mosquitto -c /tmp/mosquitto.conf"
+    entrypoint:
+      - sh
+      - -c
+      - |
+        apk add --no-cache openssl > /dev/null 2>&1
+        openssl req -x509 -newkey rsa:2048 -keyout /tmp/server.key \
+          -out /tmp/server.crt -days 3650 -nodes -subj '/CN=mosquitto' \
+          > /dev/null 2>&1
+        chmod 644 /tmp/server.key /tmp/server.crt
+        printf '%s\n' \
+          'listener 1883' \
+          'allow_anonymous true' \
+          '' \
+          'listener 8883' \
+          'allow_anonymous true' \
+          'certfile /tmp/server.crt' \
+          'keyfile /tmp/server.key' \
+          '' \
+          'listener 9001' \
+          'protocol websockets' \
+          'allow_anonymous true' \
+          '' \
+          'listener 9002' \
+          'protocol websockets' \
+          'allow_anonymous true' \
+          'certfile /tmp/server.crt' \
+          'keyfile /tmp/server.key' \
+          '' \
+          'log_dest stdout' \
+          > /tmp/mosquitto.conf
+        exec mosquitto -c /tmp/mosquitto.conf
     ports:
-      - "1883:1883"
+      - "1883:1883"   # Plain MQTT
+      - "8883:8883"   # MQTT over TLS (MQTTS)
+      - "9001:9001"   # MQTT over WebSocket
+      - "9002:9002"   # MQTT over WebSocket + TLS (WSS)
+    networks:
+      - mqttprobe-net
     restart: unless-stopped
 
 volumes:
   mqttprobe-config:
+
+networks:
+  mqttprobe-net:

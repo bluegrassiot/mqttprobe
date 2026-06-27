@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+RESET='\033[0m'
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+pass() { printf "${GREEN}  PASS${RESET}  %s\n" "$1"; }
+fail() { printf "${RED}  FAIL${RESET}  %s\n" "$1"; }
+step() { printf "\n${CYAN}==> %s${RESET}\n" "$1"; }
+
+step "Build"
+if ! dotnet build "$ROOT/MqttProbe.slnx" --warnaserror -nologo -clp:NoSummary 2>&1; then
+    fail "Build failed — fix errors and warnings before pushing."
+    exit 1
+fi
+pass "Build"
+
+step "Tests (unit)"
+if ! dotnet test "$ROOT/tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj" \
+        --no-build -nologo 2>&1; then
+    fail "Unit tests failed — all tests must pass before pushing."
+    exit 1
+fi
+pass "Tests (unit)"
+
+step "Format"
+FORMAT_FAILED=0
+PROJECTS=(
+    "src/MqttProbe.Shared/MqttProbe.Shared.csproj"
+    "src/MqttProbe.Maui/MqttProbe.Maui.csproj"
+    "src/MqttProbe.Web/MqttProbe.Web.csproj"
+    "tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj"
+)
+SHARED_EXCLUDES=("--exclude" "**/LucideIcons.cs" "--exclude" "**/SparkplugBProtobuf.cs")
+
+for PROJECT in "${PROJECTS[@]}"; do
+    ARGS=("$ROOT/$PROJECT" "--verify-no-changes")
+    if [[ "$PROJECT" == *"MqttProbe.Shared"* ]]; then
+        ARGS+=("${SHARED_EXCLUDES[@]}")
+    fi
+    OUTPUT=$(dotnet format "${ARGS[@]}" 2>&1) && STATUS=0 || STATUS=$?
+    if [[ -n "$OUTPUT" ]]; then printf "%s\n" "$OUTPUT"; fi
+    if [[ $STATUS -ne 0 ]]; then
+        FORMAT_FAILED=$((FORMAT_FAILED + 1))
+    fi
+done
+
+if [[ $FORMAT_FAILED -gt 0 ]]; then
+    fail "Formatting violations found — run: python scripts/format-check.py --fix"
+    exit 1
+fi
+pass "Format"
+
+printf "\n${GREEN}All checks passed.${RESET}\n\n"

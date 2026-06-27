@@ -62,6 +62,7 @@
     private Func<EventArgs, Task>? _connectionStateChangedHandler;
     private bool _disposed;
     private bool _isAuthPage;
+    private bool _hasRendered;
 
     protected override void OnInitialized()
     {
@@ -89,7 +90,8 @@
     private void OnFontModeChanged()
     {
         _ = SettingsStore.SetFontAccessibleAsync(Themes.IsFontAccessible);
-        _ = SetBodyFontClass();
+        if (_hasRendered)
+            _ = SetBodyFontClass();
         InvokeAsync(StateHasChanged);
     }
 
@@ -116,7 +118,10 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
+        {
+            _hasRendered = true;
             await SetBodyFontClass();
+        }
     }
 
     private async Task StopReconnect()

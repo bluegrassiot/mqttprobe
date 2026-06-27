@@ -15,6 +15,10 @@
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     </PropertyGroup>
 
+    <PropertyGroup>
+        <DefaultLanguage>en-US</DefaultLanguage>
+    </PropertyGroup>
+
     <ItemGroup>
       <ProjectReference Include="..\MqttProbe.Shared\MqttProbe.Shared.csproj" />
     </ItemGroup>

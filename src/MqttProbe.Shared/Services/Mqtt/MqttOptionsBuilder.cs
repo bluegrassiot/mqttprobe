@@ -20,7 +20,7 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
 
         var clientOptionsBuilder = new MqttClientOptionsBuilder()
             .WithClientId(connection.ClientId + _sessionSuffix)
-            .WithTimeout(TimeSpan.FromSeconds(connection.ConnectTimeout))
+            .WithTimeout(TimeSpan.FromSeconds(connection.ConnectTimeout > 0 ? connection.ConnectTimeout : 15))
             .WithProtocolVersion(connection.MqttVersion == MqttVersion.V5
                 ? MqttProtocolVersion.V500
                 : MqttProtocolVersion.V311);

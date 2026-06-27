@@ -149,7 +149,7 @@ else
         @if (_messageList.Count > 0)
         {
             <div class="d-flex align-center px-3 py-1 payload-section-divider">
-                <MudIcon Icon="@LucideIcons.ChevronRight" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
+                <MudIcon Icon="@LucideIcons.Inbox" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
                 <MudText Typo="Typo.subtitle2" Style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
                     @_messageList.FirstOrDefault()?.Topic
                 </MudText>
@@ -172,13 +172,6 @@ else
                               Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
                               Immediate="true" Clearable="true" Variant="Variant.Outlined"
                               Margin="Margin.Dense" Class="mt-0"/>
-                <MudSpacer/>
-                <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                           StartIcon="@LucideIcons.Trash2"
-                           Color="Color.Error"
-                           OnClick="ClearAllMessages">
-                    Clear Messages
-                </MudButton>
             </ToolBarContent>
             <ColGroup>
                 <col/>
@@ -372,23 +365,6 @@ else
         _newestFirst = !_newestFirst;
         _messageList.Reverse();
         StateHasChanged();
-    }
-
-    internal async Task ClearAllMessages()
-    {
-        var confirmed = await DialogService.ShowMessageBoxAsync(
-            "Clear All Messages",
-            "This will remove all stored topics and messages. Continue?",
-            yesText: "Clear all", cancelText: "Cancel", options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
-        if (confirmed != true)
-            return;
-
-        await MessageStoreManager.ClearAllMessages();
-        _currentSelectedStore = null;
-        _lastMessageTimestamp = DateTime.MinValue;
-        _messageList = [];
-        ClearSelection();
-        Snackbar.Add("All stored messages cleared.", Severity.Success);
     }
 
     private void SelectPreviousMessage()

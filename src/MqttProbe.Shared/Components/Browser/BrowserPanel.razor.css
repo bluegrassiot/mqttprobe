@@ -1,0 +1,89 @@
+.tab-panel-content {
+    padding-top: 8px;
+}
+
+/* Split-pane browser layout — desktop */
+.browser-split {
+    display: grid;
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+    column-gap: 12px;
+    min-height: 0;
+    height: 100%;
+}
+
+.browser-split__topics {
+    min-height: 0;
+    overflow: auto;
+}
+
+.browser-split__messages {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Mobile show/hide classes */
+.mobile-show {
+    display: none;
+}
+
+.mobile-hide {
+    display: block;
+}
+
+/* sm and down — stack vertically */
+@media (max-width: 959.98px) {
+    .browser-split {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        height: 100%;
+        gap: 12px;
+    }
+
+    .browser-split__messages {
+        overflow: auto;
+    }
+
+    .browser-split__topics {
+        max-height: 38vh;
+        overflow: auto;
+    }
+
+    .mobile-show {
+        display: block;
+    }
+
+    .mobile-hide {
+        display: none;
+    }
+}
+
+/* Mobile topics collapse styles */
+.mobile-topics-collapse {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borders);
+    overflow: hidden;
+}
+
+.mobile-topics-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    background: var(--mud-palette-surface);
+    transition: background-color 150ms ease-out;
+}
+
+.mobile-topics-header:hover {
+    background: var(--mud-palette-surface-hover);
+}
+
+.mobile-topics-content {
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+::deep .mobile-topics-content .topic-header-row {
+    display: none;
+}

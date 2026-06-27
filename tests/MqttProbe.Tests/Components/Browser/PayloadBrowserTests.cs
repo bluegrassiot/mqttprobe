@@ -13,8 +13,6 @@ namespace MqttProbe.Shared.Tests.Components.Browser;
 public class PayloadBrowserTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
-    private IDialogService _mockDialogService = null!;
-    private ISnackbar _mockSnackbar = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -22,13 +20,10 @@ public class PayloadBrowserTests : BunitTestContext
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _mockMsgStore.GetMessagesForSelectedTopic()
             .Returns(Task.FromResult<IEnumerable<MqttMessage>>(Array.Empty<MqttMessage>()));
-        _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask);
         Services.AddSingleton(_mockMsgStore);
 
-        _mockDialogService = Substitute.For<IDialogService>();
-        Services.AddSingleton(_mockDialogService);
-        _mockSnackbar = Substitute.For<ISnackbar>();
-        Services.AddSingleton(_mockSnackbar);
+        Services.AddSingleton(Substitute.For<IDialogService>());
+        Services.AddSingleton(Substitute.For<ISnackbar>());
     }
 
 
@@ -253,63 +248,6 @@ public class PayloadBrowserTests : BunitTestContext
         cut.FindAll(".json-preview").Should().HaveCount(1);
     }
 
-    [Test]
-    public async Task ClearAllMessages_WhenConfirmed_CallsStoreClear()
-    {
-        _mockDialogService.ShowMessageBoxAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(true));
-
-        var cut = Render<PayloadBrowser>();
-
-        await cut.InvokeAsync(() => cut.Instance.ClearAllMessages());
-
-        _ = _mockMsgStore.Received(1).ClearAllMessages();
-    }
-
-    [Test]
-    public async Task ClearAllMessages_WhenCancelled_DoesNotCallStoreClear()
-    {
-        _mockDialogService.ShowMessageBoxAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(false));
-
-        var cut = Render<PayloadBrowser>();
-
-        await cut.InvokeAsync(() => cut.Instance.ClearAllMessages());
-
-        _ = _mockMsgStore.DidNotReceive().ClearAllMessages();
-    }
-
-    [Test]
-    public async Task ClearAllMessages_WhenConfirmed_ShowsSuccessSnackbar()
-    {
-        _mockDialogService.ShowMessageBoxAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(true));
-
-        var cut = Render<PayloadBrowser>();
-
-        await cut.InvokeAsync(() => cut.Instance.ClearAllMessages());
-
-        _mockSnackbar.Received(1).Add("All stored messages cleared.", Severity.Success,
-            Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
-    }
 
 
     [Test]

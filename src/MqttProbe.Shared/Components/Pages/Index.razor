@@ -21,57 +21,7 @@
          KeepPanelsAlive="true" Centered="true">
 
     <MudTabPanel Icon="@LucideIcons.Eye" Text="@BrowserTabLabel">
-        <TabPanelHeader Title="Browser" Icon="@LucideIcons.Eye">
-            <HeaderChips>
-                @if (MessageStoreManager.MessageStores.Any())
-                {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
-                             Style="height:20px; font-size:0.7rem; padding:0 6px;">
-                        @MessageStoreManager.MessageStores.Count
-                    </MudChip>
-                }
-            </HeaderChips>
-        </TabPanelHeader>
-        <div class="tab-panel-content">
-            @if (!MessageStoreManager.MessageStores.Any() && !SettingsStore.IsHintDismissed("browser"))
-            {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-2"
-                          ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("browser"))">
-                    <strong>Start here:</strong> connect to a broker, then select or add subscriptions to begin receiving topics.
-                </MudAlert>
-            }
-            <ErrorBoundary ErrorContent="_sectionError">
-                <div class="browser-split">
-                    <div class="browser-split__topics browser-pane-topics mobile-hide">
-                        <TopicBrowser/>
-                    </div>
-                    <div class="mobile-topics-collapse mobile-show">
-                        <div class="mobile-topics-header" @onclick="ToggleMobileTopics">
-                            <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary"/>
-                            <MudText Typo="Typo.subtitle2" Style="font-weight:600">Topics</MudText>
-                            @if (MessageStoreManager.MessageStores.Any())
-                            {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
-                                         Style="height:20px; font-size:0.7rem; padding:0 6px;">
-                                    @MessageStoreManager.MessageStores.Count
-                                </MudChip>
-                            }
-                            <MudSpacer/>
-                            <MudIcon Icon="@(_mobileTopicsExpanded ? LucideIcons.ChevronUp : LucideIcons.ChevronDown)"
-                                     Size="Size.Small" Color="Color.Primary"/>
-                        </div>
-                        <MudCollapse Expanded="@_mobileTopicsExpanded">
-                            <div class="mobile-topics-content">
-                                <TopicBrowser/>
-                            </div>
-                        </MudCollapse>
-                    </div>
-                    <div class="browser-split__messages browser-pane-messages">
-                        <PayloadBrowser/>
-                    </div>
-                </div>
-            </ErrorBoundary>
-        </div>
+        <BrowserPanel/>
     </MudTabPanel>
 
     @if (TopologyService.Groups.Any())
@@ -195,8 +145,6 @@
     private string EmulationTabLabel =>
         EmulationService.Nodes.Count > 0 ? $"Emulation ({EmulationService.Nodes.Count})" : "Emulation";
 
-    private bool _mobileTopicsExpanded = false;
-
     private readonly RenderFragment<Exception> _sectionError = _ => @<SectionError />;
 
     private int _activeTabIndex = 0;
@@ -227,8 +175,6 @@
         TopologyService.TopologyChanged -= OnTopologyChanged;
         NavigationManager.LocationChanged -= OnLocationChanged;
     }
-
-    private void ToggleMobileTopics() => _mobileTopicsExpanded = !_mobileTopicsExpanded;
 
     private async Task DismissHint(string hintId)
     {

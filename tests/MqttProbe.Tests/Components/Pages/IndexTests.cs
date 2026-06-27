@@ -67,8 +67,7 @@ public class IndexTests : BunitTestContext
         Services.AddSingleton(mockSessionState);
         Services.AddSingleton<IThemes>(new Themes());
 
-        ComponentFactories.AddStub<TopicBrowser>();
-        ComponentFactories.AddStub<PayloadBrowser>();
+        ComponentFactories.AddStub<BrowserPanel>();
         ComponentFactories.AddStub<ChartsComponent>();
         ComponentFactories.AddStub<Subscriptions>();
         ComponentFactories.AddStub<SparkplugNodesView>();
@@ -134,23 +133,6 @@ public class IndexTests : BunitTestContext
     }
 
     [Test]
-    public void Browser_Tab_Renders_Header_With_Title_And_Count_Chip()
-    {
-        // Seed one message store so the count chip renders.
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>(
-            new Dictionary<string, MessageStore> { ["a/b"] = new MessageStore { Topic = "a/b", FullTopic = "a/b" } }));
-
-        var cut = Render<IndexPage>();
-
-        // The panel-level header now wraps the Browser tab.
-        cut.Markup.Should().Contain("app-tabpanel-header__row");
-        // The title text is the Browser tab name.
-        cut.Markup.Should().Contain(">Browser<");
-        // The count chip shows the store count (1).
-        cut.Markup.Should().Contain("1");
-    }
-
-    [Test]
     public void TabRouting_DefaultTab_IsBrowser()
     {
         var cut = Render<IndexPage>();
@@ -182,6 +164,7 @@ public class IndexTests : BunitTestContext
         activeTabs.Should().ContainSingle()
             .Which.TextContent.Should().Contain("Browser");
     }
+
 }
 
 [TestFixture]

@@ -33,6 +33,10 @@
 
 .tab-panel-content {
     padding-top: 8px;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 @media (min-width: 600px) {

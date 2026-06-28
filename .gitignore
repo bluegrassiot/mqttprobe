@@ -284,3 +284,5 @@ appsettings.Local.json
 /.worktrees/
 /.github/copilot-instructions.md
 /.claude
+/.obsidian
+/docs/superpowers

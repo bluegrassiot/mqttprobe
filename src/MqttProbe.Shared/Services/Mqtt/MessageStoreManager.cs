@@ -42,6 +42,8 @@ public class MessageStoreManager : IMessageStoreManager
     private long _droppedMessageCount;
     private readonly Lock _storeSync = new();
     private readonly Lock _lifecycleSync = new();
+    private readonly Queue<MessageStore> _retentionOrder = new();
+    private int _totalMessageCount;
 
     public MessageStoreManager(IManagedMqttClient client, ILogger<MessageStoreManager> logger,
         ISettingsStore settingsStore, IUxTelemetryService telemetry)
@@ -55,6 +57,11 @@ public class MessageStoreManager : IMessageStoreManager
     }
 
     public int MaxStoredMessages => _settingsStore.Config.Performance.MaxStoredMessages;
+
+    public int TotalStoredMessages
+    {
+        get { lock (_storeSync) { return _totalMessageCount; } }
+    }
 
     private static FixedWindowRateLimiter BuildRateLimiter(int permitsPerSecond) =>
         new(new FixedWindowRateLimiterOptions
@@ -146,6 +153,8 @@ public class MessageStoreManager : IMessageStoreManager
             MessageStores.Clear();
             SelectedMessageStore = null;
             _totalNodeCount = 0;
+            _totalMessageCount = 0;
+            _retentionOrder.Clear();
             _nodeLimitLogged = false;
             _rateLimitLogged = false;
             Interlocked.Exchange(ref _droppedMessageCount, 0);
@@ -201,11 +210,25 @@ public class MessageStoreManager : IMessageStoreManager
     private void StoreMessage(MessageStore store, MqttMessage message)
     {
         store.Messages ??= new ConcurrentQueue<MqttMessage>();
-
-        if (store.Messages.Count >= MaxStoredMessages)
-            store.Messages.TryDequeue(out _);
-
         store.Messages.Enqueue(message);
+        _retentionOrder.Enqueue(store);
+        _totalMessageCount++;
+        TrimToLimit();
+    }
+
+    // Evicts the globally-oldest message(s) until the total is within MaxStoredMessages.
+    // Called only while holding _storeSync. The node at the head of _retentionOrder owns
+    // the oldest message overall (per-topic queues and the global index share arrival order),
+    // so dequeuing that node's queue removes exactly the right message — O(1), no scanning.
+    private void TrimToLimit()
+    {
+        var limit = MaxStoredMessages;
+        while (_totalMessageCount > limit && _retentionOrder.Count > 0)
+        {
+            var oldest = _retentionOrder.Dequeue();
+            oldest.Messages?.TryDequeue(out _);
+            _totalMessageCount--;
+        }
     }
 
     private async Task MessageHandler(MqttApplicationMessageReceivedEventArgs arg)

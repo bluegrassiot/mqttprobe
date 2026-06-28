@@ -138,6 +138,39 @@ public class BrowserPanelTests : BunitTestContext
     }
 
     [Test]
+    public async Task ClearMessages_AfterClear_DisablesButtonOnNextTick()
+    {
+        var stores = new ConcurrentDictionary<string, MessageStore>(
+            new Dictionary<string, MessageStore> { ["t"] = new MessageStore { Topic = "t", FullTopic = "t" } });
+        _mockMsgStore.MessageStores.Returns(stores);
+
+        _mockDialogService.ShowMessageBoxAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
+            .Returns(Task.FromResult<bool?>(true));
+
+        _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask)
+            .AndDoes(_ => stores.Clear());
+
+        var cut = Render<BrowserPanel>();
+        var btn = cut.FindAll("button")
+            .First(b => b.TextContent.Contains("Clear Messages"));
+
+        btn.HasAttribute("disabled").Should().BeFalse();
+
+        await cut.InvokeAsync(() => btn.Click());
+
+        cut.Instance.OnTimerTick();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll("button")
+                .First(b => b.TextContent.Contains("Clear Messages"))
+                .HasAttribute("disabled").Should().BeTrue();
+        });
+    }
+
+    [Test]
     public void BrowserHint_WhenNoStoresAndNotDismissed_IsVisible()
     {
         var cut = Render<BrowserPanel>();

@@ -3,16 +3,8 @@ using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Chart;
-using MqttProbe.Models.Configuration;
-using MqttProbe.Models.Mqtt;
-using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Platform;
-using MqttProbe.Services.Security;
-using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 
 namespace MqttProbe.Shared.Tests.Services.Chart;
 
@@ -265,6 +257,23 @@ public class ChartDataServiceMessageHandlerTests
             entry.Level == LogLevel.Error &&
             entry.Message.Contains("Error processing chart data message", StringComparison.Ordinal) &&
             entry.Exception != null);
+    }
+
+    [Test]
+    public async Task SetConnection_WithMatchingConfig_BuffersPointsForActiveConnection()
+    {
+        var connectionId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        _mockSettingsStore.GetCharts(connectionId).Returns(
+        [
+            ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "sensor/temp", JsonPath = "temperature" })
+        ]);
+
+        _service.SetConnection(connectionId);
+        await Fire("sensor/temp", """{"temperature": 21.5}""");
+
+        _service.GetPoints(seriesId).Should().ContainSingle()
+            .Which.Value.Should().BeApproximately(21.5, 0.001);
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

@@ -272,9 +272,7 @@
     private List<ChartDataPoint> GetPoints(Guid seriesId)
     {
         var points = ChartDataService.GetPoints(seriesId);
-        if (!Configuration.TimeWindowMinutes.HasValue) return [.. points];
-        var cutoff = DateTime.UtcNow.AddMinutes(-Configuration.TimeWindowMinutes.Value);
-        return [.. points.Where(p => p.Timestamp >= cutoff)];
+        return [.. TimeWindowFilter.Apply(points, Configuration.TimeWindowMinutes)];
     }
 
     private SeriesType GetSeriesType() => Configuration.Type switch

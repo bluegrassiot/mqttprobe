@@ -140,6 +140,29 @@ public class ChartsComponentTests : BunitTestContext
     }
 
     [Test]
+    public void OnInitializedAsync_CallsSetConnectionWithSelectedConnectionId()
+    {
+        Render<ChartsComponent>();
+
+        _mockChartDataService.Received(1).SetConnection(_testConnectionId);
+    }
+
+    [Test]
+    public void SelectedConnectionChanged_CallsSetConnectionWithNewConnectionId()
+    {
+        var newConnectionId = Guid.NewGuid();
+        var newConnection = new Connection { Id = newConnectionId };
+
+        var cut = Render<ChartsComponent>();
+        _mockChartDataService.ClearReceivedCalls();
+
+        _mockSessionState.SelectedConnection.Returns(newConnection);
+        _mockSessionState.SelectedConnectionChanged += Raise.Event<Action<Connection>>(newConnection);
+
+        _mockChartDataService.Received(1).SetConnection(newConnectionId);
+    }
+
+    [Test]
     public void Renders_Header_With_Title_And_Create_Action()
     {
         var cut = Render<ChartsComponent>();

@@ -57,6 +57,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         await ChartDataService.StartAsync();
+        ChartDataService.SetConnection(SessionState.SelectedConnection.Id);
         SettingsStore.ChartsChanged += OnConfigurationsChanged;
         SessionState.SelectedConnectionChanged += OnSelectedConnectionChanged;
     }
@@ -67,7 +68,12 @@ else
         InvokeAsync(StateHasChanged);
     }
 
-    private void OnSelectedConnectionChanged(Connection _) => InvokeAsync(StateHasChanged);
+    private void OnSelectedConnectionChanged(Connection _) =>
+        InvokeAsync(() =>
+        {
+            ChartDataService.SetConnection(SessionState.SelectedConnection.Id);
+            StateHasChanged();
+        });
 
     private async Task CreateChart()
     {

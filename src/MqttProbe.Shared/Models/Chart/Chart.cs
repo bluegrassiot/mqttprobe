@@ -37,7 +37,14 @@ public class ChartConfiguration
         set => _maxPoints = value > 0 ? value : DefaultMaxPoints;
     }
 
-    public int? TimeWindowMinutes { get; set; }
+    private int? _timeWindowMinutes;
+
+    public int? TimeWindowMinutes
+    {
+        get => _timeWindowMinutes;
+        set => _timeWindowMinutes = value is > 0 ? value : null;
+    }
+
     public List<ChartSeries> Series { get; set; } = [];
 }
 

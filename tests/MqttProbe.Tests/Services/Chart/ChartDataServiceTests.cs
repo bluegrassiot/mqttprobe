@@ -1,18 +1,9 @@
-using System.Collections.Concurrent;
 using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Chart;
-using MqttProbe.Models.Configuration;
-using MqttProbe.Models.Mqtt;
-using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Platform;
-using MqttProbe.Services.Security;
-using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 
 namespace MqttProbe.Shared.Tests.Services.Chart;
 
@@ -97,6 +88,31 @@ public class ChartDataServiceTests
         var config = new ChartConfiguration { MaxPoints = maxPoints };
 
         config.MaxPoints.Should().Be(500);
+    }
+
+    [TestCase(0)]
+    [TestCase(-1)]
+    public void ChartConfiguration_TimeWindowMinutes_NormalizesNonPositiveToNull(int value)
+    {
+        var config = new ChartConfiguration { TimeWindowMinutes = value };
+
+        config.TimeWindowMinutes.Should().BeNull();
+    }
+
+    [Test]
+    public void ChartConfiguration_TimeWindowMinutes_PreservesPositiveValue()
+    {
+        var config = new ChartConfiguration { TimeWindowMinutes = 15 };
+
+        config.TimeWindowMinutes.Should().Be(15);
+    }
+
+    [Test]
+    public void ChartConfiguration_TimeWindowMinutes_NullStaysNull()
+    {
+        var config = new ChartConfiguration { TimeWindowMinutes = null };
+
+        config.TimeWindowMinutes.Should().BeNull();
     }
 
     [Test]

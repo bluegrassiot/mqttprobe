@@ -80,6 +80,8 @@ public class MessageStoreManager : IMessageStoreManager
         lock (_rateLimiterSync) { oldLimiter = _rateLimiter; _rateLimiter = newLimiter; }
         try { oldLimiter.Dispose(); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to dispose old rate limiter; new limiter is already in place."); }
+
+        lock (_storeSync) { TrimToLimit(); }
     }
 
     public MessageStore? SelectedMessageStore { get; set; }

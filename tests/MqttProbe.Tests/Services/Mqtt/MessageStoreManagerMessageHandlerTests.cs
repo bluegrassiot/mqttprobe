@@ -391,6 +391,55 @@ public class MessageStoreManagerMessageHandlerTests
     }
 
     [Test]
+    public async Task ClearAllMessages_ResetsGlobalCount_SoNewMessagesStore()
+    {
+        var config = new AppConfiguration
+        {
+            Performance = new PerformanceSettings { MaxStoredMessages = 5, MaxMessagesPerSecond = 50_000 }
+        };
+        var built = BuildManager(config);
+        using var manager = built.Manager;
+        var fire = built.Fire;
+
+        for (var i = 0; i < 5; i++)
+            await fire(MakeArgs($"t-{i}", "x"));
+        manager.TotalStoredMessages.Should().Be(5);
+
+        await manager.ClearAllMessages();
+
+        manager.TotalStoredMessages.Should().Be(0);
+        manager.MessageStores.Should().BeEmpty();
+
+        // Counter was reset, so a subsequent message is retained (not instantly evicted).
+        await fire(MakeArgs("after-clear", "y"));
+        manager.TotalStoredMessages.Should().Be(1);
+        CountStored(manager.MessageStores.Values).Should().Be(1);
+    }
+
+    [Test]
+    public async Task PerformanceSettingsChanged_LoweredLimit_TrimsImmediately()
+    {
+        var config = new AppConfiguration
+        {
+            Performance = new PerformanceSettings { MaxStoredMessages = 10, MaxMessagesPerSecond = 50_000 }
+        };
+        var built = BuildManager(config);
+        using var manager = built.Manager;
+        var fire = built.Fire;
+        var settings = built.Settings;
+
+        for (var i = 0; i < 8; i++)
+            await fire(MakeArgs($"t-{i}", "x"));
+        manager.TotalStoredMessages.Should().Be(8);
+
+        config.Performance.MaxStoredMessages = 3;
+        settings.PerformanceSettingsChanged += Raise.Event<Action>();
+
+        manager.TotalStoredMessages.Should().Be(3);
+        CountStored(manager.MessageStores.Values).Should().Be(3);
+    }
+
+    [Test]
     public async Task PerformanceSettingsChanged_RebuildsRateLimiter()
     {
         var rateLimitedLogger = Substitute.For<ILogger<MessageStoreManager>>();

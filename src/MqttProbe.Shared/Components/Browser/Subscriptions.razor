@@ -14,82 +14,86 @@
     </HeaderChips>
 </TabPanelHeader>
 
-<AuthorizeView Roles="Admin,Operator">
-    <Authorized>
-        <MudGrid Spacing="1" Class="mb-2">
-            <MudItem xs="10" Class="d-flex align-center">
-                <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_topic" Label="Topic"
-                              Variant="Variant.Outlined" Clearable="true"
-                              Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.ChevronRight"
-                              OnKeyDown="HandleAddKeyDown"/>
-            </MudItem>
-            <MudItem xs="2" Class="d-flex align-center">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="app-btn-min"
-                           StartIcon="@LucideIcons.Plus"
-                           title="Subscribe"
-                           Disabled="@_isAdding"
-                           OnClick="@AddTopic">
-                    Subscribe
-                </MudButton>
-            </MudItem>
-            <MudItem xs="12">
-                <div class="d-flex flex-wrap gap-1">
-                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" OnClick="@(() => ApplyPreset("spBv1.0/#"))">spBv1.0/#</MudChip>
-                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" OnClick="@(() => ApplyPreset("#"))">#</MudChip>
-                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" OnClick="@(() => ApplyPreset("+/STATE/#"))">+/STATE/#</MudChip>
-                </div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
-                    Wildcards: <code>+</code> matches one level, <code>#</code> matches remaining levels.
-                </MudText>
-            </MudItem>
-        </MudGrid>
-    </Authorized>
-</AuthorizeView>
-
-@if (!SubscriptionManager.Topics.Any())
-{
-    <div class="d-flex flex-column align-center pa-8">
-        <MudIcon Icon="@LucideIcons.Layers" Size="Size.Large" Color="Color.Secondary"/>
-        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">No active subscriptions</MudText>
-        <MudText Typo="Typo.caption" Color="Color.Secondary">Add a topic above to start receiving messages</MudText>
-    </div>
-}
-else
-{
-    <MudTable Filter="new Func<string, bool>(FilterFunc)"
-              MultiSelection="true" @bind-SelectedItems="_selectedTopics"
-              Items="@SubscriptionManager.Topics" Hover="true" Virtualize="true"
-              Striped="true" Breakpoint="Breakpoint.None" Dense="true">
-        <ToolBarContent>
-            <MudTextField @bind-Value="_searchStringTerm" Placeholder="Filter subscriptions…"
-                          Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
-                          Immediate="true" Clearable="true" Variant="Variant.Outlined"
-                          Margin="Margin.Dense" Class="mt-0"/>
-            <MudSpacer/>
-            <AuthorizeView Roles="Admin,Operator">
-                <Authorized>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Error"
-                               StartIcon="@LucideIcons.Trash2"
-                               title="Remove"
-                               OnClick="@RemoveSelected">
-                        Remove
+<div class="subs-body">
+    <AuthorizeView Roles="Admin,Operator">
+        <Authorized>
+            <MudGrid Spacing="1" Class="mb-2">
+                <MudItem xs="10" Class="d-flex align-center">
+                    <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_topic" Label="Topic"
+                                  Variant="Variant.Outlined" Clearable="true"
+                                  Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.ChevronRight"
+                                  OnKeyDown="HandleAddKeyDown"/>
+                </MudItem>
+                <MudItem xs="2" Class="d-flex align-center">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="app-btn-min"
+                               StartIcon="@LucideIcons.Plus"
+                               title="Subscribe"
+                               Disabled="@_isAdding"
+                               OnClick="@AddTopic">
+                        Subscribe
                     </MudButton>
-                </Authorized>
-            </AuthorizeView>
-        </ToolBarContent>
-        <ColGroup>
-            <col/>
-        </ColGroup>
-        <RowTemplate>
-            <MudTd Class="telemetry-mono telemetry-compact">@context</MudTd>
-        </RowTemplate>
-        <NoRecordsContent>
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-3">
-                No subscriptions match "@_searchStringTerm"
-            </MudText>
-        </NoRecordsContent>
-    </MudTable>
-}
+                </MudItem>
+                <MudItem xs="12">
+                    <div class="d-flex flex-wrap gap-1">
+                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" OnClick="@(() => ApplyPreset("spBv1.0/#"))">spBv1.0/#</MudChip>
+                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" OnClick="@(() => ApplyPreset("#"))">#</MudChip>
+                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" OnClick="@(() => ApplyPreset("+/STATE/#"))">+/STATE/#</MudChip>
+                    </div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                        Wildcards: <code>+</code> matches one level, <code>#</code> matches remaining levels.
+                    </MudText>
+                </MudItem>
+            </MudGrid>
+        </Authorized>
+    </AuthorizeView>
+
+    @if (!SubscriptionManager.Topics.Any())
+    {
+        <div class="d-flex flex-column align-center pa-8">
+            <MudIcon Icon="@LucideIcons.Layers" Size="Size.Large" Color="Color.Secondary"/>
+            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">No active subscriptions</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Add a topic above to start receiving messages</MudText>
+        </div>
+    }
+    else
+    {
+        <div class="subs-table-wrap">
+            <MudTable Filter="new Func<string, bool>(FilterFunc)"
+                      MultiSelection="true" @bind-SelectedItems="_selectedTopics"
+                      Items="@SubscriptionManager.Topics" Hover="true" Virtualize="true"
+                      Striped="true" Breakpoint="Breakpoint.None" Dense="true">
+                <ToolBarContent>
+                    <MudTextField @bind-Value="_searchStringTerm" Placeholder="Filter subscriptions…"
+                                  Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
+                                  Immediate="true" Clearable="true" Variant="Variant.Outlined"
+                                  Margin="Margin.Dense" Class="mt-0"/>
+                    <MudSpacer/>
+                    <AuthorizeView Roles="Admin,Operator">
+                        <Authorized>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Error"
+                                       StartIcon="@LucideIcons.Trash2"
+                                       title="Remove"
+                                       OnClick="@RemoveSelected">
+                                Remove
+                            </MudButton>
+                        </Authorized>
+                    </AuthorizeView>
+                </ToolBarContent>
+                <ColGroup>
+                    <col/>
+                </ColGroup>
+                <RowTemplate>
+                    <MudTd Class="telemetry-mono telemetry-compact">@context</MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-3">
+                        No subscriptions match "@_searchStringTerm"
+                    </MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </div>
+    }
+</div>
 
 @code {
     private string _topic = string.Empty;

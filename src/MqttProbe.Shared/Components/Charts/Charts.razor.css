@@ -6,3 +6,10 @@
         linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
     background-size: 32px 32px;
 }
+
+.tab-panel-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}

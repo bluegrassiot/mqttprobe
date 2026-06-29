@@ -1,0 +1,33 @@
+.subs-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.subs-table-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* MudTable's outer .mud-table div is block with height:auto by default, so
+   .mud-table-container's height:100% resolves to auto and the table overflows.
+   Make .mud-table a flex column so it gets a definite height from the flex
+   algorithm, then .mud-table-container flex-fills the remaining space after the
+   toolbar and its overflow-y:auto activates. */
+.subs-table-wrap ::deep .mud-table {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.subs-table-wrap ::deep .mud-table-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}

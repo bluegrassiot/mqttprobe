@@ -16,6 +16,7 @@ public interface ISparkplugTopologyService : IDisposable
     public event Action? TopologyChanged;
     public bool RemoveNode(string groupId, string nodeId);
     public int RemoveOfflineNodes();
+    public void ClearAll();
     public Task RequestNodeRebirthAsync(string groupId, string nodeId);
 }
 
@@ -40,12 +41,6 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         _client.ApplicationMessageReceivedAsync += OnMessageReceived;
     }
 
-    /// <summary>
-    /// Removes a single node from the in-memory topology. Returns <c>false</c> if the
-    /// group or node does not exist (no event is raised in that case). If the removed
-    /// node was the last one in its group, the group is also removed. On successful
-    /// removal, <see cref="TopologyChanged"/> is raised exactly once.
-    /// </summary>
     public bool RemoveNode(string groupId, string nodeId)
     {
         if (!_groups.TryGetValue(groupId, out var group))
@@ -61,13 +56,6 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         return true;
     }
 
-    /// <summary>
-    /// Removes every node whose status is <see cref="SpbNodeStatus.Offline"/> from the
-    /// in-memory topology. Online and Unknown nodes are untouched. Groups that become
-    /// empty as a result are pruned. On at least one successful removal,
-    /// <see cref="TopologyChanged"/> is raised exactly once. Returns the number of
-    /// nodes removed.
-    /// </summary>
     public int RemoveOfflineNodes()
     {
         var removed = 0;
@@ -88,6 +76,14 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
             TopologyChanged?.Invoke();
 
         return removed;
+    }
+
+    public void ClearAll()
+    {
+        var wasEmpty = _groups.IsEmpty;
+        _groups.Clear();
+        if (!wasEmpty)
+            TopologyChanged?.Invoke();
     }
 
     internal static bool TryParseTopic(string topic, out string group, out string verb, out string node, out string? device)

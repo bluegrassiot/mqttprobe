@@ -3,13 +3,8 @@ using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
-using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Platform;
-using MqttProbe.Services.Security;
-using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 using MudBlazor;
 
 namespace MqttProbe.Shared.Tests.Services.Mqtt;
@@ -337,5 +332,74 @@ public class SubscriptionManagerTests
 
         _manager.Topics.Should().Contain("memory/topic");
         _manager.Topics.Should().Contain("saved/topic");
+    }
+
+    [Test]
+    public async Task ClearActiveSubscriptions_WithTopics_ClearsTopics()
+    {
+        await _manager.Add("a/b");
+        await _manager.Add("c/d");
+        _mockSettingsStore.ClearReceivedCalls();
+
+        _manager.ClearActiveSubscriptions();
+
+        _manager.Topics.Should().BeEmpty();
+    }
+
+    [Test]
+    public void ClearActiveSubscriptions_WhenEmpty_DoesNotThrow()
+    {
+        var act = () => _manager.ClearActiveSubscriptions();
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public async Task ClearActiveSubscriptions_DoesNotPersistToConnection()
+    {
+        await _manager.Add("a/b");
+        _mockSettingsStore.ClearReceivedCalls();
+
+        _manager.ClearActiveSubscriptions();
+
+        // ClearActiveSubscriptions must NOT call AddConnectionAsync —
+        // it is a runtime-only clear, not a user action.
+        await _mockSettingsStore.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+    }
+
+    [Test]
+    public async Task ClearActiveSubscriptions_DoesNotCallUnsubscribe()
+    {
+        await _manager.Add("a/b");
+        _mockClient.ClearReceivedCalls();
+
+        _manager.ClearActiveSubscriptions();
+
+        // No MQTT unsubscribe — broker may already be disconnected.
+        await _mockClient.DidNotReceive().UnsubscribeAsync(Arg.Any<IEnumerable<string>>());
+    }
+
+    [Test]
+    public async Task ClearActiveSubscriptions_SetsTopicsEmpty_BeforeNextConnect()
+    {
+        await _manager.Add("old/topic");
+
+        _manager.ClearActiveSubscriptions();
+
+        // After clear, simulating a new connect with auto-resubscribe should
+        // only load the new connection's saved topics, not the old ones.
+        var newConnection = new Connection
+        {
+            Name = "New",
+            Host = "new-broker",
+            SubscribedTopics = ["new/topic"]
+        };
+        _mockSessionState.SelectedConnection.Returns(newConnection);
+        _mockClient.ClearReceivedCalls();
+
+        await _connectedHandler!(null!);
+
+        _manager.Topics.Should().Contain("new/topic");
+        _manager.Topics.Should().NotContain("old/topic");
     }
 }

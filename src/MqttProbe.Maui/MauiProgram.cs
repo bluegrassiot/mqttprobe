@@ -53,6 +53,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IEmulationService, EmulationService>();
         builder.Services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
         builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
+        builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
         builder.Services.AddSingleton<IMqttOptionsBuilder, MqttOptionsBuilder>();
         builder.Services.AddSingleton<IUxTelemetryService, UxTelemetryService>();
         builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();

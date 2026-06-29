@@ -16,6 +16,7 @@ public interface IChartDataService : IDisposable
     public Task StopAsync();
     public bool IsListening { get; }
     public void SetConnection(Guid connectionId);
+    public void ClearBuffers();
 }
 
 public class ChartDataService(
@@ -37,6 +38,12 @@ public class ChartDataService(
     {
         _connectionId = connectionId;
         _buffers.Clear();
+    }
+
+    public void ClearBuffers()
+    {
+        _buffers.Clear();
+        OnDataUpdated?.Invoke();
     }
 
     public IReadOnlyList<ChartDataPoint> GetPoints(Guid seriesId) =>

@@ -13,6 +13,7 @@ public interface ISubscriptionManager : IDisposable
     public IReadOnlySet<string> Topics { get; }
     public Task Remove(List<string> topics);
     public Task Add(string topic);
+    public void ClearActiveSubscriptions();
 }
 
 public class SubscriptionManager : ISubscriptionManager, IDisposable
@@ -121,6 +122,14 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
         finally
         {
             _operationLock.Release();
+        }
+    }
+
+    public void ClearActiveSubscriptions()
+    {
+        lock (_topicsSync)
+        {
+            _topics.Clear();
         }
     }
 

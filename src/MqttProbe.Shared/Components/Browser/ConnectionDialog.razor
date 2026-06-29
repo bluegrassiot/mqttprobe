@@ -12,6 +12,7 @@
 @inject ISessionState SessionState
 @inject IMqttOptionsBuilder MqttOptionsBuilder
 @inject IChartDataService ChartDataService
+@inject IBrokerStateResetCoordinator BrokerResetCoordinator
 @inject IUxTelemetryService? UxTelemetry
 @inject IDialogService DialogService
 
@@ -276,6 +277,17 @@
 
             if (choice is null) return;
             if (choice == true) await Save();
+        }
+
+        // Reset runtime state if connecting to a different broker.
+        // Best-effort: if reset fails, proceed with connect anyway.
+        try
+        {
+            await BrokerResetCoordinator.ResetIfBrokerChangedAsync(_selectedConnection);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Broker state reset failed; proceeding with connect");
         }
 
         try

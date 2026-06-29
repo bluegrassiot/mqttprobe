@@ -585,4 +585,80 @@ public class EmulationServiceTests
         stopwatch.ElapsedMilliseconds.Should().BeLessThan(5000);
         await _mockMqttClient.Received(5000).EnqueueAsync(Arg.Any<MqttApplicationMessage>());
     }
+
+    [Test]
+    public async Task ResetForConnectionAsync_StopsRunningEmulation()
+    {
+        await _service.AddNodeAsync(SparkplugNode());
+        await _service.StartAsync();
+        _service.IsRunning.Should().BeTrue();
+
+        var newConnId = Guid.NewGuid();
+        await _service.ResetForConnectionAsync(newConnId);
+
+        _service.IsRunning.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task ResetForConnectionAsync_SwitchesConnectionId()
+    {
+        var newConnId = Guid.NewGuid();
+        // Add a node config for the new connection in the store
+        await _settingsStore.AddEmulatorNodeAsync(newConnId, new EmulatorNodeConfig { NodeId = "NewNode" });
+
+        await _service.ResetForConnectionAsync(newConnId);
+
+        _service.Nodes.Should().HaveCount(1);
+        _service.Nodes[0].NodeId.Should().Be("NewNode");
+    }
+
+    [Test]
+    public async Task ResetForConnectionAsync_WhenNotRunning_SwitchesConnectionIdWithoutError()
+    {
+        var newConnId = Guid.NewGuid();
+        await _settingsStore.AddEmulatorNodeAsync(newConnId, new EmulatorNodeConfig { NodeId = "Node" });
+
+        await _service.ResetForConnectionAsync(newConnId);
+
+        _service.Nodes.Should().HaveCount(1);
+        _service.Nodes[0].NodeId.Should().Be("Node");
+    }
+
+    [Test]
+    public async Task ResetForConnectionAsync_DoesNotAutoStart()
+    {
+        await _service.AddNodeAsync(SparkplugNode());
+        await _service.StartAsync();
+
+        var newConnId = Guid.NewGuid();
+        await _settingsStore.AddEmulatorNodeAsync(newConnId, new EmulatorNodeConfig { NodeId = "X" });
+        await _service.ResetForConnectionAsync(newConnId);
+
+        _service.IsRunning.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task ResetForConnectionAsync_FiresStateChanged()
+    {
+        var fired = false;
+        _service.StateChanged += () => fired = true;
+
+        await _service.ResetForConnectionAsync(Guid.NewGuid());
+
+        fired.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task ResetForConnectionAsync_PreservesSavedNodeConfigs()
+    {
+        var oldConnId = _mockSessionState.SelectedConnection.Id;
+        await _service.AddNodeAsync(SparkplugNode());
+
+        var newConnId = Guid.NewGuid();
+
+        await _service.ResetForConnectionAsync(newConnId);
+
+        // Old connection's saved configs are still in the store
+        _settingsStore.GetEmulatorNodes(oldConnId).Should().HaveCount(1);
+    }
 }

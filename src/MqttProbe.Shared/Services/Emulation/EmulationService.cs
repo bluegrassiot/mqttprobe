@@ -19,6 +19,7 @@ public interface IEmulationService : IDisposable
     public event Action? StateChanged;
 
     public void SetConnection(Guid connectionId);
+    public Task ResetForConnectionAsync(Guid connectionId);
     public Task AddNodeAsync(EmulatorNodeConfig node);
     public Task UpdateNodeAsync(EmulatorNodeConfig node);
     public Task RemoveNodeAsync(Guid nodeId);
@@ -72,6 +73,15 @@ public class EmulationService : IEmulationService
 
     public void SetConnection(Guid connectionId)
     {
+        _connectionId = connectionId;
+        StateChanged?.Invoke();
+    }
+
+    public async Task ResetForConnectionAsync(Guid connectionId)
+    {
+        if (IsRunning)
+            await StopAsync();
+
         _connectionId = connectionId;
         StateChanged?.Invoke();
     }

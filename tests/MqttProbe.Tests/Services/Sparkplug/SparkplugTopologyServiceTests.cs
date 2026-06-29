@@ -5,17 +5,8 @@ using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
 using MQTTnet.Protocol;
-using MqttProbe.Models.Chart;
-using MqttProbe.Models.Configuration;
-using MqttProbe.Models.Mqtt;
 using MqttProbe.Models.Sparkplug;
-using MqttProbe.Services.Chart;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Platform;
-using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 using Org.Eclipse.Tahu.Protobuf;
 
 namespace MqttProbe.Shared.Tests.Services.Sparkplug;
@@ -662,5 +653,67 @@ public class SparkplugTopologyServiceTests
             Arg.Is<ManagedMqttApplicationMessage>(m =>
                 m.ApplicationMessage.Topic == "spBv1.0/factory/NCMD/edge-01"
                 && m.ApplicationMessage.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce));
+    }
+
+    [Test]
+    public async Task ClearAll_WithPopulatedTopology_ClearsAllGroups()
+    {
+        var nbirth = SpbPayload(("metric1", 0, 10, 1.0));
+        await Fire("spBv1.0/grp/NBIRTH/node1", nbirth);
+        var dbirth = SpbPayload(("dmetric", 0, 12, 42.0));
+        await Fire("spBv1.0/grp/DBIRTH/node1/device1", dbirth);
+
+        _service.Groups.Should().NotBeEmpty();
+
+        _service.ClearAll();
+
+        _service.Groups.Should().BeEmpty();
+    }
+
+    [Test]
+    public void ClearAll_WhenEmpty_DoesNotThrow()
+    {
+        var act = () => _service.ClearAll();
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public async Task ClearAll_RaisesTopologyChanged()
+    {
+        var nbirth = SpbPayload(("m", 0, 10, 1.0));
+        await Fire("spBv1.0/grp/NBIRTH/node1", nbirth);
+
+        var raised = false;
+        _service.TopologyChanged += () => raised = true;
+
+        _service.ClearAll();
+
+        raised.Should().BeTrue();
+    }
+
+    [Test]
+    public void ClearAll_WhenEmpty_DoesNotRaiseTopologyChanged()
+    {
+        var raised = false;
+        _service.TopologyChanged += () => raised = true;
+
+        _service.ClearAll();
+
+        raised.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task ClearAll_ThenReceiveMessage_BuildsNewTopology()
+    {
+        var nbirth = SpbPayload(("m", 0, 10, 1.0));
+        await Fire("spBv1.0/grp/NBIRTH/node1", nbirth);
+        _service.ClearAll();
+        _service.Groups.Should().BeEmpty();
+
+        await Fire("spBv1.0/grp/NBIRTH/node2", nbirth);
+
+        _service.Groups.Should().ContainKey("grp");
+        _service.Groups["grp"].Nodes.Should().ContainKey("node2");
     }
 }

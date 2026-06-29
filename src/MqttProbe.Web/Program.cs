@@ -83,6 +83,7 @@ builder.Services.AddScoped<ISessionState, SessionState>();
 builder.Services.AddScoped<IEmulationService, EmulationService>();
 builder.Services.AddScoped<IMessageStoreManager, MessageStoreManager>();
 builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
+builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
 builder.Services.AddScoped<IMqttOptionsBuilder, MqttOptionsBuilder>();
 builder.Services.AddScoped<IUxTelemetryService, UxTelemetryService>();
 builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();

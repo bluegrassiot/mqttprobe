@@ -22,6 +22,7 @@ public class ConnectionDialogTests : BunitTestContext
     private ISubscriptionManager _mockSubMgr = null!;
     private ISessionState _mockSessionState = null!;
     private IMqttOptionsBuilder _mockOptionsBuilder = null!;
+    private IBrokerStateResetCoordinator _mockCoordinator = null!;
     private IRenderedComponent<MudDialogProvider> _dialogProvider = null!;
 
     private Func<MqttClientConnectedEventArgs, Task>? _connectedHandler;
@@ -36,6 +37,7 @@ public class ConnectionDialogTests : BunitTestContext
         _mockSubMgr = Substitute.For<ISubscriptionManager>();
         _mockSessionState = Substitute.For<ISessionState>();
         _mockOptionsBuilder = Substitute.For<IMqttOptionsBuilder>();
+        _mockCoordinator = Substitute.For<IBrokerStateResetCoordinator>();
 
         _mockConfigMgr.Config.Returns(new AppConfiguration());
         _mockMsgStore.Start().Returns(Task.CompletedTask);
@@ -59,6 +61,7 @@ public class ConnectionDialogTests : BunitTestContext
         Services.AddSingleton(_mockSubMgr);
         Services.AddSingleton(_mockSessionState);
         Services.AddSingleton(_mockOptionsBuilder);
+        Services.AddSingleton(_mockCoordinator);
         Services.AddSingleton(Substitute.For<ILogger<ConnectionDialog>>());
         Services.AddSingleton(Substitute.For<IChartDataService>());
         Services.AddSingleton(Substitute.For<IUxTelemetryService>());
@@ -546,5 +549,58 @@ public class ConnectionDialogTests : BunitTestContext
 
         var tabPanels = _dialogProvider.FindAll(".mud-tab-panel[role='tabpanel']");
         tabPanels.Should().HaveCount(3, "Identity, Transport, and On Connect panels are always rendered");
+    }
+
+    [Test]
+    public async Task Connect_CallsResetCoordinatorBeforeStartAsync()
+    {
+        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        Received.InOrder(() =>
+        {
+            _mockCoordinator.ResetIfBrokerChangedAsync(Arg.Any<Connection>());
+            _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>());
+        });
+    }
+
+    [Test]
+    public async Task Connect_PassesSelectedConnectionToCoordinator()
+    {
+        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
+        var conn = new Connection { Name = "TestConn", Host = "broker.example.com", Port = 8883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        await _mockCoordinator.Received(1).ResetIfBrokerChangedAsync(
+            Arg.Is<Connection>(c => c.Host == "broker.example.com" && c.Port == 8883));
+    }
+
+    [Test]
+    public async Task Connect_WhenCoordinatorThrows_StillProceedsWithConnect()
+    {
+        _mockCoordinator.ResetIfBrokerChangedAsync(Arg.Any<Connection>())
+            .Returns(Task.FromException(new Exception("reset failed")));
+        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        await _mockClient.Received(1).StartAsync(Arg.Any<ManagedMqttClientOptions>());
     }
 }

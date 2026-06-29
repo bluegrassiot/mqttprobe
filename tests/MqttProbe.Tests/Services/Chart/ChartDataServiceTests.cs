@@ -205,6 +205,84 @@ public class ChartDataServiceTests
         onUpdated.Should().BeTrue();
     }
 
+    [Test]
+    public async Task ClearBuffers_WithPopulatedBuffers_ClearsAllSeriesData()
+    {
+        var connId = Guid.NewGuid();
+        _service.SetConnection(connId);
+
+        var seriesId = Guid.NewGuid();
+        var config = new ChartConfiguration
+        {
+            MaxPoints = 100,
+            Series = [new ChartSeries { Id = seriesId, Topic = "data/temp", JsonPath = "value" }]
+        };
+        _mockSettingsStore.GetCharts(connId).Returns([config]);
+
+        await _service.StartAsync();
+
+        // Fire a message to populate the buffer
+        var msg = new MqttApplicationMessageBuilder()
+            .WithTopic("data/temp")
+            .WithPayload("""{"value":42}""")
+            .Build();
+        var args = new MqttApplicationMessageReceivedEventArgs("test", msg,
+            new MQTTnet.Packets.MqttPublishPacket(), null);
+        await _handler!(args);
+
+        _service.GetPoints(seriesId).Should().NotBeEmpty();
+
+        _service.ClearBuffers();
+
+        _service.GetPoints(seriesId).Should().BeEmpty();
+    }
+
+    [Test]
+    public void ClearBuffers_WhenEmpty_DoesNotThrow()
+    {
+        var act = () => _service.ClearBuffers();
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void ClearBuffers_FiresOnDataUpdated()
+    {
+        var fired = false;
+        _service.OnDataUpdated += () => fired = true;
+
+        _service.ClearBuffers();
+
+        fired.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task ClearBuffers_DoesNotChangeConnectionId()
+    {
+        var connId = Guid.NewGuid();
+        _service.SetConnection(connId);
+
+        await _service.StartAsync();
+
+        _service.ClearBuffers();
+
+        // Verify buffers are clear but connection ID is unchanged by
+        // checking that GetCharts is still called with the same ID
+        // when new messages arrive.
+        _mockSettingsStore.ClearReceivedCalls();
+        _mockSettingsStore.GetCharts(connId).Returns([]);
+
+        var msg = new MqttApplicationMessageBuilder()
+            .WithTopic("data/temp")
+            .WithPayload("""{"value":1}""")
+            .Build();
+        var args = new MqttApplicationMessageReceivedEventArgs("test", msg,
+            new MQTTnet.Packets.MqttPublishPacket(), null);
+        await _handler!(args);
+
+        _mockSettingsStore.Received(1).GetCharts(connId);
+    }
+
     private static MqttApplicationMessageReceivedEventArgs MakeArgs(string topic, string payload)
     {
         var appMsg = new MqttApplicationMessageBuilder()

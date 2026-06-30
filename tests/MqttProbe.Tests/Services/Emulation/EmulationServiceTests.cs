@@ -661,4 +661,11 @@ public class EmulationServiceTests
         // Old connection's saved configs are still in the store
         _settingsStore.GetEmulatorNodes(oldConnId).Should().HaveCount(1);
     }
+
+    [Test]
+    public void EmulatorNodeConfig_UseMetricAliases_DefaultsToFalse()
+    {
+        var config = new EmulatorNodeConfig();
+        config.UseMetricAliases.Should().BeFalse();
+    }
 }

@@ -4,7 +4,7 @@ namespace MqttProbe.Models.Sparkplug;
 
 public enum SpbNodeStatus { Unknown, Online, Offline }
 
-public sealed record SpbMetricSnapshot(string Name, string DataType, string Value, DateTime LastUpdated);
+public sealed record SpbMetricSnapshot(string Name, string DataType, string Value, DateTime LastUpdated, ulong? Alias = null);
 
 public sealed class SpbDevice
 {

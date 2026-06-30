@@ -173,7 +173,8 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
     private static SpbMetricSnapshot CreateMetricSnapshot(Payload.Types.Metric metric, string name)
     {
         var (value, dataType) = ExtractMetricValue(metric);
-        return new SpbMetricSnapshot(name, dataType, value, DateTime.UtcNow);
+        var alias = metric.Alias != 0 ? metric.Alias : (ulong?)null;
+        return new SpbMetricSnapshot(name, dataType, value, DateTime.UtcNow, alias);
     }
 
     private void HandleNBirth(string groupId, string nodeId, Payload payload)

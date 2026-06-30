@@ -288,12 +288,16 @@
                                         <HeaderContent>
                                             <MudTh>Name</MudTh>
                                             <MudTh>Type</MudTh>
+                                            <MudTh Class="spb-th-right">Alias</MudTh>
                                             <MudTh Class="spb-th-right">Value</MudTh>
                                             <MudTh>Updated</MudTh>
                                         </HeaderContent>
                                         <RowTemplate>
                                             <MudTd Class="spb-td-name">@context.Name</MudTd>
                                             <MudTd Class="spb-td-type">@context.DataType</MudTd>
+                                            <MudTd Class="spb-td-alias spb-th-right">
+                                                @(context.Alias.HasValue ? context.Alias.Value.ToString() : "\u2014")
+                                            </MudTd>
                                             <MudTd Class="spb-td-value" Style="@($"color:{ValueColor(context)}")">
                                                 @context.Value
                                             </MudTd>

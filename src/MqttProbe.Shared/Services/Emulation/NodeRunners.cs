@@ -87,11 +87,31 @@ public class SparkplugNodeRunner(
                 new("Node Control/Rebirth", DataType.Boolean, false)
             };
             BuildAliasMaps(nodeMetrics);
-            var node = nodeFactory.Create(nodeMetrics, SparkplugSpecificationVersion.Version30);
+
+            // Rebuild with birth-mode aliases before passing to factory.
+            // SparkplugNet uses these knownMetrics for NBIRTH.
+            var birthMetrics = nodeMetrics;
+            if (_nodeAliases is not null)
+            {
+                birthMetrics = new List<Metric>(nodeMetrics.Count);
+                foreach (var source in nodeMetrics)
+                {
+                    if (!_nodeAliases.TryGetValue(source.Name, out var alias))
+                        throw new InvalidOperationException(
+                            $"Missing alias for node metric '{source.Name}'.");
+
+                    // Rebuild from scratch using the (name, DataType, value) constructor.
+                    var m = new Metric(source.Name, source.DataType, source.Value);
+                    m.Alias = alias;
+                    birthMetrics.Add(m);
+                }
+            }
+
+            var node = nodeFactory.Create(birthMetrics, SparkplugSpecificationVersion.Version30);
             await node.Start(BuildNodeOptions(connection, config));
             _node = node;
             foreach (var device in config.Devices)
-                await node.PublishDeviceBirthMessage(device.DeviceId, SampleDeviceMetrics(device, 0));
+                await node.PublishDeviceBirthMessage(device.DeviceId, SampleDeviceMetrics(device, 0, isBirth: true));
             Status = NodeRuntimeStatus.Connected;
         }
         catch (Exception ex)
@@ -106,10 +126,11 @@ public class SparkplugNodeRunner(
     {
         if (_node is not { IsConnected: true }) return;
 
-        var tasks = new List<Task> { _node.PublishMetrics(new List<Metric>(nodeHealthMetrics)) };
+        var healthMetrics = ApplyNodeAliases(nodeHealthMetrics, isBirth: false);
+        var tasks = new List<Task> { _node.PublishMetrics(healthMetrics) };
         tasks.AddRange(config.Devices
             .Where(d => d.Metrics.Count > 0)
-            .Select(d => _node.PublishDeviceMetrics(d.DeviceId, SampleDeviceMetrics(d, tSeconds))));
+            .Select(d => _node.PublishDeviceMetrics(d.DeviceId, SampleDeviceMetrics(d, tSeconds, isBirth: false))));
         await Task.WhenAll(tasks);
     }
 
@@ -133,7 +154,7 @@ public class SparkplugNodeRunner(
         Status = NodeRuntimeStatus.Idle;
     }
 
-    private List<Metric> SampleDeviceMetrics(EmulatorDeviceConfig device, double tSeconds)
+    private List<Metric> SampleDeviceMetrics(EmulatorDeviceConfig device, double tSeconds, bool isBirth = false)
     {
         var metrics = new List<Metric>(device.Metrics.Count);
         foreach (var metric in device.Metrics)
@@ -145,19 +166,42 @@ public class SparkplugNodeRunner(
             }
 
             var value = WaveformSampler.Next(metric, state, tSeconds);
-            metrics.Add(ToSparkplugMetric(metric, value));
+            ulong alias = 0;
+            if (_deviceAliases is not null)
+            {
+                if (!_deviceAliases.TryGetValue(device.DeviceId, out var deviceMap)
+                    || !deviceMap.TryGetValue(metric.Name, out alias))
+                {
+                    throw new InvalidOperationException(
+                        $"Missing alias for metric '{metric.Name}' in device '{device.DeviceId}'. " +
+                        "Alias maps may be out of sync with config.");
+                }
+            }
+
+            metrics.Add(ToSparkplugMetric(metric, value, alias, isBirth));
         }
 
         return metrics;
     }
 
-    private static Metric ToSparkplugMetric(EmulatorMetricConfig metric, double value) =>
-        metric.ValueType switch
+    private static Metric ToSparkplugMetric(EmulatorMetricConfig metric, double value, ulong alias = 0, bool isBirth = false)
+    {
+        var m = metric.ValueType switch
         {
             MetricValueType.Boolean => new Metric(metric.Name, DataType.Boolean, value >= 0.5),
             MetricValueType.Int64 => new Metric(metric.Name, DataType.Int64, (long)Math.Round(value)),
             _ => new Metric(metric.Name, DataType.Double, value)
         };
+
+        if (alias != 0)
+        {
+            m.Alias = alias;
+            if (!isBirth)
+                m.Name = null!; // Data mode: alias-only (CS8625: SparkplugNet Name is non-nullable but null serializes as field omission)
+        }
+
+        return m;
+    }
 
     private void BuildAliasMaps(List<Metric> nodeMetrics)
     {
@@ -218,6 +262,30 @@ public class SparkplugNodeRunner(
                         $"Device '{deviceId}' alias map contains duplicate alias values.");
             }
         }
+    }
+
+    private List<Metric> ApplyNodeAliases(IReadOnlyList<Metric> metrics, bool isBirth)
+    {
+        if (_nodeAliases is null) return new List<Metric>(metrics);
+
+        var result = new List<Metric>(metrics.Count);
+        foreach (var source in metrics)
+        {
+            if (!_nodeAliases.TryGetValue(source.Name, out var alias))
+                throw new InvalidOperationException(
+                    $"Missing alias for node metric '{source.Name}'. " +
+                    "Alias map may be out of sync with config.");
+
+            // Rebuild from scratch — SparkplugNet Metric has no copy constructor.
+            // Use the same (name, DataType, value) constructor as ToSparkplugMetric.
+            var m = new Metric(source.Name, source.DataType, source.Value);
+            m.Alias = alias;
+            if (!isBirth)
+                m.Name = null!; // Data mode: alias-only (CS8625: SparkplugNet Name is non-nullable but null serializes as field omission)
+            result.Add(m);
+        }
+
+        return result;
     }
 
     internal static SparkplugNodeOptions BuildNodeOptions(Connection connection, EmulatorNodeConfig config)

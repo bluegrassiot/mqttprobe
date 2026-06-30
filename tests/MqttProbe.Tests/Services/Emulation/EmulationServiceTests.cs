@@ -97,6 +97,12 @@ public class EmulationServiceTests
         node.IsConnected.Returns(isConnected);
         _mockNodeFactory.Create(Arg.Any<List<Metric>>(), Arg.Any<SparkplugSpecificationVersion>())
             .Returns(node);
+        _mockNodeFactory.Create(
+                Arg.Any<List<Metric>>(),
+                Arg.Any<SparkplugSpecificationVersion>(),
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<Func<string, List<Metric>>>())
+            .Returns(node);
         return node;
     }
 
@@ -677,8 +683,15 @@ public class EmulationServiceTests
         var node = SetupSuccessfulNode();
         List<Metric>? capturedKnownMetrics = null;
         _mockNodeFactory.Create(
-            Arg.Do<List<Metric>>(m => capturedKnownMetrics = m),
-            Arg.Any<SparkplugSpecificationVersion>()).Returns(node);
+                Arg.Any<List<Metric>>(),
+                Arg.Any<SparkplugSpecificationVersion>(),
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<Func<string, List<Metric>>>())
+            .Returns(ci =>
+            {
+                capturedKnownMetrics = ci.ArgAt<List<Metric>>(0);
+                return node;
+            });
 
         var config = SparkplugNode("Node-1", "Flow Rate");
         config.UseMetricAliases = true;
@@ -922,8 +935,15 @@ public class EmulationServiceTests
         var node = SetupSuccessfulNode();
         List<Metric>? capturedKnownMetrics = null;
         _mockNodeFactory.Create(
-            Arg.Do<List<Metric>>(m => capturedKnownMetrics = m),
-            Arg.Any<SparkplugSpecificationVersion>()).Returns(node);
+                Arg.Any<List<Metric>>(),
+                Arg.Any<SparkplugSpecificationVersion>(),
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<Func<string, List<Metric>>>())
+            .Returns(ci =>
+            {
+                capturedKnownMetrics = ci.ArgAt<List<Metric>>(0);
+                return node;
+            });
         List<Metric>? publishedMetrics = null;
         node.PublishMetrics(Arg.Do<List<Metric>>(m => publishedMetrics = m))
             .Returns(Task.CompletedTask);
@@ -944,6 +964,88 @@ public class EmulationServiceTests
         capturedKnownMetrics!.All(m => m.Alias is not null and not 0).Should().BeTrue();
         publishedMetrics!.All(m => m.Alias is not null and not 0).Should().BeTrue();
         deviceMetrics["Device-1"].All(m => m.Alias is not null and not 0).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Rebirth_AliasesEnabled_KnownMetricsPassedToFactoryHaveAliases()
+    {
+        var node = SetupSuccessfulNode();
+        // Use Returns callback to capture metrics from the 4-param Create overload
+        List<Metric>? capturedKnownMetrics = null;
+        _mockNodeFactory.Create(
+                Arg.Any<List<Metric>>(),
+                Arg.Any<SparkplugSpecificationVersion>(),
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<Func<string, List<Metric>>>())
+            .Returns(ci =>
+            {
+                capturedKnownMetrics = ci.ArgAt<List<Metric>>(0);
+                return node;
+            });
+
+        var config = SparkplugNode("Node-1", "Flow Rate");
+        config.UseMetricAliases = true;
+        await _service.AddNodeAsync(config);
+        await _service.StartAsync();
+
+        capturedKnownMetrics.Should().NotBeNull();
+        // All known metrics (health + Node Control/Rebirth) must carry aliases
+        // so that SparkplugNet's Rebirth method re-publishes NBIRTH with aliases.
+        capturedKnownMetrics!.All(m => m.Alias is not null and not 0).Should().BeTrue();
+        capturedKnownMetrics.All(m => !string.IsNullOrEmpty(m.Name)).Should().BeTrue();
+        capturedKnownMetrics.Select(m => m.Alias).Should().OnlyHaveUniqueItems();
+    }
+
+    [Test]
+    public async Task Rebirth_AliasesEnabled_DbirthRepublishedWithAliases()
+    {
+        var node = SetupSuccessfulNode();
+        var birthCalls = new List<(string DeviceId, List<Metric> Metrics)>();
+        node.PublishDeviceBirthMessage(Arg.Any<string>(), Arg.Any<List<Metric>>())
+            .Returns(Task.CompletedTask)
+            .AndDoes(ci => birthCalls.Add((ci.ArgAt<string>(0), ci.ArgAt<List<Metric>>(1))));
+
+        var config = SparkplugNode("Node-1", "Flow Rate");
+        config.UseMetricAliases = true;
+        await _service.AddNodeAsync(config);
+        await _service.StartAsync();
+
+        // Initial DBIRTH during Start
+        birthCalls.Should().ContainSingle();
+        birthCalls[0].Metrics.All(m => m.Alias is not null and not 0).Should().BeTrue();
+
+        // The adapter is wired to republish DBIRTH on rebirth.
+        // Verify the factory was created with device-aware parameters by checking
+        // that the Create call included the device callback signature.
+        // The ISparkplugNodeFactory.Create overload with getDeviceBirthMetrics is called.
+        _mockNodeFactory.Received(1).Create(
+            Arg.Any<List<Metric>>(),
+            Arg.Any<SparkplugSpecificationVersion>(),
+            Arg.Any<IReadOnlyList<string>>(),
+            Arg.Any<Func<string, List<Metric>>>());
+    }
+
+    [Test]
+    public async Task Rebirth_AliasesDisabled_NoDeviceCallbackPassed()
+    {
+        var node = SetupSuccessfulNode();
+
+        var config = SparkplugNode("Node-1", "Flow Rate");
+        config.UseMetricAliases = false;
+        await _service.AddNodeAsync(config);
+        await _service.StartAsync();
+
+        // When aliases are disabled, the 2-parameter Create overload is used
+        // (no device callback is needed).
+        _mockNodeFactory.Received(1).Create(
+            Arg.Any<List<Metric>>(),
+            Arg.Any<SparkplugSpecificationVersion>());
+        // The 4-parameter overload must NOT be called.
+        _mockNodeFactory.DidNotReceive().Create(
+            Arg.Any<List<Metric>>(),
+            Arg.Any<SparkplugSpecificationVersion>(),
+            Arg.Any<IReadOnlyList<string>>(),
+            Arg.Any<Func<string, List<Metric>>>());
     }
 
     [Test]

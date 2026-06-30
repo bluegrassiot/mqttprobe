@@ -107,7 +107,12 @@ public class SparkplugNodeRunner(
                 }
             }
 
-            var node = nodeFactory.Create(birthMetrics, SparkplugSpecificationVersion.Version30);
+            var node = config.UseMetricAliases
+                ? nodeFactory.Create(birthMetrics, SparkplugSpecificationVersion.Version30,
+                    config.Devices.Select(d => d.DeviceId).ToList(),
+                    deviceId => SampleDeviceMetrics(
+                        config.Devices.First(d => d.DeviceId == deviceId), 0, isBirth: true))
+                : nodeFactory.Create(birthMetrics, SparkplugSpecificationVersion.Version30);
             await node.Start(BuildNodeOptions(connection, config));
             _node = node;
             foreach (var device in config.Devices)

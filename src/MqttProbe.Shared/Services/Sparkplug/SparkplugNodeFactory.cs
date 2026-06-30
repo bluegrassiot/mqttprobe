@@ -23,6 +23,8 @@ public interface ISparkplugNode
 public interface ISparkplugNodeFactory
 {
     public ISparkplugNode Create(List<Metric> knownMetrics, SparkplugSpecificationVersion version);
+    public ISparkplugNode Create(List<Metric> knownMetrics, SparkplugSpecificationVersion version,
+        IReadOnlyList<string>? deviceIds, Func<string, List<Metric>>? getDeviceBirthMetrics);
 }
 
 internal sealed class SparkplugNodeAdapter : ISparkplugNode
@@ -30,11 +32,18 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
     private readonly SparkplugNode _node;
     private readonly ILogger? _logger;
     private readonly List<Metric> _knownMetrics;
+    private readonly IReadOnlyList<string>? _deviceIds;
+    private readonly Func<string, List<Metric>>? _getDeviceBirthMetrics;
 
-    public SparkplugNodeAdapter(SparkplugNode node, List<Metric> knownMetrics, ILogger? logger = null)
+    public SparkplugNodeAdapter(SparkplugNode node, List<Metric> knownMetrics,
+        IReadOnlyList<string>? deviceIds = null,
+        Func<string, List<Metric>>? getDeviceBirthMetrics = null,
+        ILogger? logger = null)
     {
         _node = node;
         _knownMetrics = knownMetrics;
+        _deviceIds = deviceIds;
+        _getDeviceBirthMetrics = getDeviceBirthMetrics;
         _logger = logger;
         _node.NodeCommandReceived += OnNodeCommandReceived;
     }
@@ -50,6 +59,18 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
                 _logger.LogInformation("Rebirth command received for node {GroupId}/{NodeId}",
                     args.GroupIdentifier, args.EdgeNodeIdentifier);
             await _node.Rebirth(_knownMetrics);
+
+            // Re-publish DBIRTH for each device (SparkplugB spec requirement).
+            // SparkplugNet's Rebirth only re-publishes NBIRTH; DBIRTH must be
+            // explicitly republished by the application.
+            if (_getDeviceBirthMetrics is not null && _deviceIds is not null)
+            {
+                foreach (var deviceId in _deviceIds)
+                {
+                    var metrics = _getDeviceBirthMetrics(deviceId);
+                    await _node.PublishDeviceBirthMessage(metrics, deviceId);
+                }
+            }
         }
     }
 
@@ -95,5 +116,10 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
 public class SparkplugNodeFactory(ILogger<SparkplugNodeFactory>? logger = null) : ISparkplugNodeFactory
 {
     public ISparkplugNode Create(List<Metric> knownMetrics, SparkplugSpecificationVersion version)
-        => new SparkplugNodeAdapter(new SparkplugNode(knownMetrics, version), knownMetrics, logger);
+        => new SparkplugNodeAdapter(new SparkplugNode(knownMetrics, version), knownMetrics, logger: logger);
+
+    public ISparkplugNode Create(List<Metric> knownMetrics, SparkplugSpecificationVersion version,
+        IReadOnlyList<string>? deviceIds, Func<string, List<Metric>>? getDeviceBirthMetrics)
+        => new SparkplugNodeAdapter(new SparkplugNode(knownMetrics, version), knownMetrics,
+            deviceIds, getDeviceBirthMetrics, logger);
 }

@@ -25,6 +25,17 @@
                       Class="emu-id-field"/>
     </MudItem>
 
+    @if (Node.Type == EmulatorNodeType.SparkplugB)
+    {
+        <MudItem xs="12" sm="4">
+            <MudTooltip Text="Replaces metric names with integer aliases in data messages, reducing MQTT payload size. Birth messages still include names." Placement="Placement.Right">
+                <MudCheckBox T="bool" @bind-Value="Node.UseMetricAliases" @bind-Value:after="SaveAsync"
+                             Label="Use Metric Aliases"
+                             Disabled="@EmulationService.IsRunning"/>
+            </MudTooltip>
+        </MudItem>
+    }
+
     @if (Node.Type == EmulatorNodeType.Generic)
     {
         <MudItem xs="12" sm="4">

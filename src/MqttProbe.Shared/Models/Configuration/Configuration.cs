@@ -18,6 +18,8 @@ public class PerformanceSettings
     public int MaxStoredMessages { get; set; } = 10_000;
 
     public int MaxMessagesPerSecond { get; set; } = 50_000;
+
+    public int MaxDisplayMessages { get; set; } = 500;
 }
 
 public class UiPreferences
@@ -27,8 +29,6 @@ public class UiPreferences
     public string FontFamily { get; set; } = "OpenDyslexic";
     public bool AutoResubscribe { get; set; } = true;
 
-    // Identifiers of onboarding hints the operator has dismissed. Persisting these
-    // keeps the "Start here" banners from re-appearing as chrome noise on every visit.
     public List<string> DismissedHints { get; set; } = [];
 }
 

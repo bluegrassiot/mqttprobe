@@ -152,4 +152,34 @@ public class SettingsStoreTests
         _store.Config.Performance.MaxStoredMessages.Should().Be(9999);
         _store.Config.Connections.Should().Contain(c => c.Name == "ConcurrentConn");
     }
+
+    [Test]
+    public async Task SetMaxDisplayMessagesAsync_PersistsValue()
+    {
+        await _store.SetMaxDisplayMessagesAsync(300);
+
+        _store.Config.Performance.MaxDisplayMessages.Should().Be(300);
+    }
+
+    [Test]
+    public async Task SetMaxDisplayMessagesAsync_RaisesPerformanceSettingsChanged()
+    {
+        var fired = false;
+        _store.PerformanceSettingsChanged += () => fired = true;
+
+        await _store.SetMaxDisplayMessagesAsync(300);
+
+        fired.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task SetMaxDisplayMessagesAsync_DoesNotRaiseUiPreferencesChanged()
+    {
+        var fired = false;
+        _store.UiPreferencesChanged += () => fired = true;
+
+        await _store.SetMaxDisplayMessagesAsync(300);
+
+        fired.Should().BeFalse("performance setters must not raise the UI event");
+    }
 }

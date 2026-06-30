@@ -51,6 +51,7 @@ public interface ISettingsStore
     public event Action? PerformanceSettingsChanged;
     public Task SetMaxStoredMessagesAsync(int value);
     public Task SetMaxMessagesPerSecondAsync(int value);
+    public Task SetMaxDisplayMessagesAsync(int value);
 
     // Auth
     public bool VerifyCredentials(string username, string password);
@@ -405,6 +406,22 @@ public class SettingsStore : ISettingsStore
         try
         {
             _config.Performance.MaxMessagesPerSecond = value;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        await SaveAsync();
+        PerformanceSettingsChanged?.Invoke();
+    }
+
+    public async Task SetMaxDisplayMessagesAsync(int value)
+    {
+        await _lock.WaitAsync();
+        try
+        {
+            _config.Performance.MaxDisplayMessages = value;
         }
         finally
         {

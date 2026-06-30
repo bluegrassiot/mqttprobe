@@ -65,6 +65,15 @@
                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
                     Rate limit for inbound messages. Messages exceeding this limit are dropped.
                 </MudText>
+
+                <MudNumericField T="int" Label="Max displayed messages"
+                                 Value="@SettingsStore.Config.Performance.MaxDisplayMessages"
+                                 ValueChanged="@OnMaxDisplayMessagesChanged"
+                                 Min="10" Max="10000" Step="100"
+                                 Variant="Variant.Outlined" Class="mt-3" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    Maximum messages shown in the payload browser. Higher values may slow rendering.
+                </MudText>
             </MudPaper>
         </MudItem>
 
@@ -136,5 +145,10 @@
     private async Task OnMaxMessagesPerSecondChanged(int value)
     {
         await SettingsStore.SetMaxMessagesPerSecondAsync(value);
+    }
+
+    private async Task OnMaxDisplayMessagesChanged(int value)
+    {
+        await SettingsStore.SetMaxDisplayMessagesAsync(value);
     }
 }

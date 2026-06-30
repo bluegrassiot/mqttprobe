@@ -92,6 +92,30 @@ public class SettingsTests : BunitTestContext
     }
 
     [Test]
+    public void MaxDisplayedMessages_Field_Renders()
+    {
+        var cut = Render<Settings>();
+
+        var numericFields = cut.FindComponents<MudNumericField<int>>();
+        numericFields.Should().Contain(f => f.Instance.Label == "Max displayed messages");
+    }
+
+    [Test]
+    public async Task MaxDisplayedMessages_Change_UsesNewSetter()
+    {
+        _mockStore.SetMaxDisplayMessagesAsync(Arg.Any<int>()).Returns(Task.CompletedTask);
+        var cut = Render<Settings>();
+
+        var numericFields = cut.FindComponents<MudNumericField<int>>();
+        var maxDisplayed = numericFields.First(f => f.Instance.Label == "Max displayed messages");
+        maxDisplayed.Find("input").Change("300");
+
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        await _mockStore.Received(1).SetMaxDisplayMessagesAsync(300);
+    }
+
+    [Test]
     public void Account_ChangePassword_ButtonHasHref()
     {
         var cut = Render<Settings>();

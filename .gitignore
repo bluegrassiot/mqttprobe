@@ -286,3 +286,5 @@ appsettings.Local.json
 /.claude
 /.obsidian
 /docs/superpowers
+/profile-output/
+/.opencode/

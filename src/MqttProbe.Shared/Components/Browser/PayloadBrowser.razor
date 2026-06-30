@@ -1,7 +1,9 @@
+@using System.Globalization
+@using MqttProbe.Services.Configuration
 @inject IMessageStoreManager MessageStoreManager
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@using System.Globalization
+@inject ISettingsStore SettingsStore
 @using System.Text.Json
 @using System.Xml.Linq
 @implements IAsyncDisposable
@@ -223,7 +225,7 @@ else
 @code {
     [Inject] public required IClipboardService Clipboard { get; set; }
 
-    private const int MaxMessageCount = 500;
+    private int MaxMessageCount => SettingsStore.Config.Performance.MaxDisplayMessages;
     internal string? _searchStringTerm;
     private List<MqttMessage> _messageList = [];
     private MqttMessage? _selectedMessage;
@@ -231,6 +233,7 @@ else
     private JsonTreeView? _jsonTreeView;
     internal bool _disposed;
     private DateTime _lastMessageTimestamp;
+    private int _lastAppliedMaxCount;
     private MessageStore? _currentSelectedStore;
     private bool _newestFirst = true;
     private bool CanNavigatePrevious => _selectedMessage != null && _messageList.IndexOf(_selectedMessage) >= 1;
@@ -245,7 +248,8 @@ else
             var messages = await MessageStoreManager.GetMessagesForSelectedTopic();
             if (_disposed) return;
 
-            var list = messages.Take(MaxMessageCount).ToList();
+            var maxCount = MaxMessageCount;
+            var list = messages.Take(maxCount).ToList();
             if (!_newestFirst)
                 list.Reverse();
             var newestTimestamp = list.Count > 0 ? list[0].DateTimeReceived : DateTime.MinValue;
@@ -256,12 +260,15 @@ else
                 _currentSelectedStore = currentStore;
                 _selectedMessage = null;
             }
-            else if (newestTimestamp <= _lastMessageTimestamp && list.Count == _messageList.Count)
+            else if (newestTimestamp <= _lastMessageTimestamp
+                     && list.Count == _messageList.Count
+                     && maxCount == _lastAppliedMaxCount)
             {
                 return;
             }
 
             _lastMessageTimestamp = newestTimestamp;
+            _lastAppliedMaxCount = maxCount;
             _messageList = list;
             // Guard against the circuit being torn down between the _disposed check
             // above and the actual invocation — ObjectDisposedException is expected here.

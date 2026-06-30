@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Models.Chart;
+using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
+using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Shared.Tests.TestHelpers;
@@ -13,6 +15,7 @@ namespace MqttProbe.Shared.Tests.Components.Browser;
 public class PayloadBrowserTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
+    private ISettingsStore _mockSettingsStore = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -21,6 +24,10 @@ public class PayloadBrowserTests : BunitTestContext
         _mockMsgStore.GetMessagesForSelectedTopic()
             .Returns(Task.FromResult<IEnumerable<MqttMessage>>(Array.Empty<MqttMessage>()));
         Services.AddSingleton(_mockMsgStore);
+
+        _mockSettingsStore = Substitute.For<ISettingsStore>();
+        _mockSettingsStore.Config.Returns(new AppConfiguration());
+        Services.AddSingleton(_mockSettingsStore);
 
         Services.AddSingleton(Substitute.For<IDialogService>());
         Services.AddSingleton(Substitute.For<ISnackbar>());
@@ -56,6 +63,26 @@ public class PayloadBrowserTests : BunitTestContext
 
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("sensor/temp"));
         cut.Markup.Should().NotContain("Showing latest");
+    }
+
+    [Test]
+    public void MessageList_WithConfiguredMaxDisplayMessages_ShowsCustomTruncationWarning()
+    {
+        _mockSettingsStore.Config.Returns(new AppConfiguration
+        {
+            Performance = new PerformanceSettings { MaxDisplayMessages = 3 }
+        });
+        var messages = Enumerable.Range(0, 5)
+            .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
+            .ToList();
+        _mockMsgStore.GetMessagesForSelectedTopic()
+            .Returns(Task.FromResult<IEnumerable<MqttMessage>>(messages));
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Showing latest 3"));
+        cut.FindAll(".payload-row").Should().HaveCount(3);
     }
 
     [Test]

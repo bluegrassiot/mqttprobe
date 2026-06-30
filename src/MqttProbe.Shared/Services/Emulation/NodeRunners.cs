@@ -69,6 +69,8 @@ public class SparkplugNodeRunner(
     ILogger logger) : INodeRunner
 {
     private readonly Dictionary<Guid, WaveformState> _states = [];
+    private Dictionary<string, ulong>? _nodeAliases;
+    private Dictionary<string, Dictionary<string, ulong>>? _deviceAliases;
     private ISparkplugNode? _node;
 
     public Guid NodeId => config.Id;
@@ -84,6 +86,7 @@ public class SparkplugNodeRunner(
             {
                 new("Node Control/Rebirth", DataType.Boolean, false)
             };
+            BuildAliasMaps(nodeMetrics);
             var node = nodeFactory.Create(nodeMetrics, SparkplugSpecificationVersion.Version30);
             await node.Start(BuildNodeOptions(connection, config));
             _node = node;
@@ -155,6 +158,67 @@ public class SparkplugNodeRunner(
             MetricValueType.Int64 => new Metric(metric.Name, DataType.Int64, (long)Math.Round(value)),
             _ => new Metric(metric.Name, DataType.Double, value)
         };
+
+    private void BuildAliasMaps(List<Metric> nodeMetrics)
+    {
+        if (!config.UseMetricAliases)
+        {
+            _nodeAliases = null;
+            _deviceAliases = null;
+            return;
+        }
+
+        // Node-scoped aliases: health metrics + Node Control/Rebirth
+        _nodeAliases = new Dictionary<string, ulong>();
+        ulong alias = 1;
+        foreach (var metric in nodeMetrics)
+        {
+            _nodeAliases[metric.Name!] = alias++;
+        }
+
+        // Device-scoped aliases: per device, starting at 1
+        _deviceAliases = new Dictionary<string, Dictionary<string, ulong>>();
+        foreach (var device in config.Devices)
+        {
+            var deviceMap = new Dictionary<string, ulong>();
+            ulong deviceAlias = 1;
+            foreach (var metric in device.Metrics)
+            {
+                deviceMap[metric.Name] = deviceAlias++;
+            }
+
+            _deviceAliases[device.DeviceId] = deviceMap;
+        }
+
+        ValidateAliasMaps();
+    }
+
+    private void ValidateAliasMaps()
+    {
+        if (_nodeAliases is null) return;
+
+        if (_nodeAliases.Values.Any(v => v == 0))
+            throw new InvalidOperationException(
+                "Node alias map contains alias 0, which is reserved. All aliases must be >= 1.");
+
+        if (_nodeAliases.Values.Distinct().Count() != _nodeAliases.Values.Count)
+            throw new InvalidOperationException(
+                "Node alias map contains duplicate alias values.");
+
+        if (_deviceAliases is not null)
+        {
+            foreach (var (deviceId, aliases) in _deviceAliases)
+            {
+                if (aliases.Values.Any(v => v == 0))
+                    throw new InvalidOperationException(
+                        $"Device '{deviceId}' alias map contains alias 0, which is reserved.");
+
+                if (aliases.Values.Distinct().Count() != aliases.Values.Count)
+                    throw new InvalidOperationException(
+                        $"Device '{deviceId}' alias map contains duplicate alias values.");
+            }
+        }
+    }
 
     internal static SparkplugNodeOptions BuildNodeOptions(Connection connection, EmulatorNodeConfig config)
     {

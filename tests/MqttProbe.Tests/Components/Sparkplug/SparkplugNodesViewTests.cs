@@ -282,6 +282,70 @@ public class SparkplugNodesViewTests : BunitTestContext
 
         cut.Instance.GetGroupFilterForTest().Should().BeNull();
     }
+
+    [Test]
+    public void NodeMetricTable_RendersAliasColumnHeader()
+    {
+        var group = new SpbGroup { };
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        node.Metrics = [new SpbMetricSnapshot("Temp", "double", "20.0000", DateTime.UtcNow, 42UL)];
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+
+        cut.Markup.Should().Contain(">Alias<");
+    }
+
+    [Test]
+    public void NodeMetricTable_DisplaysAliasValueWhenPresent()
+    {
+        var group = new SpbGroup { };
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        node.Metrics = [new SpbMetricSnapshot("Temp", "double", "20.0000", DateTime.UtcNow, 42UL)];
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+
+        cut.Markup.Should().Contain("42");
+    }
+
+    [Test]
+    public void NodeMetricTable_DisplaysEmDashWhenAliasNull()
+    {
+        var group = new SpbGroup { };
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        node.Metrics = [new SpbMetricSnapshot("Temp", "double", "20.0000", DateTime.UtcNow)];
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+
+        cut.Markup.Should().Contain("\u2014");
+    }
+
+    [Test]
+    public void DeviceMetricTable_RendersAliasColumnAndValue()
+    {
+        var group = new SpbGroup { };
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        var device = new SpbDevice { DeviceId = "sensor-A", NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        device.Metrics = [new SpbMetricSnapshot("Voltage", "double", "220.0000", DateTime.UtcNow, 7UL)];
+        node.Devices["sensor-A"] = device;
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+        cut.FindAll(".spb-device-row").First(r => r.TextContent.Contains("sensor-A")).Click();
+
+        cut.Markup.Should().Contain(">Alias<");
+        cut.Markup.Should().Contain("7");
+    }
 }
 
 [TestFixture]

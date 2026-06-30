@@ -43,4 +43,5 @@ public class EmulatorNodeConfig
     public GenericPayloadFormat PayloadFormat { get; set; } = GenericPayloadFormat.Json;
     public string TopicTemplate { get; set; } = "{group}/{node}/{device}/{metric}";
     public List<EmulatorDeviceConfig> Devices { get; set; } = [];
+    public bool UseMetricAliases { get; set; }
 }

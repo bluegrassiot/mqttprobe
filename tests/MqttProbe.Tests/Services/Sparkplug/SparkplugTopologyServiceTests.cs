@@ -205,6 +205,54 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
+    public async Task NBIRTH_PreservesAliasOnSnapshot()
+    {
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(("Temp", 42, 10, 20.0)));
+
+        var node = _service.Groups["g"].Nodes["n"];
+        node.Metrics.Single().Alias.Should().Be(42UL);
+    }
+
+    [Test]
+    public async Task NBIRTH_NullAliasWhenZero()
+    {
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(("Temp", 0, 10, 20.0)));
+
+        var node = _service.Groups["g"].Nodes["n"];
+        node.Metrics.Single().Alias.Should().BeNull();
+    }
+
+    [Test]
+    public async Task NDATA_PreservesAliasOnSnapshot()
+    {
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(("Temp", 42, 10, 20.0)));
+        await Fire("spBv1.0/g/NDATA/n", SpbPayload(("", 42, 10, 25.0)));
+
+        _service.Groups["g"].Nodes["n"].Metrics.Single().Alias.Should().Be(42UL);
+    }
+
+    [Test]
+    public async Task DBIRTH_PreservesAliasOnSnapshot()
+    {
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload());
+        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(("Voltage", 7, 10, 220.0)));
+
+        var device = _service.Groups["g"].Nodes["n"].Devices["d1"];
+        device.Metrics.Single().Alias.Should().Be(7UL);
+    }
+
+    [Test]
+    public async Task DDATA_PreservesAliasOnSnapshot()
+    {
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload());
+        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(("Current", 99, 10, 1.5)));
+        await Fire("spBv1.0/g/DDATA/n/d1", SpbPayload(("", 99, 10, 2.0)));
+
+        var device = _service.Groups["g"].Nodes["n"].Devices["d1"];
+        device.Metrics.Single().Alias.Should().Be(99UL);
+    }
+
+    [Test]
     public async Task NDATA_UnknownAlias_DoesNotAddOrUpdateMetric()
     {
         await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(("Temp", 0, 10, 20.0)));

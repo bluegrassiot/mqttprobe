@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
@@ -12,6 +13,7 @@ using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Sparkplug;
 using SparkplugNet.Core.Enumerations;
 using SparkplugNet.Core.Node;
+using SparkplugNet.VersionB;
 using SparkplugNet.VersionB.Data;
 
 namespace MqttProbe.Shared.Tests.Services.Emulation;
@@ -942,5 +944,97 @@ public class EmulationServiceTests
         capturedKnownMetrics!.All(m => m.Alias is not null and not 0).Should().BeTrue();
         publishedMetrics!.All(m => m.Alias is not null and not 0).Should().BeTrue();
         deviceMetrics["Device-1"].All(m => m.Alias is not null and not 0).Should().BeTrue();
+    }
+
+    [Test]
+    public void SparkplugNet_Metric_AliasIsSettableAndSerializes()
+    {
+        // SparkplugNet uses an internal PayloadConverter → ProtoBufPayload → PayloadHelper
+        // pipeline for serialization. ProtoBuf.Serializer.Serialize does not work directly
+        // with the public Metric type (no protobuf-net contract). We exercise the real path.
+        var metric = new Metric("Test", DataType.Double, 42.0);
+        metric.Alias = 7;
+
+        metric.Alias.Should().Be(7UL);
+
+        var bytes = SerializeMetricThroughPayload(metric);
+        var roundtripped = DeserializePayloadToMetric(bytes);
+
+        roundtripped.Name.Should().Be("Test");
+        roundtripped.Alias.Should().Be(7UL);
+    }
+
+    [Test]
+    public void SparkplugNet_Metric_NameNull_OmitsFieldInSerialization()
+    {
+        // The SparkplugB spec requires NDATA/DDATA to carry alias only, with no name.
+        // Metric.Name = null must cause the name field to be absent from the serialized
+        // payload — not present as an empty string.
+        var metric = new Metric("Test", DataType.Double, 42.0);
+        metric.Alias = 7;
+        metric.Name = null!; // Data mode: alias-only
+
+        var bytesWithName = SerializeMetricThroughPayload(new Metric("Test", DataType.Double, 42.0) { Alias = 7 });
+        var bytesNullName = SerializeMetricThroughPayload(metric);
+
+        // Null name must serialize to fewer bytes than a set name (field omitted).
+        bytesNullName.Length.Should().BeLessThan(bytesWithName.Length,
+            "Name=null must omit the name field from the serialized payload");
+
+        // Round-trip: alias must survive.
+        var roundtripped = DeserializePayloadToMetric(bytesNullName);
+        roundtripped.Alias.Should().Be(7UL);
+    }
+
+    /// <summary>
+    /// Serializes a single <see cref="Metric"/> through SparkplugNet's internal
+    /// Payload → ProtoBufPayload → byte[] pipeline using reflection.
+    /// </summary>
+    private static byte[] SerializeMetricThroughPayload(Metric metric)
+    {
+        var payload = new Payload();
+        payload.Metrics.Add(metric);
+
+        var sparkplugAsm = typeof(Metric).Assembly;
+        var converterType = sparkplugAsm.GetType("SparkplugNet.VersionB.PayloadConverter")!;
+        var protoPayloadType = sparkplugAsm.GetType("SparkplugNet.VersionB.ProtoBuf.ProtoBufPayload")!;
+        var helperType = sparkplugAsm.GetType("SparkplugNet.Core.PayloadHelper")!;
+
+        var convertMethod = converterType.GetMethod("ConvertVersionBPayload",
+            BindingFlags.Public | BindingFlags.Static,
+            null, new[] { typeof(Payload) }, null)!;
+        var protoPayload = convertMethod.Invoke(null, new object[] { payload })!;
+
+        var serializeMethod = helperType
+            .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+            .First(m => m.Name == "Serialize" && m.GetParameters().Length == 1);
+        var genericSerialize = serializeMethod.MakeGenericMethod(protoPayloadType);
+
+        return (byte[])genericSerialize.Invoke(null, new object[] { protoPayload })!;
+    }
+
+    /// <summary>
+    /// Deserializes bytes through SparkplugNet's internal pipeline and returns
+    /// the first <see cref="Metric"/> from the resulting payload.
+    /// </summary>
+    private static Metric DeserializePayloadToMetric(byte[] data)
+    {
+        var sparkplugAsm = typeof(Metric).Assembly;
+        var converterType = sparkplugAsm.GetType("SparkplugNet.VersionB.PayloadConverter")!;
+        var protoPayloadType = sparkplugAsm.GetType("SparkplugNet.VersionB.ProtoBuf.ProtoBufPayload")!;
+        var helperType = sparkplugAsm.GetType("SparkplugNet.Core.PayloadHelper")!;
+
+        var deserializeMethod = helperType
+            .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+            .First(m => m.Name == "Deserialize" && m.GetParameters().Length == 1);
+        var genericDeserialize = deserializeMethod.MakeGenericMethod(protoPayloadType);
+        var protoPayload = genericDeserialize.Invoke(null, new object[] { data })!;
+
+        var convertMethod = converterType.GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .First(m => m.Name == "ConvertVersionBPayload"
+                        && m.GetParameters()[0].ParameterType != typeof(Payload));
+        var payload = (Payload)convertMethod.Invoke(null, new object[] { protoPayload })!;
+
+        return payload.Metrics[0];
     }
 }

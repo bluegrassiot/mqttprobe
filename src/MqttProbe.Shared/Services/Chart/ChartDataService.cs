@@ -89,7 +89,7 @@ public class ChartDataService(
             var topic = e.ApplicationMessage.Topic;
             var decoded = payloadDecoder.Decode(e);
             var payload = decoded.Payload;
-            if (!TryExtractFields(payload, out var fields))
+            if (!TryExtractFields(payload, decoded.AliasNames, out var fields))
                 return Task.CompletedTask;
 
             registry.Update(topic, fields);
@@ -106,7 +106,10 @@ public class ChartDataService(
         return Task.CompletedTask;
     }
 
-    private bool TryExtractFields(string? payload, out IReadOnlyDictionary<string, ExtractedField> fields)
+    private bool TryExtractFields(
+        string? payload,
+        IReadOnlyDictionary<ulong, string>? aliasNames,
+        out IReadOnlyDictionary<string, ExtractedField> fields)
     {
         fields = new Dictionary<string, ExtractedField>();
         if (string.IsNullOrEmpty(payload))
@@ -114,7 +117,7 @@ public class ChartDataService(
 
         try
         {
-            fields = extractor.Extract(payload);
+            fields = extractor.Extract(payload, aliasNames);
         }
         catch
         {

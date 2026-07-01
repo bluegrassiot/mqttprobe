@@ -30,7 +30,16 @@ public class MessageStoreManagerTests
         _mockLogger = Substitute.For<ILogger<MessageStoreManager>>();
         var mockSettings = Substitute.For<ISettingsStore>();
         mockSettings.Config.Returns(new AppConfiguration());
-        _messageStoreManager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, Substitute.For<IUxTelemetryService>());
+        var mockDecoder = Substitute.For<IPayloadDecoder>();
+        mockDecoder.Decode(Arg.Any<MqttApplicationMessageReceivedEventArgs>())
+            .Returns(x =>
+            {
+                var e = (MqttApplicationMessageReceivedEventArgs)x[0];
+                var seg = e.ApplicationMessage.PayloadSegment;
+                var payload = seg.Count > 0 ? System.Text.Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count) : string.Empty;
+                return new DecodedPayload(payload, DetectedPayloadFormat.PlainText);
+            });
+        _messageStoreManager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, Substitute.For<IUxTelemetryService>(), mockDecoder);
     }
 
     [TearDown]

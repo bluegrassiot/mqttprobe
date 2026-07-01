@@ -4,6 +4,8 @@ using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Chart;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Sparkplug;
 
 namespace MqttProbe.Shared.Tests.Services.Chart;
 
@@ -31,7 +33,16 @@ public class ChartDataServiceTests
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => _handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        _service = new ChartDataService(_mockClient, _extractor, _registry, _mockSettingsStore);
+        var mockDecoder = Substitute.For<IPayloadDecoder>();
+        mockDecoder.Decode(Arg.Any<MqttApplicationMessageReceivedEventArgs>())
+            .Returns(x =>
+            {
+                var e = (MqttApplicationMessageReceivedEventArgs)x[0];
+                var seg = e.ApplicationMessage.PayloadSegment;
+                var payload = seg.Count > 0 ? System.Text.Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count) : string.Empty;
+                return new DecodedPayload(payload, DetectedPayloadFormat.PlainText);
+            });
+        _service = new ChartDataService(_mockClient, mockDecoder, _extractor, _registry, _mockSettingsStore);
     }
 
     [TearDown]

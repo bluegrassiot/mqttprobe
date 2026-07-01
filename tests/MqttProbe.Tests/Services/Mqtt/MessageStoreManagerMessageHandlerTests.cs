@@ -32,7 +32,7 @@ public class MessageStoreManagerMessageHandlerTests
         _mockLogger = Substitute.For<ILogger<MessageStoreManager>>();
         var mockSettings = Substitute.For<ISettingsStore>();
         mockSettings.Config.Returns(new AppConfiguration());
-        _manager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, Substitute.For<IUxTelemetryService>());
+        _manager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, Substitute.For<IUxTelemetryService>(), CreateMockDecoder());
 
         _capturedHandler = null;
         _mockClient.When(x =>
@@ -63,6 +63,20 @@ public class MessageStoreManagerMessageHandlerTests
 
     private Task Fire(string topic, string payload = "") =>
         _capturedHandler!(MakeArgs(topic, payload));
+
+    private static IPayloadDecoder CreateMockDecoder()
+    {
+        var decoder = Substitute.For<IPayloadDecoder>();
+        decoder.Decode(Arg.Any<MqttApplicationMessageReceivedEventArgs>())
+            .Returns(x =>
+            {
+                var e = (MqttApplicationMessageReceivedEventArgs)x[0];
+                var seg = e.ApplicationMessage.PayloadSegment;
+                var payload = seg.Count > 0 ? System.Text.Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count) : string.Empty;
+                return new DecodedPayload(payload, DetectedPayloadFormat.PlainText);
+            });
+        return decoder;
+    }
 
     [Test]
     public async Task MessageReceived_PlainText_StoresInCorrectTopicNode()
@@ -248,7 +262,7 @@ public class MessageStoreManagerMessageHandlerTests
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings, Substitute.For<IUxTelemetryService>());
+        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings, Substitute.For<IUxTelemetryService>(), CreateMockDecoder());
         await manager.Start();
 
         // Fire 3 messages immediately — only the first should be permitted in the 1-second window.
@@ -270,7 +284,7 @@ public class MessageStoreManagerMessageHandlerTests
         mockSettings.Config.Returns(config);
 
         using var manager = new MessageStoreManager(Substitute.For<IManagedMqttClient>(),
-            Substitute.For<ILogger<MessageStoreManager>>(), mockSettings, Substitute.For<IUxTelemetryService>());
+            Substitute.For<ILogger<MessageStoreManager>>(), mockSettings, Substitute.For<IUxTelemetryService>(), CreateMockDecoder());
 
         config.Performance.MaxStoredMessages = 25;
 
@@ -290,7 +304,7 @@ public class MessageStoreManagerMessageHandlerTests
         settings.Config.Returns(config);
 
         var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
-            settings, Substitute.For<IUxTelemetryService>());
+            settings, Substitute.For<IUxTelemetryService>(), CreateMockDecoder());
         manager.Start().GetAwaiter().GetResult();
         return (manager, handler!, settings);
     }
@@ -456,7 +470,7 @@ public class MessageStoreManagerMessageHandlerTests
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings, Substitute.For<IUxTelemetryService>());
+        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings, Substitute.For<IUxTelemetryService>(), CreateMockDecoder());
         await manager.Start();
 
         await handler!(MakeArgs("before", "x"));

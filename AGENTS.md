@@ -13,6 +13,12 @@
 - Inline comments explain non-obvious why, not restate what.
 - Comments are acceptable when they clarify messy CSS/Razor markup, complex regex, or hard-to-name structure.
 
+## Styles
+
+- Avoid inline styles; use separate CSS files.
+- For Razor pages and components, use the companion `.razor.css` file.
+- When modifying files that already contain inline styles, extract them into the appropriate CSS file.
+
 ## Verification
 
 - Run tests with `dotnet test tests/MqttProbe.Tests`.

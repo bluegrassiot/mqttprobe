@@ -206,10 +206,7 @@
             && !string.IsNullOrWhiteSpace(nameEl.GetString()))
             return false;
 
-        if (!element.TryGetProperty("alias", out var aliasEl)
-            || aliasEl.ValueKind != JsonValueKind.Number
-            || !aliasEl.TryGetUInt64(out var aliasVal)
-            || aliasVal == 0)
+        if (!TryGetAliasValue(element, out var aliasVal) || aliasVal == 0)
             return false;
 
         return aliasNames.ContainsKey(aliasVal);
@@ -221,13 +218,28 @@
         if (aliasNames is null)
             return string.Empty;
 
-        if (element.TryGetProperty("alias", out var aliasEl)
-            && aliasEl.ValueKind == JsonValueKind.Number
-            && aliasEl.TryGetUInt64(out var aliasVal)
+        if (TryGetAliasValue(element, out var aliasVal)
             && aliasNames.TryGetValue(aliasVal, out var resolvedName))
             return resolvedName;
 
         return string.Empty;
+    }
+
+    private static bool TryGetAliasValue(JsonElement element, out ulong alias)
+    {
+        alias = 0;
+        if (!element.TryGetProperty("alias", out var aliasEl))
+            return false;
+
+        if (aliasEl.ValueKind == JsonValueKind.Number)
+            return aliasEl.TryGetUInt64(out alias);
+
+        if (aliasEl.ValueKind == JsonValueKind.String
+            && aliasEl.GetString() is { } aliasStr
+            && ulong.TryParse(aliasStr, NumberStyles.None, CultureInfo.InvariantCulture, out alias))
+            return true;
+
+        return false;
     }
 
     private static bool IsSparkplugDatatypePath(string jsonPath) =>

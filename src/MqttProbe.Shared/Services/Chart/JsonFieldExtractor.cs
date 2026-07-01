@@ -235,11 +235,23 @@ public class JsonFieldExtractor : IJsonFieldExtractor
         alias = 0;
         foreach (var prop in item.EnumerateObject())
         {
-            if (prop is { Name: "alias", Value.ValueKind: JsonValueKind.Number }
+            if (prop is not { Name: "alias" })
+                continue;
+
+            if (prop.Value.ValueKind == JsonValueKind.Number
                 && prop.Value.TryGetUInt64(out var parsedAlias)
                 && parsedAlias != 0)
             {
                 alias = parsedAlias;
+                return true;
+            }
+
+            if (prop.Value.ValueKind == JsonValueKind.String
+                && prop.Value.GetString() is { } aliasStr
+                && ulong.TryParse(aliasStr, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedAliasStr)
+                && parsedAliasStr != 0)
+            {
+                alias = parsedAliasStr;
                 return true;
             }
         }

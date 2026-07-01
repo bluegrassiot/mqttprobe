@@ -41,15 +41,15 @@
                     </div>
                 }
                 <div style="margin-left: @(Depth * 14)px"><span class="json-bracket">}</span></div>
-                @if (ShouldShowAliasAnnotation(Element, AliasNames))
-                {
-                    var resolvedName = GetResolvedAliasName(Element, AliasNames);
-                    <span class="json-alias-annotation"> &rarr; @resolvedName (resolved)</span>
-                }
             }
             else
             {
                 <span class="json-preview">@GetCollapsedPreview(Element)</span>
+            }
+            @if (ShouldShowAliasAnnotation(Element, AliasNames))
+            {
+                var resolvedName = GetResolvedAliasName(Element, AliasNames);
+                <span class="json-alias-annotation"> &rarr; @resolvedName (resolved)</span>
             }
         }
         break;

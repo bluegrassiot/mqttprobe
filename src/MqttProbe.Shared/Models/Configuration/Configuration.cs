@@ -28,6 +28,7 @@ public class UiPreferences
     public string Theme { get; set; } = "dark";
     public string FontFamily { get; set; } = "OpenDyslexic";
     public bool AutoResubscribe { get; set; } = true;
+    public bool EnrichSparkplugAliasNames { get; set; } = true;
 
     public List<string> DismissedHints { get; set; } = [];
 }

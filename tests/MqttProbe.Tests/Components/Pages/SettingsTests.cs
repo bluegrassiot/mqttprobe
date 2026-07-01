@@ -144,4 +144,17 @@ public class SettingsTests : BunitTestContext
 
         cut.Markup.Should().Contain("Version 1.0.0-test");
     }
+
+    [Test]
+    public async Task EnrichSparkplugAliasNames_Toggle_CallsSetter()
+    {
+        _mockStore.SetEnrichSparkplugAliasNamesAsync(Arg.Any<bool>()).Returns(Task.CompletedTask);
+        var cut = Render<Settings>();
+
+        var switches = cut.FindComponents<MudSwitch<bool>>();
+        var enrichSwitch = switches.First(s => s.Instance.Label == "Enrich Sparkplug alias names");
+        await cut.InvokeAsync(() => enrichSwitch.Instance.ValueChanged.InvokeAsync(false));
+
+        await _mockStore.Received(1).SetEnrichSparkplugAliasNamesAsync(false);
+    }
 }

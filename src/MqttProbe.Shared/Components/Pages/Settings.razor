@@ -46,6 +46,20 @@
 
         <MudItem xs="12" md="6">
             <MudPaper Elevation="0" Class="pa-4 app-chrome-panel">
+                <MudText Typo="Typo.h6" Class="mb-3">Sparkplug</MudText>
+
+                <MudSwitch T="bool" Value="@SettingsStore.Config.Ui.EnrichSparkplugAliasNames"
+                           ValueChanged="@OnEnrichAliasNamesChanged"
+                           Color="Color.Primary"
+                           Label="Enrich Sparkplug alias names" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    When enabled, alias-only Sparkplug metrics are annotated with resolved names from the topology.
+                </MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4 app-chrome-panel">
                 <MudText Typo="Typo.h6" Class="mb-3">Performance</MudText>
 
                 <MudNumericField T="int" Label="Max stored messages"
@@ -135,6 +149,11 @@
     private async Task OnAutoResubscribeChanged(bool value)
     {
         await SettingsStore.SetAutoResubscribeAsync(value);
+    }
+
+    private async Task OnEnrichAliasNamesChanged(bool value)
+    {
+        await SettingsStore.SetEnrichSparkplugAliasNamesAsync(value);
     }
 
     private async Task OnMaxStoredMessagesChanged(int value)

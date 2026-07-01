@@ -42,6 +42,7 @@ public interface ISettingsStore
     public Task SetFontFamilyAsync(string fontFamily);
     public Task SetFontAccessibleAsync(bool accessible);
     public Task SetAutoResubscribeAsync(bool autoResubscribe);
+    public Task SetEnrichSparkplugAliasNamesAsync(bool enrich);
     public Task DismissHintAsync(string hintId);
     public bool IsHintDismissed(string hintId);
 
@@ -458,6 +459,13 @@ public class SettingsStore : ISettingsStore
     public async Task SetAutoResubscribeAsync(bool autoResubscribe)
     {
         _config.Ui.AutoResubscribe = autoResubscribe;
+        await SaveAsync();
+        UiPreferencesChanged?.Invoke();
+    }
+
+    public async Task SetEnrichSparkplugAliasNamesAsync(bool enrich)
+    {
+        _config.Ui.EnrichSparkplugAliasNames = enrich;
         await SaveAsync();
         UiPreferencesChanged?.Invoke();
     }

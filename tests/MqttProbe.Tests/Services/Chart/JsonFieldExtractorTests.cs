@@ -248,4 +248,50 @@ public class JsonFieldExtractorTests
         result.Should().ContainKey("a.b.c.d");
         result["a.b.c.d"].Value.Should().Be(42.0);
     }
+
+    // --- Alias-aware extraction tests ---
+
+    [Test]
+    public void Extract_WithAliasMap_ResolvesAliasOnlyMetrics()
+    {
+        var json = """{"metrics":[{"alias":42,"doubleValue":3.14}]}""";
+        var aliasNames = new Dictionary<ulong, string> { [42] = "Flow Rate" };
+        var result = _extractor.Extract(json, aliasNames);
+
+        result.Should().ContainKey("metrics.Flow Rate");
+        result["metrics.Flow Rate"].Value.Should().BeApproximately(3.14, 0.001);
+    }
+
+    [Test]
+    public void Extract_WithNullAliasMap_FallsBackToIndexedPaths()
+    {
+        var json = """{"metrics":[{"alias":42,"doubleValue":3.14}]}""";
+        var result = _extractor.Extract(json, null);
+
+        result.Should().ContainKey("metrics[0].doubleValue");
+        result["metrics[0].doubleValue"].Value.Should().BeApproximately(3.14, 0.001);
+    }
+
+    [Test]
+    public void Extract_WithAliasMap_AliasNotInMap_FallsBackToIndexedPaths()
+    {
+        var json = """{"metrics":[{"alias":99,"doubleValue":1.0}]}""";
+        var aliasNames = new Dictionary<ulong, string> { [42] = "Flow Rate" };
+        var result = _extractor.Extract(json, aliasNames);
+
+        result.Should().ContainKey("metrics[0].doubleValue");
+    }
+
+    [Test]
+    public void Extract_WithAliasMap_MixedNamedAndAliasOnly()
+    {
+        var json = """{"metrics":[{"name":"Pressure","doubleValue":1013.25},{"alias":7,"doubleValue":22.5}]}""";
+        var aliasNames = new Dictionary<ulong, string> { [7] = "Temperature" };
+        var result = _extractor.Extract(json, aliasNames);
+
+        result.Should().ContainKey("metrics.Pressure");
+        result.Should().ContainKey("metrics.Temperature");
+        result.Should().NotContainKey("metrics[0].doubleValue");
+        result.Should().NotContainKey("metrics[1].doubleValue");
+    }
 }

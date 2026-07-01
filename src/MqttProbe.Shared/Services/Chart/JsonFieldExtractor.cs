@@ -8,11 +8,16 @@ public record ExtractedField(double Value, string? ContextJson = null);
 public interface IJsonFieldExtractor
 {
     public IReadOnlyDictionary<string, ExtractedField> Extract(string jsonPayload);
+    public IReadOnlyDictionary<string, ExtractedField> Extract(string jsonPayload, IReadOnlyDictionary<ulong, string>? aliasNames);
 }
 
 public class JsonFieldExtractor : IJsonFieldExtractor
 {
-    public IReadOnlyDictionary<string, ExtractedField> Extract(string jsonPayload)
+    public IReadOnlyDictionary<string, ExtractedField> Extract(string jsonPayload) =>
+        Extract(jsonPayload, null);
+
+    public IReadOnlyDictionary<string, ExtractedField> Extract(
+        string jsonPayload, IReadOnlyDictionary<ulong, string>? aliasNames)
     {
         var result = new Dictionary<string, ExtractedField>();
         if (string.IsNullOrWhiteSpace(jsonPayload)) return result;
@@ -25,7 +30,7 @@ public class JsonFieldExtractor : IJsonFieldExtractor
         try
         {
             using var doc = JsonDocument.Parse(jsonPayload);
-            Walk(doc.RootElement, "", result);
+            Walk(doc.RootElement, "", result, aliasNames);
         }
         catch
         {
@@ -34,16 +39,19 @@ public class JsonFieldExtractor : IJsonFieldExtractor
         return result;
     }
 
-    private static void Walk(JsonElement element, string prefix, Dictionary<string, ExtractedField> result)
+    private static void Walk(
+        JsonElement element, string prefix,
+        Dictionary<string, ExtractedField> result,
+        IReadOnlyDictionary<ulong, string>? aliasNames)
     {
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
-                WalkObject(element, prefix, result);
+                WalkObject(element, prefix, result, aliasNames);
                 break;
 
             case JsonValueKind.Array:
-                WalkArray(element, prefix, result);
+                WalkArray(element, prefix, result, aliasNames);
                 break;
 
             case JsonValueKind.Number:
@@ -64,13 +72,19 @@ public class JsonFieldExtractor : IJsonFieldExtractor
         }
     }
 
-    private static void WalkObject(JsonElement element, string prefix, Dictionary<string, ExtractedField> result)
+    private static void WalkObject(
+        JsonElement element, string prefix,
+        Dictionary<string, ExtractedField> result,
+        IReadOnlyDictionary<ulong, string>? aliasNames)
     {
         foreach (var prop in element.EnumerateObject())
-            Walk(prop.Value, BuildChildPath(prefix, prop.Name), result);
+            Walk(prop.Value, BuildChildPath(prefix, prop.Name), result, aliasNames);
     }
 
-    private static void WalkArray(JsonElement element, string prefix, Dictionary<string, ExtractedField> result)
+    private static void WalkArray(
+        JsonElement element, string prefix,
+        Dictionary<string, ExtractedField> result,
+        IReadOnlyDictionary<ulong, string>? aliasNames)
     {
         if (TryExtractNamedValueArray(element, out var pairs))
         {
@@ -80,9 +94,27 @@ public class JsonFieldExtractor : IJsonFieldExtractor
             return;
         }
 
+        if (aliasNames is not null
+            && TryExtractAliasValueArray(element, aliasNames, out var aliasPairs))
+        {
+            foreach (var (name, value, contextJson) in aliasPairs)
+                result[BuildChildPath(prefix, name)] = new ExtractedField(value, contextJson);
+
+            return;
+        }
+
+        if (aliasNames is not null
+            && TryExtractMixedValueArray(element, aliasNames, out var mixedPairs))
+        {
+            foreach (var (name, value, contextJson) in mixedPairs)
+                result[BuildChildPath(prefix, name)] = new ExtractedField(value, contextJson);
+
+            return;
+        }
+
         var index = 0;
         foreach (var item in element.EnumerateArray())
-            Walk(item, $"{prefix}[{index++}]", result);
+            Walk(item, $"{prefix}[{index++}]", result, aliasNames);
     }
 
     private static string BuildChildPath(string prefix, string name) =>
@@ -130,6 +162,89 @@ public class JsonFieldExtractor : IJsonFieldExtractor
         }
 
         return sawNamedMetric;
+    }
+
+    private static bool TryExtractAliasValueArray(
+        JsonElement array,
+        IReadOnlyDictionary<ulong, string> aliasNames,
+        out List<(string name, double value, string? contextJson)> pairs)
+    {
+        pairs = [];
+        var sawAliasMetric = false;
+        foreach (var item in array.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+                return false;
+
+            if (!TryGetMetricAlias(item, out var alias))
+                return false;
+
+            if (!aliasNames.TryGetValue(alias, out var resolvedName))
+                return false;
+
+            sawAliasMetric = true;
+
+            if (!TryGetMetricValue(item, out var value))
+                continue;
+
+            pairs.Add((resolvedName, value, item.GetRawText()));
+        }
+
+        return sawAliasMetric;
+    }
+
+    private static bool TryExtractMixedValueArray(
+        JsonElement array,
+        IReadOnlyDictionary<ulong, string> aliasNames,
+        out List<(string name, double value, string? contextJson)> pairs)
+    {
+        pairs = [];
+        var sawResolvable = false;
+        foreach (var item in array.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+                return false;
+
+            string? resolvedName = null;
+            if (TryGetMetricName(item, out var metricName))
+            {
+                resolvedName = metricName;
+            }
+            else if (TryGetMetricAlias(item, out var alias)
+                     && aliasNames.TryGetValue(alias, out var aliasName))
+            {
+                resolvedName = aliasName;
+            }
+
+            if (resolvedName is null)
+                return false;
+
+            sawResolvable = true;
+
+            if (!TryGetMetricValue(item, out var value))
+                continue;
+
+            pairs.Add((resolvedName, value, item.GetRawText()));
+        }
+
+        return sawResolvable;
+    }
+
+    private static bool TryGetMetricAlias(JsonElement item, out ulong alias)
+    {
+        alias = 0;
+        foreach (var prop in item.EnumerateObject())
+        {
+            if (prop is { Name: "alias", Value.ValueKind: JsonValueKind.Number }
+                && prop.Value.TryGetUInt64(out var parsedAlias)
+                && parsedAlias != 0)
+            {
+                alias = parsedAlias;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool TryGetMetricName(JsonElement item, out string name)

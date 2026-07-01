@@ -37,10 +37,15 @@
                     var chartPath = GetChildChartPath(childPath, JsonPath, prop.Name, metricName);
                     <div class="json-row" style="margin-left: @((Depth + 1) * 14)px">
                         <span class="json-key">"@prop.Name"</span><span class="json-colon">: </span><JsonTreeNode Element="prop.Value" Depth="@(Depth + 1)" AutoExpandDepth="@AutoExpandDepth"
-                              JsonPath="@chartPath" SeriesName="@GetChildSeriesName(prop.Name, metricName)" OnAddToChart="OnAddToChart"/>
+                              JsonPath="@chartPath" SeriesName="@GetChildSeriesName(prop.Name, metricName)" OnAddToChart="OnAddToChart" AliasNames="@AliasNames"/>
                     </div>
                 }
                 <div style="margin-left: @(Depth * 14)px"><span class="json-bracket">}</span></div>
+                @if (ShouldShowAliasAnnotation(Element, AliasNames))
+                {
+                    var resolvedName = GetResolvedAliasName(Element, AliasNames);
+                    <span class="json-alias-annotation"> &rarr; @resolvedName (resolved)</span>
+                }
             }
             else
             {
@@ -83,7 +88,7 @@
                     var itemPath = $"{JsonPath}[{i}]";
                     <div class="json-row" style="margin-left: @((Depth + 1) * 14)px">
                         <JsonTreeNode Element="item" Depth="@(Depth + 1)" AutoExpandDepth="@AutoExpandDepth"
-                                      JsonPath="@itemPath" OnAddToChart="OnAddToChart"/>@(!isLast ? "," : "")
+                                      JsonPath="@itemPath" OnAddToChart="OnAddToChart" AliasNames="@AliasNames"/>@(!isLast ? "," : "")
                     </div>
                 }
                 <div style="margin-left: @(Depth * 14)px"><span class="json-bracket">]</span></div>
@@ -135,6 +140,7 @@
     [Parameter] public string JsonPath { get; set; } = "";
     [Parameter] public string? SeriesName { get; set; }
     [Parameter] public EventCallback<ChartFieldSelection> OnAddToChart { get; set; }
+    [Parameter] public IReadOnlyDictionary<ulong, string>? AliasNames { get; set; }
 
     private bool _isExpanded;
     private bool _initialized;
@@ -187,6 +193,41 @@
 
         var name = nameElement.GetString();
         return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
+
+    private static bool ShouldShowAliasAnnotation(
+        JsonElement element, IReadOnlyDictionary<ulong, string>? aliasNames)
+    {
+        if (aliasNames is null)
+            return false;
+
+        if (element.TryGetProperty("name", out var nameEl)
+            && nameEl.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(nameEl.GetString()))
+            return false;
+
+        if (!element.TryGetProperty("alias", out var aliasEl)
+            || aliasEl.ValueKind != JsonValueKind.Number
+            || !aliasEl.TryGetUInt64(out var aliasVal)
+            || aliasVal == 0)
+            return false;
+
+        return aliasNames.ContainsKey(aliasVal);
+    }
+
+    private static string GetResolvedAliasName(
+        JsonElement element, IReadOnlyDictionary<ulong, string>? aliasNames)
+    {
+        if (aliasNames is null)
+            return string.Empty;
+
+        if (element.TryGetProperty("alias", out var aliasEl)
+            && aliasEl.ValueKind == JsonValueKind.Number
+            && aliasEl.TryGetUInt64(out var aliasVal)
+            && aliasNames.TryGetValue(aliasVal, out var resolvedName))
+            return resolvedName;
+
+        return string.Empty;
     }
 
     private static bool IsSparkplugDatatypePath(string jsonPath) =>

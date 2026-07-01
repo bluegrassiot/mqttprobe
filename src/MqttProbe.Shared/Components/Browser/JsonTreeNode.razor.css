@@ -72,3 +72,10 @@
     font-size: 0.78rem;
 }
 
+.json-alias-annotation {
+    color: var(--mud-palette-text-secondary);
+    font-style: italic;
+    font-size: 0.85em;
+    margin-left: 4px;
+}
+

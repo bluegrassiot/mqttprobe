@@ -111,7 +111,7 @@
             </div>
             @if (payloadType == PayloadType.Json)
             {
-                <JsonTreeView @ref="_jsonTreeView" Json="@msg.Payload" OnAddToChart="HandleAddToChart"/>
+                <JsonTreeView @ref="_jsonTreeView" Json="@msg.Payload" AliasNames="@msg.AliasNames" OnAddToChart="HandleAddToChart"/>
             }
             else if (payloadType == PayloadType.Xml)
             {

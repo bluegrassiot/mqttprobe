@@ -6,7 +6,7 @@
     case JsonValueKind.Object:
     {
         var props = Element.EnumerateObject().ToList();
-        var metricName = TryGetMetricName(Element);
+        var metricName = TryGetMetricName(Element, AliasNames);
         if (props.Count == 0)
         {
             <span class="json-bracket">{ }</span>
@@ -186,13 +186,19 @@
         return string.IsNullOrEmpty(prefix) ? metricName : $"{prefix}.{metricName}";
     }
 
-    private static string? TryGetMetricName(JsonElement element)
+    private static string? TryGetMetricName(JsonElement element, IReadOnlyDictionary<ulong, string>? aliasNames = null)
     {
-        if (!element.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String)
-            return null;
+        if (element.TryGetProperty("name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String)
+        {
+            var name = nameElement.GetString();
+            if (!string.IsNullOrWhiteSpace(name))
+                return name;
+        }
 
-        var name = nameElement.GetString();
-        return string.IsNullOrWhiteSpace(name) ? null : name;
+        if (aliasNames is not null && TryGetAliasValue(element, out var aliasVal))
+            return aliasNames.TryGetValue(aliasVal, out var resolvedName) ? resolvedName : null;
+
+        return null;
     }
 
     private static bool ShouldShowAliasAnnotation(

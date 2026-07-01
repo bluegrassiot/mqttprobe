@@ -94,27 +94,33 @@ public class JsonFieldExtractor : IJsonFieldExtractor
             return;
         }
 
+        var didAliasExtraction = false;
+
         if (aliasNames is not null
             && TryExtractAliasValueArray(element, aliasNames, out var aliasPairs))
         {
             foreach (var (name, value, contextJson) in aliasPairs)
                 result[BuildChildPath(prefix, name)] = new ExtractedField(value, contextJson);
 
-            return;
+            didAliasExtraction = true;
         }
-
-        if (aliasNames is not null
-            && TryExtractMixedValueArray(element, aliasNames, out var mixedPairs))
+        else if (aliasNames is not null
+                 && TryExtractMixedValueArray(element, aliasNames, out var mixedPairs))
         {
             foreach (var (name, value, contextJson) in mixedPairs)
                 result[BuildChildPath(prefix, name)] = new ExtractedField(value, contextJson);
 
-            return;
+            didAliasExtraction = true;
         }
 
+        // Always add indexed entries for backward compatibility with
+        // chart configurations that use raw array-index paths.
         var index = 0;
         foreach (var item in element.EnumerateArray())
-            Walk(item, $"{prefix}[{index++}]", result, aliasNames);
+            Walk(item, $"{prefix}[{index++}]", result, null);
+
+        if (didAliasExtraction)
+            return;
     }
 
     private static string BuildChildPath(string prefix, string name) =>

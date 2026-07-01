@@ -291,7 +291,12 @@ public class JsonFieldExtractorTests
 
         result.Should().ContainKey("metrics.Pressure");
         result.Should().ContainKey("metrics.Temperature");
-        result.Should().NotContainKey("metrics[0].doubleValue");
-        result.Should().NotContainKey("metrics[1].doubleValue");
+
+        // Indexed entries are also present for backward compatibility with
+        // chart configurations that use raw array-index paths.
+        result.Should().ContainKey("metrics[0].doubleValue");
+        result["metrics[0].doubleValue"].Value.Should().BeApproximately(1013.25, 0.001);
+        result.Should().ContainKey("metrics[1].doubleValue");
+        result["metrics[1].doubleValue"].Value.Should().BeApproximately(22.5, 0.001);
     }
 }

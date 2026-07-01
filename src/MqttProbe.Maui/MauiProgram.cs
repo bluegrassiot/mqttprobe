@@ -75,6 +75,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
         builder.Services.AddScoped<IChartDataService, ChartDataService>();
         builder.Services.AddSingleton<ISparkplugTopologyService, SparkplugTopologyService>();
+        builder.Services.AddSingleton<IPayloadDecoder, PayloadDecoder>();
         builder.Services.AddScoped<IThemes, Themes>();
 
         return builder.Build();

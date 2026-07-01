@@ -21,6 +21,7 @@ public interface IChartDataService : IDisposable
 
 public class ChartDataService(
     IManagedMqttClient client,
+    IPayloadDecoder payloadDecoder,
     IJsonFieldExtractor extractor,
     IChartFieldRegistry registry,
     ISettingsStore settingsStore,
@@ -86,7 +87,8 @@ public class ChartDataService(
         try
         {
             var topic = e.ApplicationMessage.Topic;
-            var payload = PayloadDecoder.GetPayloadStr(e);
+            var decoded = payloadDecoder.Decode(e);
+            var payload = decoded.Payload;
             if (!TryExtractFields(payload, out var fields))
                 return Task.CompletedTask;
 

@@ -33,6 +33,7 @@ public class MessageStoreManager : IMessageStoreManager
     private readonly ILogger<MessageStoreManager> _logger;
     private readonly ISettingsStore _settingsStore;
     private readonly IUxTelemetryService _telemetry;
+    private readonly IPayloadDecoder _payloadDecoder;
     private readonly object _rateLimiterSync = new();
     private FixedWindowRateLimiter _rateLimiter;
 
@@ -46,12 +47,13 @@ public class MessageStoreManager : IMessageStoreManager
     private int _totalMessageCount;
 
     public MessageStoreManager(IManagedMqttClient client, ILogger<MessageStoreManager> logger,
-        ISettingsStore settingsStore, IUxTelemetryService telemetry)
+        ISettingsStore settingsStore, IUxTelemetryService telemetry, IPayloadDecoder payloadDecoder)
     {
         _client = client;
         _logger = logger;
         _settingsStore = settingsStore;
         _telemetry = telemetry;
+        _payloadDecoder = payloadDecoder;
         _rateLimiter = BuildRateLimiter(settingsStore.Config.Performance.MaxMessagesPerSecond);
         settingsStore.PerformanceSettingsChanged += OnPerformanceSettingsChanged;
     }
@@ -260,7 +262,7 @@ public class MessageStoreManager : IMessageStoreManager
             var firstSlash = topic.IndexOf('/');
             var rootKey = firstSlash >= 0 ? topic[..firstSlash] : topic;
 
-            decodedPayload = PayloadDecoder.Decode(arg);
+            decodedPayload = _payloadDecoder.Decode(arg);
             message = new MqttMessage(decodedPayload.Payload, topic,
                 arg.ApplicationMessage.Retain, arg.ApplicationMessage.QualityOfServiceLevel);
 

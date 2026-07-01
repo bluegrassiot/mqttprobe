@@ -121,6 +121,7 @@ builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
 builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
 builder.Services.AddScoped<IChartDataService, ChartDataService>();
 builder.Services.AddScoped<ISparkplugTopologyService, SparkplugTopologyService>();
+builder.Services.AddScoped<IPayloadDecoder, PayloadDecoder>();
 builder.Services.AddScoped<IThemes, Themes>();
 
 var app = builder.Build();

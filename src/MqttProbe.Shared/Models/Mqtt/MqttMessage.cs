@@ -36,4 +36,6 @@ public class MqttMessage
         get => _dateTimeReceived;
         init => _dateTimeReceived = value == default ? DateTime.UtcNow : value;
     }
+
+    public IReadOnlyDictionary<ulong, string>? AliasNames { get; init; }
 }

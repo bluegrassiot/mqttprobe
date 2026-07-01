@@ -17,6 +17,8 @@ public interface IMessageStoreManager : IDisposable
     public MessageStore? SelectedMessageStore { get; set; }
     public bool IsListening { get; }
     public int MaxStoredMessages { get; }
+    public int MaxTopicNodes { get; }
+    public long GetVersion();
     public Task<IEnumerable<MqttMessage>> GetMessagesForSelectedTopic();
     public Task ClearAllMessages();
     public Task Stop();
@@ -27,7 +29,7 @@ public interface IMessageStoreManager : IDisposable
 
 public class MessageStoreManager : IMessageStoreManager
 {
-    private const int MaxTopicNodes = 10_000;
+    private const int DefaultMaxTopicNodes = 10_000;
 
     private readonly IManagedMqttClient _client;
     private readonly ILogger<MessageStoreManager> _logger;
@@ -45,6 +47,7 @@ public class MessageStoreManager : IMessageStoreManager
     private readonly Lock _lifecycleSync = new();
     private readonly Queue<MessageStore> _retentionOrder = new();
     private int _totalMessageCount;
+    private long _version;
 
     public MessageStoreManager(IManagedMqttClient client, ILogger<MessageStoreManager> logger,
         ISettingsStore settingsStore, IUxTelemetryService telemetry, IPayloadDecoder payloadDecoder)
@@ -59,6 +62,10 @@ public class MessageStoreManager : IMessageStoreManager
     }
 
     public int MaxStoredMessages => _settingsStore.Config.Performance.MaxStoredMessages;
+
+    public int MaxTopicNodes => DefaultMaxTopicNodes;
+
+    public long GetVersion() => Volatile.Read(ref _version);
 
     public int TotalStoredMessages
     {
@@ -162,6 +169,7 @@ public class MessageStoreManager : IMessageStoreManager
             _nodeLimitLogged = false;
             _rateLimitLogged = false;
             Interlocked.Exchange(ref _droppedMessageCount, 0);
+            Interlocked.Increment(ref _version);
         }
 
         return Task.CompletedTask;
@@ -202,7 +210,10 @@ public class MessageStoreManager : IMessageStoreManager
             var subTopics = parent.SubTopics ??= new ConcurrentDictionary<string, MessageStore>();
             child = subTopics.GetOrAdd(levelKey, candidate);
             if (ReferenceEquals(child, candidate))
+            {
                 Interlocked.Increment(ref _totalNodeCount);
+                Interlocked.Increment(ref _version);
+            }
         }
 
         if (hasChildren)
@@ -217,6 +228,7 @@ public class MessageStoreManager : IMessageStoreManager
         store.Messages.Enqueue(message);
         _retentionOrder.Enqueue(store);
         _totalMessageCount++;
+        Interlocked.Increment(ref _version);
         TrimToLimit();
     }
 
@@ -264,7 +276,10 @@ public class MessageStoreManager : IMessageStoreManager
 
             decodedPayload = _payloadDecoder.Decode(arg);
             message = new MqttMessage(decodedPayload.Payload, topic,
-                arg.ApplicationMessage.Retain, arg.ApplicationMessage.QualityOfServiceLevel);
+                arg.ApplicationMessage.Retain, arg.ApplicationMessage.QualityOfServiceLevel)
+            {
+                AliasNames = decodedPayload.AliasNames
+            };
 
             lock (_storeSync)
             {
@@ -279,7 +294,10 @@ public class MessageStoreManager : IMessageStoreManager
                     var candidate = new MessageStore { Topic = rootKey, FullTopic = rootKey };
                     messageStore = MessageStores.GetOrAdd(rootKey, candidate);
                     if (ReferenceEquals(messageStore, candidate))
+                    {
                         Interlocked.Increment(ref _totalNodeCount);
+                        Interlocked.Increment(ref _version);
+                    }
                 }
 
                 if (firstSlash >= 0)

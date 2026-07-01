@@ -1,4 +1,5 @@
 using System.Text;
+using Google.Protobuf;
 using MQTTnet;
 using MQTTnet.Client;
 using MqttProbe.Models.Configuration;
@@ -10,6 +11,7 @@ using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using MqttProbe.Services.Telemetry;
+using Org.Eclipse.Tahu.Protobuf;
 
 namespace MqttProbe.Shared.Tests.Services.Sparkplug;
 
@@ -192,5 +194,115 @@ public class PayloadDecoderTests
     {
         const string json = "[1,2,3]";
         _decoder.GetPayloadStr(MakeArgs("sensor/data", json)).Should().Be(json);
+    }
+
+    // --- Alias resolution tests ---
+
+    private static byte[] BuildSparkplugPayload(string? name, ulong alias, double doubleValue)
+    {
+        var payload = new Payload { Timestamp = 1234567890 };
+        var metric = new Payload.Types.Metric
+        {
+            Datatype = 10, // double
+            DoubleValue = doubleValue
+        };
+        if (name is not null)
+            metric.Name = name;
+        if (alias != 0)
+            metric.Alias = alias;
+        payload.Metrics.Add(metric);
+        return payload.ToByteArray();
+    }
+
+    [Test]
+    public void Decode_Sparkplug_AliasOnlyMetric_ResolvesName()
+    {
+        var node = new SpbNode { NodeId = "eon1", GroupId = "group" };
+        node.AliasMap[42] = "Flow Rate";
+        var group = new SpbGroup { GroupId = "group" };
+        group.Nodes["eon1"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["group"] = group });
+
+        var bytes = BuildSparkplugPayload(null, 42, 3.14);
+        var args = MakeArgsBytes("spBv1.0/group/NDATA/eon1", bytes);
+        var result = _decoder.Decode(args);
+
+        result.AliasNames.Should().NotBeNull();
+        result.AliasNames![42].Should().Be("Flow Rate");
+    }
+
+    [Test]
+    public void Decode_Sparkplug_SettingOff_ReturnsNullAliasNames()
+    {
+        _mockSettings.Config.Returns(new AppConfiguration
+        {
+            Ui = new UiPreferences { EnrichSparkplugAliasNames = false }
+        });
+        _decoder = new PayloadDecoder(_mockTopology, _mockSettings);
+
+        var node = new SpbNode { NodeId = "eon1", GroupId = "group" };
+        node.AliasMap[42] = "Flow Rate";
+        var group = new SpbGroup { GroupId = "group" };
+        group.Nodes["eon1"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["group"] = group });
+
+        var bytes = BuildSparkplugPayload(null, 42, 3.14);
+        var args = MakeArgsBytes("spBv1.0/group/NDATA/eon1", bytes);
+        var result = _decoder.Decode(args);
+
+        result.AliasNames.Should().BeNull();
+    }
+
+    [Test]
+    public void Decode_Sparkplug_MissingAliasMapping_OmitsMetric()
+    {
+        var node = new SpbNode { NodeId = "eon1", GroupId = "group" };
+        node.AliasMap[7] = "Temperature";
+        var group = new SpbGroup { GroupId = "group" };
+        group.Nodes["eon1"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["group"] = group });
+
+        var bytes = BuildSparkplugPayload(null, 99, 1.0);
+        var args = MakeArgsBytes("spBv1.0/group/NDATA/eon1", bytes);
+        var result = _decoder.Decode(args);
+
+        result.AliasNames.Should().BeNull();
+    }
+
+    [Test]
+    public void Decode_Sparkplug_NamedMetric_NotIncludedInAliasNames()
+    {
+        var node = new SpbNode { NodeId = "eon1", GroupId = "group" };
+        node.AliasMap[5] = "Pressure";
+        var group = new SpbGroup { GroupId = "group" };
+        group.Nodes["eon1"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["group"] = group });
+
+        var bytes = BuildSparkplugPayload("Pressure", 5, 1013.25);
+        var args = MakeArgsBytes("spBv1.0/group/NBIRTH/eon1", bytes);
+        var result = _decoder.Decode(args);
+
+        result.AliasNames.Should().BeNull();
+    }
+
+    [Test]
+    public void Decode_NonSparkplug_ReturnsNullAliasNames()
+    {
+        var args = MakeArgs("sensor/temp", "42.5");
+        var result = _decoder.Decode(args);
+
+        result.AliasNames.Should().BeNull();
+    }
+
+    [Test]
+    public void Decode_Sparkplug_TopologyNotInitialized_ReturnsNullAliasNames()
+    {
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup>());
+
+        var bytes = BuildSparkplugPayload(null, 42, 3.14);
+        var args = MakeArgsBytes("spBv1.0/group/NDATA/eon1", bytes);
+        var result = _decoder.Decode(args);
+
+        result.AliasNames.Should().BeNull();
     }
 }

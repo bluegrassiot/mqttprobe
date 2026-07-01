@@ -458,4 +458,65 @@ public class JsonTreeViewTests : BunitTestContext
         cut.FindAll(".json-preview").Should().HaveCount(1);
         cut.FindAll(".json-key").Select(e => e.TextContent).Should().NotContain("\"z\"");
     }
+
+    // --- Alias annotation tests ---
+
+    [Test]
+    public void AliasAnnotation_RendersForAliasOnlyMetric()
+    {
+        var aliasNames = new Dictionary<ulong, string> { [42] = "Flow Rate" };
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"metrics":[{"alias":42,"doubleValue":3.14}]}""")
+            .Add(x => x.AliasNames, aliasNames));
+        cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        cut.Markup.Should().Contain("→ Flow Rate (resolved)");
+    }
+
+    [Test]
+    public void AliasAnnotation_NotRenderedWhenNamePresent()
+    {
+        var aliasNames = new Dictionary<ulong, string> { [5] = "Pressure" };
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"metrics":[{"name":"Pressure","alias":5,"doubleValue":1013.0}]}""")
+            .Add(x => x.AliasNames, aliasNames));
+        cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        cut.Markup.Should().NotContain("(resolved)");
+    }
+
+    [Test]
+    public void AliasAnnotation_NotRenderedWhenAliasNamesNull()
+    {
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"metrics":[{"alias":42,"doubleValue":3.14}]}""")
+            .Add(x => x.AliasNames, (IReadOnlyDictionary<ulong, string>?)null));
+        cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        cut.Markup.Should().NotContain("(resolved)");
+    }
+
+    [Test]
+    public void AliasAnnotation_NotRenderedWhenAliasNotInMap()
+    {
+        var aliasNames = new Dictionary<ulong, string> { [7] = "Temperature" };
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"metrics":[{"alias":42,"doubleValue":3.14}]}""")
+            .Add(x => x.AliasNames, aliasNames));
+        cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        cut.Markup.Should().NotContain("(resolved)");
+    }
+
+    [Test]
+    public void AliasAnnotation_NotRenderedWhenAliasIsZero()
+    {
+        var aliasNames = new Dictionary<ulong, string> { [0] = "Something" };
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"metrics":[{"alias":0,"doubleValue":1.0}]}""")
+            .Add(x => x.AliasNames, aliasNames));
+        cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        cut.Markup.Should().NotContain("(resolved)");
+    }
 }

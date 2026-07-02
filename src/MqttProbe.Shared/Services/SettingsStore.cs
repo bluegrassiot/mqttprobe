@@ -53,6 +53,7 @@ public interface ISettingsStore
     public Task SetMaxStoredMessagesAsync(int value);
     public Task SetMaxMessagesPerSecondAsync(int value);
     public Task SetMaxDisplayMessagesAsync(int value);
+    public Task SetMaxTopicNodesAsync(int value);
 
     // Auth
     public bool VerifyCredentials(string username, string password);
@@ -423,6 +424,24 @@ public class SettingsStore : ISettingsStore
         try
         {
             _config.Performance.MaxDisplayMessages = value;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        await SaveAsync();
+        PerformanceSettingsChanged?.Invoke();
+    }
+
+    public async Task SetMaxTopicNodesAsync(int value)
+    {
+        if (value < 100) return;
+
+        await _lock.WaitAsync();
+        try
+        {
+            _config.Performance.MaxTopicNodes = value;
         }
         finally
         {

@@ -76,6 +76,7 @@ public static class LucideIcons
     public const string Inbox          = $"<path {S} d='M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/>";
     public const string Folder         = $"<path {S} d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/>";
     public const string Circle         = $"<circle {S} cx='12' cy='12' r='10'/>";
+    public const string Database       = $"<ellipse {S} cx='12' cy='5' rx='9' ry='3'/><path {S} d='M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5'/><path {S} d='M3 12c0 1.66 4 3 9 3s9-1.34 9-3'/>";
     public const string CheckCircle    = $"<path {S} d='M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3'/>";
     public const string Sparkles       = $"<path {S} d='M12 3l1.09 2.36L15.75 6l-2.66 1.09L12 9.75l-1.09-2.66L8.25 6l2.66-1.09L12 3zM5 14l.54 1.09L6.75 15.5 5.54 16.09 5 17.5l-.54-1.41L3.25 15.5l1.21-.41L5 14zM19 2l.54 1.09L20.75 3.5l-1.21.5L19 5.25l-.54-1.25L17.25 3.5l1.21-.41L19 2z'/>";
     public const string Cpu            = $"<rect {S} x='9' y='9' width='6' height='6'/><path {S} d='M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18M3 9h18M3 15h18M15 3v6M15 15v6'/>";

@@ -1,7 +1,5 @@
-using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Security;
 
 namespace MqttProbe.Shared.Tests.Services.Configuration;
 
@@ -181,5 +179,22 @@ public class SettingsStoreTests
         await _store.SetMaxDisplayMessagesAsync(300);
 
         fired.Should().BeFalse("performance setters must not raise the UI event");
+    }
+
+    [Test]
+    public async Task SetMaxTopicNodesAsync_Roundtrips()
+    {
+        await _store.SetMaxTopicNodesAsync(5000);
+
+        _store.Config.Performance.MaxTopicNodes.Should().Be(5000);
+    }
+
+    [Test]
+    public async Task SetMaxTopicNodesAsync_RejectsValuesBelow100()
+    {
+        await _store.SetMaxTopicNodesAsync(5000);
+        await _store.SetMaxTopicNodesAsync(50);
+
+        _store.Config.Performance.MaxTopicNodes.Should().Be(5000);
     }
 }

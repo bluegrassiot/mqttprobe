@@ -1,0 +1,55 @@
+@inject IMessageStoreManager MessageStoreManager
+
+<div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(IsSelected ? "topic-tree-row--selected" : "")"
+     style="padding-left: @(8 + Row.Depth * 16)px; cursor: pointer; min-height: 36px;"
+     @onclick="OnRowClick">
+    @if (Row.HasChildren)
+    {
+        <span @onclick:stopPropagation="true">
+            <MudIconButton Icon="@(Row.IsExpanded ? LucideIcons.ChevronDown : LucideIcons.ChevronRight)"
+                           Size="Size.Small"
+                           OnClick="OnToggleExpand"/>
+        </span>
+    }
+    else
+    {
+        <div style="width: 32px; flex-shrink: 0;"></div>
+    }
+    <MudIcon Icon="@NodeIcon" Size="Size.Small" Color="@NodeColor" Class="mx-1"/>
+    <span class="flex-grow-1">@Row.DisplayName</span>
+    <span class="topic-stat-text" title="@($"{Row.TopicCount:N0} topics, {Row.MessageCount:N0} messages")">
+        T @Row.TopicCount.ToString("N0") · M @Row.MessageCount.ToString("N0")
+    </span>
+</div>
+
+@code {
+    [Parameter] public TopicTreeRowModel Row { get; set; } = null!;
+    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public EventCallback<string> OnExpandToggled { get; set; }
+    [Parameter] public EventCallback<string> OnSelected { get; set; }
+
+    private string NodeIcon => (Row.IsValueBearer, Row.HasChildren) switch
+    {
+        (true, _) => LucideIcons.Database,
+        (false, true) => LucideIcons.Folder,
+        (false, false) => LucideIcons.Circle
+    };
+
+    private Color NodeColor => Row.IsValueBearer
+        ? Color.Success
+        : Row.Depth switch
+        {
+            0 => Color.Primary,
+            1 => Color.Info,
+            _ => Color.Secondary
+        };
+
+    private async Task OnRowClick()
+    {
+        MessageStoreManager.SelectedMessageStore = Row.Store;
+        await OnSelected.InvokeAsync(Row.FullPath);
+    }
+
+    private async Task OnToggleExpand() =>
+        await OnExpandToggled.InvokeAsync(Row.FullPath);
+}

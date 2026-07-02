@@ -116,7 +116,28 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
             if (_logger?.IsEnabled(LogLevel.Information) == true)
                 _logger.LogInformation("Rebirth command received for node {GroupId}/{NodeId}",
                     args.GroupIdentifier, args.EdgeNodeIdentifier);
-            await _node.Rebirth(_knownMetrics);
+
+            if (!_node.IsConnected)
+            {
+                _logger?.LogWarning(
+                    "Rebirth command ignored for node {GroupId}/{NodeId}: client is not connected. " +
+                    "The broker already published the NDEATH LWT; NBIRTH will be sent on reconnect.",
+                    args.GroupIdentifier, args.EdgeNodeIdentifier);
+                return;
+            }
+
+            try
+            {
+                await _node.Rebirth(_knownMetrics);
+            }
+            catch (MQTTnet.Client.MqttClientDisconnectedException ex)
+            {
+                _logger?.LogWarning(ex,
+                    "Rebirth aborted for node {GroupId}/{NodeId}: client disconnected mid-rebirth. " +
+                    "NBIRTH will be sent on reconnect.",
+                    args.GroupIdentifier, args.EdgeNodeIdentifier);
+                return;
+            }
 
             // Rebirth internally replaces knownMetrics with a plain KnownMetricStorage,
             // losing alias tracking. Restore alias-aware storage for subsequent NDATA.

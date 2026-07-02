@@ -56,6 +56,27 @@
     border-radius: 4px;
 }
 
+::deep .topic-tree-row--selected {
+    background: rgba(249, 115, 22, 0.12);
+    border-left: 2px solid #f97316;
+}
+
+::deep .topic-stat-text {
+    font-size: 0.7rem;
+    opacity: 0.6;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: 8px;
+    cursor: default;
+}
+
+::deep .topic-stat-legend {
+    font-size: 0.65rem;
+    opacity: 0.45;
+    white-space: nowrap;
+    margin-left: auto;
+}
+
 .topic-tree-wrap ::deep .topic-depth-0 .mud-treeview-item-label { font-weight: 600; }
 .topic-tree-wrap ::deep .topic-depth-1 .mud-treeview-item-label { opacity: 0.95; }
 .topic-tree-wrap ::deep .topic-depth-2 .mud-treeview-item-label { opacity: 0.88; }

@@ -168,7 +168,7 @@ else
         <div style="flex:1 1 auto; min-height:0; overflow:hidden; display:flex; flex-direction:column;">
             <MudTable HorizontalScrollbar="true" Dense="true"
                   SelectedItem="_selectedMessage" SelectedItemChanged="MessageChanged" T="MqttMessage"
-                  Filter="new Func<MqttMessage, bool>(FilterFunc)" Items="_messageList"
+                  Filter="@_filterFunc" Items="_messageList"
                   Hover="true" Breakpoint="Breakpoint.None" Virtualize="true" FixedHeader="true" Striped="true"
                   RowClassFunc="GetRowClass">
             <ToolBarContent>
@@ -231,44 +231,63 @@ else
     private MqttMessage? _selectedMessage;
     private Timer? _updateTimer;
     private JsonTreeView? _jsonTreeView;
+    private Func<MqttMessage, bool> _filterFunc = null!;
     internal bool _disposed;
     private DateTime _lastMessageTimestamp;
     private int _lastAppliedMaxCount;
-    private MessageStore? _currentSelectedStore;
+    private string? _lastTopicPath;
+    private long _lastVersion;
     private bool _newestFirst = true;
     private bool CanNavigatePrevious => _selectedMessage != null && _messageList.IndexOf(_selectedMessage) >= 1;
     private bool CanNavigateNext => _selectedMessage != null && _messageList.IndexOf(_selectedMessage) < _messageList.Count - 1;
 
     protected override Task OnInitializedAsync()
     {
+        _filterFunc = FilterFunc;
         _updateTimer = new Timer(async _ =>
         {
             if (_disposed) return;
-            var currentStore = MessageStoreManager.SelectedMessageStore;
-            var messages = await MessageStoreManager.GetMessagesForSelectedTopic();
+            var currentTopic = MessageStoreManager.SelectedMessageStore?.FullTopic;
+            var currentVersion = MessageStoreManager.GetSelectedTopicVersion();
             if (_disposed) return;
 
-            var maxCount = MaxMessageCount;
-            var list = messages.Take(maxCount).ToList();
-            if (!_newestFirst)
-                list.Reverse();
-            var newestTimestamp = list.Count > 0 ? list[0].DateTimeReceived : DateTime.MinValue;
-
-            var storeChanged = !ReferenceEquals(currentStore, _currentSelectedStore);
-            if (storeChanged)
+            if (string.IsNullOrEmpty(currentTopic))
             {
-                _currentSelectedStore = currentStore;
+                var needsRefresh = _messageList.Count > 0 || _selectedMessage != null;
+                _messageList = [];
                 _selectedMessage = null;
-            }
-            else if (newestTimestamp <= _lastMessageTimestamp
-                     && list.Count == _messageList.Count
-                     && maxCount == _lastAppliedMaxCount)
-            {
+                _lastTopicPath = null;
+                _lastVersion = 0;
+                _lastAppliedMaxCount = 0;
+                if (needsRefresh)
+                {
+                    try { await InvokeAsync(StateHasChanged); }
+                    catch (Exception) when (_disposed) { }
+                }
                 return;
             }
 
-            _lastMessageTimestamp = newestTimestamp;
+            var maxCount = MaxMessageCount;
+            if (currentTopic == _lastTopicPath
+                && currentVersion == _lastVersion
+                && maxCount == _lastAppliedMaxCount)
+                return;
+
+            var messages = await MessageStoreManager.GetRecentMessagesAsync(currentTopic, maxCount);
+            if (_disposed) return;
+
+            var topicChanged = currentTopic != _lastTopicPath;
+            _lastTopicPath = currentTopic;
+            _lastVersion = currentVersion;
             _lastAppliedMaxCount = maxCount;
+
+            if (topicChanged)
+                _selectedMessage = null;
+
+            var list = _newestFirst
+                ? messages.ToList()
+                : messages.Reverse().ToList();
+            _lastMessageTimestamp = list.Count > 0 ? list[0].DateTimeReceived : DateTime.MinValue;
             _messageList = list;
             // Guard against the circuit being torn down between the _disposed check
             // above and the actual invocation — ObjectDisposedException is expected here.

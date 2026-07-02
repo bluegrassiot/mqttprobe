@@ -88,6 +88,15 @@
                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
                     Maximum messages shown in the payload browser. Higher values may slow rendering.
                 </MudText>
+
+                <MudNumericField T="int" Label="Max topic nodes"
+                                 Value="@SettingsStore.Config.Performance.MaxTopicNodes"
+                                 ValueChanged="@OnMaxTopicNodesChanged"
+                                 Min="100" Max="100000" Step="1000"
+                                 Variant="Variant.Outlined" Class="mt-3" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    Maximum topic tree nodes (prevents runaway topic cardinality).
+                </MudText>
             </MudPaper>
         </MudItem>
 
@@ -169,5 +178,10 @@
     private async Task OnMaxDisplayMessagesChanged(int value)
     {
         await SettingsStore.SetMaxDisplayMessagesAsync(value);
+    }
+
+    private async Task OnMaxTopicNodesChanged(int value)
+    {
+        await SettingsStore.SetMaxTopicNodesAsync(value);
     }
 }

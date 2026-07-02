@@ -20,6 +20,8 @@ public class PerformanceSettings
     public int MaxMessagesPerSecond { get; set; } = 50_000;
 
     public int MaxDisplayMessages { get; set; } = 500;
+
+    public int MaxTopicNodes { get; set; } = 10_000;
 }
 
 public class UiPreferences

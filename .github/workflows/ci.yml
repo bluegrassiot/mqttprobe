@@ -150,8 +150,11 @@ jobs:
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
             echo "value=latest" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "value=pr-${{ github.event.number }}" >> "$GITHUB_OUTPUT"
           else
-            echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            # Docker tags cannot contain slashes (e.g. release/v1.0.1)
+            echo "value=$(echo "${{ github.ref_name }}" | tr '/' '-')" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build and push

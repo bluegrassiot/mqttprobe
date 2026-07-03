@@ -29,7 +29,11 @@ public class JsonFieldExtractor : IJsonFieldExtractor
 
         try
         {
-            using var doc = JsonDocument.Parse(jsonPayload);
+            // Collapse consecutive commas emitted by malformed upstream publishers (e.g. ", , ," → ",")
+            jsonPayload = System.Text.RegularExpressions.Regex.Replace(jsonPayload, @",(\s*,)+", ",");
+
+            var options = new JsonDocumentOptions { AllowTrailingCommas = true };
+            using var doc = JsonDocument.Parse(jsonPayload, options);
             Walk(doc.RootElement, "", result, aliasNames);
         }
         catch

@@ -188,6 +188,7 @@ jobs:
       contents: read
     with:
       version: ${{ github.ref_name }}
+    secrets: inherit
 
   # ── Create GitHub Release ───────────────────────────────────────────────────
 
@@ -246,7 +247,7 @@ jobs:
             | `mqttprobe-blazor-linux-arm64-${{ github.ref_name }}.zip` | Blazor Web — single binary, Linux arm64 (Raspberry Pi, NAS) |
             | `mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip` | Blazor Web — single exe, Windows x64 |
             | `mqttprobe-windows-${{ github.ref_name }}.zip` | Windows desktop app — MAUI (unsigned, SmartScreen warning expected) |
-            | `mqttprobe-macos-${{ github.ref_name }}.zip` | macOS desktop app — MAUI Mac Catalyst, universal Intel + Apple Silicon (unsigned, see below) |
+            | `mqttprobe-macos-${{ github.ref_name }}.zip` | macOS desktop app — universal Intel + Apple Silicon, signed & notarized |
             | `docker pull bluegrassiot/mqttprobe:${{ github.ref_name }}` | Docker image (amd64 + arm64, no runtime install needed) |
 
             ### Quick Start
@@ -262,14 +263,8 @@ jobs:
             MqttProbe.Web.exe
             ```
 
-            ### macOS: opening an unsigned app
+            ### macOS
 
-            This build is not notarized. After unzipping, the first launch will be blocked:
-
-            1. Double-click the app — macOS will say it cannot verify the developer.
-            2. Open **System Settings → Privacy & Security**, scroll down, and click **"Open Anyway"**.
-            3. Launch the app again and confirm.
-
-            Terminal alternative: `xattr -cr /path/to/MQTTProbe.app`
+            The macOS app is signed and notarized by Apple — unzip and run, no security prompts.
 
             See [README](https://github.com/bluegrassiot/mqttprobe#readme) for full documentation.

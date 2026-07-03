@@ -92,6 +92,7 @@ internal static class Program
             .SetTitle("")
             .SetWidth(1280)
             .SetHeight(800)
+            .SetMaximized(true)
             .SetIconFile(Path.Combine(AppContext.BaseDirectory, "Assets", iconFile))
             .RegisterWindowCreatedHandler((_, _) =>
                 WindowsTitleBar.ApplyBrandTint(app.MainWindow.WindowHandle));

@@ -84,6 +84,8 @@ internal static class Program
 
         var app = builder.Build();
 
+        settingsStore.LoadAsync(secretStorage).GetAwaiter().GetResult();
+
         // .ico for the Win32 window/titlebar; .png for the Linux WM/dock.
         var iconFile = OperatingSystem.IsWindows() ? "icon.ico" : "icon.png";
         app.MainWindow

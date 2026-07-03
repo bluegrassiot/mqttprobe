@@ -37,7 +37,8 @@
                     var chartPath = GetChildChartPath(childPath, JsonPath, prop.Name, metricName);
                     <div class="json-row" style="margin-left: @((Depth + 1) * 14)px">
                         <span class="json-key">"@prop.Name"</span><span class="json-colon">: </span><JsonTreeNode Element="prop.Value" Depth="@(Depth + 1)" AutoExpandDepth="@AutoExpandDepth"
-                              JsonPath="@chartPath" SeriesName="@GetChildSeriesName(prop.Name, metricName)" OnAddToChart="OnAddToChart" AliasNames="@AliasNames"/>
+                              JsonPath="@chartPath" SeriesName="@GetChildSeriesName(prop.Name, metricName)" OnAddToChart="OnAddToChart" AliasNames="@AliasNames"
+                              SuppressChartButton="@ShouldSuppressChildChartButton(prop.Name, JsonPath, Element)"/>
                     </div>
                 }
                 <div style="margin-left: @(Depth * 14)px"><span class="json-bracket">}</span></div>
@@ -141,12 +142,15 @@
     [Parameter] public string? SeriesName { get; set; }
     [Parameter] public EventCallback<ChartFieldSelection> OnAddToChart { get; set; }
     [Parameter] public IReadOnlyDictionary<ulong, string>? AliasNames { get; set; }
+    [Parameter] public bool SuppressChartButton { get; set; }
 
     private bool _isExpanded;
     private bool _initialized;
 
     private bool IsExpanded => _isExpanded;
-    private bool ShouldShowChartButton => OnAddToChart.HasDelegate && !IsSparkplugDatatypePath(JsonPath);
+    private bool ShouldShowChartButton => OnAddToChart.HasDelegate
+        && !SuppressChartButton
+        && !IsSparkplugDatatypePath(JsonPath);
 
     protected override void OnParametersSet()
     {
@@ -251,6 +255,32 @@
     private static bool IsSparkplugDatatypePath(string jsonPath) =>
         jsonPath.EndsWith(".datatype", StringComparison.Ordinal) ||
         string.Equals(jsonPath, "datatype", StringComparison.Ordinal);
+
+    private static bool ShouldSuppressChildChartButton(string propertyName, string parentPath, JsonElement parentElement)
+    {
+        if (!string.Equals(propertyName, "alias", StringComparison.Ordinal))
+            return false;
+
+        if (!IsSparkplugMetricsItemPath(parentPath))
+            return false;
+
+        if (parentElement.ValueKind != JsonValueKind.Object)
+            return false;
+
+        return parentElement.EnumerateObject()
+            .Any(p => IsMetricValueFieldName(p.Name));
+    }
+
+    private static bool IsSparkplugMetricsItemPath(string path)
+    {
+        var lastBracket = path.LastIndexOf('[');
+        if (lastBracket < 0 || !path.EndsWith("]", StringComparison.Ordinal))
+            return false;
+
+        var beforeBracket = path[..lastBracket];
+        return beforeBracket.EndsWith(".metrics", StringComparison.Ordinal)
+               || string.Equals(beforeBracket, "metrics", StringComparison.Ordinal);
+    }
 
     private static bool IsMetricValueFieldName(string propertyName) =>
         propertyName is "value" or "int_value" or "float_value" or "double_value" or "long_value" or "boolean_value"

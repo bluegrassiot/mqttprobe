@@ -36,6 +36,7 @@
     <File Path="scripts/reset-password.py" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/MqttProbe.Desktop/MqttProbe.Desktop.csproj" />
     <Project Path="src/MqttProbe.Maui/MqttProbe.Maui.csproj">
       <Deploy Solution="*|Any CPU" />
     </Project>

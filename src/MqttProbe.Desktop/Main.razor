@@ -1,0 +1,15 @@
+@namespace MqttProbe.Desktop
+@using Microsoft.AspNetCore.Components.Authorization
+@using MqttProbe.Components.Layout
+@using MqttProbe.Components.Pages
+@using Index = MqttProbe.Components.Pages.Index
+<CascadingAuthenticationState>
+<Router AppAssembly="@typeof(Main).Assembly"
+        AdditionalAssemblies="[typeof(Index).Assembly]"
+        NotFoundPage="typeof(NotFoundPage)">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)"/>
+        <FocusOnNavigate RouteData="@routeData" Selector="h1"/>
+    </Found>
+</Router>
+</CascadingAuthenticationState>

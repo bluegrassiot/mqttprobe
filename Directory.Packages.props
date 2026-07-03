@@ -11,7 +11,8 @@
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
     <PackageVersion Include="MessagePack" Version="3.1.7" />
-    <PackageVersion Include="MudBlazor" Version="9.5.0" />
+    <PackageVersion Include="MudBlazor" Version="9.6.0" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.9" />
     <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.9" />
     <!-- MQTTnet v4 — pinned; SparkplugNet is incompatible with v5 -->
     <PackageVersion Include="MQTTnet" Version="4.3.7.1207" />
@@ -22,6 +23,7 @@
     <!-- ============================================================ -->
     <PackageVersion Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.9" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="10.0.9" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.9" />
@@ -32,6 +34,10 @@
     <PackageVersion Include="Microsoft.Maui.Controls.Compatibility" Version="10.0.80" />
     <PackageVersion Include="Microsoft.Maui.Essentials" Version="10.0.80" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.80" />
+    <!-- ============================================================ -->
+    <!-- Photino                                                       -->
+    <!-- ============================================================ -->
+    <PackageVersion Include="Photino.Blazor" Version="4.0.13" />
     <!-- ============================================================ -->
     <!-- Tests                                                         -->
     <!-- ============================================================ -->

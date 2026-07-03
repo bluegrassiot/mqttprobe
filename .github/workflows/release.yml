@@ -179,11 +179,21 @@ jobs:
           name: maui-windows
           path: publish/mqttprobe-windows-${{ github.ref_name }}.zip
 
+  # ── Build MAUI macOS ────────────────────────────────────────────────────────
+
+  build-maui-macos:
+    name: Build (MAUI macOS)
+    uses: ./.github/workflows/build-macos.yml
+    permissions:
+      contents: read
+    with:
+      version: ${{ github.ref_name }}
+
   # ── Create GitHub Release ───────────────────────────────────────────────────
 
   create-release:
     name: Create Release
-    needs: [build-blazor, build-docker, build-maui-windows]
+    needs: [build-blazor, build-docker, build-maui-windows, build-maui-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -208,6 +218,11 @@ jobs:
         with:
           name: maui-windows
 
+      - name: Download maui-macos
+        uses: actions/download-artifact@v4
+        with:
+          name: maui-macos
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
@@ -217,6 +232,7 @@ jobs:
             mqttprobe-blazor-linux-arm64-${{ github.ref_name }}.zip
             mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip
             mqttprobe-windows-${{ github.ref_name }}.zip
+            mqttprobe-macos-${{ github.ref_name }}.zip
           body: |
             ## MQTT Probe ${{ github.ref_name }}
 
@@ -230,6 +246,7 @@ jobs:
             | `mqttprobe-blazor-linux-arm64-${{ github.ref_name }}.zip` | Blazor Web — single binary, Linux arm64 (Raspberry Pi, NAS) |
             | `mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip` | Blazor Web — single exe, Windows x64 |
             | `mqttprobe-windows-${{ github.ref_name }}.zip` | Windows desktop app — MAUI (unsigned, SmartScreen warning expected) |
+            | `mqttprobe-macos-${{ github.ref_name }}.zip` | macOS desktop app — MAUI Mac Catalyst, universal Intel + Apple Silicon (unsigned, see below) |
             | `docker pull bluegrassiot/mqttprobe:${{ github.ref_name }}` | Docker image (amd64 + arm64, no runtime install needed) |
 
             ### Quick Start
@@ -244,5 +261,15 @@ jobs:
             # Windows bare metal — extract zip and run
             MqttProbe.Web.exe
             ```
+
+            ### macOS: opening an unsigned app
+
+            This build is not notarized. After unzipping, the first launch will be blocked:
+
+            1. Double-click the app — macOS will say it cannot verify the developer.
+            2. Open **System Settings → Privacy & Security**, scroll down, and click **"Open Anyway"**.
+            3. Launch the app again and confirm.
+
+            Terminal alternative: `xattr -cr /path/to/MQTTProbe.app`
 
             See [README](https://github.com/bluegrassiot/mqttprobe#readme) for full documentation.

@@ -1,10 +1,12 @@
-<Project Sdk="Microsoft.NET.Sdk.Razor">
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
     <PropertyGroup>
         <LangVersion>latest</LangVersion>
         <MqttProbeMauiWindowsTargetFrameworks>net10.0-android;net10.0-windows10.0.19041.0</MqttProbeMauiWindowsTargetFrameworks>
         <MqttProbeMauiWindowsTargetFrameworks Condition="'$(MqttProbeMauiWindowsTargetFrameworksOverride)' != ''">$(MqttProbeMauiWindowsTargetFrameworksOverride)</MqttProbeMauiWindowsTargetFrameworks>
-        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+        <MqttProbeMauiMacTargetFrameworks>net10.0-ios;net10.0-maccatalyst</MqttProbeMauiMacTargetFrameworks>
+        <MqttProbeMauiMacTargetFrameworks Condition="'$(MqttProbeMauiMacTargetFrameworksOverride)' != ''">$(MqttProbeMauiMacTargetFrameworksOverride)</MqttProbeMauiMacTargetFrameworks>
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(MqttProbeMauiMacTargetFrameworks)</TargetFrameworks>
         <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(MqttProbeMauiWindowsTargetFrameworks)</TargetFrameworks>
         <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('osx')) AND !$([MSBuild]::IsOSPlatform('windows'))">net10.0-android</TargetFrameworks>
 		<!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
@@ -29,7 +31,7 @@
         <ApplicationTitle>MQTTProbe</ApplicationTitle>
 
         <!-- App Identifier -->
-        <ApplicationId>com.bluegrassiot.mqttprobemaui</ApplicationId>
+        <ApplicationId>com.bluegrassiot.mqttprobe</ApplicationId>
 
         <!-- Versions -->
         <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>

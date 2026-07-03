@@ -190,11 +190,61 @@ jobs:
       version: ${{ github.ref_name }}
     secrets: inherit
 
+  # ── Build Desktop Linux ────────────────────────────────────────────────────
+
+  build-desktop-linux:
+    name: Build (Desktop Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Restore NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
+          restore-keys: nuget-
+
+      - name: Install WebKitGTK
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-0
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        run: >
+          dotnet publish src/MqttProbe.Desktop/MqttProbe.Desktop.csproj
+          -c:Release
+          -r:linux-x64
+          --self-contained
+          -p:Version=${{ steps.version.outputs.value }}
+          --output publish/desktop
+
+      - name: Archive
+        run: |
+          cd publish/desktop
+          zip -r ../../mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux-x64
+          path: mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip
+
   # ── Create GitHub Release ───────────────────────────────────────────────────
 
   create-release:
     name: Create Release
-    needs: [build-blazor, build-docker, build-maui-windows, build-maui-macos]
+    needs: [build-blazor, build-docker, build-desktop-linux, build-maui-windows, build-maui-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -224,6 +274,11 @@ jobs:
         with:
           name: maui-macos
 
+      - name: Download desktop-linux-x64
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-linux-x64
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
@@ -234,6 +289,7 @@ jobs:
             mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip
             mqttprobe-windows-${{ github.ref_name }}.zip
             mqttprobe-macos-${{ github.ref_name }}.zip
+            mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip
           body: |
             ## MQTT Probe ${{ github.ref_name }}
 
@@ -248,6 +304,7 @@ jobs:
             | `mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip` | Blazor Web — single exe, Windows x64 |
             | `mqttprobe-windows-${{ github.ref_name }}.zip` | Windows desktop app — MAUI (unsigned, SmartScreen warning expected) |
             | `mqttprobe-macos-${{ github.ref_name }}.zip` | macOS desktop app — universal Intel + Apple Silicon, signed & notarized |
+            | `mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip` | Linux desktop app — Photino/Blazor, self-contained (requires `libwebkit2gtk-4.1-0`) |
             | `docker pull bluegrassiot/mqttprobe:${{ github.ref_name }}` | Docker image (amd64 + arm64, no runtime install needed) |
 
             ### Quick Start
@@ -261,6 +318,10 @@ jobs:
 
             # Windows bare metal — extract zip and run
             MqttProbe.Web.exe
+
+            # Linux desktop — extract zip, install WebKitGTK, and run
+            sudo apt install libwebkit2gtk-4.1-0
+            chmod +x MqttProbe.Desktop && ./MqttProbe.Desktop
             ```
 
             ### macOS

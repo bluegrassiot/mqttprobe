@@ -213,3 +213,47 @@ jobs:
           name: maui-windows
           path: publish/
           retention-days: 7
+
+  # ── Build Desktop Linux ────────────────────────────────────────────────────
+
+  build-desktop-linux:
+    name: Build (Desktop Linux)
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Restore NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
+          restore-keys: nuget-
+
+      - name: Install WebKitGTK
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-0
+
+      - name: Publish
+        run: >
+          dotnet publish src/MqttProbe.Desktop/MqttProbe.Desktop.csproj
+          -c:Release
+          -r:linux-x64
+          --self-contained
+          --output publish/desktop
+
+      - name: Archive
+        run: |
+          cd publish/desktop
+          zip -r ../../mqttprobe-desktop-linux-x64.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: mqttprobe-desktop-linux-x64.zip
+          retention-days: 7

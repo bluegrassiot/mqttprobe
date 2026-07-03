@@ -127,7 +127,7 @@ public class MainLayoutTests : BunitTestContext
     {
         var cut = RenderLayout();
 
-        cut.Find("img[title='1.0.0-test']").Should().NotBeNull();
+        cut.Find("img[title='Version 1.0.0-test']").Should().NotBeNull();
     }
 
     [Test]

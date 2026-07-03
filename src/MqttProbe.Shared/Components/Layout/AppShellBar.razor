@@ -10,7 +10,7 @@
 @implements IAsyncDisposable
 
 <MudAppBar Fixed="false" Elevation="2" Class="mt-0 app-shell-appbar app-chrome-panel">
-    <MudImage title="@_version" Src="favicon.svg" Height="34" Class="mr-2" />
+    <MudImage title="@($"Version {_version}")" Src="favicon.svg" Height="34" Class="mr-2" />
     <span class="app-wordmark app-wordmark-mqtt">MQTT</span><span class="app-wordmark app-wordmark-probe">Probe</span>
 
     @if (MqttClient.IsConnected && SessionState.SelectedConnection.Host != null)

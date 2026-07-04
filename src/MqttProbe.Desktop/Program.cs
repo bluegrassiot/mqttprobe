@@ -95,7 +95,10 @@ internal static class Program
             .SetMaximized(true)
             .SetIconFile(Path.Combine(AppContext.BaseDirectory, "Assets", iconFile))
             .RegisterWindowCreatedHandler((_, _) =>
-                WindowsTitleBar.ApplyBrandTint(app.MainWindow.WindowHandle));
+            {
+                if (OperatingSystem.IsWindows())
+                    WindowsTitleBar.ApplyBrandTint(app.MainWindow.WindowHandle);
+            });
 
         app.Run();
     }

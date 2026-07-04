@@ -62,6 +62,18 @@
     display: none;
 }
 
+/* Same breakpoint as the connection dialog: below it, text buttons become
+   icon buttons and secondary actions collapse into the overflow menu. */
+@media (max-width: 599px) {
+    .app-actions-wide {
+        display: none;
+    }
+
+    .app-actions-compact {
+        display: flex;
+    }
+}
+
 .logout-action-form {
     display: contents;
 }

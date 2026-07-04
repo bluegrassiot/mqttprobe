@@ -94,6 +94,13 @@
     white-space: nowrap;
 }
 
+/* Long connection names must not crowd out the appbar actions on phones. */
+@media (max-width: 599px) {
+    .mud-appbar .broker-chip .mud-chip-content {
+        max-width: 110px;
+    }
+}
+
 .mud-appbar .status-pulse {
     animation: status-pulse 1.8s ease-in-out infinite;
 }
@@ -226,11 +233,13 @@
     overflow: hidden;
 }
 
-/* Each visible tab panel wrapper must fill the panels area and pass a bounded
+/* The active tab panel wrapper must fill the panels area and pass a bounded
    height down to the tab's content (.tab-panel-content), so that content's
-   flex:1 / min-height:0 children can scroll internally. Inactive panels are
-   hidden via .mud-tab-panel-hidden (display:none) so they don't take space. */
-.app-shell-body .mud-tab-panel[role='tabpanel'] {
+   flex:1 / min-height:0 children can scroll internally. Must target ONLY the
+   active panel: MudBlazor (9.6+) hides inactive panels via
+   `.mud-tabs-panels > .mud-tab-panel { display:none }`, which this rule's
+   higher specificity would otherwise override — rendering every tab at once. */
+.app-shell-body .mud-tab-panel[role='tabpanel'].mud-tab-panel-active {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;

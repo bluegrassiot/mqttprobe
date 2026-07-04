@@ -23,11 +23,23 @@
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
+.connection-dialog-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
 @media (max-width: 599px) {
     .connection-dialog-header {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
         gap: 8px;
+    }
+
+    /* Buttons stay inline as a single row under the selector */
+    .connection-dialog-actions {
+        align-self: flex-end;
     }
 }
 

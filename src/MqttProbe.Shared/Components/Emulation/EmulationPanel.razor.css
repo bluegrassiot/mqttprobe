@@ -191,6 +191,32 @@
 ::deep .emu-metric-field--name { min-width: 160px; flex: 1 1 160px; }
 ::deep .emu-metric-field--num { max-width: 130px; }
 
+/* On phones the header buttons drop their second word (Add Node → Add) so all
+   three stay one line tall; the icons carry the rest of the meaning. */
+@media (max-width: 599px) {
+    .emu-action-word {
+        display: none;
+    }
+}
+
+/* On phones the fixed-width waveform cannot share a line with the fields:
+   it crushes them to nothing and overlaps the name field. Fields take the
+   full width and the preview + delete button wrap to their own line. */
+@media (max-width: 599px) {
+    ::deep .emu-metric-row {
+        flex-wrap: wrap;
+    }
+
+    ::deep .emu-metric-row__fields {
+        flex: 1 1 100%;
+    }
+
+    ::deep .emu-metric-row__side {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
 /* ── Waveform preview (synthetic sketch glyph — not live data) ───────────── */
 
 ::deep .emu-waveform {

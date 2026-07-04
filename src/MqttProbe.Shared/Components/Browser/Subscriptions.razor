@@ -18,13 +18,13 @@
     <AuthorizeView Roles="Admin,Operator">
         <Authorized>
             <MudGrid Spacing="1" Class="mb-2">
-                <MudItem xs="10" Class="d-flex align-center">
+                <MudItem xs="12" sm="10" Class="d-flex align-center">
                     <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_topic" Label="Topic"
                                   Variant="Variant.Outlined" Clearable="true"
                                   Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.ChevronRight"
                                   OnKeyDown="HandleAddKeyDown"/>
                 </MudItem>
-                <MudItem xs="2" Class="d-flex align-center">
+                <MudItem xs="12" sm="2" Class="d-flex align-center">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="app-btn-min"
                                StartIcon="@LucideIcons.Plus"
                                title="Subscribe"

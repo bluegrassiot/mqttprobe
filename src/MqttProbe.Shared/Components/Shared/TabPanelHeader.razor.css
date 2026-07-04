@@ -8,6 +8,10 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    /* On narrow screens the actions drop to their own line instead of
+       clipping past the right edge. Single-line layouts are unaffected. */
+    flex-wrap: wrap;
+    row-gap: 8px;
 }
 
 .app-tabpanel-header__title {

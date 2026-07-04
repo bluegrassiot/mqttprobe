@@ -31,3 +31,18 @@
     min-height: 0;
     overflow-y: auto;
 }
+
+/* On narrow screens the filter field must shrink instead of pushing the
+   Remove button past the table edge. */
+.subs-table-wrap ::deep .mud-table-toolbar {
+    gap: 8px;
+}
+
+.subs-table-wrap ::deep .mud-table-toolbar .mud-input-control {
+    min-width: 0;
+    flex: 1 1 140px;
+}
+
+.subs-table-wrap ::deep .mud-table-toolbar .mud-button-root {
+    flex-shrink: 0;
+}

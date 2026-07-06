@@ -67,7 +67,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISecretStorage>(secretStorage);
 
         var configPath = Path.Combine(FileSystem.Current.AppDataDirectory, "config", "appsettings.json");
-        var settingsStore = new SettingsStore(configPath, null);
+        var isMobile = DeviceInfo.Idiom == DeviceIdiom.Phone || DeviceInfo.Idiom == DeviceIdiom.Tablet;
+        var settingsStore = new SettingsStore(configPath, isMobile, null);
         builder.Services.AddSingleton<ISettingsStore>(settingsStore);
 
         builder.Services.AddScoped<IClipboardService, MauiClipboardService>();

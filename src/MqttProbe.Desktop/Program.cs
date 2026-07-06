@@ -69,7 +69,7 @@ internal static class Program
             "mqttprobe");
         Directory.CreateDirectory(configDir);
         var configPath = Path.Combine(configDir, "appsettings.json");
-        var settingsStore = new SettingsStore(configPath, null);
+        var settingsStore = new SettingsStore(configPath, isMobile: false, logger: null);
         builder.Services.AddSingleton<ISettingsStore>(settingsStore);
 
         builder.Services.AddScoped<IClipboardService, DesktopClipboardService>();

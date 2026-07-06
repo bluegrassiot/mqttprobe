@@ -71,13 +71,15 @@ public class SettingsStore : ISettingsStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
     private readonly SemaphoreSlim _lock = new(1, 1);
+    private readonly bool _isMobile;
 
     private AppConfiguration _config = new();
     private ISecretStorage? _secretStorage;
 
-    public SettingsStore(string configPath, ILogger<SettingsStore>? logger = null)
+    public SettingsStore(string configPath, bool isMobile = false, ILogger<SettingsStore>? logger = null)
     {
         _configPath = configPath;
+        _isMobile = isMobile;
         _logger = logger;
     }
 
@@ -98,6 +100,13 @@ public class SettingsStore : ISettingsStore
             if (!File.Exists(_configPath))
             {
                 _config = new AppConfiguration();
+                if (_isMobile)
+                {
+                    _config.Performance.MaxStoredMessages = 1_000;
+                    _config.Performance.MaxMessagesPerSecond = 1_000;
+                    _config.Performance.MaxTopicNodes = 1_000;
+                    _config.Performance.MaxDisplayMessages = 500;
+                }
                 await SaveCoreAsync();
                 return;
             }

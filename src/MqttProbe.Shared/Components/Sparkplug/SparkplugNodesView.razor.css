@@ -172,9 +172,9 @@
     }
 
     /* Headline: name on the left, value pinned flush-right by an auto margin so
-       values line up in a column. The auto margin also consumes all free space
-       on line 1, which forces the meta fields (order 3-5) onto their own second
-       line. Value keeps its mono font and value colour from the base rules. */
+       values line up in a column. The wrap onto a second line is forced by the
+       ::after break below — margin:auto only right-aligns, it can't wrap.
+       Value keeps its mono font and value colour from the base rules. */
     .spb-split__detail ::deep .spb-td-name {
         order: 1;
         flex: 0 1 auto;

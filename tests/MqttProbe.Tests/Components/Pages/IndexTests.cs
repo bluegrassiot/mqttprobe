@@ -165,6 +165,203 @@ public class IndexTests : BunitTestContext
             .Which.TextContent.Should().Contain("Browser");
     }
 
+    [Test]
+    public void MobileNav_RendersNavElement()
+    {
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mobile-primary-nav").Should().ContainSingle();
+    }
+
+    [Test]
+    public void MobileNav_ShowsPrimaryDestinations()
+    {
+        var cut = Render<IndexPage>();
+
+        var navButtons = cut.FindAll(".mobile-nav-btn");
+        navButtons.Should().Contain(b => b.TextContent.Contains("Browser"));
+        navButtons.Should().Contain(b => b.TextContent.Contains("Charts"));
+        navButtons.Should().Contain(b => b.TextContent.Contains("Publish"));
+    }
+
+    [Test]
+    public void MobileNav_ShowsNodes_WhenTopologyHasGroups()
+    {
+        var group = new SpbGroup { };
+        group.Nodes["n1"] = new SpbNode { NodeId = "n1", GroupId = "g1", Status = SpbNodeStatus.Online };
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["g1"] = group });
+
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mobile-nav-btn")
+            .Should().Contain(b => b.TextContent.Contains("Nodes"));
+    }
+
+    [Test]
+    public void MobileNav_HidesNodes_WhenTopologyEmpty()
+    {
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup>());
+
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mobile-nav-btn")
+            .Should().NotContain(b => b.TextContent.Contains("Nodes"));
+    }
+
+    [Test]
+    public void MoreMenu_RendersActivator()
+    {
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mobile-nav-more").Should().ContainSingle();
+    }
+
+    [Test]
+    public void MoreMenu_SubscriptionsIsUrlAddressable()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=subscriptions");
+
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Subscriptions");
+    }
+
+    [Test]
+    public void MoreMenu_SettingsIsUrlAddressable()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=settings");
+
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Settings");
+    }
+
+    [Test]
+    public void MobileNav_ClickingCharts_ActivatesChartsTab()
+    {
+        var cut = Render<IndexPage>();
+        var nav = Services.GetRequiredService<NavigationManager>();
+
+        var chartsBtn = cut.FindAll(".mobile-nav-btn")
+            .First(b => b.TextContent.Contains("Charts"));
+        chartsBtn.Click();
+
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Charts");
+        nav.Uri.Should().Contain("tab=charts");
+    }
+
+    [Test]
+    public void MobileNav_HidesPublish_ForNonOperator()
+    {
+        AuthorizationContext.SetAuthorized("viewer").SetRoles();
+
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mobile-nav-btn")
+            .Should().NotContain(b => b.TextContent.Contains("Publish"));
+    }
+
+    [Test]
+    [TestCase("charts", "Charts")]
+    [TestCase("subscriptions", "Subscriptions")]
+    [TestCase("publish", "Publish")]
+    [TestCase("emulation", "Emulation")]
+    [TestCase("settings", "Settings")]
+    public void TabRouting_SlugWithNoNodes_ActivatesIntendedTab(string slug, string expectedLabel)
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo($"/?tab={slug}");
+
+        var cut = Render<IndexPage>();
+        var activeTabs = cut.FindAll(".mud-tab[aria-selected='true']");
+        activeTabs.Should().ContainSingle()
+            .Which.TextContent.Should().Contain(expectedLabel);
+    }
+
+    [Test]
+    public void MobileNav_ClickingCharts_NoNodes_ActivatesChartsAndWritesUrl()
+    {
+        var cut = Render<IndexPage>();
+        var nav = Services.GetRequiredService<NavigationManager>();
+
+        var chartsBtn = cut.FindAll(".mobile-nav-btn")
+            .First(b => b.TextContent.Contains("Charts"));
+        chartsBtn.Click();
+
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Charts");
+        nav.Uri.Should().Contain("tab=charts");
+    }
+
+    [Test]
+    public void DesktopTabClick_Charts_NoNodes_WritesCorrectSlug()
+    {
+        var cut = Render<IndexPage>();
+        var nav = Services.GetRequiredService<NavigationManager>();
+
+        var chartsTab = cut.FindAll(".mud-tab")
+            .First(t => t.TextContent.Contains("Charts"));
+        chartsTab.Click();
+
+        nav.Uri.Should().Contain("tab=charts");
+    }
+
+    [Test]
+    public void DesktopTabClick_Subscriptions_NoNodes_WritesCorrectSlug()
+    {
+        var cut = Render<IndexPage>();
+        var nav = Services.GetRequiredService<NavigationManager>();
+
+        var subsTab = cut.FindAll(".mud-tab")
+            .First(t => t.TextContent.Contains("Subscriptions"));
+        subsTab.Click();
+
+        nav.Uri.Should().Contain("tab=subscriptions");
+    }
+
+    [Test]
+    public void TabRouting_NodesSlug_EmptyTopology_DefaultsToBrowser()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=nodes");
+
+        var cut = Render<IndexPage>();
+        var activeTabs = cut.FindAll(".mud-tab[aria-selected='true']");
+        activeTabs.Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Browser");
+    }
+
+    [Test]
+    public void TopologyChanged_PreservesActiveSlugWhenStillVisible()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=charts");
+
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Charts");
+
+        var group = new SpbGroup { };
+        group.Nodes["n1"] = new SpbNode { NodeId = "n1", GroupId = "g1", Status = SpbNodeStatus.Online };
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["g1"] = group });
+        _mockTopology.TopologyChanged += Raise.Event<Action>();
+
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Charts");
+    }
+
 }
 
 [TestFixture]

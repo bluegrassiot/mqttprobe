@@ -23,7 +23,7 @@
                    Color="Color.Error" Class="app-btn-min"
                    Disabled="@(!MessageStoreManager.MessageStores.Any())"
                    OnClick="ClearAllMessages">
-            Clear Messages
+            Clear
         </MudButton>
     </HeaderActions>
 </TabPanelHeader>
@@ -51,19 +51,31 @@
             </div>
         </MudHidden>
         <MudHidden Breakpoint="Breakpoint.MdAndUp">
-            <div class="browser-split-wrap">
-                <MudSplitPanel Class="browser-split-panel" Horizontal="true"
-                               FirstPanelInitialSize="260" MinPanelSize="120"
-                               PanelGap="6" ResetOnDoubleClick="true" Transparent="true">
-                    <FirstPanel>
-                        <TopicBrowser/>
-                    </FirstPanel>
-                    <SecondPanel>
+            <div class="browser-split-wrap browser-split-wrap--mobile">
+                @* Phone layout: topic bar + payload (CSS media query hides the split) *@
+                <div class="browser-mobile-layout">
+                    <MobileTopicBar HasTopics="@MessageStoreManager.MessageStores.Any()"
+                                    OnOpenPicker="OpenMobilePicker"/>
+                    <div class="browser-mobile-payload">
                         <PayloadBrowser/>
-                    </SecondPanel>
-                </MudSplitPanel>
+                    </div>
+                </div>
+                @* Tablet layout: stacked split (CSS media query hides the mobile bar) *@
+                <div class="browser-tablet-layout">
+                    <MudSplitPanel Class="browser-split-panel" Horizontal="true"
+                                   FirstPanelInitialSize="260" MinPanelSize="120"
+                                   PanelGap="6" ResetOnDoubleClick="true" Transparent="true">
+                        <FirstPanel>
+                            <TopicBrowser/>
+                        </FirstPanel>
+                        <SecondPanel>
+                            <PayloadBrowser/>
+                        </SecondPanel>
+                    </MudSplitPanel>
+                </div>
             </div>
         </MudHidden>
+        <TopicPickerOverlay IsOpen="@_mobilePickerOpen" OnClose="CloseMobilePicker"/>
     </ErrorBoundary>
 </div>
 
@@ -73,6 +85,10 @@
     private Timer? _updateTimer;
     private bool _disposed;
     private int _lastCount;
+    private bool _mobilePickerOpen;
+
+    internal void OpenMobilePicker() => _mobilePickerOpen = true;
+    internal void CloseMobilePicker() => _mobilePickerOpen = false;
 
     protected override void OnInitialized()
     {

@@ -39,6 +39,12 @@
     min-height: 0;
 }
 
+@media (max-width: 599px) {
+    .tab-panel-content {
+        padding-bottom: 64px; /* space for fixed mobile nav bar */
+    }
+}
+
 @media (min-width: 600px) {
     ::deep .tab-shell {
         padding: 12px 12px 8px 12px;
@@ -66,5 +72,57 @@
 
     .tab-panel-content {
         padding-top: 8px;
+    }
+}
+
+/* Mobile primary navigation — fixed bottom bar, hidden on desktop */
+.mobile-primary-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1200;
+    background: var(--mud-palette-surface);
+    border-top: 1px solid var(--mud-palette-lines-default);
+    padding: 8px 0 env(safe-area-inset-bottom, 8px);
+}
+
+.mobile-nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 12px;
+    min-height: 44px;
+    border: none;
+    background: transparent;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: color 150ms ease-out;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-nav-btn.active {
+    color: var(--mud-palette-primary);
+    font-weight: 600;
+}
+
+.mobile-nav-btn:hover {
+    color: var(--mud-palette-text-primary);
+}
+
+/* More menu trigger styled like a nav button */
+.mobile-nav-more .mud-icon-root {
+    color: inherit;
+}
+
+/* Hide mobile nav on desktop */
+@media (min-width: 600px) {
+    .mobile-primary-nav {
+        display: none;
     }
 }

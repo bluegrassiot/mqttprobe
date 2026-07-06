@@ -179,6 +179,107 @@ jobs:
           name: maui-windows
           path: publish/mqttprobe-windows-${{ github.ref_name }}.zip
 
+  # ── Build MAUI Android ──────────────────────────────────────────────────────
+
+  build-maui-android:
+    name: Build (MAUI Android)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'microsoft'
+          java-version: '17'
+
+      - name: Restore NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
+          restore-keys: nuget-
+
+      - name: Install MAUI Android workload
+        run: |
+          if ! dotnet workload list | grep -q 'maui-android'; then
+            dotnet workload install maui-android --source https://api.nuget.org/v3/index.json
+          fi
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          # Android versionCode must be a monotonically increasing integer,
+          # otherwise devices refuse to install the update over a prior release.
+          IFS='.-' read -r major minor patch _ <<< "$version"
+          echo "code=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_OUTPUT"
+
+      - name: Decode signing keystore
+        id: keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/mqttprobe.keystore"
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 secret not set — APK will be signed with a debug key and users cannot upgrade across releases. See docs/superpowers/RELEASING_ANDROID.md."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish (release-signed)
+        if: steps.keystore.outputs.available == 'true'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: >
+          dotnet publish src/MqttProbe.Maui/MqttProbe.Maui.csproj
+          -f:net10.0-android
+          -c:Release
+          -p:AndroidPackageFormat=apk
+          -p:ApplicationDisplayVersion=${{ steps.version.outputs.value }}
+          -p:ApplicationVersion=${{ steps.version.outputs.code }}
+          -p:AndroidKeyStore=true
+          -p:AndroidSigningKeyStore=${{ runner.temp }}/mqttprobe.keystore
+          -p:AndroidSigningKeyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          -p:AndroidSigningStorePass=env:ANDROID_KEYSTORE_PASSWORD
+          -p:AndroidSigningKeyPass=env:ANDROID_KEY_PASSWORD
+          --output publish/android
+
+      - name: Publish (debug-signed fallback)
+        if: steps.keystore.outputs.available != 'true'
+        run: >
+          dotnet publish src/MqttProbe.Maui/MqttProbe.Maui.csproj
+          -f:net10.0-android
+          -c:Release
+          -p:AndroidPackageFormat=apk
+          -p:ApplicationDisplayVersion=${{ steps.version.outputs.value }}
+          -p:ApplicationVersion=${{ steps.version.outputs.code }}
+          --output publish/android
+
+      - name: Rename APK
+        run: |
+          apk=$(find publish/android -name '*-Signed.apk' | head -n 1)
+          if [ -z "$apk" ]; then
+            apk=$(find publish/android -name '*.apk' | head -n 1)
+          fi
+          cp "$apk" "mqttprobe-android-${GITHUB_REF_NAME}.apk"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: maui-android
+          path: mqttprobe-android-${{ github.ref_name }}.apk
+
   # ── Build MAUI macOS ────────────────────────────────────────────────────────
 
   build-maui-macos:
@@ -244,7 +345,7 @@ jobs:
 
   create-release:
     name: Create Release
-    needs: [build-blazor, build-docker, build-desktop-linux, build-maui-windows, build-maui-macos]
+    needs: [build-blazor, build-docker, build-desktop-linux, build-maui-windows, build-maui-macos, build-maui-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -274,6 +375,11 @@ jobs:
         with:
           name: maui-macos
 
+      - name: Download maui-android
+        uses: actions/download-artifact@v4
+        with:
+          name: maui-android
+
       - name: Download desktop-linux-x64
         uses: actions/download-artifact@v4
         with:
@@ -290,6 +396,7 @@ jobs:
             mqttprobe-windows-${{ github.ref_name }}.zip
             mqttprobe-macos-${{ github.ref_name }}.zip
             mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip
+            mqttprobe-android-${{ github.ref_name }}.apk
           body: |
             ## MQTT Probe ${{ github.ref_name }}
 
@@ -305,6 +412,7 @@ jobs:
             | `mqttprobe-windows-${{ github.ref_name }}.zip` | Windows desktop app — MAUI (unsigned, SmartScreen warning expected) |
             | `mqttprobe-macos-${{ github.ref_name }}.zip` | macOS desktop app — universal Intel + Apple Silicon, signed & notarized |
             | `mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip` | Linux desktop app — Photino/Blazor, self-contained (requires `libwebkit2gtk-4.1-0`) |
+            | `mqttprobe-android-${{ github.ref_name }}.apk` | Android app — sideload APK, Android 7.0+ (API 24) |
             | `docker pull bluegrassiot/mqttprobe:${{ github.ref_name }}` | Docker image (amd64 + arm64, no runtime install needed) |
 
             ### Quick Start
@@ -327,5 +435,9 @@ jobs:
             ### macOS
 
             The macOS app is signed and notarized by Apple — unzip and run, no security prompts.
+
+            ### Android
+
+            Download the APK on your device and open it to install. Your browser will ask you to allow installing unknown apps the first time, and Play Protect may show a warning for apps installed outside the Play Store — choose "Install anyway".
 
             See [README](https://github.com/bluegrassiot/mqttprobe#readme) for full documentation.

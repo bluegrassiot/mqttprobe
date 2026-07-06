@@ -1,6 +1,6 @@
 @namespace MqttProbe.Components.Shared
 
-<div class="app-tabpanel-header">
+<div class="app-tabpanel-header @Class">
     <div class="app-tabpanel-header__row">
         @if (!string.IsNullOrEmpty(Icon))
         {
@@ -26,6 +26,8 @@
     [Parameter, EditorRequired] public string Title { get; set; } = "";
 
     [Parameter] public string? Icon { get; set; }
+
+    [Parameter] public string? Class { get; set; }
 
     [Parameter] public RenderFragment? HeaderChips { get; set; }
 

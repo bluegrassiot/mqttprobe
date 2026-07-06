@@ -136,7 +136,7 @@ public class MainLayoutTests : BunitTestContext
         _mockMqttClient.IsConnected.Returns(false);
         var cut = RenderLayout();
 
-        cut.Markup.Should().Contain("Click to connect");
+        cut.Markup.Should().Contain("Connect");
     }
 
     [Test]

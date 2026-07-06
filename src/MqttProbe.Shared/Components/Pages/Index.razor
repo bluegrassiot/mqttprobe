@@ -14,7 +14,73 @@
 
 <PageTitle>MQTTProbe</PageTitle>
 
-<MudTabs ActivePanelIndex="@_activeTabIndex"
+<nav class="mobile-primary-nav" aria-label="Primary navigation">
+    @foreach (var dest in _destinations.Where(d => d.IsMobilePrimary && d.IsVisible()))
+    {
+        @if (dest.RequiresOperatorRole)
+        {
+            <AuthorizeView Roles="Admin,Operator">
+                <Authorized>
+                    <button class="mobile-nav-btn @(IsSlugActive(dest.Slug) ? "active" : "")"
+                            @onclick="() => OnDestinationSelected(dest)"
+                            aria-current="@(IsSlugActive(dest.Slug) ? "page" : null)">
+                        <MudIcon Icon="@dest.Icon" Size="Size.Medium" />
+                        <span>@dest.Label()</span>
+                    </button>
+                </Authorized>
+            </AuthorizeView>
+        }
+        else
+        {
+            <button class="mobile-nav-btn @(IsSlugActive(dest.Slug) ? "active" : "")"
+                    @onclick="() => OnDestinationSelected(dest)"
+                    aria-current="@(IsSlugActive(dest.Slug) ? "page" : null)">
+                <MudIcon Icon="@dest.Icon" Size="Size.Medium" />
+                <span>@dest.Label()</span>
+            </button>
+        }
+    }
+
+    @{
+        var moreItems = _destinations.Where(d => !d.IsMobilePrimary && d.IsVisible()).ToList();
+    }
+    @if (moreItems.Count > 0)
+    {
+        @* Right-aligned so the popover never extends past the right viewport
+           edge — a centered anchor overflows horizontally on phones, which
+           makes mobile browsers zoom out and the fixed nav bar vanish. *@
+        <MudMenu Icon="@LucideIcons.MoreVertical" Size="Size.Medium"
+                 AnchorOrigin="Origin.TopRight" TransformOrigin="Origin.BottomRight"
+                 Class="mobile-nav-btn mobile-nav-more"
+                 AriaLabel="More navigation options">
+            @foreach (var dest in moreItems)
+            {
+                @if (dest.RequiresOperatorRole)
+                {
+                    <AuthorizeView Roles="Admin,Operator">
+                        <Authorized>
+                            <MudMenuItem Icon="@dest.Icon"
+                                         OnClick="() => OnDestinationSelected(dest)">
+                                @dest.Label()
+                            </MudMenuItem>
+                        </Authorized>
+                    </AuthorizeView>
+                }
+                else
+                {
+                    <MudMenuItem Icon="@dest.Icon"
+                                 OnClick="() => OnDestinationSelected(dest)">
+                        @dest.Label()
+                    </MudMenuItem>
+                }
+            }
+        </MudMenu>
+    }
+</nav>
+
+<MudTabs @key="RenderedDestinations.Count"
+         ActivePanelIndex="@_activeTabIndex"
+         Class="desktop-tabs"
          ActivePanelIndexChanged="@OnActivePanelChanged"
          IconColor="Color.Inherit" Elevation="0" Rounded="true"
          TabPanelsClass="tab-shell" SliderColor="Color.Primary"
@@ -147,28 +213,77 @@
 
     private readonly RenderFragment<Exception> _sectionError = _ => @<SectionError />;
 
-    private int _activeTabIndex = 0;
+    private string _activeSlug = "browser";
+    private int _activeTabIndex;
     private bool _suppressUrlUpdate;
 
-    private static readonly Dictionary<string, int> TabSlugs = new(StringComparer.OrdinalIgnoreCase)
+    private IReadOnlyList<NavigationDestination> RenderedDestinations =>
+        _destinations.Where(d => d.IsVisible()).ToList();
+
+    private void SyncActiveTabIndex()
     {
-        ["browser"] = 0,
-        ["nodes"] = 1,
-        ["charts"] = 2,
-        ["subscriptions"] = 3,
-        ["publish"] = 4,
-        ["emulation"] = 5,
-        ["settings"] = 6,
-    };
+        var rendered = RenderedDestinations;
+        for (int i = 0; i < rendered.Count; i++)
+        {
+            if (string.Equals(rendered[i].Slug, _activeSlug, StringComparison.OrdinalIgnoreCase))
+            {
+                _activeTabIndex = i;
+                return;
+            }
+        }
+        _activeTabIndex = 0;
+    }
+
+    private bool IsSlugActive(string slug) =>
+        string.Equals(_activeSlug, slug, StringComparison.OrdinalIgnoreCase);
+
+    private sealed record NavigationDestination(
+        int Index,
+        string Slug,
+        Func<string> Label,
+        string Icon,
+        bool IsMobilePrimary,
+        Func<bool> IsVisible,
+        bool RequiresOperatorRole = false);
+
+    private IReadOnlyList<NavigationDestination> _destinations = null!;
+
+    private IReadOnlyList<NavigationDestination> BuildDestinations() =>
+    [
+        new(0, "browser", () => BrowserTabLabel, LucideIcons.Eye,
+            IsMobilePrimary: true, IsVisible: () => true),
+        new(1, "nodes", () => NodesTabLabel, LucideIcons.Network,
+            IsMobilePrimary: true, IsVisible: () => TopologyService.Groups.Any()),
+        new(2, "charts", () => ChartsTabLabel, LucideIcons.Activity,
+            IsMobilePrimary: true, IsVisible: () => true),
+        new(3, "subscriptions", () => SubscriptionsTabLabel, LucideIcons.Layers,
+            IsMobilePrimary: false, IsVisible: () => true),
+        new(4, "publish", () => "Publish", LucideIcons.Send,
+            IsMobilePrimary: true, IsVisible: () => true, RequiresOperatorRole: true),
+        new(5, "emulation", () => EmulationTabLabel, LucideIcons.Zap,
+            IsMobilePrimary: false, IsVisible: () => true, RequiresOperatorRole: true),
+        new(6, "settings", () => "Settings", LucideIcons.Settings,
+            IsMobilePrimary: false, IsVisible: () => true),
+    ];
 
     protected override void OnInitialized()
     {
         TopologyService.TopologyChanged += OnTopologyChanged;
-        _activeTabIndex = ResolveTabFromUrl();
+        _destinations = BuildDestinations();
+        _activeSlug = ResolveSlugFromUrl();
+        SyncActiveTabIndex();
         NavigationManager.LocationChanged += OnLocationChanged;
     }
 
-    private void OnTopologyChanged() => InvokeAsync(StateHasChanged);
+    private void OnTopologyChanged()
+    {
+        var activeDest = _destinations.FirstOrDefault(d =>
+            string.Equals(d.Slug, _activeSlug, StringComparison.OrdinalIgnoreCase));
+        if (activeDest is null || !activeDest.IsVisible())
+            _activeSlug = "browser";
+        SyncActiveTabIndex();
+        InvokeAsync(StateHasChanged);
+    }
 
     public void Dispose()
     {
@@ -182,7 +297,7 @@
         StateHasChanged();
     }
 
-    private int ResolveTabFromUrl()
+    private string ResolveSlugFromUrl()
     {
         var uri = new Uri(NavigationManager.Uri);
         var query = uri.Query.TrimStart('?');
@@ -194,26 +309,46 @@
             if (string.Equals(key, "tab", StringComparison.OrdinalIgnoreCase))
             {
                 var value = Uri.UnescapeDataString(pair[(eq + 1)..]);
-                if (TabSlugs.TryGetValue(value, out var idx)) return idx;
+                var dest = _destinations.FirstOrDefault(d =>
+                    string.Equals(d.Slug, value, StringComparison.OrdinalIgnoreCase));
+                if (dest is not null && dest.IsVisible()) return dest.Slug;
+                return "browser";
             }
         }
-        return 0;
+        return "browser";
     }
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         if (_suppressUrlUpdate) return;
-        var idx = ResolveTabFromUrl();
-        if (idx != _activeTabIndex) _activeTabIndex = idx;
+        var slug = ResolveSlugFromUrl();
+        if (!string.Equals(slug, _activeSlug, StringComparison.OrdinalIgnoreCase))
+        {
+            _activeSlug = slug;
+            SyncActiveTabIndex();
+        }
     }
 
-    private void OnActivePanelChanged(int index)
+    private void OnActivePanelChanged(int physicalIndex)
     {
-        if (index < 0 || index >= TabSlugs.Count) return;
-        _activeTabIndex = index;
+        var rendered = RenderedDestinations;
+        if (physicalIndex < 0 || physicalIndex >= rendered.Count) return;
+        var dest = rendered[physicalIndex];
+        _activeSlug = dest.Slug;
+        _activeTabIndex = physicalIndex;
         if (_suppressUrlUpdate) return;
-        var slug = TabSlugs.First(kv => kv.Value == index).Key;
-        var newUrl = NavigationManager.GetUriWithQueryParameter("tab", slug);
+        var newUrl = NavigationManager.GetUriWithQueryParameter("tab", dest.Slug);
+        _suppressUrlUpdate = true;
+        try { NavigationManager.NavigateTo(newUrl, forceLoad: false); }
+        finally { _suppressUrlUpdate = false; }
+    }
+
+    private void OnDestinationSelected(NavigationDestination dest)
+    {
+        _activeSlug = dest.Slug;
+        SyncActiveTabIndex();
+        if (_suppressUrlUpdate) return;
+        var newUrl = NavigationManager.GetUriWithQueryParameter("tab", dest.Slug);
         _suppressUrlUpdate = true;
         try { NavigationManager.NavigateTo(newUrl, forceLoad: false); }
         finally { _suppressUrlUpdate = false; }

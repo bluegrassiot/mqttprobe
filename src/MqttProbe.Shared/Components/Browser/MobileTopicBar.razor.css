@@ -1,0 +1,47 @@
+.mobile-topic-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: var(--mud-palette-surface);
+    border-bottom: 1px solid var(--mud-palette-divider);
+    min-height: 44px;
+    flex-shrink: 0;
+}
+
+.mobile-topic-bar__info {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.mobile-topic-bar__name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: var(--font-mono);
+}
+
+.mobile-topic-bar__name--empty {
+    font-weight: 400;
+    opacity: 0.6;
+    font-style: italic;
+}
+
+.mobile-topic-bar__count-chip {
+    height: 18px;
+    font-size: 0.65rem;
+    padding: 0 5px;
+    margin-left: 4px;
+}
+
+.mobile-topic-bar__btn {
+    flex-shrink: 0;
+    text-transform: none;
+    min-height: 44px;
+}

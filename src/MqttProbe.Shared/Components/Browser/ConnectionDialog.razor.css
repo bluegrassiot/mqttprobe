@@ -43,13 +43,16 @@
     }
 }
 
-.connection-tabs {
+/* .connection-tabs sits on MudTabs (child component) which never gets this
+   component's CSS-isolation scope attribute — rules must anchor on the scoped
+   .connection-dialog-content wrapper and use ::deep (not Vue's :deep()). */
+.connection-dialog-content ::deep .connection-tabs {
     flex: 1;
     min-height: 0;            /* flexbox: let the tab panel actually shrink and scroll */
     overflow: hidden;
 }
 
-.connection-tabs :deep(.mud-tab-panel[role='tabpanel']) {
+.connection-dialog-content ::deep .connection-tabs .mud-tab-panel[role='tabpanel'] {
     padding: 16px;
     background: var(--mud-palette-surface);
     overflow-y: auto;          /* internal scroll when panel content > panel height */
@@ -78,4 +81,43 @@
     width: 26px;
     height: 26px;
     animation: signal-breathe 1.6s ease-in-out infinite;
+}
+
+/* Compact step selector — visible only on mobile */
+.step-selector {
+    display: none;
+}
+
+.step-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: color 150ms ease-out, border-color 150ms ease-out;
+    border-bottom: 2px solid transparent;
+}
+
+.step-btn.active {
+    color: var(--mud-palette-primary);
+    border-bottom-color: var(--mud-palette-primary);
+    font-weight: 600;
+}
+
+.step-btn:hover {
+    color: var(--mud-palette-text-primary);
+}
+
+@media (max-width: 599px) {
+    .step-selector {
+        display: flex;
+        border-bottom: 1px solid var(--mud-palette-divider);
+    }
+
+    /* Hide the MudTabs tabbar on mobile, keep panels */
+    .connection-dialog-content ::deep .connection-tabs .mud-tabs-tabbar {
+        display: none;
+    }
 }

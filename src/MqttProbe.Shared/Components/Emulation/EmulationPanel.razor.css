@@ -129,6 +129,17 @@
 
 ::deep .emu-id-field input { font-family: var(--font-mono); }
 
+::deep .emu-alias-option {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+::deep .emu-alias-info {
+    color: var(--mud-palette-text-secondary);
+    cursor: help;
+}
+
 /* ── Device rows ─────────────────────────────────────────────────────────── */
 
 ::deep .emu-device-row {

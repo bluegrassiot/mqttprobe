@@ -51,6 +51,24 @@
                      Validation="@_connectionValidator.ValidateValue" ValidationDelay="0"
                      IsValidChanged="@FormValidationChanged" FieldChanged="@FormChanged">
 
+                <div class="step-selector">
+                    <button class="step-btn @(_activeTabIndex == 0 ? "active" : "")"
+                            @onclick="() => _activeTabIndex = 0"
+                            type="button">
+                        Identity
+                    </button>
+                    <button class="step-btn @(_activeTabIndex == 1 ? "active" : "")"
+                            @onclick="() => _activeTabIndex = 1"
+                            type="button">
+                        Transport
+                    </button>
+                    <button class="step-btn @(_activeTabIndex == 2 ? "active" : "")"
+                            @onclick="() => _activeTabIndex = 2"
+                            type="button">
+                        On Connect
+                    </button>
+                </div>
+
                 <MudTabs @bind-ActivePanelIndex="_activeTabIndex"
                          KeepPanelsAlive="true"
                          Elevation="0"

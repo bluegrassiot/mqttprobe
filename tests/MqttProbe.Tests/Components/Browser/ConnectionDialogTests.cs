@@ -603,4 +603,58 @@ public class ConnectionDialogTests : BunitTestContext
 
         await _mockClient.Received(1).StartAsync(Arg.Any<ManagedMqttClientOptions>());
     }
+
+    [Test]
+    public async Task StepSelector_RendersThreeStepButtons()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        var stepButtons = _dialogProvider.FindAll(".step-btn");
+        stepButtons.Should().HaveCount(3);
+        stepButtons[0].TextContent.Should().Contain("Identity");
+        stepButtons[1].TextContent.Should().Contain("Transport");
+        stepButtons[2].TextContent.Should().Contain("On Connect");
+    }
+
+    [Test]
+    public async Task StepSelector_ClickTransport_ActivatesTransportButton()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        var stepButtons = _dialogProvider.FindAll(".step-btn");
+        stepButtons[0].ClassName.Should().Contain("active", "Identity is default");
+
+        stepButtons[1].Click();
+
+        var refreshedButtons = _dialogProvider.FindAll(".step-btn");
+        refreshedButtons[1].ClassName.Should().Contain("active", "Transport was clicked");
+        refreshedButtons[0].ClassName.Should().NotContain("active", "Identity is no longer selected");
+        _dialogProvider.Markup.Should().Contain("Protocol");
+        _dialogProvider.Markup.Should().Contain("Host");
+    }
+
+    [Test]
+    public async Task StepSelector_ClickOnConnect_ActivatesOnConnectButton()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        var stepButtons = _dialogProvider.FindAll(".step-btn");
+        stepButtons[2].Click();
+
+        var refreshedButtons = _dialogProvider.FindAll(".step-btn");
+        refreshedButtons[2].ClassName.Should().Contain("active", "On Connect was clicked");
+        refreshedButtons[0].ClassName.Should().NotContain("active", "Identity is no longer selected");
+        _dialogProvider.Markup.Should().Contain("Sparkplug B");
+    }
+
+    [Test]
+    public async Task StepSelector_IdentityIsDefaultStep()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        var identityBtn = _dialogProvider.FindAll(".step-btn")
+            .First(b => b.TextContent.Contains("Identity"));
+        identityBtn.ClassName.Should().Contain("active");
+        _dialogProvider.Markup.Should().Contain("Name");
+    }
 }

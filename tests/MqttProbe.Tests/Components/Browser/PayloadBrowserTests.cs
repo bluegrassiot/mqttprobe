@@ -51,7 +51,7 @@ public class PayloadBrowserTests : BunitTestContext
 
         var cut = Render<PayloadBrowser>();
 
-        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Showing latest 500"));
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("500 msgs"));
 
         // Verify GetRecentMessagesAsync was called with the default display cap (500).
         _mockMsgStore.Received(1).GetRecentMessagesAsync(Arg.Any<string>(), 500);
@@ -70,7 +70,7 @@ public class PayloadBrowserTests : BunitTestContext
         var cut = Render<PayloadBrowser>();
 
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("sensor/temp"));
-        cut.Markup.Should().NotContain("Showing latest");
+        cut.Markup.Should().NotContain("msgs");
     }
 
     [Test]
@@ -89,7 +89,7 @@ public class PayloadBrowserTests : BunitTestContext
 
         var cut = Render<PayloadBrowser>();
 
-        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Showing latest 3"));
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("3 msgs"));
         cut.FindAll(".payload-row").Should().HaveCount(3);
 
         // Verify GetRecentMessagesAsync was called with the custom display cap (3).

@@ -37,3 +37,27 @@
     gap: 8px;
     padding-top: 16px;
 }
+
+/* Phones: the 24px header padding/margin costs too much vertical space. */
+@media (max-width: 599px) {
+    .app-tabpanel-header {
+        padding: 8px 0;
+        margin-bottom: 12px;
+    }
+
+    .app-tabpanel-header__title {
+        font-size: 1.1rem;
+    }
+
+    .app-tabpanel-header__filters {
+        padding-top: 8px;
+    }
+
+    /* Views with wide chip sets (e.g. Nodes) opt in via this modifier: the
+       chips drop to their own row so the action button stays on the title
+       row instead of wrapping to a line of its own. */
+    .app-tabpanel-header--stack-chips .app-tabpanel-header__chips {
+        order: 1;
+        flex-basis: 100%;
+    }
+}

@@ -73,8 +73,13 @@
             </table>
         </div>
 
+        @* Flex column that clips: the payload content (JSON tree / pre) flex-fills
+           it and becomes the bounded scroller, so its horizontal scrollbar sits at
+           the visible bottom of the panel instead of below the fold at the end of
+           a tall payload. Inline because MudPaper renders without this component's
+           CSS-isolation scope attribute, so a scoped class rule can't reach it. *@
         <MudPaper Outlined="true" Class="ma-2 pa-1 payload-detail-body"
-                  Style="flex:1 1 auto; min-height:0; overflow:auto;">
+                  Style="flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden;">
             @{
                 var payloadType = GetPayloadType(msg.Payload);
                 var (typeLabel, typeColor) = payloadType switch
@@ -115,7 +120,7 @@
             }
             else if (payloadType == PayloadType.Xml)
             {
-                <pre style="margin:0; padding:8px; overflow:auto; font-size:0.82rem"><code>@(TryFormatXml(msg.Payload!) ?? msg.Payload)</code></pre>
+                <pre style="margin:0; padding:8px; flex:1 1 auto; min-height:0; overflow:auto; font-size:0.82rem"><code>@(TryFormatXml(msg.Payload!) ?? msg.Payload)</code></pre>
             }
             else if (payloadType == PayloadType.Number)
             {
@@ -141,7 +146,7 @@
             }
             else
             {
-                <pre style="margin:0; padding:8px; overflow:auto; font-size:0.82rem; white-space:pre-wrap; word-break:break-word"><code>@msg.Payload</code></pre>
+                <pre style="margin:0; padding:8px; flex:1 1 auto; min-height:0; overflow:auto; font-size:0.82rem; white-space:pre-wrap; word-break:break-word"><code>@msg.Payload</code></pre>
             }
         </MudPaper>
     </MudPaper>
@@ -160,7 +165,7 @@ else
                 @if (_messageList.Count >= MaxMessageCount)
                 {
                     <MudText Typo="Typo.caption" Color="Color.Warning" Class="mr-2 payload-truncation-note">
-                        Showing latest @MaxMessageCount
+                        @MaxMessageCount msgs
                     </MudText>
                 }
             </div>
@@ -197,14 +202,14 @@ else
                 <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
-                <MudTd DataLabel="Time" Class="telemetry-time">
+                <MudTd DataLabel="Time" Class="telemetry-time pb-cell-time">
                     @context.DateTimeReceived.ToString("HH:mm:ss.fff")
                 </MudTd>
-                <MudTd DataLabel="Topic" Class="telemetry-mono telemetry-compact" Style="word-break:break-all">@context.Topic</MudTd>
-                <MudTd DataLabel="Payload" Class="telemetry-mono telemetry-compact">
+                <MudTd DataLabel="Topic" Class="telemetry-mono telemetry-compact pb-cell-topic">@context.Topic</MudTd>
+                <MudTd DataLabel="Payload" Class="telemetry-mono telemetry-compact pb-cell-payload">
                     @(context.Payload is { Length: > 250 } ? $"{context.Payload[..250]}…" : context.Payload)
                 </MudTd>
-                <MudTd DataLabel="">
+                <MudTd DataLabel="" Class="pb-cell-flag">
                     @if (context.RetainedMessage)
                     {
                         <MudIcon Icon="@LucideIcons.Bookmark" Size="Size.Small" Color="Color.Warning" title="Retained"/>

@@ -288,3 +288,4 @@ appsettings.Local.json
 /docs/superpowers
 /profile-output/
 /.opencode/
+/.playwright-mcp

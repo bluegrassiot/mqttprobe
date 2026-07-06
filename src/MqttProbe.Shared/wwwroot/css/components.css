@@ -87,6 +87,11 @@
     color: var(--mud-palette-appbar-text);
 }
 
+.mud-appbar .broker-chip {
+    flex-shrink: 1;
+    min-width: 0;
+}
+
 .mud-appbar .broker-chip .mud-chip-content {
     max-width: 180px;
     overflow: hidden;
@@ -97,8 +102,15 @@
 /* Long connection names must not crowd out the appbar actions on phones. */
 @media (max-width: 599px) {
     .mud-appbar .broker-chip .mud-chip-content {
-        max-width: 110px;
+        max-width: 100%;
     }
+}
+
+/* Hide the mobile bottom nav when a MudBlazor dialog is open so only the
+   dialog's own navigation is visible. MudDialog renders in a portal outside
+   the app shell, so a global :has() rule is the simplest override. */
+body:has(.mud-dialog-container) .mobile-primary-nav {
+    display: none;
 }
 
 .mud-appbar .status-pulse {
@@ -244,4 +256,17 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+}
+
+/* Hide the desktop MudTabs tabbar on mobile. Like the .mud-tabs-panels rule
+   above, this must live in the global sheet: although .desktop-tabs is a
+   Blazor component element (and does receive CSS-isolation scoping), the
+   inner .mud-tabs-tabbar is MudBlazor markup rendered without the host
+   component's isolation attribute — so a scoped ::deep selector cannot
+   reach it reliably. Scoped under .app-shell-body to avoid hitting other
+   MudTabs instances (e.g. the connection dialog's tabs). */
+@media (max-width: 599px) {
+    .app-shell-body .desktop-tabs .mud-tabs-tabbar {
+        display: none;
+    }
 }

@@ -1,0 +1,84 @@
+@inject IMessageStoreManager MessageStoreManager
+@implements IAsyncDisposable
+
+<div class="mobile-topic-bar">
+    <div class="mobile-topic-bar__info" @onclick="OpenPicker">
+        @if (_selectedTopic is not null)
+        {
+            <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
+            <span class="mobile-topic-bar__name" title="@_selectedTopic">@_selectedTopic</span>
+            @if (_messageCount > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                         Class="mobile-topic-bar__count-chip">
+                    @_messageCount
+                </MudChip>
+            }
+        }
+        else
+        {
+            <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Secondary" Class="mr-1"/>
+            <span class="mobile-topic-bar__name mobile-topic-bar__name--empty">Choose a topic</span>
+        }
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+               StartIcon="@LucideIcons.ChevronDown"
+               OnClick="OpenPicker"
+               Disabled="@(!HasTopics)"
+               Class="mobile-topic-bar__btn">
+        Topics
+    </MudButton>
+</div>
+
+@code {
+    [Parameter] public bool HasTopics { get; set; }
+    [Parameter] public EventCallback OnOpenPicker { get; set; }
+
+    private string? _selectedTopic;
+    private int _messageCount;
+    private Timer? _updateTimer;
+    private bool _disposed;
+
+    protected override void OnInitialized()
+    {
+        SyncFromManager();
+        _updateTimer = new Timer(async _ =>
+        {
+            if (_disposed) return;
+            SyncFromManager();
+            await RequestRenderSafelyAsync();
+        }, null, 0, 1_000);
+    }
+
+    private async Task RequestRenderSafelyAsync()
+    {
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException) when (_disposed)
+        {
+            // Circuit was torn down between timer tick and dispatch.
+        }
+    }
+
+    private void SyncFromManager()
+    {
+        var store = MessageStoreManager.SelectedMessageStore;
+        _selectedTopic = store?.FullTopic ?? store?.Topic;
+        _messageCount = store?.MessageCount ?? 0;
+    }
+
+    private async Task OpenPicker()
+    {
+        if (!HasTopics) return;
+        await OnOpenPicker.InvokeAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        if (_updateTimer != null)
+            await _updateTimer.DisposeAsync();
+    }
+}

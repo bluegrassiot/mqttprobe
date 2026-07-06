@@ -82,3 +82,39 @@
     background-image: radial-gradient(circle, var(--mud-palette-primary-text) 1.1px, transparent 1.4px);
     opacity: 1;
 }
+
+/* Mobile layout: visible only below 600px */
+.browser-mobile-layout {
+    display: none;
+}
+
+/* Tablet layout: visible between 600px and 959px */
+.browser-tablet-layout {
+    display: contents;
+}
+
+@media (max-width: 599.98px) {
+    .browser-mobile-layout {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    .browser-mobile-payload {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        /* BrowserPanel isn't wrapped in .tab-panel-content (it manages its own
+           flex chain), so reserve space for the fixed mobile nav bar here —
+           otherwise the payload panel's bottom edge (and its horizontal
+           scrollbar) sits underneath the bar. Matches .tab-panel-content. */
+        padding-bottom: 64px;
+    }
+
+    .browser-tablet-layout {
+        display: none;
+    }
+}

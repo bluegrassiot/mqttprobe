@@ -37,6 +37,7 @@ public class BrowserPanelTests : BunitTestContext
 
         ComponentFactories.AddStub<TopicBrowser>();
         ComponentFactories.AddStub<PayloadBrowser>();
+        ComponentFactories.AddStub<MobileTopicBar>();
 
         EnsureMudProviders();
     }
@@ -60,7 +61,7 @@ public class BrowserPanelTests : BunitTestContext
         var cut = Render<BrowserPanel>();
 
         var btn = cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear Messages"));
+            .First(b => b.TextContent.Contains("Clear"));
         btn.HasAttribute("disabled").Should().BeTrue();
     }
 
@@ -73,7 +74,7 @@ public class BrowserPanelTests : BunitTestContext
         var cut = Render<BrowserPanel>();
 
         var btn = cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear Messages"));
+            .First(b => b.TextContent.Contains("Clear"));
         btn.HasAttribute("disabled").Should().BeFalse();
     }
 
@@ -90,7 +91,7 @@ public class BrowserPanelTests : BunitTestContext
 
         var cut = Render<BrowserPanel>();
         var btn = cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear Messages"));
+            .First(b => b.TextContent.Contains("Clear"));
 
         await cut.InvokeAsync(() => btn.Click());
 
@@ -109,7 +110,7 @@ public class BrowserPanelTests : BunitTestContext
 
         var cut = Render<BrowserPanel>();
         var btn = cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear Messages"));
+            .First(b => b.TextContent.Contains("Clear"));
 
         await cut.InvokeAsync(() => btn.Click());
 
@@ -129,7 +130,7 @@ public class BrowserPanelTests : BunitTestContext
 
         var cut = Render<BrowserPanel>();
         var btn = cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear Messages"));
+            .First(b => b.TextContent.Contains("Clear"));
 
         await cut.InvokeAsync(() => btn.Click());
 
@@ -154,7 +155,7 @@ public class BrowserPanelTests : BunitTestContext
 
         var cut = Render<BrowserPanel>();
         var btn = cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear Messages"));
+            .First(b => b.TextContent.Contains("Clear"));
 
         btn.HasAttribute("disabled").Should().BeFalse();
 
@@ -165,7 +166,7 @@ public class BrowserPanelTests : BunitTestContext
         cut.WaitForAssertion(() =>
         {
             cut.FindAll("button")
-                .First(b => b.TextContent.Contains("Clear Messages"))
+                .First(b => b.TextContent.Contains("Clear"))
                 .HasAttribute("disabled").Should().BeTrue();
         });
     }
@@ -187,5 +188,48 @@ public class BrowserPanelTests : BunitTestContext
         var cut = Render<BrowserPanel>();
 
         cut.Markup.Should().NotContain("connect to a broker");
+    }
+
+    [Test]
+    public void MobileLayout_RendersMobileTopicBar()
+    {
+        var cut = Render<BrowserPanel>();
+
+        // MobileTopicBar is stubbed (renders empty), but the mobile layout wrapper exists
+        cut.Markup.Should().Contain("browser-mobile-layout");
+    }
+
+    [Test]
+    public void MobileLayout_RendersTopicPickerOverlay()
+    {
+        var cut = Render<BrowserPanel>();
+
+        // TopicPickerOverlay is in the render tree (IsOpen=false so it renders nothing,
+        // but the component is wired up)
+        cut.FindComponents<TopicPickerOverlay>().Should().HaveCount(1);
+    }
+
+    [Test]
+    public void MobilePicker_OpensAndCloses()
+    {
+        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>(
+            new Dictionary<string, MessageStore> { ["t"] = new MessageStore { Topic = "t", FullTopic = "t" } }));
+
+        var cut = Render<BrowserPanel>();
+
+        // Initially closed — overlay panel should not be rendered
+        cut.Markup.Should().NotContain("topic-picker-overlay__panel");
+
+        // Open picker (internal method, matching OnTimerTick test pattern)
+        cut.Instance.OpenMobilePicker();
+        cut.Render();
+
+        cut.Markup.Should().Contain("topic-picker-overlay__panel");
+
+        // Close picker
+        cut.Instance.CloseMobilePicker();
+        cut.Render();
+
+        cut.Markup.Should().NotContain("topic-picker-overlay__panel");
     }
 }

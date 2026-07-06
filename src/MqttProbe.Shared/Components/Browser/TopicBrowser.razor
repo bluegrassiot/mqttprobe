@@ -61,6 +61,8 @@
     private bool _hasFilter;
     private string? _selectedFullPath;
 
+    [Parameter] public EventCallback<MessageStore?> OnSelectedChanged { get; set; }
+
     protected override void OnInitialized()
     {
         BuildVisibleRows();
@@ -148,11 +150,13 @@
         StateHasChanged();
     }
 
-    private void OnRowSelected(string path)
+    private async Task OnRowSelected(string path)
     {
         _selectedFullPath = path;
         BuildVisibleRows();
         StateHasChanged();
+        if (OnSelectedChanged.HasDelegate)
+            await OnSelectedChanged.InvokeAsync(MessageStoreManagerService.SelectedMessageStore);
     }
 
     private async Task ToggleExpand(string path)

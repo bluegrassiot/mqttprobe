@@ -170,6 +170,15 @@ body:has(.mud-dialog-container) .mobile-primary-nav {
     margin-bottom: 1rem;
 }
 
+/* Breathing pulse for the connecting/reconnecting motif. Kept global (not in a
+   component's scoped .razor.css) so every connecting indicator can reference it
+   by name — a scoped @keyframes gets renamed per-component and won't resolve
+   from another component's scope. */
+@keyframes signal-breathe {
+    0%, 100% { opacity: 0.4; transform: scale(0.94); }
+    50%      { opacity: 1; transform: scale(1.05); }
+}
+
 #components-reconnect-modal .reconnect-message {
     margin: 0;
     font-size: 1rem;

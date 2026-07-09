@@ -31,13 +31,6 @@
     animation: signal-breathe 1.8s ease-in-out infinite;
 }
 
-/* Defined here (the always-present layout) so connecting indicators in other
-   components can share it — CSS isolation bundles keyframes globally. */
-@keyframes signal-breathe {
-    0%, 100% { opacity: 0.4; transform: scale(0.94); }
-    50%      { opacity: 1; transform: scale(1.05); }
-}
-
 .reconnect-stop-btn {
     margin-top: 16px;
 }

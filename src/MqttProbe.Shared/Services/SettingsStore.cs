@@ -99,7 +99,7 @@ public class SettingsStore : ISettingsStore
 
             if (!File.Exists(_configPath))
             {
-                _config = new AppConfiguration();
+                _config = new AppConfiguration { Connections = CreateDefaultConnections() };
                 if (_isMobile)
                 {
                     _config.Performance.MaxStoredMessages = 1_000;
@@ -574,6 +574,42 @@ public class SettingsStore : ISettingsStore
         }
 #pragma warning restore CS0618
     }
+
+    // Seeded on first run so a user without their own broker can try the app immediately.
+    // ClientId is left to auto-generate per install to avoid collisions on these shared public brokers.
+    private static List<Connection> CreateDefaultConnections() =>
+    [
+        new()
+        {
+            Name = "HiveMQ — TCP 1883",
+            Host = "broker.hivemq.com",
+            Port = 1883,
+            Protocol = Protocol.Mqtt,
+            UseTls = false,
+            SubscribedTopics = ["spBv1.0/#"]
+        },
+        new()
+        {
+            Name = "EMQX — TLS 8883",
+            Host = "broker.emqx.io",
+            Port = 8883,
+            Protocol = Protocol.Mqtt,
+            UseTls = true,
+            AllowUntrustedCertificate = false,
+            SubscribedTopics = ["spBv1.0/#"]
+        },
+        new()
+        {
+            Name = "Mosquitto — WebSocket TLS 8081",
+            Host = "test.mosquitto.org",
+            Port = 8081,
+            Protocol = Protocol.WebSocket,
+            UseTls = true,
+            AllowUntrustedCertificate = true,
+            WebsocketBasePath = "",
+            SubscribedTopics = ["spBv1.0/#"]
+        }
+    ];
 
     private Guid EnsureDefaultConnection()
     {

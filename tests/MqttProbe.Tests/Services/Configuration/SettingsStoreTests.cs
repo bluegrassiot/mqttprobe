@@ -197,4 +197,57 @@ public class SettingsStoreTests
 
         _store.Config.Performance.MaxTopicNodes.Should().Be(5000);
     }
+
+    [Test]
+    public async Task LoadAsync_WhenFileDoesNotExist_SeedsThePickedPublicBrokers()
+    {
+        await _store.LoadAsync();
+
+        var conns = _store.Config.Connections;
+        conns.Should().HaveCount(3);
+        conns.Should().Contain(c =>
+            c.Host == "broker.hivemq.com" && c.Port == 1883 &&
+            c.Protocol == Protocol.Mqtt && !c.UseTls);
+        conns.Should().Contain(c =>
+            c.Host == "test.mosquitto.org" && c.Port == 8081 &&
+            c.Protocol == Protocol.WebSocket && c.UseTls &&
+            c.AllowUntrustedCertificate && c.WebsocketBasePath == "");
+        conns.Should().Contain(c =>
+            c.Host == "broker.emqx.io" && c.Port == 8883 &&
+            c.Protocol == Protocol.Mqtt && c.UseTls && !c.AllowUntrustedCertificate);
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenFileDoesNotExist_SeededBrokersSubscribeToSparkplugAndHaveUniqueClientIds()
+    {
+        await _store.LoadAsync();
+
+        _store.Config.Connections.Should()
+            .AllSatisfy(c => c.SubscribedTopics.Should().Contain("spBv1.0/#"));
+        var clientIds = _store.Config.Connections.Select(c => c.ClientId).ToList();
+        clientIds.Should().OnlyHaveUniqueItems("shared client IDs evict each other on public brokers");
+        clientIds.Should().AllSatisfy(id => id.Should().StartWith("mqttprobe_"));
+    }
+
+    [Test]
+    public async Task LoadAsync_PersistsSeededBrokersSoSecondLoadDoesNotReSeed()
+    {
+        await _store.LoadAsync();
+
+        var store2 = new SettingsStore(_configPath);
+        await store2.LoadAsync();
+
+        store2.Config.Connections.Should().HaveCount(3, "seeding happens only when the file is first created");
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenFileExistsWithNoConnections_DoesNotSeed()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """{"connections":[],"auth":{"username":"","passwordHash":""}}""");
+
+        await _store.LoadAsync();
+
+        _store.Config.Connections.Should().BeEmpty("an existing config is never reseeded");
+    }
 }

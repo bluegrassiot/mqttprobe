@@ -63,6 +63,7 @@ public static class LucideIcons
 
     // Alerts / status
     public const string AlertTriangle  = $"<path {S} d='M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z'/><path {S} d='M12 9v4M12 17h.01'/>";
+    public const string Info           = $"<circle {S} cx='12' cy='12' r='10'/><path {S} d='M12 16v-4M12 8h.01'/>";
 
     // Search / filter
     public const string Search         = $"<circle {S} cx='11' cy='11' r='8'/><path {S} d='M21 21l-4.35-4.35'/>";
@@ -76,6 +77,7 @@ public static class LucideIcons
     public const string Inbox          = $"<path {S} d='M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/>";
     public const string Folder         = $"<path {S} d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/>";
     public const string Circle         = $"<circle {S} cx='12' cy='12' r='10'/>";
+    public const string Database       = $"<ellipse {S} cx='12' cy='5' rx='9' ry='3'/><path {S} d='M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5'/><path {S} d='M3 12c0 1.66 4 3 9 3s9-1.34 9-3'/>";
     public const string CheckCircle    = $"<path {S} d='M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3'/>";
     public const string Sparkles       = $"<path {S} d='M12 3l1.09 2.36L15.75 6l-2.66 1.09L12 9.75l-1.09-2.66L8.25 6l2.66-1.09L12 3zM5 14l.54 1.09L6.75 15.5 5.54 16.09 5 17.5l-.54-1.41L3.25 15.5l1.21-.41L5 14zM19 2l.54 1.09L20.75 3.5l-1.21.5L19 5.25l-.54-1.25L17.25 3.5l1.21-.41L19 2z'/>";
     public const string Cpu            = $"<rect {S} x='9' y='9' width='6' height='6'/><path {S} d='M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18M3 9h18M3 15h18M15 3v6M15 15v6'/>";
@@ -86,6 +88,9 @@ public static class LucideIcons
     public const string Download       = $"<path {S} d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline {S} points='7 10 12 15 17 10'/><line {S} x1='12' y1='15' x2='12' y2='3'/>";
     public const string Minimize2      = $"<polyline {S} points='4 14 10 14 10 20'/><polyline {S} points='20 10 14 10 14 4'/><line {S} x1='10' y1='14' x2='21' y2='3'/><line {S} x1='3' y1='21' x2='14' y2='10'/>";
     public const string Settings       = $"<path {S} d='M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z'/><circle {S} cx='12' cy='12' r='3'/>";
+
+    // Close / dismiss
+    public const string X              = $"<path {S} d='M18 6 6 18M6 6l12 12'/>";
 
     public const string FactCheck      = CheckCircle; // alias
     public const string AutoFixHigh    = Sparkles;    // alias

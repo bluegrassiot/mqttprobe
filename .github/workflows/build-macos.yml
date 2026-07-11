@@ -1,0 +1,154 @@
+name: Build macOS (Mac Catalyst)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp (e.g. 1.0.1 or v1.0.1)'
+        required: false
+        default: '0.0.0'
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to stamp (tag name, e.g. v1.0.1)'
+        required: true
+        type: string
+    secrets:
+      MACOS_CERT_P12:
+        description: 'Developer ID Application cert + key, .p12, base64-encoded'
+        required: true
+      MACOS_CERT_PASSWORD:
+        description: 'Password protecting the .p12'
+        required: true
+      MACOS_PROVISION_PROFILE:
+        description: 'Developer ID Mac Catalyst provisioning profile, base64-encoded'
+        required: true
+      NOTARY_KEY_P8:
+        description: 'App Store Connect API key (.p8 contents, plain text)'
+        required: true
+      NOTARY_KEY_ID:
+        description: 'App Store Connect API key ID'
+        required: true
+      NOTARY_ISSUER_ID:
+        description: 'App Store Connect issuer ID'
+        required: true
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  build-maui-macos:
+    name: Build (MAUI macOS)
+    # Pinned to macos-26: macos-latest is mid-migration (15 -> 26, June/July 2026),
+    # and macOS 15's default Xcode 16.4 cannot build net10.0 Apple targets.
+    # macos-26's default Xcode is 26.x (26.5 as of image 20260623), so no xcode-select step is needed.
+    # NOTE: each .NET Apple workload band requires ONE exact Xcode version. If this job fails with
+    # "requires Xcode 26.5" after an image update, add: sudo xcode-select -s /Applications/Xcode_26.5.app
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Install MAUI Mac Catalyst workload
+        run: dotnet workload install maui-maccatalyst --source https://api.nuget.org/v3/index.json
+
+      - name: Extract version
+        id: version
+        run: |
+          RAW="${{ inputs.version }}"
+          echo "value=${RAW#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Import signing certificate into temporary keychain
+        env:
+          CERT_P12_B64: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          [ -n "$CERT_P12_B64" ] || { echo "::error::MACOS_CERT_P12 secret is not set"; exit 1; }
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$CERT_P12_B64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          # Allow Apple's signing tools to use the key without a GUI consent prompt
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain
+          rm "$RUNNER_TEMP/cert.p12"
+
+      - name: Install provisioning profile
+        env:
+          PROFILE_B64: ${{ secrets.MACOS_PROVISION_PROFILE }}
+        run: |
+          [ -n "$PROFILE_B64" ] || { echo "::error::MACOS_PROVISION_PROFILE secret is not set"; exit 1; }
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "$PROFILE_B64" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/mqttprobe-devid.provisionprofile"
+
+      - name: Publish (signed)
+        run: >
+          dotnet publish src/MqttProbe.Maui/MqttProbe.Maui.csproj
+          -f:net10.0-maccatalyst
+          -p:MqttProbeMauiMacTargetFrameworksOverride=net10.0-maccatalyst
+          -c:Release
+          -p:RuntimeIdentifiers='"maccatalyst-x64;maccatalyst-arm64"'
+          -p:CreatePackage=false
+          -p:EnableCodeSigning=true
+          -p:CodesignKey="Developer ID Application: Bluegrass IOT LLC (XVKMB6CQ72)"
+          -p:CodesignProvision="MQTTProbe DevID MacCatalyst"
+          -p:CodesignEntitlements=Platforms/MacCatalyst/Entitlements.plist
+          -p:UseHardenedRuntime=true
+          -p:ApplicationDisplayVersion=${{ steps.version.outputs.value }}
+
+      - name: Verify universal binary and signature
+        run: |
+          # --output is ignored for Apple bundles; the universal .app lands at the TFM root
+          APP=$(find src/MqttProbe.Maui/bin/Release/net10.0-maccatalyst -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$APP" || { echo "No .app bundle found in publish output"; exit 1; }
+          EXE="$APP/Contents/MacOS/$(defaults read "$(pwd)/$APP/Contents/Info.plist" CFBundleExecutable)"
+          lipo -archs "$EXE"
+          lipo -archs "$EXE" | grep -q x86_64
+          lipo -archs "$EXE" | grep -q arm64
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dvv "$APP" 2>&1 | grep -q "Authority=Developer ID Application"
+
+      - name: Notarize and staple
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          [ -n "$NOTARY_KEY_P8" ] || { echo "::error::NOTARY_KEY_P8 secret is not set"; exit 1; }
+          APP=$(find src/MqttProbe.Maui/bin/Release/net10.0-maccatalyst -maxdepth 1 -name '*.app' -print -quit)
+          echo "$NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --key "$RUNNER_TEMP/notary.p8" \
+            --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID" \
+            --wait --timeout 30m
+          rm "$RUNNER_TEMP/notary.p8"
+          xcrun stapler staple "$APP"
+          spctl --assess --type execute -vv "$APP"
+
+      - name: Archive
+        run: |
+          APP=$(find src/MqttProbe.Maui/bin/Release/net10.0-maccatalyst -maxdepth 1 -name '*.app' -print -quit)
+          ditto -c -k --keepParent "$APP" "mqttprobe-macos-v${{ steps.version.outputs.value }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: maui-macos
+          path: mqttprobe-macos-v${{ steps.version.outputs.value }}.zip
+
+      - name: Clean up signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true

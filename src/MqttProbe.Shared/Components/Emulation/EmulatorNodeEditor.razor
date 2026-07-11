@@ -25,6 +25,23 @@
                       Class="emu-id-field"/>
     </MudItem>
 
+    @if (Node.Type == EmulatorNodeType.SparkplugB)
+    {
+        <MudItem xs="12" sm="4">
+            @* Tooltip on the icon, not the checkbox: a tooltip-wrapped control is
+               unusable on touch — the tap opens the tooltip popover over the
+               control instead of toggling it. *@
+            <div class="emu-alias-option">
+                <MudCheckBox T="bool" @bind-Value="Node.UseMetricAliases" @bind-Value:after="SaveAsync"
+                             Label="Use Metric Aliases"
+                             Disabled="@EmulationService.IsRunning"/>
+                <MudTooltip Text="Replaces metric names with integer aliases in data messages, reducing MQTT payload size. Birth messages still include names.">
+                    <MudIcon Icon="@LucideIcons.Info" Size="Size.Small" Class="emu-alias-info"/>
+                </MudTooltip>
+            </div>
+        </MudItem>
+    }
+
     @if (Node.Type == EmulatorNodeType.Generic)
     {
         <MudItem xs="12" sm="4">
@@ -51,7 +68,7 @@
             @if (ResolvedTopicPreview != null)
             {
                 <div class="emu-topic-preview">
-                    Topic: <span class="telemetry-mono">@ResolvedTopicPreview</span>
+                    Topic: <span class="metrics-mono">@ResolvedTopicPreview</span>
                 </div>
             }
         </MudItem>

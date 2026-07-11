@@ -7,7 +7,7 @@
 {
     <div class="json-tree-root">
         <JsonTreeNode @key="_renderKey" Element="_doc.RootElement" Depth="0" AutoExpandDepth="@_autoExpandDepth"
-                      JsonPath="" OnAddToChart="OnAddToChart"/>
+                      JsonPath="" OnAddToChart="OnAddToChart" AliasNames="@AliasNames"/>
     </div>
 }
 else if (_parseFailed)
@@ -21,6 +21,7 @@ else if (_parseFailed)
     private const int DefaultAutoExpandDepth = 2;
 
     [Parameter] public string? Json { get; set; }
+    [Parameter] public IReadOnlyDictionary<ulong, string>? AliasNames { get; set; }
     [Parameter] public EventCallback<ChartFieldSelection> OnAddToChart { get; set; }
 
     private JsonDocument? _doc;

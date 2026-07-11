@@ -13,6 +13,7 @@ using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
@@ -47,8 +48,11 @@ public class IndexTests : BunitTestContext
         _mockConfig = Substitute.For<ISettingsStore>();
         _mockConfig.IsHintDismissed(Arg.Any<string>()).Returns(false);
 
+        var mockSessionState = Substitute.For<ISessionState>();
+        mockSessionState.SelectedConnection.Returns(new Connection());
+
         _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>());
-        _mockChartStore.Charts.Returns([]);
+        _mockChartStore.GetCharts(Arg.Any<Guid>()).Returns([]);
         _mockSubManager.Topics.Returns(new HashSet<string>());
         _emulatorNodes = [];
         _mockEmulation.Nodes.Returns(_ => _emulatorNodes);
@@ -61,10 +65,10 @@ public class IndexTests : BunitTestContext
         Services.AddSingleton(_mockEmulation);
         Services.AddSingleton(_mockTopology);
         Services.AddSingleton(_mockConfig);
+        Services.AddSingleton(mockSessionState);
         Services.AddSingleton<IThemes>(new Themes());
 
-        ComponentFactories.AddStub<TopicBrowser>();
-        ComponentFactories.AddStub<PayloadBrowser>();
+        ComponentFactories.AddStub<BrowserPanel>();
         ComponentFactories.AddStub<ChartsComponent>();
         ComponentFactories.AddStub<Subscriptions>();
         ComponentFactories.AddStub<SparkplugNodesView>();
@@ -130,23 +134,6 @@ public class IndexTests : BunitTestContext
     }
 
     [Test]
-    public void Browser_Tab_Renders_Header_With_Title_And_Count_Chip()
-    {
-        // Seed one message store so the count chip renders.
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>(
-            new Dictionary<string, MessageStore> { ["a/b"] = new MessageStore { Topic = "a/b", FullTopic = "a/b" } }));
-
-        var cut = Render<IndexPage>();
-
-        // The panel-level header now wraps the Browser tab.
-        cut.Markup.Should().Contain("app-tabpanel-header__row");
-        // The title text is the Browser tab name.
-        cut.Markup.Should().Contain(">Browser<");
-        // The count chip shows the store count (1).
-        cut.Markup.Should().Contain("1");
-    }
-
-    [Test]
     public void TabRouting_DefaultTab_IsBrowser()
     {
         var cut = Render<IndexPage>();
@@ -178,6 +165,204 @@ public class IndexTests : BunitTestContext
         activeTabs.Should().ContainSingle()
             .Which.TextContent.Should().Contain("Browser");
     }
+
+    [Test]
+    public void MobileNav_RendersNavElement()
+    {
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mobile-primary-nav").Should().ContainSingle();
+    }
+
+    [Test]
+    public void MobileNav_ShowsPrimaryDestinations()
+    {
+        var cut = Render<IndexPage>();
+
+        var navButtons = cut.FindAll(".mobile-nav-btn");
+        navButtons.Should().Contain(b => b.TextContent.Contains("Browser"));
+        navButtons.Should().Contain(b => b.TextContent.Contains("Charts"));
+        navButtons.Should().Contain(b => b.TextContent.Contains("Publish"));
+    }
+
+    [Test]
+    public void MobileNav_ShowsNodes_WhenTopologyHasGroups()
+    {
+        var group = new SpbGroup { };
+        group.Nodes["n1"] = new SpbNode { NodeId = "n1", GroupId = "g1", Status = SpbNodeStatus.Online };
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["g1"] = group });
+
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mobile-nav-btn")
+            .Should().Contain(b => b.TextContent.Contains("Nodes"));
+    }
+
+    [Test]
+    public void MobileNav_HidesNodes_WhenTopologyEmpty()
+    {
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup>());
+
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mobile-nav-btn")
+            .Should().NotContain(b => b.TextContent.Contains("Nodes"));
+    }
+
+    [Test]
+    public void MoreMenu_RendersActivator()
+    {
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mobile-nav-more").Should().ContainSingle();
+    }
+
+    [Test]
+    public void MoreMenu_SubscriptionsIsUrlAddressable()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=subscriptions");
+
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Subscriptions");
+    }
+
+    [Test]
+    public void MoreMenu_SettingsIsUrlAddressable()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=settings");
+
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Settings");
+    }
+
+    [Test]
+    public void MobileNav_ClickingCharts_ActivatesChartsTab()
+    {
+        var cut = Render<IndexPage>();
+        var nav = Services.GetRequiredService<NavigationManager>();
+
+        var chartsBtn = cut.FindAll(".mobile-nav-btn")
+            .First(b => b.TextContent.Contains("Charts"));
+        chartsBtn.Click();
+
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Charts");
+        nav.Uri.Should().Contain("tab=charts");
+    }
+
+    [Test]
+    public void MobileNav_HidesPublish_ForNonOperator()
+    {
+        AuthorizationContext.SetAuthorized("viewer").SetRoles();
+
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mobile-nav-btn")
+            .Should().NotContain(b => b.TextContent.Contains("Publish"));
+    }
+
+    [Test]
+    [TestCase("charts", "Charts")]
+    [TestCase("subscriptions", "Subscriptions")]
+    [TestCase("publish", "Publish")]
+    [TestCase("emulation", "Emulation")]
+    [TestCase("settings", "Settings")]
+    public void TabRouting_SlugWithNoNodes_ActivatesIntendedTab(string slug, string expectedLabel)
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo($"/?tab={slug}");
+
+        var cut = Render<IndexPage>();
+        var activeTabs = cut.FindAll(".mud-tab[aria-selected='true']");
+        activeTabs.Should().ContainSingle()
+            .Which.TextContent.Should().Contain(expectedLabel);
+    }
+
+    [Test]
+    public void MobileNav_ClickingCharts_NoNodes_ActivatesChartsAndWritesUrl()
+    {
+        var cut = Render<IndexPage>();
+        var nav = Services.GetRequiredService<NavigationManager>();
+
+        var chartsBtn = cut.FindAll(".mobile-nav-btn")
+            .First(b => b.TextContent.Contains("Charts"));
+        chartsBtn.Click();
+
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Charts");
+        nav.Uri.Should().Contain("tab=charts");
+    }
+
+    [Test]
+    public void DesktopTabClick_Charts_NoNodes_WritesCorrectSlug()
+    {
+        var cut = Render<IndexPage>();
+        var nav = Services.GetRequiredService<NavigationManager>();
+
+        var chartsTab = cut.FindAll(".mud-tab")
+            .First(t => t.TextContent.Contains("Charts"));
+        chartsTab.Click();
+
+        nav.Uri.Should().Contain("tab=charts");
+    }
+
+    [Test]
+    public void DesktopTabClick_Subscriptions_NoNodes_WritesCorrectSlug()
+    {
+        var cut = Render<IndexPage>();
+        var nav = Services.GetRequiredService<NavigationManager>();
+
+        var subsTab = cut.FindAll(".mud-tab")
+            .First(t => t.TextContent.Contains("Subscriptions"));
+        subsTab.Click();
+
+        nav.Uri.Should().Contain("tab=subscriptions");
+    }
+
+    [Test]
+    public void TabRouting_NodesSlug_EmptyTopology_DefaultsToBrowser()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=nodes");
+
+        var cut = Render<IndexPage>();
+        var activeTabs = cut.FindAll(".mud-tab[aria-selected='true']");
+        activeTabs.Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Browser");
+    }
+
+    [Test]
+    public void TopologyChanged_PreservesActiveSlugWhenStillVisible()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=charts");
+
+        var cut = Render<IndexPage>();
+
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Charts");
+
+        var group = new SpbGroup { };
+        group.Nodes["n1"] = new SpbNode { NodeId = "n1", GroupId = "g1", Status = SpbNodeStatus.Online };
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["g1"] = group });
+        _mockTopology.TopologyChanged += Raise.Event<Action>();
+
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Charts");
+    }
+
 }
 
 [TestFixture]
@@ -205,6 +390,25 @@ public class NotFoundPageTests : BunitTestContext
         mockConfig.Config.Returns(new AppConfiguration());
         Services.AddSingleton(mockConfig);
         Services.AddSingleton(Substitute.For<IJSRuntime>());
+        var mockMetrics = Substitute.For<IUxMetricsService>();
+        mockMetrics.GetSnapshot().Returns(new UxMetricsSnapshot(
+            ConnectAttempts: 0, ConnectSuccesses: 0, ConnectFailures: 0,
+            PublishSuccesses: 0, PublishFailures: 0,
+            ChartsCreated: 0, SeriesAddedToExistingCharts: 0,
+            MessagesProcessed: 0, MessagesDropped: 0,
+            AvgProcessingTimeUs: 0, MaxProcessingTimeUs: 0,
+            AvgPayloadBytes: 0, MaxPayloadBytes: 0,
+            CurrentMessagesPerSecond: 0,
+            MessageRateHistory: new int[UxMetricsService.RateWindowSeconds],
+            MessagesProcessedByFormat: new Dictionary<string, long>(),
+            ChartFunnelBySource: new Dictionary<string, long>(),
+            MaxDisplayMessages: 0, CurrentDisplayedMessageCount: 0,
+            AppCpuUsagePercent: 0, AppManagedHeapMb: 0,
+            AppWorkingSetMb: 0, AppThreadCount: 0,
+            AppThreadPoolQueueLength: 0, AppGcGen2Collections: 0,
+            AppUptimeSeconds: 0, EmulatorPublishersOnline: 0,
+            EmulatorPublishCycles: 0, EmulatorNodesInError: 0));
+        Services.AddSingleton(mockMetrics);
         Services.AddSingleton<IThemes>(new Themes());
     }
 

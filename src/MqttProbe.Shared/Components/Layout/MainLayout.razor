@@ -41,7 +41,7 @@
                             </MudText>
                         </MudItem>
                         <MudItem Class="d-flex justify-center" xs="12">
-                            <img class="signal-connecting" src="/_content/MqttProbe.Shared/img/signal-motif.svg" alt="Searching for signal" />
+                            <img class="signal-connecting" width="104" height="104" src="/_content/MqttProbe.Shared/img/signal-motif.svg" alt="Searching for signal" />
                         </MudItem>
                         <MudItem Class="d-flex justify-center" xs="12">
                             <MudButton Variant="Variant.Outlined" Color="Color.Error"
@@ -62,6 +62,7 @@
     private Func<EventArgs, Task>? _connectionStateChangedHandler;
     private bool _disposed;
     private bool _isAuthPage;
+    private bool _hasRendered;
 
     protected override void OnInitialized()
     {
@@ -89,7 +90,8 @@
     private void OnFontModeChanged()
     {
         _ = SettingsStore.SetFontAccessibleAsync(Themes.IsFontAccessible);
-        _ = SetBodyFontClass();
+        if (_hasRendered)
+            _ = SetBodyFontClass();
         InvokeAsync(StateHasChanged);
     }
 
@@ -116,7 +118,10 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
+        {
+            _hasRendered = true;
             await SetBodyFontClass();
+        }
     }
 
     private async Task StopReconnect()

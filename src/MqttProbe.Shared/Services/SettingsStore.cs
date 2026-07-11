@@ -11,12 +11,9 @@ namespace MqttProbe.Services.Configuration;
 public interface ISettingsStore
 {
     public AppConfiguration Config { get; }
-    public IReadOnlyList<ChartConfiguration> Charts { get; }
-    public IReadOnlyList<EmulatorNodeConfig> EmulatorNodes { get; }
-    public int EmulatorPublishIntervalMs { get; }
 
-    public event Action? ChartsChanged;
-    public event Action? EmulatorsChanged;
+    public event Action<Guid>? ChartsChanged;
+    public event Action<Guid>? EmulatorsChanged;
 
     public Task LoadAsync(ISecretStorage? secretStorage = null);
     public Task SaveAsync();
@@ -25,23 +22,27 @@ public interface ISettingsStore
     public Task AddConnectionAsync(Connection connection);
     public Task RemoveConnectionAsync(Connection connection);
 
-    // Chart ops
-    public Task AddChartAsync(ChartConfiguration chart);
-    public Task UpdateChartAsync(ChartConfiguration chart);
-    public Task RemoveChartAsync(Guid chartId);
+    // Chart ops (per-connection)
+    public Task AddChartAsync(Guid connectionId, ChartConfiguration chart);
+    public Task UpdateChartAsync(Guid connectionId, ChartConfiguration chart);
+    public Task RemoveChartAsync(Guid connectionId, Guid chartId);
+    public IReadOnlyList<ChartConfiguration> GetCharts(Guid connectionId);
 
-    // Emulator ops
-    public Task AddEmulatorNodeAsync(EmulatorNodeConfig node);
-    public Task UpdateEmulatorNodeAsync(EmulatorNodeConfig node);
-    public Task RemoveEmulatorNodeAsync(Guid nodeId);
-    public Task RemoveAllEmulatorNodesAsync();
-    public Task SetEmulatorPublishIntervalAsync(int intervalMs);
+    // Emulator ops (per-connection)
+    public Task AddEmulatorNodeAsync(Guid connectionId, EmulatorNodeConfig node);
+    public Task UpdateEmulatorNodeAsync(Guid connectionId, EmulatorNodeConfig node);
+    public Task RemoveEmulatorNodeAsync(Guid connectionId, Guid nodeId);
+    public Task RemoveAllEmulatorNodesAsync(Guid connectionId);
+    public Task SetEmulatorPublishIntervalAsync(Guid connectionId, int intervalMs);
+    public IReadOnlyList<EmulatorNodeConfig> GetEmulatorNodes(Guid connectionId);
+    public int GetEmulatorPublishIntervalMs(Guid connectionId);
 
     // UI prefs
     public Task SetThemeAsync(string theme);
     public Task SetFontFamilyAsync(string fontFamily);
     public Task SetFontAccessibleAsync(bool accessible);
     public Task SetAutoResubscribeAsync(bool autoResubscribe);
+    public Task SetEnrichSparkplugAliasNamesAsync(bool enrich);
     public Task DismissHintAsync(string hintId);
     public bool IsHintDismissed(string hintId);
 
@@ -51,6 +52,8 @@ public interface ISettingsStore
     public event Action? PerformanceSettingsChanged;
     public Task SetMaxStoredMessagesAsync(int value);
     public Task SetMaxMessagesPerSecondAsync(int value);
+    public Task SetMaxDisplayMessagesAsync(int value);
+    public Task SetMaxTopicNodesAsync(int value);
 
     // Auth
     public bool VerifyCredentials(string username, string password);
@@ -68,23 +71,22 @@ public class SettingsStore : ISettingsStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
     private readonly SemaphoreSlim _lock = new(1, 1);
+    private readonly bool _isMobile;
 
     private AppConfiguration _config = new();
     private ISecretStorage? _secretStorage;
 
-    public SettingsStore(string configPath, ILogger<SettingsStore>? logger = null)
+    public SettingsStore(string configPath, bool isMobile = false, ILogger<SettingsStore>? logger = null)
     {
         _configPath = configPath;
+        _isMobile = isMobile;
         _logger = logger;
     }
 
     public AppConfiguration Config => Volatile.Read(ref _config);
-    public IReadOnlyList<ChartConfiguration> Charts => Volatile.Read(ref _config).Charts;
-    public IReadOnlyList<EmulatorNodeConfig> EmulatorNodes => Volatile.Read(ref _config).Emulators.Nodes;
-    public int EmulatorPublishIntervalMs => Volatile.Read(ref _config).Emulators.PublishIntervalMs;
 
-    public event Action? ChartsChanged;
-    public event Action? EmulatorsChanged;
+    public event Action<Guid>? ChartsChanged;
+    public event Action<Guid>? EmulatorsChanged;
     public event Action? UiPreferencesChanged;
     public event Action? PerformanceSettingsChanged;
 
@@ -97,7 +99,14 @@ public class SettingsStore : ISettingsStore
 
             if (!File.Exists(_configPath))
             {
-                _config = new AppConfiguration();
+                _config = new AppConfiguration { Connections = CreateDefaultConnections() };
+                if (_isMobile)
+                {
+                    _config.Performance.MaxStoredMessages = 1_000;
+                    _config.Performance.MaxMessagesPerSecond = 1_000;
+                    _config.Performance.MaxTopicNodes = 1_000;
+                    _config.Performance.MaxDisplayMessages = 500;
+                }
                 await SaveCoreAsync();
                 return;
             }
@@ -107,6 +116,7 @@ public class SettingsStore : ISettingsStore
                 var json = await File.ReadAllTextAsync(_configPath);
                 _config = JsonSerializer.Deserialize<AppConfiguration>(json, _jsonOptions) ?? new AppConfiguration();
                 NormalizeConfig();
+                MigrateGlobalData();
             }
             catch (Exception ex)
             {
@@ -144,8 +154,8 @@ public class SettingsStore : ISettingsStore
             Performance = _config.Performance,
             Ui = _config.Ui,
             Connections = _config.Connections.Select(c => c.CloneWithoutPassword()).ToList(),
-            Charts = _config.Charts,
-            Emulators = _config.Emulators
+            ChartsByConnection = _config.ChartsByConnection,
+            EmulatorsByConnection = _config.EmulatorsByConnection
         };
         await FileHelper.WriteAtomicallyAsync(_configPath, JsonSerializer.Serialize(sanitised, _jsonOptions));
         RestrictFilePermissions(_configPath);
@@ -187,6 +197,8 @@ public class SettingsStore : ISettingsStore
             if (existing != null)
             {
                 _config.Connections.Remove(existing);
+                _config.ChartsByConnection.Remove(existing.Id);
+                _config.EmulatorsByConnection.Remove(existing.Id);
                 if (_secretStorage != null)
                     await _secretStorage.RemoveAsync(SecretKey(connection));
             }
@@ -199,14 +211,20 @@ public class SettingsStore : ISettingsStore
         await SaveAsync();
     }
 
-    // --- Chart ops ---
+    // --- Chart ops (per-connection) ---
 
-    public async Task AddChartAsync(ChartConfiguration chart)
+    public async Task AddChartAsync(Guid connectionId, ChartConfiguration chart)
     {
         await _lock.WaitAsync();
         try
         {
-            _config.Charts.Add(chart);
+            if (!_config.ChartsByConnection.TryGetValue(connectionId, out var charts))
+            {
+                charts = [];
+                _config.ChartsByConnection[connectionId] = charts;
+            }
+
+            charts.Add(chart);
         }
         finally
         {
@@ -214,16 +232,19 @@ public class SettingsStore : ISettingsStore
         }
 
         await SaveAsync();
-        ChartsChanged?.Invoke();
+        ChartsChanged?.Invoke(connectionId);
     }
 
-    public async Task UpdateChartAsync(ChartConfiguration chart)
+    public async Task UpdateChartAsync(Guid connectionId, ChartConfiguration chart)
     {
         await _lock.WaitAsync();
         try
         {
-            var idx = _config.Charts.FindIndex(c => c.Id == chart.Id);
-            if (idx >= 0) _config.Charts[idx] = chart;
+            if (_config.ChartsByConnection.TryGetValue(connectionId, out var charts))
+            {
+                var idx = charts.FindIndex(c => c.Id == chart.Id);
+                if (idx >= 0) charts[idx] = chart;
+            }
         }
         finally
         {
@@ -231,15 +252,16 @@ public class SettingsStore : ISettingsStore
         }
 
         await SaveAsync();
-        ChartsChanged?.Invoke();
+        ChartsChanged?.Invoke(connectionId);
     }
 
-    public async Task RemoveChartAsync(Guid chartId)
+    public async Task RemoveChartAsync(Guid connectionId, Guid chartId)
     {
         await _lock.WaitAsync();
         try
         {
-            _config.Charts.RemoveAll(c => c.Id == chartId);
+            if (_config.ChartsByConnection.TryGetValue(connectionId, out var charts))
+                charts.RemoveAll(c => c.Id == chartId);
         }
         finally
         {
@@ -247,34 +269,30 @@ public class SettingsStore : ISettingsStore
         }
 
         await SaveAsync();
-        ChartsChanged?.Invoke();
+        ChartsChanged?.Invoke(connectionId);
     }
 
-    // --- Emulator ops ---
-
-    public async Task AddEmulatorNodeAsync(EmulatorNodeConfig node)
+    public IReadOnlyList<ChartConfiguration> GetCharts(Guid connectionId)
     {
-        await _lock.WaitAsync();
-        try
-        {
-            _config.Emulators.Nodes.Add(node);
-        }
-        finally
-        {
-            _lock.Release();
-        }
-
-        await SaveAsync();
-        EmulatorsChanged?.Invoke();
+        return _config.ChartsByConnection.TryGetValue(connectionId, out var charts)
+            ? charts
+            : [];
     }
 
-    public async Task UpdateEmulatorNodeAsync(EmulatorNodeConfig node)
+    // --- Emulator ops (per-connection) ---
+
+    public async Task AddEmulatorNodeAsync(Guid connectionId, EmulatorNodeConfig node)
     {
         await _lock.WaitAsync();
         try
         {
-            var idx = _config.Emulators.Nodes.FindIndex(n => n.Id == node.Id);
-            if (idx >= 0) _config.Emulators.Nodes[idx] = node;
+            if (!_config.EmulatorsByConnection.TryGetValue(connectionId, out var doc))
+            {
+                doc = new EmulatorDocument();
+                _config.EmulatorsByConnection[connectionId] = doc;
+            }
+
+            doc.Nodes.Add(node);
         }
         finally
         {
@@ -282,15 +300,19 @@ public class SettingsStore : ISettingsStore
         }
 
         await SaveAsync();
-        EmulatorsChanged?.Invoke();
+        EmulatorsChanged?.Invoke(connectionId);
     }
 
-    public async Task RemoveEmulatorNodeAsync(Guid nodeId)
+    public async Task UpdateEmulatorNodeAsync(Guid connectionId, EmulatorNodeConfig node)
     {
         await _lock.WaitAsync();
         try
         {
-            _config.Emulators.Nodes.RemoveAll(n => n.Id == nodeId);
+            if (_config.EmulatorsByConnection.TryGetValue(connectionId, out var doc))
+            {
+                var idx = doc.Nodes.FindIndex(n => n.Id == node.Id);
+                if (idx >= 0) doc.Nodes[idx] = node;
+            }
         }
         finally
         {
@@ -298,15 +320,16 @@ public class SettingsStore : ISettingsStore
         }
 
         await SaveAsync();
-        EmulatorsChanged?.Invoke();
+        EmulatorsChanged?.Invoke(connectionId);
     }
 
-    public async Task RemoveAllEmulatorNodesAsync()
+    public async Task RemoveEmulatorNodeAsync(Guid connectionId, Guid nodeId)
     {
         await _lock.WaitAsync();
         try
         {
-            _config.Emulators.Nodes.Clear();
+            if (_config.EmulatorsByConnection.TryGetValue(connectionId, out var doc))
+                doc.Nodes.RemoveAll(n => n.Id == nodeId);
         }
         finally
         {
@@ -314,15 +337,16 @@ public class SettingsStore : ISettingsStore
         }
 
         await SaveAsync();
-        EmulatorsChanged?.Invoke();
+        EmulatorsChanged?.Invoke(connectionId);
     }
 
-    public async Task SetEmulatorPublishIntervalAsync(int intervalMs)
+    public async Task RemoveAllEmulatorNodesAsync(Guid connectionId)
     {
         await _lock.WaitAsync();
         try
         {
-            _config.Emulators.PublishIntervalMs = intervalMs;
+            if (_config.EmulatorsByConnection.TryGetValue(connectionId, out var doc))
+                doc.Nodes.Clear();
         }
         finally
         {
@@ -330,7 +354,43 @@ public class SettingsStore : ISettingsStore
         }
 
         await SaveAsync();
-        EmulatorsChanged?.Invoke();
+        EmulatorsChanged?.Invoke(connectionId);
+    }
+
+    public async Task SetEmulatorPublishIntervalAsync(Guid connectionId, int intervalMs)
+    {
+        await _lock.WaitAsync();
+        try
+        {
+            if (!_config.EmulatorsByConnection.TryGetValue(connectionId, out var doc))
+            {
+                doc = new EmulatorDocument();
+                _config.EmulatorsByConnection[connectionId] = doc;
+            }
+
+            doc.PublishIntervalMs = intervalMs;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        await SaveAsync();
+        EmulatorsChanged?.Invoke(connectionId);
+    }
+
+    public IReadOnlyList<EmulatorNodeConfig> GetEmulatorNodes(Guid connectionId)
+    {
+        return _config.EmulatorsByConnection.TryGetValue(connectionId, out var doc)
+            ? doc.Nodes
+            : [];
+    }
+
+    public int GetEmulatorPublishIntervalMs(Guid connectionId)
+    {
+        return _config.EmulatorsByConnection.TryGetValue(connectionId, out var doc)
+            ? doc.PublishIntervalMs
+            : 500;
     }
 
     // --- Performance prefs ---
@@ -367,6 +427,40 @@ public class SettingsStore : ISettingsStore
         PerformanceSettingsChanged?.Invoke();
     }
 
+    public async Task SetMaxDisplayMessagesAsync(int value)
+    {
+        await _lock.WaitAsync();
+        try
+        {
+            _config.Performance.MaxDisplayMessages = value;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        await SaveAsync();
+        PerformanceSettingsChanged?.Invoke();
+    }
+
+    public async Task SetMaxTopicNodesAsync(int value)
+    {
+        if (value < 100) return;
+
+        await _lock.WaitAsync();
+        try
+        {
+            _config.Performance.MaxTopicNodes = value;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        await SaveAsync();
+        PerformanceSettingsChanged?.Invoke();
+    }
+
     // --- UI prefs ---
 
     public async Task SetThemeAsync(string theme)
@@ -393,6 +487,13 @@ public class SettingsStore : ISettingsStore
     public async Task SetAutoResubscribeAsync(bool autoResubscribe)
     {
         _config.Ui.AutoResubscribe = autoResubscribe;
+        await SaveAsync();
+        UiPreferencesChanged?.Invoke();
+    }
+
+    public async Task SetEnrichSparkplugAliasNamesAsync(bool enrich)
+    {
+        _config.Ui.EnrichSparkplugAliasNames = enrich;
         await SaveAsync();
         UiPreferencesChanged?.Invoke();
     }
@@ -443,9 +544,82 @@ public class SettingsStore : ISettingsStore
         _config.Auth ??= new Auth();
         _config.Performance ??= new PerformanceSettings();
         _config.Ui ??= new UiPreferences();
+#pragma warning disable CS0618 // Intentional: ensuring legacy properties exist for migration
         _config.Charts ??= [];
         _config.Emulators ??= new EmulatorDocument();
+#pragma warning restore CS0618
         _config.Ui.DismissedHints ??= [];
+        _config.ChartsByConnection ??= [];
+        _config.EmulatorsByConnection ??= [];
+    }
+
+    private void MigrateGlobalData()
+    {
+#pragma warning disable CS0618 // Intentional: migrating from legacy properties
+        if (_config.ChartsByConnection.Count == 0 && _config.Charts.Count > 0)
+        {
+            var targetId = _config.Connections.FirstOrDefault()?.Id
+                           ?? EnsureDefaultConnection();
+            _config.ChartsByConnection[targetId] = _config.Charts;
+            _config.Charts = [];
+        }
+
+        if (_config.EmulatorsByConnection.Count == 0
+            && _config.Emulators.Nodes.Count > 0)
+        {
+            var targetId = _config.Connections.FirstOrDefault()?.Id
+                           ?? EnsureDefaultConnection();
+            _config.EmulatorsByConnection[targetId] = _config.Emulators;
+            _config.Emulators = new EmulatorDocument();
+        }
+#pragma warning restore CS0618
+    }
+
+    // Seeded on first run so a user without their own broker can try the app immediately.
+    // ClientId is left to auto-generate per install to avoid collisions on these shared public brokers.
+    private static List<Connection> CreateDefaultConnections() =>
+    [
+        new()
+        {
+            Name = "HiveMQ — TCP 1883",
+            Host = "broker.hivemq.com",
+            Port = 1883,
+            Protocol = Protocol.Mqtt,
+            UseTls = false,
+            SubscribedTopics = ["spBv1.0/#"]
+        },
+        new()
+        {
+            Name = "EMQX — TLS 8883",
+            Host = "broker.emqx.io",
+            Port = 8883,
+            Protocol = Protocol.Mqtt,
+            UseTls = true,
+            AllowUntrustedCertificate = false,
+            SubscribedTopics = ["spBv1.0/#"]
+        },
+        new()
+        {
+            Name = "Mosquitto — WebSocket TLS 8081",
+            Host = "test.mosquitto.org",
+            Port = 8081,
+            Protocol = Protocol.WebSocket,
+            UseTls = true,
+            AllowUntrustedCertificate = true,
+            WebsocketBasePath = "",
+            SubscribedTopics = ["spBv1.0/#"]
+        }
+    ];
+
+    private Guid EnsureDefaultConnection()
+    {
+        var id = Guid.NewGuid();
+        _config.Connections.Add(new Connection
+        {
+            Id = id,
+            Name = "Default"
+        });
+        return id;
     }
 
     private static string SecretKey(Connection c)

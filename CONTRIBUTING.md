@@ -26,7 +26,24 @@ Bug fixes and small improvements are welcome. For larger changes, open an issue 
 - File-scoped namespaces
 - `_camelCase` for private fields
 - `var` everywhere
-- No comments unless the why is non-obvious
+- **Prefer few comments.** Good code names and structure make most comments unnecessary.
+- **Comments explain non-obvious *why*, not restate *what*.** `// increment i` is noise; `// retry after transient disconnect because the library does not handle this` is useful.
+- **Acceptable when they improve clarity** in messy CSS/Razor markup, complex regex, or otherwise hard-to-name structure.
+
+### Tests and Coverage
+
+- Run `dotnet test tests/MqttProbe.Tests` before opening a PR.
+- Add or update tests for behavior changes and bug fixes.
+- Keep test coverage at or above 75%.
+- Use `python scripts/coverage.py --open` to inspect coverage when needed.
+
+### CI Checks
+
+Before submitting changes, make sure the same checks used by CI pass locally:
+
+- `dotnet build MqttProbe.slnx --warnaserror`
+- `dotnet test tests/MqttProbe.Tests`
+- `python scripts/format-check.py`
 
 ### Commit Messages
 

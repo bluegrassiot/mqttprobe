@@ -4,6 +4,7 @@
 @inject IEmulationService EmulationService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject ISessionState SessionState
 
 <div class="emu-root">
     <TabPanelHeader Title="Emulation" Icon="@LucideIcons.Zap">
@@ -34,14 +35,14 @@
                        title="Add node"
                        Disabled="@EmulationService.IsRunning"
                        OnClick="@AddDefaultNodeAsync">
-                Add Node
+                Add<span class="emu-action-word">&nbsp;Node</span>
             </MudButton>
             <MudButton Variant="Variant.Outlined" Color="Color.Error" Class="app-btn-min"
                        StartIcon="@LucideIcons.Trash2"
                        title="Remove all nodes"
                        Disabled="@(NodeCount == 0 || EmulationService.IsRunning)"
                        OnClick="@RemoveAllAsync">
-                Remove All
+                Remove<span class="emu-action-word">&nbsp;All</span>
             </MudButton>
             <MudButton Variant="Variant.Filled" Class="app-btn-min"
                        Color="@(EmulationService.IsRunning ? Color.Error : Color.Success)"
@@ -87,7 +88,7 @@
                 No emulator nodes configured
             </MudText>
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
-                Add a node to start streaming synthetic telemetry
+                Add a node to start streaming synthetic metrics
             </MudText>
         </div>
     }
@@ -157,7 +158,12 @@
     {
         _intervalMs = EmulationService.PublishIntervalMs;
         EmulationService.StateChanged += OnServiceStateChanged;
+        EmulationService.SetConnection(SessionState.SelectedConnection.Id);
+        SessionState.SelectedConnectionChanged += OnSelectedConnectionChanged;
     }
+
+    private void OnSelectedConnectionChanged(Connection _) =>
+        InvokeAsync(() => EmulationService.SetConnection(SessionState.SelectedConnection.Id));
 
     private void OnServiceStateChanged() => InvokeAsync(StateHasChanged);
 
@@ -220,5 +226,9 @@
         Snackbar.Add("All nodes removed.", Severity.Success);
     }
 
-    public void Dispose() => EmulationService.StateChanged -= OnServiceStateChanged;
+    public void Dispose()
+    {
+        EmulationService.StateChanged -= OnServiceStateChanged;
+        SessionState.SelectedConnectionChanged -= OnSelectedConnectionChanged;
+    }
 }

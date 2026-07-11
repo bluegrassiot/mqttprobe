@@ -5,10 +5,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link href="_content/MqttProbe.Shared/css/fonts.css" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link href="_content/MqttProbe.Shared/css/components.css" rel="stylesheet" />
-    <link href="_content/Blazor-ApexCharts/index.css" rel="stylesheet" />
+    <link href="_content/Blazor-ApexCharts/css/apexcharts.css" rel="stylesheet" />
     <link href="MqttProbe.Web.styles.css" rel="stylesheet" />
     <style>
         #blazor-error-ui {
@@ -30,12 +31,27 @@
 <body>
     <Routes @rendermode="InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
-    <script src="_content/CurrieTechnologies.Razor.Clipboard/clipboard.min.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <div id="blazor-error-ui">
         An error has occurred. This application may no longer respond until reloaded.
         <a href="" class="reload">Reload</a>
         <a class="dismiss">🗙</a>
+    </div>
+
+    @* Custom Blazor circuit reconnect UI. Providing an element with this id
+       suppresses the framework's unstyled default dialog *@
+    <div id="components-reconnect-modal" class="components-reconnect-hide">
+        <div class="reconnect-card">
+            <img class="reconnect-motif" width="96" height="96"
+                 src="_content/MqttProbe.Shared/img/signal-motif.svg" alt="" />
+            <p class="reconnect-message reconnect-message--show">Rejoining the server&hellip;</p>
+            <p class="reconnect-message reconnect-message--failed">
+                Connection lost. <a href="" onclick="window.Blazor.reconnect(); return false;">Try to reconnect</a>
+            </p>
+            <p class="reconnect-message reconnect-message--rejected">
+                Could not reconnect to the server. <a href="" onclick="location.reload(); return false;">Reload the page</a>
+            </p>
+        </div>
     </div>
 </body>
 

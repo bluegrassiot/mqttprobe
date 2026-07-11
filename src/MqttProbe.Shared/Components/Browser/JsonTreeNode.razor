@@ -6,7 +6,7 @@
     case JsonValueKind.Object:
     {
         var props = Element.EnumerateObject().ToList();
-        var metricName = TryGetMetricName(Element);
+        var metricName = TryGetMetricName(Element, AliasNames);
         if (props.Count == 0)
         {
             <span class="json-bracket">{ }</span>
@@ -37,7 +37,8 @@
                     var chartPath = GetChildChartPath(childPath, JsonPath, prop.Name, metricName);
                     <div class="json-row" style="margin-left: @((Depth + 1) * 14)px">
                         <span class="json-key">"@prop.Name"</span><span class="json-colon">: </span><JsonTreeNode Element="prop.Value" Depth="@(Depth + 1)" AutoExpandDepth="@AutoExpandDepth"
-                              JsonPath="@chartPath" SeriesName="@GetChildSeriesName(prop.Name, metricName)" OnAddToChart="OnAddToChart"/>
+                              JsonPath="@chartPath" SeriesName="@GetChildSeriesName(prop.Name, metricName)" OnAddToChart="OnAddToChart" AliasNames="@AliasNames"
+                              SuppressChartButton="@ShouldSuppressChildChartButton(prop.Name, JsonPath, Element)"/>
                     </div>
                 }
                 <div style="margin-left: @(Depth * 14)px"><span class="json-bracket">}</span></div>
@@ -45,6 +46,11 @@
             else
             {
                 <span class="json-preview">@GetCollapsedPreview(Element)</span>
+            }
+            @if (ShouldShowAliasAnnotation(Element, AliasNames))
+            {
+                var resolvedName = GetResolvedAliasName(Element, AliasNames);
+                <span class="json-alias-annotation"> &rarr; @resolvedName (resolved)</span>
             }
         }
         break;
@@ -83,7 +89,7 @@
                     var itemPath = $"{JsonPath}[{i}]";
                     <div class="json-row" style="margin-left: @((Depth + 1) * 14)px">
                         <JsonTreeNode Element="item" Depth="@(Depth + 1)" AutoExpandDepth="@AutoExpandDepth"
-                                      JsonPath="@itemPath" OnAddToChart="OnAddToChart"/>@(!isLast ? "," : "")
+                                      JsonPath="@itemPath" OnAddToChart="OnAddToChart" AliasNames="@AliasNames"/>@(!isLast ? "," : "")
                     </div>
                 }
                 <div style="margin-left: @(Depth * 14)px"><span class="json-bracket">]</span></div>
@@ -135,12 +141,16 @@
     [Parameter] public string JsonPath { get; set; } = "";
     [Parameter] public string? SeriesName { get; set; }
     [Parameter] public EventCallback<ChartFieldSelection> OnAddToChart { get; set; }
+    [Parameter] public IReadOnlyDictionary<ulong, string>? AliasNames { get; set; }
+    [Parameter] public bool SuppressChartButton { get; set; }
 
     private bool _isExpanded;
     private bool _initialized;
 
     private bool IsExpanded => _isExpanded;
-    private bool ShouldShowChartButton => OnAddToChart.HasDelegate && !IsSparkplugDatatypePath(JsonPath);
+    private bool ShouldShowChartButton => OnAddToChart.HasDelegate
+        && !SuppressChartButton
+        && !IsSparkplugDatatypePath(JsonPath);
 
     protected override void OnParametersSet()
     {
@@ -180,18 +190,97 @@
         return string.IsNullOrEmpty(prefix) ? metricName : $"{prefix}.{metricName}";
     }
 
-    private static string? TryGetMetricName(JsonElement element)
+    private static string? TryGetMetricName(JsonElement element, IReadOnlyDictionary<ulong, string>? aliasNames = null)
     {
-        if (!element.TryGetProperty("name", out var nameElement) || nameElement.ValueKind != JsonValueKind.String)
-            return null;
+        if (element.TryGetProperty("name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String)
+        {
+            var name = nameElement.GetString();
+            if (!string.IsNullOrWhiteSpace(name))
+                return name;
+        }
 
-        var name = nameElement.GetString();
-        return string.IsNullOrWhiteSpace(name) ? null : name;
+        if (aliasNames is not null && TryGetAliasValue(element, out var aliasVal))
+            return aliasNames.TryGetValue(aliasVal, out var resolvedName) ? resolvedName : null;
+
+        return null;
+    }
+
+    private static bool ShouldShowAliasAnnotation(
+        JsonElement element, IReadOnlyDictionary<ulong, string>? aliasNames)
+    {
+        if (aliasNames is null)
+            return false;
+
+        if (element.TryGetProperty("name", out var nameEl)
+            && nameEl.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(nameEl.GetString()))
+            return false;
+
+        if (!TryGetAliasValue(element, out var aliasVal) || aliasVal == 0)
+            return false;
+
+        return aliasNames.ContainsKey(aliasVal);
+    }
+
+    private static string GetResolvedAliasName(
+        JsonElement element, IReadOnlyDictionary<ulong, string>? aliasNames)
+    {
+        if (aliasNames is null)
+            return string.Empty;
+
+        if (TryGetAliasValue(element, out var aliasVal)
+            && aliasNames.TryGetValue(aliasVal, out var resolvedName))
+            return resolvedName;
+
+        return string.Empty;
+    }
+
+    private static bool TryGetAliasValue(JsonElement element, out ulong alias)
+    {
+        alias = 0;
+        if (!element.TryGetProperty("alias", out var aliasEl))
+            return false;
+
+        if (aliasEl.ValueKind == JsonValueKind.Number)
+            return aliasEl.TryGetUInt64(out alias);
+
+        if (aliasEl.ValueKind == JsonValueKind.String
+            && aliasEl.GetString() is { } aliasStr
+            && ulong.TryParse(aliasStr, NumberStyles.None, CultureInfo.InvariantCulture, out alias))
+            return true;
+
+        return false;
     }
 
     private static bool IsSparkplugDatatypePath(string jsonPath) =>
         jsonPath.EndsWith(".datatype", StringComparison.Ordinal) ||
         string.Equals(jsonPath, "datatype", StringComparison.Ordinal);
+
+    private static bool ShouldSuppressChildChartButton(string propertyName, string parentPath, JsonElement parentElement)
+    {
+        if (!string.Equals(propertyName, "alias", StringComparison.Ordinal))
+            return false;
+
+        if (!IsSparkplugMetricsItemPath(parentPath))
+            return false;
+
+        if (parentElement.ValueKind != JsonValueKind.Object)
+            return false;
+
+        return parentElement.EnumerateObject()
+            .Any(p => IsMetricValueFieldName(p.Name));
+    }
+
+    private static bool IsSparkplugMetricsItemPath(string path)
+    {
+        var lastBracket = path.LastIndexOf('[');
+        if (lastBracket < 0 || !path.EndsWith("]", StringComparison.Ordinal))
+            return false;
+
+        var beforeBracket = path[..lastBracket];
+        return beforeBracket.EndsWith(".metrics", StringComparison.Ordinal)
+               || string.Equals(beforeBracket, "metrics", StringComparison.Ordinal);
+    }
 
     private static bool IsMetricValueFieldName(string propertyName) =>
         propertyName is "value" or "int_value" or "float_value" or "double_value" or "long_value" or "boolean_value"

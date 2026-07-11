@@ -1,5 +1,9 @@
 .json-tree-root {
     padding: 8px;
+    /* Flex-fill the payload panel (a clipping flex column) so this element is
+       the bounded scroller and its horizontal scrollbar stays on-screen. */
+    flex: 1 1 auto;
+    min-height: 0;
     overflow: auto;
     font-family: var(--font-mono);
     font-size: 0.82rem;

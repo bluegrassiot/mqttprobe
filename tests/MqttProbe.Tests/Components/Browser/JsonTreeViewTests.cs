@@ -350,6 +350,80 @@ public class JsonTreeViewTests : BunitTestContext
     }
 
     [Test]
+    public void GenericAlias_ShowsChartButton_WhenOnAddToChartIsSet()
+    {
+        ChartFieldSelection? captured = null;
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"alias":42}""")
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, sel => captured = sel)));
+        cut.Find(".json-chart-btn").Should().NotBeNull();
+
+        cut.Find(".json-chart-btn").Click();
+
+        captured.Should().Be(new ChartFieldSelection("alias"));
+    }
+
+    [Test]
+    public async Task NestedGenericAlias_ShowsChartButton_WhenOnAddToChartIsSet()
+    {
+        ChartFieldSelection? captured = null;
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"device":{"alias":42}}""")
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, sel => captured = sel)));
+        cut.Find(".json-chart-btn").Should().NotBeNull();
+
+        await cut.Find(".json-chart-btn").ClickAsync(new());
+
+        captured.Should().Be(new ChartFieldSelection("device.alias"));
+    }
+
+    [Test]
+    public async Task GenericAliasWithValueSibling_ShowsChartButton_WhenOnAddToChartIsSet()
+    {
+        ChartFieldSelection? captured = null;
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"device":{"alias":42,"value":10}}""")
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, sel => captured = sel)));
+        await cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        var buttons = cut.FindAll(".json-chart-btn");
+        buttons.Should().HaveCount(2);
+
+        await buttons[0].ClickAsync(new());
+
+        captured.Should().Be(new ChartFieldSelection("device.alias"));
+    }
+
+    [Test]
+    public async Task SparkplugAlias_DoesNotShowChartButton()
+    {
+        var aliasNames = new Dictionary<ulong, string> { [42] = "Flow Rate" };
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"metrics":[{"alias":42,"doubleValue":3.14}]}""")
+            .Add(x => x.AliasNames, aliasNames)
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, _ => { })));
+        await cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        cut.FindAll(".json-chart-btn").Should().ContainSingle();
+    }
+
+    [Test]
+    public async Task SparkplugAliasValue_InvokesCallbackWithResolvedMetricNameAsSeriesName()
+    {
+        ChartFieldSelection? captured = null;
+        var aliasNames = new Dictionary<ulong, string> { [42] = "Flow Rate" };
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"metrics":[{"alias":42,"doubleValue":3.14}]}""")
+            .Add(x => x.AliasNames, aliasNames)
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+        await cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        await cut.Find(".json-chart-btn").ClickAsync(new());
+
+        captured.Should().Be(new ChartFieldSelection("metrics.Flow Rate", "Flow Rate"));
+    }
+
+    [Test]
     public void HasExpandableContent_True_WhenJsonHasNonEmptyContainer()
     {
         var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":1}"""));
@@ -457,5 +531,66 @@ public class JsonTreeViewTests : BunitTestContext
 
         cut.FindAll(".json-preview").Should().HaveCount(1);
         cut.FindAll(".json-key").Select(e => e.TextContent).Should().NotContain("\"z\"");
+    }
+
+    // --- Alias annotation tests ---
+
+    [Test]
+    public void AliasAnnotation_RendersForAliasOnlyMetric()
+    {
+        var aliasNames = new Dictionary<ulong, string> { [42] = "Flow Rate" };
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"metrics":[{"alias":42,"doubleValue":3.14}]}""")
+            .Add(x => x.AliasNames, aliasNames));
+        cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        cut.Markup.Should().Contain("→ Flow Rate (resolved)");
+    }
+
+    [Test]
+    public void AliasAnnotation_NotRenderedWhenNamePresent()
+    {
+        var aliasNames = new Dictionary<ulong, string> { [5] = "Pressure" };
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"metrics":[{"name":"Pressure","alias":5,"doubleValue":1013.0}]}""")
+            .Add(x => x.AliasNames, aliasNames));
+        cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        cut.Markup.Should().NotContain("(resolved)");
+    }
+
+    [Test]
+    public void AliasAnnotation_NotRenderedWhenAliasNamesNull()
+    {
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"metrics":[{"alias":42,"doubleValue":3.14}]}""")
+            .Add(x => x.AliasNames, (IReadOnlyDictionary<ulong, string>?)null));
+        cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        cut.Markup.Should().NotContain("(resolved)");
+    }
+
+    [Test]
+    public void AliasAnnotation_NotRenderedWhenAliasNotInMap()
+    {
+        var aliasNames = new Dictionary<ulong, string> { [7] = "Temperature" };
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"metrics":[{"alias":42,"doubleValue":3.14}]}""")
+            .Add(x => x.AliasNames, aliasNames));
+        cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        cut.Markup.Should().NotContain("(resolved)");
+    }
+
+    [Test]
+    public void AliasAnnotation_NotRenderedWhenAliasIsZero()
+    {
+        var aliasNames = new Dictionary<ulong, string> { [0] = "Something" };
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, """{"metrics":[{"alias":0,"doubleValue":1.0}]}""")
+            .Add(x => x.AliasNames, aliasNames));
+        cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        cut.Markup.Should().NotContain("(resolved)");
     }
 }

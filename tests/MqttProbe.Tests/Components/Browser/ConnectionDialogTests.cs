@@ -6,8 +6,8 @@ using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Telemetry;
 using MqttProbe.Shared.Tests.TestHelpers;
 using MudBlazor;
 
@@ -22,6 +22,7 @@ public class ConnectionDialogTests : BunitTestContext
     private ISubscriptionManager _mockSubMgr = null!;
     private ISessionState _mockSessionState = null!;
     private IMqttOptionsBuilder _mockOptionsBuilder = null!;
+    private IBrokerStateResetCoordinator _mockCoordinator = null!;
     private IRenderedComponent<MudDialogProvider> _dialogProvider = null!;
 
     private Func<MqttClientConnectedEventArgs, Task>? _connectedHandler;
@@ -36,6 +37,7 @@ public class ConnectionDialogTests : BunitTestContext
         _mockSubMgr = Substitute.For<ISubscriptionManager>();
         _mockSessionState = Substitute.For<ISessionState>();
         _mockOptionsBuilder = Substitute.For<IMqttOptionsBuilder>();
+        _mockCoordinator = Substitute.For<IBrokerStateResetCoordinator>();
 
         _mockConfigMgr.Config.Returns(new AppConfiguration());
         _mockMsgStore.Start().Returns(Task.CompletedTask);
@@ -59,9 +61,10 @@ public class ConnectionDialogTests : BunitTestContext
         Services.AddSingleton(_mockSubMgr);
         Services.AddSingleton(_mockSessionState);
         Services.AddSingleton(_mockOptionsBuilder);
+        Services.AddSingleton(_mockCoordinator);
         Services.AddSingleton(Substitute.For<ILogger<ConnectionDialog>>());
         Services.AddSingleton(Substitute.For<IChartDataService>());
-        Services.AddSingleton(Substitute.For<IUxTelemetryService>());
+        Services.AddSingleton(Substitute.For<IUxMetricsService>());
 
         EnsureMudProviders();
 
@@ -546,5 +549,112 @@ public class ConnectionDialogTests : BunitTestContext
 
         var tabPanels = _dialogProvider.FindAll(".mud-tab-panel[role='tabpanel']");
         tabPanels.Should().HaveCount(3, "Identity, Transport, and On Connect panels are always rendered");
+    }
+
+    [Test]
+    public async Task Connect_CallsResetCoordinatorBeforeStartAsync()
+    {
+        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        Received.InOrder(() =>
+        {
+            _mockCoordinator.ResetIfBrokerChangedAsync(Arg.Any<Connection>());
+            _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>());
+        });
+    }
+
+    [Test]
+    public async Task Connect_PassesSelectedConnectionToCoordinator()
+    {
+        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
+        var conn = new Connection { Name = "TestConn", Host = "broker.example.com", Port = 8883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        await _mockCoordinator.Received(1).ResetIfBrokerChangedAsync(
+            Arg.Is<Connection>(c => c.Host == "broker.example.com" && c.Port == 8883));
+    }
+
+    [Test]
+    public async Task Connect_WhenCoordinatorThrows_StillProceedsWithConnect()
+    {
+        _mockCoordinator.ResetIfBrokerChangedAsync(Arg.Any<Connection>())
+            .Returns(Task.FromException(new Exception("reset failed")));
+        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        await _mockClient.Received(1).StartAsync(Arg.Any<ManagedMqttClientOptions>());
+    }
+
+    [Test]
+    public async Task StepSelector_RendersThreeStepButtons()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        var stepButtons = _dialogProvider.FindAll(".step-btn");
+        stepButtons.Should().HaveCount(3);
+        stepButtons[0].TextContent.Should().Contain("Identity");
+        stepButtons[1].TextContent.Should().Contain("Transport");
+        stepButtons[2].TextContent.Should().Contain("On Connect");
+    }
+
+    [Test]
+    public async Task StepSelector_ClickTransport_ActivatesTransportButton()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        var stepButtons = _dialogProvider.FindAll(".step-btn");
+        stepButtons[0].ClassName.Should().Contain("active", "Identity is default");
+
+        stepButtons[1].Click();
+
+        var refreshedButtons = _dialogProvider.FindAll(".step-btn");
+        refreshedButtons[1].ClassName.Should().Contain("active", "Transport was clicked");
+        refreshedButtons[0].ClassName.Should().NotContain("active", "Identity is no longer selected");
+        _dialogProvider.Markup.Should().Contain("Protocol");
+        _dialogProvider.Markup.Should().Contain("Host");
+    }
+
+    [Test]
+    public async Task StepSelector_ClickOnConnect_ActivatesOnConnectButton()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        var stepButtons = _dialogProvider.FindAll(".step-btn");
+        stepButtons[2].Click();
+
+        var refreshedButtons = _dialogProvider.FindAll(".step-btn");
+        refreshedButtons[2].ClassName.Should().Contain("active", "On Connect was clicked");
+        refreshedButtons[0].ClassName.Should().NotContain("active", "Identity is no longer selected");
+        _dialogProvider.Markup.Should().Contain("Sparkplug B");
+    }
+
+    [Test]
+    public async Task StepSelector_IdentityIsDefaultStep()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        var identityBtn = _dialogProvider.FindAll(".step-btn")
+            .First(b => b.TextContent.Contains("Identity"));
+        identityBtn.ClassName.Should().Contain("active");
+        _dialogProvider.Markup.Should().Contain("Name");
     }
 }

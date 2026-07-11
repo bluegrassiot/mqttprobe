@@ -16,6 +16,9 @@ public class ConnectionValidator : AbstractValidator<Connection>
         RuleFor(x => x.Port)
             .InclusiveBetween(1, 65535)
             .WithMessage("Port must be between 1 and 65535.");
+        RuleFor(x => x.ConnectTimeout)
+            .InclusiveBetween(1, 120)
+            .WithMessage("Connect timeout must be between 1 and 120 seconds.");
     }
 
     public Func<object, string, Task<IEnumerable<string>>> ValidateValue => async (model, propertyName) =>

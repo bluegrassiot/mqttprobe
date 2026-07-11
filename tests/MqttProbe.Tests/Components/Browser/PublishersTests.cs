@@ -2,9 +2,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MQTTnet.Extensions.ManagedClient;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
-using MqttProbe.Services.Telemetry;
 using MqttProbe.Shared.Tests.TestHelpers;
 using MudBlazor;
 
@@ -24,7 +24,7 @@ public class PublishersTests : BunitTestContext
         Services.AddSingleton(_mockClient);
         Services.AddSingleton(Substitute.For<ILogger<Publishers>>());
         Services.AddSingleton(Substitute.For<IAppInfoService>());
-        Services.AddSingleton(Substitute.For<IUxTelemetryService>());
+        Services.AddSingleton(Substitute.For<IUxMetricsService>());
         _mockSnackbar = Substitute.For<ISnackbar>();
         Services.AddSingleton(_mockSnackbar);
 

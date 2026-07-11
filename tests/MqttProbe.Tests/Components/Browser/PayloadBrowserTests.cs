@@ -1,7 +1,10 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Models.Chart;
+using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
+using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Shared.Tests.TestHelpers;
@@ -13,8 +16,8 @@ namespace MqttProbe.Shared.Tests.Components.Browser;
 public class PayloadBrowserTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
-    private IDialogService _mockDialogService = null!;
-    private ISnackbar _mockSnackbar = null!;
+    private ISettingsStore _mockSettingsStore = null!;
+    private IUxMetricsService _mockMetrics = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -22,13 +25,22 @@ public class PayloadBrowserTests : BunitTestContext
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _mockMsgStore.GetMessagesForSelectedTopic()
             .Returns(Task.FromResult<IEnumerable<MqttMessage>>(Array.Empty<MqttMessage>()));
-        _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask);
+        _mockMsgStore.GetSelectedTopicVersion().Returns(1L);
+        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
+            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(Array.Empty<MqttMessage>()));
+        var mockStore = new MessageStore { Topic = "sensor", FullTopic = "sensor" };
+        _mockMsgStore.SelectedMessageStore.Returns(mockStore);
         Services.AddSingleton(_mockMsgStore);
 
-        _mockDialogService = Substitute.For<IDialogService>();
-        Services.AddSingleton(_mockDialogService);
-        _mockSnackbar = Substitute.For<ISnackbar>();
-        Services.AddSingleton(_mockSnackbar);
+        _mockSettingsStore = Substitute.For<ISettingsStore>();
+        _mockSettingsStore.Config.Returns(new AppConfiguration());
+        Services.AddSingleton(_mockSettingsStore);
+
+        _mockMetrics = Substitute.For<IUxMetricsService>();
+        Services.AddSingleton(_mockMetrics);
+
+        Services.AddSingleton(Substitute.For<IDialogService>());
+        Services.AddSingleton(Substitute.For<ISnackbar>());
     }
 
 
@@ -38,13 +50,16 @@ public class PayloadBrowserTests : BunitTestContext
         var messages = Enumerable.Range(0, 600)
             .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
             .ToList();
-        _mockMsgStore.GetMessagesForSelectedTopic()
-            .Returns(Task.FromResult<IEnumerable<MqttMessage>>(messages));
+        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
+            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(messages));
         EnsureMudProviders();
 
         var cut = Render<PayloadBrowser>();
 
-        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Showing latest 500"));
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("500 msgs"));
+
+        // Verify GetRecentMessagesAsync was called with the default display cap (500).
+        _mockMsgStore.Received(1).GetRecentMessagesAsync(Arg.Any<string>(), 500);
     }
 
     [Test]
@@ -53,14 +68,106 @@ public class PayloadBrowserTests : BunitTestContext
         var messages = Enumerable.Range(0, 10)
             .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
             .ToList();
-        _mockMsgStore.GetMessagesForSelectedTopic()
-            .Returns(Task.FromResult<IEnumerable<MqttMessage>>(messages));
+        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
+            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(messages));
         EnsureMudProviders();
 
         var cut = Render<PayloadBrowser>();
 
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("sensor/temp"));
-        cut.Markup.Should().NotContain("Showing latest");
+        cut.Markup.Should().NotContain("msgs");
+    }
+
+    [Test]
+    public void MessageList_WithConfiguredMaxDisplayMessages_ShowsCustomTruncationWarning()
+    {
+        _mockSettingsStore.Config.Returns(new AppConfiguration
+        {
+            Performance = new PerformanceSettings { MaxDisplayMessages = 3 }
+        });
+        var messages = Enumerable.Range(0, 3)
+            .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
+            .ToList();
+        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
+            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(messages));
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("3 msgs"));
+        cut.FindAll(".payload-row").Should().HaveCount(3);
+
+        // Verify GetRecentMessagesAsync was called with the custom display cap (3).
+        _mockMsgStore.Received(1).GetRecentMessagesAsync(Arg.Any<string>(), 3);
+    }
+
+    [Test]
+    public void DoesNotQuery_WhenVersionUnchanged()
+    {
+        _mockMsgStore.GetSelectedTopicVersion().Returns(42L);
+        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
+            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(
+                new List<MqttMessage>
+                {
+                    new() { Topic = "sensor/temp", Payload = "1" },
+                    new() { Topic = "sensor/temp", Payload = "2" },
+                    new() { Topic = "sensor/temp", Payload = "3" },
+                    new() { Topic = "sensor/temp", Payload = "4" },
+                    new() { Topic = "sensor/temp", Payload = "5" }
+                }));
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        // First tick: _lastVersion (0) != 42 → queries.
+        cut.WaitForAssertion(() =>
+            _mockMsgStore.Received(1).GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>()));
+
+        // Wait past a second timer tick (500ms interval) to prove no second query fires.
+        Thread.Sleep(600);
+
+        // Still exactly 1 call — version unchanged, second tick is a no-op.
+        _mockMsgStore.Received(1).GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>());
+    }
+
+    [Test]
+    public void QueriesAgain_WhenVersionChanges()
+    {
+        _mockMsgStore.GetSelectedTopicVersion().Returns(42L, 43L);
+        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
+            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(
+                new List<MqttMessage>
+                {
+                    new() { Topic = "sensor/temp", Payload = "1" },
+                    new() { Topic = "sensor/temp", Payload = "2" },
+                    new() { Topic = "sensor/temp", Payload = "3" },
+                    new() { Topic = "sensor/temp", Payload = "4" },
+                    new() { Topic = "sensor/temp", Payload = "5" }
+                }));
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        // First tick: version 42 → queries.
+        // Second tick: version 43 → queries again.
+        cut.WaitForAssertion(() =>
+            _mockMsgStore.Received(2).GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>()));
+
+        // Verify limit matches default MaxDisplayMessages (500).
+        _mockMsgStore.Received(2).GetRecentMessagesAsync(Arg.Any<string>(), 500);
+    }
+
+    [Test]
+    public void NoSelectedTopic_DoesNotQueryAndShowsEmpty()
+    {
+        _mockMsgStore.SelectedMessageStore.Returns((MessageStore?)null);
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        cut.WaitForAssertion(() =>
+            _mockMsgStore.DidNotReceive().GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>()));
+        cut.FindAll(".payload-row").Should().BeEmpty();
     }
 
     [Test]
@@ -231,11 +338,16 @@ public class PayloadBrowserTests : BunitTestContext
 
         await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
 
-        cut.FindAll(".json-preview").Should().HaveCount(1);
+        cut.WaitForElement(".json-expand-all-btn");
 
-        await cut.InvokeAsync(() => cut.Find(".json-expand-all-btn").Click());
-
-        cut.FindAll(".json-preview").Should().BeEmpty();
+        // MudTable virtualization re-renders asynchronously, which can invalidate a found
+        // element's event-handler id before the click dispatches on slow (CI) machines.
+        // WaitForAssertion retries the find+click until it lands on a settled render tree.
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find(".json-expand-all-btn").Click();
+            cut.FindAll(".json-preview").Should().BeEmpty();
+        });
         cut.FindAll(".json-key").Select(e => e.TextContent).Should().Contain("\"c\"");
     }
 
@@ -247,69 +359,14 @@ public class PayloadBrowserTests : BunitTestContext
 
         await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
 
+        cut.WaitForElement(".json-collapse-all-btn");
+
         await cut.InvokeAsync(() => cut.Find(".json-collapse-all-btn").Click());
 
         cut.FindAll(".json-key").Should().BeEmpty();
         cut.FindAll(".json-preview").Should().HaveCount(1);
     }
 
-    [Test]
-    public async Task ClearAllMessages_WhenConfirmed_CallsStoreClear()
-    {
-        _mockDialogService.ShowMessageBoxAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(true));
-
-        var cut = Render<PayloadBrowser>();
-
-        await cut.InvokeAsync(() => cut.Instance.ClearAllMessages());
-
-        _ = _mockMsgStore.Received(1).ClearAllMessages();
-    }
-
-    [Test]
-    public async Task ClearAllMessages_WhenCancelled_DoesNotCallStoreClear()
-    {
-        _mockDialogService.ShowMessageBoxAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(false));
-
-        var cut = Render<PayloadBrowser>();
-
-        await cut.InvokeAsync(() => cut.Instance.ClearAllMessages());
-
-        _ = _mockMsgStore.DidNotReceive().ClearAllMessages();
-    }
-
-    [Test]
-    public async Task ClearAllMessages_WhenConfirmed_ShowsSuccessSnackbar()
-    {
-        _mockDialogService.ShowMessageBoxAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(true));
-
-        var cut = Render<PayloadBrowser>();
-
-        await cut.InvokeAsync(() => cut.Instance.ClearAllMessages());
-
-        _mockSnackbar.Received(1).Add("All stored messages cleared.", Severity.Success,
-            Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
-    }
 
 
     [Test]
@@ -464,6 +521,7 @@ public class PayloadBrowserTests : BunitTestContext
         var cut = Render<PayloadBrowser>();
         await cut.InvokeAsync(() => cut.Instance.MessageChanged(message));
 
+        cut.WaitForElement("button[title='Copy full message']");
         await cut.InvokeAsync(() => cut.Find("button[title='Copy full message']").Click());
 
         await mockClipboard.Received(1).WriteTextAsync(JsonSerializer.Serialize(message));
@@ -477,6 +535,7 @@ public class PayloadBrowserTests : BunitTestContext
         var cut = Render<PayloadBrowser>();
         await cut.InvokeAsync(() => cut.Instance.MessageChanged(message));
 
+        cut.WaitForElement("button[title='Copy topic']");
         await cut.InvokeAsync(() => cut.Find("button[title='Copy topic']").Click());
 
         await mockClipboard.Received(1).WriteTextAsync("sensors/temp");
@@ -490,8 +549,76 @@ public class PayloadBrowserTests : BunitTestContext
         var cut = Render<PayloadBrowser>();
         await cut.InvokeAsync(() => cut.Instance.MessageChanged(message));
 
+        cut.WaitForElement("button[title='Copy payload']");
         await cut.InvokeAsync(() => cut.Find("button[title='Copy payload']").Click());
 
         await mockClipboard.Received(1).WriteTextAsync("42");
+    }
+
+    [Test]
+    public async Task MessageChanged_SelectionSurvivesInitialTimerTick()
+    {
+        var messages = new List<MqttMessage>
+        {
+            new() { Topic = "sensor/temp", Payload = "1" }
+        };
+        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
+            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(messages));
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        // Wait for the first timer tick to load messages.
+        cut.WaitForAssertion(() =>
+            _mockMetrics.Received().SetDisplayedMessageCount(1));
+
+        var message = new MqttMessage { Topic = "sensor/temp", Payload = "42" };
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(message));
+
+        // Wait past another timer cycle — selection must survive.
+        cut.WaitForElement("button[title='Copy topic']");
+        Thread.Sleep(600);
+
+        cut.Find("button[title='Copy topic']").Should().NotBeNull();
+        cut.Find("button[title='Copy payload']").Should().NotBeNull();
+    }
+
+    [Test]
+    public void Refresh_AfterTopicSelected_ReportsCountToMetrics()
+    {
+        var messages = Enumerable.Range(0, 5)
+            .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
+            .ToList();
+        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
+            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(messages));
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        cut.WaitForAssertion(() =>
+            _mockMetrics.Received().SetDisplayedMessageCount(5));
+    }
+
+    [Test]
+    public void NoSelectedTopic_ResetsDisplayedCountToZero()
+    {
+        _mockMsgStore.SelectedMessageStore.Returns((MessageStore?)null);
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        cut.WaitForAssertion(() =>
+            _mockMetrics.Received().SetDisplayedMessageCount(0));
+    }
+
+    [Test]
+    public async Task Dispose_ResetsDisplayedCountToZero()
+    {
+        EnsureMudProviders();
+        var cut = Render<PayloadBrowser>();
+
+        await cut.Instance.DisposeAsync();
+
+        _mockMetrics.Received().SetDisplayedMessageCount(0);
     }
 }

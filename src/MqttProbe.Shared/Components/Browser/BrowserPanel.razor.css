@@ -1,0 +1,120 @@
+/* The app shell is locked to the viewport (components.css) and the tab panel is
+   a flex column, so this content fills the space the tab gives it */
+.tab-panel-content {
+    padding-top: 8px;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Resizable split: side-by-side (topics left, payload right) on desktop and
+   stacked (topics top, payload bottom) on mobile */
+.browser-split-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    /* Be a flex column so the MudSplitPanel can flex to fill the available
+       height. With display:block, the panel's height:100% resolves against
+       the parent's content height (the tall topic tree) instead of the
+       flex-derived viewport-locked height, so it overflows off-screen. */
+    display: flex;
+    flex-direction: column;
+}
+
+/* MudSplitPanel's root is a child component, so it doesn't carry this
+   component's CSS-isolation scope attribute — must use ::deep or the rule
+   compiles to .browser-split-panel[b-xxx] and never matches. */
+.browser-split-wrap ::deep .browser-split-panel {
+    /* Flex to fill the wrap instead of height:100%, which doesn't reliably
+       resolve against a flex-derived parent height. */
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* MudSplitPanel's .child-panel gets `flex:1 1 auto; overflow:hidden` from
+   MudBlazor, but it is NOT a flex container. Make each child panel a flex column with min-height:0 so the
+   browser panes fill it and their own scroll areas activate. Applies to both
+   the side-by-side (desktop) and stacked (mobile) split layouts. */
+.browser-split-wrap ::deep .child-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* Make the resize divider visible and clearly draggable */
+.browser-split-wrap ::deep .divider {
+    background: var(--mud-palette-lines-default);
+    border-radius: 3px;
+    transition: background-color 150ms ease-out;
+}
+
+.browser-split-wrap ::deep .divider:hover,
+.browser-split-wrap ::deep .divider:focus {
+    background: var(--mud-palette-primary);
+}
+
+/* Grip handle — a small cluster of dots signalling the divider is draggable.
+   A vertical column of dots for the side-by-side (vertical) divider; the
+   horizontal divider in the stacked layout rotates it to a horizontal row. */
+.browser-split-wrap ::deep .divider::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 34px;
+    background-image: radial-gradient(circle, var(--mud-palette-text-secondary) 1.1px, transparent 1.4px);
+    background-size: 3px 6px;
+    background-position: center;
+    opacity: 0.85;
+    pointer-events: none;
+}
+
+.browser-split-wrap ::deep .divider.horizontal::after {
+    width: 34px;
+    height: 6px;
+    background-size: 6px 3px;
+}
+
+.browser-split-wrap ::deep .divider:hover::after,
+.browser-split-wrap ::deep .divider:focus::after {
+    background-image: radial-gradient(circle, var(--mud-palette-primary-text) 1.1px, transparent 1.4px);
+    opacity: 1;
+}
+
+/* Mobile layout: visible only below 600px */
+.browser-mobile-layout {
+    display: none;
+}
+
+/* Tablet layout: visible between 600px and 959px */
+.browser-tablet-layout {
+    display: contents;
+}
+
+@media (max-width: 599.98px) {
+    .browser-mobile-layout {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    .browser-mobile-payload {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        /* BrowserPanel isn't wrapped in .tab-panel-content (it manages its own
+           flex chain), so reserve space for the fixed mobile nav bar here —
+           otherwise the payload panel's bottom edge (and its horizontal
+           scrollbar) sits underneath the bar. Matches .tab-panel-content. */
+        padding-bottom: 64px;
+    }
+
+    .browser-tablet-layout {
+        display: none;
+    }
+}

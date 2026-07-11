@@ -1,0 +1,156 @@
+@using MqttProbe.Services.Configuration
+@inject IMessageStoreManager MessageStoreManager
+@inject ISettingsStore SettingsStore
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ILogger<BrowserPanel> Logger
+@using Microsoft.Extensions.Logging
+@implements IAsyncDisposable
+
+<TabPanelHeader Title="Browser" Icon="@LucideIcons.Eye">
+    <HeaderChips>
+        @if (MessageStoreManager.MessageStores.Any())
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                     Style="height:20px; font-size:0.7rem; padding:0 6px;">
+                @MessageStoreManager.MessageStores.Count
+            </MudChip>
+        }
+    </HeaderChips>
+    <HeaderActions>
+        <MudButton Variant="Variant.Outlined" Size="Size.Medium"
+                   StartIcon="@LucideIcons.Trash2"
+                   Color="Color.Error" Class="app-btn-min"
+                   Disabled="@(!MessageStoreManager.MessageStores.Any())"
+                   OnClick="ClearAllMessages">
+            Clear
+        </MudButton>
+    </HeaderActions>
+</TabPanelHeader>
+<div class="tab-panel-content">
+    @if (!MessageStoreManager.MessageStores.Any() && !SettingsStore.IsHintDismissed("browser"))
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-2"
+                  ShowCloseIcon="true" CloseIconClicked="@DismissHint">
+            <strong>Start here:</strong> connect to a broker, then select or add subscriptions to begin receiving topics.
+        </MudAlert>
+    }
+    <ErrorBoundary ErrorContent="_sectionError">
+        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            <div class="browser-split-wrap">
+                <MudSplitPanel Class="browser-split-panel"
+                               FirstPanelInitialSize="320" MinPanelSize="220"
+                               PanelGap="6" ResetOnDoubleClick="true" Transparent="true">
+                    <FirstPanel>
+                        <TopicBrowser/>
+                    </FirstPanel>
+                    <SecondPanel>
+                        <PayloadBrowser/>
+                    </SecondPanel>
+                </MudSplitPanel>
+            </div>
+        </MudHidden>
+        <MudHidden Breakpoint="Breakpoint.MdAndUp">
+            <div class="browser-split-wrap browser-split-wrap--mobile">
+                @* Phone layout: topic bar + payload (CSS media query hides the split) *@
+                <div class="browser-mobile-layout">
+                    <MobileTopicBar HasTopics="@MessageStoreManager.MessageStores.Any()"
+                                    OnOpenPicker="OpenMobilePicker"/>
+                    <div class="browser-mobile-payload">
+                        <PayloadBrowser/>
+                    </div>
+                </div>
+                @* Tablet layout: stacked split (CSS media query hides the mobile bar) *@
+                <div class="browser-tablet-layout">
+                    <MudSplitPanel Class="browser-split-panel" Horizontal="true"
+                                   FirstPanelInitialSize="260" MinPanelSize="120"
+                                   PanelGap="6" ResetOnDoubleClick="true" Transparent="true">
+                        <FirstPanel>
+                            <TopicBrowser/>
+                        </FirstPanel>
+                        <SecondPanel>
+                            <PayloadBrowser/>
+                        </SecondPanel>
+                    </MudSplitPanel>
+                </div>
+            </div>
+        </MudHidden>
+        <TopicPickerOverlay IsOpen="@_mobilePickerOpen" OnClose="CloseMobilePicker"/>
+    </ErrorBoundary>
+</div>
+
+@code {
+    private readonly RenderFragment<Exception> _sectionError = _ => @<SectionError />;
+
+    private Timer? _updateTimer;
+    private bool _disposed;
+    private int _lastCount;
+    private bool _mobilePickerOpen;
+
+    internal void OpenMobilePicker() => _mobilePickerOpen = true;
+    internal void CloseMobilePicker() => _mobilePickerOpen = false;
+
+    protected override void OnInitialized()
+    {
+        _lastCount = MessageStoreManager.MessageStores.Count;
+        _updateTimer = new Timer(_ =>
+        {
+            if (_disposed) return;
+            OnTimerTick();
+        }, null, 0, 1_000);
+    }
+
+    internal void OnTimerTick()
+    {
+        if (_disposed) return;
+        var count = MessageStoreManager.MessageStores.Count;
+        if (count == _lastCount) return;
+        _lastCount = count;
+#pragma warning disable CS4014 // Intentional fire-and-forget from Timer callback
+        RequestRenderSafelyAsync();
+#pragma warning restore CS4014
+    }
+
+    private async Task RequestRenderSafelyAsync()
+    {
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException) when (_disposed)
+        {
+            // The circuit was torn down between the timer tick and the dispatch; nothing to render.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "BrowserPanel timer render update failed");
+        }
+    }
+
+    private async Task ClearAllMessages()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Clear All Messages",
+            "This will remove all stored topics and messages. Continue?",
+            yesText: "Clear all", cancelText: "Cancel",
+            options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (confirmed != true)
+            return;
+
+        await MessageStoreManager.ClearAllMessages();
+        Snackbar.Add("All stored messages cleared.", Severity.Success);
+    }
+
+    private async Task DismissHint()
+    {
+        await SettingsStore.DismissHintAsync("browser");
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        if (_updateTimer != null)
+            await _updateTimer.DisposeAsync();
+    }
+}

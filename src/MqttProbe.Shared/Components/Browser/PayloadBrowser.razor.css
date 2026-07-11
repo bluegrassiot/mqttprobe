@@ -5,28 +5,115 @@
     background: var(--mud-palette-surface);
 }
 
-.payload-detail-meta-sticky {
-    position: sticky;
-    top: 40px;
-    z-index: 2;
+.payload-detail-meta {
     background: var(--mud-palette-surface);
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
-.payload-detail-body {
-    max-height: calc(100% - 40px);
-    overflow: auto;
+/* Plain table replacing MudSimpleTable — no overflow container, no height:100%
+   from FixedHeader, so it renders at natural height and never pushes the
+   payload body off-screen. */
+.pb-meta-table {
+    width: 100%;
+    border-collapse: collapse;
 }
+
+.pb-meta-table td {
+    padding: 4px 12px;
+    vertical-align: middle;
+}
+
+/* .payload-detail-body is styled inline in the razor markup: MudPaper renders
+   without this component's CSS-isolation scope attribute, so a scoped class
+   rule here never matches it. */
 
 ::deep .payload-row td {
     padding-top: 6px;
     padding-bottom: 6px;
 }
 
+/* Moved from an inline style so the mobile stacked layout below can override it. */
+::deep .pb-cell-topic {
+    word-break: break-all;
+}
+
 @media (max-width: 959.98px) {
     ::deep .payload-row td {
         padding-top: 8px;
         padding-bottom: 8px;
+    }
+}
+
+/* ── Mobile stacked rows ───────────────────────────────────────────────────
+   At phone widths the 13/28/54/5 column split leaves ~105px for the topic and
+   wraps everything into screen-tall rows. Collapse each row into a stacked
+   entry instead: time + retained flag on top, topic on one ellipsized line,
+   payload preview clamped to two lines. Desktop table is untouched. */
+@media (max-width: 599.98px) {
+    ::deep .mud-table-container thead {
+        display: none;
+    }
+
+    /* HorizontalScrollbar lets the table grow to content width, which defeats
+       the ellipsis/clamp below — pin everything to the container width. */
+    ::deep .mud-table-container {
+        overflow-x: hidden;
+    }
+
+    ::deep .mud-table-container table,
+    ::deep .mud-table-container tbody {
+        display: block;
+        width: 100%;
+    }
+
+    ::deep .payload-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        column-gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--mud-palette-divider);
+    }
+
+    ::deep .payload-row td {
+        display: block;
+        padding: 0;
+        border: none;
+        min-width: 0;
+    }
+
+    ::deep .payload-row .pb-cell-time {
+        order: 1;
+        flex: 1 1 auto;
+        color: var(--mud-palette-text-secondary);
+    }
+
+    ::deep .payload-row .pb-cell-flag {
+        order: 2;
+        flex: 0 0 auto;
+    }
+
+    ::deep .payload-row .pb-cell-topic {
+        order: 3;
+        flex: 1 1 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        word-break: normal;
+        margin-top: 2px;
+    }
+
+    ::deep .payload-row .pb-cell-payload {
+        order: 4;
+        flex: 1 1 100%;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        overflow: hidden;
+        word-break: break-all;
+        margin-top: 2px;
+        color: var(--mud-palette-text-primary);
     }
 }
 
@@ -64,4 +151,22 @@
 .pb-topic {
     font-size: 0.85rem;
     word-break: break-all;
+}
+
+/* ── MudTable flex height fix ──────────────────────────────────────────────
+   MudTable's outer .mud-table div is a block element with height:auto by
+   default, so .mud-table-container's height:100% resolves to auto and the
+   table overflows. Make .mud-table a flex column so it gets a definite
+   height from the flex algorithm, then .mud-table-container flex-fills the
+   remaining space after the toolbar and its overflow-y:auto activates. */
+::deep .mud-table {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+::deep .mud-table-container {
+    flex: 1 1 auto;
+    min-height: 0;
 }

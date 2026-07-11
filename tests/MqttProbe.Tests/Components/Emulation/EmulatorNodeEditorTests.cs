@@ -1,8 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Components.Emulation;
 using MqttProbe.Models.Emulation;
+using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
 using MqttProbe.Shared.Tests.TestHelpers;
+using MudBlazor;
 
 namespace MqttProbe.Shared.Tests.Components.Emulation;
 
@@ -69,7 +71,7 @@ public class EmulatorNodeEditorTests : BunitTestContext
 
         var cut = RenderEditor();
 
-        var preview = cut.Find(".emu-topic-preview .telemetry-mono");
+        var preview = cut.Find(".emu-topic-preview .metrics-mono");
         preview.TextContent.Should().Be("Plant1/Press-01/Sensor-1");
     }
 
@@ -81,7 +83,7 @@ public class EmulatorNodeEditorTests : BunitTestContext
 
         var cut = RenderEditor();
 
-        var preview = cut.Find(".emu-topic-preview .telemetry-mono");
+        var preview = cut.Find(".emu-topic-preview .metrics-mono");
         preview.TextContent.Should().Be("Plant1/Press-01/Sensor-1/Flow Rate");
     }
 
@@ -189,5 +191,68 @@ public class EmulatorNodeEditorTests : BunitTestContext
         var cut = RenderEditor();
 
         cut.Markup.Should().Contain("publishes nothing");
+    }
+
+    [Test]
+    public void SparkplugNode_ShowsUseMetricAliasesCheckbox()
+    {
+        var cut = RenderEditor();
+
+        cut.Markup.Should().Contain("Use Metric Aliases");
+    }
+
+    [Test]
+    public void GenericNode_HidesUseMetricAliasesCheckbox()
+    {
+        _node.Type = EmulatorNodeType.Generic;
+
+        var cut = RenderEditor();
+
+        cut.Markup.Should().NotContain("Use Metric Aliases");
+    }
+
+    [Test]
+    public async Task UseMetricAliasesCheckbox_Toggle_SavesState()
+    {
+        var cut = RenderEditor();
+
+        var checkbox = cut.FindComponent<MudCheckBox<bool>>();
+        await cut.InvokeAsync(() => checkbox.Instance.ValueChanged.InvokeAsync(true));
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        _node.UseMetricAliases.Should().BeTrue();
+        await _mockService.Received(1).UpdateNodeAsync(_node);
+    }
+
+    [Test]
+    public async Task UseMetricAliases_PersistsAcrossSaveLoad()
+    {
+        var filePath = Path.Combine(Path.GetTempPath(), $"alias_persist_test_{Guid.NewGuid()}.json");
+        try
+        {
+            var store = new SettingsStore(filePath);
+            await store.LoadAsync();
+            var connectionId = Guid.NewGuid();
+
+            var config = new EmulatorNodeConfig
+            {
+                Type = EmulatorNodeType.SparkplugB,
+                NodeId = "Node-1",
+                UseMetricAliases = true
+            };
+            await store.AddEmulatorNodeAsync(connectionId, config);
+
+            // Reload from disk
+            var store2 = new SettingsStore(filePath);
+            await store2.LoadAsync();
+            var nodes = store2.GetEmulatorNodes(connectionId);
+
+            nodes.Should().ContainSingle();
+            nodes[0].UseMetricAliases.Should().BeTrue();
+        }
+        finally
+        {
+            if (File.Exists(filePath)) File.Delete(filePath);
+        }
     }
 }

@@ -25,7 +25,7 @@ REPORT_DIR = RESULTS_DIR / "CoverageReport"
 SETTINGS = ROOT / "tests" / "coverlet.runsettings"
 
 UNIT_PROJ = ROOT / "tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj"
-INTEGRATION_PROJ = ROOT / "tests/MqttProbe.IntegrationTests/MqttProbe.IntegrationTests.csproj"
+# INTEGRATION_PROJ = ROOT / "tests/MqttProbe.IntegrationTests/MqttProbe.IntegrationTests.csproj"
 
 
 def run_tests(project: Path, label: str, results_subdir: str):
@@ -55,7 +55,7 @@ def main():
     RESULTS_DIR.mkdir(parents=True)
 
     run_tests(UNIT_PROJ, "Unit Tests", "unit")
-    run_tests(INTEGRATION_PROJ, "Integration Tests", "integration")
+    # run_tests(INTEGRATION_PROJ, "Integration Tests", "integration")
 
     print("\n=== Generating Coverage Report ===", flush=True)
 

@@ -3,7 +3,7 @@
 @using Microsoft.Extensions.Logging
 @implements IAsyncDisposable
 
-<MudPaper Elevation="1" Class="pa-2 app-chrome-panel" Style="height:100%; display:flex; flex-direction:column; overflow:hidden; box-sizing:border-box;">
+<MudPaper Elevation="1" Class="pa-2 app-chrome-panel" Style="flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; box-sizing:border-box;">
     <div class="topic-header-row">
         <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary"/>
         <MudText Typo="Typo.subtitle2" Style="font-weight:600">Topics</MudText>
@@ -16,23 +16,23 @@
         }
     </div>
     <div class="topic-filter-wrap">
-        <MudTextField @bind-Value="_searchFilter" Placeholder="Filter…"
+        <MudTextField @bind-Value="_searchFilter" @bind-Value:after="OnSearchChanged"
+                      Placeholder="Filter&hellip;"
                       Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
                       Immediate="true" Clearable="true" Variant="Variant.Outlined"
                       Margin="Margin.Dense" Class="topic-filter-field"/>
     </div>
-
-    <div class="topic-tree-wrap" style="flex:1; overflow-y:auto; min-height:0;">
-        @if (FilteredStores.Any())
+    <div class="topic-tree-wrap" style="flex:1 1 auto; min-height:0; overflow:auto;">
+        <MudToolBar Class="pa-0 mb-1" Style="gap:4px;">
+            <MudIconButton Icon="@LucideIcons.Maximize2" Size="Size.Small" title="Expand all" OnClick="ExpandAll"/>
+            <MudIconButton Icon="@LucideIcons.Minimize2" Size="Size.Small" title="Collapse all" OnClick="CollapseAll"/>
+            <span class="topic-stat-legend">T = topics · M = messages</span>
+        </MudToolBar>
+        @if (_visibleRows.Count > 0)
         {
-            <MudTreeView SelectedValue="@MessageStoreManagerService.SelectedMessageStore"
-                         SelectedValueChanged="OnTopicSelected" T="MessageStore" Dense="true">
-                @foreach (var msgStore in FilteredStores)
-                {
-                    <RecursiveTree @key="@msgStore.Value.FullTopic" MessageStore="@msgStore.Value" Filter="@_searchFilter"
-                                   ExpandFirstLevel="true"/>
-                }
-            </MudTreeView>
+            <Virtualize Items="@_visibleRows" Context="row" ItemSize="36">
+                <TopicTreeRow Row="row" IsSelected="@(row.FullPath == _selectedFullPath)" OnExpandToggled="ToggleExpand" OnSelected="OnRowSelected"/>
+            </Virtualize>
         }
         else if (MessageStoreManagerService.MessageStores.Any())
         {
@@ -55,78 +55,142 @@
     private string? _searchFilter;
     private Timer? _updateTimer;
     private bool _disposed;
-    private int _lastTopicCount;
-    private int _lastTotalNodeCount;
-    private int _lastTotalMessageCount;
+    private long _lastVersion;
+    private List<TopicTreeRowModel> _visibleRows = [];
+    private HashSet<string> _expandedPaths = [];
+    private bool _hasFilter;
+    private string? _selectedFullPath;
 
-    private IEnumerable<KeyValuePair<string, MessageStore>> FilteredStores =>
-        string.IsNullOrWhiteSpace(_searchFilter)
-            ? MessageStoreManagerService.MessageStores
-            : MessageStoreManagerService.MessageStores
-                .Where(s => RecursiveTree.Matches(s.Value, _searchFilter));
+    [Parameter] public EventCallback<MessageStore?> OnSelectedChanged { get; set; }
 
     protected override void OnInitialized()
     {
-        _lastTopicCount = 0;
-        _lastTotalNodeCount = 0;
-        _lastTotalMessageCount = 0;
+        BuildVisibleRows();
         _updateTimer = new Timer(_ =>
         {
             if (_disposed) return;
-            var topicCount = MessageStoreManagerService.MessageStores.Count;
-            var totalNodes = MessageStoreManagerService.MessageStores.Values
-                .Sum(CountNodesRecursive);
-            var totalMessages = MessageStoreManagerService.MessageStores.Values
-                .Sum(CountMessagesRecursive);
-            if (topicCount == _lastTopicCount
-                && totalNodes == _lastTotalNodeCount
-                && totalMessages == _lastTotalMessageCount) return;
-            _lastTopicCount = topicCount;
-            _lastTotalNodeCount = totalNodes;
-            _lastTotalMessageCount = totalMessages;
-#pragma warning disable CS4014 // Intentional fire-and-forget from Timer callback
-            RequestRenderSafelyAsync();
+            var version = MessageStoreManagerService.GetVersion();
+            if (version == _lastVersion) return;
+            _lastVersion = version;
+#pragma warning disable CS4014
+            RefreshAsync();
 #pragma warning restore CS4014
         }, null, 0, 1_000);
     }
 
-    private async Task RequestRenderSafelyAsync()
+    private async Task RefreshAsync()
     {
-        try
+        BuildVisibleRows();
+        try { await InvokeAsync(StateHasChanged); }
+        catch (ObjectDisposedException) when (_disposed) { }
+        catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser refresh render failed"); }
+    }
+
+    private void BuildVisibleRows()
+    {
+        _visibleRows = [];
+        _hasFilter = !string.IsNullOrWhiteSpace(_searchFilter);
+
+        // Keep visual selection consistent with manager state.
+        var managerSelection = MessageStoreManagerService.SelectedMessageStore;
+        _selectedFullPath = managerSelection is null
+            ? null
+            : managerSelection.FullTopic ?? managerSelection.Topic;
+
+        foreach (var kvp in MessageStoreManagerService.MessageStores
+                     .OrderBy(s => s.Key, NaturalStringComparer.Instance))
         {
-            await InvokeAsync(StateHasChanged);
-        }
-        catch (ObjectDisposedException) when (_disposed)
-        {
-            // The circuit was torn down between the timer tick and the dispatch; nothing to render.
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "TopicBrowser timer render update failed");
+            AppendRows(kvp.Value, _hasFilter);
         }
     }
 
-    private void OnTopicSelected(MessageStore? store)
+    private void AppendRows(MessageStore store, bool hasFilter)
     {
-        MessageStoreManagerService.SelectedMessageStore = store;
+        var path = store.FullTopic ?? store.Topic ?? "";
+        var isExpanded = _expandedPaths.Contains(path);
+        var matches = hasFilter && MatchesFilter(store, _searchFilter!);
+
+        if (hasFilter && !matches && !HasAnyMatchingDescendant(store))
+            return;
+
+        _visibleRows.Add(new TopicTreeRowModel(
+            Store: store,
+            FullPath: path,
+            DisplayName: store.Topic ?? "",
+            Depth: path.Count(c => c == '/'),
+            HasChildren: store.SubTopics?.Count > 0,
+            TopicCount: store.TopicCount,
+            MessageCount: store.MessageCount,
+            IsExpanded: isExpanded || (hasFilter && matches),
+            IsValueBearer: store.Messages is { IsEmpty: false }
+        ));
+
+        if (store.SubTopics is { Count: > 0 } && (isExpanded || hasFilter))
+        {
+            foreach (var child in store.SubTopics.Values
+                         .OrderBy(s => s.Topic, NaturalStringComparer.Instance))
+            {
+                AppendRows(child, hasFilter);
+            }
+        }
     }
 
-    private static int CountNodesRecursive(MessageStore store)
+    private static bool MatchesFilter(MessageStore store, string filter) =>
+        (store.Topic?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true)
+        || (store.SubTopics?.Values.Any(s => MatchesFilter(s, filter)) ?? false);
+
+    private bool HasAnyMatchingDescendant(MessageStore store) =>
+        store.SubTopics?.Values.Any(s => MatchesFilter(s, _searchFilter!)) ?? false;
+
+    private void OnSearchChanged()
     {
-        var count = 1;
-        if (store.SubTopics == null) return count;
-        foreach (var sub in store.SubTopics.Values)
-            count += CountNodesRecursive(sub);
-        return count;
+        _selectedFullPath = null;
+        MessageStoreManagerService.SelectedMessageStore = null;
+        BuildVisibleRows();
+        StateHasChanged();
     }
 
-    private static int CountMessagesRecursive(MessageStore store)
+    private async Task OnRowSelected(string path)
     {
-        var count = store.Messages?.Count ?? 0;
-        if (store.SubTopics == null) return count;
-        foreach (var sub in store.SubTopics.Values)
-            count += CountMessagesRecursive(sub);
-        return count;
+        _selectedFullPath = path;
+        BuildVisibleRows();
+        StateHasChanged();
+        if (OnSelectedChanged.HasDelegate)
+            await OnSelectedChanged.InvokeAsync(MessageStoreManagerService.SelectedMessageStore);
+    }
+
+    private async Task ToggleExpand(string path)
+    {
+        if (_expandedPaths.Contains(path))
+            _expandedPaths.Remove(path);
+        else
+            _expandedPaths.Add(path);
+        BuildVisibleRows();
+        StateHasChanged();
+    }
+
+    private void ExpandAll()
+    {
+        foreach (var kvp in MessageStoreManagerService.MessageStores)
+            ExpandAllDescendants(kvp.Value);
+        BuildVisibleRows();
+        StateHasChanged();
+    }
+
+    private void ExpandAllDescendants(MessageStore store)
+    {
+        if (store.FullTopic != null)
+            _expandedPaths.Add(store.FullTopic);
+        if (store.SubTopics != null)
+            foreach (var child in store.SubTopics.Values)
+                ExpandAllDescendants(child);
+    }
+
+    private void CollapseAll()
+    {
+        _expandedPaths.Clear();
+        BuildVisibleRows();
+        StateHasChanged();
     }
 
     public async ValueTask DisposeAsync()

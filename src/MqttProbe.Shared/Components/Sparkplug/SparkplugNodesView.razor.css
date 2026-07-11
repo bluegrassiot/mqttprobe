@@ -11,13 +11,15 @@
 .spb-split {
     display: flex;
     flex-direction: row;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     gap: 0;
 }
 
 .spb-split__nodes {
     width: 35%;
     min-width: 260px;
+    min-height: 0;
     overflow-y: auto;
     border-right: 1px solid var(--mud-palette-divider);
     flex-shrink: 0;
@@ -25,6 +27,8 @@
 
 .spb-split__detail {
     flex: 1;
+    min-width: 0;
+    min-height: 0;
     overflow-y: auto;
     padding: 16px;
 }
@@ -89,9 +93,133 @@
 }
 
 @media (max-width: 959px) {
-    .spb-split { flex-direction: column; }
-    .spb-split__nodes { width: 100%; border-right: none; border-bottom: 1px solid var(--mud-palette-divider); max-height: 40vh; }
-    .spb-split__detail { padding: 12px; }
+    .spb-split {
+        flex-direction: column;
+    }
+
+    .spb-split__nodes {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--mud-palette-divider);
+        max-height: 40vh;
+    }
+
+    .spb-split__detail {
+        padding: 12px;
+    }
+}
+
+/* ── Phone layout: in-place swap ───────────────────────────────────────────
+   The stacked split is too cramped below 600px, so mirror the Browser tab's
+   Message Details pattern instead: the list fills the pane until a node is
+   selected, then the detail takes over the full pane and the existing Back
+   button (already rendered below 960px) returns to the list. */
+@media (max-width: 599.98px) {
+    .spb-split__nodes {
+        max-height: none;
+        flex: 1 1 auto;
+    }
+
+    .spb-split__detail {
+        display: none;
+    }
+
+    .spb-split--detail-open .spb-split__nodes {
+        display: none;
+    }
+
+    .spb-split--detail-open .spb-split__detail {
+        display: block;
+        flex: 1 1 auto;
+        overflow-y: auto;
+    }
+
+    /* Metric tables have 5 columns that never fit ~360px. Rather than let each
+       one scroll horizontally under a capped height — which stacks two or three
+       nested scrollbars on top of the detail panel's own — collapse every row
+       into a stacked card, the same approach the Browser tab uses. Name + value
+       read as the headline; type/alias/updated drop to a muted meta line. Only
+       the detail panel's vertical scroll remains. ::deep throughout because
+       MudTable owns this markup without the component's scope attribute. */
+    .spb-split__detail ::deep .mud-table-container {
+        overflow-x: hidden;
+    }
+
+    .spb-split__detail ::deep .mud-table-container thead {
+        display: none;
+    }
+
+    .spb-split__detail ::deep .mud-table-container table,
+    .spb-split__detail ::deep .mud-table-container tbody {
+        display: block;
+        width: 100%;
+    }
+
+    .spb-split__detail ::deep .spb-metric-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: 6px;
+        padding: 8px 4px;
+        border-bottom: 1px solid var(--mud-palette-divider);
+    }
+
+    .spb-split__detail ::deep .spb-metric-row td {
+        display: block;
+        padding: 0;
+        border: none;
+        min-width: 0;
+    }
+
+    /* Headline: name on the left, value pinned flush-right by an auto margin so
+       values line up in a column. The wrap onto a second line is forced by the
+       ::after break below — margin:auto only right-aligns, it can't wrap.
+       Value keeps its mono font and value colour from the base rules. */
+    .spb-split__detail ::deep .spb-td-name {
+        order: 1;
+        flex: 0 1 auto;
+        min-width: 0;
+        font-size: 14px;
+        color: var(--mud-palette-text-primary);
+    }
+
+    .spb-split__detail ::deep .spb-td-value {
+        order: 2;
+        flex: 0 0 auto;
+        margin-left: auto;
+        text-align: right;
+    }
+
+    /* Meta line: type · alias · updated wrap together below the headline */
+    .spb-split__detail ::deep .spb-td-type,
+    .spb-split__detail ::deep .spb-td-alias,
+    .spb-split__detail ::deep .spb-td-updated {
+        margin-top: 2px;
+        font-size: 11px;
+        color: var(--mud-palette-text-secondary);
+    }
+
+    /* Full-width zero-height break between value (order 2) and the meta cells
+       (order 4-6). A flex container's ::after pseudo-element is itself a flex
+       item, so this drops the meta group onto its own second line no matter how
+       short the metric name is — margin:auto alone can't force that wrap. */
+    .spb-split__detail ::deep .spb-metric-row::after {
+        content: "";
+        order: 3;
+        flex: 0 0 100%;
+        height: 0;
+    }
+
+    .spb-split__detail ::deep .spb-td-type    { order: 4; }
+    .spb-split__detail ::deep .spb-td-alias   { order: 5; text-align: left; }
+    .spb-split__detail ::deep .spb-td-updated { order: 6; }
+
+    .spb-split__detail ::deep .spb-td-alias::before,
+    .spb-split__detail ::deep .spb-td-updated::before {
+        content: "·";
+        margin-right: 6px;
+        color: var(--mud-palette-text-disabled);
+    }
 }
 
 /* ── Header chips and filters ────────────────────────────────────────────── */
@@ -107,7 +235,6 @@
 
 ::deep .spb-count-chip--online  { color: var(--mud-palette-success); }
 ::deep .spb-count-chip--offline { color: var(--mud-palette-error); }
-
 ::deep .spb-filter-select { min-width: 120px; font-size: 0.85rem; }
 ::deep .spb-filter-text   { min-width: 160px; font-size: 0.85rem; }
 
@@ -117,6 +244,7 @@
     font-size: 14px;
     font-weight: 500;
     color: var(--mud-palette-text-primary);
+    overflow-wrap: anywhere;
 }
 
 .spb-node-secondary {
@@ -170,15 +298,21 @@
 /* ── Metrics table ───────────────────────────────────────────────────────── */
 
 /* ::deep because MudTh/MudTd render the th/td elements */
+::deep table.mud-table-root {
+    table-layout: fixed;
+    width: 100%;
+}
+
 ::deep .spb-th-right   { text-align: right; }
 
-::deep .spb-td-name    { font-size: 13px; color: var(--mud-palette-text-secondary); }
+::deep .spb-td-name    { font-size: 13px; color: var(--mud-palette-text-secondary); overflow-wrap: anywhere; }
 ::deep .spb-td-type    { font-size: 12px; color: var(--mud-palette-text-secondary); }
 
 ::deep .spb-td-value {
     text-align: right;
     font-family: var(--font-mono);
     font-size: 13px;
+    overflow-wrap: anywhere;
     /* color kept inline — driven by ValueColor() */
 }
 
@@ -195,6 +329,7 @@
     font-weight: 500;
     color: var(--mud-palette-text-primary);
     margin-left: 6px;
+    overflow-wrap: anywhere;
 }
 
 .spb-device-secondary {

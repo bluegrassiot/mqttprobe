@@ -2,7 +2,9 @@ using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Components.Emulation;
 using MqttProbe.Models.Emulation;
+using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Emulation;
+using MqttProbe.Services.Mqtt;
 using MqttProbe.Shared.Tests.TestHelpers;
 using MudBlazor;
 
@@ -29,6 +31,11 @@ public class EmulationPanelTests : BunitTestContext
         Services.AddSingleton(_mockDialogService);
         _mockSnackbar = Substitute.For<ISnackbar>();
         Services.AddSingleton(_mockSnackbar);
+
+        var mockSessionState = Substitute.For<ISessionState>();
+        mockSessionState.SelectedConnection.Returns(new Connection());
+        Services.AddSingleton(mockSessionState);
+
         EnsureMudProviders();
     }
 

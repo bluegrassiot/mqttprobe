@@ -21,21 +21,11 @@
     color: var(--mud-palette-text-primary);
 }
 
-/* Remove inner scrollbar from MudTabs panels — the outer .app-shell-body
-   already handles page scrolling. MudBlazor may set overflow-y via JS on
-   .mud-tabs-panels which creates a confusing nested scroll container.
-   !important overrides any inline styles set by MudBlazor interop. */
-::deep .mud-tabs-panels {
-    overflow-y: visible !important;
-    max-height: none !important;
-    height: auto !important;
-}
-
-::deep .mud-tab-panel {
-    overflow: visible !important;
-    max-height: none !important;
-    height: auto !important;
-}
+/* The tab panels area is the bounded scroll region for the viewport-locked
+   shell. Those rules live in components.css under `.app-shell-body` rather than
+   here: a scoped ::deep is unreliable for MudTabs' deep internals, and an
+   unscoped global would also hit the connection dialog's own MudTabs (which
+   renders in a portal outside .app-shell-body). */
 
 ::deep .tab-shell {
     padding: 8px 8px 8px 8px;
@@ -43,6 +33,16 @@
 
 .tab-panel-content {
     padding-top: 8px;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+@media (max-width: 599px) {
+    .tab-panel-content {
+        padding-bottom: 64px; /* space for fixed mobile nav bar */
+    }
 }
 
 @media (min-width: 600px) {
@@ -75,84 +75,54 @@
     }
 }
 
-/* Split-pane browser layout — desktop */
-.browser-split {
-    display: grid;
-    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-    column-gap: 12px;
-    min-height: 0;
-    height: 100%;
-}
-
-.browser-split__topics {
-    min-height: 0;
-    overflow: auto;
-}
-
-.browser-split__messages {
-    min-height: 0;
-    overflow-y: auto;
-}
-
-/* Mobile show/hide classes */
-.mobile-show {
-    display: none;
-}
-
-.mobile-hide {
-    display: block;
-}
-
-/* sm and down — stack vertically */
-@media (max-width: 959.98px) {
-    .browser-split {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        height: 100%;
-        gap: 12px;
-    }
-
-    .browser-split__messages {
-        overflow: auto;
-    }
-
-    .browser-split__topics {
-        max-height: 38vh;
-        overflow: auto;
-    }
-
-    .mobile-show {
-        display: block;
-    }
-
-    .mobile-hide {
-        display: none;
-    }
-}
-
-/* Mobile topics collapse styles */
-.mobile-topics-collapse {
-    border: 1px solid var(--mud-palette-lines-default);
-    border-radius: var(--mud-default-borders);
-    overflow: hidden;
-}
-
-.mobile-topics-header {
+/* Mobile primary navigation — fixed bottom bar, hidden on desktop */
+.mobile-primary-nav {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    cursor: pointer;
+    justify-content: space-around;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1200;
     background: var(--mud-palette-surface);
-    transition: background-color 150ms ease-out;
+    border-top: 1px solid var(--mud-palette-lines-default);
+    padding: 8px 0 env(safe-area-inset-bottom, 8px);
 }
 
-.mobile-topics-header:hover {
-    background: var(--mud-palette-surface-hover);
+.mobile-nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 12px;
+    min-height: 44px;
+    border: none;
+    background: transparent;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: color 150ms ease-out;
+    -webkit-tap-highlight-color: transparent;
 }
 
-.mobile-topics-content {
-    max-height: 50vh;
-    overflow-y: auto;
+.mobile-nav-btn.active {
+    color: var(--mud-palette-primary);
+    font-weight: 600;
+}
+
+.mobile-nav-btn:hover {
+    color: var(--mud-palette-text-primary);
+}
+
+/* More menu trigger styled like a nav button */
+.mobile-nav-more .mud-icon-root {
+    color: inherit;
+}
+
+/* Hide mobile nav on desktop */
+@media (min-width: 600px) {
+    .mobile-primary-nav {
+        display: none;
+    }
 }

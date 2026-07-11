@@ -4,11 +4,11 @@ using MqttProbe.Models.Mqtt;
 using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 
 namespace MqttProbe.Shared.Tests.Services.Mqtt;
 
@@ -146,5 +146,37 @@ public class ConnectionValidatorTests
 
         nameErrors.Should().HaveCount(1, "only one rule per field");
         hostErrors.Should().HaveCount(1, "only one rule per field");
+    }
+
+    [TestCase(0)]
+    [TestCase(-1)]
+    [TestCase(121)]
+    [TestCase(300)]
+    public async Task Validate_FailsWhenConnectTimeoutIsOutsideValidRange(int timeout)
+    {
+        var conn = ValidConnection();
+        conn.ConnectTimeout = timeout;
+
+        var result = await _validator.ValidateAsync(conn);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e =>
+            e.PropertyName == nameof(Connection.ConnectTimeout) &&
+            e.ErrorMessage.Contains("1 and 120", StringComparison.Ordinal));
+    }
+
+    [TestCase(1)]
+    [TestCase(5)]
+    [TestCase(15)]
+    [TestCase(60)]
+    [TestCase(120)]
+    public async Task Validate_PassesForValidConnectTimeout(int timeout)
+    {
+        var conn = ValidConnection();
+        conn.ConnectTimeout = timeout;
+
+        var result = await _validator.ValidateAsync(conn);
+
+        result.IsValid.Should().BeTrue();
     }
 }

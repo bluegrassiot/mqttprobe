@@ -9,11 +9,11 @@ using MqttProbe.Models.Mqtt;
 using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 
 namespace MqttProbe.Shared.Tests.Services.Mqtt;
 
@@ -32,7 +32,7 @@ public class MessageStoreManagerMessageHandlerTests
         _mockLogger = Substitute.For<ILogger<MessageStoreManager>>();
         var mockSettings = Substitute.For<ISettingsStore>();
         mockSettings.Config.Returns(new AppConfiguration());
-        _manager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, Substitute.For<IUxTelemetryService>());
+        _manager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, Substitute.For<IUxMetricsService>(), CreateMockDecoder());
 
         _capturedHandler = null;
         _mockClient.When(x =>
@@ -64,6 +64,20 @@ public class MessageStoreManagerMessageHandlerTests
     private Task Fire(string topic, string payload = "") =>
         _capturedHandler!(MakeArgs(topic, payload));
 
+    private static IPayloadDecoder CreateMockDecoder()
+    {
+        var decoder = Substitute.For<IPayloadDecoder>();
+        decoder.Decode(Arg.Any<MqttApplicationMessageReceivedEventArgs>())
+            .Returns(x =>
+            {
+                var e = (MqttApplicationMessageReceivedEventArgs)x[0];
+                var seg = e.ApplicationMessage.PayloadSegment;
+                var payload = seg.Count > 0 ? System.Text.Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count) : string.Empty;
+                return new DecodedPayload(payload, DetectedPayloadFormat.PlainText);
+            });
+        return decoder;
+    }
+
     [Test]
     public async Task MessageReceived_PlainText_StoresInCorrectTopicNode()
     {
@@ -94,12 +108,15 @@ public class MessageStoreManagerMessageHandlerTests
     }
 
     [Test]
-    public async Task MessageReceived_CapsAt10000MessagesPerLeaf()
+    public async Task MessageReceived_SingleTopic_CapsAtGlobalMaxStoredMessages()
     {
+        // With a single active topic, that topic may hold the entire global budget.
+        // Default MaxStoredMessages is 10_000.
         for (var i = 0; i < 10_010; i++)
             await Fire("capped", $"msg-{i}");
 
-        _manager.MessageStores["capped"].Messages!.Count.Should().BeLessThanOrEqualTo(10_000);
+        _manager.MessageStores["capped"].Messages!.Count.Should().Be(10_000);
+        _manager.TotalStoredMessages.Should().Be(10_000);
     }
 
     [Test]
@@ -245,7 +262,7 @@ public class MessageStoreManagerMessageHandlerTests
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings, Substitute.For<IUxTelemetryService>());
+        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings, Substitute.For<IUxMetricsService>(), CreateMockDecoder());
         await manager.Start();
 
         // Fire 3 messages immediately — only the first should be permitted in the 1-second window.
@@ -267,12 +284,173 @@ public class MessageStoreManagerMessageHandlerTests
         mockSettings.Config.Returns(config);
 
         using var manager = new MessageStoreManager(Substitute.For<IManagedMqttClient>(),
-            Substitute.For<ILogger<MessageStoreManager>>(), mockSettings, Substitute.For<IUxTelemetryService>());
+            Substitute.For<ILogger<MessageStoreManager>>(), mockSettings, Substitute.For<IUxMetricsService>(), CreateMockDecoder());
 
         config.Performance.MaxStoredMessages = 25;
 
         manager.MaxStoredMessages.Should().Be(25,
             "MaxStoredMessages must be a live read of the current settings, not a snapshot from construction");
+    }
+
+    private static (MessageStoreManager Manager, Func<MqttApplicationMessageReceivedEventArgs, Task> Fire, ISettingsStore Settings)
+        BuildManager(AppConfiguration config)
+    {
+        var client = Substitute.For<IManagedMqttClient>();
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+              .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        var settings = Substitute.For<ISettingsStore>();
+        settings.Config.Returns(config);
+
+        var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
+            settings, Substitute.For<IUxMetricsService>(), CreateMockDecoder());
+        manager.Start().GetAwaiter().GetResult();
+        return (manager, handler!, settings);
+    }
+
+    private static int CountStored(IEnumerable<MessageStore> stores)
+    {
+        var total = 0;
+        foreach (var s in stores)
+        {
+            total += s.Messages?.Count ?? 0;
+            if (s.SubTopics != null)
+                total += CountStored(s.SubTopics.Values);
+        }
+        return total;
+    }
+
+    [Test]
+    public async Task Retention_GlobalCapAcrossManyTopics_TotalNeverExceedsLimit()
+    {
+        var config = new AppConfiguration
+        {
+            Performance = new PerformanceSettings { MaxStoredMessages = 5, MaxMessagesPerSecond = 50_000 }
+        };
+        var built = BuildManager(config);
+        using var manager = built.Manager;
+        var fire = built.Fire;
+
+        // 12 messages across 12 distinct topics; global cap is 5.
+        for (var i = 0; i < 12; i++)
+            await fire(MakeArgs($"topic-{i}", $"msg-{i}"));
+
+        manager.TotalStoredMessages.Should().Be(5);
+        CountStored(manager.MessageStores.Values).Should().Be(5,
+            "the live counter must match the messages actually retained in the tree");
+    }
+
+    [Test]
+    public async Task Retention_GlobalFifo_EvictsOldestAcrossTopicBoundaries()
+    {
+        var config = new AppConfiguration
+        {
+            Performance = new PerformanceSettings { MaxStoredMessages = 3, MaxMessagesPerSecond = 50_000 }
+        };
+        var built = BuildManager(config);
+        using var manager = built.Manager;
+        var fire = built.Fire;
+
+        // Arrival order: a:0, b:1, a:2, c:3  -> retentionOrder [a,b,a,c], cap 3.
+        // Oldest overall (a's "0") is evicted; a keeps "2".
+        await fire(MakeArgs("a", "0"));
+        await fire(MakeArgs("b", "1"));
+        await fire(MakeArgs("a", "2"));
+        await fire(MakeArgs("c", "3"));
+
+        manager.TotalStoredMessages.Should().Be(3);
+        manager.MessageStores["a"].Messages!.Select(m => m.Payload).Should().ContainSingle().Which.Should().Be("2");
+        manager.MessageStores["b"].Messages!.Should().ContainSingle(m => m.Payload == "1");
+        manager.MessageStores["c"].Messages!.Should().ContainSingle(m => m.Payload == "3");
+    }
+
+    [Test]
+    public async Task Retention_SingleHotTopic_RetainsExactlyTheGlobalLimit()
+    {
+        var config = new AppConfiguration
+        {
+            Performance = new PerformanceSettings { MaxStoredMessages = 4, MaxMessagesPerSecond = 50_000 }
+        };
+        var built = BuildManager(config);
+        using var manager = built.Manager;
+        var fire = built.Fire;
+
+        for (var i = 0; i < 10; i++)
+            await fire(MakeArgs("hot", $"msg-{i}"));
+
+        // Per-topic cap is gone: one busy topic may use the whole global budget.
+        manager.TotalStoredMessages.Should().Be(4);
+        manager.MessageStores["hot"].Messages!.Count.Should().Be(4);
+        manager.MessageStores["hot"].Messages!.Select(m => m.Payload)
+            .Should().BeEquivalentTo(["msg-6", "msg-7", "msg-8", "msg-9"]);
+    }
+
+    [Test]
+    public async Task Retention_NonPositiveLimit_StoresNothing_DoesNotSpin()
+    {
+        var config = new AppConfiguration
+        {
+            Performance = new PerformanceSettings { MaxStoredMessages = 0, MaxMessagesPerSecond = 50_000 }
+        };
+        var built = BuildManager(config);
+        using var manager = built.Manager;
+        var fire = built.Fire;
+
+        await fire(MakeArgs("zero", "x"));
+        await fire(MakeArgs("zero", "y"));
+
+        manager.TotalStoredMessages.Should().Be(0);
+        CountStored(manager.MessageStores.Values).Should().Be(0);
+    }
+
+    [Test]
+    public async Task ClearAllMessages_ResetsGlobalCount_SoNewMessagesStore()
+    {
+        var config = new AppConfiguration
+        {
+            Performance = new PerformanceSettings { MaxStoredMessages = 5, MaxMessagesPerSecond = 50_000 }
+        };
+        var built = BuildManager(config);
+        using var manager = built.Manager;
+        var fire = built.Fire;
+
+        for (var i = 0; i < 5; i++)
+            await fire(MakeArgs($"t-{i}", "x"));
+        manager.TotalStoredMessages.Should().Be(5);
+
+        await manager.ClearAllMessages();
+
+        manager.TotalStoredMessages.Should().Be(0);
+        manager.MessageStores.Should().BeEmpty();
+
+        // Counter was reset, so a subsequent message is retained (not instantly evicted).
+        await fire(MakeArgs("after-clear", "y"));
+        manager.TotalStoredMessages.Should().Be(1);
+        CountStored(manager.MessageStores.Values).Should().Be(1);
+    }
+
+    [Test]
+    public async Task PerformanceSettingsChanged_LoweredLimit_TrimsImmediately()
+    {
+        var config = new AppConfiguration
+        {
+            Performance = new PerformanceSettings { MaxStoredMessages = 10, MaxMessagesPerSecond = 50_000 }
+        };
+        var built = BuildManager(config);
+        using var manager = built.Manager;
+        var fire = built.Fire;
+        var settings = built.Settings;
+
+        for (var i = 0; i < 8; i++)
+            await fire(MakeArgs($"t-{i}", "x"));
+        manager.TotalStoredMessages.Should().Be(8);
+
+        config.Performance.MaxStoredMessages = 3;
+        settings.PerformanceSettingsChanged += Raise.Event<Action>();
+
+        manager.TotalStoredMessages.Should().Be(3);
+        CountStored(manager.MessageStores.Values).Should().Be(3);
     }
 
     [Test]
@@ -292,7 +470,7 @@ public class MessageStoreManagerMessageHandlerTests
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings, Substitute.For<IUxTelemetryService>());
+        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings, Substitute.For<IUxMetricsService>(), CreateMockDecoder());
         await manager.Start();
 
         await handler!(MakeArgs("before", "x"));

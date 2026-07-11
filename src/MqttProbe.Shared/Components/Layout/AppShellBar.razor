@@ -10,7 +10,7 @@
 @implements IAsyncDisposable
 
 <MudAppBar Fixed="false" Elevation="2" Class="mt-0 app-shell-appbar app-chrome-panel">
-    <MudImage title="@_version" Src="favicon.svg" Height="34" Class="mr-2" />
+    <MudImage title="@($"Version {_version}")" Src="favicon.svg" Height="34" Class="mr-2" />
     <span class="app-wordmark app-wordmark-mqtt">MQTT</span><span class="app-wordmark app-wordmark-probe">Probe</span>
 
     @if (MqttClient.IsConnected && SessionState.SelectedConnection.Host != null)
@@ -38,6 +38,8 @@
         </MudChip>
     }
 
+
+    <MetricsStatsChip />
     <MudSpacer/>
 
     <div class="app-actions app-actions-wide">
@@ -75,20 +77,21 @@
     </div>
 
     <div class="app-actions app-actions-compact">
-        <MudIconButton Class="touch-target" Disabled="@(!MqttClient.IsConnected)" Size="Size.Medium"
-                       title="@(MessageStoreManagerService.IsListening ? "Pause capture" : "Resume capture")"
-                       Icon="@(MessageStoreManagerService.IsListening ? LucideIcons.Pause : LucideIcons.Play)"
-                       Color="@CaptureButtonColor"
-                       OnClick="@(MessageStoreManagerService.IsListening ? MessageStoreManagerService.Stop : MessageStoreManagerService.Start)"/>
-
-        <MudIconButton Class="touch-target" Size="Size.Medium"
-                       title="@(MqttClient.IsConnected ? "Connected — click to disconnect" : "Click to connect")"
-                       Icon="@(MqttClient.IsConnected ? LucideIcons.Wifi : LucideIcons.WifiOff)"
-                       Color="@(MqttClient.IsConnected ? Color.Success : Color.Inherit)"
-                       OnClick="@(_ => ConnectionToggle())"/>
-
         <MudMenu Icon="@LucideIcons.MoreVertical" Dense="true" Color="Color.Inherit"
                  AriaLabel="More actions">
+            <MudMenuItem Disabled="@(!MqttClient.IsConnected)"
+                         Icon="@(MessageStoreManagerService.IsListening ? LucideIcons.Pause : LucideIcons.Play)"
+                         IconColor="@CaptureButtonColor"
+                         OnClick="@(MessageStoreManagerService.IsListening ? MessageStoreManagerService.Stop : MessageStoreManagerService.Start)">
+                @(MessageStoreManagerService.IsListening ? "Pause" : "Capture")
+            </MudMenuItem>
+
+            <MudMenuItem Icon="@(MqttClient.IsConnected ? LucideIcons.WifiOff : LucideIcons.Wifi)"
+                         IconColor="@(MqttClient.IsConnected ? Color.Success : Color.Inherit)"
+                         OnClick="@(() => ConnectionToggle())">
+                @(MqttClient.IsConnected ? "Disconnect" : "Connect")
+            </MudMenuItem>
+
             @if (AppInfoService.RequiresAuthentication)
             {
                 <AuthorizeView>

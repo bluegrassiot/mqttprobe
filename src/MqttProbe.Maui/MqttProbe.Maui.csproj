@@ -1,10 +1,12 @@
-<Project Sdk="Microsoft.NET.Sdk.Razor">
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
     <PropertyGroup>
         <LangVersion>latest</LangVersion>
         <MqttProbeMauiWindowsTargetFrameworks>net10.0-android;net10.0-windows10.0.19041.0</MqttProbeMauiWindowsTargetFrameworks>
         <MqttProbeMauiWindowsTargetFrameworks Condition="'$(MqttProbeMauiWindowsTargetFrameworksOverride)' != ''">$(MqttProbeMauiWindowsTargetFrameworksOverride)</MqttProbeMauiWindowsTargetFrameworks>
-        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+        <MqttProbeMauiMacTargetFrameworks>net10.0-ios;net10.0-maccatalyst</MqttProbeMauiMacTargetFrameworks>
+        <MqttProbeMauiMacTargetFrameworks Condition="'$(MqttProbeMauiMacTargetFrameworksOverride)' != ''">$(MqttProbeMauiMacTargetFrameworksOverride)</MqttProbeMauiMacTargetFrameworks>
+        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">$(MqttProbeMauiMacTargetFrameworks)</TargetFrameworks>
         <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(MqttProbeMauiWindowsTargetFrameworks)</TargetFrameworks>
         <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('osx')) AND !$([MSBuild]::IsOSPlatform('windows'))">net10.0-android</TargetFrameworks>
 		<!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
@@ -29,7 +31,7 @@
         <ApplicationTitle>MQTTProbe</ApplicationTitle>
 
         <!-- App Identifier -->
-        <ApplicationId>com.bluegrassiot.mqttprobemaui</ApplicationId>
+        <ApplicationId>com.bluegrassiot.mqttprobe</ApplicationId>
 
         <!-- Versions -->
         <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
@@ -37,7 +39,7 @@
 
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
-        <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">29.0</SupportedOSPlatformVersion>
+        <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
         <Configurations>Debug;Release</Configurations>
@@ -77,7 +79,7 @@
 
     <PropertyGroup>
         <ServerGarbageCollection>false</ServerGarbageCollection>
-        <DefaultLanguage>en</DefaultLanguage>
+        <DefaultLanguage>en-US</DefaultLanguage>
         <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
         <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
         <PackageCertificateThumbprint></PackageCertificateThumbprint>
@@ -92,7 +94,7 @@
         <MauiIcon Include="Resources\AppIcon\appicon.svg" />
 
         <!-- Splash Screen -->
-        <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
+        <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#4A575D" BaseSize="128,128" />
 
         <!-- Custom Fonts -->
         <MauiFont Include="Resources\Fonts\*" />

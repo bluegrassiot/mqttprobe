@@ -7,11 +7,11 @@ using MqttProbe.Models.Mqtt;
 using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 
 namespace MqttProbe.Shared.Tests.Services.Mqtt;
 
@@ -152,6 +152,31 @@ public class MqttOptionsBuilderTests
     {
         var options = _builder.Build(TcpConnection());
         options.AutoReconnectDelay.Should().Be(TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public void Build_DefaultConnectTimeout_Uses15Seconds()
+    {
+        var options = _builder.Build(TcpConnection());
+        ((MqttClientOptions)options.ClientOptions).Timeout.Should().Be(TimeSpan.FromSeconds(15));
+    }
+
+    [Test]
+    public void Build_CustomConnectTimeout_UsesConfiguredValue()
+    {
+        var conn = TcpConnection();
+        conn.ConnectTimeout = 30;
+        var options = _builder.Build(conn);
+        ((MqttClientOptions)options.ClientOptions).Timeout.Should().Be(TimeSpan.FromSeconds(30));
+    }
+
+    [Test]
+    public void Build_ZeroConnectTimeout_FallsBackTo15Seconds()
+    {
+        var conn = TcpConnection();
+        conn.ConnectTimeout = 0;
+        var options = _builder.Build(conn);
+        ((MqttClientOptions)options.ClientOptions).Timeout.Should().Be(TimeSpan.FromSeconds(15));
     }
 
     [Test]

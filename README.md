@@ -2,7 +2,7 @@
 
 **The MQTT diagnostic tool built for IIoT.**
 
-Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart JSON telemetry in real time. Native Sparkplug B decode and EoN node emulation built in. Open source, no cloud required.
+Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart JSON metrics in real time. Native Sparkplug B decode and EoN node emulation built in. Open source, no cloud required.
 
 [![CI](https://github.com/bluegrassiot/mqttprobe/actions/workflows/ci.yml/badge.svg)](https://github.com/bluegrassiot/mqttprobe/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
@@ -18,12 +18,12 @@ Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart
 - **Payload Browser** — structured JSON viewer for message payloads, with topic/payload copy-to-clipboard
 - **Subscriptions** — add and remove MQTT topic subscriptions (including wildcards) at runtime; subscriptions persist per connection and auto-resubscribe on reconnect (configurable)
 - **Publish** — send messages to any topic with configurable QoS level
-- **MQTT/Sparkplug B Emulator** — simulate multiple Edge Nodes publishing telemetry data at a configurable rate with and without Sparkplug B
+- **MQTT/Sparkplug B Emulator** — simulate multiple Edge Nodes publishing metrics data at a configurable rate with and without Sparkplug B
 - **Sparkplug B EoN dashboard** — live view of all Edge of Network nodes, devices, and metrics; automatically requests Birth certificates for newly discovered nodes
 - **Multiple Connections** — save and switch between multiple broker configurations
 - **TLS / MQTTS** — connect to brokers over TLS (port 8883) or plain MQTT (port 1883), with optional untrusted certificate override
 - **WebSocket support** — connect via `ws://` or `wss://` in addition to raw TCP
-- **Charts** — live time-series visualization of JSON payload fields with configurable field selection; chart configurations are saved across sessions
+- **Charts** — live time-series visualization of JSON payload fields with configurable field selection; chart configurations are saved per connection across sessions
 - **Authentication** — cookie-based login with PBKDF2-SHA256 hashed passwords; first-run setup wizard, in-app password change
 - **Secure credential storage** — MQTT broker passwords stored in platform-native secure storage (iOS Keychain / Android Keystore / ASP.NET Data Protection); never written in plaintext
 
@@ -145,14 +145,12 @@ On first run the app creates `config/appsettings.json` (gitignored, never commit
     "AutoResubscribe": true,
     "DismissedHints": []
   },
-  "Charts": [],
-  "Emulators": {
-    "Version": 1,
-    "PublishIntervalMs": 500,
-    "Nodes": []
-  }
+  "ChartsByConnection": {},
+  "EmulatorsByConnection": {}
 }
 ```
+
+Charts and emulator configurations are stored per connection, keyed by connection GUID.
 
 > **Passwords are never stored here.** MQTT broker passwords are stored in platform-secure storage (ASP.NET Data Protection on the server, iOS Keychain / Android Keystore on MAUI). If `PasswordHash` is empty, the app redirects to `/Setup` on next start.
 

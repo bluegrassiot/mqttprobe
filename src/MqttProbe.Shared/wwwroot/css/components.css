@@ -87,11 +87,34 @@
     color: var(--mud-palette-appbar-text);
 }
 
+.mud-appbar .metrics-chip:not(.metrics-chip--dropping) {
+    color: var(--mud-palette-appbar-text);
+}
+
+.mud-appbar .broker-chip {
+    flex-shrink: 1;
+    min-width: 0;
+}
+
 .mud-appbar .broker-chip .mud-chip-content {
     max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Long connection names must not crowd out the appbar actions on phones. */
+@media (max-width: 599px) {
+    .mud-appbar .broker-chip .mud-chip-content {
+        max-width: 100%;
+    }
+}
+
+/* Hide the mobile bottom nav when a MudBlazor dialog is open so only the
+   dialog's own navigation is visible. MudDialog renders in a portal outside
+   the app shell, so a global :has() rule is the simplest override. */
+body:has(.mud-dialog-container) .mobile-primary-nav {
+    display: none;
 }
 
 .mud-appbar .status-pulse {
@@ -101,4 +124,162 @@
 @keyframes status-pulse {
     0%, 100% { opacity: 1; }
     50%       { opacity: 0.3; }
+}
+
+/* ── Circuit reconnect modal ────────────────────────────────────────────────
+   The default framework dialog renders light-gray text on white and ignores the
+   theme. We supply our own #components-reconnect-modal (see App.razor); Blazor
+   toggles the state classes below. Colors are hardcoded to the brand palette
+   rather than --mud-palette-* because the circuit (and thus MudThemeProvider's
+   interactivity) is exactly what's broken when this shows. */
+
+#components-reconnect-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 20000; /* above MudBlazor dialogs/overlays */
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.85); /* slate-black, translucent */
+    backdrop-filter: blur(3px);
+}
+
+/* Blazor shows the modal by swapping -hide for one of these. */
+#components-reconnect-modal.components-reconnect-show,
+#components-reconnect-modal.components-reconnect-failed,
+#components-reconnect-modal.components-reconnect-rejected {
+    display: flex;
+}
+
+#components-reconnect-modal.components-reconnect-hide {
+    display: none;
+}
+
+#components-reconnect-modal .reconnect-card {
+    background: #1E293B; /* slate-dark */
+    border: 1px solid #334155; /* slate-border */
+    border-radius: 8px;
+    padding: 2rem 2.25rem;
+    max-width: 380px;
+    text-align: center;
+    color: #F1F5F9; /* off-white */
+    font-family: var(--font-ui, system-ui, sans-serif);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+}
+
+#components-reconnect-modal .reconnect-motif {
+    width: 96px;
+    height: 96px;
+    margin-bottom: 1rem;
+}
+
+/* Breathing pulse for the connecting/reconnecting motif. Kept global (not in a
+   component's scoped .razor.css) so every connecting indicator can reference it
+   by name — a scoped @keyframes gets renamed per-component and won't resolve
+   from another component's scope. */
+@keyframes signal-breathe {
+    0%, 100% { opacity: 0.4; transform: scale(0.94); }
+    50%      { opacity: 1; transform: scale(1.05); }
+}
+
+#components-reconnect-modal .reconnect-message {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
+    color: #F1F5F9;
+}
+
+#components-reconnect-modal .reconnect-message a {
+    color: #F97316; /* signal-orange */
+    font-weight: 600;
+    text-decoration: none;
+}
+
+#components-reconnect-modal .reconnect-message a:hover {
+    text-decoration: underline;
+}
+
+/* Show only the message matching the current circuit state. */
+#components-reconnect-modal .reconnect-message { display: none; }
+#components-reconnect-modal.components-reconnect-show .reconnect-message--show { display: block; }
+#components-reconnect-modal.components-reconnect-failed .reconnect-message--failed { display: block; }
+#components-reconnect-modal.components-reconnect-rejected .reconnect-message--rejected { display: block; }
+
+/* ── Viewport-locked app shell ──────────────────────────────────────────────
+   Lock the whole app to the viewport so the page itself never scrolls. Each
+   chain link fills its parent and clips overflow; scrolling happens inside the
+   active tab's content area (.mud-tabs-panels) or, for the Browser tab, inside
+   the topic tree and payload panes. These live in the global sheet (not a
+   scoped ::deep) because MudLayout/MudMainContent/MudContainer roots never
+   carry a component's CSS-isolation attribute. */
+.mud-layout {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.mud-main-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.app-shell-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* The tabs host fills the shell body so its panels area can flex and scroll. */
+.app-shell-body > .mud-tabs {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* The panels area must be a flex column that fills the tabs host and clips
+   overflow. MudBlazor only gives .mud-tabs-panels `flex-grow:1`; without
+   display:flex / min-height:0 / overflow:hidden here, each tab's content
+   collapses to its natural height and overflows the viewport-locked shell
+   instead of scrolling internally. Scoped under .app-shell-body so the
+   connection dialog's MudTabs (rendered in a portal outside the shell) is
+   unaffected. */
+.app-shell-body .mud-tabs-panels {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* The active tab panel wrapper must fill the panels area and pass a bounded
+   height down to the tab's content (.tab-panel-content), so that content's
+   flex:1 / min-height:0 children can scroll internally. Must target ONLY the
+   active panel: MudBlazor (9.6+) hides inactive panels via
+   `.mud-tabs-panels > .mud-tab-panel { display:none }`, which this rule's
+   higher specificity would otherwise override — rendering every tab at once. */
+.app-shell-body .mud-tab-panel[role='tabpanel'].mud-tab-panel-active {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Hide the desktop MudTabs tabbar on mobile. Like the .mud-tabs-panels rule
+   above, this must live in the global sheet: although .desktop-tabs is a
+   Blazor component element (and does receive CSS-isolation scoping), the
+   inner .mud-tabs-tabbar is MudBlazor markup rendered without the host
+   component's isolation attribute — so a scoped ::deep selector cannot
+   reach it reliably. Scoped under .app-shell-body to avoid hitting other
+   MudTabs instances (e.g. the connection dialog's tabs). */
+@media (max-width: 599px) {
+    .app-shell-body .desktop-tabs .mud-tabs-tabbar {
+        display: none;
+    }
 }

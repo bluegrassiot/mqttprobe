@@ -9,7 +9,7 @@ namespace MqttProbe.Shared.Tests.Components.Sparkplug;
 [TestFixture]
 public class SparkplugNodesViewTests : BunitTestContext
 {
-    private const string RemoveOfflineNodes = "Prune offline";
+    private const string RemoveOfflineNodesSelector = "button[aria-label='Remove all offline nodes']";
     private ISparkplugTopologyService _mockTopology = null!;
     private IDialogService _mockDialogService = null!;
     private ISnackbar _mockSnackbar = null!;
@@ -47,7 +47,7 @@ public class SparkplugNodesViewTests : BunitTestContext
 
         cut.Markup.Should().Contain("app-tabpanel-header__row");
         cut.Markup.Should().Contain(">Nodes<");
-        cut.Markup.Should().Contain(RemoveOfflineNodes);
+        cut.FindAll(RemoveOfflineNodesSelector).Should().NotBeEmpty();
         cut.Markup.Should().Contain("app-tabpanel-header__filters");
     }
 
@@ -101,6 +101,25 @@ public class SparkplugNodesViewTests : BunitTestContext
         cut.Markup.Should().Contain("edge-A");
         cut.Markup.Should().NotContain("edge-B");
         cut.FindAll(".spb-node-row--selected").Should().ContainSingle("the selected node survives a sibling removal");
+    }
+
+    [Test]
+    public void DetailOpenModifier_TogglesWithNodeSelection()
+    {
+        var group = new SpbGroup { };
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+
+        cut.FindAll(".spb-split--detail-open").Should().BeEmpty("no node is selected yet");
+
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+        cut.FindAll(".spb-split--detail-open").Should().ContainSingle("selecting a node opens the detail takeover");
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Back")).Click();
+        cut.FindAll(".spb-split--detail-open").Should().BeEmpty("Back clears the selection and returns to the list");
     }
 
     [Test]
@@ -171,8 +190,8 @@ public class SparkplugNodesViewTests : BunitTestContext
 
         var cut = Render<SparkplugNodesView>();
 
-        cut.Markup.Should().Contain(RemoveOfflineNodes);
-        var btn = cut.FindAll("button").First(b => b.TextContent.Contains(RemoveOfflineNodes));
+        cut.FindAll(RemoveOfflineNodesSelector).Should().NotBeEmpty();
+        var btn = cut.Find(RemoveOfflineNodesSelector);
         btn.HasAttribute("disabled").Should().BeTrue();
     }
 
@@ -186,7 +205,7 @@ public class SparkplugNodesViewTests : BunitTestContext
 
         var cut = Render<SparkplugNodesView>();
 
-        var btn = cut.FindAll("button").First(b => b.TextContent.Contains(RemoveOfflineNodes));
+        var btn = cut.Find(RemoveOfflineNodesSelector);
         btn.HasAttribute("disabled").Should().BeFalse();
     }
 
@@ -205,7 +224,7 @@ public class SparkplugNodesViewTests : BunitTestContext
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
 
         var cut = Render<SparkplugNodesView>();
-        var btn = cut.FindAll("button").First(b => b.TextContent.Contains(RemoveOfflineNodes));
+        var btn = cut.Find(RemoveOfflineNodesSelector);
 
         await cut.InvokeAsync(() => btn.Click());
 
@@ -230,7 +249,7 @@ public class SparkplugNodesViewTests : BunitTestContext
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
 
         var cut = Render<SparkplugNodesView>();
-        var btn = cut.FindAll("button").First(b => b.TextContent.Contains(RemoveOfflineNodes));
+        var btn = cut.Find(RemoveOfflineNodesSelector);
 
         await cut.InvokeAsync(() => btn.Click());
 
@@ -281,6 +300,70 @@ public class SparkplugNodesViewTests : BunitTestContext
         _mockTopology.TopologyChanged += Raise.Event<Action>();
 
         cut.Instance.GetGroupFilterForTest().Should().BeNull();
+    }
+
+    [Test]
+    public void NodeMetricTable_RendersAliasColumnHeader()
+    {
+        var group = new SpbGroup { };
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        node.Metrics = [new SpbMetricSnapshot("Temp", "double", "20.0000", DateTime.UtcNow, 42UL)];
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+
+        cut.Markup.Should().Contain(">Alias<");
+    }
+
+    [Test]
+    public void NodeMetricTable_DisplaysAliasValueWhenPresent()
+    {
+        var group = new SpbGroup { };
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        node.Metrics = [new SpbMetricSnapshot("Temp", "double", "20.0000", DateTime.UtcNow, 42UL)];
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+
+        cut.Markup.Should().Contain("42");
+    }
+
+    [Test]
+    public void NodeMetricTable_DisplaysEmDashWhenAliasNull()
+    {
+        var group = new SpbGroup { };
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        node.Metrics = [new SpbMetricSnapshot("Temp", "double", "20.0000", DateTime.UtcNow)];
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+
+        cut.Markup.Should().Contain("\u2014");
+    }
+
+    [Test]
+    public void DeviceMetricTable_RendersAliasColumnAndValue()
+    {
+        var group = new SpbGroup { };
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        var device = new SpbDevice { DeviceId = "sensor-A", NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        device.Metrics = [new SpbMetricSnapshot("Voltage", "double", "220.0000", DateTime.UtcNow, 7UL)];
+        node.Devices["sensor-A"] = device;
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+        cut.FindAll(".spb-device-row").First(r => r.TextContent.Contains("sensor-A")).Click();
+
+        cut.Markup.Should().Contain(">Alias<");
+        cut.Markup.Should().Contain("7");
     }
 }
 

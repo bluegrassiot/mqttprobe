@@ -1,0 +1,199 @@
+@using System.Globalization
+@using MQTTnet.Extensions.ManagedClient
+@inject IManagedMqttClient MqttClient
+@inject IMessageStoreManager MessageStoreManagerService
+@inject IUxMetricsService Metrics
+@implements IDisposable
+
+<MudMenu Class="ml-2" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Dense="false">
+    <ActivatorContent>
+        <MudChip T="string" Size="Size.Small"
+                 Class="@ChipClass"
+                 Variant="Variant.Outlined"
+                 Color="@(_droppingRecently ? Color.Warning : Color.Inherit)"
+                 @onclick="context.ToggleAsync">
+            <span class="metrics-chip-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">@((MarkupString)LucideIcons.Activity)</svg>
+            </span>
+            @RateText
+        </MudChip>
+    </ActivatorContent>
+    <ChildContent>
+        <div class="metrics-flyout pa-4" @onclick:stopPropagation="true">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Live traffic</MudText>
+
+            <div class="metrics-sparkline mb-3">
+                <svg width="100%" height="40" viewBox="0 0 240 40" preserveAspectRatio="none">
+                    <polyline fill="none" stroke="var(--mud-palette-primary)" stroke-width="1.5"
+                              points="@SparklinePoints()"/>
+                </svg>
+                <MudText Typo="Typo.caption">@RateText over last 60 s</MudText>
+            </div>
+
+            <div class="metrics-row">
+                <span>Showing</span>
+                <span>@Fmt(_snapshot.CurrentDisplayedMessageCount) / @Fmt(_snapshot.MaxDisplayMessages)</span>
+            </div>
+
+            <div class="metrics-row">
+                <span>Stored messages</span>
+                <span>@Fmt(_storedMessages) / @Fmt(MessageStoreManagerService.MaxStoredMessages)</span>
+            </div>
+            <MudProgressLinear Value="@Percent(_storedMessages, MessageStoreManagerService.MaxStoredMessages)"
+                               Color="Color.Primary" Class="mb-2 metrics-progress"/>
+
+            <div class="metrics-row">
+                <span>Topic nodes</span>
+                <span>@Fmt(_topicNodes) / @Fmt(MessageStoreManagerService.MaxTopicNodes)</span>
+            </div>
+            <MudProgressLinear Value="@Percent(_topicNodes, MessageStoreManagerService.MaxTopicNodes)"
+                               Color="Color.Primary" Class="mb-2 metrics-progress"/>
+
+            <div class="metrics-row"><span>Messages processed</span><span>@Fmt(_snapshot.MessagesProcessed)</span></div>
+            <div class="metrics-row"><span>Messages dropped</span><span>@Fmt(_snapshot.MessagesDropped)</span></div>
+            <div class="metrics-row"><span>Processing time (avg / max)</span><span>@FmtUs(_snapshot.AvgProcessingTimeUs) / @FmtUs(_snapshot.MaxProcessingTimeUs)</span></div>
+            <div class="metrics-row"><span>Payload size (avg / max)</span><span>@FmtBytes(_snapshot.AvgPayloadBytes) / @FmtBytes(_snapshot.MaxPayloadBytes)</span></div>
+
+            @if (_snapshot.MessagesProcessedByFormat.Count > 0)
+            {
+                <MudText Typo="Typo.caption" Class="mt-2">By format</MudText>
+                @foreach (var (format, count) in _snapshot.MessagesProcessedByFormat.OrderByDescending(kv => kv.Value))
+                {
+                    <div class="metrics-row"><span>@format</span><span>@Fmt(count)</span></div>
+                }
+            }
+
+            <MudDivider Class="my-2" />
+            <MudExpansionPanels Elevation="0" Class="mt-1 metrics-health">
+                <MudExpansionPanel Text="Health" Dense="true">
+                    <div class="metrics-row"><span>CPU usage</span><span>@FmtPercent(_snapshot.AppCpuUsagePercent)</span></div>
+                    <div class="metrics-row"><span>Managed heap</span><span>@FmtMb(_snapshot.AppManagedHeapMb)</span></div>
+                    <div class="metrics-row"><span>Working set</span><span>@FmtMb(_snapshot.AppWorkingSetMb)</span></div>
+                    <div class="metrics-row"><span>Threads</span><span>@Fmt(_snapshot.AppThreadCount)</span></div>
+                    <div class="metrics-row"><span>ThreadPool queue</span><span>@Fmt(_snapshot.AppThreadPoolQueueLength)</span></div>
+                    <div class="metrics-row"><span>GC Gen2 collections</span><span>@Fmt(_snapshot.AppGcGen2Collections)</span></div>
+                    <div class="metrics-row"><span>Uptime</span><span>@FmtDuration(_snapshot.AppUptimeSeconds)</span></div>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+
+            <MudExpansionPanels Elevation="0" Class="mt-2 metrics-diagnostics">
+                <MudExpansionPanel Text="Diagnostics" Dense="true">
+                    <div class="metrics-row"><span>Emulators online</span><span>@Fmt(_snapshot.EmulatorPublishersOnline)</span></div>
+                    <div class="metrics-row"><span>Emulation cycles</span><span>@Fmt(_snapshot.EmulatorPublishCycles)</span></div>
+                    @if (_snapshot.EmulatorNodesInError > 0)
+                    {
+                        <div class="metrics-row"><span>Node connection errors</span><span class="metrics-error">@Fmt(_snapshot.EmulatorNodesInError)</span></div>
+                    }
+                    <div class="metrics-row"><span>Connect attempts</span><span>@Fmt(_snapshot.ConnectAttempts)</span></div>
+                    <div class="metrics-row"><span>Connect successes</span><span>@Fmt(_snapshot.ConnectSuccesses)</span></div>
+                    <div class="metrics-row"><span>Connect failures</span><span>@Fmt(_snapshot.ConnectFailures)</span></div>
+                    <div class="metrics-row"><span>Publish successes</span><span>@Fmt(_snapshot.PublishSuccesses)</span></div>
+                    <div class="metrics-row"><span>Publish failures</span><span>@Fmt(_snapshot.PublishFailures)</span></div>
+                    <div class="metrics-row"><span>Charts created</span><span>@Fmt(_snapshot.ChartsCreated)</span></div>
+                    <div class="metrics-row"><span>Series added to charts</span><span>@Fmt(_snapshot.SeriesAddedToExistingCharts)</span></div>
+                    @foreach (var (source, count) in _snapshot.ChartFunnelBySource.OrderByDescending(kv => kv.Value))
+                    {
+                        <div class="metrics-row"><span>Chart funnel: @source</span><span>@Fmt(count)</span></div>
+                    }
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </div>
+    </ChildContent>
+</MudMenu>
+
+@code {
+    private Timer? _timer;
+    private bool _disposed;
+    private bool _droppingRecently;
+    private long _lastDroppedCount;
+    private int _storedMessages;
+    private int _topicNodes;
+    private UxMetricsSnapshot _snapshot = null!;
+
+    private string ChipClass =>
+        _droppingRecently ? "metrics-chip metrics-chip--dropping" : "metrics-chip";
+
+    private string RateText =>
+        MqttClient.IsConnected
+            ? $"{_snapshot.CurrentMessagesPerSecond:N0} msg/s"
+            : "— msg/s";
+
+    protected override void OnInitialized()
+    {
+        Poll();
+        _timer = new Timer(_ => OnTick(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    private void OnTick()
+    {
+        if (_disposed) return;
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed) return;
+            Poll();
+            StateHasChanged();
+        });
+    }
+
+    private void Poll()
+    {
+        var previousDropped = _lastDroppedCount;
+        _snapshot = Metrics.GetSnapshot();
+        _lastDroppedCount = _snapshot.MessagesDropped;
+        _droppingRecently = _snapshot.MessagesDropped > previousDropped;
+        _storedMessages = MessageStoreManagerService.TotalStoredMessages;
+        _topicNodes = MessageStoreManagerService.TopicNodeCount;
+    }
+
+    private string SparklinePoints()
+    {
+        var history = _snapshot.MessageRateHistory;
+        var max = Math.Max(1, history.Count == 0 ? 1 : history.Max());
+        var points = new System.Text.StringBuilder();
+        for (var i = 0; i < history.Count; i++)
+        {
+            var x = history.Count <= 1 ? 0 : (double)i / (history.Count - 1) * 240;
+            var y = 38 - (double)history[i] / max * 36;
+            points.Append(x.ToString("F1", CultureInfo.InvariantCulture))
+                  .Append(',')
+                  .Append(y.ToString("F1", CultureInfo.InvariantCulture))
+                  .Append(' ');
+        }
+        return points.ToString();
+    }
+
+    private static string Fmt(long value) => value.ToString("N0", CultureInfo.CurrentCulture);
+
+    private static double Percent(long value, long max) =>
+        max <= 0 ? 0 : Math.Min(100, (double)value / max * 100);
+
+    private static string FmtUs(double us) => us >= 1000
+        ? $"{us / 1000:N1} ms"
+        : $"{us:N0} µs";
+
+    private static string FmtBytes(double bytes) => bytes switch
+    {
+        >= 1024 * 1024 => $"{bytes / (1024 * 1024):N1} MB",
+        >= 1024 => $"{bytes / 1024:N1} KB",
+        _ => $"{bytes:N0} B"
+    };
+
+    private static string FmtPercent(double value) => $"{value:N1} %";
+
+    private static string FmtMb(double mb) => mb >= 1024
+        ? $"{mb / 1024:N1} GB"
+        : $"{mb:N1} MB";
+
+    private static string FmtDuration(double seconds) => TimeSpan.FromSeconds(seconds) switch
+    {
+        var d when d.TotalHours >= 1 => $"{(int)d.TotalHours}h {d.Minutes:D2}m",
+        var d when d.TotalMinutes >= 1 => $"{(int)d.TotalMinutes}m {d.Seconds:D2}s",
+        var d => $"{d.TotalSeconds:N0}s"
+    };
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _timer?.Dispose();
+    }
+}

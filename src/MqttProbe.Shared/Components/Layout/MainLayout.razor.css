@@ -4,16 +4,21 @@
 }
 
 .app-shell {
-    min-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    height: 100%;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
+    overflow: hidden;
 }
 
 .app-shell-body {
     min-height: 0;
     flex: 1 1 auto;
     padding-top: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .reconnect-message {
@@ -24,13 +29,6 @@
     width: 104px;
     height: 104px;
     animation: signal-breathe 1.8s ease-in-out infinite;
-}
-
-/* Defined here (the always-present layout) so connecting indicators in other
-   components can share it — CSS isolation bundles keyframes globally. */
-@keyframes signal-breathe {
-    0%, 100% { opacity: 0.4; transform: scale(0.94); }
-    50%      { opacity: 1; transform: scale(1.05); }
 }
 
 .reconnect-stop-btn {
@@ -46,18 +44,18 @@
     border: 1px solid var(--mud-palette-lines-default);
 }
 
-::deep .telemetry-compact {
+::deep .metrics-compact {
     font-size: 0.82rem;
     line-height: 1.2;
 }
 
-::deep .telemetry-mono {
+::deep .metrics-mono {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     color: var(--mud-palette-text-secondary);
 }
 
-::deep .telemetry-time {
+::deep .metrics-time {
     font-size: 0.78rem;
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;

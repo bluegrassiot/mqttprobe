@@ -15,10 +15,13 @@ public interface IChartDataService : IDisposable
     public Task StartAsync();
     public Task StopAsync();
     public bool IsListening { get; }
+    public void SetConnection(Guid connectionId);
+    public void ClearBuffers();
 }
 
 public class ChartDataService(
     IManagedMqttClient client,
+    IPayloadDecoder payloadDecoder,
     IJsonFieldExtractor extractor,
     IChartFieldRegistry registry,
     ISettingsStore settingsStore,
@@ -27,9 +30,22 @@ public class ChartDataService(
 {
     private readonly ConcurrentDictionary<Guid, ConcurrentQueue<ChartDataPoint>> _buffers = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private Guid _connectionId;
 
     public event Action? OnDataUpdated;
     public bool IsListening { get; private set; }
+
+    public void SetConnection(Guid connectionId)
+    {
+        _connectionId = connectionId;
+        _buffers.Clear();
+    }
+
+    public void ClearBuffers()
+    {
+        _buffers.Clear();
+        OnDataUpdated?.Invoke();
+    }
 
     public IReadOnlyList<ChartDataPoint> GetPoints(Guid seriesId) =>
         _buffers.TryGetValue(seriesId, out var q) ? [.. q] : [];
@@ -41,6 +57,7 @@ public class ChartDataService(
         {
             if (IsListening) return;
             client.ApplicationMessageReceivedAsync += MessageHandler;
+            settingsStore.ChartsChanged += OnChartsChanged;
             IsListening = true;
         }
         finally
@@ -56,6 +73,7 @@ public class ChartDataService(
         {
             if (!IsListening) return;
             client.ApplicationMessageReceivedAsync -= MessageHandler;
+            settingsStore.ChartsChanged -= OnChartsChanged;
             IsListening = false;
         }
         finally
@@ -69,8 +87,9 @@ public class ChartDataService(
         try
         {
             var topic = e.ApplicationMessage.Topic;
-            var payload = PayloadDecoder.GetPayloadStr(e);
-            if (!TryExtractFields(payload, out var fields))
+            var decoded = payloadDecoder.Decode(e);
+            var payload = decoded.Payload;
+            if (!TryExtractFields(payload, decoded.AliasNames, out var fields))
                 return Task.CompletedTask;
 
             registry.Update(topic, fields);
@@ -87,7 +106,10 @@ public class ChartDataService(
         return Task.CompletedTask;
     }
 
-    private bool TryExtractFields(string? payload, out IReadOnlyDictionary<string, ExtractedField> fields)
+    private bool TryExtractFields(
+        string? payload,
+        IReadOnlyDictionary<ulong, string>? aliasNames,
+        out IReadOnlyDictionary<string, ExtractedField> fields)
     {
         fields = new Dictionary<string, ExtractedField>();
         if (string.IsNullOrEmpty(payload))
@@ -95,7 +117,7 @@ public class ChartDataService(
 
         try
         {
-            fields = extractor.Extract(payload);
+            fields = extractor.Extract(payload, aliasNames);
         }
         catch
         {
@@ -105,8 +127,15 @@ public class ChartDataService(
         return fields.Count > 0;
     }
 
+    private void OnChartsChanged(Guid connectionId)
+    {
+        if (connectionId != _connectionId) return;
+        _buffers.Clear();
+        OnDataUpdated?.Invoke();
+    }
+
     private bool UpdateBuffers(string topic, IReadOnlyDictionary<string, ExtractedField> fields, DateTime timestamp) =>
-        settingsStore.Charts.Any(config => UpdateBuffersForConfiguration(topic, fields, timestamp, config));
+        settingsStore.GetCharts(_connectionId).Any(config => UpdateBuffersForConfiguration(topic, fields, timestamp, config));
 
     private bool UpdateBuffersForConfiguration(
         string topic,
@@ -147,6 +176,7 @@ public class ChartDataService(
         if (disposing)
         {
             client.ApplicationMessageReceivedAsync -= MessageHandler;
+            settingsStore.ChartsChanged -= OnChartsChanged;
             IsListening = false;
             _gate.Dispose();
         }

@@ -7,11 +7,11 @@ using MqttProbe.Services;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 using MudBlazor;
 using MudBlazor.Services;
 
@@ -53,8 +53,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<IEmulationService, EmulationService>();
         builder.Services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
         builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
+        builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
         builder.Services.AddSingleton<IMqttOptionsBuilder, MqttOptionsBuilder>();
-        builder.Services.AddSingleton<IUxTelemetryService, UxTelemetryService>();
+        builder.Services.AddSingleton<IUxMetricsService, UxMetricsService>();
         builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
         builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
         builder.Services.AddAuthorizationCore();
@@ -66,7 +67,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISecretStorage>(secretStorage);
 
         var configPath = Path.Combine(FileSystem.Current.AppDataDirectory, "config", "appsettings.json");
-        var settingsStore = new SettingsStore(configPath, null);
+        var isMobile = DeviceInfo.Idiom == DeviceIdiom.Phone || DeviceInfo.Idiom == DeviceIdiom.Tablet;
+        var settingsStore = new SettingsStore(configPath, isMobile, null);
         builder.Services.AddSingleton<ISettingsStore>(settingsStore);
 
         builder.Services.AddScoped<IClipboardService, MauiClipboardService>();
@@ -74,6 +76,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
         builder.Services.AddScoped<IChartDataService, ChartDataService>();
         builder.Services.AddSingleton<ISparkplugTopologyService, SparkplugTopologyService>();
+        builder.Services.AddSingleton<IPayloadDecoder, PayloadDecoder>();
         builder.Services.AddScoped<IThemes, Themes>();
 
         return builder.Build();

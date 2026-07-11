@@ -2,6 +2,9 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
 }
 
 .emu-header {
@@ -16,6 +19,10 @@
 
 .emu-node-list {
     border-top: 1px solid var(--mud-palette-divider);
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .emu-session-hint {
@@ -122,6 +129,17 @@
 
 ::deep .emu-id-field input { font-family: var(--font-mono); }
 
+::deep .emu-alias-option {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+::deep .emu-alias-info {
+    color: var(--mud-palette-text-secondary);
+    cursor: help;
+}
+
 /* ── Device rows ─────────────────────────────────────────────────────────── */
 
 ::deep .emu-device-row {
@@ -183,6 +201,32 @@
 ::deep .emu-metric-field { min-width: 110px; flex: 0 1 auto; }
 ::deep .emu-metric-field--name { min-width: 160px; flex: 1 1 160px; }
 ::deep .emu-metric-field--num { max-width: 130px; }
+
+/* On phones the header buttons drop their second word (Add Node → Add) so all
+   three stay one line tall; the icons carry the rest of the meaning. */
+@media (max-width: 599px) {
+    .emu-action-word {
+        display: none;
+    }
+}
+
+/* On phones the fixed-width waveform cannot share a line with the fields:
+   it crushes them to nothing and overlaps the name field. Fields take the
+   full width and the preview + delete button wrap to their own line. */
+@media (max-width: 599px) {
+    ::deep .emu-metric-row {
+        flex-wrap: wrap;
+    }
+
+    ::deep .emu-metric-row__fields {
+        flex: 1 1 100%;
+    }
+
+    ::deep .emu-metric-row__side {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
 
 /* ── Waveform preview (synthetic sketch glyph — not live data) ───────────── */
 

@@ -6,7 +6,7 @@
 @inject ISnackbar Snackbar
 @implements IAsyncDisposable
 
-<TabPanelHeader Title="Nodes" Icon="@LucideIcons.Network">
+<TabPanelHeader Title="Nodes" Icon="@LucideIcons.Network" Class="app-tabpanel-header--stack-chips">
     <HeaderChips>
         @if (TotalNodeCount > 0)
         {
@@ -43,6 +43,7 @@
         <MudSelect T="string?" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
                    Value="@_selectedGroupId"
                    ValueChanged="@OnGroupFilterChanged"
+                   RelativeWidth="DropdownWidth.Adaptive"
                    Class="spb-filter-select" Label="Group">
             <MudSelectItem T="string?" Value="@((string?)null)">All</MudSelectItem>
             @foreach (var g in TopologyService.Groups.Keys.OrderBy(k => k, NaturalStringComparer.Instance))
@@ -58,7 +59,7 @@
     </HeaderFilters>
 </TabPanelHeader>
 
-<div class="spb-split">
+<div class="spb-split @(_selectedNode != null ? "spb-split--detail-open" : "")">
     <div class="spb-split__nodes">
         @{
             var grouped = GroupedNodes.ToList();
@@ -91,7 +92,7 @@
                 <div class="spb-group-header">@grp.Key.ToUpperInvariant()</div>
                 @foreach (var node in grp.OrderBy(n => n.NodeId, NaturalStringComparer.Instance))
                 {
-                    <div @key="node.NodeId" class="spb-node-row @(IsSelected(node) ? "spb-node-row--selected" : "")"
+                    <div @key="@($"{node.GroupId}/{node.NodeId}")" class="spb-node-row @(IsSelected(node) ? "spb-node-row--selected" : "")"
                          @onclick="() => SelectNode(node)">
                         <div class="d-flex align-center justify-space-between">
                             <div class="d-flex align-center gap-1">
@@ -167,7 +168,7 @@
                     {
                         <span>
                             Birth:
-                            <span class="telemetry-mono">
+                            <span class="metrics-mono">
                                 @_selectedNode.LastBirthAt.Value.ToLocalTime().ToString("HH:mm:ss")
                             </span>
                         </span>
@@ -176,7 +177,7 @@
                     {
                         <span>
                             Last data:
-                            <span class="telemetry-mono">
+                            <span class="metrics-mono">
                                 @_selectedNode.LastDataAt.Value.ToLocalTime().ToString("HH:mm:ss")
                             </span>
                             @if (_selectedNode.Status == SpbNodeStatus.Online)
@@ -189,7 +190,7 @@
                     {
                         <span>
                             Death:
-                            <span class="telemetry-mono">
+                            <span class="metrics-mono">
                                 @_selectedNode.LastDeathAt.Value.ToLocalTime().ToString("HH:mm:ss")
                             </span>
                         </span>
@@ -198,7 +199,7 @@
                     {
                         <span>
                             Rebirth requested:
-                            <span class="telemetry-mono">
+                            <span class="metrics-mono">
                                 @_selectedNode.LastRebirthRequestAt.Value.ToLocalTime().ToString("HH:mm:ss")
                             </span>
                         </span>
@@ -219,7 +220,14 @@
                 {
                     <MudTable Items="@_selectedNode.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
                               Dense="true" Hover="true" Elevation="0"
-                              Breakpoint="Breakpoint.None" Class="mb-3">
+                              Breakpoint="Breakpoint.None" Class="mb-3" RowClass="spb-metric-row">
+                        <ColGroup>
+                            <col style="width: 30%;" />
+                            <col style="width: 15%;" />
+                            <col style="width: 15%;" />
+                            <col style="width: 25%;" />
+                            <col style="width: 15%;" />
+                        </ColGroup>
                         <HeaderContent>
                             <MudTh>
                                 <MudTableSortLabel SortBy="new Func<SpbMetricSnapshot, object>(m => m.Name)">
@@ -227,12 +235,16 @@
                                 </MudTableSortLabel>
                             </MudTh>
                             <MudTh>Type</MudTh>
+                            <MudTh Class="spb-th-right">Alias</MudTh>
                             <MudTh Class="spb-th-right">Value</MudTh>
                             <MudTh>Updated</MudTh>
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd Class="spb-td-name">@context.Name</MudTd>
                             <MudTd Class="spb-td-type">@context.DataType</MudTd>
+                            <MudTd Class="spb-td-alias spb-th-right">
+                                @(context.Alias.HasValue ? context.Alias.Value.ToString() : "\u2014")
+                            </MudTd>
                             <MudTd Class="spb-td-value" Style="@($"color:{ValueColor(context)}")">
                                 @context.Value
                             </MudTd>
@@ -280,16 +292,27 @@
                                 {
                                     <MudTable Items="@device.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
                                               Dense="true" Hover="true" Elevation="0"
-                                              Breakpoint="Breakpoint.None">
+                                              Breakpoint="Breakpoint.None" RowClass="spb-metric-row">
+                                        <ColGroup>
+                                            <col style="width: 30%;" />
+                                            <col style="width: 15%;" />
+                                            <col style="width: 15%;" />
+                                            <col style="width: 25%;" />
+                                            <col style="width: 15%;" />
+                                        </ColGroup>
                                         <HeaderContent>
                                             <MudTh>Name</MudTh>
                                             <MudTh>Type</MudTh>
+                                            <MudTh Class="spb-th-right">Alias</MudTh>
                                             <MudTh Class="spb-th-right">Value</MudTh>
                                             <MudTh>Updated</MudTh>
                                         </HeaderContent>
                                         <RowTemplate>
                                             <MudTd Class="spb-td-name">@context.Name</MudTd>
                                             <MudTd Class="spb-td-type">@context.DataType</MudTd>
+                                            <MudTd Class="spb-td-alias spb-th-right">
+                                                @(context.Alias.HasValue ? context.Alias.Value.ToString() : "\u2014")
+                                            </MudTd>
                                             <MudTd Class="spb-td-value" Style="@($"color:{ValueColor(context)}")">
                                                 @context.Value
                                             </MudTd>

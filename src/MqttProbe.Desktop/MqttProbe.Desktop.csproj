@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>MqttProbe</RootNamespace>
+        <NoWarn>$(NoWarn);CS8669</NoWarn>
+        <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Photino.Blazor 4.0.13 only includes Microsoft.AspNetCore.Components.WebView
+             for net8.0/net9.0 dependency groups. Explicitly add it for net10.0 so the
+             _framework/blazor.webview.js static web asset is processed at build time. -->
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebView" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+        <PackageReference Include="Photino.Blazor" />
+        <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Update="wwwroot\**">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="Assets\**">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\MqttProbe.Shared\MqttProbe.Shared.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="MqttProbe.Shared.Tests" />
+    </ItemGroup>
+
+</Project>

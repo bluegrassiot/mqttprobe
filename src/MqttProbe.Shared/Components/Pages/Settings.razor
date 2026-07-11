@@ -6,7 +6,7 @@
 
 <TabPanelHeader Title="Settings" Icon="@LucideIcons.Settings"/>
 
-<div class="tab-panel-content">
+<div class="tab-panel-scroll">
     <MudGrid>
         <MudItem xs="12" md="6">
             <MudPaper Elevation="0" Class="pa-4 app-chrome-panel">
@@ -46,6 +46,20 @@
 
         <MudItem xs="12" md="6">
             <MudPaper Elevation="0" Class="pa-4 app-chrome-panel">
+                <MudText Typo="Typo.h6" Class="mb-3">Sparkplug</MudText>
+
+                <MudSwitch T="bool" Value="@SettingsStore.Config.Ui.EnrichSparkplugAliasNames"
+                           ValueChanged="@OnEnrichAliasNamesChanged"
+                           Color="Color.Primary"
+                           Label="Enrich Sparkplug alias names" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    When enabled, alias-only Sparkplug metrics are annotated with resolved names from the topology.
+                </MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4 app-chrome-panel">
                 <MudText Typo="Typo.h6" Class="mb-3">Performance</MudText>
 
                 <MudNumericField T="int" Label="Max stored messages"
@@ -64,6 +78,24 @@
                                  Variant="Variant.Outlined" Class="mt-3" />
                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
                     Rate limit for inbound messages. Messages exceeding this limit are dropped.
+                </MudText>
+
+                <MudNumericField T="int" Label="Max displayed messages"
+                                 Value="@SettingsStore.Config.Performance.MaxDisplayMessages"
+                                 ValueChanged="@OnMaxDisplayMessagesChanged"
+                                 Min="10" Max="10000" Step="100"
+                                 Variant="Variant.Outlined" Class="mt-3" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    Maximum messages shown in the payload browser. Higher values may slow rendering.
+                </MudText>
+
+                <MudNumericField T="int" Label="Max topic nodes"
+                                 Value="@SettingsStore.Config.Performance.MaxTopicNodes"
+                                 ValueChanged="@OnMaxTopicNodesChanged"
+                                 Min="100" Max="100000" Step="1000"
+                                 Variant="Variant.Outlined" Class="mt-3" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    Maximum topic tree nodes (prevents runaway topic cardinality).
                 </MudText>
             </MudPaper>
         </MudItem>
@@ -128,6 +160,11 @@
         await SettingsStore.SetAutoResubscribeAsync(value);
     }
 
+    private async Task OnEnrichAliasNamesChanged(bool value)
+    {
+        await SettingsStore.SetEnrichSparkplugAliasNamesAsync(value);
+    }
+
     private async Task OnMaxStoredMessagesChanged(int value)
     {
         await SettingsStore.SetMaxStoredMessagesAsync(value);
@@ -136,5 +173,15 @@
     private async Task OnMaxMessagesPerSecondChanged(int value)
     {
         await SettingsStore.SetMaxMessagesPerSecondAsync(value);
+    }
+
+    private async Task OnMaxDisplayMessagesChanged(int value)
+    {
+        await SettingsStore.SetMaxDisplayMessagesAsync(value);
+    }
+
+    private async Task OnMaxTopicNodesChanged(int value)
+    {
+        await SettingsStore.SetMaxTopicNodesAsync(value);
     }
 }

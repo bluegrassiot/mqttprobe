@@ -283,3 +283,9 @@ appsettings.Local.json
 # Git worktrees (per-feature isolation during execution)
 /.worktrees/
 /.github/copilot-instructions.md
+/.claude
+/.obsidian
+/docs/superpowers
+/profile-output/
+/.opencode/
+/.playwright-mcp

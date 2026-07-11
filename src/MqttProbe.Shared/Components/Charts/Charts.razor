@@ -5,7 +5,7 @@
 @inject IChartDataService ChartDataService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject IUxTelemetryService? UxTelemetry
+@inject IUxMetricsService? UxMetrics
 @implements IAsyncDisposable
 
 <TabPanelHeader Title="Charts" Icon="@LucideIcons.Activity">
@@ -85,7 +85,7 @@
         if (result is { Canceled: false, Data: ChartConfiguration created })
         {
                 await SettingsStore.AddChartAsync(SessionState.SelectedConnection.Id, created);
-            UxTelemetry?.RecordChartFunnel("charts-tab", createdNewChart: true);
+            UxMetrics?.RecordChartFunnel("charts-tab", createdNewChart: true);
             Snackbar.Add($"Chart created: {created.Name}", Severity.Success);
         }
     }

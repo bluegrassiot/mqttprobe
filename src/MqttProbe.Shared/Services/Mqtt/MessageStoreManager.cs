@@ -6,8 +6,8 @@ using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 
 namespace MqttProbe.Services.Mqtt;
 
@@ -18,6 +18,9 @@ public interface IMessageStoreManager : IDisposable
     public bool IsListening { get; }
     public int MaxStoredMessages { get; }
     public int MaxTopicNodes { get; }
+    public int TotalStoredMessages { get; }
+    public int TopicNodeCount { get; }
+    public long DroppedMessageCount { get; }
     public Task<IEnumerable<MqttMessage>> GetMessagesForSelectedTopic();
     public Task<IReadOnlyList<MqttMessage>> GetRecentMessagesAsync(string topic, int limit);
     public long GetVersion();
@@ -36,7 +39,7 @@ public class MessageStoreManager : IMessageStoreManager
     private readonly IManagedMqttClient _client;
     private readonly ILogger<MessageStoreManager> _logger;
     private readonly ISettingsStore _settingsStore;
-    private readonly IUxTelemetryService _telemetry;
+    private readonly IUxMetricsService _metrics;
     private readonly IPayloadDecoder _payloadDecoder;
     private readonly object _rateLimiterSync = new();
     private FixedWindowRateLimiter _rateLimiter;
@@ -53,12 +56,12 @@ public class MessageStoreManager : IMessageStoreManager
     private long _selectedTopicVersion;
 
     public MessageStoreManager(IManagedMqttClient client, ILogger<MessageStoreManager> logger,
-        ISettingsStore settingsStore, IUxTelemetryService telemetry, IPayloadDecoder payloadDecoder)
+        ISettingsStore settingsStore, IUxMetricsService metrics, IPayloadDecoder payloadDecoder)
     {
         _client = client;
         _logger = logger;
         _settingsStore = settingsStore;
-        _telemetry = telemetry;
+        _metrics = metrics;
         _payloadDecoder = payloadDecoder;
         _rateLimiter = BuildRateLimiter(settingsStore.Config.Performance.MaxMessagesPerSecond);
         settingsStore.PerformanceSettingsChanged += OnPerformanceSettingsChanged;
@@ -70,6 +73,10 @@ public class MessageStoreManager : IMessageStoreManager
     {
         get { lock (_storeSync) { return _totalMessageCount; } }
     }
+
+    public int TopicNodeCount => Volatile.Read(ref _totalNodeCount);
+
+    public long DroppedMessageCount => Interlocked.Read(ref _droppedMessageCount);
 
     private static FixedWindowRateLimiter BuildRateLimiter(int permitsPerSecond) =>
         new(new FixedWindowRateLimiterOptions
@@ -387,14 +394,14 @@ public class MessageStoreManager : IMessageStoreManager
         if (!lease.IsAcquired)
         {
             Interlocked.Increment(ref _droppedMessageCount);
-            _telemetry.RecordMessageDropped();
+            _metrics.RecordMessageDropped();
             TryLogRateLimit();
             return;
         }
         _rateLimitLogged = false;
 
         var payloadSize = arg.ApplicationMessage.PayloadSegment.Count;
-        _telemetry.RecordPayloadSize(payloadSize);
+        _metrics.RecordPayloadSize(payloadSize);
 
         var sw = Stopwatch.StartNew();
         MqttMessage? message = null;
@@ -417,9 +424,9 @@ public class MessageStoreManager : IMessageStoreManager
         }
 
         sw.Stop();
-        _telemetry.RecordProcessingTime(sw.Elapsed.TotalMicroseconds);
+        _metrics.RecordProcessingTime(sw.Elapsed.TotalMicroseconds);
         if (decodedPayload is not null)
-            _telemetry.RecordMessageProcessed(decodedPayload.Format.ToString());
+            _metrics.RecordMessageProcessed(decodedPayload.Format.ToString());
 
         if (message != null && MessageReceived is { } handler)
         {

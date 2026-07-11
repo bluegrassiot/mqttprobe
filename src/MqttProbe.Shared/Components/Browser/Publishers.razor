@@ -12,7 +12,7 @@
 @inject ISnackbar Snackbar
 @inject IAppInfoService AppInfoService
 @inject AuthenticationStateProvider AuthenticationStateProvider
-@inject IUxTelemetryService? UxTelemetry
+@inject IUxMetricsService? UxMetrics
 
 <TabPanelHeader Title="Publish" Icon="@LucideIcons.Send">
     <HeaderActions>
@@ -113,14 +113,14 @@
         try
         {
             await ManagedMqttClient.EnqueueAsync(appMsg);
-            UxTelemetry?.RecordPublishOutcome(success: true);
+            UxMetrics?.RecordPublishOutcome(success: true);
 
             Snackbar.Add($"Published to {_message.Topic}", Severity.Success,
                 cfg => { cfg.ShowCloseIcon = true; cfg.VisibleStateDuration = 2000; });
         }
         catch (Exception ex)
         {
-            UxTelemetry?.RecordPublishOutcome(success: false);
+            UxMetrics?.RecordPublishOutcome(success: false);
             Logger.LogError(ex, "Failed to publish message to topic {Topic}", _message.Topic);
             Snackbar.Add("Publish failed. Confirm broker connection and payload format.", Severity.Error);
         }

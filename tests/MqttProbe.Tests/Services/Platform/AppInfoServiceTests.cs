@@ -1,10 +1,10 @@
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 using MqttProbe.Web.Services;
 
 namespace MqttProbe.Shared.Tests.Services.Platform;

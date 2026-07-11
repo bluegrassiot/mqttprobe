@@ -71,7 +71,7 @@ public class EmulatorNodeEditorTests : BunitTestContext
 
         var cut = RenderEditor();
 
-        var preview = cut.Find(".emu-topic-preview .telemetry-mono");
+        var preview = cut.Find(".emu-topic-preview .metrics-mono");
         preview.TextContent.Should().Be("Plant1/Press-01/Sensor-1");
     }
 
@@ -83,7 +83,7 @@ public class EmulatorNodeEditorTests : BunitTestContext
 
         var cut = RenderEditor();
 
-        var preview = cut.Find(".emu-topic-preview .telemetry-mono");
+        var preview = cut.Find(".emu-topic-preview .metrics-mono");
         preview.TextContent.Should().Be("Plant1/Press-01/Sensor-1/Flow Rate");
     }
 

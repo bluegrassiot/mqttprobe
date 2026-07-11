@@ -3,8 +3,8 @@ using MqttProbe.Models.Chart;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Telemetry;
 using MqttProbe.Shared.Tests.TestHelpers;
 using MudBlazor;
 
@@ -29,7 +29,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
         _mockChartStore.UpdateChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
         Services.AddSingleton(_mockChartStore);
         Services.AddSingleton(mockSessionState);
-        Services.AddSingleton(Substitute.For<IUxTelemetryService>());
+        Services.AddSingleton(Substitute.For<IUxMetricsService>());
 
         EnsureMudProviders();
         _dialogProvider = Render<MudDialogProvider>();

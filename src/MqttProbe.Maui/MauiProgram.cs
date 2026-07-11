@@ -7,11 +7,11 @@ using MqttProbe.Services;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 using MudBlazor;
 using MudBlazor.Services;
 
@@ -55,7 +55,7 @@ public static class MauiProgram
         builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
         builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
         builder.Services.AddSingleton<IMqttOptionsBuilder, MqttOptionsBuilder>();
-        builder.Services.AddSingleton<IUxTelemetryService, UxTelemetryService>();
+        builder.Services.AddSingleton<IUxMetricsService, UxMetricsService>();
         builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
         builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
         builder.Services.AddAuthorizationCore();

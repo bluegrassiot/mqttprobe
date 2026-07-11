@@ -13,6 +13,7 @@ using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
@@ -389,6 +390,25 @@ public class NotFoundPageTests : BunitTestContext
         mockConfig.Config.Returns(new AppConfiguration());
         Services.AddSingleton(mockConfig);
         Services.AddSingleton(Substitute.For<IJSRuntime>());
+        var mockMetrics = Substitute.For<IUxMetricsService>();
+        mockMetrics.GetSnapshot().Returns(new UxMetricsSnapshot(
+            ConnectAttempts: 0, ConnectSuccesses: 0, ConnectFailures: 0,
+            PublishSuccesses: 0, PublishFailures: 0,
+            ChartsCreated: 0, SeriesAddedToExistingCharts: 0,
+            MessagesProcessed: 0, MessagesDropped: 0,
+            AvgProcessingTimeUs: 0, MaxProcessingTimeUs: 0,
+            AvgPayloadBytes: 0, MaxPayloadBytes: 0,
+            CurrentMessagesPerSecond: 0,
+            MessageRateHistory: new int[UxMetricsService.RateWindowSeconds],
+            MessagesProcessedByFormat: new Dictionary<string, long>(),
+            ChartFunnelBySource: new Dictionary<string, long>(),
+            MaxDisplayMessages: 0, CurrentDisplayedMessageCount: 0,
+            AppCpuUsagePercent: 0, AppManagedHeapMb: 0,
+            AppWorkingSetMb: 0, AppThreadCount: 0,
+            AppThreadPoolQueueLength: 0, AppGcGen2Collections: 0,
+            AppUptimeSeconds: 0, EmulatorPublishersOnline: 0,
+            EmulatorPublishCycles: 0, EmulatorNodesInError: 0));
+        Services.AddSingleton(mockMetrics);
         Services.AddSingleton<IThemes>(new Themes());
     }
 

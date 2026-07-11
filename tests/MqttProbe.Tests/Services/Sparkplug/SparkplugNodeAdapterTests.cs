@@ -1,10 +1,10 @@
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 using SparkplugNet.Core;
 using SparkplugNet.Core.Enumerations;
 using SparkplugNet.VersionB.Data;

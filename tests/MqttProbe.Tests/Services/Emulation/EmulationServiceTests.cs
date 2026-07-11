@@ -9,6 +9,7 @@ using MqttProbe.Models.Emulation;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Sparkplug;
 using SparkplugNet.Core.Enumerations;
@@ -39,6 +40,7 @@ public class EmulationServiceTests
     private ISparkplugNodeFactory _mockNodeFactory = null!;
     private IManagedMqttClient _mockMqttClient = null!;
     private ISessionState _mockSessionState = null!;
+    private IUxMetricsService _mockMetrics = null!;
     private EmulationService _service = null!;
     private Func<MqttClientDisconnectedEventArgs, Task>? _disconnectedHandler;
 
@@ -59,6 +61,7 @@ public class EmulationServiceTests
         _mockNodeFactory = Substitute.For<ISparkplugNodeFactory>();
         _mockMqttClient = Substitute.For<IManagedMqttClient>();
         _mockMqttClient.EnqueueAsync(Arg.Any<MqttApplicationMessage>()).Returns(Task.CompletedTask);
+        _mockMetrics = Substitute.For<IUxMetricsService>();
 
         _disconnectedHandler = null;
         _mockMqttClient
@@ -72,6 +75,7 @@ public class EmulationServiceTests
             _mockNodeFactory,
             _mockSessionState,
             _mockMqttClient,
+            _mockMetrics,
             Substitute.For<ILogger<EmulationService>>());
         _service.SetConnection(_mockSessionState.SelectedConnection.Id);
     }
@@ -1138,5 +1142,27 @@ public class EmulationServiceTests
         var payload = (Payload)convertMethod.Invoke(null, new object[] { protoPayload })!;
 
         return payload.Metrics[0];
+    }
+
+    [Test]
+    public async Task StartAsync_FirstTick_CallsUpdateEmulatorHealth()
+    {
+        await _service.AddNodeAsync(SparkplugNode("node-01"));
+        await _service.StartAsync();
+
+        _mockMetrics.Received(1).UpdateEmulatorHealth(
+            Arg.Is<int>(n => n >= 0),
+            Arg.Is<long>(n => n >= 0),
+            Arg.Is<int>(n => n >= 0));
+    }
+
+    [Test]
+    public async Task StopAsync_CallsClearEmulatorHealth()
+    {
+        await _service.AddNodeAsync(SparkplugNode("node-01"));
+        await _service.StartAsync();
+        await _service.StopAsync();
+
+        _mockMetrics.Received(1).ClearEmulatorHealth();
     }
 }

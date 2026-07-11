@@ -1,9 +1,11 @@
 @using System.Globalization
 @using MqttProbe.Services.Configuration
+@using MqttProbe.Services.Metrics
 @inject IMessageStoreManager MessageStoreManager
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject ISettingsStore SettingsStore
+@inject IUxMetricsService Metrics
 @using System.Text.Json
 @using System.Xml.Linq
 @implements IAsyncDisposable
@@ -202,11 +204,11 @@ else
                 <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
-                <MudTd DataLabel="Time" Class="telemetry-time pb-cell-time">
+                <MudTd DataLabel="Time" Class="metrics-time pb-cell-time">
                     @context.DateTimeReceived.ToString("HH:mm:ss.fff")
                 </MudTd>
-                <MudTd DataLabel="Topic" Class="telemetry-mono telemetry-compact pb-cell-topic">@context.Topic</MudTd>
-                <MudTd DataLabel="Payload" Class="telemetry-mono telemetry-compact pb-cell-payload">
+                <MudTd DataLabel="Topic" Class="metrics-mono metrics-compact pb-cell-topic">@context.Topic</MudTd>
+                <MudTd DataLabel="Payload" Class="metrics-mono metrics-compact pb-cell-payload">
                     @(context.Payload is { Length: > 250 } ? $"{context.Payload[..250]}…" : context.Payload)
                 </MudTd>
                 <MudTd DataLabel="" Class="pb-cell-flag">
@@ -264,6 +266,7 @@ else
                 _lastTopicPath = null;
                 _lastVersion = 0;
                 _lastAppliedMaxCount = 0;
+                Metrics.SetDisplayedMessageCount(0);
                 if (needsRefresh)
                 {
                     try { await InvokeAsync(StateHasChanged); }
@@ -294,6 +297,7 @@ else
                 : messages.Reverse().ToList();
             _lastMessageTimestamp = list.Count > 0 ? list[0].DateTimeReceived : DateTime.MinValue;
             _messageList = list;
+            Metrics.SetDisplayedMessageCount(_messageList.Count);
             // Guard against the circuit being torn down between the _disposed check
             // above and the actual invocation — ObjectDisposedException is expected here.
             try { await InvokeAsync(StateHasChanged); }
@@ -308,6 +312,7 @@ else
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        Metrics.SetDisplayedMessageCount(0);
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();
     }

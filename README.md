@@ -2,7 +2,7 @@
 
 **The MQTT diagnostic tool built for IIoT.**
 
-Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart JSON telemetry in real time. Native Sparkplug B decode and EoN node emulation built in. Open source, no cloud required.
+Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart JSON metrics in real time. Native Sparkplug B decode and EoN node emulation built in. Open source, no cloud required.
 
 [![CI](https://github.com/bluegrassiot/mqttprobe/actions/workflows/ci.yml/badge.svg)](https://github.com/bluegrassiot/mqttprobe/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
@@ -18,7 +18,7 @@ Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart
 - **Payload Browser** — structured JSON viewer for message payloads, with topic/payload copy-to-clipboard
 - **Subscriptions** — add and remove MQTT topic subscriptions (including wildcards) at runtime; subscriptions persist per connection and auto-resubscribe on reconnect (configurable)
 - **Publish** — send messages to any topic with configurable QoS level
-- **MQTT/Sparkplug B Emulator** — simulate multiple Edge Nodes publishing telemetry data at a configurable rate with and without Sparkplug B
+- **MQTT/Sparkplug B Emulator** — simulate multiple Edge Nodes publishing metrics data at a configurable rate with and without Sparkplug B
 - **Sparkplug B EoN dashboard** — live view of all Edge of Network nodes, devices, and metrics; automatically requests Birth certificates for newly discovered nodes
 - **Multiple Connections** — save and switch between multiple broker configurations
 - **TLS / MQTTS** — connect to brokers over TLS (port 8883) or plain MQTT (port 1883), with optional untrusted certificate override

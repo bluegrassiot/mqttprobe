@@ -87,6 +87,10 @@
     color: var(--mud-palette-appbar-text);
 }
 
+.mud-appbar .metrics-chip:not(.metrics-chip--dropping) {
+    color: var(--mud-palette-appbar-text);
+}
+
 .mud-appbar .broker-chip {
     flex-shrink: 1;
     min-width: 0;

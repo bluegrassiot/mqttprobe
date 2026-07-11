@@ -2,7 +2,7 @@
 @using MqttProbe.Services.Mqtt
 @inject ISettingsStore SettingsStore
 @inject ISessionState SessionState
-@inject IUxTelemetryService? UxTelemetry
+@inject IUxMetricsService? UxMetrics
 
 <MudDialog>
     <TitleContent>
@@ -165,7 +165,7 @@
                 Series = [series]
             };
             await SettingsStore.AddChartAsync(SessionState.SelectedConnection.Id, newChart);
-            UxTelemetry?.RecordChartFunnel("payload-quick-add", createdNewChart: true);
+            UxMetrics?.RecordChartFunnel("payload-quick-add", createdNewChart: true);
             MudDialog.Close(DialogResult.Ok($"Chart created: {newChart.Name}"));
         }
         else
@@ -192,7 +192,7 @@
                 Series = [.. chart.Series, newSeries]
             };
             await SettingsStore.UpdateChartAsync(SessionState.SelectedConnection.Id, updated);
-            UxTelemetry?.RecordChartFunnel("payload-quick-add", createdNewChart: false);
+            UxMetrics?.RecordChartFunnel("payload-quick-add", createdNewChart: false);
             MudDialog.Close(DialogResult.Ok($"Series added to chart: {chart.Name}"));
         }
     }

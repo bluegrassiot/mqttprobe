@@ -13,7 +13,7 @@
 @inject IMqttOptionsBuilder MqttOptionsBuilder
 @inject IChartDataService ChartDataService
 @inject IBrokerStateResetCoordinator BrokerResetCoordinator
-@inject IUxTelemetryService? UxTelemetry
+@inject IUxMetricsService? UxMetrics
 @inject IDialogService DialogService
 
 <MudDialog>
@@ -229,14 +229,14 @@
     private async Task OnConnectingFailed(ConnectingFailedEventArgs _)
     {
         _connectionState = ConnectionState.Failed;
-        UxTelemetry?.RecordConnectFailure();
+        UxMetrics?.RecordConnectFailure();
         await InvokeAsync(StateHasChanged);
     }
 
     private async Task OnConnected(MqttClientConnectedEventArgs _)
     {
         _connectionState = ConnectionState.Connected;
-        UxTelemetry?.RecordConnectSuccess();
+        UxMetrics?.RecordConnectSuccess();
         Logger.LogInformation("Connected to broker {Host}:{Port}", _selectedConnection.Host, _selectedConnection.Port);
         await MessageStoreManagerService.Start();
         await ChartDataService.StartAsync();
@@ -312,7 +312,7 @@
 
         try
         {
-            UxTelemetry?.RecordConnectAttempt();
+            UxMetrics?.RecordConnectAttempt();
             _connectionState = ConnectionState.Connecting;
             SessionState.SelectedConnection = _selectedConnection;
             if (ManagedMqttClient.IsStarted)

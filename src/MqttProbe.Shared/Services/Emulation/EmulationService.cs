@@ -6,6 +6,7 @@ using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Sparkplug;
 
@@ -37,6 +38,7 @@ public class EmulationService : IEmulationService
     private readonly ISparkplugNodeFactory _nodeFactory;
     private readonly ISessionState _sessionState;
     private readonly IManagedMqttClient _managedMqttClient;
+    private readonly IUxMetricsService _metrics;
     private readonly ILogger<EmulationService> _logger;
     private readonly NodeHealthMetricsProvider _healthMetrics = new();
 
@@ -52,12 +54,14 @@ public class EmulationService : IEmulationService
         ISparkplugNodeFactory nodeFactory,
         ISessionState sessionState,
         IManagedMqttClient managedMqttClient,
+        IUxMetricsService metrics,
         ILogger<EmulationService> logger)
     {
         _settingsStore = settingsStore;
         _nodeFactory = nodeFactory;
         _sessionState = sessionState;
         _managedMqttClient = managedMqttClient;
+        _metrics = metrics;
         _logger = logger;
         _settingsStore.EmulatorsChanged += OnEmulatorsChanged;
         _managedMqttClient.DisconnectedAsync += OnMainClientDisconnected;
@@ -174,6 +178,8 @@ public class EmulationService : IEmulationService
             _runners = [];
         }
 
+        _metrics.ClearEmulatorHealth();
+
         if (wasRunning || runners.Count > 0)
             StateChanged?.Invoke();
     }
@@ -279,7 +285,11 @@ public class EmulationService : IEmulationService
             var tSeconds = Stopwatch.GetElapsedTime(_loopStartTimestamp).TotalSeconds;
             var runners = _runners;
             var publishersOnline = runners.Count(r => r is SparkplugNodeRunner && r.Status == NodeRuntimeStatus.Connected);
+            var nodesInError = runners.Count(r => r.Status == NodeRuntimeStatus.Error);
             var health = _healthMetrics.BuildSnapshot(publishersOnline, Interlocked.Read(ref _publishCycles));
+
+            _metrics.UpdateEmulatorHealth(publishersOnline, Interlocked.Read(ref _publishCycles), nodesInError);
+
             await Task.WhenAll(runners.Select(r => r.PublishTickAsync(tSeconds, health)));
         }
         catch (Exception ex)

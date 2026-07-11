@@ -4,6 +4,7 @@ using MqttProbe.Models.Chart;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Shared.Tests.TestHelpers;
@@ -16,6 +17,7 @@ public class PayloadBrowserTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
     private ISettingsStore _mockSettingsStore = null!;
+    private IUxMetricsService _mockMetrics = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -33,6 +35,9 @@ public class PayloadBrowserTests : BunitTestContext
         _mockSettingsStore = Substitute.For<ISettingsStore>();
         _mockSettingsStore.Config.Returns(new AppConfiguration());
         Services.AddSingleton(_mockSettingsStore);
+
+        _mockMetrics = Substitute.For<IUxMetricsService>();
+        Services.AddSingleton(_mockMetrics);
 
         Services.AddSingleton(Substitute.For<IDialogService>());
         Services.AddSingleton(Substitute.For<ISnackbar>());
@@ -333,11 +338,16 @@ public class PayloadBrowserTests : BunitTestContext
 
         await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
 
-        cut.FindAll(".json-preview").Should().HaveCount(1);
+        cut.WaitForElement(".json-expand-all-btn");
 
-        await cut.InvokeAsync(() => cut.Find(".json-expand-all-btn").Click());
-
-        cut.FindAll(".json-preview").Should().BeEmpty();
+        // MudTable virtualization re-renders asynchronously, which can invalidate a found
+        // element's event-handler id before the click dispatches on slow (CI) machines.
+        // WaitForAssertion retries the find+click until it lands on a settled render tree.
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find(".json-expand-all-btn").Click();
+            cut.FindAll(".json-preview").Should().BeEmpty();
+        });
         cut.FindAll(".json-key").Select(e => e.TextContent).Should().Contain("\"c\"");
     }
 
@@ -348,6 +358,8 @@ public class PayloadBrowserTests : BunitTestContext
         var msg = new MqttMessage { Topic = "test/topic", Payload = """{"a":{"b":{"c":"deep"}}}""" };
 
         await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        cut.WaitForElement(".json-collapse-all-btn");
 
         await cut.InvokeAsync(() => cut.Find(".json-collapse-all-btn").Click());
 
@@ -522,6 +534,7 @@ public class PayloadBrowserTests : BunitTestContext
         var cut = Render<PayloadBrowser>();
         await cut.InvokeAsync(() => cut.Instance.MessageChanged(message));
 
+        cut.WaitForElement("button[title='Copy topic']");
         await cut.InvokeAsync(() => cut.Find("button[title='Copy topic']").Click());
 
         await mockClipboard.Received(1).WriteTextAsync("sensors/temp");
@@ -538,5 +551,44 @@ public class PayloadBrowserTests : BunitTestContext
         await cut.InvokeAsync(() => cut.Find("button[title='Copy payload']").Click());
 
         await mockClipboard.Received(1).WriteTextAsync("42");
+    }
+
+    [Test]
+    public void Refresh_AfterTopicSelected_ReportsCountToMetrics()
+    {
+        var messages = Enumerable.Range(0, 5)
+            .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
+            .ToList();
+        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
+            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(messages));
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        cut.WaitForAssertion(() =>
+            _mockMetrics.Received().SetDisplayedMessageCount(5));
+    }
+
+    [Test]
+    public void NoSelectedTopic_ResetsDisplayedCountToZero()
+    {
+        _mockMsgStore.SelectedMessageStore.Returns((MessageStore?)null);
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        cut.WaitForAssertion(() =>
+            _mockMetrics.Received().SetDisplayedMessageCount(0));
+    }
+
+    [Test]
+    public async Task Dispose_ResetsDisplayedCountToZero()
+    {
+        EnsureMudProviders();
+        var cut = Render<PayloadBrowser>();
+
+        await cut.Instance.DisposeAsync();
+
+        _mockMetrics.Received().SetDisplayedMessageCount(0);
     }
 }

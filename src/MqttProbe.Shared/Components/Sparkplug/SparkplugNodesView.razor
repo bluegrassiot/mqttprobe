@@ -168,7 +168,7 @@
                     {
                         <span>
                             Birth:
-                            <span class="telemetry-mono">
+                            <span class="metrics-mono">
                                 @_selectedNode.LastBirthAt.Value.ToLocalTime().ToString("HH:mm:ss")
                             </span>
                         </span>
@@ -177,7 +177,7 @@
                     {
                         <span>
                             Last data:
-                            <span class="telemetry-mono">
+                            <span class="metrics-mono">
                                 @_selectedNode.LastDataAt.Value.ToLocalTime().ToString("HH:mm:ss")
                             </span>
                             @if (_selectedNode.Status == SpbNodeStatus.Online)
@@ -190,7 +190,7 @@
                     {
                         <span>
                             Death:
-                            <span class="telemetry-mono">
+                            <span class="metrics-mono">
                                 @_selectedNode.LastDeathAt.Value.ToLocalTime().ToString("HH:mm:ss")
                             </span>
                         </span>
@@ -199,7 +199,7 @@
                     {
                         <span>
                             Rebirth requested:
-                            <span class="telemetry-mono">
+                            <span class="metrics-mono">
                                 @_selectedNode.LastRebirthRequestAt.Value.ToLocalTime().ToString("HH:mm:ss")
                             </span>
                         </span>

@@ -3,8 +3,8 @@ using MqttProbe.Models.Chart;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Telemetry;
 using MqttProbe.Shared.Tests.TestHelpers;
 using ChartsComponent = MqttProbe.Components.Charts.Charts;
 
@@ -37,7 +37,7 @@ public class ChartsComponentTests : BunitTestContext
         Services.AddSingleton(_mockChartStore);
         Services.AddSingleton(_mockChartDataService);
         Services.AddSingleton(_mockSessionState);
-        Services.AddSingleton(Substitute.For<IUxTelemetryService>());
+        Services.AddSingleton(Substitute.For<IUxMetricsService>());
 
         EnsureMudProviders();
     }

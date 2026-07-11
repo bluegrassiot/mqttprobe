@@ -5,9 +5,9 @@ using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 
 namespace MqttProbe.Shared.Tests.Services.Mqtt;
 
@@ -34,7 +34,7 @@ public class MessageStoreManagerTests
                 var payload = seg.Count > 0 ? System.Text.Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count) : string.Empty;
                 return new DecodedPayload(payload, DetectedPayloadFormat.PlainText);
             });
-        _messageStoreManager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, Substitute.For<IUxTelemetryService>(), mockDecoder);
+        _messageStoreManager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, Substitute.For<IUxMetricsService>(), mockDecoder);
     }
 
     [TearDown]

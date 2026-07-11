@@ -6,11 +6,11 @@ using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
-using MqttProbe.Services.Telemetry;
 using Org.Eclipse.Tahu.Protobuf;
 
 namespace MqttProbe.Shared.Tests.Services.Sparkplug;

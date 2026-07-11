@@ -6,8 +6,8 @@ using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Telemetry;
 using MqttProbe.Shared.Tests.TestHelpers;
 using MudBlazor;
 
@@ -64,7 +64,7 @@ public class ConnectionDialogTests : BunitTestContext
         Services.AddSingleton(_mockCoordinator);
         Services.AddSingleton(Substitute.For<ILogger<ConnectionDialog>>());
         Services.AddSingleton(Substitute.For<IChartDataService>());
-        Services.AddSingleton(Substitute.For<IUxTelemetryService>());
+        Services.AddSingleton(Substitute.For<IUxMetricsService>());
 
         EnsureMudProviders();
 

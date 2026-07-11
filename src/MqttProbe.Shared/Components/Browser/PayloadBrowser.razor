@@ -284,12 +284,13 @@ else
             var messages = await MessageStoreManager.GetRecentMessagesAsync(currentTopic, maxCount);
             if (_disposed) return;
 
+            var previousTopic = _lastTopicPath;
             var topicChanged = currentTopic != _lastTopicPath;
             _lastTopicPath = currentTopic;
             _lastVersion = currentVersion;
             _lastAppliedMaxCount = maxCount;
 
-            if (topicChanged)
+            if (topicChanged && previousTopic is not null)
                 _selectedMessage = null;
 
             var list = _newestFirst

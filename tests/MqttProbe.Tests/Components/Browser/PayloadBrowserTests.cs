@@ -521,6 +521,7 @@ public class PayloadBrowserTests : BunitTestContext
         var cut = Render<PayloadBrowser>();
         await cut.InvokeAsync(() => cut.Instance.MessageChanged(message));
 
+        cut.WaitForElement("button[title='Copy full message']");
         await cut.InvokeAsync(() => cut.Find("button[title='Copy full message']").Click());
 
         await mockClipboard.Received(1).WriteTextAsync(JsonSerializer.Serialize(message));
@@ -548,9 +549,38 @@ public class PayloadBrowserTests : BunitTestContext
         var cut = Render<PayloadBrowser>();
         await cut.InvokeAsync(() => cut.Instance.MessageChanged(message));
 
+        cut.WaitForElement("button[title='Copy payload']");
         await cut.InvokeAsync(() => cut.Find("button[title='Copy payload']").Click());
 
         await mockClipboard.Received(1).WriteTextAsync("42");
+    }
+
+    [Test]
+    public async Task MessageChanged_SelectionSurvivesInitialTimerTick()
+    {
+        var messages = new List<MqttMessage>
+        {
+            new() { Topic = "sensor/temp", Payload = "1" }
+        };
+        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
+            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(messages));
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        // Wait for the first timer tick to load messages.
+        cut.WaitForAssertion(() =>
+            _mockMetrics.Received().SetDisplayedMessageCount(1));
+
+        var message = new MqttMessage { Topic = "sensor/temp", Payload = "42" };
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(message));
+
+        // Wait past another timer cycle — selection must survive.
+        cut.WaitForElement("button[title='Copy topic']");
+        Thread.Sleep(600);
+
+        cut.Find("button[title='Copy topic']").Should().NotBeNull();
+        cut.Find("button[title='Copy payload']").Should().NotBeNull();
     }
 
     [Test]

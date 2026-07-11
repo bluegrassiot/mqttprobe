@@ -1,0 +1,57 @@
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # NuGet — all PackageVersions live in /Directory.Packages.props
+  # Point at project folders (not only the solution root); globs need `directories`
+  - package-ecosystem: "nuget"
+    directories:
+      - "/src/**"
+      - "/tests/**"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    groups:
+      # Batch non-breaking updates to cut PR noise
+      nuget-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+        patterns:
+          - "*"
+      nuget-major:
+        applies-to: version-updates
+        update-types:
+          - "major"
+        patterns:
+          - "*"
+    # Optional: keep MQTTnet on v4 while SparkplugNet is incompatible with v5
+    ignore:
+      - dependency-name: "MQTTnet"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "MQTTnet.Extensions.ManagedClient"
+        update-types: ["version-update:semver-major"]
+
+  # Dockerfile base images (aspnet:10.0-alpine, etc.)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Workflow action versions under .github/workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Bump SDK pin in global.json (currently 10.0.301)
+  - package-ecosystem: "dotnet-sdk"
+    directory: "/"
+    schedule:
+      interval: "weekly"

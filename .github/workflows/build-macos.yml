@@ -51,9 +51,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.x'
 
@@ -144,7 +144,7 @@ jobs:
           ditto -c -k --keepParent "$APP" "mqttprobe-macos-v${{ steps.version.outputs.value }}.zip"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: maui-macos
           path: mqttprobe-macos-v${{ steps.version.outputs.value }}.zip

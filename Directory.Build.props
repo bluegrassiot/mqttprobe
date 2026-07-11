@@ -7,6 +7,8 @@
     <Copyright>Bluegrass IoT</Copyright>
     <NeutralLanguage>en-US</NeutralLanguage>
     <Authors>Mark Todd</Authors>
+    <Company>Bluegrass IoT</Company>
+    <Product>MQTTProbe</Product>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 </Project>

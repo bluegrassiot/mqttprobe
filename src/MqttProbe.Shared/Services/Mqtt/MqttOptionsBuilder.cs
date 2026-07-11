@@ -35,9 +35,12 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
         else
         {
             var wsScheme = connection.UseTls ? "wss" : "ws";
+            var path = (connection.WebsocketBasePath ?? string.Empty).Trim().TrimStart('/');
             clientOptionsBuilder.WithWebSocketServer(opt =>
             {
-                opt.WithUri($"{wsScheme}://{connection.Host}:{connection.Port}/{connection.WebsocketBasePath}");
+                opt.WithUri(string.IsNullOrEmpty(path)
+                    ? $"{wsScheme}://{connection.Host}:{connection.Port}/"
+                    : $"{wsScheme}://{connection.Host}:{connection.Port}/{path}");
             });
         }
 

@@ -211,7 +211,7 @@ public class SettingsStoreTests
         conns.Should().Contain(c =>
             c.Host == "test.mosquitto.org" && c.Port == 8081 &&
             c.Protocol == Protocol.WebSocket && c.UseTls &&
-            c.AllowUntrustedCertificate && c.WebsocketBasePath == "");
+            !c.AllowUntrustedCertificate && c.WebsocketBasePath == "mqtt");
         conns.Should().Contain(c =>
             c.Host == "broker.emqx.io" && c.Port == 8883 &&
             c.Protocol == Protocol.Mqtt && c.UseTls && !c.AllowUntrustedCertificate);

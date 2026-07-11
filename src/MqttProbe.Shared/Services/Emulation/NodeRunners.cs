@@ -304,7 +304,10 @@ public class SparkplugNodeRunner(
             // MqttClientWebSocketOptions.Uri, so the full ws(s) URI must travel through BrokerAddress.
             // The options object is still passed (non-null) purely to select the library's WebSocket
             // branch over TCP.
-            brokerAddress = $"{scheme}://{connection.Host}:{connection.Port}/{connection.WebsocketBasePath}";
+            var wsPath = (connection.WebsocketBasePath ?? string.Empty).Trim().TrimStart('/');
+            brokerAddress = string.IsNullOrEmpty(wsPath)
+                ? $"{scheme}://{connection.Host}:{connection.Port}/"
+                : $"{scheme}://{connection.Host}:{connection.Port}/{wsPath}";
             webSocketOptions = new MqttClientWebSocketOptions { Uri = brokerAddress };
         }
 

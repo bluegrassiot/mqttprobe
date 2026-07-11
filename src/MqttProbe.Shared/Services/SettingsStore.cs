@@ -605,8 +605,8 @@ public class SettingsStore : ISettingsStore
             Port = 8081,
             Protocol = Protocol.WebSocket,
             UseTls = true,
-            AllowUntrustedCertificate = true,
-            WebsocketBasePath = "",
+            AllowUntrustedCertificate = false,
+            WebsocketBasePath = "mqtt",
             SubscribedTopics = ["spBv1.0/#"]
         }
     ];

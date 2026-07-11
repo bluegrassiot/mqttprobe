@@ -148,6 +148,78 @@ public class MqttOptionsBuilderTests
     }
 
     [Test]
+    public void Build_WebSocketPathMqtt_ProducesCorrectUri()
+    {
+        var conn = new Connection
+        {
+            Name = "WS",
+            Host = "broker.local",
+            Port = 8080,
+            Protocol = Protocol.WebSocket,
+            ClientId = "ws-client",
+            WebsocketBasePath = "mqtt",
+            UseTls = false
+        };
+        var options = _builder.Build(conn);
+        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        ws.Uri.Should().Be("ws://broker.local:8080/mqtt");
+    }
+
+    [Test]
+    public void Build_WebSocketPathWithLeadingSlash_NoDoubleSlash()
+    {
+        var conn = new Connection
+        {
+            Name = "WS",
+            Host = "broker.local",
+            Port = 8080,
+            Protocol = Protocol.WebSocket,
+            ClientId = "ws-client",
+            WebsocketBasePath = "/mqtt",
+            UseTls = false
+        };
+        var options = _builder.Build(conn);
+        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        ws.Uri.Should().Be("ws://broker.local:8080/mqtt");
+    }
+
+    [Test]
+    public void Build_WebSocketPathEmpty_NoDoubleSlash()
+    {
+        var conn = new Connection
+        {
+            Name = "WS",
+            Host = "broker.local",
+            Port = 8080,
+            Protocol = Protocol.WebSocket,
+            ClientId = "ws-client",
+            WebsocketBasePath = "",
+            UseTls = false
+        };
+        var options = _builder.Build(conn);
+        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        ws.Uri.Should().Be("ws://broker.local:8080/");
+    }
+
+    [Test]
+    public void Build_WebSocketPathWhitespace_NoDoubleSlash()
+    {
+        var conn = new Connection
+        {
+            Name = "WS",
+            Host = "broker.local",
+            Port = 8080,
+            Protocol = Protocol.WebSocket,
+            ClientId = "ws-client",
+            WebsocketBasePath = "   ",
+            UseTls = false
+        };
+        var options = _builder.Build(conn);
+        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        ws.Uri.Should().Be("ws://broker.local:8080/");
+    }
+
+    [Test]
     public void Build_SetsAutoReconnectDelay()
     {
         var options = _builder.Build(TcpConnection());

@@ -33,6 +33,7 @@
   <Folder Name="/scripts/">
     <File Path="scripts/coverage.py" />
     <File Path="scripts/format-check.py" />
+    <File Path="scripts/manage-windows-config.ps1" />
     <File Path="scripts/reset-password.py" />
   </Folder>
   <Folder Name="/src/">

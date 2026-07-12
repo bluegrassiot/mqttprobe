@@ -56,6 +56,7 @@ internal static class Program
         builder.Services.AddSingleton<IUxMetricsService, UxMetricsService>();
         builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
         builder.Services.AddSingleton<IAppInfoService, DesktopAppInfoService>();
+        builder.Services.AddSingleton<IUpdateService, NoOpUpdateService>();
         builder.Services.AddAuthorizationCore();
         builder.Services.AddCascadingAuthenticationState();
         builder.Services.AddScoped<AuthenticationStateProvider, DesktopUnauthenticatedStateProvider>();

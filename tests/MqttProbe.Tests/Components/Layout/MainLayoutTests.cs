@@ -25,6 +25,7 @@ public class MainLayoutTests : BunitTestContext
     private ISessionState _mockSessionState = null!;
     private ISettingsStore _mockConfig = null!;
     private IJSRuntime _mockJs = null!;
+    private IUpdateService _mockUpdateService = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -37,6 +38,8 @@ public class MainLayoutTests : BunitTestContext
         _mockConfig = Substitute.For<ISettingsStore>();
         _mockConfig.Config.Returns(new AppConfiguration());
         _mockJs = Substitute.For<IJSRuntime>();
+        _mockUpdateService = Substitute.For<IUpdateService>();
+        _mockUpdateService.IsSupported.Returns(false);
 
         _mockAppInfo.GetVersion().Returns("1.0.0-test");
         _mockAppInfo.RequiresAuthentication.Returns(false);
@@ -55,6 +58,7 @@ public class MainLayoutTests : BunitTestContext
         Services.AddSingleton(_mockSessionState);
         Services.AddSingleton(_mockConfig);
         Services.AddSingleton(_mockJs);
+        Services.AddSingleton(_mockUpdateService);
         var mockMetrics = Substitute.For<IUxMetricsService>();
         mockMetrics.GetSnapshot().Returns(new UxMetricsSnapshot(
             ConnectAttempts: 0, ConnectSuccesses: 0, ConnectFailures: 0,

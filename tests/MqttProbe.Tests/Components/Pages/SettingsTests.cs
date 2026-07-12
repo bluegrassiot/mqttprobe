@@ -17,6 +17,7 @@ public class SettingsTests : BunitTestContext
     private ISettingsStore _mockStore = null!;
     private Themes _themes = null!;
     private IAppInfoService _mockAppInfo = null!;
+    private IUpdateService _mockUpdateService = null!;
 
     [SetUp]
     public void Setup()
@@ -30,9 +31,11 @@ public class SettingsTests : BunitTestContext
         _themes = new Themes();
         _mockAppInfo = Substitute.For<IAppInfoService>();
         _mockAppInfo.RequiresAuthentication.Returns(true);
+        _mockUpdateService = Substitute.For<IUpdateService>();
         Services.AddSingleton(_mockStore);
         Services.AddSingleton<IThemes>(_themes);
         Services.AddSingleton(_mockAppInfo);
+        Services.AddSingleton(_mockUpdateService);
         AuthorizationContext.SetAuthorized("admin").SetRoles(AppRoles.Admin);
         EnsureMudProviders();
     }

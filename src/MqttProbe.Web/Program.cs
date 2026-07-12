@@ -116,6 +116,7 @@ builder.Services.AddSingleton<ISecretStorage>(sp =>
 var settingsStore = new SettingsStore(Path.Combine(configDir, "appsettings.json"));
 builder.Services.AddSingleton<ISettingsStore>(settingsStore);
 builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
+builder.Services.AddSingleton<IUpdateService, NoOpUpdateService>();
 builder.Services.AddSingleton<IUserAuthService, SingleAdminUserAuthService>();
 builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
 builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();

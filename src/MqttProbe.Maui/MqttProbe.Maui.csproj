@@ -54,6 +54,8 @@
 		<OutputType>WinExe</OutputType>
 		<WindowsPackageType>None</WindowsPackageType>
 		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+		<SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+		<DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
 	</PropertyGroup>
 
 	<!--ANDROID SECTION-->
@@ -117,6 +119,7 @@
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
         <PackageReference Include="Microsoft.Maui.Essentials" />
+        <PackageReference Include="Velopack" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'" />
     </ItemGroup>
 
     <ItemGroup>

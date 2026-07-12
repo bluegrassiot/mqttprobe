@@ -410,6 +410,9 @@ public class NotFoundPageTests : BunitTestContext
             EmulatorPublishCycles: 0, EmulatorNodesInError: 0));
         Services.AddSingleton(mockMetrics);
         Services.AddSingleton<IThemes>(new Themes());
+        var mockUpdateService = Substitute.For<IUpdateService>();
+        mockUpdateService.IsSupported.Returns(false);
+        Services.AddSingleton(mockUpdateService);
     }
 
     [Test]

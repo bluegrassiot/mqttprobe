@@ -173,6 +173,40 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path publish/windows/* -DestinationPath publish/mqttprobe-windows-${{ github.ref_name }}.zip -Force
 
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk
+
+      - name: Download previous Velopack release (for delta packages)
+        shell: pwsh
+        continue-on-error: true   # first Velopack release has nothing to download
+        run: vpk download github --repoUrl https://github.com/bluegrassiot/mqttprobe --token ${{ secrets.GITHUB_TOKEN }} --outputDir publish/velopack
+
+      - name: Build installer
+        shell: pwsh
+        run: >
+          vpk pack
+          --packId MQTTProbe
+          --packVersion ${{ steps.version.outputs.value }}
+          --packDir publish/windows
+          --mainExe MqttProbe.Maui.exe
+          --packTitle MQTTProbe
+          --packAuthors "Bluegrass IoT"
+          --icon src/MqttProbe.Desktop/Assets/icon.ico
+          --outputDir publish/velopack
+
+      - name: Remove stale nupkg packages (keep only current version)
+        shell: pwsh
+        run: >
+          Get-ChildItem publish/velopack -Filter *.nupkg |
+          Where-Object Name -notlike "MQTTProbe-${{ steps.version.outputs.value }}-*" |
+          Remove-Item
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: maui-windows-velopack
+          path: publish/velopack/
+
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
@@ -370,6 +404,12 @@ jobs:
         with:
           name: maui-windows
 
+      - name: Download maui-windows-velopack
+        uses: actions/download-artifact@v8
+        with:
+          name: maui-windows-velopack
+          path: velopack
+
       - name: Download maui-macos
         uses: actions/download-artifact@v8
         with:
@@ -397,6 +437,10 @@ jobs:
             mqttprobe-macos-${{ github.ref_name }}.zip
             mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip
             mqttprobe-android-${{ github.ref_name }}.apk
+            velopack/MQTTProbe-win-Setup.exe
+            velopack/*.nupkg
+            velopack/releases.win.json
+            velopack/assets.win.json
           body: |
             ## MQTT Probe ${{ github.ref_name }}
 
@@ -431,6 +475,10 @@ jobs:
             sudo apt install libwebkit2gtk-4.1-0
             chmod +x MqttProbe.Desktop && ./MqttProbe.Desktop
             ```
+
+            ### Windows
+
+            Download `MQTTProbe-win-Setup.exe` (installs per-user, auto-updates) or the portable `mqttprobe-windows-*.zip`.
 
             ### macOS
 

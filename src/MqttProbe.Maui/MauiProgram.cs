@@ -58,6 +58,11 @@ public static class MauiProgram
         builder.Services.AddSingleton<IUxMetricsService, UxMetricsService>();
         builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
         builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
+#if WINDOWS
+        builder.Services.AddSingleton<IUpdateService, MqttProbe.WinUI.VelopackUpdateService>();
+#else
+        builder.Services.AddSingleton<IUpdateService, NoOpUpdateService>();
+#endif
         builder.Services.AddAuthorizationCore();
         builder.Services.AddCascadingAuthenticationState();
         builder.Services.AddScoped<AuthenticationStateProvider, UnauthenticatedStateProvider>();
@@ -66,7 +71,16 @@ public static class MauiProgram
         var secretStorage = new MauiSecretStorage();
         builder.Services.AddSingleton<ISecretStorage>(secretStorage);
 
-        var configPath = Path.Combine(FileSystem.Current.AppDataDirectory, "config", "appsettings.json");
+        var configDir = Path.Combine(FileSystem.Current.AppDataDirectory, "config");
+#if WINDOWS
+        // v1.0.1 and earlier shipped with the MAUI template's placeholder publisher
+        // ("User Name"), so existing users' config lives under that directory.
+        var legacyConfigDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "User Name", "com.bluegrassiot.mqttprobe", "Data", "config");
+        ConfigMigrator.MigrateIfNeeded(legacyConfigDir, configDir);
+#endif
+        var configPath = Path.Combine(configDir, "appsettings.json");
         var isMobile = DeviceInfo.Idiom == DeviceIdiom.Phone || DeviceInfo.Idiom == DeviceIdiom.Tablet;
         var settingsStore = new SettingsStore(configPath, isMobile, null);
         builder.Services.AddSingleton<ISettingsStore>(settingsStore);

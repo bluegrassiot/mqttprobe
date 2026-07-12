@@ -96,7 +96,21 @@ The app starts on `https://localhost:5001`. On first launch it redirects to `/Se
 
 ---
 
+## Quick Start — Windows Desktop
+
+### Download the installer
+
+**Recommended:** Download [`MQTTProbe-win-Setup.exe`](https://github.com/bluegrassiot/mqttprobe/releases/latest) — per-user install, no admin rights, auto-updates.
+
+Alternatively: Download the portable `mqttprobe-windows-<version>.zip`, extract, and run `MqttProbe.Maui.exe` (no auto-update).
+
+> **Windows SmartScreen warning:** Releases are not yet code-signed, so Windows may warn on first run. Choose "More info" → "Run anyway" to proceed.
+
+---
+
 ## Quick Start — MAUI (iOS / Android / Windows)
+
+**For developers:** build from source for testing and development.
 
 **Prerequisites:** .NET 10 SDK + MAUI workload
 

@@ -1,0 +1,17 @@
+@namespace MqttProbe.Components
+@inject IUpdateService UpdateService
+@inject ISnackbar Snackbar
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !UpdateService.IsSupported)
+            return;
+
+        var version = await UpdateService.CheckForUpdateAsync();
+        if (version is not null)
+        {
+            Snackbar.Add($"MQTTProbe {version} is available — update from Settings.", Severity.Info);
+        }
+    }
+}

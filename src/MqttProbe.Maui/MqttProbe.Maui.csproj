@@ -29,6 +29,7 @@
 
         <!-- Display name -->
         <ApplicationTitle>MQTTProbe</ApplicationTitle>
+        <AssemblyTitle>MQTTProbe</AssemblyTitle>
 
         <!-- App Identifier -->
         <ApplicationId>com.bluegrassiot.mqttprobe</ApplicationId>
@@ -52,6 +53,7 @@
 
 	<PropertyGroup Condition="'$(TargetFramework)'=='net10.0-windows10.0.19041.0'">
 		<OutputType>WinExe</OutputType>
+		<ApplicationIcon>..\MqttProbe.Desktop\Assets\icon.ico</ApplicationIcon>
 		<WindowsPackageType>None</WindowsPackageType>
 		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
 		<SatelliteResourceLanguages>en</SatelliteResourceLanguages>

@@ -14,7 +14,8 @@ dotnet publish src/MqttProbe.Maui/MqttProbe.Maui.csproj `
     -p:MqttProbeMauiWindowsTargetFrameworksOverride=net10.0-windows10.0.19041.0 `
     -c:Release `
     --output $publishDir `
-    -p:ApplicationDisplayVersion=$Version
+    -p:ApplicationDisplayVersion=$Version `
+    -p:ApplicationVersion=1
 
 Write-Host "Packing with Velopack..." -ForegroundColor Cyan
 

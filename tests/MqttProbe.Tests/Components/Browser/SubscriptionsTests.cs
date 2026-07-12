@@ -114,7 +114,7 @@ public class SubscriptionsTests : BunitTestContext
 
         cut.WaitForAssertion(() =>
             _mockSnackbar.Received().Add(
-                Arg.Is<string>(m => m.Contains("Failed to subscribe")),
+                Arg.Is<string>(m => m!.Contains("Failed to subscribe")),
                 Severity.Error,
                 Arg.Any<Action<SnackbarOptions>?>(),
                 Arg.Any<string>()));

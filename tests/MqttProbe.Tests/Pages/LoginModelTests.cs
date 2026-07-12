@@ -131,7 +131,7 @@ public class LoginModelTests
             Arg.Any<HttpContext>(),
             CookieAuthenticationDefaults.AuthenticationScheme,
             Arg.Is<ClaimsPrincipal>(principal =>
-                principal.Identity!.Name == "admin" && principal.IsInRole(AppRoles.Admin)),
+                principal!.Identity!.Name == "admin" && principal.IsInRole(AppRoles.Admin)),
             Arg.Any<AuthenticationProperties?>());
     }
 
@@ -156,7 +156,7 @@ public class LoginModelTests
             CookieAuthenticationDefaults.AuthenticationScheme,
             Arg.Any<ClaimsPrincipal>(),
             Arg.Is<AuthenticationProperties>(properties =>
-                !properties.IsPersistent && properties.RedirectUri == "/"));
+                !properties!.IsPersistent && properties.RedirectUri == "/"));
     }
 
     [Test]
@@ -180,7 +180,7 @@ public class LoginModelTests
             CookieAuthenticationDefaults.AuthenticationScheme,
             Arg.Any<ClaimsPrincipal>(),
             Arg.Is<AuthenticationProperties>(properties =>
-                properties.IsPersistent && properties.RedirectUri == "/"));
+                properties!.IsPersistent && properties.RedirectUri == "/"));
     }
 
     [Test]

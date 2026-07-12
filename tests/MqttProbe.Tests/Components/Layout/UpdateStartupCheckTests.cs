@@ -39,7 +39,7 @@ public class UpdateStartupCheckTests : BunitTestContext
         var cut = Render<UpdateStartupCheck>();
 
         cut.WaitForAssertion(() => _snackbar.Received(1).Add(
-            Arg.Is<string>(m => m.Contains("1.2.0")), Severity.Info, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>()));
+            Arg.Is<string>(m => m!.Contains("1.2.0")), Severity.Info, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>()));
     }
 
     [Test]

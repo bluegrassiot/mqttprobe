@@ -88,7 +88,7 @@ public class PublishersTests : BunitTestContext
         cut.Find("button[title='Publish']").Click();
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<MqttApplicationMessage>(m => m.Topic == "test/topic"));
+            Arg.Is<MqttApplicationMessage>(m => m!.Topic == "test/topic"));
     }
 
     [Test]
@@ -102,7 +102,7 @@ public class PublishersTests : BunitTestContext
 
         await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
         _mockSnackbar.Received().Add(
-            Arg.Is<string>(m => m.Contains("permission")),
+            Arg.Is<string>(m => m!.Contains("permission")),
             Severity.Error,
             Arg.Any<Action<SnackbarOptions>?>(),
             Arg.Any<string?>());

@@ -269,7 +269,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
         cut.Find(".topic-tree-row").Click();
 
         _mockMsgStore.Received().SelectedMessageStore =
-            Arg.Is<MessageStore>(s => s.FullTopic == "sensors");
+            Arg.Is<MessageStore>(s => s!.FullTopic == "sensors");
     }
 
     [Test]

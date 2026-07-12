@@ -303,7 +303,7 @@ public class ConnectionDialogTests : BunitTestContext
         await _mockClient.Received(1).StartAsync(Arg.Any<ManagedMqttClientOptions>());
         Received.InOrder(() =>
         {
-            _mockSessionState.SelectedConnection = Arg.Is<Connection>(c => c.SubscribedTopics.Contains("saved/topic"));
+            _mockSessionState.SelectedConnection = Arg.Is<Connection>(c => c!.SubscribedTopics.Contains("saved/topic"));
             _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>());
         });
     }
@@ -583,7 +583,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Find("button[title='Connect']").Click();
 
         await _mockCoordinator.Received(1).ResetIfBrokerChangedAsync(
-            Arg.Is<Connection>(c => c.Host == "broker.example.com" && c.Port == 8883));
+            Arg.Is<Connection>(c => c!.Host == "broker.example.com" && c.Port == 8883));
     }
 
     [Test]

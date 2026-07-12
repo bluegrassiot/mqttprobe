@@ -289,3 +289,4 @@ appsettings.Local.json
 /profile-output/
 /.opencode/
 /.playwright-mcp
+/docs/release-testing

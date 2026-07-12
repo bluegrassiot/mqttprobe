@@ -556,7 +556,7 @@ public class SparkplugTopologyServiceTests
 
         await _mockClient.Received(1).EnqueueAsync(
             Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m.ApplicationMessage.Topic == "spBv1.0/factory/NCMD/edge-01"));
+                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -578,7 +578,7 @@ public class SparkplugTopologyServiceTests
 
         await _mockClient.Received(1).EnqueueAsync(
             Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m.ApplicationMessage.Topic == "spBv1.0/factory/NCMD/edge-01"));
+                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -593,7 +593,7 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
         await _mockClient.Received(1).EnqueueAsync(
             Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m.ApplicationMessage.Topic == "spBv1.0/factory/NCMD/edge-01"));
+                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
 
         // Advance past the 30-second cooldown
         fakeClock.Advance(TimeSpan.FromSeconds(31));
@@ -602,7 +602,7 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 23.0)));
         await _mockClient.Received(2).EnqueueAsync(
             Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m.ApplicationMessage.Topic == "spBv1.0/factory/NCMD/edge-01"));
+                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -615,7 +615,7 @@ public class SparkplugTopologyServiceTests
 
         await _mockClient.Received(1).EnqueueAsync(
             Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m.ApplicationMessage.Topic == "spBv1.0/factory/NCMD/edge-01"));
+                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -648,7 +648,7 @@ public class SparkplugTopologyServiceTests
 
         await _mockClient.Received(1).EnqueueAsync(
             Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m.ApplicationMessage.Topic == "spBv1.0/factory/NCMD/edge-01"));
+                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -660,7 +660,7 @@ public class SparkplugTopologyServiceTests
 
         await _mockClient.Received(1).EnqueueAsync(
             Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m.ApplicationMessage.Topic == "spBv1.0/factory/NCMD/edge-01"));
+                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -679,8 +679,8 @@ public class SparkplugTopologyServiceTests
 
         await _mockClient.Received(1).EnqueueAsync(
             Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m.ApplicationMessage.Topic == "spBv1.0/factory/NCMD/edge-01"
-                && VerifyRebirthPayload(m.ApplicationMessage.PayloadSegment)));
+                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"
+                && VerifyRebirthPayload(m!.ApplicationMessage!.PayloadSegment)));
     }
 
     private static bool VerifyRebirthPayload(ReadOnlyMemory<byte> payloadBytes)
@@ -699,8 +699,8 @@ public class SparkplugTopologyServiceTests
 
         await _mockClient.Received(1).EnqueueAsync(
             Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m.ApplicationMessage.Topic == "spBv1.0/factory/NCMD/edge-01"
-                && m.ApplicationMessage.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce));
+                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"
+                && m!.ApplicationMessage!.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce));
     }
 
     [Test]

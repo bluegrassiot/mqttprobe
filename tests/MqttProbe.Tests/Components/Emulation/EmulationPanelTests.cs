@@ -230,7 +230,7 @@ public class EmulationPanelTests : BunitTestContext
 
         await _mockDialogService.Received(1).ShowMessageBoxAsync(
             "Remove All Nodes",
-            Arg.Is<string>(s => s.Contains("This will remove all configured nodes")),
+            Arg.Is<string>(s => s!.Contains("This will remove all configured nodes")),
             "Remove all", Arg.Any<string?>(), "Cancel", Arg.Any<DialogOptions>());
     }
 

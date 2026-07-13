@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
@@ -22,6 +23,14 @@ public static class MauiProgram
 {
     public static MauiApp CreateMauiApp()
     {
+        // WORKAROUND: MudBlazor satellite assemblies (MudBlazor.resources.dll) are not
+        // bundled on iOS, causing a FileNotFoundException during localization. Force a
+        // neutral culture so the runtime falls back to the embedded default resources.
+        // See: https://github.com/MudBlazor/MudBlazor/issues — replace with proper
+        // satellite assembly inclusion once a permanent fix is applied.
+        CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("en-US");
+        CultureInfo.DefaultThreadCurrentUICulture = new CultureInfo("en-US");
+
         var builder = MauiApp.CreateBuilder();
 
         builder
@@ -60,7 +69,8 @@ public static class MauiProgram
                 sp.GetRequiredService<IUxMetricsService>(),
                 sp.GetRequiredService<ICertificateAssetStore>(),
                 sp.GetRequiredService<ICertificateSessionQuarantine>(),
-                sp.GetRequiredService<ILogger<EmulationService>>()));
+                sp.GetRequiredService<ILogger<EmulationService>>(),
+                sp.GetRequiredService<IAppHealthMetricsCollector>()));
         builder.Services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
         builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
         builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
@@ -68,6 +78,7 @@ public static class MauiProgram
             new MqttOptionsBuilder(sp.GetRequiredService<ICertificateAssetStore>()));
         builder.Services.AddSingleton<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
         builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
+        builder.Services.AddSingleton<IAppHealthMetricsCollector, AppHealthMetricsCollector>();
         builder.Services.AddSingleton<IUxMetricsService, UxMetricsService>();
         builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
         builder.Services.AddSingleton<IAppInfoService, AppInfoService>();

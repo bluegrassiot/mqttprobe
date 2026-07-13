@@ -43,7 +43,7 @@ public class EmulationService : IEmulationService
     private readonly ICertificateAssetStore _certStore;
     private readonly ICertificateSessionQuarantine _quarantine;
     private readonly ILogger<EmulationService> _logger;
-    private readonly NodeHealthMetricsProvider _healthMetrics = new();
+    private readonly NodeHealthMetricsProvider _healthMetrics;
 
     private List<INodeRunner> _runners = [];
     private CancellationTokenSource? _cts;
@@ -60,7 +60,8 @@ public class EmulationService : IEmulationService
         IUxMetricsService metrics,
         ICertificateAssetStore certStore,
         ICertificateSessionQuarantine quarantine,
-        ILogger<EmulationService> logger)
+        ILogger<EmulationService> logger,
+        IAppHealthMetricsCollector healthCollector)
     {
         _settingsStore = settingsStore;
         _nodeFactory = nodeFactory;
@@ -70,6 +71,7 @@ public class EmulationService : IEmulationService
         _certStore = certStore;
         _quarantine = quarantine;
         _logger = logger;
+        _healthMetrics = new NodeHealthMetricsProvider(healthCollector);
         _settingsStore.EmulatorsChanged += OnEmulatorsChanged;
         _managedMqttClient.DisconnectedAsync += OnMainClientDisconnected;
     }

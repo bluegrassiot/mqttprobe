@@ -122,21 +122,23 @@ builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQ
 builder.Services.AddSingleton<ICertificateFilePicker, WebCertificateFilePicker>();
 builder.Services.AddSingleton<ICertificateInputCapability, WebCertificateInputCapability>();
 builder.Services.AddScoped<IEmulationService>(sp =>
-    new EmulationService(
-        sp.GetRequiredService<ISettingsStore>(),
-        sp.GetRequiredService<ISparkplugNodeFactory>(),
-        sp.GetRequiredService<ISessionState>(),
-        sp.GetRequiredService<IManagedMqttClient>(),
-        sp.GetRequiredService<IUxMetricsService>(),
-        sp.GetRequiredService<ICertificateAssetStore>(),
-        sp.GetRequiredService<ICertificateSessionQuarantine>(),
-        sp.GetRequiredService<ILogger<EmulationService>>()));
+new EmulationService(
+sp.GetRequiredService<ISettingsStore>(),
+sp.GetRequiredService<ISparkplugNodeFactory>(),
+sp.GetRequiredService<ISessionState>(),
+sp.GetRequiredService<IManagedMqttClient>(),
+sp.GetRequiredService<IUxMetricsService>(),
+sp.GetRequiredService<ICertificateAssetStore>(),
+sp.GetRequiredService<ICertificateSessionQuarantine>(),
+sp.GetRequiredService<ILogger<EmulationService>>(),
+sp.GetRequiredService<IAppHealthMetricsCollector>()));
 builder.Services.AddScoped<IMessageStoreManager, MessageStoreManager>();
 builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
 builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
 builder.Services.AddScoped<IMqttOptionsBuilder>(sp =>
     new MqttOptionsBuilder(sp.GetRequiredService<ICertificateAssetStore>()));
 builder.Services.AddScoped<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
+builder.Services.AddSingleton<IAppHealthMetricsCollector, AppHealthMetricsCollector>();
 builder.Services.AddScoped<IUxMetricsService, UxMetricsService>();
 builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
 builder.Services.AddScoped<IClipboardService, WebClipboardService>();

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
@@ -6,6 +5,7 @@ using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Models.Mqtt;
+using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using SparkplugNet.Core.Enumerations;
@@ -25,41 +25,25 @@ public interface INodeRunner
     public Task StopAsync();
 }
 
-public class NodeHealthMetricsProvider
+public class NodeHealthMetricsProvider(IAppHealthMetricsCollector collector)
 {
-    private readonly Lock _sync = new();
-    private readonly DateTime _startTime = DateTime.UtcNow;
-    private readonly Process _currentProcess = Process.GetCurrentProcess();
-    private DateTime _lastCpuSample = DateTime.UtcNow;
-    private TimeSpan _lastCpuTime = Process.GetCurrentProcess().TotalProcessorTime;
-
     public List<Metric> BuildSnapshot(int publishersOnline, long publishCycles)
     {
-        lock (_sync)
+        var health = collector.GetSnapshot();
+        var metrics = new List<Metric>();
+        if (health.Available)
         {
-            _currentProcess.Refresh();
-            var now = DateTime.UtcNow;
-            var cpuTime = _currentProcess.TotalProcessorTime;
-            var elapsedSec = (now - _lastCpuSample).TotalSeconds;
-            var cpuUsage = elapsedSec > 0
-                ? Math.Min(100.0, (cpuTime - _lastCpuTime).TotalSeconds / (elapsedSec * Environment.ProcessorCount) * 100.0)
-                : 0.0;
-            _lastCpuSample = now;
-            _lastCpuTime = cpuTime;
-
-            return
-            [
-                new Metric("CPU Usage (%)", DataType.Double, cpuUsage),
-                new Metric("Managed Heap (MB)", DataType.Double, GC.GetTotalMemory(false) / 1048576.0),
-                new Metric("Working Set (MB)", DataType.Double, _currentProcess.WorkingSet64 / 1048576.0),
-                new Metric("Thread Count", DataType.Double, (double)_currentProcess.Threads.Count),
-                new Metric("ThreadPool Queue", DataType.Double, (double)ThreadPool.PendingWorkItemCount),
-                new Metric("GC Gen2 Collections", DataType.Double, (double)GC.CollectionCount(2)),
-                new Metric("Uptime (s)", DataType.Double, (now - _startTime).TotalSeconds),
-                new Metric("Publishers Online", DataType.Double, (double)publishersOnline),
-                new Metric("Publish Cycles", DataType.Double, (double)publishCycles)
-            ];
+            metrics.Add(new Metric("CPU Usage (%)", DataType.Double, health.CpuUsagePercent));
+            metrics.Add(new Metric("Managed Heap (MB)", DataType.Double, health.ManagedHeapMb));
+            metrics.Add(new Metric("Working Set (MB)", DataType.Double, health.WorkingSetMb));
+            metrics.Add(new Metric("Thread Count", DataType.Double, (double)health.ThreadCount));
+            metrics.Add(new Metric("ThreadPool Queue", DataType.Double, (double)health.ThreadPoolQueueLength));
+            metrics.Add(new Metric("GC Gen2 Collections", DataType.Double, (double)health.GcGen2Collections));
+            metrics.Add(new Metric("Uptime (s)", DataType.Double, health.UptimeSeconds));
         }
+        metrics.Add(new Metric("Publishers Online", DataType.Double, (double)publishersOnline));
+        metrics.Add(new Metric("Publish Cycles", DataType.Double, (double)publishCycles));
+        return metrics;
     }
 }
 

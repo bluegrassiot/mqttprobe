@@ -44,6 +44,7 @@ public class EmulationServiceTests
     private IUxMetricsService _mockMetrics = null!;
     private ICertificateAssetStore _mockCertStore = null!;
     private ICertificateSessionQuarantine _mockQuarantine = null!;
+    private IAppHealthMetricsCollector _mockHealthCollector = null!;
     private EmulationService _service = null!;
     private Func<MqttClientDisconnectedEventArgs, Task>? _disconnectedHandler;
 
@@ -67,6 +68,11 @@ public class EmulationServiceTests
         _mockMetrics = Substitute.For<IUxMetricsService>();
         _mockCertStore = Substitute.For<ICertificateAssetStore>();
         _mockQuarantine = Substitute.For<ICertificateSessionQuarantine>();
+        _mockHealthCollector = Substitute.For<IAppHealthMetricsCollector>();
+        _mockHealthCollector.GetSnapshot().Returns(new AppHealthMetricsSnapshot(
+            Available: true, CpuUsagePercent: 0, ManagedHeapMb: 0,
+            WorkingSetMb: 0, ThreadCount: 0, ThreadPoolQueueLength: 0,
+            GcGen2Collections: 0, UptimeSeconds: 0));
 
         _disconnectedHandler = null;
         _mockMqttClient
@@ -83,7 +89,8 @@ public class EmulationServiceTests
             _mockMetrics,
             _mockCertStore,
             _mockQuarantine,
-            Substitute.For<ILogger<EmulationService>>());
+            Substitute.For<ILogger<EmulationService>>(),
+            _mockHealthCollector);
         _service.SetConnection(_mockSessionState.SelectedConnection.Id);
     }
 
@@ -93,6 +100,7 @@ public class EmulationServiceTests
         await _service.StopAsync();
         _service.Dispose();
         _mockMqttClient.Dispose();
+        _mockHealthCollector.Dispose();
         if (File.Exists(_filePath)) File.Delete(_filePath);
     }
 

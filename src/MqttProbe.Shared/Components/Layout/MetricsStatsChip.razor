@@ -63,18 +63,21 @@
                 }
             }
 
-            <MudDivider Class="my-2" />
-            <MudExpansionPanels Elevation="0" Class="mt-1 metrics-health">
-                <MudExpansionPanel Text="Health" Dense="true">
-                    <div class="metrics-row"><span>CPU usage</span><span>@FmtPercent(_snapshot.AppCpuUsagePercent)</span></div>
-                    <div class="metrics-row"><span>Managed heap</span><span>@FmtMb(_snapshot.AppManagedHeapMb)</span></div>
-                    <div class="metrics-row"><span>Working set</span><span>@FmtMb(_snapshot.AppWorkingSetMb)</span></div>
-                    <div class="metrics-row"><span>Threads</span><span>@Fmt(_snapshot.AppThreadCount)</span></div>
-                    <div class="metrics-row"><span>ThreadPool queue</span><span>@Fmt(_snapshot.AppThreadPoolQueueLength)</span></div>
-                    <div class="metrics-row"><span>GC Gen2 collections</span><span>@Fmt(_snapshot.AppGcGen2Collections)</span></div>
-                    <div class="metrics-row"><span>Uptime</span><span>@FmtDuration(_snapshot.AppUptimeSeconds)</span></div>
-                </MudExpansionPanel>
-            </MudExpansionPanels>
+            @if (_snapshot.AppHealth.Available)
+            {
+                <MudDivider Class="my-2" />
+                <MudExpansionPanels Elevation="0" Class="mt-1 metrics-health">
+                    <MudExpansionPanel Text="Health" Dense="true">
+                        <div class="metrics-row"><span>CPU usage</span><span>@FmtPercent(_snapshot.AppHealth.CpuUsagePercent)</span></div>
+                        <div class="metrics-row"><span>Managed heap</span><span>@FmtMb(_snapshot.AppHealth.ManagedHeapMb)</span></div>
+                        <div class="metrics-row"><span>Working set</span><span>@FmtMb(_snapshot.AppHealth.WorkingSetMb)</span></div>
+                        <div class="metrics-row"><span>Threads</span><span>@Fmt(_snapshot.AppHealth.ThreadCount)</span></div>
+                        <div class="metrics-row"><span>ThreadPool queue</span><span>@Fmt(_snapshot.AppHealth.ThreadPoolQueueLength)</span></div>
+                        <div class="metrics-row"><span>GC Gen2 collections</span><span>@Fmt(_snapshot.AppHealth.GcGen2Collections)</span></div>
+                        <div class="metrics-row"><span>Uptime</span><span>@FmtDuration(_snapshot.AppHealth.UptimeSeconds)</span></div>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
 
             <MudExpansionPanels Elevation="0" Class="mt-2 metrics-diagnostics">
                 <MudExpansionPanel Text="Diagnostics" Dense="true">

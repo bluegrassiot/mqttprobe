@@ -76,10 +76,11 @@ public class MainLayoutTests : BunitTestContext
             MessagesProcessedByFormat: new Dictionary<string, long>(),
             ChartFunnelBySource: new Dictionary<string, long>(),
             MaxDisplayMessages: 0, CurrentDisplayedMessageCount: 0,
-            AppCpuUsagePercent: 0, AppManagedHeapMb: 0,
-            AppWorkingSetMb: 0, AppThreadCount: 0,
-            AppThreadPoolQueueLength: 0, AppGcGen2Collections: 0,
-            AppUptimeSeconds: 0, EmulatorPublishersOnline: 0,
+            AppHealth: new AppHealthMetricsSnapshot(
+                Available: true, CpuUsagePercent: 0, ManagedHeapMb: 0,
+                WorkingSetMb: 0, ThreadCount: 0, ThreadPoolQueueLength: 0,
+                GcGen2Collections: 0, UptimeSeconds: 0),
+            EmulatorPublishersOnline: 0,
             EmulatorPublishCycles: 0, EmulatorNodesInError: 0));
         Services.AddSingleton(mockMetrics);
         Services.AddSingleton<IThemes>(new Themes());

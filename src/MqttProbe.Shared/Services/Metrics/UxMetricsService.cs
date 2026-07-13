@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using MqttProbe.Services.Configuration;
 
@@ -26,14 +25,8 @@ public sealed record UxMetricsSnapshot(
     // Display-limit scope
     int MaxDisplayMessages,
     int CurrentDisplayedMessageCount,
-    // App health scope (self-collected)
-    double AppCpuUsagePercent,
-    double AppManagedHeapMb,
-    double AppWorkingSetMb,
-    int AppThreadCount,
-    long AppThreadPoolQueueLength,
-    int AppGcGen2Collections,
-    double AppUptimeSeconds,
+    // App health scope (delegated to IAppHealthMetricsCollector)
+    AppHealthMetricsSnapshot AppHealth,
     // Emulation scope
     int EmulatorPublishersOnline,
     long EmulatorPublishCycles,
@@ -56,32 +49,20 @@ public interface IUxMetricsService
     public void ClearEmulatorHealth();
 }
 
-public sealed class UxMetricsService : IUxMetricsService, IDisposable
+public sealed class UxMetricsService : IUxMetricsService
 {
     public const int RateWindowSeconds = 60;
 
     private readonly ILogger<UxMetricsService> _logger;
     private readonly ISettingsStore _settingsStore;
     private readonly Func<long> _tickCount64Ms;
+    private readonly IAppHealthMetricsCollector _healthCollector;
     private int _displayedCount;
 
     // Emulation metrics (written by EmulationService)
     private volatile int _emulatorPublishersOnline;
     private long _emulatorPublishCycles;
     private volatile int _emulatorNodesInError;
-
-    // App health self-collection
-    private readonly DateTime _startTime = DateTime.UtcNow;
-    private DateTime _lastCpuSample = DateTime.UtcNow;
-    private TimeSpan _lastCpuTime = Process.GetCurrentProcess().TotalProcessorTime;
-    private double _appCpuUsagePercent;
-    private double _appManagedHeapMb;
-    private double _appWorkingSetMb;
-    private volatile int _appThreadCount;
-    private long _appThreadPoolQueueLength;
-    private volatile int _appGcGen2Collections;
-    private double _appUptimeSeconds;
-    private readonly System.Timers.Timer _appHealthTimer;
 
     private long _connectAttempts;
     private long _connectSuccesses;
@@ -110,53 +91,23 @@ public sealed class UxMetricsService : IUxMetricsService, IDisposable
     private readonly int[] _rateBuckets = new int[RateWindowSeconds];
     private readonly long[] _rateBucketSeconds = new long[RateWindowSeconds];
 
-    public UxMetricsService(ILogger<UxMetricsService> logger, ISettingsStore settingsStore)
-        : this(logger, settingsStore, static () => Environment.TickCount64)
+    public UxMetricsService(ILogger<UxMetricsService> logger, ISettingsStore settingsStore,
+        IAppHealthMetricsCollector healthCollector)
+        : this(logger, settingsStore, healthCollector, static () => Environment.TickCount64)
     {
     }
 
-    internal UxMetricsService(ILogger<UxMetricsService> logger, ISettingsStore settingsStore, Func<long> tickCount64Ms)
+    internal UxMetricsService(
+        ILogger<UxMetricsService> logger,
+        ISettingsStore settingsStore,
+        IAppHealthMetricsCollector healthCollector,
+        Func<long> tickCount64Ms)
     {
         _logger = logger;
         _settingsStore = settingsStore;
+        _healthCollector = healthCollector;
         _tickCount64Ms = tickCount64Ms;
         Array.Fill(_rateBucketSeconds, -1);
-
-        _appHealthTimer = new System.Timers.Timer(1000);
-        _appHealthTimer.Elapsed += (_, _) => SampleAppHealth();
-        _appHealthTimer.AutoReset = true;
-        _appHealthTimer.Start();
-        SampleAppHealth();
-    }
-
-    private void SampleAppHealth()
-    {
-        try
-        {
-            var process = Process.GetCurrentProcess();
-            process.Refresh();
-
-            var now = DateTime.UtcNow;
-            var cpuTime = process.TotalProcessorTime;
-            var elapsedSec = (now - _lastCpuSample).TotalSeconds;
-            var cpuUsage = elapsedSec > 0
-                ? Math.Min(100.0, (cpuTime - _lastCpuTime).TotalSeconds / (elapsedSec * Environment.ProcessorCount) * 100.0)
-                : 0.0;
-            _lastCpuSample = now;
-            _lastCpuTime = cpuTime;
-
-            Volatile.Write(ref _appCpuUsagePercent, cpuUsage);
-            Volatile.Write(ref _appManagedHeapMb, GC.GetTotalMemory(false) / 1048576.0);
-            Volatile.Write(ref _appWorkingSetMb, process.WorkingSet64 / 1048576.0);
-            _appThreadCount = process.Threads.Count;
-            Volatile.Write(ref _appThreadPoolQueueLength, ThreadPool.PendingWorkItemCount);
-            _appGcGen2Collections = GC.CollectionCount(2);
-            Volatile.Write(ref _appUptimeSeconds, (now - _startTime).TotalSeconds);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Failed to sample app health");
-        }
     }
 
     public void RecordConnectAttempt()
@@ -292,6 +243,7 @@ public sealed class UxMetricsService : IUxMetricsService, IDisposable
             }
         }
 
+        var health = _healthCollector.GetSnapshot();
         return new UxMetricsSnapshot(
             ConnectAttempts: Interlocked.Read(ref _connectAttempts),
             ConnectSuccesses: Interlocked.Read(ref _connectSuccesses),
@@ -312,20 +264,10 @@ public sealed class UxMetricsService : IUxMetricsService, IDisposable
             ChartFunnelBySource: new Dictionary<string, long>(_chartFunnelBySource),
             MaxDisplayMessages: _settingsStore.Config.Performance.MaxDisplayMessages,
             CurrentDisplayedMessageCount: Volatile.Read(ref _displayedCount),
-            AppCpuUsagePercent: Volatile.Read(ref _appCpuUsagePercent),
-            AppManagedHeapMb: Volatile.Read(ref _appManagedHeapMb),
-            AppWorkingSetMb: Volatile.Read(ref _appWorkingSetMb),
-            AppThreadCount: _appThreadCount,
-            AppThreadPoolQueueLength: Volatile.Read(ref _appThreadPoolQueueLength),
-            AppGcGen2Collections: _appGcGen2Collections,
-            AppUptimeSeconds: Volatile.Read(ref _appUptimeSeconds),
+            AppHealth: health,
             EmulatorPublishersOnline: _emulatorPublishersOnline,
             EmulatorPublishCycles: Volatile.Read(ref _emulatorPublishCycles),
             EmulatorNodesInError: _emulatorNodesInError);
     }
 
-    public void Dispose()
-    {
-        _appHealthTimer.Dispose();
-    }
 }

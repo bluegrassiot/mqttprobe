@@ -58,7 +58,8 @@ internal static class Program
                 sp.GetRequiredService<IUxMetricsService>(),
                 sp.GetRequiredService<ICertificateAssetStore>(),
                 sp.GetRequiredService<ICertificateSessionQuarantine>(),
-                sp.GetRequiredService<ILogger<EmulationService>>()));
+                sp.GetRequiredService<ILogger<EmulationService>>(),
+                sp.GetRequiredService<IAppHealthMetricsCollector>()));
         builder.Services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
         builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
         builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
@@ -66,6 +67,7 @@ internal static class Program
             new MqttOptionsBuilder(sp.GetRequiredService<ICertificateAssetStore>()));
         builder.Services.AddSingleton<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
         builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
+        builder.Services.AddSingleton<IAppHealthMetricsCollector, AppHealthMetricsCollector>();
         builder.Services.AddSingleton<IUxMetricsService, UxMetricsService>();
         builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
         builder.Services.AddSingleton<IAppInfoService, DesktopAppInfoService>();

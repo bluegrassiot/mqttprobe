@@ -10,15 +10,20 @@ public partial class App
     private readonly ISecretStorage _secretStorage;
     private readonly ILogger<App> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ICertificateAssetStore _certStore;
+    private readonly ICertificateEnvelopeKeyStore _envelopeKeyStore;
 
     public App(ISettingsStore settingsStore, ISecretStorage secretStorage,
-        ILogger<App> logger, IServiceProvider serviceProvider)
+        ILogger<App> logger, IServiceProvider serviceProvider,
+        ICertificateAssetStore certStore, ICertificateEnvelopeKeyStore envelopeKeyStore)
     {
         InitializeComponent();
         _settingsStore = settingsStore;
         _secretStorage = secretStorage;
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _certStore = certStore;
+        _envelopeKeyStore = envelopeKeyStore;
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
@@ -67,7 +72,7 @@ public partial class App
         try
         {
             await MainThread.InvokeOnMainThreadAsync(() => window.Page = CreateLoadingPage());
-            await _settingsStore.LoadAsync(_secretStorage);
+            await _settingsStore.LoadAsync(_secretStorage, _certStore, _envelopeKeyStore);
 
             var root = await ResolveInitialPageAsync();
             await MainThread.InvokeOnMainThreadAsync(() => window.Page = root);

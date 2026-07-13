@@ -26,6 +26,7 @@ public class MainLayoutTests : BunitTestContext
     private ISettingsStore _mockConfig = null!;
     private IJSRuntime _mockJs = null!;
     private IUpdateService _mockUpdateService = null!;
+    private IConnectionSessionLifecycle _mockLifecycle = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -59,6 +60,9 @@ public class MainLayoutTests : BunitTestContext
         Services.AddSingleton(_mockConfig);
         Services.AddSingleton(_mockJs);
         Services.AddSingleton(_mockUpdateService);
+        _mockLifecycle = Substitute.For<IConnectionSessionLifecycle>();
+        _mockLifecycle.StopActiveConnectionAsync().Returns(Task.CompletedTask);
+        Services.AddSingleton(_mockLifecycle);
         var mockMetrics = Substitute.For<IUxMetricsService>();
         mockMetrics.GetSnapshot().Returns(new UxMetricsSnapshot(
             ConnectAttempts: 0, ConnectSuccesses: 0, ConnectFailures: 0,
@@ -116,17 +120,16 @@ public class MainLayoutTests : BunitTestContext
     }
 
     [Test]
-    public async Task ConnectionToggle_WhenConnected_CallsStopAsync()
+    public async Task ConnectionToggle_WhenConnected_CallsStopActiveConnectionAsync()
     {
         _mockMqttClient.IsConnected.Returns(true);
-        _mockMqttClient.StopAsync().Returns(Task.CompletedTask);
 
         var cut = RenderLayout();
         var bar = cut.FindComponent<AppShellBar>();
 
         await bar.InvokeAsync(() => bar.Instance.ConnectionToggle());
 
-        await _mockMqttClient.Received(1).StopAsync();
+        await _mockLifecycle.Received(1).StopActiveConnectionAsync();
     }
 
     [Test]
@@ -175,17 +178,17 @@ public class MainLayoutTests : BunitTestContext
     }
 
     [Test]
-    public async Task ReconnectStopButton_AwaitsStopAsync()
+    public async Task ReconnectStopButton_AwaitsStopActiveConnectionAsync()
     {
         _mockMqttClient.IsConnected.Returns(false);
         _mockMqttClient.IsStarted.Returns(true);
         var pending = new TaskCompletionSource();
-        _mockMqttClient.StopAsync().Returns(pending.Task);
+        _mockLifecycle.StopActiveConnectionAsync().Returns(pending.Task);
 
         var cut = RenderLayout();
         cut.FindAll("button").First(b => b.TextContent.Trim() == "Stop").Click();
 
-        await _mockMqttClient.Received(1).StopAsync();
+        await _mockLifecycle.Received(1).StopActiveConnectionAsync();
         pending.SetResult();
     }
 
@@ -194,7 +197,7 @@ public class MainLayoutTests : BunitTestContext
     {
         _mockMqttClient.IsConnected.Returns(false);
         _mockMqttClient.IsStarted.Returns(true);
-        _mockMqttClient.StopAsync().Returns(Task.FromException(new InvalidOperationException("boom")));
+        _mockLifecycle.StopActiveConnectionAsync().Returns(Task.FromException(new InvalidOperationException("boom")));
 
         var cut = RenderLayout();
         cut.FindAll("button").First(b => b.TextContent.Trim() == "Stop").Click();

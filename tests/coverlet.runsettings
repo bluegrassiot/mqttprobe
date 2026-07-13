@@ -6,7 +6,7 @@
         <Configuration>
           <Format>opencover</Format>
           <!-- Exclude test assemblies and untestable auto-generated Web host infrastructure -->
-          <Exclude>[MqttProbe.Tests]*,[MqttProbe.IntegrationTests]*,[MqttProbe.E2ETests]*,[MqttProbe.Web]Program*,[MqttProbe.Web]MqttProbe.Routes,[MqttProbe.Web]AspNetCoreGeneratedDocument.*,[MqttProbe.Web]MqttProbe.Web.Services.WebClipboardService</Exclude>
+          <Exclude>[MqttProbe.Tests]*,[MqttProbe.TestInfrastructure]*,[MqttProbe.IntegrationTests]*,[MqttProbe.E2ETests]*,[MqttProbe.Web]Program*,[MqttProbe.Web]MqttProbe.Routes,[MqttProbe.Web]AspNetCoreGeneratedDocument.*,[MqttProbe.Web]MqttProbe.Web.Services.WebClipboardService</Exclude>
           <ExcludeByFile>**/SparkplugBProtobuf.cs,**/*.g.cs,**/*.Designer.cs</ExcludeByFile>
           <!-- Include only production assemblies -->
           <Include>[MqttProbe.Shared]*,[MqttProbe.Web]*</Include>

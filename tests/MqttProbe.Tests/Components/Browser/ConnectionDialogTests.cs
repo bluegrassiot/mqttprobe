@@ -8,7 +8,9 @@ using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Security;
 using MqttProbe.Shared.Tests.TestHelpers;
+using MqttProbe.Tests.Services.Security.TestHelpers;
 using MudBlazor;
 
 namespace MqttProbe.Shared.Tests.Components.Browser;
@@ -24,6 +26,9 @@ public class ConnectionDialogTests : BunitTestContext
     private IMqttOptionsBuilder _mockOptionsBuilder = null!;
     private IBrokerStateResetCoordinator _mockCoordinator = null!;
     private IRenderedComponent<MudDialogProvider> _dialogProvider = null!;
+    private ICertificateAssetStore _mockCertStore = null!;
+    private ICertificateFilePicker _mockFilePicker = null!;
+    private ICertificateInputCapability _mockInputCapability = null!;
 
     private Func<MqttClientConnectedEventArgs, Task>? _connectedHandler;
     private Func<ConnectingFailedEventArgs, Task>? _failedHandler;
@@ -38,6 +43,10 @@ public class ConnectionDialogTests : BunitTestContext
         _mockSessionState = Substitute.For<ISessionState>();
         _mockOptionsBuilder = Substitute.For<IMqttOptionsBuilder>();
         _mockCoordinator = Substitute.For<IBrokerStateResetCoordinator>();
+        _mockCertStore = Substitute.For<ICertificateAssetStore>();
+        _mockFilePicker = Substitute.For<ICertificateFilePicker>();
+        _mockInputCapability = Substitute.For<ICertificateInputCapability>();
+        _mockInputCapability.UsesInputFileComponent.Returns(false);
 
         _mockConfigMgr.Config.Returns(new AppConfiguration());
         _mockMsgStore.Start().Returns(Task.CompletedTask);
@@ -65,6 +74,10 @@ public class ConnectionDialogTests : BunitTestContext
         Services.AddSingleton(Substitute.For<ILogger<ConnectionDialog>>());
         Services.AddSingleton(Substitute.For<IChartDataService>());
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
+        Services.AddSingleton(Substitute.For<IConnectionSessionLifecycle>());
+        Services.AddSingleton(_mockCertStore);
+        Services.AddSingleton(_mockFilePicker);
+        Services.AddSingleton(_mockInputCapability);
 
         EnsureMudProviders();
 
@@ -656,5 +669,156 @@ public class ConnectionDialogTests : BunitTestContext
             .First(b => b.TextContent.Contains("Identity"));
         identityBtn.ClassName.Should().Contain("active");
         _dialogProvider.Markup.Should().Contain("Name");
+    }
+
+    [Test]
+    public async Task TlsEnabled_ShowsClientCertificateSection()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TLS", Host = "tls.local", Port = 8883, UseTls = true }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Markup.Should().Contain("Client Certificate");
+    }
+
+    [Test]
+    public async Task TlsDisabled_HidesClientCertificateSection()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "Plain", Host = "plain.local", Port = 1883, UseTls = false }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Markup.Should().NotContain("Client Certificate");
+    }
+
+    [Test]
+    public async Task ConnectionChanged_WithExistingAsset_ShowsSummary()
+    {
+        var cert = TestCertFactory.CreateRsaCert();
+        _mockCertStore.LoadAsync(Arg.Any<Guid>(), "existing-asset")
+            .Returns(new ClientCertificateBundle(cert));
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection
+            {
+                Name = "CertConn", Host = "tls.local", Port = 8883,
+                UseTls = true, ClientCertificateAssetId = "existing-asset"
+            }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Markup.Should().Contain("Certificate loaded");
+    }
+
+    [Test]
+    public async Task ConnectionChanged_MissingAsset_ShowsUnavailableError()
+    {
+        _mockCertStore.LoadAsync(Arg.Any<Guid>(), "missing-asset")
+            .Returns((ClientCertificateBundle?)null);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection
+            {
+                Name = "CertConn", Host = "tls.local", Port = 8883,
+                UseTls = true, ClientCertificateAssetId = "missing-asset"
+            }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Markup.Should().Contain("unavailable or corrupt");
+    }
+
+    [Test]
+    public async Task RemoveCertificate_ClearsAssetId_ShowsImportControls()
+    {
+        var cert = TestCertFactory.CreateRsaCert();
+        _mockCertStore.LoadAsync(Arg.Any<Guid>(), "old-asset")
+            .Returns(new ClientCertificateBundle(cert));
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection
+            {
+                Name = "CertConn", Host = "tls.local", Port = 8883,
+                UseTls = true, ClientCertificateAssetId = "old-asset"
+            }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Remove certificate']").Click();
+
+        _dialogProvider.Markup.Should().Contain("PFX/P12");
+        _dialogProvider.Markup.Should().NotContain("Certificate loaded");
+    }
+
+    [Test]
+    public async Task CertificateModeToggle_SwitchesBetweenPfxAndPem()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TLS", Host = "tls.local", Port = 8883, UseTls = true }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        // Default is PFX mode
+        _dialogProvider.Markup.Should().Contain("Select PFX/P12 file");
+
+        // Click PEM toggle item
+        var pemItem = _dialogProvider.Find(".mud-toggle-item");
+        // The first toggle item is PFX (default), the second is PEM
+        var toggleItems = _dialogProvider.FindAll(".mud-toggle-item");
+        var pemToggle = toggleItems.First(i => i.TextContent.Trim() == "PEM");
+        pemToggle.Click();
+
+        _dialogProvider.Markup.Should().Contain("Select certificate PEM");
+        _dialogProvider.Markup.Should().Contain("Select private key PEM");
+    }
+
+    [Test]
+    public async Task PasswordField_RendersForCertInput()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TLS", Host = "tls.local", Port = 8883, UseTls = true }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Markup.Should().Contain("PFX Password");
+    }
+
+    [Test]
+    public async Task Connect_BlocksWhenCertificateUnavailable()
+    {
+        _mockCertStore.LoadAsync(Arg.Any<Guid>(), "bad-asset")
+            .Returns((ClientCertificateBundle?)null);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection
+            {
+                Name = "CertConn", Host = "tls.local", Port = 8883,
+                UseTls = true, ClientCertificateAssetId = "bad-asset"
+            }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        _dialogProvider.Markup.Should().Contain("unavailable or corrupt");
+        await _mockClient.DidNotReceive().StartAsync(Arg.Any<ManagedMqttClientOptions>());
     }
 }

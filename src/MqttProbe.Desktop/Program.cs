@@ -5,6 +5,7 @@ using MQTTnet;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Layout;
 using MqttProbe.Desktop.Interop;
+using MqttProbe.Desktop.Services;
 using MqttProbe.Services;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
@@ -48,11 +49,23 @@ internal static class Program
         var client = new MqttFactory().CreateManagedMqttClient();
         builder.Services.AddSingleton(client);
         builder.Services.AddSingleton<ISessionState, SessionState>();
-        builder.Services.AddSingleton<IEmulationService, EmulationService>();
+        builder.Services.AddSingleton<IEmulationService>(sp =>
+            new EmulationService(
+                sp.GetRequiredService<ISettingsStore>(),
+                sp.GetRequiredService<ISparkplugNodeFactory>(),
+                sp.GetRequiredService<ISessionState>(),
+                sp.GetRequiredService<IManagedMqttClient>(),
+                sp.GetRequiredService<IUxMetricsService>(),
+                sp.GetRequiredService<ICertificateAssetStore>(),
+                sp.GetRequiredService<ICertificateSessionQuarantine>(),
+                sp.GetRequiredService<ILogger<EmulationService>>()));
         builder.Services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
         builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
         builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
-        builder.Services.AddSingleton<IMqttOptionsBuilder, MqttOptionsBuilder>();
+        builder.Services.AddSingleton<IMqttOptionsBuilder>(sp =>
+            new MqttOptionsBuilder(sp.GetRequiredService<ICertificateAssetStore>()));
+        builder.Services.AddSingleton<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
+        builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
         builder.Services.AddSingleton<IUxMetricsService, UxMetricsService>();
         builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
         builder.Services.AddSingleton<IAppInfoService, DesktopAppInfoService>();
@@ -64,14 +77,34 @@ internal static class Program
         var secretStorage = new DesktopSecretStorage();
         builder.Services.AddSingleton<ISecretStorage>(secretStorage);
 
+        builder.Services.AddSingleton<IPhotinoWindowAccessor, PhotinoWindowAccessor>();
+        builder.Services.AddSingleton<ICertificateEnvelopeKeyStore>(sp =>
+            new DesktopCertificateEnvelopeKeyStore(sp.GetRequiredService<ISecretStorage>()));
+        builder.Services.AddSingleton<IFileProtector, DefaultFileProtector>();
+
         var configDir = Path.Combine(
             Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")
                 ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config"),
             "mqttprobe");
         Directory.CreateDirectory(configDir);
         var configPath = Path.Combine(configDir, "appsettings.json");
-        var settingsStore = new SettingsStore(configPath, isMobile: false, logger: null);
-        builder.Services.AddSingleton<ISettingsStore>(settingsStore);
+        builder.Services.AddSingleton<ISettingsStore>(sp =>
+            new SettingsStore(configPath, isMobile: false,
+                logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
+
+        builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
+        {
+            var store = new CertificateAssetStore(
+                sp.GetRequiredService<ICertificateEnvelopeKeyStore>(),
+                configDir,
+                sp.GetRequiredService<ILogger<CertificateAssetStore>>());
+            return store;
+        });
+        builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
+        builder.Services.AddSingleton<ICertificateFilePicker>(sp =>
+            new DesktopCertificateFilePicker(sp.GetRequiredService<IPhotinoWindowAccessor>()));
+        builder.Services.AddSingleton<ICertificateInputCapability, DesktopCertificateInputCapability>();
+        builder.Services.AddSingleton<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
 
         builder.Services.AddScoped<IClipboardService, DesktopClipboardService>();
         builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
@@ -85,7 +118,9 @@ internal static class Program
 
         var app = builder.Build();
 
-        settingsStore.LoadAsync(secretStorage).GetAwaiter().GetResult();
+        app.Services.GetRequiredService<IPhotinoWindowAccessor>().Window = app.MainWindow;
+        var resolvedSettingsStore = app.Services.GetRequiredService<ISettingsStore>();
+        resolvedSettingsStore.LoadAsync(secretStorage, app.Services.GetService<ICertificateAssetStore>(), app.Services.GetService<ICertificateEnvelopeKeyStore>()).GetAwaiter().GetResult();
 
         // .ico for the Win32 window/titlebar; .png for the Linux WM/dock.
         var iconFile = OperatingSystem.IsWindows() ? "icon.ico" : "icon.png";

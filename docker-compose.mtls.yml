@@ -1,0 +1,43 @@
+# Full stack for client certificate (mTLS) lab testing.
+# Prerequisites:
+#   python scripts/generate-mtls-certs.py
+# Then:
+#   docker compose -f docker-compose.mtls.yml up -d
+#
+# Import deploy/mtls/certs/client.pfx (password changeme) in MQTTProbe.
+# Connect to 127.0.0.1:8883 with Use TLS and Allow untrusted certificate.
+
+services:
+  mqttprobe:
+    image: bluegrassiot/mqttprobe:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - mqttprobe-config:/app/config
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    networks:
+      - mqttprobe-net
+    restart: unless-stopped
+
+  # mTLS Mosquitto: TLS listeners require a client certificate signed by the lab CA.
+  # Plain 1883/9001 remain anonymous for comparison. Lab only — do not expose publicly.
+  mosquitto:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./deploy/mtls/certs:/certs:ro
+      - ./deploy/mtls/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "1883:1883"   # Plain MQTT (no client cert)
+      - "8883:8883"   # MQTTS + require client cert
+      - "9001:9001"   # WebSocket (no client cert)
+      - "9002:9002"   # WSS + require client cert
+    networks:
+      - mqttprobe-net
+    restart: unless-stopped
+
+volumes:
+  mqttprobe-config:
+
+networks:
+  mqttprobe-net:

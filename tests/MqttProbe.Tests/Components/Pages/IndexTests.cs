@@ -385,6 +385,7 @@ public class NotFoundPageTests : BunitTestContext
         Services.AddSingleton(sessionState);
         Services.AddSingleton(Substitute.For<IMessageStoreManager>());
         Services.AddSingleton(Substitute.For<IDialogService>());
+        Services.AddSingleton(Substitute.For<IConnectionSessionLifecycle>());
 
         var mockConfig = Substitute.For<ISettingsStore>();
         mockConfig.Config.Returns(new AppConfiguration());

@@ -77,18 +77,6 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     }
 });
 
-// Web circuits are independent user sessions, so MQTT and UI state services stay scoped per circuit.
-builder.Services.AddScoped<IManagedMqttClient>(_ => new MqttFactory().CreateManagedMqttClient());
-builder.Services.AddScoped<ISessionState, SessionState>();
-builder.Services.AddScoped<IEmulationService, EmulationService>();
-builder.Services.AddScoped<IMessageStoreManager, MessageStoreManager>();
-builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
-builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
-builder.Services.AddScoped<IMqttOptionsBuilder, MqttOptionsBuilder>();
-builder.Services.AddScoped<IUxMetricsService, UxMetricsService>();
-builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
-builder.Services.AddScoped<IClipboardService, WebClipboardService>();
-
 var configDir = Path.Combine(builder.Environment.ContentRootPath, "config");
 
 var dpBuilder = builder.Services.AddDataProtection()
@@ -113,8 +101,45 @@ builder.Services.AddSingleton<ISecretStorage>(sp =>
         sp.GetRequiredService<IDataProtectionProvider>(),
         Path.Combine(configDir, "secrets.dat")));
 
-var settingsStore = new SettingsStore(Path.Combine(configDir, "appsettings.json"));
-builder.Services.AddSingleton<ISettingsStore>(settingsStore);
+// Web circuits are independent user sessions, so MQTT and UI state services stay scoped per circuit.
+builder.Services.AddScoped<IManagedMqttClient>(_ => new MqttFactory().CreateManagedMqttClient());
+builder.Services.AddScoped<ISessionState, SessionState>();
+builder.Services.AddSingleton<ISettingsStore>(sp =>
+    new SettingsStore(Path.Combine(configDir, "appsettings.json"),
+        logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
+builder.Services.AddSingleton<ICertificateEnvelopeKeyStore>(sp =>
+    new WebCertificateEnvelopeKeyStore(sp.GetRequiredService<ISecretStorage>()));
+builder.Services.AddSingleton<IFileProtector, DefaultFileProtector>();
+builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
+{
+    var store = new CertificateAssetStore(
+        sp.GetRequiredService<ICertificateEnvelopeKeyStore>(),
+        configDir,
+        sp.GetRequiredService<ILogger<CertificateAssetStore>>());
+    return store;
+});
+builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
+builder.Services.AddSingleton<ICertificateFilePicker, WebCertificateFilePicker>();
+builder.Services.AddSingleton<ICertificateInputCapability, WebCertificateInputCapability>();
+builder.Services.AddScoped<IEmulationService>(sp =>
+    new EmulationService(
+        sp.GetRequiredService<ISettingsStore>(),
+        sp.GetRequiredService<ISparkplugNodeFactory>(),
+        sp.GetRequiredService<ISessionState>(),
+        sp.GetRequiredService<IManagedMqttClient>(),
+        sp.GetRequiredService<IUxMetricsService>(),
+        sp.GetRequiredService<ICertificateAssetStore>(),
+        sp.GetRequiredService<ICertificateSessionQuarantine>(),
+        sp.GetRequiredService<ILogger<EmulationService>>()));
+builder.Services.AddScoped<IMessageStoreManager, MessageStoreManager>();
+builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
+builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
+builder.Services.AddScoped<IMqttOptionsBuilder>(sp =>
+    new MqttOptionsBuilder(sp.GetRequiredService<ICertificateAssetStore>()));
+builder.Services.AddScoped<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
+builder.Services.AddScoped<IUxMetricsService, UxMetricsService>();
+builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
+builder.Services.AddScoped<IClipboardService, WebClipboardService>();
 builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
 builder.Services.AddSingleton<IUpdateService, NoOpUpdateService>();
 builder.Services.AddSingleton<IUserAuthService, SingleAdminUserAuthService>();
@@ -128,7 +153,8 @@ builder.Services.AddScoped<IThemes, Themes>();
 var app = builder.Build();
 
 var secretStorage = app.Services.GetRequiredService<ISecretStorage>();
-await settingsStore.LoadAsync(secretStorage);
+var settingsStore = app.Services.GetRequiredService<ISettingsStore>();
+await settingsStore.LoadAsync(secretStorage, app.Services.GetService<ICertificateAssetStore>(), app.Services.GetService<ICertificateEnvelopeKeyStore>());
 
 if (!app.Environment.IsDevelopment())
 {

@@ -11,6 +11,7 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
 @inject IThemes Themes
+@inject IConnectionSessionLifecycle SessionLifecycle
 
 <CascadingValue Value="Themes.IsDarkMode" Name="IsDarkMode">
 <MudThemeProvider Theme="@Themes.CurrentTheme" IsDarkMode="@Themes.IsDarkMode"/>
@@ -130,7 +131,7 @@
     {
         try
         {
-            await MqttClient.StopAsync();
+            await SessionLifecycle.StopActiveConnectionAsync();
         }
         catch (Exception ex)
         {

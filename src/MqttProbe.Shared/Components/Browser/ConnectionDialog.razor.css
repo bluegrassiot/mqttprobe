@@ -83,6 +83,57 @@
     animation: signal-breathe 1.6s ease-in-out infinite;
 }
 
+.client-cert-section {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+}
+
+.client-cert-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+}
+
+.client-cert-file-btn {
+    width: 100%;
+    justify-content: flex-start;
+}
+
+.client-cert-file-input {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 4px 12px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-primary);
+    background: transparent;
+    cursor: pointer;
+    transition: border-color 150ms ease-out, background 150ms ease-out;
+    min-height: 32px;
+    box-sizing: border-box;
+}
+
+.client-cert-file-input:hover {
+    border-color: var(--mud-palette-primary);
+    background: rgba(249, 115, 22, 0.05);
+}
+
+.client-cert-file-input ::deep input[type="file"] {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
 /* Compact step selector — visible only on mobile */
 .step-selector {
     display: none;

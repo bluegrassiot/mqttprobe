@@ -86,11 +86,45 @@ jobs:
           path: TestResults/
           retention-days: 7
 
+  test-integration:
+    name: Test (Integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.x'
+
+      - name: Restore NuGet cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
+          restore-keys: nuget-
+
+      - name: Integration tests
+        run: |
+          dotnet test tests/MqttProbe.IntegrationTests/MqttProbe.IntegrationTests.csproj \
+            -p:TreatWarningsAsErrors=true \
+            -p:MSBuildTreatWarningsAsErrors=true \
+            --logger:trx \
+            --results-directory ./TestResults/integration
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: integration-test-results
+          path: TestResults/
+          retention-days: 7
+
   # ── Stage: build ─────────────────────────────────────────────────────────────
 
   build-blazor:
     name: Build (Blazor Web)
-    needs: test
+    needs: [test, test-integration]
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
@@ -123,7 +157,7 @@ jobs:
 
   build-docker:
     name: Build (Docker)
-    needs: test
+    needs: [test, test-integration]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -169,7 +203,7 @@ jobs:
 
   build-maui-windows:
     name: Build (MAUI Windows)
-    needs: test
+    needs: [test, test-integration]
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -219,7 +253,7 @@ jobs:
 
   build-maui-android:
     name: Build (MAUI Android)
-    needs: test
+    needs: [test, test-integration]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -270,7 +304,7 @@ jobs:
 
   build-desktop-linux:
     name: Build (Desktop Linux)
-    needs: test
+    needs: [test, test-integration]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

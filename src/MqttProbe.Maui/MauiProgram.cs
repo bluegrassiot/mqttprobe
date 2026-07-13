@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Layout;
+using MqttProbe.Maui.Services;
 using MqttProbe.Services;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
@@ -50,11 +51,23 @@ public static class MauiProgram
         var client = new MqttFactory().CreateManagedMqttClient();
         builder.Services.AddSingleton(client);
         builder.Services.AddSingleton<ISessionState, SessionState>();
-        builder.Services.AddSingleton<IEmulationService, EmulationService>();
+        builder.Services.AddSingleton<IEmulationService>(sp =>
+            new EmulationService(
+                sp.GetRequiredService<ISettingsStore>(),
+                sp.GetRequiredService<ISparkplugNodeFactory>(),
+                sp.GetRequiredService<ISessionState>(),
+                sp.GetRequiredService<IManagedMqttClient>(),
+                sp.GetRequiredService<IUxMetricsService>(),
+                sp.GetRequiredService<ICertificateAssetStore>(),
+                sp.GetRequiredService<ICertificateSessionQuarantine>(),
+                sp.GetRequiredService<ILogger<EmulationService>>()));
         builder.Services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
         builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
         builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
-        builder.Services.AddSingleton<IMqttOptionsBuilder, MqttOptionsBuilder>();
+        builder.Services.AddSingleton<IMqttOptionsBuilder>(sp =>
+            new MqttOptionsBuilder(sp.GetRequiredService<ICertificateAssetStore>()));
+        builder.Services.AddSingleton<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
+        builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
         builder.Services.AddSingleton<IUxMetricsService, UxMetricsService>();
         builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
         builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
@@ -71,6 +84,36 @@ public static class MauiProgram
         var secretStorage = new MauiSecretStorage();
         builder.Services.AddSingleton<ISecretStorage>(secretStorage);
 
+#if IOS
+        builder.Services.AddSingleton<ICertificateEnvelopeKeyStore, iOSCertificateEnvelopeKeyStore>();
+        builder.Services.AddSingleton<IFileProtector>(new iOSFileProtector());
+        builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
+        {
+            var baseStore = new CertificateAssetStore(
+                sp.GetRequiredService<ICertificateEnvelopeKeyStore>(),
+                FileSystem.Current.AppDataDirectory,
+                sp.GetRequiredService<ILogger<CertificateAssetStore>>());
+            return new MauiCertificateAssetStore(
+                baseStore,
+                baseStore,
+                sp.GetRequiredService<ICertificateEnvelopeKeyStore>(),
+                baseStore.CertificatesDirectory,
+                new iOSFileProtector(),
+                sp.GetRequiredService<ILogger<MauiCertificateAssetStore>>());
+        });
+#else
+        builder.Services.AddSingleton<ICertificateEnvelopeKeyStore>(sp =>
+            new MauiCertificateEnvelopeKeyStore(sp.GetRequiredService<ISecretStorage>()));
+        builder.Services.AddSingleton<IFileProtector, DefaultFileProtector>();
+        builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
+            new CertificateAssetStore(
+                sp.GetRequiredService<ICertificateEnvelopeKeyStore>(),
+                FileSystem.Current.AppDataDirectory,
+                sp.GetRequiredService<ILogger<CertificateAssetStore>>()));
+#endif
+        builder.Services.AddSingleton<ICertificateFilePicker, MauiCertificateFilePicker>();
+        builder.Services.AddSingleton<ICertificateInputCapability, MauiCertificateInputCapability>();
+
         var configDir = Path.Combine(FileSystem.Current.AppDataDirectory, "config");
 #if WINDOWS
         // v1.0.1 and earlier shipped with the MAUI template's placeholder publisher
@@ -82,8 +125,9 @@ public static class MauiProgram
 #endif
         var configPath = Path.Combine(configDir, "appsettings.json");
         var isMobile = DeviceInfo.Idiom == DeviceIdiom.Phone || DeviceInfo.Idiom == DeviceIdiom.Tablet;
-        var settingsStore = new SettingsStore(configPath, isMobile, null);
-        builder.Services.AddSingleton<ISettingsStore>(settingsStore);
+        builder.Services.AddSingleton<ISettingsStore>(sp =>
+            new SettingsStore(configPath, isMobile,
+                logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
 
         builder.Services.AddScoped<IClipboardService, MauiClipboardService>();
         builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();

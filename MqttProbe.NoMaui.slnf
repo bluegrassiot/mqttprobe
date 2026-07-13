@@ -4,6 +4,8 @@
     "projects": [
       "src\\MqttProbe.Shared\\MqttProbe.Shared.csproj",
       "src\\MqttProbe.Web\\MqttProbe.Web.csproj",
+      "tests\\MqttProbe.TestInfrastructure\\MqttProbe.TestInfrastructure.csproj",
+      "tests\\MqttProbe.IntegrationTests\\MqttProbe.IntegrationTests.csproj",
       "tests\\MqttProbe.Tests\\MqttProbe.Shared.Tests.csproj"
     ]
   }

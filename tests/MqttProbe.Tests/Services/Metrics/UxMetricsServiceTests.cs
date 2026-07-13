@@ -21,7 +21,7 @@ public class UxMetricsServiceTests
         _mockSettings.Config.Returns(new AppConfiguration());
         _mockHealthCollector = Substitute.For<IAppHealthMetricsCollector>();
         _mockHealthCollector.GetSnapshot().Returns(new AppHealthMetricsSnapshot(
-            Available: true, CpuUsagePercent: 1.0, ManagedHeapMb: 2.0,
+            CpuUsagePercent: 1.0, ManagedHeapMb: 2.0,
             WorkingSetMb: 3.0, ThreadCount: 4, ThreadPoolQueueLength: 5,
             GcGen2Collections: 6, UptimeSeconds: 7.0));
         _service = new UxMetricsService(_logger, _mockSettings, _mockHealthCollector);
@@ -105,7 +105,7 @@ public class UxMetricsServiceTests
     {
         var snapshot = _service.GetSnapshot();
 
-        snapshot.AppHealth.Available.Should().BeTrue();
+        snapshot.AppHealth.HasAny.Should().BeTrue();
         snapshot.AppHealth.CpuUsagePercent.Should().Be(1.0);
         snapshot.AppHealth.ManagedHeapMb.Should().Be(2.0);
         snapshot.AppHealth.WorkingSetMb.Should().Be(3.0);
@@ -157,7 +157,7 @@ public class UxMetricsServiceTests
 
         var snapshot = _service.GetSnapshot();
         // App health is delegated to collector, unaffected by emulation clear
-        snapshot.AppHealth.Available.Should().BeTrue();
+        snapshot.AppHealth.HasAny.Should().BeTrue();
         snapshot.AppHealth.ManagedHeapMb.Should().BeGreaterThanOrEqualTo(0);
     }
 
@@ -165,20 +165,20 @@ public class UxMetricsServiceTests
     public void GetSnapshot_WhenCollectorUnavailable_SetsAppHealthUnavailable()
     {
         _mockHealthCollector.GetSnapshot().Returns(new AppHealthMetricsSnapshot(
-            Available: false, CpuUsagePercent: 0, ManagedHeapMb: 0,
-            WorkingSetMb: 0, ThreadCount: 0, ThreadPoolQueueLength: 0,
-            GcGen2Collections: 0, UptimeSeconds: 0));
+            CpuUsagePercent: null, ManagedHeapMb: 2.0,
+            WorkingSetMb: null, ThreadCount: null, ThreadPoolQueueLength: 5,
+            GcGen2Collections: 6, UptimeSeconds: 7.0));
 
         var snapshot = _service.GetSnapshot();
 
-        snapshot.AppHealth.Available.Should().BeFalse();
-        snapshot.AppHealth.CpuUsagePercent.Should().Be(0);
-        snapshot.AppHealth.ManagedHeapMb.Should().Be(0);
-        snapshot.AppHealth.WorkingSetMb.Should().Be(0);
-        snapshot.AppHealth.ThreadCount.Should().Be(0);
-        snapshot.AppHealth.ThreadPoolQueueLength.Should().Be(0);
-        snapshot.AppHealth.GcGen2Collections.Should().Be(0);
-        snapshot.AppHealth.UptimeSeconds.Should().Be(0);
+        snapshot.AppHealth.HasAny.Should().BeTrue();
+        snapshot.AppHealth.CpuUsagePercent.Should().BeNull();
+        snapshot.AppHealth.ManagedHeapMb.Should().Be(2.0);
+        snapshot.AppHealth.WorkingSetMb.Should().BeNull();
+        snapshot.AppHealth.ThreadCount.Should().BeNull();
+        snapshot.AppHealth.ThreadPoolQueueLength.Should().Be(5);
+        snapshot.AppHealth.GcGen2Collections.Should().Be(6);
+        snapshot.AppHealth.UptimeSeconds.Should().Be(7.0);
     }
 
     [Test]
@@ -186,16 +186,16 @@ public class UxMetricsServiceTests
     {
         var snapshot = _service.GetSnapshot();
 
-        snapshot.AppHealth.Available.Should().BeTrue();
+        snapshot.AppHealth.HasAny.Should().BeTrue();
     }
 
     [Test]
     public void GetSnapshot_WhenCollectorUnavailable_PreservesNonHealthMetrics()
     {
         _mockHealthCollector.GetSnapshot().Returns(new AppHealthMetricsSnapshot(
-            Available: false, CpuUsagePercent: 0, ManagedHeapMb: 0,
-            WorkingSetMb: 0, ThreadCount: 0, ThreadPoolQueueLength: 0,
-            GcGen2Collections: 0, UptimeSeconds: 0));
+            CpuUsagePercent: null, ManagedHeapMb: 2.0,
+            WorkingSetMb: null, ThreadCount: null, ThreadPoolQueueLength: 5,
+            GcGen2Collections: 6, UptimeSeconds: 7.0));
 
         _service.RecordConnectAttempt();
         _service.RecordPublishOutcome(true);
@@ -209,7 +209,7 @@ public class UxMetricsServiceTests
         snapshot.MessagesProcessed.Should().Be(1);
         snapshot.MessagesProcessedByFormat.Should().ContainKey("Json");
         snapshot.EmulatorPublishersOnline.Should().Be(2);
-        snapshot.AppHealth.Available.Should().BeFalse();
+        snapshot.AppHealth.HasAny.Should().BeTrue();
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

@@ -405,7 +405,7 @@ public class NotFoundPageTests : BunitTestContext
             ChartFunnelBySource: new Dictionary<string, long>(),
             MaxDisplayMessages: 0, CurrentDisplayedMessageCount: 0,
             AppHealth: new AppHealthMetricsSnapshot(
-                Available: true, CpuUsagePercent: 0, ManagedHeapMb: 0,
+                CpuUsagePercent: 0, ManagedHeapMb: 0,
                 WorkingSetMb: 0, ThreadCount: 0, ThreadPoolQueueLength: 0,
                 GcGen2Collections: 0, UptimeSeconds: 0),
             EmulatorPublishersOnline: 0,

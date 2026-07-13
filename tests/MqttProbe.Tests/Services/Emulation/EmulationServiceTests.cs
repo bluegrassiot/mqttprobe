@@ -70,7 +70,7 @@ public class EmulationServiceTests
         _mockQuarantine = Substitute.For<ICertificateSessionQuarantine>();
         _mockHealthCollector = Substitute.For<IAppHealthMetricsCollector>();
         _mockHealthCollector.GetSnapshot().Returns(new AppHealthMetricsSnapshot(
-            Available: true, CpuUsagePercent: 0, ManagedHeapMb: 0,
+            CpuUsagePercent: 0, ManagedHeapMb: 0,
             WorkingSetMb: 0, ThreadCount: 0, ThreadPoolQueueLength: 0,
             GcGen2Collections: 0, UptimeSeconds: 0));
 

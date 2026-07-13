@@ -10,7 +10,7 @@ namespace MqttProbe.Shared.Tests.Services.Emulation;
 public class NodeHealthMetricsProviderTests
 {
     [Test]
-    public void BuildSnapshot_WhenAvailable_IncludesProcessMetrics()
+    public void BuildSnapshot_WhenAllAvailable_IncludesAllProcessMetrics()
     {
         using var collector = new AppHealthMetricsCollector(
             Substitute.For<ILogger<AppHealthMetricsCollector>>());
@@ -32,32 +32,36 @@ public class NodeHealthMetricsProviderTests
     }
 
     [Test]
-    public void BuildSnapshot_WhenUnavailable_OmitsProcessMetrics()
+    public void BuildSnapshot_WhenProcessUnavailable_OmitsOnlyProcessMetrics()
     {
         using var collector = new AppHealthMetricsCollector(
             Substitute.For<ILogger<AppHealthMetricsCollector>>(),
-            getCpuTime: static () => throw new PlatformNotSupportedException());
+            getCpuTime: static _ => throw new PlatformNotSupportedException(),
+            getWorkingSet64: static _ => throw new PlatformNotSupportedException(),
+            getThreadCount: static _ => throw new PlatformNotSupportedException());
         var provider = new NodeHealthMetricsProvider(collector);
 
         var metrics = provider.BuildSnapshot(publishersOnline: 1, publishCycles: 10);
 
         var names = metrics.Select(m => m.Name).ToList();
         names.Should().NotContain("CPU Usage (%)");
-        names.Should().NotContain("Managed Heap (MB)");
+        names.Should().Contain("Managed Heap (MB)");
         names.Should().NotContain("Working Set (MB)");
         names.Should().NotContain("Thread Count");
-        names.Should().NotContain("ThreadPool Queue");
-        names.Should().NotContain("GC Gen2 Collections");
-        names.Should().NotContain("Uptime (s)");
-        metrics.Count.Should().Be(2);
+        names.Should().Contain("ThreadPool Queue");
+        names.Should().Contain("GC Gen2 Collections");
+        names.Should().Contain("Uptime (s)");
+        names.Should().Contain("Publishers Online");
+        names.Should().Contain("Publish Cycles");
+        metrics.Count.Should().Be(6);
     }
 
     [Test]
-    public void BuildSnapshot_WhenUnavailable_KeepsEmulationMetrics()
+    public void BuildSnapshot_WhenProcessUnavailable_KeepsEmulationMetrics()
     {
         using var collector = new AppHealthMetricsCollector(
             Substitute.For<ILogger<AppHealthMetricsCollector>>(),
-            getCpuTime: static () => throw new PlatformNotSupportedException());
+            getCpuTime: static _ => throw new PlatformNotSupportedException());
         var provider = new NodeHealthMetricsProvider(collector);
 
         var metrics = provider.BuildSnapshot(publishersOnline: 3, publishCycles: 42);

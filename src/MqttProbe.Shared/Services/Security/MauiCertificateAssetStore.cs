@@ -32,7 +32,8 @@ public class MauiCertificateAssetStore : ICertificateAssetStore
 
     public async Task<string> ImportAsync(Guid ownerConnectionId, CertificateImportRequest request)
     {
-        var (assetId, tempPath) = await _pipeline.ImportStagedAsync(ownerConnectionId, request);
+        var iosRequest = request with { SkipCanonicalExport = true };
+        var (assetId, tempPath) = await _pipeline.ImportStagedAsync(ownerConnectionId, iosRequest);
 
         if (!_fileProtector.ApplyProtections(tempPath))
         {

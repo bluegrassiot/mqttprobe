@@ -4,4 +4,5 @@ public record CertificateImportRequest(
     CertificateInputMode Mode,
     byte[] CertificateBytes,
     byte[]? PrivateKeyBytes,
-    string? Password);
+    string? Password,
+    bool SkipCanonicalExport = false);

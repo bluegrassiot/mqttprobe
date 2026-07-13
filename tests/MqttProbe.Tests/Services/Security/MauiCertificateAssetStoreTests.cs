@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Security;
@@ -189,6 +190,36 @@ public class MauiCertificateAssetStoreTests
             Substitute.For<ILogger<MauiCertificateAssetStore>>());
 
         store.CertificatesDirectory.Should().Be(_baseStore.CertificatesDirectory);
+    }
+
+    [Test]
+    public async Task ImportAsync_StoresOriginalPassword_NotRandomGuid()
+    {
+        var protector = new StubFileProtector(applySucceeds: true);
+        var store = new MauiCertificateAssetStore(
+            _baseStore, _baseStore, _envelopeStore,
+            _baseStore.CertificatesDirectory, protector,
+            Substitute.For<ILogger<MauiCertificateAssetStore>>());
+
+        var (pfxBytes, password) = TestCertFactory.CreatePfx();
+        var ownerId = Guid.NewGuid();
+        var assetId = await store.ImportAsync(ownerId,
+            new CertificateImportRequest(CertificateInputMode.Pfx, pfxBytes, null, password));
+
+        var envelopeJson = await _envelopeStore.GetAsync($"cert-env-{assetId}");
+        envelopeJson.Should().NotBeNull();
+        var envelope = JsonSerializer.Deserialize<JsonElement>(envelopeJson!);
+        var storedPassword = envelope.GetProperty("p").GetString();
+
+        storedPassword.Should().Be(password);
+
+        Guid.TryParse(storedPassword, out _).Should().BeFalse(
+            "stored password should be the original, not a random GUID");
+
+        var bundle = await store.LoadAsync(ownerId, assetId);
+        bundle.Should().NotBeNull();
+        bundle!.Certificate.HasPrivateKey.Should().BeTrue();
+        bundle.Certificate.Dispose();
     }
 }
 

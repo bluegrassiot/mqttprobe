@@ -49,6 +49,110 @@ public class CertificateAssetStoreTests
         (await _envelopeStore.GetAsync($"cert-env-{assetId}")).Should().NotBeNull();
     }
 
+    // --- Skip-canonical-export tests (iOS raw PKCS#12 storage) ---
+
+    [Test]
+    public async Task ImportAsync_PfxSkipCanonicalExport_StoresOriginalPassword()
+    {
+        var (pfxBytes, password) = TestCertFactory.CreatePfx();
+        var request = new CertificateImportRequest(
+            CertificateInputMode.Pfx, pfxBytes, null, password,
+            SkipCanonicalExport: true);
+        var ownerId = Guid.NewGuid();
+
+        var assetId = await _store.ImportAsync(ownerId, request);
+
+        var envelopeJson = await _envelopeStore.GetAsync($"cert-env-{assetId}");
+        envelopeJson.Should().NotBeNull();
+        var envelope = JsonSerializer.Deserialize<JsonElement>(envelopeJson!);
+        var storedPassword = envelope.GetProperty("p").GetString();
+        storedPassword.Should().Be(password);
+    }
+
+    [Test]
+    public async Task ImportAsync_PfxSkipCanonicalExport_RoundTrip_ReturnsValidCertWithPrivateKey()
+    {
+        var (pfxBytes, password) = TestCertFactory.CreatePfx();
+        var ownerId = Guid.NewGuid();
+        var request = new CertificateImportRequest(
+            CertificateInputMode.Pfx, pfxBytes, null, password,
+            SkipCanonicalExport: true);
+        var assetId = await _store.ImportAsync(ownerId, request);
+
+        var bundle = await _store.LoadAsync(ownerId, assetId);
+
+        bundle.Should().NotBeNull();
+        bundle!.Certificate.HasPrivateKey.Should().BeTrue();
+        bundle.Certificate.Dispose();
+    }
+
+    [Test]
+    public async Task ImportAsync_PfxSkipCanonicalExport_StoredCiphertextIsOriginalBytes()
+    {
+        var (pfxBytes, password) = TestCertFactory.CreatePfx();
+        var ownerId = Guid.NewGuid();
+        var request = new CertificateImportRequest(
+            CertificateInputMode.Pfx, pfxBytes, null, password,
+            SkipCanonicalExport: true);
+        var assetId = await _store.ImportAsync(ownerId, request);
+
+        var blobPath = Path.Combine(_store.CertificatesDirectory, $"cert-{assetId}.bin");
+        var blob = await File.ReadAllBytesAsync(blobPath);
+
+        var headerAssetId = Encoding.ASCII.GetString(blob, 0, 36);
+        var headerOwner = Encoding.ASCII.GetString(blob, 36, 36);
+        var headerVersion = blob[72];
+
+        const int nonceLen = 12;
+        const int tagLen = 16;
+        var nonce = blob[73..(73 + nonceLen)];
+        var ciphertext = blob[(73 + nonceLen)..^tagLen];
+        var tag = blob[^tagLen..];
+
+        var envelopeJson = await _envelopeStore.GetAsync($"cert-env-{assetId}");
+        envelopeJson.Should().NotBeNull();
+        var envelope = JsonSerializer.Deserialize<JsonElement>(envelopeJson!);
+        var encKey = Convert.FromBase64String(envelope.GetProperty("k").GetString()!);
+
+        var aad = Encoding.UTF8.GetBytes($"{assetId}|{headerAssetId}|{headerOwner}|{headerVersion}");
+        var decrypted = new byte[ciphertext.Length];
+
+        using (var aes = new AesGcm(encKey, tagLen))
+        {
+            aes.Decrypt(nonce, ciphertext, tag, decrypted, aad);
+        }
+
+        decrypted.Should().Equal(pfxBytes);
+    }
+
+    [Test]
+    public async Task ImportAsync_PfxSkipCanonicalExport_WrongPassword_Throws()
+    {
+        var (pfxBytes, _) = TestCertFactory.CreatePfx();
+        var request = new CertificateImportRequest(
+            CertificateInputMode.Pfx, pfxBytes, null, "wrong",
+            SkipCanonicalExport: true);
+        var act = () => _store.ImportAsync(Guid.NewGuid(), request);
+        await act.Should().ThrowAsync<CertificateImportException>()
+            .WithMessage("*password*incorrect*corrupt*");
+    }
+
+    [Test]
+    public async Task ImportAsync_PfxSkipCanonicalExport_NoPrivateKey_Throws()
+    {
+        using var rsa = RSA.Create(2048);
+        var req = new CertificateRequest("CN=NoKey", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using var cert = req.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddHours(1));
+        using var pubOnlyCert = X509CertificateLoader.LoadCertificate(cert.Export(X509ContentType.Cert));
+        var pubOnlyPfx = pubOnlyCert.Export(X509ContentType.Pfx, "");
+        var request = new CertificateImportRequest(
+            CertificateInputMode.Pfx, pubOnlyPfx, null, "",
+            SkipCanonicalExport: true);
+        var act = () => _store.ImportAsync(Guid.NewGuid(), request);
+        await act.Should().ThrowAsync<CertificateImportException>()
+            .WithMessage("*private key*");
+    }
+
     // --- Step 4.3: Additional Import tests ---
 
     [Test]

@@ -313,6 +313,30 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
 
     private (byte[] pfxBytes, string internalPassword) ImportPfx(CertificateImportRequest request)
     {
+        if (request.SkipCanonicalExport)
+        {
+            X509Certificate2 cert;
+            try
+            {
+                cert = X509CertificateLoader.LoadPkcs12(
+                    request.CertificateBytes, request.Password,
+                    X509KeyStorageFlags.EphemeralKeySet);
+            }
+            catch (CryptographicException ex)
+            {
+                throw new CertificateImportException("The PFX password is incorrect or the file is corrupt.", ex);
+            }
+
+            if (!cert.HasPrivateKey)
+            {
+                cert.Dispose();
+                throw new CertificateImportException("The certificate does not contain a private key.");
+            }
+
+            cert.Dispose();
+            return (request.CertificateBytes, request.Password!);
+        }
+
         X509Certificate2 loadedCert;
         try
         {

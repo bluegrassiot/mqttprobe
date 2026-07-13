@@ -10,8 +10,8 @@
     <PackageVersion Include="Blazor.Lucide" Version="1.0.6" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
-    <PackageVersion Include="MessagePack" Version="3.1.7" />
-    <PackageVersion Include="MudBlazor" Version="9.6.0" />
+    <PackageVersion Include="MessagePack" Version="3.1.8" />
+    <PackageVersion Include="MudBlazor" Version="9.7.0" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.9" />
     <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.9" />
     <!-- MQTTnet v4 — pinned; SparkplugNet is incompatible with v5 -->

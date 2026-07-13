@@ -209,6 +209,7 @@ MqttProbe.slnx
 - Passwords are hashed with **PBKDF2-SHA256** (100,000 iterations, random salt, constant-time verification)
 - `config/appsettings.json` is restricted to **owner read/write only** (mode 600) on Linux/macOS
 - MQTT broker passwords are stored in **platform-native secure storage** — never in the config file
+- Client certificate payloads are stored in an AES-256-GCM-encrypted file; the AES key and certificate password are held separately in platform secret storage, see [Client Certificate Security](docs/client-certificate-security.md) for details
 - Authentication cookies are `HttpOnly`, `SameSite=Strict`, and expire after 8 hours with sliding renewal
 - No credentials are ever committed to the repository
 

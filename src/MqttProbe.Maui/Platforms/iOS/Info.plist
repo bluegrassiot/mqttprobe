@@ -50,9 +50,10 @@
 			<true/>
 		</dict>
 	</dict>
-	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
-	<key>CFBundleVersion</key>
-	<string>1.0.0</string>
+	<!-- CFBundleShortVersionString/CFBundleVersion are deliberately absent: the build sets
+	     them from ApplicationDisplayVersion/ApplicationVersion, but only via SetIfNotPresent,
+	     so a value here would win and pin every release to it. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

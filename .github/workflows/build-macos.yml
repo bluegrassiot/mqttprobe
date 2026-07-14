@@ -64,7 +64,10 @@ jobs:
         id: version
         run: |
           RAW="${{ inputs.version }}"
-          echo "value=${RAW#v}" >> "$GITHUB_OUTPUT"
+          version="${RAW#v}"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          IFS='.-' read -r major minor patch _ <<< "$version"
+          echo "code=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_OUTPUT"
 
       - name: Import signing certificate into temporary keychain
         env:
@@ -106,6 +109,7 @@ jobs:
           -p:CodesignEntitlements=Platforms/MacCatalyst/Entitlements.plist
           -p:UseHardenedRuntime=true
           -p:ApplicationDisplayVersion=${{ steps.version.outputs.value }}
+          -p:ApplicationVersion=${{ steps.version.outputs.code }}
 
       - name: Verify universal binary and signature
         run: |

@@ -289,12 +289,16 @@ deploy/mtls/certs/**
 
 # Git worktrees (per-feature isolation during execution)
 /.worktrees/
+
+# LLM files
 /.github/copilot-instructions.md
 /.claude
-/.obsidian
-/docs/superpowers
-/profile-output/
 /.opencode/
+/.obsidian
+docs/
+!docs/images
+
+# Misc artifacts
+/profile-output/
 /.playwright-mcp
-/docs/release-testing
 /src/MqttProbe.Web/Config/certificates

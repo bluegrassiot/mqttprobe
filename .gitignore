@@ -277,6 +277,9 @@ __pycache__/
 appsettings.Development.json
 appsettings.Local.json
 
+# Machine-specific MSBuild overrides (e.g. iOS TFM + Apple codesign identity)
+*.local.props
+
 # Per-deployment compose settings (copy from .env.example)
 /.env
 

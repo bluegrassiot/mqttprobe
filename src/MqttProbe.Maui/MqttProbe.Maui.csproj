@@ -1,5 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
+    <!-- Optional machine-specific overrides (iOS TFM + codesign identity) for building the
+         iOS app from Windows via a paired Mac. Gitignored; absent on CI and other machines,
+         which then use the committed Android + Windows defaults. Imported before the TFM
+         properties below so its override takes effect. -->
+    <Import Project="MqttProbe.Maui.local.props" Condition="Exists('MqttProbe.Maui.local.props')" />
+
     <PropertyGroup>
         <LangVersion>latest</LangVersion>
         <MqttProbeMauiWindowsTargetFrameworks>net10.0-android;net10.0-windows10.0.19041.0</MqttProbeMauiWindowsTargetFrameworks>
@@ -79,6 +85,9 @@
 	<PropertyGroup Condition="'$(TargetFramework)'=='net10.0-ios'">
 		<BuildIpa>True</BuildIpa>
 		<MtouchNoSymbolStrip>True</MtouchNoSymbolStrip>
+		<!-- CodesignKey/CodesignProvision are machine-specific (per Apple Developer account).
+		     Set them in MqttProbe.Maui.local.props (gitignored) to build/deploy iOS from Windows
+		     via a paired Mac. See that file's import at the top of this project. -->
 	</PropertyGroup>
 
     <PropertyGroup>

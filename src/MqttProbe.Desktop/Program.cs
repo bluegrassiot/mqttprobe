@@ -128,6 +128,10 @@ internal static class Program
         var iconFile = OperatingSystem.IsWindows() ? "icon.ico" : "icon.png";
         app.MainWindow
             .SetTitle("")
+            // Photino's Log() is binary: it prints unless LogVerbosity <= 0. Levels 1 and 2
+            // behave identically (both flood stdout with SendWebMessage/RenderBatch blobs that
+            // bury app logs), so 0 is the only value that silences it.
+            .SetLogVerbosity(0)
             .SetWidth(1280)
             .SetHeight(800)
             .SetMaximized(true)

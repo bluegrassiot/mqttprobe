@@ -32,6 +32,7 @@
     <File Path=".github/workflows/release.yml" />
   </Folder>
   <Folder Name="/scripts/">
+    <File Path="scripts/build-linux-desktop.ps1" />
     <File Path="scripts/coverage.py" />
     <File Path="scripts/format-check.py" />
     <File Path="scripts/generate-mtls-certs.py" />

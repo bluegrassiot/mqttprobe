@@ -84,8 +84,13 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
             var envelopeJson = System.Text.Json.JsonSerializer.Serialize(new { v = 1, k = Convert.ToBase64String(encKey), p = internalPassword });
             await _envelopeKeyStore.SetAsync($"cert-env-{assetId}", envelopeJson);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex,
+                "Certificate staging failed after crypto (os={OS}): {ExceptionType}: {Message}. " +
+                "Thrown while persisting blob or envelope key (envelope store type={EnvelopeStore}).",
+                System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+                ex.GetType().FullName, ex.Message, _envelopeKeyStore.GetType().FullName);
             TryDelete(tempPath);
             try { await _envelopeKeyStore.RemoveAsync($"cert-env-{assetId}"); } catch { }
             throw;
@@ -178,7 +183,16 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
 
         try
         {
-            var cert = X509CertificateLoader.LoadPkcs12(pfxBytes, intPwd, X509KeyStorageFlags.EphemeralKeySet);
+            // Windows Schannel cannot use an EphemeralKeySet (in-memory CNG) private key for
+            // TLS client authentication — AcquireClientCredentials fails with
+            // SEC_E_UNKNOWN_CREDENTIALS (0x8009030D). Load into a real (user) key container on
+            // Windows; without PersistKeySet the key is deleted when the cert is disposed, so no
+            // key files are left behind. OpenSSL (Linux/macOS) accepts the ephemeral key and
+            // keeps it off disk, so keep EphemeralKeySet there.
+            var loadFlags = OperatingSystem.IsWindows()
+                ? X509KeyStorageFlags.DefaultKeySet
+                : X509KeyStorageFlags.EphemeralKeySet;
+            var cert = X509CertificateLoader.LoadPkcs12(pfxBytes, intPwd, loadFlags);
             if (cert is null || !cert.HasPrivateKey) { cert?.Dispose(); return null; }
             return new ClientCertificateBundle(cert);
         }

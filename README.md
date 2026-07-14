@@ -25,7 +25,7 @@ Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart
 - **WebSocket support** — connect via `ws://` or `wss://` in addition to raw TCP
 - **Charts** — live time-series visualization of JSON payload fields with configurable field selection; chart configurations are saved per connection across sessions
 - **Authentication** — cookie-based login with PBKDF2-SHA256 hashed passwords; first-run setup wizard, in-app password change
-- **Secure credential storage** — MQTT broker passwords stored in platform-native secure storage (iOS Keychain / Android Keystore / ASP.NET Data Protection); never written in plaintext
+- **Secure credential storage** — MQTT broker passwords stored in platform-appropriate secure storage (iOS Keychain / Android Keystore / ASP.NET Data Protection on Web / AES-256-GCM encrypted key-file on the desktop app); never written in plaintext
 
 ---
 
@@ -208,7 +208,7 @@ MqttProbe.slnx
 
 - Passwords are hashed with **PBKDF2-SHA256** (100,000 iterations, random salt, constant-time verification)
 - `config/appsettings.json` is restricted to **owner read/write only** (mode 600) on Linux/macOS
-- MQTT broker passwords are stored in **platform-native secure storage** — never in the config file
+- MQTT broker passwords are stored in **platform-appropriate secure storage** (OS keystore on MAUI, ASP.NET Data Protection on Web, an AES-256-GCM encrypted key-file on the desktop app) — never in the config file
 - Client certificate payloads are stored in an AES-256-GCM-encrypted file; the AES key and certificate password are held separately in platform secret storage, see [Client Certificate Security](docs/client-certificate-security.md) for details
 - Authentication cookies are `HttpOnly`, `SameSite=Strict`, and expire after 8 hours with sliding renewal
 - No credentials are ever committed to the repository

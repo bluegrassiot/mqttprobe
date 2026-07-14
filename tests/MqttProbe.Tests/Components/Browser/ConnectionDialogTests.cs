@@ -142,6 +142,28 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
+    public async Task SaveButton_Enabled_WhenCertificateStaged_OnUnchangedConnection()
+    {
+        var conn = new Connection { Name = "Cert Conn", Host = "localhost", Port = 8883, UseTls = true };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        // An unchanged saved connection is not dirty, so Save is disabled.
+        _dialogProvider.Find("button[title='Save connection']")
+            .GetAttribute("disabled").Should().NotBeNull("an unchanged saved connection is not dirty");
+
+        // Staging a certificate (as the file picker does) must mark the dialog dirty even
+        // though the Connection model itself is unchanged.
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        await _dialogProvider.InvokeAsync(() =>
+            dialog.SetStagedCertificate([1, 2, 3], null, null, ""));
+
+        _dialogProvider.Find("button[title='Save connection']")
+            .GetAttribute("disabled").Should().BeNull("staging a certificate should enable Save");
+    }
+
+    [Test]
     public async Task DeleteButton_IsDisabled_WhenNoConnectionSelected()
     {
         await OpenDialog();
@@ -460,6 +482,48 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
             .Should().NotBeNull("a valid form matching an existing saved connection is not dirty");
+    }
+
+    [Test]
+    public async Task SaveButton_Enabled_WhenBrokerPasswordCleared()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "Saved", Host = "localhost", Port = 1883, Password = "secret" }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
+            .Should().NotBeNull("an unchanged saved connection is not dirty");
+
+        ActivateTab("Transport");
+        SetTextField("Password", "");
+
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
+            .Should().BeNull("clearing the broker password is a change and should enable Save");
+    }
+
+    [Test]
+    public async Task SaveButton_Enabled_WhenBrokerPasswordCleared_OnP12Connection()
+    {
+        var conn = new Connection
+        {
+            Name = "P12 Conn", Host = "localhost", Port = 8883, UseTls = true,
+            Password = "secret", ClientCertificateAssetId = Guid.NewGuid().ToString("D")
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
+            .Should().NotBeNull("an unchanged saved connection is not dirty");
+
+        ActivateTab("Transport");
+        SetTextField("Password", "");
+
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
+            .Should().BeNull("clearing the broker password on a P12 connection should enable Save");
     }
 
     private void FillNewConnection()

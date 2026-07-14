@@ -22,7 +22,6 @@
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
         <PackageReference Include="Photino.Blazor" />
-        <PackageReference Include="System.Security.Cryptography.ProtectedData" />
     </ItemGroup>
 
     <ItemGroup>

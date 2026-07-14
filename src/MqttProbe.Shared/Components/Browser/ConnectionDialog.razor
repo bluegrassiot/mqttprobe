@@ -251,7 +251,8 @@
                                                     </MudText>
                                                 }
 
-                                                <CertificatePasswordField @bind-Value="_certPassword"
+                                                <CertificatePasswordField Value="_certPassword"
+                                                                          ValueChanged="OnCertPasswordChanged"
                                                                           Label="@(_certInputMode == CertificateInputMode.Pfx ? "PFX Password" : "Key Password (if encrypted)")"
                                                                           Required="false"
                                                                           Class="mt-2" />
@@ -346,6 +347,15 @@
         _pemCertFileBytes = pemCertBytes;
         _pemKeyFileBytes = pemKeyBytes;
         _certPassword = password;
+        UpdateActionStates();
+        StateHasChanged();
+    }
+
+    private void OnCertPasswordChanged(string value)
+    {
+        _certPassword = value;
+        UpdateActionStates();
+        StateHasChanged();
     }
 
     public void FormValidationChanged(bool isValid)
@@ -362,10 +372,14 @@
         base.OnInitialized();
     }
 
-    private async Task OnConnectingFailed(ConnectingFailedEventArgs _)
+    private async Task OnConnectingFailed(ConnectingFailedEventArgs args)
     {
         _connectionState = ConnectionState.Failed;
         UxMetrics?.RecordConnectFailure();
+        Logger.LogError(args.Exception,
+            "Connecting to broker {Host}:{Port} failed. ResultCode={ResultCode}",
+            _selectedConnection?.Host, _selectedConnection?.Port,
+            args.ConnectResult?.ResultCode);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -420,9 +434,21 @@
 
     private void UpdateCanSave()
     {
-        var isDirty = !SettingsStore.Config.Connections.Any(conn => conn.Equals(_selectedConnection));
-        _canSave = isDirty && _isFormValid;
+        var matchesSaved = SettingsStore.Config.Connections.Any(conn => conn.Equals(_selectedConnection));
+        _canSave = (!matchesSaved || HasPendingCertificateChange()) && _isFormValid;
     }
+
+    // Certificate edits live outside the Connection model (staged cert/key files, cert
+    // password, pending removal), so Connection.Equals cannot see them. Treat any such
+    // pending change as dirty so Save enables and the connect-time "unsaved changes"
+    // prompt fires — matching how ordinary fields behave.
+    private bool HasPendingCertificateChange() =>
+        _pfxFileBytes is not null ||
+        _pemCertFileBytes is not null ||
+        _pemKeyFileBytes is not null ||
+        _certificateRemoved ||
+        _stagedAssetId is not null ||
+        !string.IsNullOrEmpty(_certPassword);
 
     private async Task Connect()
     {
@@ -755,6 +781,7 @@
             _certError = $"Failed to read certificate file: {ex.Message}";
         }
 
+        UpdateActionStates();
         StateHasChanged();
     }
 
@@ -778,6 +805,7 @@
             _certError = $"Failed to read key file: {ex.Message}";
         }
 
+        UpdateActionStates();
         StateHasChanged();
     }
 
@@ -817,6 +845,7 @@
             _certError = $"Failed to read certificate file: {ex.Message}";
         }
 
+        UpdateActionStates();
         StateHasChanged();
     }
 
@@ -842,6 +871,7 @@
             _certError = $"Failed to read key file: {ex.Message}";
         }
 
+        UpdateActionStates();
         StateHasChanged();
     }
 
@@ -855,6 +885,7 @@
         _certificateRemoved = true;
         _certificateUnavailable = false;
         _selectedConnection.ClientCertificateAssetId = null;
+        UpdateActionStates();
         StateHasChanged();
     }
 }

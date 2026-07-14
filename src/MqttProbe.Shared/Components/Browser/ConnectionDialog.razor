@@ -46,7 +46,7 @@
                                    title="New connection" OnClick="@Add" />
                     <MudIconButton Icon="@LucideIcons.Save" Color="Color.Inherit" Size="Size.Medium"
                                    title="Save connection" Disabled="@(!_canSave)"
-                                   OnClick="@(async () => await Save())" />
+                                   OnClick="@(async () => await Save(closeDialog: false))" />
                     <MudIconButton Icon="@LucideIcons.Trash2" Color="Color.Error" Size="Size.Medium"
                                    title="Delete connection" Disabled="@(!_canDelete)"
                                    OnClick="@(async () => await Delete())" />
@@ -251,8 +251,8 @@
                                                     </MudText>
                                                 }
 
-                                                <CertificatePasswordField Value="_certPassword"
-                                                                          ValueChanged="OnCertPasswordChanged"
+                                                <CertificatePasswordField Value="@_certPassword"
+                                                                          ValueChanged="@OnCertPasswordChanged"
                                                                           Label="@(_certInputMode == CertificateInputMode.Pfx ? "PFX Password" : "Key Password (if encrypted)")"
                                                                           Required="false"
                                                                           Class="mt-2" />
@@ -663,6 +663,15 @@
         _stagedAssetId = null;
         _previousAssetId = connection.ClientCertificateAssetId;
         _certificateUnavailable = false;
+
+        // Clear pending certificate edits now that they are persisted, so the dialog can stay
+        // open after Save: the "Certificate loaded" summary shows again and the connection is no
+        // longer considered dirty (Save disables until the next change).
+        _pfxFileBytes = null;
+        _pemCertFileBytes = null;
+        _pemKeyFileBytes = null;
+        _certPassword = "";
+        _certificateRemoved = false;
 
         Logger.LogInformation("Connection saved: {Name} ({Host}:{Port})", connection.Name, connection.Host, connection.Port);
         _savedConnectionForSelector = SettingsStore.Config.Connections.FirstOrDefault(c => c.Id == connection.Id) ?? connection;

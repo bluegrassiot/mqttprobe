@@ -436,6 +436,23 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
+    public async Task SaveButton_DoesNotCloseDialog()
+    {
+        var conn = new Connection { Name = "Test", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        _mockConfigMgr.Config.Returns(cfg);
+        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        DirtyNameField("Test Updated");
+
+        _dialogProvider.Find("button[title='Save connection']").Click();
+
+        await _mockConfigMgr.Received(1).AddConnectionAsync(Arg.Any<Connection>());
+        _dialogProvider.FindAll(".mud-dialog").Should().NotBeEmpty("saving should keep the dialog open");
+    }
+
+    [Test]
     public async Task SaveButton_InvalidDirtyInput_StaysDisabled()
     {
         await OpenDialog(new AppConfiguration());
@@ -482,6 +499,31 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
             .Should().NotBeNull("a valid form matching an existing saved connection is not dirty");
+    }
+
+    [Test]
+    public async Task CertPasswordField_ShowsBoundValue_AndEnablesSaveWhenTyped()
+    {
+        var conn = new Connection { Name = "TLS Conn", Host = "localhost", Port = 8883, UseTls = true };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        ActivateTab("Transport");
+
+        var pwField = _dialogProvider.FindComponents<MudTextField<string>>()
+            .First(f => f.Instance.Label == "PFX Password");
+
+        // Regression: the field must bind to the value of _certPassword (empty), not render
+        // the literal parameter name "_certPassword".
+        (pwField.Find("input").GetAttribute("value") ?? "").Should().NotBe("_certPassword");
+
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
+            .Should().NotBeNull("unchanged connection is not dirty");
+
+        pwField.Find("input").Input("mypass");
+
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
+            .Should().BeNull("entering a certificate password should enable Save");
     }
 
     [Test]

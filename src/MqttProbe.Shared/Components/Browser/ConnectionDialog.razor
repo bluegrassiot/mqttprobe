@@ -97,14 +97,18 @@
                         <MudGrid Spacing="2" Class="mt-2">
                             <MudItem xs="12" sm="6">
                                 <MudSelect Variant="Variant.Outlined" T="Protocol" @bind-Value="_selectedConnection.Protocol"
-                                           Label="Protocol" AnchorOrigin="Origin.BottomCenter">
+                                           Label="Protocol"
+                                           AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft"
+                                           PopoverFixed="true">
                                     <MudSelectItem Value="@(Protocol.Mqtt)" />
                                     <MudSelectItem Value="@(Protocol.WebSocket)" />
                                 </MudSelect>
                             </MudItem>
                             <MudItem xs="12" sm="6">
                                 <MudSelect Variant="Variant.Outlined" T="MqttVersion" @bind-Value="_selectedConnection.MqttVersion"
-                                           Label="MQTT Version" AnchorOrigin="Origin.BottomCenter">
+                                           Label="MQTT Version"
+                                           AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft"
+                                           PopoverFixed="true">
                                     <MudSelectItem Value="@(MqttVersion.V311)">3.1.1</MudSelectItem>
                                     <MudSelectItem Value="@(MqttVersion.V5)">5.0</MudSelectItem>
                                 </MudSelect>

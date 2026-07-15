@@ -187,12 +187,18 @@ public class SparkplugNodeRunner(
         try
         {
             if (_node.IsConnected)
-                await _node.PublishNodeDeathMessage();
+            {
+                try { await _node.PublishNodeDeathMessage(); }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "Could not publish NDEATH for node {NodeId} (connection already gone — LWT will handle it)", config.NodeId);
+                }
+            }
+
             await _node.Stop();
             (_node as IDisposable)?.Dispose();
             _node = null;
 
-            // StopAsync succeeded — dispose cert resource normally
             _certResource?.Dispose();
             _certResource = null;
 

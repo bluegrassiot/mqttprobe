@@ -931,4 +931,25 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Markup.Should().Contain("unavailable or corrupt");
         await _mockClient.DidNotReceive().StartAsync(Arg.Any<ManagedMqttClientOptions>());
     }
+
+    [Test]
+    public async Task ProtocolAndMqttVersionSelects_HavePopoverFixedAndExplicitOrigins()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        ActivateTab("Transport");
+
+        var protocolSelect = _dialogProvider.FindComponents<MudSelect<Protocol>>()
+            .Single(s => s.Instance.Label == "Protocol");
+        var mqttVersionSelect = _dialogProvider.FindComponents<MudSelect<MqttVersion>>()
+            .Single(s => s.Instance.Label == "MQTT Version");
+
+        protocolSelect.Instance.PopoverFixed.Should().BeTrue();
+        protocolSelect.Instance.AnchorOrigin.Should().Be(Origin.BottomLeft);
+        protocolSelect.Instance.TransformOrigin.Should().Be(Origin.TopLeft);
+
+        mqttVersionSelect.Instance.PopoverFixed.Should().BeTrue();
+        mqttVersionSelect.Instance.AnchorOrigin.Should().Be(Origin.BottomLeft);
+        mqttVersionSelect.Instance.TransformOrigin.Should().Be(Origin.TopLeft);
+    }
 }

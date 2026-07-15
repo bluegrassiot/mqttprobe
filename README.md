@@ -96,15 +96,25 @@ The app starts on `https://localhost:5001`. On first launch it redirects to `/Se
 
 ---
 
-## Quick Start — Windows Desktop
+## Quick Start — Desktop Apps
 
-### Download the installer
+### Windows
 
-**Recommended:** Download [`MQTTProbe-win-Setup.exe`](https://github.com/bluegrassiot/mqttprobe/releases/latest) — per-user install, no admin rights, auto-updates.
-
-Alternatively: Download the portable `mqttprobe-windows-<version>.zip`, extract, and run `MqttProbe.Maui.exe` (no auto-update).
+- **Recommended:** Download [`MQTTProbe-win-Setup.exe`](https://github.com/bluegrassiot/mqttprobe/releases/latest) — per-user install, no admin rights, auto-updates in-app.
+- **Portable:** Download the portable `mqttprobe-windows-<version>.zip`, extract, and run `MqttProbe.Maui.exe` (no auto-update).
 
 > **Windows SmartScreen warning:** Releases are not yet code-signed, so Windows may warn on first run. Choose "More info" → "Run anyway" to proceed.
+
+### Linux
+
+- **Recommended:** Download the `MQTTProbe` AppImage from the [latest release](https://github.com/bluegrassiot/mqttprobe/releases/latest), `chmod +x`, run — auto-updates in-app.
+  Requires `libwebkit2gtk-4.1` and, on Ubuntu 22.04+, `libfuse2` (`sudo apt install libfuse2 libwebkit2gtk-4.1-0`).
+- **Portable:** Download `mqttprobe-desktop-linux-x64-<version>.zip`, extract, and run `MqttProbe.Desktop` (no auto-update).
+
+### macOS
+
+- **Recommended:** Download the `MQTTProbe` installer `.pkg` from the [latest release](https://github.com/bluegrassiot/mqttprobe/releases/latest) — signed & notarized, installs to Applications, auto-updates in-app.
+- **Portable:** Download the Velopack portable zip on the release page (no auto-update).
 
 ---
 

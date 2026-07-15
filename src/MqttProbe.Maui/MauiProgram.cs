@@ -95,9 +95,22 @@ public static class MauiProgram
         var secretStorage = new MauiSecretStorage();
         builder.Services.AddSingleton<ISecretStorage>(secretStorage);
 
+        // Only iOS has a platform-specific secret store and file protection. Mac Catalyst runs
+        // on macOS, which has no NSFileProtection, and the iOS types are themselves #if IOS.
 #if IOS
         builder.Services.AddSingleton<ICertificateEnvelopeKeyStore, iOSCertificateEnvelopeKeyStore>();
         builder.Services.AddSingleton<IFileProtector>(new iOSFileProtector());
+#else
+        builder.Services.AddSingleton<ICertificateEnvelopeKeyStore>(sp =>
+            new MauiCertificateEnvelopeKeyStore(sp.GetRequiredService<ISecretStorage>()));
+        builder.Services.AddSingleton<IFileProtector, DefaultFileProtector>();
+#endif
+
+        // Separate question from the above: Apple's crypto stack cannot load a PKCS#12 with
+        // X509KeyStorageFlags.Exportable -- both the ephemeral and the default key set throw
+        // PlatformNotSupportedException -- so both Apple heads need the wrapper, which skips
+        // the canonical re-export and stores the original bytes and password instead.
+#if IOS || MACCATALYST
         builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
         {
             var baseStore = new CertificateAssetStore(
@@ -109,13 +122,10 @@ public static class MauiProgram
                 baseStore,
                 sp.GetRequiredService<ICertificateEnvelopeKeyStore>(),
                 baseStore.CertificatesDirectory,
-                new iOSFileProtector(),
+                sp.GetRequiredService<IFileProtector>(),
                 sp.GetRequiredService<ILogger<MauiCertificateAssetStore>>());
         });
 #else
-        builder.Services.AddSingleton<ICertificateEnvelopeKeyStore>(sp =>
-            new MauiCertificateEnvelopeKeyStore(sp.GetRequiredService<ISecretStorage>()));
-        builder.Services.AddSingleton<IFileProtector, DefaultFileProtector>();
         builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
             new CertificateAssetStore(
                 sp.GetRequiredService<ICertificateEnvelopeKeyStore>(),

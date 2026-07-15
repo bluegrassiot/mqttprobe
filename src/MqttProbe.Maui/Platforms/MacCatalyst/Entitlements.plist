@@ -9,6 +9,14 @@
         <!-- When App Sandbox is enabled, this value is required to open outgoing network connections. -->
         <key>com.apple.security.network.client</key>
         <true/>
+        <!-- Required for certificate import. Must be read-write even though we only ever read
+             the file: MAUI's FilePicker builds UIDocumentPickerViewController with
+             UIDocumentPickerMode.Open (open-in-place), so the system requests a read-write
+             sandbox extension. With read-only the request is denied, the picker returns no
+             URL, and PickAsync reports a cancel that is indistinguishable from the user
+             backing out, so import fails silently. -->
+        <key>com.apple.security.files.user-selected.read-write</key>
+        <true/>
     </dict>
 </plist>
 

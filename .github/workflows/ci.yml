@@ -122,8 +122,8 @@ jobs:
 
   # ── Stage: build ─────────────────────────────────────────────────────────────
 
-  build-blazor:
-    name: Build (Blazor Web)
+  build-web:
+    name: Build (Web)
     needs: [test, test-integration]
     runs-on: windows-latest
     timeout-minutes: 10
@@ -142,17 +142,17 @@ jobs:
           restore-keys: nuget-
 
       - name: Publish
-        run: dotnet publish src\MqttProbe.Web\MqttProbe.Web.csproj -f:net10.0 -c:Release --output publish/blazor
+        run: dotnet publish src\MqttProbe.Web\MqttProbe.Web.csproj -f:net10.0 -c:Release --output publish/web
 
       - name: Archive
         shell: pwsh
-        run: Compress-Archive -Path publish/blazor/* -DestinationPath publish/blazor-app.zip -Force
+        run: Compress-Archive -Path publish/web/* -DestinationPath publish/web-app.zip -Force
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: blazor-app
-          path: publish/blazor-app.zip
+          name: web-app
+          path: publish/web-app.zip
           retention-days: 7
 
   build-docker:

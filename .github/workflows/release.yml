@@ -11,10 +11,10 @@ env:
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
 
 jobs:
-  # ── Build Blazor Web ────────────────────────────────────────────────────────
+  # ── Build Web ───────────────────────────────────────────────────────────────
 
-  build-blazor:
-    name: Build (Blazor Web / ${{ matrix.rid }})
+  build-web:
+    name: Build (Web / ${{ matrix.rid }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     permissions:
@@ -55,24 +55,24 @@ jobs:
           --self-contained false
           -p:PublishSingleFile=true
           -p:Version=${{ steps.version.outputs.value }}
-          --output publish/blazor
+          --output publish/web
 
       - name: Archive (Linux)
         if: runner.os == 'Linux'
         run: |
-          cd publish/blazor
-          zip -r ../../mqttprobe-blazor-${{ matrix.rid }}-${{ github.ref_name }}.zip .
+          cd publish/web
+          zip -r ../../mqttprobe-web-${{ matrix.rid }}-${{ github.ref_name }}.zip .
 
       - name: Archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path publish/blazor/* -DestinationPath mqttprobe-blazor-${{ matrix.rid }}-${{ github.ref_name }}.zip -Force
+        run: Compress-Archive -Path publish/web/* -DestinationPath mqttprobe-web-${{ matrix.rid }}-${{ github.ref_name }}.zip -Force
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: blazor-${{ matrix.rid }}
-          path: mqttprobe-blazor-${{ matrix.rid }}-${{ github.ref_name }}.zip
+          name: web-${{ matrix.rid }}
+          path: mqttprobe-web-${{ matrix.rid }}-${{ github.ref_name }}.zip
 
   # ── Build Docker ────────────────────────────────────────────────────────────
 
@@ -412,25 +412,25 @@ jobs:
 
   create-release:
     name: Create Release
-    needs: [build-blazor, build-docker, build-desktop-linux, build-maui-windows, build-maui-macos, build-maui-android]
+    needs: [build-web, build-docker, build-desktop-linux, build-maui-windows, build-maui-macos, build-maui-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download blazor-linux-x64
+      - name: Download web-linux-x64
         uses: actions/download-artifact@v8
         with:
-          name: blazor-linux-x64
+          name: web-linux-x64
 
-      - name: Download blazor-linux-arm64
+      - name: Download web-linux-arm64
         uses: actions/download-artifact@v8
         with:
-          name: blazor-linux-arm64
+          name: web-linux-arm64
 
-      - name: Download blazor-win-x64
+      - name: Download web-win-x64
         uses: actions/download-artifact@v8
         with:
-          name: blazor-win-x64
+          name: web-win-x64
 
       - name: Download maui-windows
         uses: actions/download-artifact@v8
@@ -475,9 +475,9 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            mqttprobe-blazor-linux-x64-${{ github.ref_name }}.zip
-            mqttprobe-blazor-linux-arm64-${{ github.ref_name }}.zip
-            mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip
+            mqttprobe-web-linux-x64-${{ github.ref_name }}.zip
+            mqttprobe-web-linux-arm64-${{ github.ref_name }}.zip
+            mqttprobe-web-win-x64-${{ github.ref_name }}.zip
             mqttprobe-windows-${{ github.ref_name }}.zip
             mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip
             mqttprobe-android-${{ github.ref_name }}.apk
@@ -490,15 +490,15 @@ jobs:
           body: |
             ## MQTT Probe ${{ github.ref_name }}
 
-            Requires [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) for the Blazor builds.
+            Requires [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) for the web builds.
 
             ### Downloads
 
             | Artifact | Description |
             |----------|-------------|
-            | `mqttprobe-blazor-linux-x64-${{ github.ref_name }}.zip` | Blazor Web — single binary, Linux x64 |
-            | `mqttprobe-blazor-linux-arm64-${{ github.ref_name }}.zip` | Blazor Web — single binary, Linux arm64 (Raspberry Pi, NAS) |
-            | `mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip` | Blazor Web — single exe, Windows x64 |
+            | `mqttprobe-web-linux-x64-${{ github.ref_name }}.zip` | Web app (Blazor Server) — single binary, Linux x64 |
+            | `mqttprobe-web-linux-arm64-${{ github.ref_name }}.zip` | Web app (Blazor Server) — single binary, Linux arm64 (Raspberry Pi, NAS) |
+            | `mqttprobe-web-win-x64-${{ github.ref_name }}.zip` | Web app (Blazor Server) — single exe, Windows x64 |
             | `mqttprobe-windows-${{ github.ref_name }}.zip` | Windows desktop app — MAUI (unsigned, SmartScreen warning expected) |
             | MQTTProbe `.pkg` installer | macOS desktop app (recommended) — universal Intel + Apple Silicon, signed & notarized, auto-updates |
             | `mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip` | Linux desktop app — Photino/Blazor, self-contained (requires `libwebkit2gtk-4.1-0`) |

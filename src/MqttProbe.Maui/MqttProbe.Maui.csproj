@@ -41,8 +41,8 @@
         <ApplicationId>com.bluegrassiot.mqttprobe</ApplicationId>
 
         <!-- Versions -->
-        <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
-        <ApplicationVersion>1</ApplicationVersion>
+        <ApplicationDisplayVersion>0.0.0</ApplicationDisplayVersion>
+        <ApplicationVersion>0</ApplicationVersion>
 
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
@@ -62,7 +62,6 @@
 		<ApplicationIcon>..\MqttProbe.Desktop\Assets\icon.ico</ApplicationIcon>
 		<WindowsPackageType>None</WindowsPackageType>
 		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-		<SatelliteResourceLanguages>en</SatelliteResourceLanguages>
 		<DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
 	</PropertyGroup>
 
@@ -93,6 +92,7 @@
     <PropertyGroup>
         <ServerGarbageCollection>false</ServerGarbageCollection>
         <DefaultLanguage>en-US</DefaultLanguage>
+        <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
         <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
         <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
         <PackageCertificateThumbprint></PackageCertificateThumbprint>

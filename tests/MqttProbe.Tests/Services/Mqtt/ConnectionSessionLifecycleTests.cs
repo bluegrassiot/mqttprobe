@@ -108,6 +108,30 @@ public class ConnectionSessionLifecycleTests
     }
 
     [Test]
+    public async Task StopActiveConnectionAsync_Success_RaisesActiveConnectionStopped()
+    {
+        _mockMqttClient.StopAsync().Returns(Task.CompletedTask);
+        var raised = false;
+        _lifecycle.ActiveConnectionStopped += () => raised = true;
+
+        await _lifecycle.StopActiveConnectionAsync();
+
+        raised.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task StopActiveConnectionAsync_StopFails_DoesNotRaiseActiveConnectionStopped()
+    {
+        _mockMqttClient.StopAsync().Returns(Task.FromException(new Exception("fail")));
+        var raised = false;
+        _lifecycle.ActiveConnectionStopped += () => raised = true;
+
+        try { await _lifecycle.StopActiveConnectionAsync(); } catch { }
+
+        raised.Should().BeFalse();
+    }
+
+    [Test]
     public async Task StopActiveConnectionAsync_StopFails_NoActiveCert_SkipsQuarantine()
     {
         _sessionState.ActiveCertificateResource = null;

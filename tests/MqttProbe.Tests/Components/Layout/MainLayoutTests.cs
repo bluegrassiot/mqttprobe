@@ -86,9 +86,13 @@ public class MainLayoutTests : BunitTestContext
         Services.AddSingleton<IThemes>(new Themes());
     }
 
-    private IRenderedComponent<MainLayout> RenderLayout()
+    private IRenderedComponent<MainLayout> RenderLayout(string? bodyMarker = null)
     {
-        return Render<MainLayout>(p => p.Add(l => l.Body, (RenderFragment)(_ => { })));
+        return Render<MainLayout>(p => p.Add(l => l.Body, (RenderFragment)(builder =>
+        {
+            if (bodyMarker is not null)
+                builder.AddContent(0, bodyMarker);
+        })));
     }
 
     private IRenderedComponent<AppShellBar> RenderBar() =>
@@ -168,75 +172,43 @@ public class MainLayoutTests : BunitTestContext
     }
 
     [Test]
-    public void Renders_ReconnectingMessage_WhenStartedButNotConnected()
+    public void WhenStartedButNotConnected_StillRendersBody_NotReconnectPanel()
     {
         _mockMqttClient.IsConnected.Returns(false);
         _mockMqttClient.IsStarted.Returns(true);
 
-        var cut = RenderLayout();
+        const string marker = "body-content-marker-xyz";
+        var cut = RenderLayout(marker);
 
-        cut.Markup.Should().Contain("attempting to reconnect");
+        cut.Markup.Should().Contain(marker);
+        cut.Markup.Should().NotContain("attempting to reconnect");
     }
 
     [Test]
-    public async Task ReconnectStopButton_AwaitsStopActiveConnectionAsync()
-    {
-        _mockMqttClient.IsConnected.Returns(false);
-        _mockMqttClient.IsStarted.Returns(true);
-        var pending = new TaskCompletionSource();
-        _mockLifecycle.StopActiveConnectionAsync().Returns(pending.Task);
-
-        var cut = RenderLayout();
-        cut.FindAll("button").First(b => b.TextContent.Trim() == "Stop").Click();
-
-        await _mockLifecycle.Received(1).StopActiveConnectionAsync();
-        pending.SetResult();
-    }
-
-    [Test]
-    public void ReconnectStopButton_WhenStopFails_SurfacesErrorSnackbar()
-    {
-        _mockMqttClient.IsConnected.Returns(false);
-        _mockMqttClient.IsStarted.Returns(true);
-        _mockLifecycle.StopActiveConnectionAsync().Returns(Task.FromException(new InvalidOperationException("boom")));
-
-        var cut = RenderLayout();
-        cut.FindAll("button").First(b => b.TextContent.Trim() == "Stop").Click();
-
-        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Failed to stop"));
-    }
-
-    [Test]
-    public void ChangePasswordRoute_IsTreatedAsAuthPage_ShowsBodyNotReconnect()
+    public void WhenDisconnected_DoesNotShowReconnectPanel()
     {
         _mockMqttClient.IsConnected.Returns(false);
         _mockMqttClient.IsStarted.Returns(true);
         Services.GetRequiredService<NavigationManager>().NavigateTo("change-password");
 
-        var cut = RenderLayout();
+        const string marker = "body-content-marker-xyz";
+        var cut = RenderLayout(marker);
 
+        cut.Markup.Should().Contain(marker);
         cut.Markup.Should().NotContain("attempting to reconnect");
     }
 
     [Test]
-    public void NormalRoute_IsNotTreatedAsAuthPage_ShowsReconnect()
+    public void NormalRoute_WhenDisconnected_StillRendersBody()
     {
         _mockMqttClient.IsConnected.Returns(false);
         _mockMqttClient.IsStarted.Returns(true);
 
-        var cut = RenderLayout();
+        const string marker = "body-content-marker-xyz";
+        var cut = RenderLayout(marker);
 
-        cut.Markup.Should().Contain("attempting to reconnect");
-    }
-
-    [Test]
-    public async Task MainLayout_WhenDisposed_RemovesConnectionStateChangedHandler()
-    {
-        var cut = RenderLayout();
-
-        await cut.Instance.DisposeAsync();
-
-        _mockMqttClient.Received().ConnectionStateChangedAsync -= Arg.Any<Func<EventArgs, Task>>();
+        cut.Markup.Should().Contain(marker);
+        cut.Markup.Should().NotContain("attempting to reconnect");
     }
 
     [Test]

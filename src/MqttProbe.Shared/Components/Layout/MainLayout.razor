@@ -1,17 +1,11 @@
-@using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.JSInterop
-@using MQTTnet.Extensions.ManagedClient
 @using MqttProbe.Services.Configuration
 @inherits LayoutComponentBase
 @implements IAsyncDisposable
-@inject IManagedMqttClient MqttClient
 @inject ISettingsStore SettingsStore
 @inject IAppInfoService AppInfoService
-@inject NavigationManager NavigationManager
-@inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
 @inject IThemes Themes
-@inject IConnectionSessionLifecycle SessionLifecycle
 
 <CascadingValue Value="Themes.IsDarkMode" Name="IsDarkMode">
 <MudThemeProvider Theme="@Themes.CurrentTheme" IsDarkMode="@Themes.IsDarkMode"/>
@@ -29,29 +23,7 @@
         <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="@($"app-shell-container{(AppInfoService.IsNative ? " app-shell-container--native" : string.Empty)}")">
             <div class="@($"app-shell{(AppInfoService.IsNative ? " app-shell--native" : string.Empty)}")">
             <div class="app-shell-body">
-                @if (MqttClient.IsConnected || _isAuthPage)
-                {
-                    @Body
-                }
-                else if (MqttClient.IsStarted)
-                {
-                    <MudGrid>
-                        <MudItem Class="d-flex justify-center" xs="12">
-                            <MudText Class="reconnect-message" Typo="Typo.h4" Align="Align.Center">
-                                Disconnected — attempting to reconnect…
-                            </MudText>
-                        </MudItem>
-                        <MudItem Class="d-flex justify-center" xs="12">
-                            <img class="signal-connecting" width="104" height="104" src="/_content/MqttProbe.Shared/img/signal-motif.svg" alt="Searching for signal" />
-                        </MudItem>
-                        <MudItem Class="d-flex justify-center" xs="12">
-                            <MudButton Variant="Variant.Outlined" Color="Color.Error"
-                                       StartIcon="@LucideIcons.CircleStop"
-                                       Class="reconnect-stop-btn"
-                                       OnClick="@StopReconnect">Stop</MudButton>
-                        </MudItem>
-                    </MudGrid>
-                }
+                @Body
             </div>
             </div>
         </MudContainer>
@@ -62,9 +34,6 @@
 <UpdateStartupCheck />
 
 @code {
-    private Func<EventArgs, Task>? _connectionStateChangedHandler;
-    private bool _disposed;
-    private bool _isAuthPage;
     private bool _hasRendered;
 
     protected override void OnInitialized()
@@ -72,11 +41,6 @@
         Themes.ModeChanged += OnModeChanged;
         Themes.FontModeChanged += OnFontModeChanged;
         SettingsStore.UiPreferencesChanged += OnUiPreferencesChangedFromStore;
-        UpdateAuthPageState();
-        NavigationManager.LocationChanged += OnLocationChanged;
-
-        _connectionStateChangedHandler = OnConnectionStateChangedAsync;
-        MqttClient.ConnectionStateChangedAsync += _connectionStateChangedHandler;
 
         Themes.SetFontAccessible(SettingsStore.Config.Ui.FontAccessible);
 
@@ -111,13 +75,6 @@
             "eval",
             $"document.body.classList.toggle('font-accessible', {Themes.IsFontAccessible.ToString().ToLowerInvariant()});");
 
-    private Task OnConnectionStateChangedAsync(EventArgs args)
-    {
-        if (!_disposed)
-            return InvokeAsync(StateHasChanged);
-        return Task.CompletedTask;
-    }
-
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -127,41 +84,11 @@
         }
     }
 
-    private async Task StopReconnect()
-    {
-        try
-        {
-            await SessionLifecycle.StopActiveConnectionAsync();
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to stop the connection: {ex.Message}", Severity.Error);
-        }
-    }
-
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
-    {
-        UpdateAuthPageState();
-        InvokeAsync(StateHasChanged);
-    }
-
-    private static readonly string[] AuthPageRoutes = ["change-password"];
-
-    private void UpdateAuthPageState()
-    {
-        var path = NavigationManager.ToBaseRelativePath(NavigationManager.Uri).TrimStart('/');
-        _isAuthPage = AuthPageRoutes.Any(route => path.StartsWith(route, StringComparison.OrdinalIgnoreCase));
-    }
-
     public ValueTask DisposeAsync()
     {
-        _disposed = true;
         Themes.ModeChanged -= OnModeChanged;
         Themes.FontModeChanged -= OnFontModeChanged;
-        NavigationManager.LocationChanged -= OnLocationChanged;
         SettingsStore.UiPreferencesChanged -= OnUiPreferencesChangedFromStore;
-        if (_connectionStateChangedHandler is not null)
-            MqttClient.ConnectionStateChangedAsync -= _connectionStateChangedHandler;
         return ValueTask.CompletedTask;
     }
 }

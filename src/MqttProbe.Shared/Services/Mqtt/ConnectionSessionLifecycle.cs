@@ -11,6 +11,8 @@ public sealed class ConnectionSessionLifecycle : IConnectionSessionLifecycle
     private readonly ICertificateSessionQuarantine _quarantine;
     private readonly ILogger<ConnectionSessionLifecycle> _logger;
 
+    public event Action? ActiveConnectionStopped;
+
     public ConnectionSessionLifecycle(
         IManagedMqttClient mqttClient,
         ISessionState sessionState,
@@ -32,6 +34,7 @@ public sealed class ConnectionSessionLifecycle : IConnectionSessionLifecycle
         {
             await _mqttClient.StopAsync();
             certResource?.Dispose();
+            ActiveConnectionStopped?.Invoke();
         }
         catch (Exception ex)
         {

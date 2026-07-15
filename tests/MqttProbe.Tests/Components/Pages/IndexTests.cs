@@ -36,6 +36,7 @@ public class IndexTests : BunitTestContext
     private List<EmulatorNodeConfig> _emulatorNodes = null!;
     private ISparkplugTopologyService _mockTopology = null!;
     private ISettingsStore _mockConfig = null!;
+    private IConnectionSessionLifecycle _mockLifecycle = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -67,6 +68,15 @@ public class IndexTests : BunitTestContext
         Services.AddSingleton(_mockConfig);
         Services.AddSingleton(mockSessionState);
         Services.AddSingleton<IThemes>(new Themes());
+
+        var mockMqtt = Substitute.For<IManagedMqttClient>();
+        mockMqtt.IsConnected.Returns(true);
+        mockMqtt.IsStarted.Returns(true);
+        Services.AddSingleton(mockMqtt);
+
+        _mockLifecycle = Substitute.For<IConnectionSessionLifecycle>();
+        _mockLifecycle.StopActiveConnectionAsync().Returns(Task.CompletedTask);
+        Services.AddSingleton(_mockLifecycle);
 
         ComponentFactories.AddStub<BrowserPanel>();
         ComponentFactories.AddStub<ChartsComponent>();
@@ -361,6 +371,69 @@ public class IndexTests : BunitTestContext
         cut.FindAll(".mud-tab[aria-selected='true']")
             .Should().ContainSingle()
             .Which.TextContent.Should().Contain("Charts");
+    }
+
+    [Test]
+    public void WhenDisconnected_OnBrowser_ShowsConnectionRequiredPanel_NotBrowserStub()
+    {
+        var mqtt = Services.GetRequiredService<IManagedMqttClient>();
+        mqtt.IsConnected.Returns(false);
+        mqtt.IsStarted.Returns(true);
+
+        var cut = Render<IndexPage>();
+
+        cut.Markup.Should().Contain("Attempting to reconnect");
+    }
+
+    [Test]
+    public void WhenDisconnected_OnSettings_ShowsSettings_NotReconnectPanel()
+    {
+        var mqtt = Services.GetRequiredService<IManagedMqttClient>();
+        mqtt.IsConnected.Returns(false);
+        mqtt.IsStarted.Returns(true);
+
+        Services.GetRequiredService<NavigationManager>()
+            .NavigateTo("/?tab=settings");
+
+        var cut = Render<IndexPage>();
+
+        cut.Markup.Should().NotContain("Attempting to reconnect");
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Settings");
+    }
+
+    [Test]
+    public void WhenDisconnected_NeverStarted_OnBrowser_ShowsConnectPrompt()
+    {
+        var mqtt = Services.GetRequiredService<IManagedMqttClient>();
+        mqtt.IsConnected.Returns(false);
+        mqtt.IsStarted.Returns(false);
+
+        var cut = Render<IndexPage>();
+
+        cut.Markup.Should().Contain("Connect to a broker");
+        cut.Markup.Should().NotContain("Attempting to reconnect");
+    }
+
+    [Test]
+    public void ActiveConnectionStopped_WhileOnBrowser_ShowsConnectionRequiredPanel()
+    {
+        var mqtt = Services.GetRequiredService<IManagedMqttClient>();
+        mqtt.IsConnected.Returns(true);
+        mqtt.IsStarted.Returns(true);
+
+        var cut = Render<IndexPage>();
+
+        cut.Markup.Should().NotContain("Connect to a broker");
+        cut.Markup.Should().NotContain("Attempting to reconnect");
+
+        mqtt.IsConnected.Returns(false);
+        mqtt.IsStarted.Returns(false);
+        _mockLifecycle.ActiveConnectionStopped += Raise.Event<Action>();
+
+        cut.WaitForAssertion(() =>
+            cut.Markup.Should().Contain("Connect to a broker"));
     }
 
 }

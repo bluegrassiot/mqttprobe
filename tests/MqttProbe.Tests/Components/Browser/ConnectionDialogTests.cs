@@ -551,8 +551,12 @@ public class ConnectionDialogTests : BunitTestContext
     {
         var conn = new Connection
         {
-            Name = "P12 Conn", Host = "localhost", Port = 8883, UseTls = true,
-            Password = "secret", ClientCertificateAssetId = Guid.NewGuid().ToString("D")
+            Name = "P12 Conn",
+            Host = "localhost",
+            Port = 8883,
+            UseTls = true,
+            Password = "secret",
+            ClientCertificateAssetId = Guid.NewGuid().ToString("D")
         };
         var cfg = new AppConfiguration { Connections = [conn] };
         await OpenDialog(cfg);

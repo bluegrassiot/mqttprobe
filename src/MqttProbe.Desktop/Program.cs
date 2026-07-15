@@ -18,12 +18,15 @@ using MqttProbe.Services.Sparkplug;
 using MudBlazor;
 using MudBlazor.Services;
 using Photino.Blazor;
+using Velopack;
 
 internal static class Program
 {
     [STAThread]
     private static void Main(string[] args)
     {
+        VelopackApp.Build().Run();
+
         var builder = PhotinoBlazorAppBuilder.CreateDefault(args);
 
         builder.Services.AddMudServices(config =>
@@ -71,7 +74,7 @@ internal static class Program
         builder.Services.AddSingleton<IUxMetricsService, UxMetricsService>();
         builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
         builder.Services.AddSingleton<IAppInfoService, DesktopAppInfoService>();
-        builder.Services.AddSingleton<IUpdateService, NoOpUpdateService>();
+        builder.Services.AddSingleton<IUpdateService, DesktopVelopackUpdateService>();
         builder.Services.AddAuthorizationCore();
         builder.Services.AddCascadingAuthenticationState();
         builder.Services.AddScoped<AuthenticationStateProvider, DesktopUnauthenticatedStateProvider>();

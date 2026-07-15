@@ -2,7 +2,7 @@ namespace MqttProbe.Services.Platform;
 
 public interface IUpdateService
 {
-    /// <summary>False on non-Windows heads and for portable (non-installed) Windows runs.</summary>
+    /// <summary>False when not running from a Velopack-installed app (portable zip, dev runs, unsupported heads).</summary>
     public bool IsSupported { get; }
 
     /// <summary>Returns the available version string, or null when up to date, unsupported, or on any error.</summary>

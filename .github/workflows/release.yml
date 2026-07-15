@@ -374,6 +374,34 @@ jobs:
           cd publish/desktop
           zip -r ../../mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip .
 
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk
+
+      - name: Download previous Velopack release (for delta packages)
+        continue-on-error: true   # first Velopack linux release has nothing to download
+        run: vpk download github --repoUrl https://github.com/bluegrassiot/mqttprobe --token ${{ secrets.GITHUB_TOKEN }} --outputDir publish/velopack-linux
+
+      - name: Build AppImage
+        run: >
+          vpk pack
+          --packId MQTTProbe
+          --packVersion ${{ steps.version.outputs.value }}
+          --packDir publish/desktop
+          --mainExe MqttProbe.Desktop
+          --packTitle MQTTProbe
+          --packAuthors "Bluegrass IoT"
+          --icon src/MqttProbe.Desktop/Assets/icon.png
+          --outputDir publish/velopack-linux
+
+      - name: Remove stale nupkg packages (keep only current version)
+        run: find publish/velopack-linux -name '*.nupkg' ! -name "MQTTProbe-${{ steps.version.outputs.value }}-*" -delete
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-linux-velopack
+          path: publish/velopack-linux/
+
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
@@ -415,10 +443,11 @@ jobs:
           name: maui-windows-velopack
           path: velopack
 
-      - name: Download maui-macos
+      - name: Download maui-macos-velopack
         uses: actions/download-artifact@v8
         with:
-          name: maui-macos
+          name: maui-macos-velopack
+          path: velopack-osx
 
       - name: Download maui-android
         uses: actions/download-artifact@v8
@@ -430,6 +459,17 @@ jobs:
         with:
           name: desktop-linux-x64
 
+      - name: Download desktop-linux-velopack
+        uses: actions/download-artifact@v8
+        with:
+          name: desktop-linux-velopack
+          path: velopack-linux
+
+      - name: Fail on duplicate release asset names
+        run: |
+          DUPES=$(find velopack* -type f -printf '%f\n' 2>/dev/null | sort | uniq -d)
+          if [ -n "$DUPES" ]; then echo "::error::Duplicate asset filenames across Velopack channels:"; echo "$DUPES"; exit 1; fi
+
       - name: Create release
         uses: softprops/action-gh-release@v3
         with:
@@ -439,13 +479,14 @@ jobs:
             mqttprobe-blazor-linux-arm64-${{ github.ref_name }}.zip
             mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip
             mqttprobe-windows-${{ github.ref_name }}.zip
-            mqttprobe-macos-${{ github.ref_name }}.zip
             mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip
             mqttprobe-android-${{ github.ref_name }}.apk
             velopack/MQTTProbe-win-Setup.exe
             velopack/*.nupkg
             velopack/releases.win.json
             velopack/assets.win.json
+            velopack-linux/*
+            velopack-osx/*
           body: |
             ## MQTT Probe ${{ github.ref_name }}
 
@@ -459,7 +500,7 @@ jobs:
             | `mqttprobe-blazor-linux-arm64-${{ github.ref_name }}.zip` | Blazor Web — single binary, Linux arm64 (Raspberry Pi, NAS) |
             | `mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip` | Blazor Web — single exe, Windows x64 |
             | `mqttprobe-windows-${{ github.ref_name }}.zip` | Windows desktop app — MAUI (unsigned, SmartScreen warning expected) |
-            | `mqttprobe-macos-${{ github.ref_name }}.zip` | macOS desktop app — universal Intel + Apple Silicon, signed & notarized |
+            | MQTTProbe `.pkg` installer | macOS desktop app (recommended) — universal Intel + Apple Silicon, signed & notarized, auto-updates |
             | `mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip` | Linux desktop app — Photino/Blazor, self-contained (requires `libwebkit2gtk-4.1-0`) |
             | `mqttprobe-android-${{ github.ref_name }}.apk` | Android app — sideload APK, Android 7.0+ (API 24) |
             | `docker pull bluegrassiot/mqttprobe:${{ github.ref_name }}` | Docker image (amd64 + arm64, no runtime install needed) |
@@ -485,9 +526,12 @@ jobs:
 
             Download `MQTTProbe-win-Setup.exe` (installs per-user, auto-updates) or the portable `mqttprobe-windows-*.zip`.
 
+            ### Linux
+            Download `MQTTProbe.AppImage` (auto-updates; needs `libfuse2` on Ubuntu 22.04+ and `libwebkit2gtk-4.1`), or the zip for a plain unpacked run.
+
             ### macOS
 
-            The macOS app is signed and notarized by Apple — unzip and run, no security prompts.
+            Download the `.pkg` installer (recommended — installs and enables in-app auto-updates) or the portable Velopack zip in the release assets. Both are signed and notarized by Apple, so Gatekeeper accepts them without security prompts.
 
             ### Android
 

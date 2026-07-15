@@ -22,6 +22,7 @@
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
         <PackageReference Include="Photino.Blazor" />
+        <PackageReference Include="Velopack" />
     </ItemGroup>
 
     <ItemGroup>

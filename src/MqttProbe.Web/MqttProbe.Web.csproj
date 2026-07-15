@@ -16,6 +16,7 @@
     </PropertyGroup>
 
     <PropertyGroup>
+        <ServerGarbageCollection>false</ServerGarbageCollection>
         <DefaultLanguage>en-US</DefaultLanguage>
     </PropertyGroup>
 

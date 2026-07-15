@@ -1,5 +1,5 @@
-﻿using ObjCRuntime;
 using UIKit;
+using Velopack;
 
 namespace MqttProbe
 {
@@ -7,6 +7,7 @@ namespace MqttProbe
     {
         static void Main(string[] args)
         {
+            VelopackApp.Build().Run();
             UIApplication.Main(args, null, typeof(AppDelegate));
         }
     }

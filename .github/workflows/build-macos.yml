@@ -21,9 +21,6 @@ on:
       MACOS_CERT_PASSWORD:
         description: 'Password protecting the .p12'
         required: true
-      MACOS_PROVISION_PROFILE:
-        description: 'Developer ID Mac Catalyst provisioning profile, base64-encoded'
-        required: true
       NOTARY_KEY_P8:
         description: 'App Store Connect API key (.p8 contents, plain text)'
         required: true
@@ -33,10 +30,22 @@ on:
       NOTARY_ISSUER_ID:
         description: 'App Store Connect issuer ID'
         required: true
+      MACOS_INSTALLER_CERT_P12:
+        description: 'Developer ID Installer cert + key, .p12, base64-encoded'
+        required: true
+      MACOS_INSTALLER_CERT_PASSWORD:
+        description: 'Password protecting the installer .p12'
+        required: true
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  # Subject Common Names of the signing certificates, as they appear in
+  # `security find-identity -v`. Not secrets: they are embedded in every signed
+  # binary. The "Verify signing identities" step asserts both exist before the
+  # build runs, so a mismatch fails in seconds rather than during vpk pack.
+  SIGN_APP_IDENTITY: "Developer ID Application: Bluegrass IOT LLC (XVKMB6CQ72)"
+  SIGN_INSTALL_IDENTITY: "Developer ID Installer: Bluegrass IOT LLC (XVKMB6CQ72)"
 
 jobs:
   build-maui-macos:
@@ -73,6 +82,8 @@ jobs:
         env:
           CERT_P12_B64: ${{ secrets.MACOS_CERT_P12 }}
           CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          INSTALLER_CERT_P12_B64: ${{ secrets.MACOS_INSTALLER_CERT_P12 }}
+          INSTALLER_CERT_PASSWORD: ${{ secrets.MACOS_INSTALLER_CERT_PASSWORD }}
         run: |
           [ -n "$CERT_P12_B64" ] || { echo "::error::MACOS_CERT_P12 secret is not set"; exit 1; }
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
@@ -82,20 +93,43 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/cert.p12"
+          [ -n "$INSTALLER_CERT_P12_B64" ] || { echo "::error::MACOS_INSTALLER_CERT_P12 secret is not set"; exit 1; }
+          echo "$INSTALLER_CERT_P12_B64" | base64 --decode > "$RUNNER_TEMP/installer.p12"
+          security import "$RUNNER_TEMP/installer.p12" -k "$KEYCHAIN" -P "$INSTALLER_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
+          rm "$RUNNER_TEMP/installer.p12"
           # Allow Apple's signing tools to use the key without a GUI consent prompt
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
           security list-keychains -d user -s "$KEYCHAIN" login.keychain
-          rm "$RUNNER_TEMP/cert.p12"
 
-      - name: Install provisioning profile
-        env:
-          PROFILE_B64: ${{ secrets.MACOS_PROVISION_PROFILE }}
+      - name: Verify signing identities
         run: |
-          [ -n "$PROFILE_B64" ] || { echo "::error::MACOS_PROVISION_PROFILE secret is not set"; exit 1; }
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          echo "$PROFILE_B64" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/mqttprobe-devid.provisionprofile"
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          echo "Identities present in the CI keychain:"
+          security find-identity -v "$KEYCHAIN"
+          for IDENTITY in "$SIGN_APP_IDENTITY" "$SIGN_INSTALL_IDENTITY"; do
+            security find-identity -v "$KEYCHAIN" | grep -qF "$IDENTITY" || {
+              echo "::error::Signing identity not found: $IDENTITY — compare it against the list above and correct SIGN_APP_IDENTITY / SIGN_INSTALL_IDENTITY in this workflow's env block."
+              exit 1
+            }
+          done
 
-      - name: Publish (signed)
+      - name: Create notarytool profile
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          [ -n "$NOTARY_KEY_P8" ] || { echo "::error::NOTARY_KEY_P8 secret is not set"; exit 1; }
+          echo "$NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+          xcrun notarytool store-credentials velopack-profile \
+            --key "$RUNNER_TEMP/notary.p8" \
+            --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID" \
+            --keychain "$RUNNER_TEMP/signing.keychain-db"
+          rm "$RUNNER_TEMP/notary.p8"
+
+      - name: Publish (unsigned — vpk signs during pack)
         run: >
           dotnet publish src/MqttProbe.Maui/MqttProbe.Maui.csproj
           -f:net10.0-maccatalyst
@@ -103,11 +137,6 @@ jobs:
           -c:Release
           -p:RuntimeIdentifiers='"maccatalyst-x64;maccatalyst-arm64"'
           -p:CreatePackage=false
-          -p:EnableCodeSigning=true
-          -p:CodesignKey="Developer ID Application: Bluegrass IOT LLC (XVKMB6CQ72)"
-          -p:CodesignProvision="MQTTProbe DevID MacCatalyst"
-          -p:CodesignEntitlements=Platforms/MacCatalyst/Entitlements.plist
-          -p:UseHardenedRuntime=true
           -p:ApplicationDisplayVersion=${{ steps.version.outputs.value }}
           -p:ApplicationVersion=${{ steps.version.outputs.code }}
 
@@ -120,38 +149,32 @@ jobs:
           lipo -archs "$EXE"
           lipo -archs "$EXE" | grep -q x86_64
           lipo -archs "$EXE" | grep -q arm64
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          codesign -dvv "$APP" 2>&1 | grep -q "Authority=Developer ID Application"
 
-      - name: Notarize and staple
-        env:
-          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
-          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
-          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+      - name: Velopack pack (sign, notarize, staple)
         run: |
-          [ -n "$NOTARY_KEY_P8" ] || { echo "::error::NOTARY_KEY_P8 secret is not set"; exit 1; }
+          dotnet tool install -g vpk
           APP=$(find src/MqttProbe.Maui/bin/Release/net10.0-maccatalyst -maxdepth 1 -name '*.app' -print -quit)
-          echo "$NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
-          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
-            --key "$RUNNER_TEMP/notary.p8" \
-            --key-id "$NOTARY_KEY_ID" \
-            --issuer "$NOTARY_ISSUER_ID" \
-            --wait --timeout 30m
-          rm "$RUNNER_TEMP/notary.p8"
-          xcrun stapler staple "$APP"
-          spctl --assess --type execute -vv "$APP"
-
-      - name: Archive
-        run: |
-          APP=$(find src/MqttProbe.Maui/bin/Release/net10.0-maccatalyst -maxdepth 1 -name '*.app' -print -quit)
-          ditto -c -k --keepParent "$APP" "mqttprobe-macos-v${{ steps.version.outputs.value }}.zip"
+          test -n "$APP" || { echo "No .app bundle found"; exit 1; }
+          vpk download github --repoUrl https://github.com/bluegrassiot/mqttprobe --token ${{ secrets.GITHUB_TOKEN }} --outputDir publish/velopack-osx || echo "No previous Velopack osx release; deltas skipped."
+          vpk pack \
+            --packId MQTTProbe \
+            --packVersion ${{ steps.version.outputs.value }} \
+            --packDir "$APP" \
+            --packTitle MQTTProbe \
+            --packAuthors "Bluegrass IoT" \
+            --signAppIdentity "$SIGN_APP_IDENTITY" \
+            --signInstallIdentity "$SIGN_INSTALL_IDENTITY" \
+            --notaryProfile velopack-profile \
+            --keychain "$RUNNER_TEMP/signing.keychain-db" \
+            --outputDir publish/velopack-osx
+          find publish/velopack-osx -name '*.nupkg' ! -name "MQTTProbe-${{ steps.version.outputs.value }}-*" -delete
+          ls -la publish/velopack-osx
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: maui-macos
-          path: mqttprobe-macos-v${{ steps.version.outputs.value }}.zip
+          name: maui-macos-velopack
+          path: publish/velopack-osx/
 
       - name: Clean up signing keychain
         if: always()

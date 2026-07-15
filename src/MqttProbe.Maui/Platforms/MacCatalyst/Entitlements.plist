@@ -1,22 +1,23 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-    <!-- See https://aka.ms/maui-publish-app-store#add-entitlements for more information about adding entitlements.-->
+    <!-- Deliberately empty. App Sandbox is NOT enabled: this build ships outside the Mac
+         App Store under Developer ID, and Velopack self-update replaces the .app bundle,
+         which the sandbox forbids. Every entitlement we previously set is sandbox-only and
+         therefore inert without it, so they are removed rather than left as dead config.
+
+         Restore all three if a sandboxed channel (e.g. Mac App Store) is ever added:
+
+           com.apple.security.app-sandbox
+           com.apple.security.network.client
+               Required for outgoing connections once sandboxed.
+           com.apple.security.files.user-selected.read-write
+               Required for certificate import, and must be read-write even though the file
+               is only ever read: MAUI's FilePicker builds UIDocumentPickerViewController
+               with UIDocumentPickerMode.Open (open-in-place), so the system requests a
+               read-write sandbox extension. With read-only the request is denied, the
+               picker returns no URL, and PickAsync reports a cancel indistinguishable from
+               the user backing out — import fails silently. -->
     <dict>
-        <!-- App Sandbox must be enabled to distribute a MacCatalyst app through the Mac App Store. -->
-        <key>com.apple.security.app-sandbox</key>
-        <true/>
-        <!-- When App Sandbox is enabled, this value is required to open outgoing network connections. -->
-        <key>com.apple.security.network.client</key>
-        <true/>
-        <!-- Required for certificate import. Must be read-write even though we only ever read
-             the file: MAUI's FilePicker builds UIDocumentPickerViewController with
-             UIDocumentPickerMode.Open (open-in-place), so the system requests a read-write
-             sandbox extension. With read-only the request is denied, the picker returns no
-             URL, and PickAsync reports a cancel that is indistinguishable from the user
-             backing out, so import fails silently. -->
-        <key>com.apple.security.files.user-selected.read-write</key>
-        <true/>
     </dict>
 </plist>
-

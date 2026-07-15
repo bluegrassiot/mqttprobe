@@ -130,7 +130,7 @@
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
         <PackageReference Include="Microsoft.Maui.Essentials" />
-        <PackageReference Include="Velopack" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'" />
+        <PackageReference Include="Velopack" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' Or $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'" />
     </ItemGroup>
 
     <ItemGroup>

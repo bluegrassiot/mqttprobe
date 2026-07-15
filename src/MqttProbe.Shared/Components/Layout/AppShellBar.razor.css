@@ -76,6 +76,10 @@
     .app-actions-compact {
         display: flex;
     }
+
+    .app-wordmark {
+        display: none;
+    }
 }
 
 .logout-action-form {

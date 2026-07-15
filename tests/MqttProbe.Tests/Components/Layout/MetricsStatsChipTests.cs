@@ -189,4 +189,52 @@ public class MetricsStatsChipTests : BunitTestContext
             provider.Markup.Should().Contain("Uptime");
         });
     }
+
+    [Test]
+    public void ChipActivator_WrapsRateText_AndExposesAccessibleLabel()
+    {
+        _mockMqttClient.IsConnected.Returns(true);
+        _mockMetrics.GetSnapshot().Returns(new UxMetricsSnapshot(
+            ConnectAttempts: 0, ConnectSuccesses: 0, ConnectFailures: 0,
+            PublishSuccesses: 0, PublishFailures: 0,
+            ChartsCreated: 0, SeriesAddedToExistingCharts: 0,
+            MessagesProcessed: 0, MessagesDropped: 0,
+            AvgProcessingTimeUs: 0, MaxProcessingTimeUs: 0,
+            AvgPayloadBytes: 0, MaxPayloadBytes: 0,
+            CurrentMessagesPerSecond: 1234,
+            MessageRateHistory: new int[UxMetricsService.RateWindowSeconds],
+            MessagesProcessedByFormat: new Dictionary<string, long>(),
+            ChartFunnelBySource: new Dictionary<string, long>(),
+            MaxDisplayMessages: 100, CurrentDisplayedMessageCount: 0,
+            AppHealth: new AppHealthMetricsSnapshot(
+                CpuUsagePercent: null, ManagedHeapMb: null,
+                WorkingSetMb: null, ThreadCount: null, ThreadPoolQueueLength: null,
+                GcGen2Collections: null, UptimeSeconds: null),
+            EmulatorPublishersOnline: 0,
+            EmulatorPublishCycles: 0, EmulatorNodesInError: 0));
+
+        var cut = Render<MetricsStatsChip>();
+        var chip = cut.Find("button.mud-chip");
+        var rate = cut.Find(".metrics-chip-rate");
+
+        rate.TextContent.Should().Contain("1");
+        rate.TextContent.Should().Contain("msg/s");
+        chip.GetAttribute("aria-label").Should().NotBeNullOrWhiteSpace();
+        chip.GetAttribute("aria-label")!.Should().Contain("msg/s");
+    }
+
+    [Test]
+    public void ChipActivator_ShowsDisconnectedRate_WhenNotConnected()
+    {
+        _mockMqttClient.IsConnected.Returns(false);
+        _mockMetrics.GetSnapshot().Returns(CreateSnapshot(appHealthAvailable: false));
+
+        var cut = Render<MetricsStatsChip>();
+        var chip = cut.Find("button.mud-chip");
+        var rate = cut.Find(".metrics-chip-rate");
+
+        rate.TextContent.Should().Contain("msg/s");
+        chip.GetAttribute("aria-label").Should().NotBeNullOrWhiteSpace();
+        chip.GetAttribute("aria-label")!.Should().Contain("msg/s");
+    }
 }

@@ -34,7 +34,6 @@ public sealed class ConnectionSessionLifecycle : IConnectionSessionLifecycle
         {
             await _mqttClient.StopAsync();
             certResource?.Dispose();
-            ActiveConnectionStopped?.Invoke();
         }
         catch (Exception ex)
         {
@@ -46,6 +45,15 @@ public sealed class ConnectionSessionLifecycle : IConnectionSessionLifecycle
             }
             _logger.LogError(ex, "Failed to stop MQTT client cleanly; certificate quarantined");
             throw;
+        }
+
+        try
+        {
+            ActiveConnectionStopped?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ActiveConnectionStopped handler failed");
         }
     }
 }

@@ -15,8 +15,8 @@
 }
 
 .metrics-flyout {
-    min-width: 300px;
-    max-width: 340px;
+    min-width: min(300px, calc(100vw - 32px));
+    max-width: min(340px, calc(100vw - 32px));
 }
 
 .metrics-row {

@@ -23,6 +23,7 @@ public static class MauiProgram
 {
     public static MauiApp CreateMauiApp()
     {
+#if IOS
         // WORKAROUND: MudBlazor satellite assemblies (MudBlazor.resources.dll) are not
         // bundled on iOS, causing a FileNotFoundException during localization. Force a
         // neutral culture so the runtime falls back to the embedded default resources.
@@ -30,6 +31,7 @@ public static class MauiProgram
         // satellite assembly inclusion once a permanent fix is applied.
         CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("en-US");
         CultureInfo.DefaultThreadCurrentUICulture = new CultureInfo("en-US");
+#endif
 
         var builder = MauiApp.CreateBuilder();
 

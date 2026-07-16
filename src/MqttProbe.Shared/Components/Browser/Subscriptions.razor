@@ -25,13 +25,13 @@
                                   OnKeyDown="HandleAddKeyDown"/>
                 </MudItem>
                 <MudItem xs="12" sm="2" Class="d-flex align-center">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="app-btn-min"
-                               StartIcon="@LucideIcons.Plus"
-                               title="Subscribe"
-                               Disabled="@_isAdding"
-                               OnClick="@AddTopic">
+                    <AppPrimaryButton MinWidth="true"
+                                StartIcon="@LucideIcons.Plus"
+                                title="Subscribe"
+                                Disabled="@_isAdding"
+                                OnClick="@AddTopic">
                         Subscribe
-                    </MudButton>
+                    </AppPrimaryButton>
                 </MudItem>
                 <MudItem xs="12">
                     <div class="d-flex flex-wrap gap-1">
@@ -70,12 +70,12 @@
                     <MudSpacer/>
                     <AuthorizeView Roles="Admin,Operator">
                         <Authorized>
-                            <MudButton Variant="Variant.Outlined" Color="Color.Error"
-                                       StartIcon="@LucideIcons.Trash2"
-                                       title="Remove"
-                                       OnClick="@RemoveSelected">
+                            <AppDestructiveButton
+                                        StartIcon="@LucideIcons.Trash2"
+                                        title="Remove"
+                                        OnClick="@RemoveSelected">
                                 Remove
-                            </MudButton>
+                            </AppDestructiveButton>
                         </Authorized>
                     </AuthorizeView>
                 </ToolBarContent>

@@ -30,13 +30,13 @@
     <HeaderActions>
         @if (TotalNodeCount > 0)
         {
-            <MudButton Variant="Variant.Outlined" Color="Color.Error" Class="app-btn-min"
-                       StartIcon="@LucideIcons.Trash2" Size="Size.Medium"
-                       Disabled="@(OfflineNodeCount == 0)"
-                       OnClick="@ConfirmRemoveAllOfflineAsync"
-                       aria-label="Remove all offline nodes">
+            <AppDestructiveButton Class="app-btn-min"
+                        StartIcon="@LucideIcons.Trash2" Size="Size.Medium"
+                        Disabled="@(OfflineNodeCount == 0)"
+                        OnClick="@ConfirmRemoveAllOfflineAsync"
+                        aria-label="Remove all offline nodes">
                 Prune offline
-            </MudButton>
+            </AppDestructiveButton>
         }
     </HeaderActions>
     <HeaderFilters>
@@ -134,10 +134,10 @@
         {
             <MudPaper Elevation="0" Class="spb-detail-panel">
                 <MudHidden Breakpoint="Breakpoint.MdAndUp">
-                    <MudButton StartIcon="@LucideIcons.ArrowLeft" Variant="Variant.Text"
-                               Color="Color.Inherit" OnClick="@ClearSelection" Class="mb-2">
+                    <AppTertiaryButton StartIcon="@LucideIcons.ArrowLeft"
+                                       OnClick="@ClearSelection" Class="mb-2">
                         Back
-                    </MudButton>
+                    </AppTertiaryButton>
                 </MudHidden>
 
                 <div class="d-flex align-center flex-wrap gap-2 mb-1">

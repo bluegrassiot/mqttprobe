@@ -144,7 +144,7 @@
                             }
                             <MudItem xs="12">
                                 <MudStack Spacing="2">
-                                    <MudCheckBox @bind-Value="@_selectedConnection.UseTls" Color="Color.Primary">
+                                    <MudCheckBox @bind-Value="@_selectedConnection.UseTls" Color="Color.Default">
                                         Use TLS
                                     </MudCheckBox>
                                     @if (_selectedConnection.UseTls)
@@ -159,7 +159,7 @@
                                             </MudText>
                                         </div>
 
-                                        <MudPaper Class="client-cert-section pa-3 mt-2" Elevation="0" Outlined="true">
+                                        <div class="client-cert-section pa-3 mt-2">
                                             <MudText Typo="Typo.subtitle2" Class="mb-2">Client Certificate</MudText>
 
                                             @if (_certificateUnavailable)
@@ -183,8 +183,10 @@
                                             else
                                             {
                                                 <MudToggleGroup T="CertificateInputMode" @bind-Value="_certInputMode"
-                                                                Color="Color.Primary" SelectionMode="SelectionMode.SingleSelection"
-                                                                Size="Size.Small" Class="mb-2 client-cert-mode-toggle">
+                                                                Color="Color.Default"
+                                                                SelectionMode="SelectionMode.SingleSelection"
+                                                                Size="Size.Small"
+                                                                Class="mb-2 client-cert-mode-toggle">
                                                     <MudToggleItem Value="CertificateInputMode.Pfx">PFX/P12</MudToggleItem>
                                                     <MudToggleItem Value="CertificateInputMode.Pem">PEM</MudToggleItem>
                                                 </MudToggleGroup>
@@ -218,7 +220,7 @@
                                                 else
                                                 {
                                                     <MudStack Spacing="1">
-                                                        <MudButton Variant="Variant.Outlined"
+                                                        <MudButton Variant="Variant.Text"
                                                                    StartIcon="@LucideIcons.Folder"
                                                                    OnClick="@PickCertificateFile"
                                                                    Size="Size.Small"
@@ -228,7 +230,7 @@
 
                                                         @if (_certInputMode == CertificateInputMode.Pem)
                                                         {
-                                                            <MudButton Variant="Variant.Outlined"
+                                                            <MudButton Variant="Variant.Text"
                                                                        StartIcon="@LucideIcons.Folder"
                                                                        OnClick="@PickKeyFile"
                                                                        Size="Size.Small"
@@ -266,7 +268,7 @@
                                             {
                                                 <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">@_certError</MudAlert>
                                             }
-                                        </MudPaper>
+                                        </div>
                                     }
                                 </MudStack>
                             </MudItem>
@@ -294,11 +296,11 @@
                     else
                     {
                         <div class="connection-actions-footer-cta">
-                            <MudButton Variant="Variant.Filled" title="Connect" Color="Color.Primary" Class="app-btn-min"
-                                       StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect)"
-                                       OnClick="@(async () => await Connect())">
+                            <AppPrimaryButton title="Connect" MinWidth="true"
+                                        StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect)"
+                                        OnClick="@(async () => await Connect())">
                                 Connect
-                            </MudButton>
+                            </AppPrimaryButton>
                         </div>
                     }
 

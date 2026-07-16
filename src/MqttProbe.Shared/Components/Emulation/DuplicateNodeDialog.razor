@@ -17,12 +17,12 @@
         </div>
     </DialogContent>
     <DialogActions>
-        <MudButton title="Cancel duplicate" OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+        <AppTertiaryButton title="Cancel duplicate" OnClick="@(() => MudDialog.Cancel())">Cancel</AppTertiaryButton>
+        <AppPrimaryButton
                    title="Create copies"
                    OnClick="@(() => MudDialog.Close(DialogResult.Ok(_copies)))">
             Create
-        </MudButton>
+        </AppPrimaryButton>
     </DialogActions>
 </MudDialog>
 

@@ -84,8 +84,9 @@
 }
 
 .client-cert-section {
-    border: 1px solid var(--mud-palette-lines-default);
+    border: none;
     border-radius: var(--mud-default-borderradius);
+    background: rgba(148, 163, 184, 0.06);
 }
 
 .client-cert-summary {
@@ -95,9 +96,20 @@
     padding: 0.25rem 0;
 }
 
-.client-cert-file-btn {
+.connection-dialog-content ::deep .client-cert-file-btn {
     width: 100%;
     justify-content: flex-start;
+    border: 1px solid var(--mud-palette-lines-default);
+    background: transparent;
+    min-height: 32px;
+    font-weight: 400;
+    text-transform: none;
+    transition: border-color 150ms ease-out, background 150ms ease-out;
+}
+
+.connection-dialog-content ::deep .client-cert-file-btn:hover {
+    border-color: var(--mud-palette-primary);
+    background: rgba(249, 115, 22, 0.05);
 }
 
 .client-cert-file-input {

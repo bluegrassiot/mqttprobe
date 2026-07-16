@@ -109,13 +109,12 @@
 
                     <AuthorizeView>
                         <Authorized>
-                            <MudButton Variant="Variant.Outlined"
-                                       Color="Color.Primary"
+                            <AppSecondaryButton
+                                       MinWidth="true"
                                        StartIcon="@LucideIcons.Lock"
-                                       Href="/change-password"
-                                       Class="app-btn-min">
+                                       Href="/change-password">
                                 Change password
-                            </MudButton>
+                            </AppSecondaryButton>
                         </Authorized>
                     </AuthorizeView>
                 </MudPaper>
@@ -134,19 +133,19 @@
                 @if (UpdateService.IsSupported)
                 {
                     <div class="mt-2">
-                        <MudButton data-testid="check-updates-button"
-                                   Variant="Variant.Outlined" Size="Size.Small"
+                        <AppSecondaryButton data-testid="check-updates-button"
+                                   Size="Size.Small"
                                    Disabled="@_checkingForUpdate"
                                    OnClick="CheckForUpdatesAsync">
                             Check for updates
-                        </MudButton>
+                        </AppSecondaryButton>
                         @if (_availableUpdateVersion is not null)
                         {
-                            <MudButton data-testid="apply-update-button"
-                                       Class="ml-2" Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small"
+                            <AppPrimaryButton data-testid="apply-update-button"
+                                       Class="ml-2" Size="Size.Small"
                                        OnClick="ApplyUpdateAsync">
                                 Update to @_availableUpdateVersion and restart
-                            </MudButton>
+                            </AppPrimaryButton>
                         }
                         else if (_updateCheckCompleted)
                         {

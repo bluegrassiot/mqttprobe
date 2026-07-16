@@ -18,9 +18,9 @@
                 Disconnected. Attempting to reconnect…
             </MudAlert>
         </div>
-        <MudButton Variant="Variant.Outlined" Color="Color.Error"
+        <AppDestructiveButton
                    StartIcon="@LucideIcons.CircleStop"
-                   OnClick="@StopReconnect">Stop</MudButton>
+                   OnClick="@StopReconnect">Stop</AppDestructiveButton>
     </div>
 }
 else

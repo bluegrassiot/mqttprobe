@@ -59,7 +59,7 @@ public class PublishersTests : BunitTestContext
     }
 
     [Test]
-    public void PasteFromClipboardButton_UsesPrimaryActionColor()
+    public void PasteFromClipboardButton_UsesTertiaryTextStyle()
     {
         // The Paste button only renders when the host is native (MAUI) or Windows;
         // in bUnit on Linux the default `IAppInfoService` is a non-native substitute
@@ -69,11 +69,12 @@ public class PublishersTests : BunitTestContext
 
         var cut = Render<Publishers>();
 
-        // Target the Paste button by its text content rather than positionally —
-        // the header Publish button now renders first in the DOM.
+        // Tertiary quiet helper: text + default color (slate), not primary orange.
         var pasteButton = cut.FindAll("button")
             .First(b => b.TextContent.Contains("Paste from clipboard"));
-        pasteButton.ClassList.Should().Contain("mud-button-text-primary");
+        pasteButton.ClassList.Should().Contain("mud-button-text");
+        pasteButton.ClassList.Should().Contain("mud-button-text-default");
+        pasteButton.ClassList.Should().NotContain("mud-button-text-primary");
     }
 
     [Test]

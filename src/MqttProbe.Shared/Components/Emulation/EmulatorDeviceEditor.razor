@@ -38,12 +38,12 @@
                                OnChanged="@NotifyChangedAsync"/>
         }
 
-        <MudButton Variant="Variant.Outlined" StartIcon="@LucideIcons.Plus" Size="Size.Small" Class="mt-2"
+        <AppSecondaryButton StartIcon="@LucideIcons.Plus" Size="Size.Small" Class="mt-2"
                    title="Add metric"
                    Disabled="@EmulationService.IsRunning"
                    OnClick="@AddMetricAsync">
             Add metric
-        </MudButton>
+        </AppSecondaryButton>
     </div>
 }
 

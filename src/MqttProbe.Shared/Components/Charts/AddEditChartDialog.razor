@@ -64,12 +64,12 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton Variant="Variant.Text" Color="Color.Default" Class="app-btn-min" OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" Class="app-btn-min"
+        <AppTertiaryButton MinWidth="true" OnClick="Cancel">Cancel</AppTertiaryButton>
+        <AppPrimaryButton MinWidth="true"
                    Disabled="@(string.IsNullOrWhiteSpace(_name))"
                    OnClick="Submit">
             @(Configuration == null ? "Create Chart" : "Save Chart")
-        </MudButton>
+        </AppPrimaryButton>
     </DialogActions>
 </MudDialog>
 

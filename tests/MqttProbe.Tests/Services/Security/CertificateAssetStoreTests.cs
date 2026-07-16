@@ -659,4 +659,97 @@ public class CertificateAssetStoreTests
 
         (await _envelopeStore.GetAsync($"cert-env-{assetId}")).Should().BeNull();
     }
+
+    [Test]
+    public async Task ImportAsync_PemDerCertificate_Succeeds()
+    {
+        using var cert = TestCertFactory.CreateRsaCert();
+        var derBytes = cert.Export(X509ContentType.Cert);
+        var keyPem = Encoding.UTF8.GetBytes(cert.GetRSAPrivateKey()!.ExportPkcs8PrivateKeyPem());
+        var request = new CertificateImportRequest(CertificateInputMode.Pem, derBytes, keyPem, null);
+        var assetId = await _store.ImportAsync(Guid.NewGuid(), request);
+        assetId.Should().NotBeNullOrEmpty();
+    }
+
+    [Test]
+    public async Task ImportAsync_PemWithUtf8Bom_Succeeds()
+    {
+        var (certPem, keyPem) = TestCertFactory.CreatePemRsa();
+        var bomCertPem = new byte[] { 0xEF, 0xBB, 0xBF }.Concat(certPem).ToArray();
+        var request = new CertificateImportRequest(CertificateInputMode.Pem, bomCertPem, keyPem, null);
+        var assetId = await _store.ImportAsync(Guid.NewGuid(), request);
+        assetId.Should().NotBeNullOrEmpty();
+    }
+
+    [Test]
+    public async Task ImportAsync_PemCertSlotIsPrivateKey_ThrowsHelpful()
+    {
+        var (certPem, keyPem) = TestCertFactory.CreatePemRsa();
+        var request = new CertificateImportRequest(CertificateInputMode.Pem, keyPem, certPem, null);
+        var act = () => _store.ImportAsync(Guid.NewGuid(), request);
+        await act.Should().ThrowAsync<CertificateImportException>()
+            .WithMessage("*looks like a private key*");
+    }
+
+    [Test]
+    public async Task ImportAsync_PemTrustedCertificateLabel_Succeeds()
+    {
+        var (certPem, keyPem) = TestCertFactory.CreatePemRsa();
+        var certText = Encoding.UTF8.GetString(certPem);
+        var trustedCertPem = Encoding.UTF8.GetBytes(
+            certText.Replace("BEGIN CERTIFICATE", "BEGIN TRUSTED CERTIFICATE")
+                    .Replace("END CERTIFICATE", "END TRUSTED CERTIFICATE"));
+        var request = new CertificateImportRequest(CertificateInputMode.Pem, trustedCertPem, keyPem, null);
+        var assetId = await _store.ImportAsync(Guid.NewGuid(), request);
+        assetId.Should().NotBeNullOrEmpty();
+    }
+
+    [Test]
+    public async Task ImportAsync_PemTextMustNotBeParsedAsDer()
+    {
+        var (certPem, keyPem) = TestCertFactory.CreatePemRsa();
+        var certText = Encoding.UTF8.GetString(certPem);
+        var garbagePem = Encoding.UTF8.GetBytes(
+            certText.Replace("BEGIN CERTIFICATE", "BEGIN GARBAGE")
+                    .Replace("END CERTIFICATE", "END GARBAGE"));
+        var request = new CertificateImportRequest(CertificateInputMode.Pem, garbagePem, keyPem, null);
+        var act = () => _store.ImportAsync(Guid.NewGuid(), request);
+        await act.Should().ThrowAsync<CertificateImportException>()
+            .WithMessage("*PEM*CERTIFICATE*");
+    }
+
+    [Test]
+    public async Task ImportAsync_DerPrivateKeyAsCert_ThrowsHelpful()
+    {
+        using var cert = TestCertFactory.CreateRsaCert();
+        var derKeyBytes = cert.GetRSAPrivateKey()!.ExportPkcs8PrivateKey();
+        var keyPem = Encoding.UTF8.GetBytes(cert.GetRSAPrivateKey()!.ExportPkcs8PrivateKeyPem());
+        var request = new CertificateImportRequest(CertificateInputMode.Pem, derKeyBytes, keyPem, null);
+        var act = () => _store.ImportAsync(Guid.NewGuid(), request);
+        await act.Should().ThrowAsync<CertificateImportException>()
+            .WithMessage("*private key*");
+    }
+
+    [Test]
+    public async Task ImportAsync_Utf16LePem_Succeeds()
+    {
+        var (certPem, keyPem) = TestCertFactory.CreatePemRsa();
+        var certText = Encoding.UTF8.GetString(certPem);
+        var utf16LeCertPem = Encoding.Unicode.GetPreamble()
+            .Concat(Encoding.Unicode.GetBytes(certText))
+            .ToArray();
+        var request = new CertificateImportRequest(CertificateInputMode.Pem, utf16LeCertPem, keyPem, null);
+        var assetId = await _store.ImportAsync(Guid.NewGuid(), request);
+        assetId.Should().NotBeNullOrEmpty();
+    }
+
+    [Test]
+    public async Task ImportAsync_CombinedPemInCertField_Succeeds()
+    {
+        var (certPem, keyPem) = TestCertFactory.CreatePemRsa();
+        var combinedPem = certPem.Concat(keyPem).ToArray();
+        var request = new CertificateImportRequest(CertificateInputMode.Pem, combinedPem, keyPem, null);
+        var assetId = await _store.ImportAsync(Guid.NewGuid(), request);
+        assetId.Should().NotBeNullOrEmpty();
+    }
 }

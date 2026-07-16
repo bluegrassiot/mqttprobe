@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using MqttProbe.Models.Mqtt;
 
@@ -391,12 +392,20 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
 
     private (byte[] pfxBytes, string internalPassword) ImportPem(CertificateImportRequest request)
     {
-        var certPem = Encoding.UTF8.GetString(request.CertificateBytes);
-        var keyPem = Encoding.UTF8.GetString(request.PrivateKeyBytes!);
+        var certText = DecodePemText(request.CertificateBytes);
+        var keyText = DecodePemText(request.PrivateKeyBytes!);
 
-        using var cert = X509Certificate2.CreateFromPem(certPem);
+        if (LooksLikePrivateKeyPem(certText) && !LooksLikeCertificatePem(certText))
+            throw new CertificateImportException(
+                "The certificate file looks like a private key. Select the certificate (.crt/.pem) for the certificate field and the private key (.key/.pem) for the key field.");
 
-        var isEncrypted = keyPem.Contains("BEGIN ENCRYPTED PRIVATE KEY");
+        if (LooksLikeCertificatePem(keyText) && !LooksLikePrivateKeyPem(keyText))
+            throw new CertificateImportException(
+                "The private key file looks like a certificate. Select the private key (.key/.pem) for the key field.");
+
+        using var cert = LoadCertificateFromPemOrDer(request.CertificateBytes, certText);
+
+        var isEncrypted = keyText.Contains("BEGIN ENCRYPTED PRIVATE KEY", StringComparison.OrdinalIgnoreCase);
         if (isEncrypted && string.IsNullOrEmpty(request.Password))
             throw new CertificateImportException("The private key is encrypted. Enter the key password.");
 
@@ -409,16 +418,16 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
             {
                 var rsa = RSA.Create();
                 key = rsa;
-                if (isEncrypted) rsa.ImportFromEncryptedPem(keyPem, request.Password);
-                else rsa.ImportFromPem(keyPem);
+                if (isEncrypted) rsa.ImportFromEncryptedPem(keyText, request.Password);
+                else rsa.ImportFromPem(keyText);
                 validatedCert = cert.CopyWithPrivateKey(rsa);
             }
             else if (algOid == OidEcc)
             {
                 var ecdsa = ECDsa.Create();
                 key = ecdsa;
-                if (isEncrypted) ecdsa.ImportFromEncryptedPem(keyPem, request.Password);
-                else ecdsa.ImportFromPem(keyPem);
+                if (isEncrypted) ecdsa.ImportFromEncryptedPem(keyText, request.Password);
+                else ecdsa.ImportFromPem(keyText);
                 validatedCert = cert.CopyWithPrivateKey(ecdsa);
             }
             else
@@ -433,6 +442,9 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
             key?.Dispose();
             if (isEncrypted)
                 throw new CertificateImportException("The key password is incorrect.", ex);
+            if (LooksLikeCertificatePem(keyText))
+                throw new CertificateImportException(
+                    "The private key file looks like a certificate. Select the private key (.key/.pem) for the key field.", ex);
             throw new CertificateImportException("The private key is invalid or does not match the certificate.", ex);
         }
         catch { key?.Dispose(); throw; }
@@ -448,6 +460,123 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         }
 
         return ExportCanonicalPfx(validatedCert);
+    }
+
+    private static readonly Regex _certPemBlock = new(
+        @"-----BEGIN (?<label>[^-]+)-----(?<body>.*?)-----END \k<label>-----",
+        RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static string DecodePemText(byte[] bytes)
+    {
+        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+            return Encoding.Unicode.GetString(bytes).TrimStart('\uFEFF').Trim();
+        if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
+            return Encoding.BigEndianUnicode.GetString(bytes).TrimStart('\uFEFF').Trim();
+
+        var utf8 = Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF').Trim();
+        if (utf8.Contains("-----BEGIN", StringComparison.Ordinal))
+            return utf8;
+
+        if (bytes.Length >= 4 && bytes[1] == 0 && bytes[3] == 0 && bytes[0] != 0)
+        {
+            var utf16 = Encoding.Unicode.GetString(bytes).TrimStart('\uFEFF').Trim();
+            if (utf16.Contains("-----BEGIN", StringComparison.Ordinal))
+                return utf16;
+        }
+
+        return utf8;
+    }
+
+    private static bool LooksLikePem(string text) =>
+        text.Contains("-----BEGIN", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikePrivateKeyPem(string text) =>
+        text.Contains("BEGIN ", StringComparison.OrdinalIgnoreCase)
+        && text.Contains("PRIVATE KEY", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikeCertificatePem(string text) =>
+        text.Contains("BEGIN CERTIFICATE", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("BEGIN TRUSTED CERTIFICATE", StringComparison.OrdinalIgnoreCase)
+        || text.Contains("BEGIN X509 CERTIFICATE", StringComparison.OrdinalIgnoreCase);
+
+    private static string? ExtractCertificatePem(string text)
+    {
+        foreach (Match m in _certPemBlock.Matches(text))
+        {
+            var label = m.Groups["label"].Value.Trim();
+            if (label.Contains("CERTIFICATE", StringComparison.OrdinalIgnoreCase)
+                && !label.Contains("REQUEST", StringComparison.OrdinalIgnoreCase))
+            {
+                return "-----BEGIN CERTIFICATE-----\n"
+                    + m.Groups["body"].Value.Trim()
+                    + "\n-----END CERTIFICATE-----";
+            }
+        }
+        return null;
+    }
+
+    private static bool LooksLikeDerPrivateKey(byte[] rawBytes)
+    {
+        try { using var rsa = RSA.Create(); rsa.ImportPkcs8PrivateKey(rawBytes, out _); return true; }
+        catch { }
+        try { using var rsa = RSA.Create(); rsa.ImportRSAPrivateKey(rawBytes, out _); return true; }
+        catch { }
+        try { using var ecdsa = ECDsa.Create(); ecdsa.ImportPkcs8PrivateKey(rawBytes, out _); return true; }
+        catch { }
+        return false;
+    }
+
+    private static X509Certificate2 LoadCertificateFromPemOrDer(byte[] rawBytes, string certText)
+    {
+        if (LooksLikePem(certText))
+        {
+            try
+            {
+                return X509Certificate2.CreateFromPem(certText);
+            }
+            catch { }
+
+            var extracted = ExtractCertificatePem(certText);
+            if (extracted is not null)
+            {
+                try
+                {
+                    return X509Certificate2.CreateFromPem(extracted);
+                }
+                catch (Exception ex) when (ex is CryptographicException or ArgumentException or FormatException)
+                {
+                    throw new CertificateImportException(
+                        "The certificate PEM could not be parsed. Ensure the file contains a "
+                        + "-----BEGIN CERTIFICATE----- block (not only a private key or CA bag).",
+                        ex);
+                }
+            }
+
+            if (LooksLikePrivateKeyPem(certText))
+                throw new CertificateImportException(
+                    "The certificate file looks like a private key. Select the certificate for the certificate field.");
+
+            throw new CertificateImportException(
+                "The certificate file contains PEM data but no CERTIFICATE block was found. "
+                + "Expected -----BEGIN CERTIFICATE-----.");
+        }
+
+        try
+        {
+            return X509CertificateLoader.LoadCertificate(rawBytes);
+        }
+        catch (Exception ex) when (ex is CryptographicException or ArgumentException or FormatException)
+        {
+            if (LooksLikeDerPrivateKey(rawBytes))
+                throw new CertificateImportException(
+                    "The certificate file looks like a private key (binary). Select the certificate (.crt) for the certificate field and the key for the key field.",
+                    ex);
+
+            throw new CertificateImportException(
+                "The certificate file is not a valid PEM or DER certificate. "
+                + "Expected -----BEGIN CERTIFICATE----- or a binary DER .crt.",
+                ex);
+        }
     }
 
     private (byte[] pfxBytes, string internalPassword) ExportCanonicalPfx(X509Certificate2 validatedCert)

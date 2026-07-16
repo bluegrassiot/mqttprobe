@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -6,6 +7,7 @@ using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Layout;
 using MqttProbe.Desktop.Interop;
 using MqttProbe.Desktop.Services;
+using MqttProbe.Desktop.Services.Security;
 using MqttProbe.Services;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
@@ -79,19 +81,36 @@ internal static class Program
         builder.Services.AddCascadingAuthenticationState();
         builder.Services.AddScoped<AuthenticationStateProvider, DesktopUnauthenticatedStateProvider>();
 
-        var secretStorage = new DesktopSecretStorage();
-        builder.Services.AddSingleton<ISecretStorage>(secretStorage);
+        var configDir = Path.Combine(
+            Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config"),
+            "mqttprobe");
+        Directory.CreateDirectory(configDir);
+        var secretsDir = Path.Combine(configDir, "secrets");
+        Directory.CreateDirectory(secretsDir);
+
+        builder.Services.AddSingleton(sp =>
+        {
+            ISecretKeyProtector os =
+                OperatingSystem.IsWindows() ? new WindowsDpapiSecretKeyProtector(secretsDir) :
+                OperatingSystem.IsMacOS() ? new MacKeychainSecretKeyProtector(new MacKeychainNative()) :
+                OperatingSystem.IsLinux() ? new LinuxLibsecretKeyProtector(new LinuxLibsecretNative()) :
+                new UnavailableSecretKeyProtector();
+
+            var raw = new RawSecretKeyFile(secretsDir);
+            var file = new FileSecretKeyProtector(raw);
+            return new DesktopSecretKeyProtector(secretsDir, os, file, raw);
+        });
+        builder.Services.AddSingleton<ISecretProtectionStatus>(sp =>
+            sp.GetRequiredService<DesktopSecretKeyProtector>());
+        builder.Services.AddSingleton<ISecretStorage>(sp =>
+            new DesktopSecretStorage(secretsDir, sp.GetRequiredService<DesktopSecretKeyProtector>()));
 
         builder.Services.AddSingleton<IPhotinoWindowAccessor, PhotinoWindowAccessor>();
         builder.Services.AddSingleton<ICertificateEnvelopeKeyStore>(sp =>
             new DesktopCertificateEnvelopeKeyStore(sp.GetRequiredService<ISecretStorage>()));
         builder.Services.AddSingleton<IFileProtector, DefaultFileProtector>();
 
-        var configDir = Path.Combine(
-            Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")
-                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config"),
-            "mqttprobe");
-        Directory.CreateDirectory(configDir);
         var configPath = Path.Combine(configDir, "appsettings.json");
         builder.Services.AddSingleton<ISettingsStore>(sp =>
             new SettingsStore(configPath, isMobile: false,
@@ -124,8 +143,25 @@ internal static class Program
         var app = builder.Build();
 
         app.Services.GetRequiredService<IPhotinoWindowAccessor>().Window = app.MainWindow;
-        var resolvedSettingsStore = app.Services.GetRequiredService<ISettingsStore>();
-        resolvedSettingsStore.LoadAsync(secretStorage, app.Services.GetService<ICertificateAssetStore>(), app.Services.GetService<ICertificateEnvelopeKeyStore>()).GetAwaiter().GetResult();
+
+        try
+        {
+            var keyProtector = app.Services.GetRequiredService<DesktopSecretKeyProtector>();
+            keyProtector.InitializeAsync().GetAwaiter().GetResult();
+
+            var secretStorage = app.Services.GetRequiredService<ISecretStorage>();
+            var resolvedSettingsStore = app.Services.GetRequiredService<ISettingsStore>();
+            resolvedSettingsStore.LoadAsync(secretStorage, app.Services.GetService<ICertificateAssetStore>(), app.Services.GetService<ICertificateEnvelopeKeyStore>()).GetAwaiter().GetResult();
+        }
+        catch (SecretStorageException ex)
+        {
+            var message = "MQTTProbe could not initialize secret storage:\n\n" + ex.Message
+                + "\n\nIf secrets are unrecoverable, remove the secrets directory under your user config (e.g. %USERPROFILE%\\.config\\mqttprobe\\secrets) and re-enter passwords.";
+            Console.Error.WriteLine(message);
+            if (OperatingSystem.IsWindows())
+                ShowWindowsError(message);
+            Environment.Exit(1);
+        }
 
         // .ico for the Win32 window/titlebar; .png for the Linux WM/dock.
         var iconFile = OperatingSystem.IsWindows() ? "icon.ico" : "icon.png";
@@ -146,5 +182,15 @@ internal static class Program
             });
 
         app.Run();
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int MessageBoxW(IntPtr hWnd, string lpText, string lpCaption, uint uType);
+
+    private static void ShowWindowsError(string message)
+    {
+        const uint MB_OK = 0x00000000;
+        const uint MB_ICONERROR = 0x00000010;
+        MessageBoxW(IntPtr.Zero, message, "MQTTProbe - Secret Storage Error", MB_OK | MB_ICONERROR);
     }
 }

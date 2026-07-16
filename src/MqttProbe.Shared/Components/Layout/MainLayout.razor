@@ -23,6 +23,7 @@
         <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="@($"app-shell-container{(AppInfoService.IsNative ? " app-shell-container--native" : string.Empty)}")">
             <div class="@($"app-shell{(AppInfoService.IsNative ? " app-shell--native" : string.Empty)}")">
             <div class="app-shell-body">
+                <SecretProtectionBanner />
                 @Body
             </div>
             </div>

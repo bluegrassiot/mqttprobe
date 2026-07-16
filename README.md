@@ -25,7 +25,7 @@ Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart
 - **WebSocket support** — connect via `ws://` or `wss://` in addition to raw TCP
 - **Charts** — live time-series visualization of JSON payload fields with configurable field selection; chart configurations are saved per connection across sessions
 - **Authentication** — cookie-based login with PBKDF2-SHA256 hashed passwords; first-run setup wizard, in-app password change
-- **Secure credential storage** — MQTT broker passwords stored in platform-appropriate secure storage (iOS Keychain / Android Keystore / ASP.NET Data Protection on Web / AES-256-GCM encrypted key-file on the desktop app); never written in plaintext
+- **Secure credential storage** — MQTT broker passwords stored in platform-appropriate secure storage (iOS Keychain / Android Keystore / ASP.NET Data Protection on Web); desktop encrypts secrets with AES-256-GCM on disk, with the master key protected by an OS-backed facility when available; never written in plaintext
 
 ---
 
@@ -218,7 +218,16 @@ MqttProbe.slnx
 
 - Passwords are hashed with **PBKDF2-SHA256** (100,000 iterations, random salt, constant-time verification)
 - `config/appsettings.json` is restricted to **owner read/write only** (mode 600) on Linux/macOS
-- MQTT broker passwords are stored in **platform-appropriate secure storage** (OS keystore on MAUI, ASP.NET Data Protection on Web, an AES-256-GCM encrypted key-file on the desktop app) — never in the config file
+- MQTT broker passwords are stored in **platform-appropriate secure storage** (OS keystore on MAUI, ASP.NET Data Protection on Web); desktop encrypts secrets with AES-256-GCM on disk — never in the config file
+- **Desktop secret key protection:**
+  - Master key is protected by an OS-backed facility when available.
+  - Windows: current-user DPAPI (`.master-key-v1.dpapi`)
+  - macOS: Keychain (`com.bluegrassiot.mqttprobe` / `master-key-v1`)
+  - Linux: libsecret schema `com.bluegrassiot.mqttprobe.MasterKey` with attribute `key-id=master-key-v1`
+  - If no OS facility is available, a local `.key` file is used and the UI shows a warning.
+- When OS protection is active, copying the secrets directory alone does not yield a usable key.
+- File-fallback mode is weaker: directory disclosure includes key and ciphertext, relying on filesystem permissions only.
+- An existing OS-protected store cannot automatically switch to file fallback if the keyring becomes temporarily unavailable; restore access to the original OS facility.
 - Client certificate payloads are stored in an AES-256-GCM-encrypted file; the AES key and certificate password are held separately in platform secret storage, see [Client Certificate Security](docs/client-certificate-security.md) for details
 - Authentication cookies are `HttpOnly`, `SameSite=Strict`, and expire after 8 hours with sliding renewal
 - No credentials are ever committed to the repository

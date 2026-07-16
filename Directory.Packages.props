@@ -12,6 +12,7 @@
     <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
     <PackageVersion Include="MessagePack" Version="3.1.8" />
     <PackageVersion Include="MudBlazor" Version="9.7.0" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.10" />
     <!-- MQTTnet v4 — pinned; SparkplugNet is incompatible with v5 -->
     <PackageVersion Include="MQTTnet" Version="4.3.7.1207" />

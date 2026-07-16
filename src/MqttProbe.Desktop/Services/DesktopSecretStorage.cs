@@ -1,68 +1,70 @@
 using System.Security.Cryptography;
 using System.Text;
+using MqttProbe.Desktop.Services.Security;
 using MqttProbe.Services.Security;
 
 namespace MqttProbe.Services;
 
-/// <summary>
-/// Cross-platform secret storage. Each secret is encrypted at rest with AES-GCM using a
-/// per-user random key persisted next to the secrets and restricted to the owning user on
-/// Unix. This replaces the previous Windows-only DPAPI (<c>ProtectedData</c>) implementation,
-/// which threw <see cref="PlatformNotSupportedException"/> on Linux/macOS.
-/// </summary>
-public class DesktopSecretStorage : ISecretStorage
+public sealed class DesktopSecretStorage : ISecretStorage
 {
-    private const int KeySize = 32;   // AES-256
-    private const int NonceSize = 12; // AES-GCM standard nonce length
-    private const int TagSize = 16;   // AES-GCM authentication tag length
+    private const int NonceSize = 12;
+    private const int TagSize = 16;
 
     private readonly string _secretsDir;
-    private readonly string _keyPath;
-    private readonly object _keyLock = new();
-    private byte[]? _key;
+    private readonly DesktopSecretKeyProtector _keyProtector;
 
-    public DesktopSecretStorage()
-        : this(Path.Combine(
-            Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")
-                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config"),
-            "mqttprobe", "secrets"))
-    {
-    }
-
-    internal DesktopSecretStorage(string secretsDir)
+    public DesktopSecretStorage(string secretsDir, DesktopSecretKeyProtector keyProtector)
     {
         _secretsDir = secretsDir;
+        _keyProtector = keyProtector;
         Directory.CreateDirectory(_secretsDir);
-        _keyPath = Path.Combine(_secretsDir, ".key");
     }
 
-    public Task<string?> GetAsync(string key)
+    public async Task<string?> GetAsync(string key)
     {
         var path = GetPath(key);
-        if (!File.Exists(path)) return Task.FromResult<string?>(null);
+        if (!File.Exists(path)) return null;
         try
         {
-            var plaintext = Decrypt(File.ReadAllBytes(path));
-            return Task.FromResult<string?>(Encoding.UTF8.GetString(plaintext));
+            var blob = await File.ReadAllBytesAsync(path);
+            try
+            {
+                var plaintext = await DecryptAsync(blob);
+                return Encoding.UTF8.GetString(plaintext);
+            }
+            catch (CryptographicException)
+            {
+                var migrated = TryMigrateLegacyDpapi(path, blob);
+                if (migrated is not null)
+                {
+                    await SetAsync(key, migrated);
+                    return migrated;
+                }
+                return null;
+            }
         }
-        catch
+        catch (IOException)
         {
-            // Fail soft: an unreadable, corrupt, or legacy (DPAPI-era) secret is treated as
-            // "no secret" so the app prompts the user to re-enter it instead of crashing.
-            return Task.FromResult<string?>(null);
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
         }
     }
 
-    public Task SetAsync(string key, string value)
+    public async Task SetAsync(string key, string value)
     {
         if (string.IsNullOrEmpty(value))
-            return RemoveAsync(key);
+        {
+            await RemoveAsync(key);
+            return;
+        }
 
-        var blob = Encrypt(Encoding.UTF8.GetBytes(value));
+        var blob = await EncryptAsync(Encoding.UTF8.GetBytes(value));
         var path = GetPath(key);
-        File.WriteAllBytes(path, blob);
+        await File.WriteAllBytesAsync(path, blob);
         RestrictToOwner(path);
-        return Task.CompletedTask;
     }
 
     public Task RemoveAsync(string key)
@@ -72,17 +74,17 @@ public class DesktopSecretStorage : ISecretStorage
         return Task.CompletedTask;
     }
 
-    private byte[] Encrypt(byte[] plaintext)
+    private async Task<byte[]> EncryptAsync(byte[] plaintext)
     {
+        var key = await GetKeyAsync();
         var nonce = RandomNumberGenerator.GetBytes(NonceSize);
         var ciphertext = new byte[plaintext.Length];
         var tag = new byte[TagSize];
-        using (var aes = new AesGcm(GetKey(), TagSize))
+        using (var aes = new AesGcm(key, TagSize))
         {
             aes.Encrypt(nonce, plaintext, ciphertext, tag);
         }
 
-        // Layout: [nonce][tag][ciphertext]
         var blob = new byte[NonceSize + TagSize + ciphertext.Length];
         Buffer.BlockCopy(nonce, 0, blob, 0, NonceSize);
         Buffer.BlockCopy(tag, 0, blob, NonceSize, TagSize);
@@ -90,46 +92,48 @@ public class DesktopSecretStorage : ISecretStorage
         return blob;
     }
 
-    private byte[] Decrypt(byte[] blob)
+    private async Task<byte[]> DecryptAsync(byte[] blob)
     {
         if (blob.Length < NonceSize + TagSize)
             throw new CryptographicException("Secret blob is too short to be valid.");
 
+        var key = await GetKeyAsync();
         var nonce = blob.AsSpan(0, NonceSize);
         var tag = blob.AsSpan(NonceSize, TagSize);
         var ciphertext = blob.AsSpan(NonceSize + TagSize);
         var plaintext = new byte[ciphertext.Length];
-        using var aes = new AesGcm(GetKey(), TagSize);
+        using var aes = new AesGcm(key, TagSize);
         aes.Decrypt(nonce, ciphertext, tag, plaintext);
         return plaintext;
     }
 
-    /// <summary>Loads the per-user key, generating and persisting it on first use.</summary>
-    private byte[] GetKey()
+    private async Task<byte[]> GetKeyAsync()
     {
-        if (_key != null) return _key;
-        lock (_keyLock)
-        {
-            if (_key != null) return _key;
-
-            if (File.Exists(_keyPath))
-            {
-                var existing = File.ReadAllBytes(_keyPath);
-                if (existing.Length == KeySize)
-                    return _key = existing;
-            }
-
-            var key = RandomNumberGenerator.GetBytes(KeySize);
-            File.WriteAllBytes(_keyPath, key);
-            RestrictToOwner(_keyPath);
-            return _key = key;
-        }
+        var key = await _keyProtector.GetOrCreateKeyAsync();
+        if (key.Length != MasterKeyConstants.KeySize)
+            throw new SecretStorageException("Master key length is invalid.");
+        return key;
     }
 
     private static void RestrictToOwner(string path)
     {
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+    }
+
+    private static string? TryMigrateLegacyDpapi(string path, byte[] blob)
+    {
+        if (!OperatingSystem.IsWindows())
+            return null;
+        try
+        {
+            var plain = ProtectedData.Unprotect(blob, null, DataProtectionScope.CurrentUser);
+            return Encoding.UTF8.GetString(plain);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private string GetPath(string key)

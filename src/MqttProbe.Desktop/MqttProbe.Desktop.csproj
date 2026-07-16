@@ -22,6 +22,7 @@
              _framework/blazor.webview.js static web asset is processed at build time. -->
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+        <PackageReference Include="System.Security.Cryptography.ProtectedData" />
         <PackageReference Include="Photino.Blazor" />
         <PackageReference Include="Velopack" />
     </ItemGroup>

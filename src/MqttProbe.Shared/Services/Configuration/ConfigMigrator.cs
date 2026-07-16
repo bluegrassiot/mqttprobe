@@ -13,21 +13,24 @@ public static class ConfigMigrator
         if (Directory.Exists(newDir) || !Directory.Exists(legacyDir))
             return false;
 
+        var stagingDir = $"{newDir}.migrating-{Guid.NewGuid():N}";
         try
         {
-            Directory.CreateDirectory(newDir);
+            Directory.CreateDirectory(stagingDir);
             foreach (var file in Directory.GetFiles(legacyDir, "*", SearchOption.AllDirectories))
             {
                 var relative = Path.GetRelativePath(legacyDir, file);
-                var destination = Path.Combine(newDir, relative);
+                var destination = Path.Combine(stagingDir, relative);
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                 File.Copy(file, destination);
             }
+
+            Directory.Move(stagingDir, newDir);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // A failed migration must never block startup; the app falls back to defaults.
+            try { Directory.Delete(stagingDir, recursive: true); } catch { }
             return false;
         }
     }

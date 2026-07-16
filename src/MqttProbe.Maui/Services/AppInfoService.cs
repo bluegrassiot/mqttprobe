@@ -1,23 +1,27 @@
 using System.Diagnostics;
 using System.Reflection;
+using Microsoft.Maui.ApplicationModel;
 using MqttProbe.Services.Platform;
 
 namespace MqttProbe.Services;
 
 public class AppInfoService : IAppInfoService
 {
+    private readonly Func<string?> _appVersionProvider;
     private readonly Func<string?> _processProductVersionProvider;
     private readonly Func<string?> _assemblyInformationalVersionProvider;
 
     public AppInfoService()
-        : this(GetProcessProductVersion, GetAssemblyInformationalVersion)
+        : this(GetAppVersion, GetProcessProductVersion, GetAssemblyInformationalVersion)
     {
     }
 
     public AppInfoService(
+        Func<string?> appVersionProvider,
         Func<string?> processProductVersionProvider,
         Func<string?> assemblyInformationalVersionProvider)
     {
+        _appVersionProvider = appVersionProvider;
         _processProductVersionProvider = processProductVersionProvider;
         _assemblyInformationalVersionProvider = assemblyInformationalVersionProvider;
     }
@@ -25,25 +29,13 @@ public class AppInfoService : IAppInfoService
     public bool RequiresAuthentication => false;
     public bool IsNative => true;
 
-    public string GetVersion()
-    {
-        var version = TryGetVersion(_processProductVersionProvider)
-                      ?? TryGetVersion(_assemblyInformationalVersionProvider)
-                      ?? "unknown";
-        return TrimAfterPlus(version);
-    }
+    public string GetVersion() =>
+        AppVersionResolver.Resolve(
+            _appVersionProvider,
+            _processProductVersionProvider,
+            _assemblyInformationalVersionProvider);
 
-    private static string? TryGetVersion(Func<string?> provider)
-    {
-        try
-        {
-            return provider();
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    private static string? GetAppVersion() => AppInfo.Current.VersionString;
 
     private static string? GetProcessProductVersion()
     {
@@ -55,11 +47,4 @@ public class AppInfoService : IAppInfoService
 
     private static string? GetAssemblyInformationalVersion() =>
         Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-
-    private static string TrimAfterPlus(string version)
-    {
-        var index = version.IndexOf('+');
-
-        return index != -1 ? version[..index] : version;
-    }
 }

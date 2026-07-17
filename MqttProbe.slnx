@@ -29,6 +29,7 @@
   </Folder>
   <Folder Name="/github/">
     <File Path=".github/workflows/build-linux-desktop.yml" />
+    <File Path=".github/workflows/build-macos-desktop.yml" />
     <File Path=".github/workflows/build-macos.yml" />
     <File Path=".github/workflows/ci.yml" />
     <File Path=".github/workflows/release.yml" />

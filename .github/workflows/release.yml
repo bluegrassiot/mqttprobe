@@ -319,11 +319,13 @@ jobs:
           name: maui-android
           path: mqttprobe-android-${{ github.ref_name }}.apk
 
-  # ── Build MAUI macOS ────────────────────────────────────────────────────────
+  # ── Build Desktop macOS ─────────────────────────────────────────────────────
+  # Photino Desktop (native net10.0) replaces the MAUI Mac Catalyst build, which
+  # crashed on launch because Velopack does not support the Catalyst runtime.
 
-  build-maui-macos:
-    name: Build (MAUI macOS)
-    uses: ./.github/workflows/build-macos.yml
+  build-macos-desktop:
+    name: Build (Desktop macOS)
+    uses: ./.github/workflows/build-macos-desktop.yml
     permissions:
       contents: read
     with:
@@ -344,7 +346,7 @@ jobs:
 
   create-release:
     name: Create Release
-    needs: [build-web, build-docker, build-desktop-linux, build-maui-windows, build-maui-macos, build-maui-android]
+    needs: [build-web, build-docker, build-desktop-linux, build-maui-windows, build-macos-desktop, build-maui-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -375,10 +377,10 @@ jobs:
           name: maui-windows-velopack
           path: velopack
 
-      - name: Download maui-macos-velopack
+      - name: Download desktop-macos-velopack
         uses: actions/download-artifact@v8
         with:
-          name: maui-macos-velopack
+          name: desktop-macos-velopack
           path: velopack-osx
 
       - name: Download maui-android

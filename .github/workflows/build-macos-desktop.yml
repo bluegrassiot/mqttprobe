@@ -193,14 +193,17 @@ jobs:
           </plist>
           PLIST
 
-      - name: Pre-sign native binaries
-        # Velopack's default 'codesign --deep' recurses into wwwroot and treats
-        # dotted static-asset dirs (e.g. _content/MqttProbe.Shared, _content/Blazor.Lucide)
-        # as nested bundles, failing with "bundle format unrecognized". Instead we
-        # sign every Mach-O binary ourselves here, then pack with --signDisableDeep
-        # so codesign only seals the outer bundle and never walks wwwroot.
-        # Signatures are embedded in each Mach-O, so they survive vpk copying the
-        # publish folder into the .app.
+      - name: Pre-sign all binaries
+        # We pack with --signDisableDeep so Velopack's codesign does NOT recurse
+        # (its default --deep walks wwwroot and treats the dotted static-asset dir
+        # _content/MqttProbe.Shared as a bundle, failing with "bundle format
+        # unrecognized"). With deep signing off, codesign's bundle seal instead
+        # requires every nested code object to be pre-signed — and codesign counts
+        # managed .dll assemblies as code, not resources. So sign all .dll and
+        # .dylib plus any extension-less Mach-O (the app host, createdump) here.
+        # Signatures live inside each file, so they survive vpk copying the publish
+        # folder into the .app; --signDisableDeep then only seals the outer bundle.
+        # (Uses bash 3.2 idioms — macOS /bin/bash predates mapfile.)
         run: |
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
           KEYCHAIN_PASSWORD=$(cat "$RUNNER_TEMP/keychain-password")
@@ -208,16 +211,17 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
           security list-keychains -d user -s "$KEYCHAIN" login.keychain
           ENT="$RUNNER_TEMP/app.entitlements"
-          count=0
+          FILES=()
+          while IFS= read -r -d '' f; do FILES+=("$f"); done \
+            < <(find publish/desktop -type f \( -name '*.dll' -o -name '*.dylib' \) -print0)
           while IFS= read -r -d '' f; do
-            if file "$f" | grep -q 'Mach-O'; then
-              codesign -s "$SIGN_APP_IDENTITY" -f --timestamp --options runtime \
-                --entitlements "$ENT" --keychain "$KEYCHAIN" "$f"
-              count=$((count + 1))
-            fi
-          done < <(find publish/desktop -type f -print0)
-          echo "Pre-signed $count Mach-O binaries."
-          test "$count" -gt 0 || { echo "::error::No Mach-O binaries found to sign — publish output looks wrong."; exit 1; }
+            if file "$f" | grep -q 'Mach-O'; then FILES+=("$f"); fi
+          done < <(find publish/desktop -type f ! -name '*.dll' ! -name '*.dylib' -print0)
+          echo "Signing ${#FILES[@]} binaries (managed + native)..."
+          test "${#FILES[@]}" -gt 0 || { echo "::error::No binaries found to sign — publish output looks wrong."; exit 1; }
+          codesign -s "$SIGN_APP_IDENTITY" -f --timestamp --options runtime \
+            --entitlements "$ENT" --keychain "$KEYCHAIN" "${FILES[@]}"
+          echo "Pre-signing complete."
 
       - name: Install Velopack CLI
         run: |

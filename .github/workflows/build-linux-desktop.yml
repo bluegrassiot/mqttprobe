@@ -6,7 +6,7 @@ on:
       version:
         description: 'Version to stamp (e.g. 1.0.2 or v1.0.2)'
         required: false
-        default: '0.0.0'
+        default: '0.0.1'
         type: string
   workflow_call:
     inputs:
@@ -49,6 +49,14 @@ jobs:
         run: |
           RAW="${{ inputs.version }}"
           echo "value=${RAW#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate version
+        run: |
+          V="${{ steps.version.outputs.value }}"
+          if [ -z "$V" ] || [ "$V" = "0.0.0" ]; then
+            echo "::error::Version '$V' is invalid. Provide a version >= 0.0.1 via workflow_dispatch input or workflow_call."
+            exit 1
+          fi
 
       - name: Publish
         run: >

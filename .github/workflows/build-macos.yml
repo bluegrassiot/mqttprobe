@@ -6,7 +6,7 @@ on:
       version:
         description: 'Version to stamp (e.g. 1.0.1 or v1.0.1)'
         required: false
-        default: '0.0.0'
+        default: '0.0.1'
         type: string
   workflow_call:
     inputs:
@@ -52,15 +52,19 @@ jobs:
     name: Build (MAUI macOS)
     # Pinned to macos-26: macos-latest is mid-migration (15 -> 26, June/July 2026),
     # and macOS 15's default Xcode 16.4 cannot build net10.0 Apple targets.
-    # macos-26's default Xcode is 26.x (26.5 as of image 20260623), so no xcode-select step is needed.
-    # NOTE: each .NET Apple workload band requires ONE exact Xcode version. If this job fails with
-    # "requires Xcode 26.5" after an image update, add: sudo xcode-select -s /Applications/Xcode_26.5.app
+    # macos-26's default Xcode may lag behind the MacCatalyst workload requirement
+    # (e.g. Microsoft.MacCatalyst.Sdk 26.5.10301 requires Xcode 26.6). We explicitly
+    # select the matching Xcode below. If the job fails with "requires Xcode X.Y",
+    # update the xcode-select path to that version.
     runs-on: macos-26
     timeout-minutes: 60
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -77,6 +81,14 @@ jobs:
           echo "value=$version" >> "$GITHUB_OUTPUT"
           IFS='.-' read -r major minor patch _ <<< "$version"
           echo "code=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_OUTPUT"
+
+      - name: Validate version
+        run: |
+          V="${{ steps.version.outputs.value }}"
+          if [ -z "$V" ] || [ "$V" = "0.0.0" ]; then
+            echo "::error::Version '$V' is invalid. Provide a version >= 0.0.1 via workflow_dispatch input or workflow_call."
+            exit 1
+          fi
 
       - name: Import signing certificate into temporary keychain
         env:

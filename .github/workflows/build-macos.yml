@@ -167,8 +167,10 @@ jobs:
 
       - name: Install Velopack CLI
         run: |
+          # --version here is for dotnet tool install (pin), not the vpk CLI.
+          # vpk has no --version flag; it prints its version when packing.
           dotnet tool install -g vpk --version 1.2.0
-          vpk --version
+          command -v vpk
 
       - name: Velopack pack (sign, notarize, staple)
         timeout-minutes: 12

@@ -170,6 +170,55 @@ jobs:
           iconutil -c icns "$ICONSET" -o "$RUNNER_TEMP/icon.icns"
           test -f "$RUNNER_TEMP/icon.icns" || { echo "::error::iconutil did not produce icon.icns"; exit 1; }
 
+      - name: Write hardened-runtime entitlements
+        # Standard .NET-on-macOS entitlements (JIT + unsigned exec memory, etc.).
+        # Used both for pre-signing the inner binaries and, via --signEntitlements,
+        # for the outer bundle so both layers match. See:
+        # https://learn.microsoft.com/dotnet/core/install/macos-notarization-issues
+        run: |
+          cat > "$RUNNER_TEMP/entitlements.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>com.apple.security.cs.allow-jit</key>
+              <true/>
+              <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+              <true/>
+              <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+              <true/>
+              <key>com.apple.security.cs.disable-library-validation</key>
+              <true/>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Pre-sign native binaries
+        # Velopack's default 'codesign --deep' recurses into wwwroot and treats
+        # dotted static-asset dirs (e.g. _content/MqttProbe.Shared, _content/Blazor.Lucide)
+        # as nested bundles, failing with "bundle format unrecognized". Instead we
+        # sign every Mach-O binary ourselves here, then pack with --signDisableDeep
+        # so codesign only seals the outer bundle and never walks wwwroot.
+        # Signatures are embedded in each Mach-O, so they survive vpk copying the
+        # publish folder into the .app.
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(cat "$RUNNER_TEMP/keychain-password")
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain
+          ENT="$RUNNER_TEMP/entitlements.plist"
+          count=0
+          while IFS= read -r -d '' f; do
+            if file "$f" | grep -q 'Mach-O'; then
+              codesign -s "$SIGN_APP_IDENTITY" -f --timestamp --options runtime \
+                --entitlements "$ENT" --keychain "$KEYCHAIN" "$f"
+              count=$((count + 1))
+            fi
+          done < <(find publish/desktop -type f -print0)
+          echo "Pre-signed $count Mach-O binaries."
+          test "$count" -gt 0 || { echo "::error::No Mach-O binaries found to sign — publish output looks wrong."; exit 1; }
+
       - name: Install Velopack CLI
         run: |
           dotnet tool install -g vpk --version 1.2.0
@@ -198,6 +247,8 @@ jobs:
             --icon "$RUNNER_TEMP/icon.icns" \
             --signAppIdentity "$SIGN_APP_IDENTITY" \
             --signInstallIdentity "$SIGN_INSTALL_IDENTITY" \
+            --signEntitlements "$RUNNER_TEMP/entitlements.plist" \
+            --signDisableDeep \
             --notaryProfile velopack-profile \
             --keychain "$RUNNER_TEMP/signing.keychain-db" \
             --outputDir publish/velopack-osx

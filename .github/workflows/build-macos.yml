@@ -57,7 +57,7 @@ jobs:
     # select the matching Xcode below. If the job fails with "requires Xcode X.Y",
     # update the xcode-select path to that version.
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       contents: read
     steps:

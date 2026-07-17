@@ -193,16 +193,64 @@ jobs:
           </plist>
           PLIST
 
+      - name: Install Velopack CLI
+        run: |
+          dotnet tool install -g vpk --version 1.2.0
+          command -v vpk
+
+      - name: Create signable app bundle
+        # Velopack puts a plain packDir entirely under Contents/MacOS. Apple treats
+        # every regular file there as code, including CSS and JSON; those text-file
+        # signatures use xattrs that Velopack packages do not preserve. Build the
+        # app first, relocate resources, and leave relative symlinks where .NET
+        # expects the files. Keep wwwroot together so codesign never encounters its
+        # dotted _content directories as nested bundles.
+        run: |
+          vpk bundle \
+            --packId MQTTProbe \
+            --packVersion ${{ steps.version.outputs.value }} \
+            --packDir publish/desktop \
+            --mainExe MqttProbe.Desktop \
+            --packTitle MQTTProbe \
+            --packAuthors "Bluegrass IoT" \
+            --icon "$RUNNER_TEMP/icon.icns" \
+            --outputDir publish/macos-app
+
+          APP="publish/macos-app/MQTTProbe.app"
+          MACOS="$APP/Contents/MacOS"
+          RESOURCES="$APP/Contents/Resources/app"
+          test -d "$MACOS" || { echo "::error::Velopack did not create $APP"; exit 1; }
+          mkdir -p "$RESOURCES"
+
+          if [ -d "$MACOS/wwwroot" ]; then
+            mv "$MACOS/wwwroot" "$RESOURCES/wwwroot"
+            ln -s "../Resources/app/wwwroot" "$MACOS/wwwroot"
+          fi
+
+          while IFS= read -r -d '' f; do
+            if [[ "$f" == *.dll || "$f" == *.dylib ]] || file "$f" | grep -q 'Mach-O'; then
+              continue
+            fi
+
+            rel="${f#"$MACOS/"}"
+            mkdir -p "$RESOURCES/$(dirname "$rel")"
+            mv "$f" "$RESOURCES/$rel"
+
+            target="../Resources/app/$rel"
+            parent="$(dirname "$rel")"
+            while [ "$parent" != "." ]; do
+              target="../$target"
+              parent="$(dirname "$parent")"
+            done
+            ln -s "$target" "$f"
+          done < <(find "$MACOS" -type f -print0)
+
+          test -L "$MACOS/wwwroot" || { echo "::error::wwwroot must be a resource symlink"; exit 1; }
+          find "$MACOS" -type f -print
+
       - name: Pre-sign all binaries
-        # We pack with --signDisableDeep so Velopack's codesign does NOT recurse
-        # (its default --deep walks wwwroot and treats the dotted static-asset dir
-        # _content/MqttProbe.Shared as a bundle, failing with "bundle format
-        # unrecognized"). With deep signing off, codesign's bundle seal instead
-        # requires every nested code object to be pre-signed — and codesign counts
-        # managed .dll assemblies as code, not resources. So sign all .dll and
-        # .dylib plus any extension-less Mach-O (the app host, createdump) here.
-        # Signatures live inside each file, so they survive vpk copying the publish
-        # folder into the .app; --signDisableDeep then only seals the outer bundle.
+        # With --signDisableDeep, Velopack signs only UpdateMac and the outer
+        # bundle. Pre-sign managed assemblies and native code in the app itself.
         # (Uses bash 3.2 idioms — macOS /bin/bash predates mapfile.)
         run: |
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
@@ -211,24 +259,20 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
           security list-keychains -d user -s "$KEYCHAIN" login.keychain
           ENT="$RUNNER_TEMP/app.entitlements"
+          MACOS="publish/macos-app/MQTTProbe.app/Contents/MacOS"
           FILES=()
           while IFS= read -r -d '' f; do FILES+=("$f"); done \
-            < <(find publish/desktop -type f \( -name '*.dll' -o -name '*.dylib' \) -print0)
+            < <(find "$MACOS" -type f \( -name '*.dll' -o -name '*.dylib' \) -print0)
           while IFS= read -r -d '' f; do
             if file "$f" | grep -q 'Mach-O'; then FILES+=("$f"); fi
-          done < <(find publish/desktop -type f ! -name '*.dll' ! -name '*.dylib' -print0)
+          done < <(find "$MACOS" -type f ! -name '*.dll' ! -name '*.dylib' -print0)
           echo "Signing ${#FILES[@]} binaries (managed + native)..."
           test "${#FILES[@]}" -gt 0 || { echo "::error::No binaries found to sign — publish output looks wrong."; exit 1; }
           codesign -s "$SIGN_APP_IDENTITY" -f --timestamp --options runtime \
             --entitlements "$ENT" --keychain "$KEYCHAIN" "${FILES[@]}"
           echo "Pre-signing complete."
 
-      - name: Install Velopack CLI
-        run: |
-          dotnet tool install -g vpk --version 1.2.0
-          command -v vpk
-
-      - name: Velopack pack (wrap .app, sign, notarize, staple)
+      - name: Velopack pack (sign, notarize, staple)
         timeout-minutes: 15
         run: |
           # Re-unlock keychain and re-apply partition list so productsign can
@@ -244,7 +288,7 @@ jobs:
           vpk pack \
             --packId MQTTProbe \
             --packVersion ${{ steps.version.outputs.value }} \
-            --packDir publish/desktop \
+            --packDir publish/macos-app/MQTTProbe.app \
             --mainExe MqttProbe.Desktop \
             --packTitle MQTTProbe \
             --packAuthors "Bluegrass IoT" \

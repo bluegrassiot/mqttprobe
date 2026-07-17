@@ -226,10 +226,53 @@ public class MqttOptionsBuilderTests
     }
 
     [Test]
-    public void Build_SetsAutoReconnectDelay()
+    public void Build_DefaultAutoReconnectDelay_Uses5Seconds()
     {
         var options = _builder.Build(TcpConnection());
         options.AutoReconnectDelay.Should().Be(TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public void Build_CustomReconnectDelay_UsesConfiguredValue()
+    {
+        var conn = TcpConnection();
+        conn.ReconnectDelay = 12;
+        var options = _builder.Build(conn);
+        options.AutoReconnectDelay.Should().Be(TimeSpan.FromSeconds(12));
+    }
+
+    [Test]
+    public void Build_ZeroReconnectDelay_FallsBackTo5Seconds()
+    {
+        var conn = TcpConnection();
+        conn.ReconnectDelay = 0;
+        var options = _builder.Build(conn);
+        options.AutoReconnectDelay.Should().Be(TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public void Build_DefaultKeepAlivePeriod_Uses15Seconds()
+    {
+        var options = _builder.Build(TcpConnection());
+        ((MqttClientOptions)options.ClientOptions).KeepAlivePeriod.Should().Be(TimeSpan.FromSeconds(15));
+    }
+
+    [Test]
+    public void Build_CustomKeepAlivePeriod_UsesConfiguredValue()
+    {
+        var conn = TcpConnection();
+        conn.KeepAlivePeriod = 30;
+        var options = _builder.Build(conn);
+        ((MqttClientOptions)options.ClientOptions).KeepAlivePeriod.Should().Be(TimeSpan.FromSeconds(30));
+    }
+
+    [Test]
+    public void Build_ZeroKeepAlivePeriod_FallsBackTo15Seconds()
+    {
+        var conn = TcpConnection();
+        conn.KeepAlivePeriod = 0;
+        var options = _builder.Build(conn);
+        ((MqttClientOptions)options.ClientOptions).KeepAlivePeriod.Should().Be(TimeSpan.FromSeconds(15));
     }
 
     [Test]

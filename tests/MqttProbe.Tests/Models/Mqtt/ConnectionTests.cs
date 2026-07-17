@@ -196,4 +196,53 @@ public class ConnectionTests
         clone.ClientCertificateAssetId.Should().Be("abc");
         clone.Password.Should().BeNull();
     }
+
+    [Test]
+    public void Constructor_SetsSessionTimingDefaults()
+    {
+        var conn = new Connection();
+
+        conn.ConnectTimeout.Should().Be(15);
+        conn.ReconnectDelay.Should().Be(5);
+        conn.KeepAlivePeriod.Should().Be(15);
+    }
+
+    [Test]
+    public void Equals_ReturnsFalseWhenReconnectDelayDiffers()
+    {
+        var a = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", ReconnectDelay = 5 };
+        var b = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", ReconnectDelay = 10 };
+
+        a.Equals(b).Should().BeFalse();
+    }
+
+    [Test]
+    public void Equals_ReturnsFalseWhenKeepAlivePeriodDiffers()
+    {
+        var a = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", KeepAlivePeriod = 15 };
+        var b = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", KeepAlivePeriod = 30 };
+
+        a.Equals(b).Should().BeFalse();
+    }
+
+    [Test]
+    public void CloneWithoutPassword_PreservesSessionTimingFields()
+    {
+        var original = new Connection
+        {
+            Name = "Broker",
+            ClientId = "my-client",
+            ConnectTimeout = 20,
+            ReconnectDelay = 8,
+            KeepAlivePeriod = 25,
+            Password = "secret"
+        };
+
+        var clone = original.CloneWithoutPassword();
+
+        clone.ConnectTimeout.Should().Be(20);
+        clone.ReconnectDelay.Should().Be(8);
+        clone.KeepAlivePeriod.Should().Be(25);
+        clone.Password.Should().BeNull();
+    }
 }

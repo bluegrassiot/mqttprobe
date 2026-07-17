@@ -123,6 +123,16 @@
                                               For="@(() => _selectedConnection.ConnectTimeout)" Immediate="true"
                                               Label="Connect Timeout (s)" />
                             </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.ReconnectDelay"
+                                              For="@(() => _selectedConnection.ReconnectDelay)" Immediate="true"
+                                              Label="Reconnect Delay (s)" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.KeepAlivePeriod"
+                                              For="@(() => _selectedConnection.KeepAlivePeriod)" Immediate="true"
+                                              Label="Keep Alive (s)" />
+                            </MudItem>
                             <MudItem xs="12">
                                 <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.Host"
                                               For="@(() => _selectedConnection.Host)" Immediate="true" Label="Host" />

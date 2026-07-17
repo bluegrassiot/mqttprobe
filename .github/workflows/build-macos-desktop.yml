@@ -176,7 +176,7 @@ jobs:
         # for the outer bundle so both layers match. See:
         # https://learn.microsoft.com/dotnet/core/install/macos-notarization-issues
         run: |
-          cat > "$RUNNER_TEMP/entitlements.plist" <<'PLIST'
+          cat > "$RUNNER_TEMP/app.entitlements" <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -207,7 +207,7 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
           security list-keychains -d user -s "$KEYCHAIN" login.keychain
-          ENT="$RUNNER_TEMP/entitlements.plist"
+          ENT="$RUNNER_TEMP/app.entitlements"
           count=0
           while IFS= read -r -d '' f; do
             if file "$f" | grep -q 'Mach-O'; then
@@ -247,7 +247,7 @@ jobs:
             --icon "$RUNNER_TEMP/icon.icns" \
             --signAppIdentity "$SIGN_APP_IDENTITY" \
             --signInstallIdentity "$SIGN_INSTALL_IDENTITY" \
-            --signEntitlements "$RUNNER_TEMP/entitlements.plist" \
+            --signEntitlements "$RUNNER_TEMP/app.entitlements" \
             --signDisableDeep \
             --notaryProfile velopack-profile \
             --keychain "$RUNNER_TEMP/signing.keychain-db" \

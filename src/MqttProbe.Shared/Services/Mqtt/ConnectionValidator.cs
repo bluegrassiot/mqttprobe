@@ -19,6 +19,12 @@ public class ConnectionValidator : AbstractValidator<Connection>
         RuleFor(x => x.ConnectTimeout)
             .InclusiveBetween(1, 120)
             .WithMessage("Connect timeout must be between 1 and 120 seconds.");
+        RuleFor(x => x.ReconnectDelay)
+            .InclusiveBetween(1, 120)
+            .WithMessage("Reconnect delay must be between 1 and 120 seconds.");
+        RuleFor(x => x.KeepAlivePeriod)
+            .InclusiveBetween(1, 120)
+            .WithMessage("Keep alive must be between 1 and 120 seconds.");
     }
 
     public Func<object, string, Task<IEnumerable<string>>> ValidateValue => async (model, propertyName) =>

@@ -30,6 +30,8 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
         var clientOptionsBuilder = new MqttClientOptionsBuilder()
             .WithClientId(connection.ClientId + _sessionSuffix)
             .WithTimeout(TimeSpan.FromSeconds(connection.ConnectTimeout > 0 ? connection.ConnectTimeout : 15))
+            .WithKeepAlivePeriod(TimeSpan.FromSeconds(
+                connection.KeepAlivePeriod > 0 ? connection.KeepAlivePeriod : 15))
             .WithProtocolVersion(connection.MqttVersion == MqttVersion.V5
                 ? MqttProtocolVersion.V500
                 : MqttProtocolVersion.V311);
@@ -63,7 +65,8 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
         }
 
         return new ManagedMqttClientOptionsBuilder()
-            .WithAutoReconnectDelay(TimeSpan.FromSeconds(5))
+            .WithAutoReconnectDelay(TimeSpan.FromSeconds(
+                connection.ReconnectDelay > 0 ? connection.ReconnectDelay : 5))
             .WithClientOptions(clientOptionsBuilder)
             .Build();
     }
@@ -87,6 +90,8 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
         var clientOptionsBuilder = new MqttClientOptionsBuilder()
             .WithClientId(connection.ClientId + _sessionSuffix)
             .WithTimeout(TimeSpan.FromSeconds(connection.ConnectTimeout > 0 ? connection.ConnectTimeout : 15))
+            .WithKeepAlivePeriod(TimeSpan.FromSeconds(
+                connection.KeepAlivePeriod > 0 ? connection.KeepAlivePeriod : 15))
             .WithProtocolVersion(connection.MqttVersion == MqttVersion.V5
                 ? MqttProtocolVersion.V500
                 : MqttProtocolVersion.V311);
@@ -122,7 +127,8 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
         }
 
         return new ManagedMqttClientOptionsBuilder()
-            .WithAutoReconnectDelay(TimeSpan.FromSeconds(5))
+            .WithAutoReconnectDelay(TimeSpan.FromSeconds(
+                connection.ReconnectDelay > 0 ? connection.ReconnectDelay : 5))
             .WithClientOptions(clientOptionsBuilder)
             .Build();
     }

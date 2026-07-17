@@ -19,6 +19,8 @@ public sealed class Connection : IEquatable<Connection>
     public bool AllowUntrustedCertificate { get; set; }
     public string? ClientCertificateAssetId { get; set; }
     public int ConnectTimeout { get; set; } = 15;
+    public int ReconnectDelay { get; set; } = 5;
+    public int KeepAlivePeriod { get; set; } = 15;
     public List<string> SubscribedTopics { get; set; } = [];
 
     public Connection CloneWithoutPassword()
@@ -48,6 +50,8 @@ public sealed class Connection : IEquatable<Connection>
                UseTls == other.UseTls &&
                AllowUntrustedCertificate == other.AllowUntrustedCertificate &&
                ConnectTimeout == other.ConnectTimeout &&
+               ReconnectDelay == other.ReconnectDelay &&
+               KeepAlivePeriod == other.KeepAlivePeriod &&
                WebsocketBasePath == other.WebsocketBasePath &&
                ClientCertificateAssetId == other.ClientCertificateAssetId;
     }
@@ -68,6 +72,8 @@ public sealed class Connection : IEquatable<Connection>
         hash.Add(UseTls);
         hash.Add(AllowUntrustedCertificate);
         hash.Add(ConnectTimeout);
+        hash.Add(ReconnectDelay);
+        hash.Add(KeepAlivePeriod);
         hash.Add(WebsocketBasePath);
         hash.Add(ClientCertificateAssetId);
         return hash.ToHashCode();

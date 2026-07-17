@@ -61,6 +61,7 @@ public class SparkplugNodeRunner(
     ILogger logger) : INodeRunner
 {
     private readonly Dictionary<Guid, WaveformState> _states = [];
+    private readonly string _sessionSuffix = "-" + Guid.NewGuid().ToString("N")[..6];
     private Dictionary<string, ulong>? _nodeAliases;
     private Dictionary<string, Dictionary<string, ulong>>? _deviceAliases;
     private ISparkplugNode? _node;
@@ -126,7 +127,8 @@ public class SparkplugNodeRunner(
                     deviceId => SampleDeviceMetrics(
                         config.Devices.First(d => d.DeviceId == deviceId), 0, isBirth: true))
                 : nodeFactory.Create(birthMetrics, SparkplugSpecificationVersion.Version30);
-            await localNode.Start(BuildNodeOptions(connection, config, localCertResource));
+            await localNode.Start(BuildNodeOptions(
+                connection, config, localCertResource, config.NodeId + _sessionSuffix));
 
             // Publish device births BEFORE promoting locals to fields.
             foreach (var device in config.Devices)
@@ -362,7 +364,8 @@ public class SparkplugNodeRunner(
 
     internal static SparkplugNodeOptions BuildNodeOptions(
         Connection connection, EmulatorNodeConfig config,
-        CertificateSessionResource? certResource = null)
+        CertificateSessionResource? certResource = null,
+        string? mqttClientId = null)
     {
         MqttClientWebSocketOptions? webSocketOptions = null;
         var brokerAddress = connection.Host;
@@ -395,14 +398,20 @@ public class SparkplugNodeRunner(
             tlsOptions = tlsBuilder.Build();
         }
 
+        mqttClientId ??= config.NodeId + "-" + Guid.NewGuid().ToString("N")[..6];
+        var reconnectSeconds = connection.ReconnectDelay > 0 ? connection.ReconnectDelay : 5;
+
+        // SparkplugNet reuses CancellationToken for connect, publish, and reconnect for the
+        // whole node lifetime. Do not CancelAfter(ConnectTimeout); that would kill a healthy node.
+        // Keep-alive is also not exposed by SparkplugNodeOptions (library builds MQTTnet options internally).
         return new SparkplugNodeOptions(
             brokerAddress,
             connection.Port,
-            config.NodeId,
+            mqttClientId,
             connection.User,
             connection.Password,
             null,
-            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(reconnectSeconds),
             SparkplugMqttProtocolVersion.V311,
             tlsOptions,
             webSocketOptions,

@@ -179,4 +179,62 @@ public class ConnectionValidatorTests
 
         result.IsValid.Should().BeTrue();
     }
+
+    [TestCase(0)]
+    [TestCase(-1)]
+    [TestCase(121)]
+    public async Task Validate_FailsWhenReconnectDelayIsOutsideValidRange(int delay)
+    {
+        var conn = ValidConnection();
+        conn.ReconnectDelay = delay;
+
+        var result = await _validator.ValidateAsync(conn);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e =>
+            e.PropertyName == nameof(Connection.ReconnectDelay) &&
+            e.ErrorMessage.Contains("1 and 120", StringComparison.Ordinal));
+    }
+
+    [TestCase(1)]
+    [TestCase(5)]
+    [TestCase(120)]
+    public async Task Validate_PassesForValidReconnectDelay(int delay)
+    {
+        var conn = ValidConnection();
+        conn.ReconnectDelay = delay;
+
+        var result = await _validator.ValidateAsync(conn);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [TestCase(0)]
+    [TestCase(-1)]
+    [TestCase(121)]
+    public async Task Validate_FailsWhenKeepAlivePeriodIsOutsideValidRange(int period)
+    {
+        var conn = ValidConnection();
+        conn.KeepAlivePeriod = period;
+
+        var result = await _validator.ValidateAsync(conn);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e =>
+            e.PropertyName == nameof(Connection.KeepAlivePeriod) &&
+            e.ErrorMessage.Contains("1 and 120", StringComparison.Ordinal));
+    }
+
+    [TestCase(1)]
+    [TestCase(15)]
+    [TestCase(120)]
+    public async Task Validate_PassesForValidKeepAlivePeriod(int period)
+    {
+        var conn = ValidConnection();
+        conn.KeepAlivePeriod = period;
+
+        var result = await _validator.ValidateAsync(conn);
+
+        result.IsValid.Should().BeTrue();
+    }
 }

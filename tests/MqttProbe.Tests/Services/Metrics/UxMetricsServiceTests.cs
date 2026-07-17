@@ -10,6 +10,7 @@ public class UxMetricsServiceTests
 {
     private CapturingLogger<UxMetricsService> _logger = null!;
     private ISettingsStore _mockSettings = null!;
+    private IAppHealthMetricsCollector _mockHealthCollector = null!;
     private UxMetricsService _service = null!;
 
     [SetUp]
@@ -18,13 +19,18 @@ public class UxMetricsServiceTests
         _logger = new CapturingLogger<UxMetricsService>();
         _mockSettings = Substitute.For<ISettingsStore>();
         _mockSettings.Config.Returns(new AppConfiguration());
-        _service = new UxMetricsService(_logger, _mockSettings);
+        _mockHealthCollector = Substitute.For<IAppHealthMetricsCollector>();
+        _mockHealthCollector.GetSnapshot().Returns(new AppHealthMetricsSnapshot(
+            CpuUsagePercent: 1.0, ManagedHeapMb: 2.0,
+            WorkingSetMb: 3.0, ThreadCount: 4, ThreadPoolQueueLength: 5,
+            GcGen2Collections: 6, UptimeSeconds: 7.0));
+        _service = new UxMetricsService(_logger, _mockSettings, _mockHealthCollector);
     }
 
     [TearDown]
     public void TearDown()
     {
-        _service.Dispose();
+        _mockHealthCollector.Dispose();
     }
 
     [Test]
@@ -95,16 +101,18 @@ public class UxMetricsServiceTests
     }
 
     [Test]
-    public void GetSnapshot_DefaultAppHealth_IsNonNegative()
+    public void GetSnapshot_DefaultAppHealth_DelegatesToCollector()
     {
         var snapshot = _service.GetSnapshot();
-        snapshot.AppCpuUsagePercent.Should().BeGreaterThanOrEqualTo(0);
-        snapshot.AppManagedHeapMb.Should().BeGreaterThanOrEqualTo(0);
-        snapshot.AppWorkingSetMb.Should().BeGreaterThanOrEqualTo(0);
-        snapshot.AppThreadCount.Should().BeGreaterThan(0);
-        snapshot.AppThreadPoolQueueLength.Should().BeGreaterThanOrEqualTo(0);
-        snapshot.AppGcGen2Collections.Should().BeGreaterThanOrEqualTo(0);
-        snapshot.AppUptimeSeconds.Should().BeGreaterThanOrEqualTo(0);
+
+        snapshot.AppHealth.HasAny.Should().BeTrue();
+        snapshot.AppHealth.CpuUsagePercent.Should().Be(1.0);
+        snapshot.AppHealth.ManagedHeapMb.Should().Be(2.0);
+        snapshot.AppHealth.WorkingSetMb.Should().Be(3.0);
+        snapshot.AppHealth.ThreadCount.Should().Be(4);
+        snapshot.AppHealth.ThreadPoolQueueLength.Should().Be(5);
+        snapshot.AppHealth.GcGen2Collections.Should().Be(6);
+        snapshot.AppHealth.UptimeSeconds.Should().Be(7.0);
     }
 
     [Test]
@@ -148,9 +156,60 @@ public class UxMetricsServiceTests
         _service.ClearEmulatorHealth();
 
         var snapshot = _service.GetSnapshot();
-        // App health fields should still be non-negative (self-collected)
-        snapshot.AppManagedHeapMb.Should().BeGreaterThanOrEqualTo(0);
-        snapshot.AppWorkingSetMb.Should().BeGreaterThanOrEqualTo(0);
+        // App health is delegated to collector, unaffected by emulation clear
+        snapshot.AppHealth.HasAny.Should().BeTrue();
+        snapshot.AppHealth.ManagedHeapMb.Should().BeGreaterThanOrEqualTo(0);
+    }
+
+    [Test]
+    public void GetSnapshot_WhenCollectorUnavailable_SetsAppHealthUnavailable()
+    {
+        _mockHealthCollector.GetSnapshot().Returns(new AppHealthMetricsSnapshot(
+            CpuUsagePercent: null, ManagedHeapMb: 2.0,
+            WorkingSetMb: null, ThreadCount: null, ThreadPoolQueueLength: 5,
+            GcGen2Collections: 6, UptimeSeconds: 7.0));
+
+        var snapshot = _service.GetSnapshot();
+
+        snapshot.AppHealth.HasAny.Should().BeTrue();
+        snapshot.AppHealth.CpuUsagePercent.Should().BeNull();
+        snapshot.AppHealth.ManagedHeapMb.Should().Be(2.0);
+        snapshot.AppHealth.WorkingSetMb.Should().BeNull();
+        snapshot.AppHealth.ThreadCount.Should().BeNull();
+        snapshot.AppHealth.ThreadPoolQueueLength.Should().Be(5);
+        snapshot.AppHealth.GcGen2Collections.Should().Be(6);
+        snapshot.AppHealth.UptimeSeconds.Should().Be(7.0);
+    }
+
+    [Test]
+    public void GetSnapshot_WhenCollectorAvailable_SetsAppHealthAvailable()
+    {
+        var snapshot = _service.GetSnapshot();
+
+        snapshot.AppHealth.HasAny.Should().BeTrue();
+    }
+
+    [Test]
+    public void GetSnapshot_WhenCollectorUnavailable_PreservesNonHealthMetrics()
+    {
+        _mockHealthCollector.GetSnapshot().Returns(new AppHealthMetricsSnapshot(
+            CpuUsagePercent: null, ManagedHeapMb: 2.0,
+            WorkingSetMb: null, ThreadCount: null, ThreadPoolQueueLength: 5,
+            GcGen2Collections: 6, UptimeSeconds: 7.0));
+
+        _service.RecordConnectAttempt();
+        _service.RecordPublishOutcome(true);
+        _service.RecordMessageProcessed("Json");
+        _service.UpdateEmulatorHealth(2, 100, 1);
+
+        var snapshot = _service.GetSnapshot();
+
+        snapshot.ConnectAttempts.Should().Be(1);
+        snapshot.PublishSuccesses.Should().Be(1);
+        snapshot.MessagesProcessed.Should().Be(1);
+        snapshot.MessagesProcessedByFormat.Should().ContainKey("Json");
+        snapshot.EmulatorPublishersOnline.Should().Be(2);
+        snapshot.AppHealth.HasAny.Should().BeTrue();
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

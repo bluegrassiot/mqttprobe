@@ -18,13 +18,13 @@
         }
     </HeaderChips>
     <HeaderActions>
-        <MudButton Variant="Variant.Outlined" Size="Size.Medium"
+        <AppDestructiveButton Size="Size.Medium"
                    StartIcon="@LucideIcons.Trash2"
-                   Color="Color.Error" Class="app-btn-min"
+                   MinWidth="true"
                    Disabled="@(!MessageStoreManager.MessageStores.Any())"
                    OnClick="ClearAllMessages">
             Clear
-        </MudButton>
+        </AppDestructiveButton>
     </HeaderActions>
 </TabPanelHeader>
 <div class="tab-panel-content">

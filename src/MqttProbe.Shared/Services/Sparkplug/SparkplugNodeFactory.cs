@@ -180,16 +180,25 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
 
     public Task PublishNodeDeathMessage()
     {
-        var method = _node.GetType().GetMethod(
-            "SendNodeDeathMessage",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance); // NOSONAR — SendNodeDeathMessage is not exposed publicly by SparkplugNet
+        System.Reflection.MethodInfo? method = null;
+        for (var type = _node.GetType(); type is not null; type = type.BaseType)
+        {
+            method = type.GetMethod(
+                "SendNodeDeathMessage",
+                System.Reflection.BindingFlags.NonPublic
+                    | System.Reflection.BindingFlags.Instance
+                    | System.Reflection.BindingFlags.DeclaredOnly); // NOSONAR — SendNodeDeathMessage is not exposed publicly by SparkplugNet
+            if (method is not null)
+                break;
+        }
+
         if (method is not null)
             return (Task)method.Invoke(_node, null)!;
 
         throw new InvalidOperationException(
             "SparkplugNet method 'SendNodeDeathMessage' was not found via reflection. " +
-            "The method may have been renamed or removed in a SparkplugNet update — " +
-            "update the reflection call in SparkplugNodeAdapter.PublishNodeDeathMessage.");
+            "The method may have been renamed or removed in a SparkplugNet update. " +
+            "Update the reflection call in SparkplugNodeAdapter.PublishNodeDeathMessage.");
     }
 
     public async Task PublishDeviceBirthMessage(string deviceId, List<Metric> metrics)

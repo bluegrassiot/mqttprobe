@@ -11,10 +11,10 @@ env:
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
 
 jobs:
-  # ── Build Blazor Web ────────────────────────────────────────────────────────
+  # ── Build Web ───────────────────────────────────────────────────────────────
 
-  build-blazor:
-    name: Build (Blazor Web / ${{ matrix.rid }})
+  build-web:
+    name: Build (Web / ${{ matrix.rid }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     permissions:
@@ -29,14 +29,14 @@ jobs:
           - rid: win-x64
             os: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.x'
 
       - name: Restore NuGet cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
           key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
@@ -55,24 +55,24 @@ jobs:
           --self-contained false
           -p:PublishSingleFile=true
           -p:Version=${{ steps.version.outputs.value }}
-          --output publish/blazor
+          --output publish/web
 
       - name: Archive (Linux)
         if: runner.os == 'Linux'
         run: |
-          cd publish/blazor
-          zip -r ../../mqttprobe-blazor-${{ matrix.rid }}-${{ github.ref_name }}.zip .
+          cd publish/web
+          zip -r ../../mqttprobe-web-${{ matrix.rid }}-${{ github.ref_name }}.zip .
 
       - name: Archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path publish/blazor/* -DestinationPath mqttprobe-blazor-${{ matrix.rid }}-${{ github.ref_name }}.zip -Force
+        run: Compress-Archive -Path publish/web/* -DestinationPath mqttprobe-web-${{ matrix.rid }}-${{ github.ref_name }}.zip -Force
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: blazor-${{ matrix.rid }}
-          path: mqttprobe-blazor-${{ matrix.rid }}-${{ github.ref_name }}.zip
+          name: web-${{ matrix.rid }}
+          path: mqttprobe-web-${{ matrix.rid }}-${{ github.ref_name }}.zip
 
   # ── Build Docker ────────────────────────────────────────────────────────────
 
@@ -84,30 +84,30 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: |
             ghcr.io/${{ github.repository }}
@@ -117,7 +117,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -134,14 +134,14 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.x'
 
       - name: Restore NuGet cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             C:/Program Files/dotnet/packs/
@@ -158,7 +158,11 @@ jobs:
       - name: Extract version
         id: version
         shell: bash
-        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          IFS='.-' read -r major minor patch _ <<< "$version"
+          echo "code=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_OUTPUT"
 
       - name: Publish
         run: >
@@ -168,13 +172,48 @@ jobs:
           -c:Release
           --output publish/windows
           -p:ApplicationDisplayVersion=${{ steps.version.outputs.value }}
+          -p:ApplicationVersion=${{ steps.version.outputs.code }}
 
       - name: Archive
         shell: pwsh
         run: Compress-Archive -Path publish/windows/* -DestinationPath publish/mqttprobe-windows-${{ github.ref_name }}.zip -Force
 
-      - name: Upload artifact
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk
+
+      - name: Download previous Velopack release (for delta packages)
+        shell: pwsh
+        continue-on-error: true   # first Velopack release has nothing to download
+        run: vpk download github --repoUrl https://github.com/bluegrassiot/mqttprobe --token ${{ secrets.GITHUB_TOKEN }} --outputDir publish/velopack
+
+      - name: Build installer
+        shell: pwsh
+        run: >
+          vpk pack
+          --packId MQTTProbe
+          --packVersion ${{ steps.version.outputs.value }}
+          --packDir publish/windows
+          --mainExe MqttProbe.Maui.exe
+          --packTitle MQTTProbe
+          --packAuthors "Bluegrass IoT"
+          --icon src/MqttProbe.Desktop/Assets/icon.ico
+          --outputDir publish/velopack
+
+      - name: Remove stale nupkg packages (keep only current version)
+        shell: pwsh
+        run: >
+          Get-ChildItem publish/velopack -Filter *.nupkg |
+          Where-Object Name -notlike "MQTTProbe-${{ steps.version.outputs.value }}-*" |
+          Remove-Item
+
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
+        with:
+          name: maui-windows-velopack
+          path: publish/velopack/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
         with:
           name: maui-windows
           path: publish/mqttprobe-windows-${{ github.ref_name }}.zip
@@ -188,19 +227,19 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.x'
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: 'microsoft'
           java-version: '17'
 
       - name: Restore NuGet cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
           key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
@@ -275,7 +314,7 @@ jobs:
           cp "$apk" "mqttprobe-android-${GITHUB_REF_NAME}.apk"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: maui-android
           path: mqttprobe-android-${{ github.ref_name }}.apk
@@ -295,122 +334,105 @@ jobs:
 
   build-desktop-linux:
     name: Build (Desktop Linux)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    uses: ./.github/workflows/build-linux-desktop.yml
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.x'
-
-      - name: Restore NuGet cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
-          restore-keys: nuget-
-
-      - name: Install WebKitGTK
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-0
-
-      - name: Extract version
-        id: version
-        shell: bash
-        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Publish
-        run: >
-          dotnet publish src/MqttProbe.Desktop/MqttProbe.Desktop.csproj
-          -c:Release
-          -r:linux-x64
-          --self-contained
-          -p:Version=${{ steps.version.outputs.value }}
-          --output publish/desktop
-
-      - name: Archive
-        run: |
-          cd publish/desktop
-          zip -r ../../mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip .
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: desktop-linux-x64
-          path: mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip
+    with:
+      version: ${{ github.ref_name }}
 
   # ── Create GitHub Release ───────────────────────────────────────────────────
 
   create-release:
     name: Create Release
-    needs: [build-blazor, build-docker, build-desktop-linux, build-maui-windows, build-maui-macos, build-maui-android]
+    needs: [build-web, build-docker, build-desktop-linux, build-maui-windows, build-maui-macos, build-maui-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download blazor-linux-x64
-        uses: actions/download-artifact@v4
+      - name: Download web-linux-x64
+        uses: actions/download-artifact@v8
         with:
-          name: blazor-linux-x64
+          name: web-linux-x64
 
-      - name: Download blazor-linux-arm64
-        uses: actions/download-artifact@v4
+      - name: Download web-linux-arm64
+        uses: actions/download-artifact@v8
         with:
-          name: blazor-linux-arm64
+          name: web-linux-arm64
 
-      - name: Download blazor-win-x64
-        uses: actions/download-artifact@v4
+      - name: Download web-win-x64
+        uses: actions/download-artifact@v8
         with:
-          name: blazor-win-x64
+          name: web-win-x64
 
       - name: Download maui-windows
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: maui-windows
 
-      - name: Download maui-macos
-        uses: actions/download-artifact@v4
+      - name: Download maui-windows-velopack
+        uses: actions/download-artifact@v8
         with:
-          name: maui-macos
+          name: maui-windows-velopack
+          path: velopack
+
+      - name: Download maui-macos-velopack
+        uses: actions/download-artifact@v8
+        with:
+          name: maui-macos-velopack
+          path: velopack-osx
 
       - name: Download maui-android
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: maui-android
 
       - name: Download desktop-linux-x64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: desktop-linux-x64
 
+      - name: Download desktop-linux-velopack
+        uses: actions/download-artifact@v8
+        with:
+          name: desktop-linux-velopack
+          path: velopack-linux
+
+      - name: Fail on duplicate release asset names
+        run: |
+          DUPES=$(find velopack* -type f -printf '%f\n' 2>/dev/null | sort | uniq -d)
+          if [ -n "$DUPES" ]; then echo "::error::Duplicate asset filenames across Velopack channels:"; echo "$DUPES"; exit 1; fi
+
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: |
-            mqttprobe-blazor-linux-x64-${{ github.ref_name }}.zip
-            mqttprobe-blazor-linux-arm64-${{ github.ref_name }}.zip
-            mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip
+            mqttprobe-web-linux-x64-${{ github.ref_name }}.zip
+            mqttprobe-web-linux-arm64-${{ github.ref_name }}.zip
+            mqttprobe-web-win-x64-${{ github.ref_name }}.zip
             mqttprobe-windows-${{ github.ref_name }}.zip
-            mqttprobe-macos-${{ github.ref_name }}.zip
             mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip
             mqttprobe-android-${{ github.ref_name }}.apk
+            velopack/MQTTProbe-win-Setup.exe
+            velopack/*.nupkg
+            velopack/releases.win.json
+            velopack/assets.win.json
+            velopack-linux/*
+            velopack-osx/*
           body: |
             ## MQTT Probe ${{ github.ref_name }}
 
-            Requires [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) for the Blazor builds.
+            Requires [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) for the web builds.
 
             ### Downloads
 
             | Artifact | Description |
             |----------|-------------|
-            | `mqttprobe-blazor-linux-x64-${{ github.ref_name }}.zip` | Blazor Web — single binary, Linux x64 |
-            | `mqttprobe-blazor-linux-arm64-${{ github.ref_name }}.zip` | Blazor Web — single binary, Linux arm64 (Raspberry Pi, NAS) |
-            | `mqttprobe-blazor-win-x64-${{ github.ref_name }}.zip` | Blazor Web — single exe, Windows x64 |
+            | `mqttprobe-web-linux-x64-${{ github.ref_name }}.zip` | Web app (Blazor Server) — single binary, Linux x64 |
+            | `mqttprobe-web-linux-arm64-${{ github.ref_name }}.zip` | Web app (Blazor Server) — single binary, Linux arm64 (Raspberry Pi, NAS) |
+            | `mqttprobe-web-win-x64-${{ github.ref_name }}.zip` | Web app (Blazor Server) — single exe, Windows x64 |
             | `mqttprobe-windows-${{ github.ref_name }}.zip` | Windows desktop app — MAUI (unsigned, SmartScreen warning expected) |
-            | `mqttprobe-macos-${{ github.ref_name }}.zip` | macOS desktop app — universal Intel + Apple Silicon, signed & notarized |
+            | MQTTProbe `.pkg` installer | macOS desktop app (recommended) — universal Intel + Apple Silicon, signed & notarized, auto-updates |
             | `mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip` | Linux desktop app — Photino/Blazor, self-contained (requires `libwebkit2gtk-4.1-0`) |
             | `mqttprobe-android-${{ github.ref_name }}.apk` | Android app — sideload APK, Android 7.0+ (API 24) |
             | `docker pull bluegrassiot/mqttprobe:${{ github.ref_name }}` | Docker image (amd64 + arm64, no runtime install needed) |
@@ -432,9 +454,16 @@ jobs:
             chmod +x MqttProbe.Desktop && ./MqttProbe.Desktop
             ```
 
+            ### Windows
+
+            Download `MQTTProbe-win-Setup.exe` (installs per-user, auto-updates) or the portable `mqttprobe-windows-*.zip`.
+
+            ### Linux
+            Download `MQTTProbe.AppImage` (auto-updates; needs `libfuse2` on Ubuntu 22.04+ and `libwebkit2gtk-4.1`), or the zip for a plain unpacked run.
+
             ### macOS
 
-            The macOS app is signed and notarized by Apple — unzip and run, no security prompts.
+            Download the `.pkg` installer (recommended — installs and enables in-app auto-updates) or the portable Velopack zip in the release assets. Both are signed and notarized by Apple, so Gatekeeper accepts them without security prompts.
 
             ### Android
 

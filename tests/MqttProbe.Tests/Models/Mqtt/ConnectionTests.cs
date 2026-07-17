@@ -143,4 +143,57 @@ public class ConnectionTests
         clone.WebsocketBasePath.Should().Be("ws");
         clone.ClientId.Should().Be("my-client");
     }
+
+    [Test]
+    public void Equals_ConsidersClientCertificateAssetId()
+    {
+        var a = new Connection
+        {
+            Name = "Test",
+            Host = "broker.local",
+            Port = 1883,
+            User = "u",
+            Password = "p",
+            Protocol = Protocol.Mqtt,
+            MqttVersion = MqttVersion.V311,
+            ClientId = "fixed-id",
+            WebsocketBasePath = "mqtt",
+            UseTls = true,
+            AllowUntrustedCertificate = false,
+            ConnectTimeout = 15,
+            ClientCertificateAssetId = "abc"
+        };
+        var b = a.Clone();
+        var c = a.Clone();
+        c.ClientCertificateAssetId = "xyz";
+
+        a.Equals(b).Should().BeTrue();
+        a.Equals(c).Should().BeFalse();
+    }
+
+    [Test]
+    public void Equals_NullClientCertificateAssetId_BackwardCompatible()
+    {
+        var a = new Connection { ClientCertificateAssetId = null, ClientId = "fixed" };
+        var b = a.Clone();
+        b.ClientCertificateAssetId = null;
+        a.Equals(b).Should().BeTrue();
+    }
+
+    [Test]
+    public void Clone_PreservesClientCertificateAssetId()
+    {
+        var conn = new Connection { ClientCertificateAssetId = "abc" };
+        var clone = conn.Clone();
+        clone.ClientCertificateAssetId.Should().Be("abc");
+    }
+
+    [Test]
+    public void CloneWithoutPassword_PreservesClientCertificateAssetId()
+    {
+        var conn = new Connection { ClientCertificateAssetId = "abc", Password = "secret" };
+        var clone = conn.CloneWithoutPassword();
+        clone.ClientCertificateAssetId.Should().Be("abc");
+        clone.Password.Should().BeNull();
+    }
 }

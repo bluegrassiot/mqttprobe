@@ -25,25 +25,10 @@ public class AppInfoService : IAppInfoService
     public bool RequiresAuthentication => true;
     public bool IsNative => false;
 
-    public string GetVersion()
-    {
-        var version = TryGetVersion(_processProductVersionProvider)
-                      ?? TryGetVersion(_assemblyInformationalVersionProvider)
-                      ?? "unknown";
-        return TrimAfterPlus(version);
-    }
-
-    private static string? TryGetVersion(Func<string?> provider)
-    {
-        try
-        {
-            return provider();
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    public string GetVersion() =>
+        AppVersionResolver.Resolve(
+            _processProductVersionProvider,
+            _assemblyInformationalVersionProvider);
 
     private static string? GetProcessProductVersion()
     {
@@ -55,11 +40,4 @@ public class AppInfoService : IAppInfoService
 
     private static string? GetAssemblyInformationalVersion() =>
         Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-
-    private static string TrimAfterPlus(string version)
-    {
-        var index = version.IndexOf('+');
-
-        return index != -1 ? version[..index] : version;
-    }
 }

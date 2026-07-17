@@ -8,6 +8,7 @@ using MqttProbe.Models.Emulation;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 
 namespace MqttProbe.Services.Emulation;
@@ -39,8 +40,10 @@ public class EmulationService : IEmulationService
     private readonly ISessionState _sessionState;
     private readonly IManagedMqttClient _managedMqttClient;
     private readonly IUxMetricsService _metrics;
+    private readonly ICertificateAssetStore _certStore;
+    private readonly ICertificateSessionQuarantine _quarantine;
     private readonly ILogger<EmulationService> _logger;
-    private readonly NodeHealthMetricsProvider _healthMetrics = new();
+    private readonly NodeHealthMetricsProvider _healthMetrics;
 
     private List<INodeRunner> _runners = [];
     private CancellationTokenSource? _cts;
@@ -55,14 +58,20 @@ public class EmulationService : IEmulationService
         ISessionState sessionState,
         IManagedMqttClient managedMqttClient,
         IUxMetricsService metrics,
-        ILogger<EmulationService> logger)
+        ICertificateAssetStore certStore,
+        ICertificateSessionQuarantine quarantine,
+        ILogger<EmulationService> logger,
+        IAppHealthMetricsCollector healthCollector)
     {
         _settingsStore = settingsStore;
         _nodeFactory = nodeFactory;
         _sessionState = sessionState;
         _managedMqttClient = managedMqttClient;
         _metrics = metrics;
+        _certStore = certStore;
+        _quarantine = quarantine;
         _logger = logger;
+        _healthMetrics = new NodeHealthMetricsProvider(healthCollector);
         _settingsStore.EmulatorsChanged += OnEmulatorsChanged;
         _managedMqttClient.DisconnectedAsync += OnMainClientDisconnected;
     }
@@ -150,13 +159,43 @@ public class EmulationService : IEmulationService
         var sparkplugCount = snapshot.Count(n => n.Type == EmulatorNodeType.SparkplugB);
         var initialKnownMetrics = _healthMetrics.BuildSnapshot(sparkplugCount, 0);
 
-        _runners = snapshot
+        // Build runners locally — do NOT overwrite _runners until all succeed.
+        var newRunners = snapshot
             .Select(node => (INodeRunner)(node.Type == EmulatorNodeType.SparkplugB
-                ? new SparkplugNodeRunner(node, _nodeFactory, connection, initialKnownMetrics, _logger)
+                ? new SparkplugNodeRunner(node, _nodeFactory, connection, initialKnownMetrics,
+                    _certStore, _quarantine, _logger)
                 : new GenericNodeRunner(node, _managedMqttClient)))
             .ToList();
 
-        await Parallel.ForEachAsync(_runners, async (runner, _) => await runner.StartAsync());
+        // Start runners sequentially so we can track which ones succeeded.
+        // On any failure, stop already-started runners before rethrowing.
+        var startedRunners = new List<INodeRunner>();
+        try
+        {
+            foreach (var runner in newRunners)
+            {
+                await runner.StartAsync();
+                startedRunners.Add(runner);
+            }
+        }
+        catch (Exception)
+        {
+            // Roll back: stop all runners that started successfully (best-effort).
+            foreach (var started in startedRunners)
+            {
+                try { await started.StopAsync(); }
+                catch (Exception stopEx)
+                {
+                    _logger.LogWarning(stopEx,
+                        "Failed to stop runner {NodeId} during StartAsync rollback",
+                        started.NodeId);
+                }
+            }
+            throw;
+        }
+
+        // All runners started successfully — promote to field.
+        _runners = newRunners;
 
         _publishCycles = 0;
         _loopStartTimestamp = Stopwatch.GetTimestamp();

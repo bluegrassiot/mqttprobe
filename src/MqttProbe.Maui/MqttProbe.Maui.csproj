@@ -1,5 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
+    <!-- Optional machine-specific overrides (iOS TFM + codesign identity) for building the
+         iOS app from Windows via a paired Mac. Gitignored; absent on CI and other machines,
+         which then use the committed Android + Windows defaults. Imported before the TFM
+         properties below so its override takes effect. -->
+    <Import Project="MqttProbe.Maui.local.props" Condition="Exists('MqttProbe.Maui.local.props')" />
+
     <PropertyGroup>
         <LangVersion>latest</LangVersion>
         <MqttProbeMauiWindowsTargetFrameworks>net10.0-android;net10.0-windows10.0.19041.0</MqttProbeMauiWindowsTargetFrameworks>
@@ -29,13 +35,14 @@
 
         <!-- Display name -->
         <ApplicationTitle>MQTTProbe</ApplicationTitle>
+        <AssemblyTitle>MQTTProbe</AssemblyTitle>
 
         <!-- App Identifier -->
         <ApplicationId>com.bluegrassiot.mqttprobe</ApplicationId>
 
         <!-- Versions -->
-        <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
-        <ApplicationVersion>1</ApplicationVersion>
+        <ApplicationDisplayVersion>0.0.0</ApplicationDisplayVersion>
+        <ApplicationVersion>0</ApplicationVersion>
 
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
@@ -52,8 +59,10 @@
 
 	<PropertyGroup Condition="'$(TargetFramework)'=='net10.0-windows10.0.19041.0'">
 		<OutputType>WinExe</OutputType>
+		<ApplicationIcon>..\MqttProbe.Desktop\Assets\icon.ico</ApplicationIcon>
 		<WindowsPackageType>None</WindowsPackageType>
 		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+		<DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
 	</PropertyGroup>
 
 	<!--ANDROID SECTION-->
@@ -75,11 +84,15 @@
 	<PropertyGroup Condition="'$(TargetFramework)'=='net10.0-ios'">
 		<BuildIpa>True</BuildIpa>
 		<MtouchNoSymbolStrip>True</MtouchNoSymbolStrip>
+		<!-- CodesignKey/CodesignProvision are machine-specific (per Apple Developer account).
+		     Set them in MqttProbe.Maui.local.props (gitignored) to build/deploy iOS from Windows
+		     via a paired Mac. See that file's import at the top of this project. -->
 	</PropertyGroup>
 
     <PropertyGroup>
         <ServerGarbageCollection>false</ServerGarbageCollection>
         <DefaultLanguage>en-US</DefaultLanguage>
+        <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
         <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
         <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
         <PackageCertificateThumbprint></PackageCertificateThumbprint>
@@ -117,6 +130,7 @@
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
         <PackageReference Include="Microsoft.Maui.Essentials" />
+        <PackageReference Include="Velopack" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' Or $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'" />
     </ItemGroup>
 
     <ItemGroup>

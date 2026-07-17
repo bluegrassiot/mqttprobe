@@ -92,12 +92,12 @@
                           OnChanged="@SaveAsync"/>
 }
 
-<MudButton Variant="Variant.Outlined" StartIcon="@LucideIcons.Plus" Size="Size.Small" Class="mt-2"
+<AppSecondaryButton StartIcon="@LucideIcons.Plus" Size="Size.Small" Class="mt-2"
            title="Add device"
            Disabled="@EmulationService.IsRunning"
            OnClick="@AddDeviceAsync">
     Add device
-</MudButton>
+</AppSecondaryButton>
 
 @code {
     [Parameter] public EmulatorNodeConfig Node { get; set; } = null!;

@@ -229,7 +229,7 @@ public class SparkplugNodesViewTests : BunitTestContext
         await cut.InvokeAsync(() => btn.Click());
 
         await _mockDialogService.Received(1).ShowMessageBoxAsync(
-            "Remove offline nodes", Arg.Is<string>(s => s.Contains("1 offline node")),
+            "Remove offline nodes", Arg.Is<string>(s => s!.Contains("1 offline node")),
             "Remove", Arg.Any<string?>(), "Cancel", Arg.Any<DialogOptions>());
         _mockTopology.Received(1).RemoveOfflineNodes();
         _mockSnackbar.Received(1).Add("Removed 3 offline nodes.", Severity.Success, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());

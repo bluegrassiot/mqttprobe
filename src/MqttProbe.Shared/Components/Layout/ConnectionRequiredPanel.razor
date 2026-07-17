@@ -1,0 +1,57 @@
+@using MQTTnet.Extensions.ManagedClient
+@using MqttProbe.Services.Mqtt
+@inject IManagedMqttClient MqttClient
+@inject IConnectionSessionLifecycle SessionLifecycle
+@inject ISnackbar Snackbar
+
+@if (MqttClient.IsStarted)
+{
+    <div class="connection-required">
+        <img class="connection-required__motif signal-connecting" width="88" height="88"
+             src="/_content/MqttProbe.Shared/img/signal-motif.svg"
+             alt="" />
+        <MudText Typo="Typo.h6" Color="Color.Secondary" Align="Align.Center">
+            Connection interrupted
+        </MudText>
+        <div class="connection-required__alert">
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                Disconnected. Attempting to reconnect…
+            </MudAlert>
+        </div>
+        <AppDestructiveButton
+                   StartIcon="@LucideIcons.CircleStop"
+                   OnClick="@StopReconnect">Stop</AppDestructiveButton>
+    </div>
+}
+else
+{
+    <div class="connection-required">
+        <MudIcon Icon="@LucideIcons.WifiOff"
+                 Class="connection-required__motif connection-required__motif--idle"
+                 aria-hidden="true" />
+        <MudText Typo="Typo.h6" Color="Color.Secondary" Align="Align.Center">
+            Connect to a broker to use this view.
+        </MudText>
+        <div class="connection-required__alert">
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Use Connect in the app bar.
+                </MudText>
+            </MudAlert>
+        </div>
+    </div>
+}
+
+@code {
+    private async Task StopReconnect()
+    {
+        try
+        {
+            await SessionLifecycle.StopActiveConnectionAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to stop the connection: {ex.Message}", Severity.Error);
+        }
+    }
+}

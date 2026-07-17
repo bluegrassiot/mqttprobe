@@ -261,8 +261,8 @@ public class BrokerStateResetCoordinatorTests
         _mockLogger.Received().Log(
             LogLevel.Error,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("ClearAll")),
-            Arg.Is<Exception>(e => e.Message == "boom"),
+            Arg.Is<object>(o => o!.ToString()!.Contains("ClearAll")),
+            Arg.Is<Exception>(e => e!.Message == "boom"),
             Arg.Any<Func<object, Exception?, string>>());
     }
 
@@ -279,7 +279,7 @@ public class BrokerStateResetCoordinatorTests
         _mockLogger.Received().Log(
             LogLevel.Information,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("reset")),
+            Arg.Is<object>(o => o!.ToString()!.Contains("reset")),
             Arg.Any<Exception?>(),
             Arg.Any<Func<object, Exception?, string>>());
     }
@@ -408,8 +408,8 @@ public class BrokerStateResetCoordinatorTests
         _mockLogger.Received().Log(
             LogLevel.Error,
             Arg.Any<EventId>(),
-            Arg.Is<object>(o => o.ToString()!.Contains("EmulationService")),
-            Arg.Is<Exception>(e => e.Message == "emulation boom"),
+            Arg.Is<object>(o => o!.ToString()!.Contains("EmulationService")),
+            Arg.Is<Exception>(e => e!.Message == "emulation boom"),
             Arg.Any<Func<object, Exception?, string>>());
     }
 

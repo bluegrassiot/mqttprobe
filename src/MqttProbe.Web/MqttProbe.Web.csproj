@@ -6,7 +6,7 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>MqttProbe.Web</RootNamespace>
-        <Version>1.0.0</Version>
+        <Version>0.0.0</Version>
         <!-- CS8669: Razor source generator emits nullable annotations without #nullable directives; suppress on generated files only -->
         <NoWarn>$(NoWarn);CS8669</NoWarn>
     </PropertyGroup>
@@ -16,6 +16,7 @@
     </PropertyGroup>
 
     <PropertyGroup>
+        <ServerGarbageCollection>false</ServerGarbageCollection>
         <DefaultLanguage>en-US</DefaultLanguage>
     </PropertyGroup>
 

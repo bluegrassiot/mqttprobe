@@ -21,6 +21,7 @@ public class BrokerStateResetCoordinator : IBrokerStateResetCoordinator
     private readonly ILogger<BrokerStateResetCoordinator> _logger;
 
     private BrokerIdentity? _lastActiveIdentity;
+    private string? _lastActiveCertificateAssetId;
     private readonly object _identityLock = new();
 
     public BrokerStateResetCoordinator(
@@ -44,10 +45,13 @@ public class BrokerStateResetCoordinator : IBrokerStateResetCoordinator
         var targetIdentity = BrokerIdentity.FromConnection(target);
 
         BrokerIdentity? previous;
+        string? previousCertId;
         lock (_identityLock)
         {
             previous = _lastActiveIdentity;
+            previousCertId = _lastActiveCertificateAssetId;
             _lastActiveIdentity = targetIdentity;
+            _lastActiveCertificateAssetId = target.ClientCertificateAssetId;
         }
 
         if (previous is null)
@@ -58,7 +62,8 @@ public class BrokerStateResetCoordinator : IBrokerStateResetCoordinator
             return;
         }
 
-        if (previous == targetIdentity)
+        if (previous == targetIdentity
+            && previousCertId == target.ClientCertificateAssetId)
         {
             if (_logger.IsEnabled(LogLevel.Debug))
                 _logger.LogDebug("Broker identity unchanged ({Host}:{Port}); skipping reset",

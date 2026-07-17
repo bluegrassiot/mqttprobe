@@ -11,6 +11,7 @@ using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using SparkplugNet.Core.Enumerations;
 using SparkplugNet.Core.Node;
@@ -41,6 +42,9 @@ public class EmulationServiceTests
     private IManagedMqttClient _mockMqttClient = null!;
     private ISessionState _mockSessionState = null!;
     private IUxMetricsService _mockMetrics = null!;
+    private ICertificateAssetStore _mockCertStore = null!;
+    private ICertificateSessionQuarantine _mockQuarantine = null!;
+    private IAppHealthMetricsCollector _mockHealthCollector = null!;
     private EmulationService _service = null!;
     private Func<MqttClientDisconnectedEventArgs, Task>? _disconnectedHandler;
 
@@ -62,6 +66,13 @@ public class EmulationServiceTests
         _mockMqttClient = Substitute.For<IManagedMqttClient>();
         _mockMqttClient.EnqueueAsync(Arg.Any<MqttApplicationMessage>()).Returns(Task.CompletedTask);
         _mockMetrics = Substitute.For<IUxMetricsService>();
+        _mockCertStore = Substitute.For<ICertificateAssetStore>();
+        _mockQuarantine = Substitute.For<ICertificateSessionQuarantine>();
+        _mockHealthCollector = Substitute.For<IAppHealthMetricsCollector>();
+        _mockHealthCollector.GetSnapshot().Returns(new AppHealthMetricsSnapshot(
+            CpuUsagePercent: 0, ManagedHeapMb: 0,
+            WorkingSetMb: 0, ThreadCount: 0, ThreadPoolQueueLength: 0,
+            GcGen2Collections: 0, UptimeSeconds: 0));
 
         _disconnectedHandler = null;
         _mockMqttClient
@@ -76,7 +87,10 @@ public class EmulationServiceTests
             _mockSessionState,
             _mockMqttClient,
             _mockMetrics,
-            Substitute.For<ILogger<EmulationService>>());
+            _mockCertStore,
+            _mockQuarantine,
+            Substitute.For<ILogger<EmulationService>>(),
+            _mockHealthCollector);
         _service.SetConnection(_mockSessionState.SelectedConnection.Id);
     }
 
@@ -86,6 +100,7 @@ public class EmulationServiceTests
         await _service.StopAsync();
         _service.Dispose();
         _mockMqttClient.Dispose();
+        _mockHealthCollector.Dispose();
         if (File.Exists(_filePath)) File.Delete(_filePath);
     }
 
@@ -523,7 +538,7 @@ public class EmulationServiceTests
     }
 
     [Test]
-    public async Task GetStatus_NodeFailsToStart_ReportsError()
+    public async Task GetStatus_NodeFailsToStart_StartAsyncThrows()
     {
         var node = Substitute.For<ISparkplugNode>();
         node.Start(Arg.Any<SparkplugNodeOptions>()).Returns<Task>(_ => throw new Exception("Broker unavailable"));
@@ -531,9 +546,13 @@ public class EmulationServiceTests
         var config = SparkplugNode();
         await _service.AddNodeAsync(config);
 
-        await _service.StartAsync();
+        // With sequential rollback, StartAsync propagates the runner's exception
+        var act = () => _service.StartAsync();
+        await act.Should().ThrowAsync<Exception>().WithMessage("*Broker unavailable*");
 
-        _service.GetStatus(config.Id).Should().Be(NodeRuntimeStatus.Error);
+        _service.IsRunning.Should().BeFalse();
+        // Runner was never promoted to _runners, so GetStatus returns Idle
+        _service.GetStatus(config.Id).Should().Be(NodeRuntimeStatus.Idle);
     }
 
     [Test]

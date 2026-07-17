@@ -133,7 +133,7 @@ public class SubscriptionManagerTests
 
         await _mockClient.Received(1).SubscribeAsync(
             Arg.Is<IEnumerable<MQTTnet.Packets.MqttTopicFilter>>(filters =>
-                filters.Any(f => f.QualityOfServiceLevel == MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)));
+                filters!.Any(f => f.QualityOfServiceLevel == MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)));
     }
 
     [Test]
@@ -255,7 +255,7 @@ public class SubscriptionManagerTests
         await _manager.Add("test/topic");
 
         await _mockSettingsStore.Received(1).AddConnectionAsync(
-            Arg.Is<Connection>(c => c.SubscribedTopics.Contains("test/topic")));
+            Arg.Is<Connection>(c => c!.SubscribedTopics!.Contains("test/topic")));
     }
 
     [Test]
@@ -268,7 +268,7 @@ public class SubscriptionManagerTests
         await _manager.Remove(["a/b"]);
 
         await _mockSettingsStore.Received(1).AddConnectionAsync(
-            Arg.Is<Connection>(c => c.SubscribedTopics.Contains("c/d") && !c.SubscribedTopics.Contains("a/b")));
+            Arg.Is<Connection>(c => c!.SubscribedTopics!.Contains("c/d") && !c.SubscribedTopics.Contains("a/b")));
     }
 
     [Test]

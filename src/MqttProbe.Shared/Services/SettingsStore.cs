@@ -15,7 +15,7 @@ public interface ISettingsStore
     public event Action<Guid>? ChartsChanged;
     public event Action<Guid>? EmulatorsChanged;
 
-    public Task LoadAsync(ISecretStorage? secretStorage = null);
+    public Task LoadAsync(ISecretStorage? secretStorage = null, ICertificateAssetStore? certStore = null, ICertificateEnvelopeKeyStore? envelopeKeyStore = null);
     public Task SaveAsync();
 
     // Connection ops
@@ -75,6 +75,8 @@ public class SettingsStore : ISettingsStore
 
     private AppConfiguration _config = new();
     private ISecretStorage? _secretStorage;
+    private ICertificateAssetStore? _certStore;
+    private ICertificateEnvelopeKeyStore? _envelopeKeyStore;
 
     public SettingsStore(string configPath, bool isMobile = false, ILogger<SettingsStore>? logger = null)
     {
@@ -90,13 +92,16 @@ public class SettingsStore : ISettingsStore
     public event Action? UiPreferencesChanged;
     public event Action? PerformanceSettingsChanged;
 
-    public async Task LoadAsync(ISecretStorage? secretStorage = null)
+    public async Task LoadAsync(ISecretStorage? secretStorage = null, ICertificateAssetStore? certStore = null, ICertificateEnvelopeKeyStore? envelopeKeyStore = null)
     {
         await _lock.WaitAsync();
         try
         {
             _secretStorage = secretStorage;
+            _certStore = certStore;
+            _envelopeKeyStore = envelopeKeyStore;
 
+            bool configLoadedSuccessfully = false;
             if (!File.Exists(_configPath))
             {
                 _config = new AppConfiguration { Connections = CreateDefaultConnections() };
@@ -108,24 +113,159 @@ public class SettingsStore : ISettingsStore
                     _config.Performance.MaxDisplayMessages = 500;
                 }
                 await SaveCoreAsync();
-                return;
             }
-
-            try
+            else
             {
-                var json = await File.ReadAllTextAsync(_configPath);
-                _config = JsonSerializer.Deserialize<AppConfiguration>(json, _jsonOptions) ?? new AppConfiguration();
-                NormalizeConfig();
-                MigrateGlobalData();
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "Failed to load config from {Path}; using defaults.", _configPath);
-                _config = new AppConfiguration();
+                try
+                {
+                    var json = await File.ReadAllTextAsync(_configPath);
+                    _config = JsonSerializer.Deserialize<AppConfiguration>(json, _jsonOptions) ?? new AppConfiguration();
+                    configLoadedSuccessfully = true;
+                    NormalizeConfig();
+                    MigrateGlobalData();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to load config from {Path}; using defaults.", _configPath);
+                    _config = new AppConfiguration();
+                }
             }
 
             if (_secretStorage != null)
                 await LoadSecretsAsync();
+
+            // Certificate store cleanup
+            if (certStore is not null && envelopeKeyStore is not null
+                && Directory.Exists(certStore.CertificatesDirectory))
+            {
+                // Staging cleanup ALWAYS runs regardless of config state:
+
+                // 1. Delete staging files (.bin.tmp).
+                foreach (var tmpFile in Directory.EnumerateFiles(certStore.CertificatesDirectory, "cert-*.bin.tmp"))
+                {
+                    var tmpAssetId = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(tmpFile))
+                        ["cert-".Length..];
+                    try
+                    {
+                        File.Delete(tmpFile);
+                        try { await envelopeKeyStore.RemoveAsync($"cert-env-{tmpAssetId}"); } catch { }
+                        var staleMarker = Path.Combine(certStore.CertificatesDirectory, $"cert-{tmpAssetId}.cleanup-retry");
+                        if (File.Exists(staleMarker))
+                            try { File.Delete(staleMarker); } catch { }
+                    }
+                    catch
+                    {
+                        var quarantinePath = Path.Combine(certStore.CertificatesDirectory, $"cert-{tmpAssetId}.quarantine");
+                        try { File.Delete(quarantinePath); } catch { }
+                        bool renamed = false;
+                        try { File.Move(tmpFile, quarantinePath); renamed = true; } catch { }
+                        if (!renamed)
+                        {
+                            var retryMarker = Path.Combine(certStore.CertificatesDirectory, $"cert-{tmpAssetId}.cleanup-retry");
+                            if (!File.Exists(retryMarker))
+                                try { await File.WriteAllTextAsync(retryMarker, $"staging cleanup failed at {DateTime.UtcNow:o}"); } catch { }
+                            _logger?.LogCritical(
+                                "Could not delete or quarantine staging temp {Path}. Cleanup retry scheduled.",
+                                tmpFile);
+                        }
+                        else
+                        {
+                            _logger?.LogWarning("Could not delete staging temp {Path}; quarantined.", tmpFile);
+                            try { await envelopeKeyStore.RemoveAsync($"cert-env-{tmpAssetId}"); } catch { }
+                        }
+                    }
+                }
+
+                // 2. Delete cleanup-retry markers.
+                foreach (var marker in Directory.EnumerateFiles(certStore.CertificatesDirectory, "cert-*.cleanup-retry"))
+                {
+                    var markerAssetId = Path.GetFileNameWithoutExtension(marker)["cert-".Length..];
+                    var correspondingTmp = Path.Combine(certStore.CertificatesDirectory, $"cert-{markerAssetId}.bin.tmp");
+                    if (!File.Exists(correspondingTmp))
+                    {
+                        try { File.Delete(marker); } catch { }
+                        try { await envelopeKeyStore.RemoveAsync($"cert-env-{markerAssetId}"); } catch { }
+                    }
+                }
+
+                // 3. Delete quarantine files older than 1 hour.
+                foreach (var qFile in Directory.EnumerateFiles(certStore.CertificatesDirectory, "cert-*.quarantine"))
+                {
+                    try
+                    {
+                        var creationTime = File.GetCreationTime(qFile);
+                        if (creationTime < DateTime.Now.AddHours(-1))
+                        {
+                            File.Delete(qFile);
+                            var qAssetId = Path.GetFileNameWithoutExtension(qFile)["cert-".Length..];
+                            try { await envelopeKeyStore.RemoveAsync($"cert-env-{qAssetId}"); } catch { }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Failed to process quarantine file {Path}", qFile);
+                    }
+                }
+
+                // Orphan + AEAD cleanup ONLY when config loaded successfully
+                if (configLoadedSuccessfully)
+                {
+                    var knownPairs = await certStore.ListAssetsAsync();
+
+                    var configuredPairs = Config.Connections
+                        .Where(c => c.ClientCertificateAssetId is not null)
+                        .Select(c => (c.Id, c.ClientCertificateAssetId!))
+                        .ToHashSet();
+                    foreach (var (ownerId, assetId) in knownPairs)
+                    {
+                        if (!configuredPairs.Contains((ownerId, assetId)))
+                        {
+                            try { await certStore.DeleteAsync(ownerId, assetId); } catch { }
+                        }
+                    }
+
+                    var verifiedAssetIds = knownPairs.Select(p => p.AssetId).ToHashSet();
+                    var knownOwnerIds = Config.Connections.Select(c => c.Id).ToHashSet();
+                    foreach (var binFile in Directory.EnumerateFiles(certStore.CertificatesDirectory, "cert-*.bin"))
+                    {
+                        var fileName = Path.GetFileName(binFile);
+                        if (fileName.EndsWith(".tmp") || fileName.EndsWith(".quarantine") || fileName.EndsWith(".cleanup-retry"))
+                            continue;
+                        var fileAssetId = fileName["cert-".Length..^".bin".Length];
+                        if (verifiedAssetIds.Contains(fileAssetId))
+                            continue;
+
+                        try
+                        {
+                            var blob = await File.ReadAllBytesAsync(binFile);
+                            if (blob.Length < 73) { File.Delete(binFile); continue; }
+                            var headerOwner = System.Text.Encoding.ASCII.GetString(blob, 36, 36);
+                            if (Guid.TryParse(headerOwner, out var parsedOwner) && knownOwnerIds.Contains(parsedOwner))
+                            {
+                                _logger?.LogCritical(
+                                    "Certificate blob {Path} has known owner {OwnerId} but failed AEAD verification. " +
+                                    "Preserving; re-import or manually delete.", binFile, parsedOwner);
+                            }
+                            else
+                            {
+                                File.Delete(binFile);
+                                try { await envelopeKeyStore.RemoveAsync($"cert-env-{fileAssetId}"); } catch { }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning(ex, "Failed to process unverified blob {Path}", binFile);
+                        }
+                    }
+                }
+                else
+                {
+                    _logger?.LogWarning(
+                        "Config file was missing or corrupt; skipping orphan and AEAD verification cleanup. " +
+                        "Staging temp files, retry markers, and aged quarantine files were still cleaned. " +
+                        "Verified certificate assets were preserved. Re-import certificates if needed.");
+                }
+            }
         }
         finally
         {
@@ -146,7 +286,7 @@ public class SettingsStore : ISettingsStore
         }
     }
 
-    private async Task SaveCoreAsync()
+    protected virtual async Task SaveCoreAsync()
     {
         var sanitised = new AppConfiguration
         {
@@ -166,49 +306,154 @@ public class SettingsStore : ISettingsStore
     public async Task AddConnectionAsync(Connection connection)
     {
         await _lock.WaitAsync();
+        var snapshot = _config.Connections.Select(c => c.Clone()).ToList();
+        var chartsSnapshot = _config.ChartsByConnection
+            .ToDictionary(kv => kv.Key, kv => new List<ChartConfiguration>(kv.Value));
+        var emulatorsSnapshot = _config.EmulatorsByConnection
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+        string? previousPassword = null;
+        string? oldSecretKey = null;
+        bool configMutated = false;
+        bool secretsMutated = false;
+
         try
         {
-            var existing = _config.Connections.Find(c => c.Name.Equals(connection.Name));
-            if (existing != null) _config.Connections.Remove(existing);
-            _config.Connections.Add(connection.Clone());
+            var existingIdx = _config.Connections.FindIndex(c => c.Id == connection.Id);
+            if (existingIdx >= 0)
+            {
+                var existing = _config.Connections[existingIdx];
+                oldSecretKey = SecretKey(existing);
+                if (_secretStorage != null)
+                {
+                    previousPassword = await _secretStorage.GetAsync(oldSecretKey);
+                }
+                _config.Connections[existingIdx] = connection.Clone();
+            }
+            else
+            {
+                _config.Connections.Add(connection.Clone());
+            }
+            configMutated = true;
 
             if (_secretStorage != null)
             {
+                if (oldSecretKey is not null && oldSecretKey != SecretKey(connection))
+                {
+                    await _secretStorage.RemoveAsync(oldSecretKey);
+                    secretsMutated = true;
+                }
+
                 if (string.IsNullOrEmpty(connection.Password))
                     await _secretStorage.RemoveAsync(SecretKey(connection));
                 else
                     await _secretStorage.SetAsync(SecretKey(connection), connection.Password);
+                secretsMutated = true;
             }
+
+            await SaveCoreAsync();
+        }
+        catch (Exception)
+        {
+            if (configMutated)
+            {
+                _config.Connections = snapshot;
+                _config.ChartsByConnection = chartsSnapshot;
+                _config.EmulatorsByConnection = emulatorsSnapshot;
+            }
+
+            if (secretsMutated && _secretStorage != null)
+            {
+                try
+                {
+                    await _secretStorage.RemoveAsync(SecretKey(connection));
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to remove new secret key {Key} during rollback",
+                        SecretKey(connection));
+                }
+                try
+                {
+                    if (previousPassword is not null && oldSecretKey is not null)
+                        await _secretStorage.SetAsync(oldSecretKey, previousPassword);
+                    else if (oldSecretKey is not null)
+                        await _secretStorage.RemoveAsync(oldSecretKey);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to restore old secret key {Key} during rollback",
+                        oldSecretKey);
+                }
+            }
+            throw;
         }
         finally
         {
             _lock.Release();
         }
-
-        await SaveAsync();
     }
 
     public async Task RemoveConnectionAsync(Connection connection)
     {
         await _lock.WaitAsync();
+        var snapshot = _config.Connections.Select(c => c.Clone()).ToList();
+        var chartsSnapshot = _config.ChartsByConnection
+            .ToDictionary(kv => kv.Key, kv => new List<ChartConfiguration>(kv.Value));
+        var emulatorsSnapshot = _config.EmulatorsByConnection
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+        Connection? removed = null;
+        string? removedSecretValue = null;
+
         try
         {
-            var existing = _config.Connections.Find(c => c.Name.Equals(connection.Name));
-            if (existing != null)
+            var existing = _config.Connections.FindIndex(c => c.Id == connection.Id);
+            if (existing >= 0)
             {
-                _config.Connections.Remove(existing);
-                _config.ChartsByConnection.Remove(existing.Id);
-                _config.EmulatorsByConnection.Remove(existing.Id);
+                removed = _config.Connections[existing];
+                _config.Connections.RemoveAt(existing);
+                _config.ChartsByConnection.Remove(removed.Id);
+                _config.EmulatorsByConnection.Remove(removed.Id);
                 if (_secretStorage != null)
-                    await _secretStorage.RemoveAsync(SecretKey(connection));
+                {
+                    removedSecretValue = await _secretStorage.GetAsync(SecretKey(removed));
+                    await _secretStorage.RemoveAsync(SecretKey(removed));
+                }
             }
+
+            await SaveCoreAsync();
+        }
+        catch (Exception)
+        {
+            _config.Connections = snapshot;
+            _config.ChartsByConnection = chartsSnapshot;
+            _config.EmulatorsByConnection = emulatorsSnapshot;
+
+            if (_secretStorage != null && removed is not null)
+            {
+                try
+                {
+                    if (removedSecretValue is not null)
+                        await _secretStorage.SetAsync(SecretKey(removed), removedSecretValue);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex,
+                        "Failed to restore secret for removed connection {Name} during rollback",
+                        removed.Name);
+                }
+            }
+            throw;
         }
         finally
         {
             _lock.Release();
         }
 
-        await SaveAsync();
+        // After successful persistence, delete the associated cert asset (best-effort)
+        if (removed?.ClientCertificateAssetId is not null && _certStore is not null)
+        {
+            try { await _certStore.DeleteAsync(removed.Id, removed.ClientCertificateAssetId); } catch { }
+        }
     }
 
     // --- Chart ops (per-connection) ---
@@ -605,8 +850,8 @@ public class SettingsStore : ISettingsStore
             Port = 8081,
             Protocol = Protocol.WebSocket,
             UseTls = true,
-            AllowUntrustedCertificate = true,
-            WebsocketBasePath = "",
+            AllowUntrustedCertificate = false,
+            WebsocketBasePath = "mqtt",
             SubscribedTopics = ["spBv1.0/#"]
         }
     ];

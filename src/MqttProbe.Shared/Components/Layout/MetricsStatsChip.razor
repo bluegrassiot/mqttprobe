@@ -5,17 +5,18 @@
 @inject IUxMetricsService Metrics
 @implements IDisposable
 
-<MudMenu Class="ml-2" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Dense="false">
+<MudMenu Class="ml-2" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" Dense="false">
     <ActivatorContent>
         <MudChip T="string" Size="Size.Small"
                  Class="@ChipClass"
                  Variant="Variant.Outlined"
                  Color="@(_droppingRecently ? Color.Warning : Color.Inherit)"
+                 aria-label="@($"Live traffic {RateText}")"
                  @onclick="context.ToggleAsync">
             <span class="metrics-chip-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24">@((MarkupString)LucideIcons.Activity)</svg>
             </span>
-            @RateText
+            <span class="metrics-chip-rate">@RateText</span>
         </MudChip>
     </ActivatorContent>
     <ChildContent>
@@ -63,18 +64,42 @@
                 }
             }
 
-            <MudDivider Class="my-2" />
-            <MudExpansionPanels Elevation="0" Class="mt-1 metrics-health">
-                <MudExpansionPanel Text="Health" Dense="true">
-                    <div class="metrics-row"><span>CPU usage</span><span>@FmtPercent(_snapshot.AppCpuUsagePercent)</span></div>
-                    <div class="metrics-row"><span>Managed heap</span><span>@FmtMb(_snapshot.AppManagedHeapMb)</span></div>
-                    <div class="metrics-row"><span>Working set</span><span>@FmtMb(_snapshot.AppWorkingSetMb)</span></div>
-                    <div class="metrics-row"><span>Threads</span><span>@Fmt(_snapshot.AppThreadCount)</span></div>
-                    <div class="metrics-row"><span>ThreadPool queue</span><span>@Fmt(_snapshot.AppThreadPoolQueueLength)</span></div>
-                    <div class="metrics-row"><span>GC Gen2 collections</span><span>@Fmt(_snapshot.AppGcGen2Collections)</span></div>
-                    <div class="metrics-row"><span>Uptime</span><span>@FmtDuration(_snapshot.AppUptimeSeconds)</span></div>
-                </MudExpansionPanel>
-            </MudExpansionPanels>
+            @if (_snapshot.AppHealth.HasAny)
+            {
+                <MudDivider Class="my-2" />
+                <MudExpansionPanels Elevation="0" Class="mt-1 metrics-health">
+                    <MudExpansionPanel Text="Health" Dense="true">
+                        @if (_snapshot.AppHealth.CpuUsagePercent.HasValue)
+                        {
+                            <div class="metrics-row"><span>CPU usage</span><span>@FmtPercent(_snapshot.AppHealth.CpuUsagePercent.Value)</span></div>
+                        }
+                        @if (_snapshot.AppHealth.ManagedHeapMb.HasValue)
+                        {
+                            <div class="metrics-row"><span>Managed heap</span><span>@FmtMb(_snapshot.AppHealth.ManagedHeapMb.Value)</span></div>
+                        }
+                        @if (_snapshot.AppHealth.WorkingSetMb.HasValue)
+                        {
+                            <div class="metrics-row"><span>Working set</span><span>@FmtMb(_snapshot.AppHealth.WorkingSetMb.Value)</span></div>
+                        }
+                        @if (_snapshot.AppHealth.ThreadCount.HasValue)
+                        {
+                            <div class="metrics-row"><span>Threads</span><span>@Fmt(_snapshot.AppHealth.ThreadCount.Value)</span></div>
+                        }
+                        @if (_snapshot.AppHealth.ThreadPoolQueueLength.HasValue)
+                        {
+                            <div class="metrics-row"><span>ThreadPool queue</span><span>@Fmt(_snapshot.AppHealth.ThreadPoolQueueLength.Value)</span></div>
+                        }
+                        @if (_snapshot.AppHealth.GcGen2Collections.HasValue)
+                        {
+                            <div class="metrics-row"><span>GC Gen2 collections</span><span>@Fmt(_snapshot.AppHealth.GcGen2Collections.Value)</span></div>
+                        }
+                        @if (_snapshot.AppHealth.UptimeSeconds.HasValue)
+                        {
+                            <div class="metrics-row"><span>Uptime</span><span>@FmtDuration(_snapshot.AppHealth.UptimeSeconds.Value)</span></div>
+                        }
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
 
             <MudExpansionPanels Elevation="0" Class="mt-2 metrics-diagnostics">
                 <MudExpansionPanel Text="Diagnostics" Dense="true">

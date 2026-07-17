@@ -9,6 +9,7 @@
         <RootNamespace>MqttProbe</RootNamespace>
         <NoWarn>$(NoWarn);CS8669</NoWarn>
         <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
+        <Version>0.0.0</Version>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(Configuration)' == 'Release'">
@@ -21,8 +22,9 @@
              _framework/blazor.webview.js static web asset is processed at build time. -->
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
-        <PackageReference Include="Photino.Blazor" />
         <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+        <PackageReference Include="Photino.Blazor" />
+        <PackageReference Include="Velopack" />
     </ItemGroup>
 
     <ItemGroup>

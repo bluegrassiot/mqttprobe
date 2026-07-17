@@ -9,6 +9,7 @@
     <File Path=".env.example" />
     <File Path="docker-compose.yml" />
     <File Path="docker-compose.prod.yml" />
+    <File Path="docker-compose.mtls.yml" />
     <File Path="Dockerfile" />
   </Folder>
   <Folder Name="/docs/">
@@ -27,13 +28,19 @@
     <File Path="global.json" />
   </Folder>
   <Folder Name="/github/">
+    <File Path=".github/workflows/build-linux-desktop.yml" />
+    <File Path=".github/workflows/build-macos.yml" />
     <File Path=".github/workflows/ci.yml" />
     <File Path=".github/workflows/release.yml" />
   </Folder>
   <Folder Name="/scripts/">
+    <File Path="scripts/build-linux-desktop.ps1" />
     <File Path="scripts/coverage.py" />
     <File Path="scripts/format-check.py" />
+    <File Path="scripts/generate-mtls-certs.py" />
+    <File Path="scripts/manage-windows-config.ps1" />
     <File Path="scripts/reset-password.py" />
+    <File Path="scripts/velopack-windows-test.ps1" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/MqttProbe.Desktop/MqttProbe.Desktop.csproj" />
@@ -44,6 +51,8 @@
     <Project Path="src/MqttProbe.Web/MqttProbe.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/MqttProbe.IntegrationTests/MqttProbe.IntegrationTests.csproj" />
+    <Project Path="tests/MqttProbe.TestInfrastructure/MqttProbe.TestInfrastructure.csproj" />
     <Project Path="tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,5 +1,6 @@
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Security;
 
 namespace MqttProbe.Shared.Tests.Services.Configuration;
 
@@ -211,7 +212,7 @@ public class SettingsStoreTests
         conns.Should().Contain(c =>
             c.Host == "test.mosquitto.org" && c.Port == 8081 &&
             c.Protocol == Protocol.WebSocket && c.UseTls &&
-            c.AllowUntrustedCertificate && c.WebsocketBasePath == "");
+            !c.AllowUntrustedCertificate && c.WebsocketBasePath == "mqtt");
         conns.Should().Contain(c =>
             c.Host == "broker.emqx.io" && c.Port == 8883 &&
             c.Protocol == Protocol.Mqtt && c.UseTls && !c.AllowUntrustedCertificate);
@@ -249,5 +250,112 @@ public class SettingsStoreTests
         await _store.LoadAsync();
 
         _store.Config.Connections.Should().BeEmpty("an existing config is never reseeded");
+    }
+
+    [Test]
+    public async Task AddConnectionAsync_SameIdDifferentName_ReplacesNotDuplicates()
+    {
+        await _store.LoadAsync();
+        var conn = new Connection { Name = "Original", Host = "h", Port = 1883 };
+        await _store.AddConnectionAsync(conn);
+
+        var renamed = conn.Clone();
+        renamed.Name = "Renamed";
+        await _store.AddConnectionAsync(renamed);
+
+        _store.Config.Connections.Should().Contain(c => c.Name == "Renamed");
+        _store.Config.Connections.Should().NotContain(c => c.Name == "Original");
+    }
+
+    [Test]
+    public async Task AddConnectionAsync_SaveFailure_RollsBackConnectionsAndSecrets()
+    {
+        var store = new FailingSaveSettingsStore(_configPath);
+        await store.LoadAsync();
+
+        var initialCount = store.Config.Connections.Count;
+        var conn = new Connection { Name = "Test", Host = "h", Port = 1883, Password = "pw" };
+
+        store.EnableSaveFailure();
+        var act = () => store.AddConnectionAsync(conn);
+        await act.Should().ThrowAsync<IOException>();
+
+        store.Config.Connections.Should().HaveCount(initialCount);
+        store.Config.Connections.Should().NotContain(c => c.Name == "Test");
+    }
+
+    [Test]
+    public async Task AddConnectionAsync_RenameSaveFailure_RestoresPasswordUnderCorrectKey()
+    {
+        var mockSecretStorage = Substitute.For<ISecretStorage>();
+        var store = new FailingSaveSettingsStore(_configPath);
+        await store.LoadAsync(mockSecretStorage);
+
+        var conn = new Connection { Name = "Original", Host = "h", Port = 1883, Password = "secret" };
+        await store.AddConnectionAsync(conn);
+        store.Config.Connections.Should().Contain(c => c.Name == "Original");
+
+        static string ExpectedSecretKey(string name)
+        {
+            var hash = System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(name));
+            return $"mqtt_{Convert.ToHexString(hash)[..16]}";
+        }
+
+        var oldKey = ExpectedSecretKey("Original");
+        var newKey = ExpectedSecretKey("Renamed");
+
+        var renamed = conn.Clone();
+        renamed.Name = "Renamed";
+        store.EnableSaveFailure();
+
+        var act = () => store.AddConnectionAsync(renamed);
+        await act.Should().ThrowAsync<IOException>();
+
+        store.Config.Connections.Should().Contain(c => c.Name == "Original");
+        store.Config.Connections.Should().NotContain(c => c.Name == "Renamed");
+
+        await mockSecretStorage.Received().RemoveAsync(newKey);
+        await mockSecretStorage.Received().SetAsync(oldKey, "secret");
+    }
+
+    [Test]
+    public async Task RemoveConnectionAsync_SaveFailure_RollsBackAllMutations()
+    {
+        var store = new FailingSaveSettingsStore(_configPath);
+        await store.LoadAsync();
+
+        var conn = new Connection { Name = "ToDelete", Host = "h", Port = 1883, Password = "pw" };
+        await store.AddConnectionAsync(conn);
+        store.Config.Connections.Should().Contain(c => c.Name == "ToDelete");
+
+        store.EnableSaveFailure();
+
+        var act = () => store.RemoveConnectionAsync(conn);
+        await act.Should().ThrowAsync<IOException>();
+
+        store.Config.Connections.Should().Contain(c => c.Name == "ToDelete");
+    }
+
+    /// <summary>
+    /// Test subclass that forces SaveCoreAsync to fail, enabling deterministic
+    /// rollback testing without relying on ISecretStorage side effects.
+    /// </summary>
+    private class FailingSaveSettingsStore : SettingsStore
+    {
+        private bool _failSave;
+
+        public FailingSaveSettingsStore(string configPath)
+            : base(configPath) { }
+
+        public void EnableSaveFailure() => _failSave = true;
+        public void DisableSaveFailure() => _failSave = false;
+
+        protected override async Task SaveCoreAsync()
+        {
+            if (_failSave)
+                throw new IOException("disk full");
+            await base.SaveCoreAsync();
+        }
     }
 }

@@ -25,7 +25,7 @@ Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart
 - **WebSocket support** — connect via `ws://` or `wss://` in addition to raw TCP
 - **Charts** — live time-series visualization of JSON payload fields with configurable field selection; chart configurations are saved per connection across sessions
 - **Authentication** — cookie-based login with PBKDF2-SHA256 hashed passwords; first-run setup wizard, in-app password change
-- **Secure credential storage** — MQTT broker passwords stored in platform-native secure storage (iOS Keychain / Android Keystore / ASP.NET Data Protection); never written in plaintext
+- **Secure credential storage** — MQTT broker passwords stored in platform-appropriate secure storage (iOS Keychain / Android Keystore / ASP.NET Data Protection on Web); desktop encrypts secrets with AES-256-GCM on disk, with the master key protected by an OS-backed facility when available; never written in plaintext
 
 ---
 
@@ -96,7 +96,31 @@ The app starts on `https://localhost:5001`. On first launch it redirects to `/Se
 
 ---
 
+## Quick Start — Desktop Apps
+
+### Windows
+
+- **Recommended:** Download [`MQTTProbe-win-Setup.exe`](https://github.com/bluegrassiot/mqttprobe/releases/latest) — per-user install, no admin rights, auto-updates in-app.
+- **Portable:** Download the portable `mqttprobe-windows-<version>.zip`, extract, and run `MqttProbe.Maui.exe` (no auto-update).
+
+> **Windows SmartScreen warning:** Releases are not yet code-signed, so Windows may warn on first run. Choose "More info" → "Run anyway" to proceed.
+
+### Linux
+
+- **Recommended:** Download the `MQTTProbe` AppImage from the [latest release](https://github.com/bluegrassiot/mqttprobe/releases/latest), `chmod +x`, run — auto-updates in-app.
+  Requires `libwebkit2gtk-4.1` and, on Ubuntu 22.04+, `libfuse2` (`sudo apt install libfuse2 libwebkit2gtk-4.1-0`).
+- **Portable:** Download `mqttprobe-desktop-linux-x64-<version>.zip`, extract, and run `MqttProbe.Desktop` (no auto-update).
+
+### macOS
+
+- **Recommended:** Download the `MQTTProbe` installer `.pkg` from the [latest release](https://github.com/bluegrassiot/mqttprobe/releases/latest) — signed & notarized, installs to Applications, auto-updates in-app.
+- **Portable:** Download the Velopack portable zip on the release page (no auto-update).
+
+---
+
 ## Quick Start — MAUI (iOS / Android / Windows)
+
+**For developers:** build from source for testing and development.
 
 **Prerequisites:** .NET 10 SDK + MAUI workload
 
@@ -194,7 +218,17 @@ MqttProbe.slnx
 
 - Passwords are hashed with **PBKDF2-SHA256** (100,000 iterations, random salt, constant-time verification)
 - `config/appsettings.json` is restricted to **owner read/write only** (mode 600) on Linux/macOS
-- MQTT broker passwords are stored in **platform-native secure storage** — never in the config file
+- MQTT broker passwords are stored in **platform-appropriate secure storage** (OS keystore on MAUI, ASP.NET Data Protection on Web); desktop encrypts secrets with AES-256-GCM on disk — never in the config file
+- **Desktop secret key protection:**
+  - Master key is protected by an OS-backed facility when available.
+  - Windows: current-user DPAPI (`.master-key-v1.dpapi`)
+  - macOS: Keychain (`com.bluegrassiot.mqttprobe` / `master-key-v1`)
+  - Linux: libsecret schema `com.bluegrassiot.mqttprobe.MasterKey` with attribute `key-id=master-key-v1`
+  - If no OS facility is available, a local `.key` file is used and the UI shows a warning.
+- When OS protection is active, copying the secrets directory alone does not yield a usable key.
+- File-fallback mode is weaker: directory disclosure includes key and ciphertext, relying on filesystem permissions only.
+- An existing OS-protected store cannot automatically switch to file fallback if the keyring becomes temporarily unavailable; restore access to the original OS facility.
+- Client certificate payloads are stored in an AES-256-GCM-encrypted file; the AES key and certificate password are held separately in platform secret storage, see [Client Certificate Security](docs/client-certificate-security.md) for details
 - Authentication cookies are `HttpOnly`, `SameSite=Strict`, and expire after 8 hours with sliding renewal
 - No credentials are ever committed to the repository
 

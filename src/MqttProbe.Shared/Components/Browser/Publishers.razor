@@ -16,13 +16,14 @@
 
 <TabPanelHeader Title="Publish" Icon="@LucideIcons.Send">
     <HeaderActions>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="app-btn-min"
-                   StartIcon="@LucideIcons.Send" Size="Size.Medium"
-                   title="Publish"
-                   Disabled="@string.IsNullOrWhiteSpace(_message.Topic)"
-                   OnClick="PublishMessage">
+        <AppPrimaryButton MinWidth="true"
+                          StartIcon="@LucideIcons.Send"
+                          Size="Size.Medium"
+                          title="Publish"
+                          Disabled="@string.IsNullOrWhiteSpace(_message.Topic)"
+                          OnClick="PublishMessage">
             Publish Message
-        </MudButton>
+        </AppPrimaryButton>
     </HeaderActions>
 </TabPanelHeader>
 
@@ -31,11 +32,10 @@
         @if (AppInfoService.IsNative || RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             <MudItem xs="12">
-                <MudButton Variant="Variant.Text" Color="Color.Primary"
-                           StartIcon="@LucideIcons.ClipboardPaste"
-                           OnClick="SetMessageFromClipBoard">
+                <AppTertiaryButton StartIcon="@LucideIcons.ClipboardPaste"
+                                   OnClick="SetMessageFromClipBoard">
                     Paste from clipboard
-                </MudButton>
+                </AppTertiaryButton>
             </MudItem>
         }
 
@@ -49,14 +49,16 @@
             <MudTextField T="string" Label="Payload" Variant="Variant.Outlined"
                           @bind-Text="@_message.Payload" Lines="6" Sizing="InputSizing.Auto" MaxLines="20"/>
             <div class="d-flex gap-2 mt-1 flex-wrap">
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                           StartIcon="@LucideIcons.Sparkles" OnClick="FormatJsonPayload">
+                <AppSecondaryButton Size="Size.Small"
+                                    StartIcon="@LucideIcons.Sparkles"
+                                    OnClick="FormatJsonPayload">
                     Format
-                </MudButton>
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                           StartIcon="@LucideIcons.Minimize2" OnClick="MinifyJsonPayload">
+                </AppSecondaryButton>
+                <AppSecondaryButton Size="Size.Small"
+                                    StartIcon="@LucideIcons.Minimize2"
+                                    OnClick="MinifyJsonPayload">
                     Minify
-                </MudButton>
+                </AppSecondaryButton>
             </div>
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
                 Tip: valid JSON is optional, but validating helps avoid malformed payload issues.

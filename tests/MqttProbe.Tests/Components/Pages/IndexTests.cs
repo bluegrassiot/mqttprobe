@@ -36,6 +36,7 @@ public class IndexTests : BunitTestContext
     private List<EmulatorNodeConfig> _emulatorNodes = null!;
     private ISparkplugTopologyService _mockTopology = null!;
     private ISettingsStore _mockConfig = null!;
+    private IConnectionSessionLifecycle _mockLifecycle = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -67,6 +68,15 @@ public class IndexTests : BunitTestContext
         Services.AddSingleton(_mockConfig);
         Services.AddSingleton(mockSessionState);
         Services.AddSingleton<IThemes>(new Themes());
+
+        var mockMqtt = Substitute.For<IManagedMqttClient>();
+        mockMqtt.IsConnected.Returns(true);
+        mockMqtt.IsStarted.Returns(true);
+        Services.AddSingleton(mockMqtt);
+
+        _mockLifecycle = Substitute.For<IConnectionSessionLifecycle>();
+        _mockLifecycle.StopActiveConnectionAsync().Returns(Task.CompletedTask);
+        Services.AddSingleton(_mockLifecycle);
 
         ComponentFactories.AddStub<BrowserPanel>();
         ComponentFactories.AddStub<ChartsComponent>();
@@ -363,6 +373,69 @@ public class IndexTests : BunitTestContext
             .Which.TextContent.Should().Contain("Charts");
     }
 
+    [Test]
+    public void WhenDisconnected_OnBrowser_ShowsConnectionRequiredPanel_NotBrowserStub()
+    {
+        var mqtt = Services.GetRequiredService<IManagedMqttClient>();
+        mqtt.IsConnected.Returns(false);
+        mqtt.IsStarted.Returns(true);
+
+        var cut = Render<IndexPage>();
+
+        cut.Markup.Should().Contain("Attempting to reconnect");
+    }
+
+    [Test]
+    public void WhenDisconnected_OnSettings_ShowsSettings_NotReconnectPanel()
+    {
+        var mqtt = Services.GetRequiredService<IManagedMqttClient>();
+        mqtt.IsConnected.Returns(false);
+        mqtt.IsStarted.Returns(true);
+
+        Services.GetRequiredService<NavigationManager>()
+            .NavigateTo("/?tab=settings");
+
+        var cut = Render<IndexPage>();
+
+        cut.Markup.Should().NotContain("Attempting to reconnect");
+        cut.FindAll(".mud-tab[aria-selected='true']")
+            .Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Settings");
+    }
+
+    [Test]
+    public void WhenDisconnected_NeverStarted_OnBrowser_ShowsConnectPrompt()
+    {
+        var mqtt = Services.GetRequiredService<IManagedMqttClient>();
+        mqtt.IsConnected.Returns(false);
+        mqtt.IsStarted.Returns(false);
+
+        var cut = Render<IndexPage>();
+
+        cut.Markup.Should().Contain("Connect to a broker");
+        cut.Markup.Should().NotContain("Attempting to reconnect");
+    }
+
+    [Test]
+    public void ActiveConnectionStopped_WhileOnBrowser_ShowsConnectionRequiredPanel()
+    {
+        var mqtt = Services.GetRequiredService<IManagedMqttClient>();
+        mqtt.IsConnected.Returns(true);
+        mqtt.IsStarted.Returns(true);
+
+        var cut = Render<IndexPage>();
+
+        cut.Markup.Should().NotContain("Connect to a broker");
+        cut.Markup.Should().NotContain("Attempting to reconnect");
+
+        mqtt.IsConnected.Returns(false);
+        mqtt.IsStarted.Returns(false);
+        _mockLifecycle.ActiveConnectionStopped += Raise.Event<Action>();
+
+        cut.WaitForAssertion(() =>
+            cut.Markup.Should().Contain("Connect to a broker"));
+    }
+
 }
 
 [TestFixture]
@@ -385,6 +458,7 @@ public class NotFoundPageTests : BunitTestContext
         Services.AddSingleton(sessionState);
         Services.AddSingleton(Substitute.For<IMessageStoreManager>());
         Services.AddSingleton(Substitute.For<IDialogService>());
+        Services.AddSingleton(Substitute.For<IConnectionSessionLifecycle>());
 
         var mockConfig = Substitute.For<ISettingsStore>();
         mockConfig.Config.Returns(new AppConfiguration());
@@ -403,13 +477,17 @@ public class NotFoundPageTests : BunitTestContext
             MessagesProcessedByFormat: new Dictionary<string, long>(),
             ChartFunnelBySource: new Dictionary<string, long>(),
             MaxDisplayMessages: 0, CurrentDisplayedMessageCount: 0,
-            AppCpuUsagePercent: 0, AppManagedHeapMb: 0,
-            AppWorkingSetMb: 0, AppThreadCount: 0,
-            AppThreadPoolQueueLength: 0, AppGcGen2Collections: 0,
-            AppUptimeSeconds: 0, EmulatorPublishersOnline: 0,
+            AppHealth: new AppHealthMetricsSnapshot(
+                CpuUsagePercent: 0, ManagedHeapMb: 0,
+                WorkingSetMb: 0, ThreadCount: 0, ThreadPoolQueueLength: 0,
+                GcGen2Collections: 0, UptimeSeconds: 0),
+            EmulatorPublishersOnline: 0,
             EmulatorPublishCycles: 0, EmulatorNodesInError: 0));
         Services.AddSingleton(mockMetrics);
         Services.AddSingleton<IThemes>(new Themes());
+        var mockUpdateService = Substitute.For<IUpdateService>();
+        mockUpdateService.IsSupported.Returns(false);
+        Services.AddSingleton(mockUpdateService);
     }
 
     [Test]

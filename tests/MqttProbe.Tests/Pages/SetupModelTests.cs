@@ -156,7 +156,7 @@ public class SetupModelTests
             Arg.Any<HttpContext>(),
             CookieAuthenticationDefaults.AuthenticationScheme,
             Arg.Is<ClaimsPrincipal>(principal =>
-                principal.Identity!.Name == "admin" && principal.IsInRole(AppRoles.Admin)),
+                principal!.Identity!.Name == "admin" && principal.IsInRole(AppRoles.Admin)),
             Arg.Any<AuthenticationProperties?>());
     }
 
@@ -180,7 +180,7 @@ public class SetupModelTests
             Arg.Any<HttpContext>(),
             CookieAuthenticationDefaults.AuthenticationScheme,
             Arg.Any<ClaimsPrincipal>(),
-            Arg.Is<AuthenticationProperties>(properties => !properties.IsPersistent));
+            Arg.Is<AuthenticationProperties>(properties => !properties!.IsPersistent));
     }
 
     [Test]

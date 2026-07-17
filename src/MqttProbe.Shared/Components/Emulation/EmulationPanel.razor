@@ -30,20 +30,20 @@
             }
         </HeaderChips>
         <HeaderActions>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="app-btn-min"
-                       StartIcon="@LucideIcons.Plus"
-                       title="Add node"
-                       Disabled="@EmulationService.IsRunning"
-                       OnClick="@AddDefaultNodeAsync">
+            <AppPrimaryButton MinWidth="true"
+                        StartIcon="@LucideIcons.Plus"
+                        title="Add node"
+                        Disabled="@EmulationService.IsRunning"
+                        OnClick="@AddDefaultNodeAsync">
                 Add<span class="emu-action-word">&nbsp;Node</span>
-            </MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Error" Class="app-btn-min"
-                       StartIcon="@LucideIcons.Trash2"
-                       title="Remove all nodes"
-                       Disabled="@(NodeCount == 0 || EmulationService.IsRunning)"
-                       OnClick="@RemoveAllAsync">
+            </AppPrimaryButton>
+            <AppDestructiveButton MinWidth="true"
+                        StartIcon="@LucideIcons.Trash2"
+                        title="Remove all nodes"
+                        Disabled="@(NodeCount == 0 || EmulationService.IsRunning)"
+                        OnClick="@RemoveAllAsync">
                 Remove<span class="emu-action-word">&nbsp;All</span>
-            </MudButton>
+            </AppDestructiveButton>
             <MudButton Variant="Variant.Filled" Class="app-btn-min"
                        Color="@(EmulationService.IsRunning ? Color.Error : Color.Success)"
                        StartIcon="@(EmulationService.IsRunning ? LucideIcons.Square : LucideIcons.Play)"

@@ -1,8 +1,10 @@
 @using Microsoft.Extensions.Logging
+@using Microsoft.AspNetCore.Components.Forms
 @using MQTTnet.Client
 @using MQTTnet.Extensions.ManagedClient
 @using MudBlazor.Utilities
 @using MqttProbe.Services.Configuration
+@using MqttProbe.Services.Security
 @implements IAsyncDisposable
 @inject IMessageStoreManager MessageStoreManagerService
 @inject IManagedMqttClient ManagedMqttClient
@@ -15,6 +17,10 @@
 @inject IBrokerStateResetCoordinator BrokerResetCoordinator
 @inject IUxMetricsService? UxMetrics
 @inject IDialogService DialogService
+@inject IConnectionSessionLifecycle SessionLifecycle
+@inject ICertificateAssetStore CertStore
+@inject ICertificateFilePicker FilePicker
+@inject ICertificateInputCapability InputCapability
 
 <MudDialog>
     <DialogContent>
@@ -40,7 +46,7 @@
                                    title="New connection" OnClick="@Add" />
                     <MudIconButton Icon="@LucideIcons.Save" Color="Color.Inherit" Size="Size.Medium"
                                    title="Save connection" Disabled="@(!_canSave)"
-                                   OnClick="@(async () => await Save())" />
+                                   OnClick="@(async () => await Save(closeDialog: false))" />
                     <MudIconButton Icon="@LucideIcons.Trash2" Color="Color.Error" Size="Size.Medium"
                                    title="Delete connection" Disabled="@(!_canDelete)"
                                    OnClick="@(async () => await Delete())" />
@@ -91,14 +97,18 @@
                         <MudGrid Spacing="2" Class="mt-2">
                             <MudItem xs="12" sm="6">
                                 <MudSelect Variant="Variant.Outlined" T="Protocol" @bind-Value="_selectedConnection.Protocol"
-                                           Label="Protocol" AnchorOrigin="Origin.BottomCenter">
+                                           Label="Protocol"
+                                           AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft"
+                                           PopoverFixed="true">
                                     <MudSelectItem Value="@(Protocol.Mqtt)" />
                                     <MudSelectItem Value="@(Protocol.WebSocket)" />
                                 </MudSelect>
                             </MudItem>
                             <MudItem xs="12" sm="6">
                                 <MudSelect Variant="Variant.Outlined" T="MqttVersion" @bind-Value="_selectedConnection.MqttVersion"
-                                           Label="MQTT Version" AnchorOrigin="Origin.BottomCenter">
+                                           Label="MQTT Version"
+                                           AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft"
+                                           PopoverFixed="true">
                                     <MudSelectItem Value="@(MqttVersion.V311)">3.1.1</MudSelectItem>
                                     <MudSelectItem Value="@(MqttVersion.V5)">5.0</MudSelectItem>
                                 </MudSelect>
@@ -134,7 +144,7 @@
                             }
                             <MudItem xs="12">
                                 <MudStack Spacing="2">
-                                    <MudCheckBox @bind-Value="@_selectedConnection.UseTls" Color="Color.Primary">
+                                    <MudCheckBox @bind-Value="@_selectedConnection.UseTls" Color="Color.Default">
                                         Use TLS
                                     </MudCheckBox>
                                     @if (_selectedConnection.UseTls)
@@ -147,6 +157,117 @@
                                             <MudText Typo="Typo.caption" Color="Color.Error" Class="ml-8">
                                                 Insecure — dev/lab only. Do not use in production.
                                             </MudText>
+                                        </div>
+
+                                        <div class="client-cert-section pa-3 mt-2">
+                                            <MudText Typo="Typo.subtitle2" Class="mb-2">Client Certificate</MudText>
+
+                                            @if (_certificateUnavailable)
+                                            {
+                                                <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">
+                                                    @_certError
+                                                </MudAlert>
+                                            }
+
+                                            @if (_previousAssetId is not null && !_certificateRemoved && _pfxFileBytes is null && _pemCertFileBytes is null)
+                                            {
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="client-cert-summary">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Verified" Color="Color.Success" Size="Size.Small" />
+                                                    <MudText Typo="Typo.body2">Certificate loaded (asset @_previousAssetId[..Math.Min(8, _previousAssetId.Length)]...)</MudText>
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                   Size="Size.Small"
+                                                                   OnClick="@RemoveCertificate"
+                                                                   title="Remove certificate" />
+                                                </MudStack>
+                                            }
+                                            else
+                                            {
+                                                <MudToggleGroup T="CertificateInputMode" @bind-Value="_certInputMode"
+                                                                Color="Color.Default"
+                                                                SelectionMode="SelectionMode.SingleSelection"
+                                                                Size="Size.Small"
+                                                                Class="mb-2 client-cert-mode-toggle">
+                                                    <MudToggleItem Value="CertificateInputMode.Pfx">PFX/P12</MudToggleItem>
+                                                    <MudToggleItem Value="CertificateInputMode.Pem">PEM</MudToggleItem>
+                                                </MudToggleGroup>
+
+                                                @if (InputCapability.UsesInputFileComponent)
+                                                {
+                                                    <MudStack Spacing="1">
+                                                        @if (_certInputMode == CertificateInputMode.Pfx)
+                                                        {
+                                                            <label class="client-cert-file-input">
+                                                                <MudIcon Icon="@LucideIcons.Folder" Size="Size.Small" Class="mr-1" />
+                                                                <span>Select PFX/P12 file</span>
+                                                                <InputFile OnChange="@OnCertificateFileSelected" accept=".pfx,.p12" />
+                                                            </label>
+                                                        }
+                                                        else
+                                                        {
+                                                            <label class="client-cert-file-input">
+                                                                <MudIcon Icon="@LucideIcons.Folder" Size="Size.Small" Class="mr-1" />
+                                                                <span>Select certificate PEM</span>
+                                                                <InputFile OnChange="@OnCertificateFileSelected" accept=".pem,.crt" />
+                                                            </label>
+                                                            <label class="client-cert-file-input">
+                                                                <MudIcon Icon="@LucideIcons.Folder" Size="Size.Small" Class="mr-1" />
+                                                                <span>Select private key PEM</span>
+                                                                <InputFile OnChange="@OnKeyFileSelected" accept=".pem,.key" />
+                                                            </label>
+                                                        }
+                                                    </MudStack>
+                                                }
+                                                else
+                                                {
+                                                    <MudStack Spacing="1">
+                                                        <MudButton Variant="Variant.Text"
+                                                                   StartIcon="@LucideIcons.Folder"
+                                                                   OnClick="@PickCertificateFile"
+                                                                   Size="Size.Small"
+                                                                   Class="app-btn-min client-cert-file-btn">
+                                                            @(_certInputMode == CertificateInputMode.Pfx ? "Select PFX/P12 file" : "Select certificate PEM")
+                                                        </MudButton>
+
+                                                        @if (_certInputMode == CertificateInputMode.Pem)
+                                                        {
+                                                            <MudButton Variant="Variant.Text"
+                                                                       StartIcon="@LucideIcons.Folder"
+                                                                       OnClick="@PickKeyFile"
+                                                                       Size="Size.Small"
+                                                                       Class="app-btn-min client-cert-file-btn">
+                                                                Select private key PEM
+                                                            </MudButton>
+                                                            @if (_pemKeyFileBytes is not null)
+                                                            {
+                                                                <MudText Typo="Typo.body2" Color="Color.Success" Class="mt-1">
+                                                                    Private key loaded (@_pemKeyFileBytes.Length:N0 bytes)
+                                                                </MudText>
+                                                            }
+                                                        }
+                                                    </MudStack>
+                                                }
+
+                                                @if ((_certInputMode == CertificateInputMode.Pfx && _pfxFileBytes is not null) ||
+                                                   (_certInputMode == CertificateInputMode.Pem && _pemCertFileBytes is not null))
+                                                {
+                                                    <MudText Typo="Typo.body2" Color="Color.Success" Class="mt-1">
+                                                        @(_certInputMode == CertificateInputMode.Pfx
+                                                            ? $"PFX file loaded ({_pfxFileBytes!.Length:N0} bytes)"
+                                                            : $"PEM certificate loaded ({_pemCertFileBytes!.Length:N0} bytes)")
+                                                    </MudText>
+                                                }
+
+                                                <CertificatePasswordField Value="@_certPassword"
+                                                                          ValueChanged="@OnCertPasswordChanged"
+                                                                          Label="@(_certInputMode == CertificateInputMode.Pfx ? "PFX Password" : "Key Password (if encrypted)")"
+                                                                          Required="false"
+                                                                          Class="mt-2" />
+                                            }
+
+                                            @if (_certError is not null && !_certificateUnavailable)
+                                            {
+                                                <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">@_certError</MudAlert>
+                                            }
                                         </div>
                                     }
                                 </MudStack>
@@ -175,11 +296,11 @@
                     else
                     {
                         <div class="connection-actions-footer-cta">
-                            <MudButton Variant="Variant.Filled" title="Connect" Color="Color.Primary" Class="app-btn-min"
-                                       StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect)"
-                                       OnClick="@(async () => await Connect())">
+                            <AppPrimaryButton title="Connect" MinWidth="true"
+                                        StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect)"
+                                        OnClick="@(async () => await Connect())">
                                 Connect
-                            </MudButton>
+                            </AppPrimaryButton>
                         </div>
                     }
 
@@ -212,6 +333,37 @@
     private bool _formReportsValid = true;
     private int _activeTabIndex;
 
+    // Certificate lifecycle fields
+    private CertificateSessionResource? _activeCertResource;
+    private string? _stagedAssetId;
+    private string? _previousAssetId;
+    private bool _certificateRemoved;
+    private CertificateInputMode _certInputMode = CertificateInputMode.Pfx;
+    private byte[]? _pfxFileBytes;
+    private byte[]? _pemCertFileBytes;
+    private byte[]? _pemKeyFileBytes;
+    private string _certPassword = "";
+    private string? _certError;
+    private bool _certificateUnavailable;
+    private const long MaxCertFileSize = 1024 * 1024; // 1 MB
+
+    internal void SetStagedCertificate(byte[]? pfxBytes, byte[]? pemCertBytes, byte[]? pemKeyBytes, string password)
+    {
+        _pfxFileBytes = pfxBytes;
+        _pemCertFileBytes = pemCertBytes;
+        _pemKeyFileBytes = pemKeyBytes;
+        _certPassword = password;
+        UpdateActionStates();
+        StateHasChanged();
+    }
+
+    private void OnCertPasswordChanged(string value)
+    {
+        _certPassword = value;
+        UpdateActionStates();
+        StateHasChanged();
+    }
+
     public void FormValidationChanged(bool isValid)
     {
         _formReportsValid = isValid;
@@ -226,10 +378,14 @@
         base.OnInitialized();
     }
 
-    private async Task OnConnectingFailed(ConnectingFailedEventArgs _)
+    private async Task OnConnectingFailed(ConnectingFailedEventArgs args)
     {
         _connectionState = ConnectionState.Failed;
         UxMetrics?.RecordConnectFailure();
+        Logger.LogError(args.Exception,
+            "Connecting to broker {Host}:{Port} failed. ResultCode={ResultCode}",
+            _selectedConnection?.Host, _selectedConnection?.Port,
+            args.ConnectResult?.ResultCode);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -251,11 +407,22 @@
         await InvokeAsync(() => MudDialog.Close(DialogResult.Ok(true)));
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         ManagedMqttClient.ConnectingFailedAsync -= OnConnectingFailed;
         ManagedMqttClient.ConnectedAsync -= OnConnected;
-        return ValueTask.CompletedTask;
+
+        if (_activeCertResource is not null)
+        {
+            _activeCertResource.Dispose();
+            _activeCertResource = null;
+        }
+
+        if (_stagedAssetId is not null)
+        {
+            try { await CertStore.DeleteAsync(_selectedConnection.Id, _stagedAssetId); } catch { }
+            _stagedAssetId = null;
+        }
     }
 
     private void FormChanged(FormFieldChangedEventArgs args) => UpdateActionStates();
@@ -273,17 +440,41 @@
 
     private void UpdateCanSave()
     {
-        var isDirty = !SettingsStore.Config.Connections.Any(conn => conn.Equals(_selectedConnection));
-        _canSave = isDirty && _isFormValid;
+        var matchesSaved = SettingsStore.Config.Connections.Any(conn => conn.Equals(_selectedConnection));
+        _canSave = (!matchesSaved || HasPendingCertificateChange()) && _isFormValid;
     }
+
+    // Certificate edits live outside the Connection model (staged cert/key files, cert
+    // password, pending removal), so Connection.Equals cannot see them. Treat any such
+    // pending change as dirty so Save enables and the connect-time "unsaved changes"
+    // prompt fires — matching how ordinary fields behave.
+    private bool HasPendingCertificateChange() =>
+        _pfxFileBytes is not null ||
+        _pemCertFileBytes is not null ||
+        _pemKeyFileBytes is not null ||
+        _certificateRemoved ||
+        _stagedAssetId is not null ||
+        !string.IsNullOrEmpty(_certPassword);
 
     private async Task Connect()
     {
+        if (SessionState.CertificateSessionFaulted)
+        {
+            _certError = "Cannot reconnect: previous shutdown failed. Restart the app.";
+            StateHasChanged();
+            return;
+        }
+
+        if (_certificateUnavailable && _pfxFileBytes is null && _pemCertFileBytes is null)
+        {
+            _certError = "The configured client certificate is unavailable or corrupt. " +
+                "Re-import the certificate or remove it before connecting.";
+            StateHasChanged();
+            return;
+        }
+
         if (!await ValidateForm()) return;
 
-        // _canSave is exactly "valid and differs from every saved connection", so the
-        // prompt covers new connections and unsaved edits but never nags on a clean
-        // reconnect to a saved one.
         if (_canSave)
         {
             var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
@@ -296,38 +487,116 @@
                 options);
 
             if (choice is null) return;
-            if (choice == true) await Save();
+            if (choice == true)
+            {
+                var saved = await Save(closeDialog: false);
+                if (!saved) return;
+                _pfxFileBytes = null;
+                _pemCertFileBytes = null;
+                _pemKeyFileBytes = null;
+                _selectedConnection.ClientCertificateAssetId = _previousAssetId;
+            }
         }
 
-        // Reset runtime state if connecting to a different broker.
-        // Best-effort: if reset fails, proceed with connect anyway.
         try
         {
-            await BrokerResetCoordinator.ResetIfBrokerChangedAsync(_selectedConnection);
+            await SessionLifecycle.StopActiveConnectionAsync();
+        }
+        catch (Exception ex)
+        {
+            _certError = $"Cannot reconnect: previous shutdown failed ({ex.Message}). Restart the app.";
+            StateHasChanged();
+            return;
+        }
+        finally
+        {
+            _activeCertResource = null;
+        }
+
+        var connection = _selectedConnection.Clone();
+
+        if (_pfxFileBytes is not null || _pemCertFileBytes is not null)
+        {
+            try
+            {
+                var request = _certInputMode == CertificateInputMode.Pfx
+                    ? new CertificateImportRequest(CertificateInputMode.Pfx, _pfxFileBytes!, null, _certPassword)
+                    : new CertificateImportRequest(CertificateInputMode.Pem, _pemCertFileBytes!, _pemKeyFileBytes, _certPassword);
+                var stagedId = await CertStore.ImportAsync(connection.Id, request);
+                connection.ClientCertificateAssetId = stagedId;
+                if (_stagedAssetId is not null && _stagedAssetId != stagedId)
+                    try { await CertStore.DeleteAsync(connection.Id, _stagedAssetId); } catch { }
+                _stagedAssetId = stagedId;
+            }
+            catch (CertificateImportException ex)
+            {
+                _certError = ex.Message;
+                StateHasChanged();
+                return;
+            }
+            catch (Exception ex)
+            {
+                _certError = $"Certificate import failed: {ex.Message}";
+                StateHasChanged();
+                return;
+            }
+        }
+
+        try
+        {
+            await BrokerResetCoordinator.ResetIfBrokerChangedAsync(connection);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Broker state reset failed; proceeding with connect");
         }
 
+        _activeCertResource = new CertificateSessionResource();
+
+        ManagedMqttClientOptions builtOptions;
+        try
+        {
+            builtOptions = await MqttOptionsBuilder.BuildAsync(connection, _activeCertResource);
+        }
+        catch (Exception ex)
+        {
+            _activeCertResource.Dispose();
+            _activeCertResource = null;
+            _certError = ex.Message;
+            StateHasChanged();
+            return;
+        }
+
         try
         {
             UxMetrics?.RecordConnectAttempt();
             _connectionState = ConnectionState.Connecting;
-            SessionState.SelectedConnection = _selectedConnection;
-            if (ManagedMqttClient.IsStarted)
+            SessionState.SelectedConnection = connection;
+
+            if (_activeCertResource is not null)
             {
-                await ManagedMqttClient.StopAsync();
+                SessionState.ActiveCertificateResource = _activeCertResource;
+                _activeCertResource = null;
             }
 
-            var managedClientOptions = MqttOptionsBuilder.Build(_selectedConnection);
-            await ManagedMqttClient.StartAsync(managedClientOptions);
+            await ManagedMqttClient.StartAsync(builtOptions);
         }
         catch (Exception ex)
         {
             _connectionState = ConnectionState.Failed;
             Logger.LogError(ex, "Failed to connect.");
+
+            try
+            {
+                await SessionLifecycle.StopActiveConnectionAsync();
+            }
+            catch (Exception stopEx)
+            {
+                Logger.LogError(stopEx, "StopActiveConnectionAsync also failed after StartAsync failure");
+            }
         }
+
+        StateHasChanged();
     }
 
     private async Task<bool> ValidateForm()
@@ -336,15 +605,90 @@
         return _form.IsValid;
     }
 
-    private async Task Save()
+    private async Task<bool> Save(bool closeDialog = true)
     {
-        if (!await ValidateForm()) return;
-        await SettingsStore.AddConnectionAsync(_selectedConnection);
-        Logger.LogInformation("Connection saved: {Name} ({Host}:{Port})", _selectedConnection.Name, _selectedConnection.Host, _selectedConnection.Port);
-        _savedConnectionForSelector = SettingsStore.Config.Connections[^1];
+        if (!await ValidateForm()) return false;
+
+        var connection = _selectedConnection.Clone();
+        var previousAssetId = _previousAssetId;
+        string? stagedAssetId = null;
+
+        if (_pfxFileBytes is not null || _pemCertFileBytes is not null)
+        {
+            try
+            {
+                var request = _certInputMode == CertificateInputMode.Pfx
+                    ? new CertificateImportRequest(CertificateInputMode.Pfx, _pfxFileBytes!, null, _certPassword)
+                    : new CertificateImportRequest(CertificateInputMode.Pem, _pemCertFileBytes!, _pemKeyFileBytes, _certPassword);
+                stagedAssetId = await CertStore.ImportAsync(connection.Id, request);
+                if (_stagedAssetId is not null && _stagedAssetId != stagedAssetId)
+                    try { await CertStore.DeleteAsync(connection.Id, _stagedAssetId); } catch { }
+                _stagedAssetId = stagedAssetId;
+                connection.ClientCertificateAssetId = stagedAssetId;
+            }
+            catch (CertificateImportException ex)
+            {
+                _certError = ex.Message;
+                StateHasChanged();
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _certError = $"Certificate import failed: {ex.Message}";
+                StateHasChanged();
+                return false;
+            }
+        }
+
+        try
+        {
+            await SettingsStore.AddConnectionAsync(connection);
+        }
+        catch (Exception ex)
+        {
+            if (stagedAssetId is not null)
+            {
+                try { await CertStore.DeleteAsync(connection.Id, stagedAssetId); } catch { }
+                _stagedAssetId = null;
+            }
+            _certError = $"Failed to save: {ex.Message}";
+            StateHasChanged();
+            return false;
+        }
+
+        if (previousAssetId is not null)
+        {
+            bool replacedByNew = stagedAssetId is not null && previousAssetId != stagedAssetId;
+            bool removedByUser = stagedAssetId is null && connection.ClientCertificateAssetId is null;
+            if (replacedByNew || removedByUser)
+            {
+                try { await CertStore.DeleteAsync(connection.Id, previousAssetId); } catch { }
+            }
+        }
+
+        _stagedAssetId = null;
+        _previousAssetId = connection.ClientCertificateAssetId;
+        _certificateUnavailable = false;
+
+        // Clear pending certificate edits now that they are persisted, so the dialog can stay
+        // open after Save: the "Certificate loaded" summary shows again and the connection is no
+        // longer considered dirty (Save disables until the next change).
+        _pfxFileBytes = null;
+        _pemCertFileBytes = null;
+        _pemKeyFileBytes = null;
+        _certPassword = "";
+        _certificateRemoved = false;
+
+        Logger.LogInformation("Connection saved: {Name} ({Host}:{Port})", connection.Name, connection.Host, connection.Port);
+        _savedConnectionForSelector = SettingsStore.Config.Connections.FirstOrDefault(c => c.Id == connection.Id) ?? connection;
         _selectedConnection = _savedConnectionForSelector.Clone();
         _canDelete = true;
         UpdateActionStates();
+
+        if (closeDialog)
+            MudDialog.Close(DialogResult.Ok(connection));
+
+        return true;
     }
 
     internal async Task ConnectionChanged(Connection value)
@@ -355,8 +699,37 @@
         _activeTabIndex = 0;
         _formReportsValid = true;
         _canDelete = true;
+
+        _previousAssetId = _selectedConnection.ClientCertificateAssetId;
+        _certificateRemoved = false;
+        _pfxFileBytes = null;
+        _pemCertFileBytes = null;
+        _pemKeyFileBytes = null;
+        _certPassword = "";
+        _certError = null;
+
+        if (_previousAssetId is not null)
+        {
+            var bundle = await CertStore.LoadAsync(_selectedConnection.Id, _previousAssetId);
+            if (bundle is null)
+            {
+                _certError = "The configured client certificate is unavailable or corrupt. " +
+                    "Re-import the certificate or remove it from the connection settings.";
+                _certificateUnavailable = true;
+            }
+            else
+            {
+                bundle.Certificate.Dispose();
+                _certificateUnavailable = false;
+            }
+        }
+        else
+        {
+            _certificateUnavailable = false;
+        }
+
         UpdateActionStates();
-        StateHasChanged(); // ensure DOM updates when called externally (e.g. from tests)
+        StateHasChanged();
     }
 
     private async Task Delete()
@@ -373,6 +746,161 @@
         _activeTabIndex = 0;
         _formReportsValid = true;
         _canDelete = false;
+
+        _previousAssetId = null;
+        _certificateRemoved = false;
+        _pfxFileBytes = null;
+        _pemCertFileBytes = null;
+        _pemKeyFileBytes = null;
+        _certPassword = "";
+        _certError = null;
+
         UpdateActionStates();
+    }
+
+    private async Task PickCertificateFile()
+    {
+        try
+        {
+            var extensions = _certInputMode == CertificateInputMode.Pfx
+                ? new[] { ".pfx", ".p12" }
+                : new[] { ".pem", ".crt" };
+
+            var bytes = await FilePicker.PickFileAsync(
+                _certInputMode == CertificateInputMode.Pfx ? "Select PFX file" : "Select certificate PEM",
+                extensions, MaxCertFileSize);
+
+            if (bytes is null) return;
+
+            if (_certInputMode == CertificateInputMode.Pfx)
+            {
+                _pfxFileBytes = bytes;
+                _pemCertFileBytes = null;
+                _pemKeyFileBytes = null;
+            }
+            else
+            {
+                _pemCertFileBytes = bytes;
+                _pfxFileBytes = null;
+            }
+
+            _certError = null;
+            _certificateUnavailable = false;
+        }
+        catch (CertificateImportException ex)
+        {
+            _certError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _certError = $"Failed to read certificate file: {ex.Message}";
+        }
+
+        UpdateActionStates();
+        StateHasChanged();
+    }
+
+    private async Task PickKeyFile()
+    {
+        try
+        {
+            var bytes = await FilePicker.PickFileAsync(
+                "Select private key PEM", new[] { ".pem", ".key" }, MaxCertFileSize);
+
+            if (bytes is null) return;
+            _pemKeyFileBytes = bytes;
+            _certError = null;
+        }
+        catch (CertificateImportException ex)
+        {
+            _certError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _certError = $"Failed to read key file: {ex.Message}";
+        }
+
+        UpdateActionStates();
+        StateHasChanged();
+    }
+
+    private async Task OnCertificateFileSelected(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file.Size > MaxCertFileSize)
+            {
+                _certError = $"File too large (max {MaxCertFileSize / 1024} KB).";
+                StateHasChanged();
+                return;
+            }
+
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(MaxCertFileSize).CopyToAsync(ms);
+            var bytes = ms.ToArray();
+
+            if (_certInputMode == CertificateInputMode.Pfx)
+            {
+                _pfxFileBytes = bytes;
+                _pemCertFileBytes = null;
+                _pemKeyFileBytes = null;
+            }
+            else
+            {
+                _pemCertFileBytes = bytes;
+                _pfxFileBytes = null;
+            }
+
+            _certError = null;
+            _certificateUnavailable = false;
+        }
+        catch (Exception ex)
+        {
+            _certError = $"Failed to read certificate file: {ex.Message}";
+        }
+
+        UpdateActionStates();
+        StateHasChanged();
+    }
+
+    private async Task OnKeyFileSelected(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file.Size > MaxCertFileSize)
+            {
+                _certError = $"Key file too large (max {MaxCertFileSize / 1024} KB).";
+                StateHasChanged();
+                return;
+            }
+
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(MaxCertFileSize).CopyToAsync(ms);
+            _pemKeyFileBytes = ms.ToArray();
+            _certError = null;
+        }
+        catch (Exception ex)
+        {
+            _certError = $"Failed to read key file: {ex.Message}";
+        }
+
+        UpdateActionStates();
+        StateHasChanged();
+    }
+
+    private void RemoveCertificate()
+    {
+        _pfxFileBytes = null;
+        _pemCertFileBytes = null;
+        _pemKeyFileBytes = null;
+        _certPassword = "";
+        _certError = null;
+        _certificateRemoved = true;
+        _certificateUnavailable = false;
+        _selectedConnection.ClientCertificateAssetId = null;
+        UpdateActionStates();
+        StateHasChanged();
     }
 }

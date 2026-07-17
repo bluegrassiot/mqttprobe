@@ -3,6 +3,7 @@
 @inject ISettingsStore SettingsStore
 @inject IThemes Themes
 @inject IAppInfoService AppInfoService
+@inject IUpdateService UpdateService
 
 <TabPanelHeader Title="Settings" Icon="@LucideIcons.Settings"/>
 
@@ -108,13 +109,12 @@
 
                     <AuthorizeView>
                         <Authorized>
-                            <MudButton Variant="Variant.Outlined"
-                                       Color="Color.Primary"
+                            <AppSecondaryButton
+                                       MinWidth="true"
                                        StartIcon="@LucideIcons.Lock"
-                                       Href="/change-password"
-                                       Class="app-btn-min">
+                                       Href="/change-password">
                                 Change password
-                            </MudButton>
+                            </AppSecondaryButton>
                         </Authorized>
                     </AuthorizeView>
                 </MudPaper>
@@ -130,6 +130,29 @@
                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
                     Version @_version
                 </MudText>
+                @if (UpdateService.IsSupported)
+                {
+                    <div class="mt-2">
+                        <AppSecondaryButton data-testid="check-updates-button"
+                                   Size="Size.Small"
+                                   Disabled="@_checkingForUpdate"
+                                   OnClick="CheckForUpdatesAsync">
+                            Check for updates
+                        </AppSecondaryButton>
+                        @if (_availableUpdateVersion is not null)
+                        {
+                            <AppPrimaryButton data-testid="apply-update-button"
+                                       Class="ml-2" Size="Size.Small"
+                                       OnClick="ApplyUpdateAsync">
+                                Update to @_availableUpdateVersion and restart
+                            </AppPrimaryButton>
+                        }
+                        else if (_updateCheckCompleted)
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-1">You're up to date.</MudText>
+                        }
+                    </div>
+                }
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -184,4 +207,18 @@
     {
         await SettingsStore.SetMaxTopicNodesAsync(value);
     }
+
+    private bool _checkingForUpdate;
+    private bool _updateCheckCompleted;
+    private string? _availableUpdateVersion;
+
+    private async Task CheckForUpdatesAsync()
+    {
+        _checkingForUpdate = true;
+        _availableUpdateVersion = await UpdateService.CheckForUpdateAsync();
+        _updateCheckCompleted = true;
+        _checkingForUpdate = false;
+    }
+
+    private Task ApplyUpdateAsync() => UpdateService.DownloadAndApplyAsync();
 }

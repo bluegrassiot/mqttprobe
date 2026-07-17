@@ -17,6 +17,7 @@ public sealed class Connection : IEquatable<Connection>
 
     public bool UseTls { get; set; }
     public bool AllowUntrustedCertificate { get; set; }
+    public string? ClientCertificateAssetId { get; set; }
     public int ConnectTimeout { get; set; } = 15;
     public List<string> SubscribedTopics { get; set; } = [];
 
@@ -47,7 +48,8 @@ public sealed class Connection : IEquatable<Connection>
                UseTls == other.UseTls &&
                AllowUntrustedCertificate == other.AllowUntrustedCertificate &&
                ConnectTimeout == other.ConnectTimeout &&
-               WebsocketBasePath == other.WebsocketBasePath;
+               WebsocketBasePath == other.WebsocketBasePath &&
+               ClientCertificateAssetId == other.ClientCertificateAssetId;
     }
 
     public override bool Equals(object? obj) => Equals(obj as Connection);
@@ -67,6 +69,7 @@ public sealed class Connection : IEquatable<Connection>
         hash.Add(AllowUntrustedCertificate);
         hash.Add(ConnectTimeout);
         hash.Add(WebsocketBasePath);
+        hash.Add(ClientCertificateAssetId);
         return hash.ToHashCode();
     }
 }

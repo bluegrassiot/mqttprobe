@@ -8,7 +8,9 @@ using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Security;
 using MqttProbe.Shared.Tests.TestHelpers;
+using MqttProbe.Tests.Services.Security.TestHelpers;
 using MudBlazor;
 
 namespace MqttProbe.Shared.Tests.Components.Browser;
@@ -24,6 +26,9 @@ public class ConnectionDialogTests : BunitTestContext
     private IMqttOptionsBuilder _mockOptionsBuilder = null!;
     private IBrokerStateResetCoordinator _mockCoordinator = null!;
     private IRenderedComponent<MudDialogProvider> _dialogProvider = null!;
+    private ICertificateAssetStore _mockCertStore = null!;
+    private ICertificateFilePicker _mockFilePicker = null!;
+    private ICertificateInputCapability _mockInputCapability = null!;
 
     private Func<MqttClientConnectedEventArgs, Task>? _connectedHandler;
     private Func<ConnectingFailedEventArgs, Task>? _failedHandler;
@@ -38,6 +43,10 @@ public class ConnectionDialogTests : BunitTestContext
         _mockSessionState = Substitute.For<ISessionState>();
         _mockOptionsBuilder = Substitute.For<IMqttOptionsBuilder>();
         _mockCoordinator = Substitute.For<IBrokerStateResetCoordinator>();
+        _mockCertStore = Substitute.For<ICertificateAssetStore>();
+        _mockFilePicker = Substitute.For<ICertificateFilePicker>();
+        _mockInputCapability = Substitute.For<ICertificateInputCapability>();
+        _mockInputCapability.UsesInputFileComponent.Returns(false);
 
         _mockConfigMgr.Config.Returns(new AppConfiguration());
         _mockMsgStore.Start().Returns(Task.CompletedTask);
@@ -65,6 +74,10 @@ public class ConnectionDialogTests : BunitTestContext
         Services.AddSingleton(Substitute.For<ILogger<ConnectionDialog>>());
         Services.AddSingleton(Substitute.For<IChartDataService>());
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
+        Services.AddSingleton(Substitute.For<IConnectionSessionLifecycle>());
+        Services.AddSingleton(_mockCertStore);
+        Services.AddSingleton(_mockFilePicker);
+        Services.AddSingleton(_mockInputCapability);
 
         EnsureMudProviders();
 
@@ -126,6 +139,28 @@ public class ConnectionDialogTests : BunitTestContext
 
         var deleteBtn = _dialogProvider.Find("button[title='Delete connection']");
         deleteBtn.GetAttribute("disabled").Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task SaveButton_Enabled_WhenCertificateStaged_OnUnchangedConnection()
+    {
+        var conn = new Connection { Name = "Cert Conn", Host = "localhost", Port = 8883, UseTls = true };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        // An unchanged saved connection is not dirty, so Save is disabled.
+        _dialogProvider.Find("button[title='Save connection']")
+            .GetAttribute("disabled").Should().NotBeNull("an unchanged saved connection is not dirty");
+
+        // Staging a certificate (as the file picker does) must mark the dialog dirty even
+        // though the Connection model itself is unchanged.
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        await _dialogProvider.InvokeAsync(() =>
+            dialog.SetStagedCertificate([1, 2, 3], null, null, ""));
+
+        _dialogProvider.Find("button[title='Save connection']")
+            .GetAttribute("disabled").Should().BeNull("staging a certificate should enable Save");
     }
 
     [Test]
@@ -303,7 +338,7 @@ public class ConnectionDialogTests : BunitTestContext
         await _mockClient.Received(1).StartAsync(Arg.Any<ManagedMqttClientOptions>());
         Received.InOrder(() =>
         {
-            _mockSessionState.SelectedConnection = Arg.Is<Connection>(c => c.SubscribedTopics.Contains("saved/topic"));
+            _mockSessionState.SelectedConnection = Arg.Is<Connection>(c => c!.SubscribedTopics.Contains("saved/topic"));
             _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>());
         });
     }
@@ -401,6 +436,23 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
+    public async Task SaveButton_DoesNotCloseDialog()
+    {
+        var conn = new Connection { Name = "Test", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        _mockConfigMgr.Config.Returns(cfg);
+        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        DirtyNameField("Test Updated");
+
+        _dialogProvider.Find("button[title='Save connection']").Click();
+
+        await _mockConfigMgr.Received(1).AddConnectionAsync(Arg.Any<Connection>());
+        _dialogProvider.FindAll(".mud-dialog").Should().NotBeEmpty("saving should keep the dialog open");
+    }
+
+    [Test]
     public async Task SaveButton_InvalidDirtyInput_StaysDisabled()
     {
         await OpenDialog(new AppConfiguration());
@@ -447,6 +499,77 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
             .Should().NotBeNull("a valid form matching an existing saved connection is not dirty");
+    }
+
+    [Test]
+    public async Task CertPasswordField_ShowsBoundValue_AndEnablesSaveWhenTyped()
+    {
+        var conn = new Connection { Name = "TLS Conn", Host = "localhost", Port = 8883, UseTls = true };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        ActivateTab("Transport");
+
+        var pwField = _dialogProvider.FindComponents<MudTextField<string>>()
+            .First(f => f.Instance.Label == "PFX Password");
+
+        // Regression: the field must bind to the value of _certPassword (empty), not render
+        // the literal parameter name "_certPassword".
+        (pwField.Find("input").GetAttribute("value") ?? "").Should().NotBe("_certPassword");
+
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
+            .Should().NotBeNull("unchanged connection is not dirty");
+
+        pwField.Find("input").Input("mypass");
+
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
+            .Should().BeNull("entering a certificate password should enable Save");
+    }
+
+    [Test]
+    public async Task SaveButton_Enabled_WhenBrokerPasswordCleared()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "Saved", Host = "localhost", Port = 1883, Password = "secret" }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
+            .Should().NotBeNull("an unchanged saved connection is not dirty");
+
+        ActivateTab("Transport");
+        SetTextField("Password", "");
+
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
+            .Should().BeNull("clearing the broker password is a change and should enable Save");
+    }
+
+    [Test]
+    public async Task SaveButton_Enabled_WhenBrokerPasswordCleared_OnP12Connection()
+    {
+        var conn = new Connection
+        {
+            Name = "P12 Conn",
+            Host = "localhost",
+            Port = 8883,
+            UseTls = true,
+            Password = "secret",
+            ClientCertificateAssetId = Guid.NewGuid().ToString("D")
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
+            .Should().NotBeNull("an unchanged saved connection is not dirty");
+
+        ActivateTab("Transport");
+        SetTextField("Password", "");
+
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
+            .Should().BeNull("clearing the broker password on a P12 connection should enable Save");
     }
 
     private void FillNewConnection()
@@ -583,7 +706,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Find("button[title='Connect']").Click();
 
         await _mockCoordinator.Received(1).ResetIfBrokerChangedAsync(
-            Arg.Is<Connection>(c => c.Host == "broker.example.com" && c.Port == 8883));
+            Arg.Is<Connection>(c => c!.Host == "broker.example.com" && c.Port == 8883));
     }
 
     [Test]
@@ -656,5 +779,177 @@ public class ConnectionDialogTests : BunitTestContext
             .First(b => b.TextContent.Contains("Identity"));
         identityBtn.ClassName.Should().Contain("active");
         _dialogProvider.Markup.Should().Contain("Name");
+    }
+
+    [Test]
+    public async Task TlsEnabled_ShowsClientCertificateSection()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TLS", Host = "tls.local", Port = 8883, UseTls = true }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Markup.Should().Contain("Client Certificate");
+    }
+
+    [Test]
+    public async Task TlsDisabled_HidesClientCertificateSection()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "Plain", Host = "plain.local", Port = 1883, UseTls = false }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Markup.Should().NotContain("Client Certificate");
+    }
+
+    [Test]
+    public async Task ConnectionChanged_WithExistingAsset_ShowsSummary()
+    {
+        var cert = TestCertFactory.CreateRsaCert();
+        _mockCertStore.LoadAsync(Arg.Any<Guid>(), "existing-asset")
+            .Returns(new ClientCertificateBundle(cert));
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection
+            {
+                Name = "CertConn", Host = "tls.local", Port = 8883,
+                UseTls = true, ClientCertificateAssetId = "existing-asset"
+            }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Markup.Should().Contain("Certificate loaded");
+    }
+
+    [Test]
+    public async Task ConnectionChanged_MissingAsset_ShowsUnavailableError()
+    {
+        _mockCertStore.LoadAsync(Arg.Any<Guid>(), "missing-asset")
+            .Returns((ClientCertificateBundle?)null);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection
+            {
+                Name = "CertConn", Host = "tls.local", Port = 8883,
+                UseTls = true, ClientCertificateAssetId = "missing-asset"
+            }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Markup.Should().Contain("unavailable or corrupt");
+    }
+
+    [Test]
+    public async Task RemoveCertificate_ClearsAssetId_ShowsImportControls()
+    {
+        var cert = TestCertFactory.CreateRsaCert();
+        _mockCertStore.LoadAsync(Arg.Any<Guid>(), "old-asset")
+            .Returns(new ClientCertificateBundle(cert));
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection
+            {
+                Name = "CertConn", Host = "tls.local", Port = 8883,
+                UseTls = true, ClientCertificateAssetId = "old-asset"
+            }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Remove certificate']").Click();
+
+        _dialogProvider.Markup.Should().Contain("PFX/P12");
+        _dialogProvider.Markup.Should().NotContain("Certificate loaded");
+    }
+
+    [Test]
+    public async Task CertificateModeToggle_SwitchesBetweenPfxAndPem()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TLS", Host = "tls.local", Port = 8883, UseTls = true }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        // Default is PFX mode
+        _dialogProvider.Markup.Should().Contain("Select PFX/P12 file");
+
+        // Click PEM toggle item
+        var pemItem = _dialogProvider.Find(".mud-toggle-item");
+        // The first toggle item is PFX (default), the second is PEM
+        var toggleItems = _dialogProvider.FindAll(".mud-toggle-item");
+        var pemToggle = toggleItems.First(i => i.TextContent.Trim() == "PEM");
+        pemToggle.Click();
+
+        _dialogProvider.Markup.Should().Contain("Select certificate PEM");
+        _dialogProvider.Markup.Should().Contain("Select private key PEM");
+    }
+
+    [Test]
+    public async Task PasswordField_RendersForCertInput()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TLS", Host = "tls.local", Port = 8883, UseTls = true }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Markup.Should().Contain("PFX Password");
+    }
+
+    [Test]
+    public async Task Connect_BlocksWhenCertificateUnavailable()
+    {
+        _mockCertStore.LoadAsync(Arg.Any<Guid>(), "bad-asset")
+            .Returns((ClientCertificateBundle?)null);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection
+            {
+                Name = "CertConn", Host = "tls.local", Port = 8883,
+                UseTls = true, ClientCertificateAssetId = "bad-asset"
+            }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        _dialogProvider.Markup.Should().Contain("unavailable or corrupt");
+        await _mockClient.DidNotReceive().StartAsync(Arg.Any<ManagedMqttClientOptions>());
+    }
+
+    [Test]
+    public async Task ProtocolAndMqttVersionSelects_HavePopoverFixedAndExplicitOrigins()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        ActivateTab("Transport");
+
+        var protocolSelect = _dialogProvider.FindComponents<MudSelect<Protocol>>()
+            .Single(s => s.Instance.Label == "Protocol");
+        var mqttVersionSelect = _dialogProvider.FindComponents<MudSelect<MqttVersion>>()
+            .Single(s => s.Instance.Label == "MQTT Version");
+
+        protocolSelect.Instance.PopoverFixed.Should().BeTrue();
+        protocolSelect.Instance.AnchorOrigin.Should().Be(Origin.BottomLeft);
+        protocolSelect.Instance.TransformOrigin.Should().Be(Origin.TopLeft);
+
+        mqttVersionSelect.Instance.PopoverFixed.Should().BeTrue();
+        mqttVersionSelect.Instance.AnchorOrigin.Should().Be(Origin.BottomLeft);
+        mqttVersionSelect.Instance.TransformOrigin.Should().Be(Origin.TopLeft);
     }
 }

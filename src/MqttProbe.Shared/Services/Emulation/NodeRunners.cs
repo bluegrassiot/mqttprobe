@@ -1,10 +1,12 @@
-using System.Diagnostics;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Models.Mqtt;
+using MqttProbe.Services.Metrics;
+using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using SparkplugNet.Core.Enumerations;
 using SparkplugNet.Core.Node;
@@ -23,41 +25,29 @@ public interface INodeRunner
     public Task StopAsync();
 }
 
-public class NodeHealthMetricsProvider
+public class NodeHealthMetricsProvider(IAppHealthMetricsCollector collector)
 {
-    private readonly Lock _sync = new();
-    private readonly DateTime _startTime = DateTime.UtcNow;
-    private readonly Process _currentProcess = Process.GetCurrentProcess();
-    private DateTime _lastCpuSample = DateTime.UtcNow;
-    private TimeSpan _lastCpuTime = Process.GetCurrentProcess().TotalProcessorTime;
-
     public List<Metric> BuildSnapshot(int publishersOnline, long publishCycles)
     {
-        lock (_sync)
-        {
-            _currentProcess.Refresh();
-            var now = DateTime.UtcNow;
-            var cpuTime = _currentProcess.TotalProcessorTime;
-            var elapsedSec = (now - _lastCpuSample).TotalSeconds;
-            var cpuUsage = elapsedSec > 0
-                ? Math.Min(100.0, (cpuTime - _lastCpuTime).TotalSeconds / (elapsedSec * Environment.ProcessorCount) * 100.0)
-                : 0.0;
-            _lastCpuSample = now;
-            _lastCpuTime = cpuTime;
-
-            return
-            [
-                new Metric("CPU Usage (%)", DataType.Double, cpuUsage),
-                new Metric("Managed Heap (MB)", DataType.Double, GC.GetTotalMemory(false) / 1048576.0),
-                new Metric("Working Set (MB)", DataType.Double, _currentProcess.WorkingSet64 / 1048576.0),
-                new Metric("Thread Count", DataType.Double, (double)_currentProcess.Threads.Count),
-                new Metric("ThreadPool Queue", DataType.Double, (double)ThreadPool.PendingWorkItemCount),
-                new Metric("GC Gen2 Collections", DataType.Double, (double)GC.CollectionCount(2)),
-                new Metric("Uptime (s)", DataType.Double, (now - _startTime).TotalSeconds),
-                new Metric("Publishers Online", DataType.Double, (double)publishersOnline),
-                new Metric("Publish Cycles", DataType.Double, (double)publishCycles)
-            ];
-        }
+        var health = collector.GetSnapshot();
+        var metrics = new List<Metric>();
+        if (health.CpuUsagePercent.HasValue)
+            metrics.Add(new Metric("CPU Usage (%)", DataType.Double, health.CpuUsagePercent.Value));
+        if (health.ManagedHeapMb.HasValue)
+            metrics.Add(new Metric("Managed Heap (MB)", DataType.Double, health.ManagedHeapMb.Value));
+        if (health.WorkingSetMb.HasValue)
+            metrics.Add(new Metric("Working Set (MB)", DataType.Double, health.WorkingSetMb.Value));
+        if (health.ThreadCount.HasValue)
+            metrics.Add(new Metric("Thread Count", DataType.Double, (double)health.ThreadCount.Value));
+        if (health.ThreadPoolQueueLength.HasValue)
+            metrics.Add(new Metric("ThreadPool Queue", DataType.Double, (double)health.ThreadPoolQueueLength.Value));
+        if (health.GcGen2Collections.HasValue)
+            metrics.Add(new Metric("GC Gen2 Collections", DataType.Double, (double)health.GcGen2Collections.Value));
+        if (health.UptimeSeconds.HasValue)
+            metrics.Add(new Metric("Uptime (s)", DataType.Double, health.UptimeSeconds.Value));
+        metrics.Add(new Metric("Publishers Online", DataType.Double, (double)publishersOnline));
+        metrics.Add(new Metric("Publish Cycles", DataType.Double, (double)publishCycles));
+        return metrics;
     }
 }
 
@@ -66,12 +56,16 @@ public class SparkplugNodeRunner(
     ISparkplugNodeFactory nodeFactory,
     Connection connection,
     IReadOnlyList<Metric> initialKnownMetrics,
+    ICertificateAssetStore certStore,
+    ICertificateSessionQuarantine quarantine,
     ILogger logger) : INodeRunner
 {
     private readonly Dictionary<Guid, WaveformState> _states = [];
     private Dictionary<string, ulong>? _nodeAliases;
     private Dictionary<string, Dictionary<string, ulong>>? _deviceAliases;
     private ISparkplugNode? _node;
+    private CertificateSessionResource? _certResource;
+    private bool _faulted;
 
     public Guid NodeId => config.Id;
 
@@ -79,9 +73,30 @@ public class SparkplugNodeRunner(
 
     public async Task StartAsync()
     {
+        if (_faulted)
+            throw new InvalidOperationException(
+                "Cannot restart a faulted SparkplugNodeRunner. The previous shutdown failed.");
+
         Status = NodeRuntimeStatus.Connecting;
+        CertificateSessionResource? localCertResource = null;
+        ISparkplugNode? localNode = null;
+
         try
         {
+            // Load certificate into a LOCAL resource first (not a field yet)
+            if (connection.UseTls && connection.ClientCertificateAssetId is not null)
+            {
+                localCertResource = new CertificateSessionResource();
+                var bundle = await certStore.LoadAsync(
+                    connection.Id, connection.ClientCertificateAssetId);
+                if (bundle is null)
+                {
+                    Status = NodeRuntimeStatus.Error;
+                    throw new CertificateAssetUnavailableException(connection.ClientCertificateAssetId);
+                }
+                localCertResource.Set(bundle.Certificate);
+            }
+
             var nodeMetrics = new List<Metric>(initialKnownMetrics)
             {
                 new("Node Control/Rebirth", DataType.Boolean, false)
@@ -89,7 +104,6 @@ public class SparkplugNodeRunner(
             BuildAliasMaps(nodeMetrics);
 
             // Rebuild with birth-mode aliases before passing to factory.
-            // SparkplugNet uses these knownMetrics for NBIRTH.
             var birthMetrics = nodeMetrics;
             if (_nodeAliases is not null)
             {
@@ -100,23 +114,27 @@ public class SparkplugNodeRunner(
                         throw new InvalidOperationException(
                             $"Missing alias for node metric '{source.Name}'.");
 
-                    // Rebuild from scratch using the (name, DataType, value) constructor.
                     var m = new Metric(source.Name, source.DataType, source.Value);
                     m.Alias = alias;
                     birthMetrics.Add(m);
                 }
             }
 
-            var node = config.UseMetricAliases
+            localNode = config.UseMetricAliases
                 ? nodeFactory.Create(birthMetrics, SparkplugSpecificationVersion.Version30,
                     config.Devices.Select(d => d.DeviceId).ToList(),
                     deviceId => SampleDeviceMetrics(
                         config.Devices.First(d => d.DeviceId == deviceId), 0, isBirth: true))
                 : nodeFactory.Create(birthMetrics, SparkplugSpecificationVersion.Version30);
-            await node.Start(BuildNodeOptions(connection, config));
-            _node = node;
+            await localNode.Start(BuildNodeOptions(connection, config, localCertResource));
+
+            // Publish device births BEFORE promoting locals to fields.
             foreach (var device in config.Devices)
-                await node.PublishDeviceBirthMessage(device.DeviceId, SampleDeviceMetrics(device, 0, isBirth: true));
+                await localNode.PublishDeviceBirthMessage(device.DeviceId, SampleDeviceMetrics(device, 0, isBirth: true));
+
+            // All success — promote locals to fields atomically
+            _certResource = localCertResource;
+            _node = localNode;
             Status = NodeRuntimeStatus.Connected;
         }
         catch (Exception ex)
@@ -124,6 +142,29 @@ public class SparkplugNodeRunner(
             Status = NodeRuntimeStatus.Error;
             logger.LogError(ex, "Emulator node {NodeId} failed to connect to {Host}:{Port}",
                 config.NodeId, connection.Host, connection.Port);
+
+            // Dispose node (best-effort)
+            if (localNode is not null)
+            {
+                try { (localNode as IDisposable)?.Dispose(); }
+                catch (Exception disposeEx)
+                {
+                    _faulted = true;
+
+                    // node.Dispose failed — quarantine cert resource instead of disposing
+                    if (localCertResource is not null)
+                    {
+                        quarantine.Quarantine(localCertResource,
+                            $"StartAsync failed ({ex.Message}), node.Dispose also failed ({disposeEx.Message})");
+                        localCertResource = null;
+                    }
+                }
+            }
+
+            // Dispose cert resource only if node.Dispose succeeded (or node was never created)
+            localCertResource?.Dispose();
+
+            throw;
         }
     }
 
@@ -141,22 +182,48 @@ public class SparkplugNodeRunner(
 
     public async Task StopAsync()
     {
-        if (_node is not null)
-        {
-            try
-            {
-                if (_node.IsConnected)
-                    await _node.PublishNodeDeathMessage();
-                await _node.Stop();
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Emulator node {NodeId} failed to stop cleanly", config.NodeId);
-            }
-        }
+        if (_node is null) return;
 
-        _node = null;
-        Status = NodeRuntimeStatus.Idle;
+        try
+        {
+            if (_node.IsConnected)
+            {
+                try { await _node.PublishNodeDeathMessage(); }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "Could not publish NDEATH for node {NodeId} (connection already gone — LWT will handle it)", config.NodeId);
+                }
+            }
+
+            await _node.Stop();
+            (_node as IDisposable)?.Dispose();
+            _node = null;
+
+            _certResource?.Dispose();
+            _certResource = null;
+
+            Status = NodeRuntimeStatus.Idle;
+        }
+        catch (Exception ex)
+        {
+            _faulted = true;
+            Status = NodeRuntimeStatus.Error;
+            logger.LogWarning(ex, "Emulator node {NodeId} failed to stop cleanly", config.NodeId);
+
+            // StopAsync failed — quarantine cert resource (do NOT dispose)
+            if (_certResource is not null)
+            {
+                quarantine.Quarantine(_certResource, $"StopAsync failed: {ex.Message}");
+                _certResource = null;
+            }
+
+            // Best-effort death message and dispose
+            try { await _node!.PublishNodeDeathMessage(); } catch { }
+            try { (_node as IDisposable)?.Dispose(); } catch { }
+            _node = null;
+
+            throw;
+        }
     }
 
     private List<Metric> SampleDeviceMetrics(EmulatorDeviceConfig device, double tSeconds, bool isBirth = false)
@@ -293,7 +360,9 @@ public class SparkplugNodeRunner(
         return result;
     }
 
-    internal static SparkplugNodeOptions BuildNodeOptions(Connection connection, EmulatorNodeConfig config)
+    internal static SparkplugNodeOptions BuildNodeOptions(
+        Connection connection, EmulatorNodeConfig config,
+        CertificateSessionResource? certResource = null)
     {
         MqttClientWebSocketOptions? webSocketOptions = null;
         var brokerAddress = connection.Host;
@@ -304,7 +373,10 @@ public class SparkplugNodeRunner(
             // MqttClientWebSocketOptions.Uri, so the full ws(s) URI must travel through BrokerAddress.
             // The options object is still passed (non-null) purely to select the library's WebSocket
             // branch over TCP.
-            brokerAddress = $"{scheme}://{connection.Host}:{connection.Port}/{connection.WebsocketBasePath}";
+            var wsPath = (connection.WebsocketBasePath ?? string.Empty).Trim().TrimStart('/');
+            brokerAddress = string.IsNullOrEmpty(wsPath)
+                ? $"{scheme}://{connection.Host}:{connection.Port}/"
+                : $"{scheme}://{connection.Host}:{connection.Port}/{wsPath}";
             webSocketOptions = new MqttClientWebSocketOptions { Uri = brokerAddress };
         }
 
@@ -317,6 +389,9 @@ public class SparkplugNodeRunner(
             if (connection.AllowUntrustedCertificate)
                 tlsBuilder = tlsBuilder.WithAllowUntrustedCertificates()
                                        .WithCertificateValidationHandler(_ => true);
+            if (certResource?.Certificate is not null)
+                tlsBuilder = tlsBuilder.WithClientCertificates(
+                    new X509Certificate2Collection(certResource.Certificate));
             tlsOptions = tlsBuilder.Build();
         }
 

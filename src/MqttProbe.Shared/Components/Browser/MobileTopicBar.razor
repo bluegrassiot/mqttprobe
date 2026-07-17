@@ -21,13 +21,13 @@
             <span class="mobile-topic-bar__name mobile-topic-bar__name--empty">Choose a topic</span>
         }
     </div>
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
-               StartIcon="@LucideIcons.ChevronDown"
-               OnClick="OpenPicker"
-               Disabled="@(!HasTopics)"
-               Class="mobile-topic-bar__btn">
+    <AppPrimaryButton Size="Size.Small"
+                StartIcon="@LucideIcons.ChevronDown"
+                OnClick="OpenPicker"
+                Disabled="@(!HasTopics)"
+                Class="mobile-topic-bar__btn">
         Topics
-    </MudButton>
+    </AppPrimaryButton>
 </div>
 
 @code {

@@ -1,0 +1,50 @@
+@namespace MqttProbe.Components.Shared
+
+<MudButton Variant="Variant.Outlined"
+           Color="Color.Primary"
+           OnClick="@OnClick"
+           Disabled="@Disabled"
+           StartIcon="@StartIcon"
+           EndIcon="@EndIcon"
+           Size="@Size"
+           Class="@CssClass"
+           Style="@Style"
+           FullWidth="@FullWidth"
+           ButtonType="@ButtonType"
+           Href="@Href"
+           @attributes="AdditionalAttributes">
+    @ChildContent
+</MudButton>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public string? StartIcon { get; set; }
+
+    [Parameter] public string? EndIcon { get; set; }
+
+    [Parameter] public Size Size { get; set; } = Size.Medium;
+
+    [Parameter] public string? Class { get; set; }
+
+    [Parameter] public string? Style { get; set; }
+
+    [Parameter] public bool FullWidth { get; set; }
+
+    [Parameter] public ButtonType ButtonType { get; set; } = ButtonType.Button;
+
+    [Parameter] public string? Href { get; set; }
+
+    [Parameter] public bool MinWidth { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object> AdditionalAttributes { get; set; } = new();
+
+    private string? CssClass => MinWidth
+        ? string.IsNullOrEmpty(Class) ? "app-btn-min" : $"app-btn-min {Class}"
+        : Class;
+}

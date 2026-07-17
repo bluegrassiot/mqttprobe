@@ -1,9 +1,12 @@
 @page "/"
 @using Microsoft.AspNetCore.Components.Authorization
+@using MQTTnet.Extensions.ManagedClient
 @using MqttProbe.Services.Configuration
 @using MqttProbe.Services.Mqtt
 @attribute [Authorize]
 @implements IDisposable
+@inject IManagedMqttClient MqttClient
+@inject IConnectionSessionLifecycle SessionLifecycle
 @inject IMessageStoreManager MessageStoreManager
 @inject ISettingsStore SettingsStore
 @inject ISessionState SessionState
@@ -87,95 +90,137 @@
          KeepPanelsAlive="true" Centered="true">
 
     <MudTabPanel Icon="@LucideIcons.Eye" Text="@BrowserTabLabel">
-        <BrowserPanel/>
+        @if (CanShowWorkspaceContent("browser"))
+        {
+            <BrowserPanel/>
+        }
+        else if (IsSlugActive("browser"))
+        {
+            <ConnectionRequiredPanel />
+        }
     </MudTabPanel>
 
     @if (TopologyService.Groups.Any())
     {
         <MudTabPanel Icon="@LucideIcons.Network" Text="@NodesTabLabel">
             <div class="tab-panel-content">
-                <ErrorBoundary ErrorContent="_sectionError">
-                    <SparkplugNodesView />
-                </ErrorBoundary>
+                @if (CanShowWorkspaceContent("nodes"))
+                {
+                    <ErrorBoundary ErrorContent="_sectionError">
+                        <SparkplugNodesView />
+                    </ErrorBoundary>
+                }
+                else if (IsSlugActive("nodes"))
+                {
+                    <ConnectionRequiredPanel />
+                }
             </div>
         </MudTabPanel>
     }
 
     <MudTabPanel Icon="@LucideIcons.Activity" Text="@ChartsTabLabel">
         <div class="tab-panel-content">
-            @if (!SettingsStore.GetCharts(SessionState.SelectedConnection.Id).Any() && !SettingsStore.IsHintDismissed("charts"))
+            @if (CanShowWorkspaceContent("charts"))
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
-                          ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("charts"))">
-                    <strong>Start here:</strong> open a JSON message in Browser and choose a numeric field to create your first chart.
-                </MudAlert>
+                @if (!SettingsStore.GetCharts(SessionState.SelectedConnection.Id).Any() && !SettingsStore.IsHintDismissed("charts"))
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                              ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("charts"))">
+                        <strong>Start here:</strong> open a JSON message in Browser and choose a numeric field to create your first chart.
+                    </MudAlert>
+                }
+                <ErrorBoundary ErrorContent="_sectionError">
+                    <Charts/>
+                </ErrorBoundary>
             }
-            <ErrorBoundary ErrorContent="_sectionError">
-                <Charts/>
-            </ErrorBoundary>
+            else if (IsSlugActive("charts"))
+            {
+                <ConnectionRequiredPanel />
+            }
         </div>
     </MudTabPanel>
 
     <MudTabPanel Icon="@LucideIcons.Layers" Text="@SubscriptionsTabLabel">
         <div class="tab-panel-content">
-            @if (!SubscriptionManager.Topics.Any() && !SettingsStore.IsHintDismissed("subscriptions"))
+            @if (CanShowWorkspaceContent("subscriptions"))
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
-                          ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("subscriptions"))">
-                    <strong>Start here:</strong> subscribe to a topic (for example <code>#</code>) to begin collecting matching messages.
-                </MudAlert>
+                @if (!SubscriptionManager.Topics.Any() && !SettingsStore.IsHintDismissed("subscriptions"))
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                              ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("subscriptions"))">
+                        <strong>Start here:</strong> subscribe to a topic (for example <code>#</code>) to begin collecting matching messages.
+                    </MudAlert>
+                }
+                <ErrorBoundary ErrorContent="_sectionError">
+                    <Subscriptions/>
+                </ErrorBoundary>
             }
-            <ErrorBoundary ErrorContent="_sectionError">
-                <Subscriptions/>
-            </ErrorBoundary>
+            else if (IsSlugActive("subscriptions"))
+            {
+                <ConnectionRequiredPanel />
+            }
         </div>
     </MudTabPanel>
 
     <MudTabPanel Icon="@LucideIcons.Send" Text="Publish">
         <div class="tab-panel-content">
-            @if (!SettingsStore.IsHintDismissed("publish"))
+            @if (CanShowWorkspaceContent("publish"))
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
-                          ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("publish"))">
-                    <strong>Start here:</strong> set a topic and payload, then publish to verify broker writes and downstream subscribers.
-                </MudAlert>
+                @if (!SettingsStore.IsHintDismissed("publish"))
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                              ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("publish"))">
+                        <strong>Start here:</strong> set a topic and payload, then publish to verify broker writes and downstream subscribers.
+                    </MudAlert>
+                }
+                <ErrorBoundary ErrorContent="_sectionError">
+                    <AuthorizeView Roles="Admin,Operator">
+                        <Authorized>
+                            <Publishers/>
+                        </Authorized>
+                        <NotAuthorized>
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                                Operator role required to publish messages.
+                            </MudAlert>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                </ErrorBoundary>
             }
-            <ErrorBoundary ErrorContent="_sectionError">
-                <AuthorizeView Roles="Admin,Operator">
-                    <Authorized>
-                        <Publishers/>
-                    </Authorized>
-                    <NotAuthorized>
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
-                            Operator role required to publish messages.
-                        </MudAlert>
-                    </NotAuthorized>
-                </AuthorizeView>
-            </ErrorBoundary>
+            else if (IsSlugActive("publish"))
+            {
+                <ConnectionRequiredPanel />
+            }
         </div>
     </MudTabPanel>
 
     <MudTabPanel Icon="@LucideIcons.Zap" Text="@EmulationTabLabel">
         <div class="tab-panel-content">
-            @if (EmulationService.Nodes.Count == 0 && !SettingsStore.IsHintDismissed("emulation"))
+            @if (CanShowWorkspaceContent("emulation"))
             {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
-                          ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("emulation"))">
-                    <strong>Start here:</strong> add an emulator node, then start emulation to stream synthetic metrics.
-                </MudAlert>
+                @if (EmulationService.Nodes.Count == 0 && !SettingsStore.IsHintDismissed("emulation"))
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                              ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("emulation"))">
+                        <strong>Start here:</strong> add an emulator node, then start emulation to stream synthetic metrics.
+                    </MudAlert>
+                }
+                <ErrorBoundary ErrorContent="_sectionError">
+                    <AuthorizeView Roles="Admin,Operator">
+                        <Authorized>
+                            <EmulationPanel/>
+                        </Authorized>
+                        <NotAuthorized>
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                                Operator role required to run emulations.
+                            </MudAlert>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                </ErrorBoundary>
             }
-            <ErrorBoundary ErrorContent="_sectionError">
-                <AuthorizeView Roles="Admin,Operator">
-                    <Authorized>
-                        <EmulationPanel/>
-                    </Authorized>
-                    <NotAuthorized>
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
-                            Operator role required to run emulations.
-                        </MudAlert>
-                    </NotAuthorized>
-                </AuthorizeView>
-            </ErrorBoundary>
+            else if (IsSlugActive("emulation"))
+            {
+                <ConnectionRequiredPanel />
+            }
         </div>
     </MudTabPanel>
 
@@ -216,6 +261,7 @@
     private string _activeSlug = "browser";
     private int _activeTabIndex;
     private bool _suppressUrlUpdate;
+    private Func<EventArgs, Task>? _connectionStateChangedHandler;
 
     private IReadOnlyList<NavigationDestination> RenderedDestinations =>
         _destinations.Where(d => d.IsVisible()).ToList();
@@ -237,6 +283,16 @@
     private bool IsSlugActive(string slug) =>
         string.Equals(_activeSlug, slug, StringComparison.OrdinalIgnoreCase);
 
+    private bool CanShowWorkspaceContent(string slug) =>
+        MqttClient.IsConnected || !DestinationRequiresConnection(slug);
+
+    private bool DestinationRequiresConnection(string slug)
+    {
+        var dest = _destinations.FirstOrDefault(d =>
+            string.Equals(d.Slug, slug, StringComparison.OrdinalIgnoreCase));
+        return dest?.RequiresConnection ?? true;
+    }
+
     private sealed record NavigationDestination(
         int Index,
         string Slug,
@@ -244,7 +300,8 @@
         string Icon,
         bool IsMobilePrimary,
         Func<bool> IsVisible,
-        bool RequiresOperatorRole = false);
+        bool RequiresOperatorRole = false,
+        bool RequiresConnection = true);
 
     private IReadOnlyList<NavigationDestination> _destinations = null!;
 
@@ -263,7 +320,7 @@
         new(5, "emulation", () => EmulationTabLabel, LucideIcons.Zap,
             IsMobilePrimary: false, IsVisible: () => true, RequiresOperatorRole: true),
         new(6, "settings", () => "Settings", LucideIcons.Settings,
-            IsMobilePrimary: false, IsVisible: () => true),
+            IsMobilePrimary: false, IsVisible: () => true, RequiresConnection: false),
     ];
 
     protected override void OnInitialized()
@@ -273,6 +330,11 @@
         _activeSlug = ResolveSlugFromUrl();
         SyncActiveTabIndex();
         NavigationManager.LocationChanged += OnLocationChanged;
+
+        _connectionStateChangedHandler = OnConnectionStateChangedAsync;
+        MqttClient.ConnectionStateChangedAsync += _connectionStateChangedHandler;
+
+        SessionLifecycle.ActiveConnectionStopped += OnActiveConnectionStopped;
     }
 
     private void OnTopologyChanged()
@@ -285,10 +347,19 @@
         InvokeAsync(StateHasChanged);
     }
 
+    private Task OnConnectionStateChangedAsync(EventArgs args) =>
+        InvokeAsync(StateHasChanged);
+
+    private void OnActiveConnectionStopped() =>
+        InvokeAsync(StateHasChanged);
+
     public void Dispose()
     {
         TopologyService.TopologyChanged -= OnTopologyChanged;
         NavigationManager.LocationChanged -= OnLocationChanged;
+        if (_connectionStateChangedHandler is not null)
+            MqttClient.ConnectionStateChangedAsync -= _connectionStateChangedHandler;
+        SessionLifecycle.ActiveConnectionStopped -= OnActiveConnectionStopped;
     }
 
     private async Task DismissHint(string hintId)

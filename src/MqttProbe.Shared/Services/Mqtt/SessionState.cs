@@ -1,4 +1,5 @@
 using MqttProbe.Models.Mqtt;
+using MqttProbe.Services.Security;
 
 namespace MqttProbe.Services.Mqtt;
 
@@ -6,6 +7,8 @@ public interface ISessionState
 {
     public event Action<Connection>? SelectedConnectionChanged;
     public Connection SelectedConnection { get; set; }
+    public CertificateSessionResource? ActiveCertificateResource { get; set; }
+    public bool CertificateSessionFaulted { get; set; }
 }
 
 public class SessionState : ISessionState
@@ -26,4 +29,7 @@ public class SessionState : ISessionState
             SelectedConnectionChanged?.Invoke(value);
         }
     }
+
+    public CertificateSessionResource? ActiveCertificateResource { get; set; }
+    public bool CertificateSessionFaulted { get; set; }
 }

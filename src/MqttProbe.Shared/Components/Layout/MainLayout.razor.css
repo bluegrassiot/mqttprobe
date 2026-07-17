@@ -21,20 +21,6 @@
     overflow: hidden;
 }
 
-.reconnect-message {
-    padding-top: 48px;
-}
-
-.signal-connecting {
-    width: 104px;
-    height: 104px;
-    animation: signal-breathe 1.8s ease-in-out infinite;
-}
-
-.reconnect-stop-btn {
-    margin-top: 16px;
-}
-
 ::deep .app-chrome-panel {
     background: var(--mud-palette-surface);
     border: 1px solid var(--mud-palette-lines-default);

@@ -12,16 +12,22 @@ using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
+using MqttProbe.Tests.Services.Security.TestHelpers;
 
 namespace MqttProbe.Shared.Tests.Services.Mqtt;
 
 [TestFixture]
 public class MqttOptionsBuilderTests
 {
+    private ICertificateAssetStore _mockCertStore = null!;
     private MqttOptionsBuilder _builder = null!;
 
     [SetUp]
-    public void Setup() => _builder = new MqttOptionsBuilder();
+    public void Setup()
+    {
+        _mockCertStore = Substitute.For<ICertificateAssetStore>();
+        _builder = new MqttOptionsBuilder(_mockCertStore);
+    }
 
     private static Connection TcpConnection(string host = "broker.local", int port = 1883) =>
         new() { Name = "Test", Host = host, Port = port, Protocol = Protocol.Mqtt, ClientId = "test-client" };
@@ -56,7 +62,7 @@ public class MqttOptionsBuilderTests
         var conn = TcpConnection();
         conn.ClientId = "shared-id";
         var id1 = ((MqttClientOptions)_builder.Build(conn).ClientOptions).ClientId;
-        var id2 = ((MqttClientOptions)new MqttOptionsBuilder().Build(conn).ClientOptions).ClientId;
+        var id2 = ((MqttClientOptions)new MqttOptionsBuilder(_mockCertStore).Build(conn).ClientOptions).ClientId;
         id1.Should().NotBe(id2);
     }
 
@@ -148,6 +154,78 @@ public class MqttOptionsBuilderTests
     }
 
     [Test]
+    public void Build_WebSocketPathMqtt_ProducesCorrectUri()
+    {
+        var conn = new Connection
+        {
+            Name = "WS",
+            Host = "broker.local",
+            Port = 8080,
+            Protocol = Protocol.WebSocket,
+            ClientId = "ws-client",
+            WebsocketBasePath = "mqtt",
+            UseTls = false
+        };
+        var options = _builder.Build(conn);
+        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        ws.Uri.Should().Be("ws://broker.local:8080/mqtt");
+    }
+
+    [Test]
+    public void Build_WebSocketPathWithLeadingSlash_NoDoubleSlash()
+    {
+        var conn = new Connection
+        {
+            Name = "WS",
+            Host = "broker.local",
+            Port = 8080,
+            Protocol = Protocol.WebSocket,
+            ClientId = "ws-client",
+            WebsocketBasePath = "/mqtt",
+            UseTls = false
+        };
+        var options = _builder.Build(conn);
+        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        ws.Uri.Should().Be("ws://broker.local:8080/mqtt");
+    }
+
+    [Test]
+    public void Build_WebSocketPathEmpty_NoDoubleSlash()
+    {
+        var conn = new Connection
+        {
+            Name = "WS",
+            Host = "broker.local",
+            Port = 8080,
+            Protocol = Protocol.WebSocket,
+            ClientId = "ws-client",
+            WebsocketBasePath = "",
+            UseTls = false
+        };
+        var options = _builder.Build(conn);
+        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        ws.Uri.Should().Be("ws://broker.local:8080/");
+    }
+
+    [Test]
+    public void Build_WebSocketPathWhitespace_NoDoubleSlash()
+    {
+        var conn = new Connection
+        {
+            Name = "WS",
+            Host = "broker.local",
+            Port = 8080,
+            Protocol = Protocol.WebSocket,
+            ClientId = "ws-client",
+            WebsocketBasePath = "   ",
+            UseTls = false
+        };
+        var options = _builder.Build(conn);
+        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        ws.Uri.Should().Be("ws://broker.local:8080/");
+    }
+
+    [Test]
     public void Build_SetsAutoReconnectDelay()
     {
         var options = _builder.Build(TcpConnection());
@@ -202,5 +280,64 @@ public class MqttOptionsBuilderTests
         conn.MqttVersion = MqttVersion.V5;
         var options = _builder.Build(conn);
         ((MqttClientOptions)options.ClientOptions).ProtocolVersion.Should().Be(MqttProtocolVersion.V500);
+    }
+
+    [Test]
+    public async Task BuildAsync_WithCertAsset_LoadsAndSetsCertificate()
+    {
+        var conn = TcpConnection();
+        conn.UseTls = true;
+        conn.ClientCertificateAssetId = "test-asset";
+        using var cert = TestCertFactory.CreateRsaCert();
+        _mockCertStore.LoadAsync(conn.Id, "test-asset")
+            .Returns(new ClientCertificateBundle(cert));
+
+        var resource = new CertificateSessionResource();
+        var options = await _builder.BuildAsync(conn, resource);
+
+        resource.Certificate.Should().NotBeNull();
+        resource.Certificate!.HasPrivateKey.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task BuildAsync_WithCertAsset_CertReachesTlsOptions()
+    {
+        var conn = TcpConnection();
+        conn.UseTls = true;
+        conn.ClientCertificateAssetId = "test-asset";
+        using var cert = TestCertFactory.CreateRsaCert();
+        _mockCertStore.LoadAsync(conn.Id, "test-asset")
+            .Returns(new ClientCertificateBundle(cert));
+
+        var resource = new CertificateSessionResource();
+        var options = await _builder.BuildAsync(conn, resource);
+
+        var tcp = TcpOpts(options);
+        var clientCerts = tcp.TlsOptions.ClientCertificatesProvider?.GetCertificates();
+        clientCerts.Should().NotBeNull();
+        clientCerts!.Count.Should().BeGreaterThan(0);
+    }
+
+    [Test]
+    public async Task BuildAsync_MissingAsset_ThrowsCertificateAssetUnavailableException()
+    {
+        var conn = TcpConnection();
+        conn.UseTls = true;
+        conn.ClientCertificateAssetId = "missing";
+        _mockCertStore.LoadAsync(conn.Id, "missing").Returns((ClientCertificateBundle?)null);
+
+        var resource = new CertificateSessionResource();
+        var act = () => _builder.BuildAsync(conn, resource);
+        await act.Should().ThrowAsync<CertificateAssetUnavailableException>();
+    }
+
+    [Test]
+    public async Task BuildAsync_NoCertAsset_ResourceCertificateRemainsNull()
+    {
+        var conn = TcpConnection();
+        conn.UseTls = true;
+        var resource = new CertificateSessionResource();
+        var options = await _builder.BuildAsync(conn, resource);
+        resource.Certificate.Should().BeNull();
     }
 }

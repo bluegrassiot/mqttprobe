@@ -7,6 +7,7 @@
 @inject IAppInfoService AppInfoService
 @inject NavigationManager NavigationManager
 @inject ISessionState SessionState
+@inject IConnectionSessionLifecycle SessionLifecycle
 @implements IAsyncDisposable
 
 <MudAppBar Fixed="false" Elevation="2" Class="mt-0 app-shell-appbar app-chrome-panel">
@@ -150,7 +151,7 @@
     internal async Task ConnectionToggle()
     {
         if (MqttClient.IsConnected)
-            await MqttClient.StopAsync();
+            await SessionLifecycle.StopActiveConnectionAsync();
         else
             await OpenConnectForm();
     }

@@ -167,11 +167,18 @@ jobs:
           dotnet tool install -g vpk
           APP=$(find src/MqttProbe.Maui/bin/Release/net10.0-maccatalyst -maxdepth 1 -name '*.app' -print -quit)
           test -n "$APP" || { echo "No .app bundle found"; exit 1; }
+          EXE_NAME=$(defaults read "$(pwd)/$APP/Contents/Info.plist" CFBundleExecutable)
+          test -x "$APP/Contents/MacOS/$EXE_NAME" || {
+            echo "::error::Main executable not found: $APP/Contents/MacOS/$EXE_NAME"
+            ls -la "$APP/Contents/MacOS/" || true
+            exit 1
+          }
           vpk download github --repoUrl https://github.com/bluegrassiot/mqttprobe --token ${{ secrets.GITHUB_TOKEN }} --outputDir publish/velopack-osx || echo "No previous Velopack osx release; deltas skipped."
           vpk pack \
             --packId MQTTProbe \
             --packVersion ${{ steps.version.outputs.value }} \
             --packDir "$APP" \
+            --mainExe "$EXE_NAME" \
             --packTitle MQTTProbe \
             --packAuthors "Bluegrass IoT" \
             --signAppIdentity "$SIGN_APP_IDENTITY" \

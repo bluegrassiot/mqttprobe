@@ -57,7 +57,7 @@ jobs:
     # select the matching Xcode below. If the job fails with "requires Xcode X.Y",
     # update the xcode-select path to that version.
     runs-on: macos-26
-    timeout-minutes: 120
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -73,22 +73,23 @@ jobs:
       - name: Install MAUI Mac Catalyst workload
         run: dotnet workload install maui-maccatalyst --source https://api.nuget.org/v3/index.json
 
-      - name: Extract version
+      - name: Extract and validate version
         id: version
         run: |
           RAW="${{ inputs.version }}"
           version="${RAW#v}"
-          echo "value=$version" >> "$GITHUB_OUTPUT"
-          IFS='.-' read -r major minor patch _ <<< "$version"
-          echo "code=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_OUTPUT"
-
-      - name: Validate version
-        run: |
-          V="${{ steps.version.outputs.value }}"
-          if [ -z "$V" ] || [ "$V" = "0.0.0" ]; then
-            echo "::error::Version '$V' is invalid. Provide a version >= 0.0.1 via workflow_dispatch input or workflow_call."
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-].*)?$ ]] || [[ "$version" == "0.0.0" ]]; then
+            echo "::error::Version '$version' is invalid. Provide a version >= 0.0.1 (e.g. 1.0.2 or v1.0.2)."
             exit 1
           fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          IFS='.-' read -r major minor patch _ <<< "$version"
+          # Guard non-numeric components from bad inputs that still matched loosely
+          if ! [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ && "$patch" =~ ^[0-9]+$ ]]; then
+            echo "::error::Version '$version' must start with numeric major.minor.patch."
+            exit 1
+          fi
+          echo "code=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_OUTPUT"
 
       - name: Import signing certificate into temporary keychain
         env:
@@ -100,18 +101,20 @@ jobs:
           [ -n "$CERT_P12_B64" ] || { echo "::error::MACOS_CERT_P12 secret is not set"; exit 1; }
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
           KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$KEYCHAIN_PASSWORD" > "$RUNNER_TEMP/keychain-password"
+          chmod 600 "$RUNNER_TEMP/keychain-password"
           echo "$CERT_P12_B64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
           rm "$RUNNER_TEMP/cert.p12"
           [ -n "$INSTALLER_CERT_P12_B64" ] || { echo "::error::MACOS_INSTALLER_CERT_P12 secret is not set"; exit 1; }
           echo "$INSTALLER_CERT_P12_B64" | base64 --decode > "$RUNNER_TEMP/installer.p12"
-          security import "$RUNNER_TEMP/installer.p12" -k "$KEYCHAIN" -P "$INSTALLER_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
+          security import "$RUNNER_TEMP/installer.p12" -k "$KEYCHAIN" -P "$INSTALLER_CERT_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/productsign -T /usr/bin/pkgbuild -T /usr/bin/productbuild -T /usr/bin/security
           rm "$RUNNER_TEMP/installer.p12"
           # Allow Apple's signing tools to use the key without a GUI consent prompt
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
           security list-keychains -d user -s "$KEYCHAIN" login.keychain
 
       - name: Verify signing identities
@@ -162,9 +165,14 @@ jobs:
           lipo -archs "$EXE" | grep -q x86_64
           lipo -archs "$EXE" | grep -q arm64
 
-      - name: Velopack pack (sign, notarize, staple)
+      - name: Install Velopack CLI
         run: |
-          dotnet tool install -g vpk
+          dotnet tool install -g vpk --version 1.2.0
+          vpk --version
+
+      - name: Velopack pack (sign, notarize, staple)
+        timeout-minutes: 12
+        run: |
           APP=$(find src/MqttProbe.Maui/bin/Release/net10.0-maccatalyst -maxdepth 1 -name '*.app' -print -quit)
           test -n "$APP" || { echo "No .app bundle found"; exit 1; }
           EXE_NAME=$(defaults read "$(pwd)/$APP/Contents/Info.plist" CFBundleExecutable)
@@ -173,6 +181,15 @@ jobs:
             ls -la "$APP/Contents/MacOS/" || true
             exit 1
           }
+          # Re-unlock keychain and re-apply partition list so productsign can
+          # access the Installer cert without a GUI prompt (the keychain may
+          # have been re-locked or the partition list lost between steps).
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(cat "$RUNNER_TEMP/keychain-password")
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain
+          echo "Starting vpk pack at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           vpk download github --repoUrl https://github.com/bluegrassiot/mqttprobe --token ${{ secrets.GITHUB_TOKEN }} --outputDir publish/velopack-osx || echo "No previous Velopack osx release; deltas skipped."
           vpk pack \
             --packId MQTTProbe \
@@ -188,6 +205,7 @@ jobs:
             --outputDir publish/velopack-osx
           find publish/velopack-osx -name '*.nupkg' ! -name "MQTTProbe-${{ steps.version.outputs.value }}-*" -delete
           ls -la publish/velopack-osx
+          echo "Finished vpk pack at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -197,4 +215,9 @@ jobs:
 
       - name: Clean up signing keychain
         if: always()
-        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/keychain-password" \
+                "$RUNNER_TEMP/cert.p12" \
+                "$RUNNER_TEMP/installer.p12" \
+                "$RUNNER_TEMP/notary.p8"

@@ -5,7 +5,7 @@
 @inject IUxMetricsService Metrics
 @implements IDisposable
 
-<MudMenu Class="ml-2" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" Dense="false">
+<MudMenu Class="ml-2" PopoverClass="metrics-flyout-popover" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" Dense="false" OpenChanged="OnMenuOpenChanged">
     <ActivatorContent>
         <MudChip T="string" Size="Size.Small"
                  Class="@ChipClass"
@@ -21,7 +21,7 @@
     </ActivatorContent>
     <ChildContent>
         <div class="metrics-flyout pa-4" @onclick:stopPropagation="true">
-            <MudText Typo="Typo.subtitle2" Class="mb-2">Live traffic</MudText>
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Traffic</MudText>
 
             <div class="metrics-sparkline mb-3">
                 <svg width="100%" height="40" viewBox="0 0 240 40" preserveAspectRatio="none">
@@ -31,10 +31,14 @@
                 <MudText Typo="Typo.caption">@RateText over last 60 s</MudText>
             </div>
 
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Capacity</MudText>
+
             <div class="metrics-row">
-                <span>Showing</span>
+                <span>Displayed messages</span>
                 <span>@Fmt(_snapshot.CurrentDisplayedMessageCount) / @Fmt(_snapshot.MaxDisplayMessages)</span>
             </div>
+            <MudProgressLinear Value="@Percent(_snapshot.CurrentDisplayedMessageCount, _snapshot.MaxDisplayMessages)"
+                               Color="Color.Primary" Class="mb-2 metrics-progress"/>
 
             <div class="metrics-row">
                 <span>Stored messages</span>
@@ -50,25 +54,33 @@
             <MudProgressLinear Value="@Percent(_topicNodes, MessageStoreManagerService.MaxTopicNodes)"
                                Color="Color.Primary" Class="mb-2 metrics-progress"/>
 
-            <div class="metrics-row"><span>Messages processed</span><span>@Fmt(_snapshot.MessagesProcessed)</span></div>
-            <div class="metrics-row"><span>Messages dropped</span><span>@Fmt(_snapshot.MessagesDropped)</span></div>
-            <div class="metrics-row"><span>Processing time (avg / max)</span><span>@FmtUs(_snapshot.AvgProcessingTimeUs) / @FmtUs(_snapshot.MaxProcessingTimeUs)</span></div>
-            <div class="metrics-row"><span>Payload size (avg / max)</span><span>@FmtBytes(_snapshot.AvgPayloadBytes) / @FmtBytes(_snapshot.MaxPayloadBytes)</span></div>
+            <MudExpansionPanels Elevation="0" Class="mt-2">
+                <MudExpansionPanel Text="Processing" Dense="true" @bind-Expanded="_processingExpanded">
+                    <div class="metrics-row"><span>Messages processed</span><span>@Fmt(_snapshot.MessagesProcessed)</span></div>
+                    <div class="metrics-row"><span>Messages dropped</span><span>@Fmt(_snapshot.MessagesDropped)</span></div>
+                    <div class="metrics-row"><span>Processing time (avg)</span><span>@FmtUs(_snapshot.AvgProcessingTimeUs)</span></div>
+                    <div class="metrics-row"><span>Processing time (max)</span><span>@FmtUs(_snapshot.MaxProcessingTimeUs)</span></div>
+                    <div class="metrics-row"><span>Payload size (avg)</span><span>@FmtBytes(_snapshot.AvgPayloadBytes)</span></div>
+                    <div class="metrics-row"><span>Payload size (max)</span><span>@FmtBytes(_snapshot.MaxPayloadBytes)</span></div>
 
-            @if (_snapshot.MessagesProcessedByFormat.Count > 0)
-            {
-                <MudText Typo="Typo.caption" Class="mt-2">By format</MudText>
-                @foreach (var (format, count) in _snapshot.MessagesProcessedByFormat.OrderByDescending(kv => kv.Value))
-                {
-                    <div class="metrics-row"><span>@format</span><span>@Fmt(count)</span></div>
-                }
-            }
+                    @if (_snapshot.MessagesProcessedByFormat.Count > 0)
+                    {
+                        <MudDivider Class="my-2" />
+                        <div class="metrics-subsection">
+                            <MudText Typo="Typo.caption" Class="metrics-subsection-title">Messages by payload format</MudText>
+                            @foreach (var (format, count) in _snapshot.MessagesProcessedByFormat.OrderByDescending(kv => kv.Value))
+                            {
+                                <div class="metrics-row"><span>@format</span><span>@Fmt(count)</span></div>
+                            }
+                        </div>
+                    }
+                </MudExpansionPanel>
+            </MudExpansionPanels>
 
             @if (_snapshot.AppHealth.HasAny)
             {
-                <MudDivider Class="my-2" />
-                <MudExpansionPanels Elevation="0" Class="mt-1 metrics-health">
-                    <MudExpansionPanel Text="Health" Dense="true">
+                <MudExpansionPanels Elevation="0" Class="mt-2">
+                    <MudExpansionPanel Text="Resources" Dense="true" @bind-Expanded="_resourcesExpanded">
                         @if (_snapshot.AppHealth.CpuUsagePercent.HasValue)
                         {
                             <div class="metrics-row"><span>CPU usage</span><span>@FmtPercent(_snapshot.AppHealth.CpuUsagePercent.Value)</span></div>
@@ -101,8 +113,8 @@
                 </MudExpansionPanels>
             }
 
-            <MudExpansionPanels Elevation="0" Class="mt-2 metrics-diagnostics">
-                <MudExpansionPanel Text="Diagnostics" Dense="true">
+            <MudExpansionPanels Elevation="0" Class="mt-2">
+                <MudExpansionPanel Text="System" Dense="true" @bind-Expanded="_systemExpanded">
                     <div class="metrics-row"><span>Emulators online</span><span>@Fmt(_snapshot.EmulatorPublishersOnline)</span></div>
                     <div class="metrics-row"><span>Emulation cycles</span><span>@Fmt(_snapshot.EmulatorPublishCycles)</span></div>
                     @if (_snapshot.EmulatorNodesInError > 0)
@@ -134,6 +146,9 @@
     private int _storedMessages;
     private int _topicNodes;
     private UxMetricsSnapshot _snapshot = null!;
+    private bool _processingExpanded;
+    private bool _resourcesExpanded;
+    private bool _systemExpanded;
 
     private string ChipClass =>
         _droppingRecently ? "metrics-chip metrics-chip--dropping" : "metrics-chip";
@@ -168,6 +183,16 @@
         _droppingRecently = _snapshot.MessagesDropped > previousDropped;
         _storedMessages = MessageStoreManagerService.TotalStoredMessages;
         _topicNodes = MessageStoreManagerService.TopicNodeCount;
+    }
+
+    private void OnMenuOpenChanged(bool open)
+    {
+        if (open)
+        {
+            _processingExpanded = false;
+            _resourcesExpanded = false;
+            _systemExpanded = false;
+        }
     }
 
     private string SparklinePoints()

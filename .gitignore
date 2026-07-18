@@ -295,8 +295,10 @@ deploy/mtls/certs/**
 /.claude
 /.opencode/
 /.obsidian
-docs/
-!docs/images
+docs/*
+!docs/images/
+!docs/images/**
+!docs/payload-formats.md
 
 # Misc artifacts
 /profile-output/

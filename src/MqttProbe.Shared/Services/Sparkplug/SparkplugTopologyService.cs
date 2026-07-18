@@ -6,6 +6,7 @@ using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
 using MQTTnet.Protocol;
 using MqttProbe.Models.Sparkplug;
+using MqttProbe.Services.Plugins.Contracts;
 using Org.Eclipse.Tahu.Protobuf;
 
 namespace MqttProbe.Services.Sparkplug;
@@ -17,6 +18,7 @@ public interface ISparkplugTopologyService : IDisposable
     public bool RemoveNode(string groupId, string nodeId);
     public int RemoveOfflineNodes();
     public void ClearAll();
+    public void ApplyTopologyEvents(IReadOnlyList<TopologyEvent> events);
     public Task RequestNodeRebirthAsync(string groupId, string nodeId);
 }
 
@@ -27,18 +29,22 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
     private readonly IManagedMqttClient _client;
     private readonly ILogger<SparkplugTopologyService> _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly bool _autoSubscribeToClient;
     private readonly ConcurrentDictionary<string, SpbGroup> _groups = new();
     private bool _disposed;
 
     public IReadOnlyDictionary<string, SpbGroup> Groups => _groups;
     public event Action? TopologyChanged;
 
-    public SparkplugTopologyService(IManagedMqttClient client, ILogger<SparkplugTopologyService> logger, TimeProvider? timeProvider = null)
+    public SparkplugTopologyService(IManagedMqttClient client, ILogger<SparkplugTopologyService> logger,
+        TimeProvider? timeProvider = null, bool autoSubscribeToClient = true)
     {
         _client = client;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
-        _client.ApplicationMessageReceivedAsync += OnMessageReceived;
+        _autoSubscribeToClient = autoSubscribeToClient;
+        if (autoSubscribeToClient)
+            _client.ApplicationMessageReceivedAsync += OnMessageReceived;
     }
 
     public bool RemoveNode(string groupId, string nodeId)
@@ -348,6 +354,134 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         TopologyChanged?.Invoke();
     }
 
+    public void ApplyTopologyEvents(IReadOnlyList<TopologyEvent> events)
+    {
+        foreach (var evt in events)
+        {
+            switch (evt)
+            {
+                case NodeBirthEvent e:
+                    ApplyNodeBirth(e.GroupId, e.NodeId, ConvertMetricSnapshots(e.Metrics));
+                    break;
+                case NodeDeathEvent e:
+                    HandleNDeath(e.GroupId, e.NodeId);
+                    break;
+                case NodeDataEvent e:
+                    ApplyNodeData(e.GroupId, e.NodeId, ConvertMetricSnapshots(e.Metrics));
+                    break;
+                case DeviceBirthEvent e:
+                    ApplyDeviceBirth(e.GroupId, e.NodeId, e.DeviceId, ConvertMetricSnapshots(e.Metrics));
+                    break;
+                case DeviceDeathEvent e:
+                    HandleDDeath(e.GroupId, e.NodeId, e.DeviceId);
+                    break;
+                case DeviceDataEvent e:
+                    ApplyDeviceData(e.GroupId, e.NodeId, e.DeviceId, ConvertMetricSnapshots(e.Metrics));
+                    break;
+            }
+        }
+    }
+
+    private static SpbMetricSnapshot[] ConvertMetricSnapshots(IReadOnlyList<MetricSnapshot> metrics)
+    {
+        var result = new SpbMetricSnapshot[metrics.Count];
+        for (var i = 0; i < metrics.Count; i++)
+        {
+            var m = metrics[i];
+            result[i] = new SpbMetricSnapshot(m.Name, m.DataType, m.Value, DateTime.UtcNow);
+        }
+
+        return result;
+    }
+
+    private void ApplyNodeBirth(string groupId, string nodeId, SpbMetricSnapshot[] metrics)
+    {
+        var node = GetOrCreateNode(groupId, nodeId);
+        lock (node.SyncRoot)
+        {
+            node.Status = SpbNodeStatus.Online;
+            node.LastBirthAt = DateTime.UtcNow;
+            node.AliasMap.Clear();
+            node.Metrics = metrics;
+        }
+
+        TopologyChanged?.Invoke();
+    }
+
+    private void ApplyNodeData(string groupId, string nodeId, SpbMetricSnapshot[] newMetrics)
+    {
+        var node = GetOrCreateNode(groupId, nodeId);
+        lock (node.SyncRoot)
+        {
+            node.LastDataAt = DateTime.UtcNow;
+            var metrics = node.Metrics.ToList();
+
+            foreach (var snapshot in newMetrics)
+            {
+                var idx = metrics.FindIndex(m => m.Name == snapshot.Name);
+                if (idx >= 0)
+                    metrics[idx] = snapshot;
+                else
+                    metrics.Add(snapshot);
+            }
+
+            node.Metrics = metrics.ToArray();
+        }
+
+        TopologyChanged?.Invoke();
+    }
+
+    private void ApplyDeviceBirth(string groupId, string nodeId, string deviceId, SpbMetricSnapshot[] metrics)
+    {
+        var node = GetOrCreateNode(groupId, nodeId);
+        var device = node.Devices.GetOrAdd(deviceId, id => new SpbDevice
+        {
+            DeviceId = id,
+            NodeId = nodeId,
+            GroupId = groupId
+        });
+
+        lock (device.SyncRoot)
+        {
+            device.Status = SpbNodeStatus.Online;
+            device.LastBirthAt = DateTime.UtcNow;
+            device.AliasMap.Clear();
+            device.Metrics = metrics;
+        }
+
+        TopologyChanged?.Invoke();
+    }
+
+    private void ApplyDeviceData(string groupId, string nodeId, string deviceId, SpbMetricSnapshot[] newMetrics)
+    {
+        var node = GetOrCreateNode(groupId, nodeId);
+        var device = node.Devices.GetOrAdd(deviceId, id => new SpbDevice
+        {
+            DeviceId = id,
+            NodeId = nodeId,
+            GroupId = groupId
+        });
+
+        lock (device.SyncRoot)
+        {
+            device.LastDataAt = DateTime.UtcNow;
+            var metrics = device.Metrics.ToList();
+
+            foreach (var snapshot in newMetrics)
+            {
+                var idx = metrics.FindIndex(m => m.Name == snapshot.Name);
+                if (idx >= 0)
+                    metrics[idx] = snapshot;
+                else
+                    metrics.Add(snapshot);
+            }
+
+            device.Metrics = metrics.ToArray();
+        }
+
+        TopologyChanged?.Invoke();
+    }
+
     public async Task RequestNodeRebirthAsync(string groupId, string nodeId)
     {
         if (!_groups.TryGetValue(groupId, out var group))
@@ -462,7 +596,8 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
     public void Dispose()
     {
         if (_disposed) return;
-        _client.ApplicationMessageReceivedAsync -= OnMessageReceived;
+        if (_autoSubscribeToClient)
+            _client.ApplicationMessageReceivedAsync -= OnMessageReceived;
         _disposed = true;
     }
 }

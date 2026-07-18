@@ -22,7 +22,7 @@ public static class EmulationRateCalculator
         return node.Type switch
         {
             EmulatorNodeType.SparkplugB => 1 + devicesWithMetrics,
-            _ => node.PayloadFormat == GenericPayloadFormat.Json
+            _ => node.PayloadFormatId == "json"
                 ? devicesWithMetrics
                 : node.Devices.Sum(d => d.Metrics.Count)
         };

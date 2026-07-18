@@ -8,6 +8,7 @@ using MqttProbe.Models.Emulation;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 
@@ -42,6 +43,7 @@ public class EmulationService : IEmulationService
     private readonly IUxMetricsService _metrics;
     private readonly ICertificateAssetStore _certStore;
     private readonly ICertificateSessionQuarantine _quarantine;
+    private readonly PayloadPipeline _pipeline;
     private readonly ILogger<EmulationService> _logger;
     private readonly NodeHealthMetricsProvider _healthMetrics;
 
@@ -60,6 +62,7 @@ public class EmulationService : IEmulationService
         IUxMetricsService metrics,
         ICertificateAssetStore certStore,
         ICertificateSessionQuarantine quarantine,
+        PayloadPipeline pipeline,
         ILogger<EmulationService> logger,
         IAppHealthMetricsCollector healthCollector)
     {
@@ -70,6 +73,7 @@ public class EmulationService : IEmulationService
         _metrics = metrics;
         _certStore = certStore;
         _quarantine = quarantine;
+        _pipeline = pipeline;
         _logger = logger;
         _healthMetrics = new NodeHealthMetricsProvider(healthCollector);
         _settingsStore.EmulatorsChanged += OnEmulatorsChanged;
@@ -152,23 +156,19 @@ public class EmulationService : IEmulationService
     {
         if (IsRunning) return;
 
-        // Runners work on a deep snapshot so config edits from other circuits never tear a running loop.
         var snapshot = CloneNodes(_settingsStore.GetEmulatorNodes(_connectionId));
         var intervalMs = _settingsStore.GetEmulatorPublishIntervalMs(_connectionId);
         var connection = _sessionState.SelectedConnection;
         var sparkplugCount = snapshot.Count(n => n.Type == EmulatorNodeType.SparkplugB);
         var initialKnownMetrics = _healthMetrics.BuildSnapshot(sparkplugCount, 0);
 
-        // Build runners locally — do NOT overwrite _runners until all succeed.
         var newRunners = snapshot
             .Select(node => (INodeRunner)(node.Type == EmulatorNodeType.SparkplugB
                 ? new SparkplugNodeRunner(node, _nodeFactory, connection, initialKnownMetrics,
                     _certStore, _quarantine, _logger)
-                : new GenericNodeRunner(node, _managedMqttClient)))
+                : new GenericNodeRunner(node, _managedMqttClient, _pipeline, _logger)))
             .ToList();
 
-        // Start runners sequentially so we can track which ones succeeded.
-        // On any failure, stop already-started runners before rethrowing.
         var startedRunners = new List<INodeRunner>();
         try
         {
@@ -180,7 +180,6 @@ public class EmulationService : IEmulationService
         }
         catch (Exception)
         {
-            // Roll back: stop all runners that started successfully (best-effort).
             foreach (var started in startedRunners)
             {
                 try { await started.StopAsync(); }
@@ -194,7 +193,6 @@ public class EmulationService : IEmulationService
             throw;
         }
 
-        // All runners started successfully — promote to field.
         _runners = newRunners;
 
         _publishCycles = 0;
@@ -297,7 +295,6 @@ public class EmulationService : IEmulationService
 
     private async Task RunPublishLoop(int rateMs, CancellationToken ct)
     {
-        // The first tick already ran inline during StartAsync, so the loop always delays before publishing.
         var lastTickDuration = TimeSpan.Zero;
         while (!ct.IsCancellationRequested)
         {

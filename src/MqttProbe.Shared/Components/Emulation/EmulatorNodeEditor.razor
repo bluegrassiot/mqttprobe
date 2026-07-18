@@ -45,12 +45,12 @@
     @if (Node.Type == EmulatorNodeType.Generic)
     {
         <MudItem xs="12" sm="4">
-            <MudSelect T="GenericPayloadFormat" @bind-Value="Node.PayloadFormat" @bind-Value:after="SaveAsync"
+            <MudSelect T="string" @bind-Value="Node.PayloadFormatId" @bind-Value:after="SaveAsync"
                        Label="Payload format" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
                        Disabled="@EmulationService.IsRunning">
-                <MudSelectItem T="GenericPayloadFormat" Value="GenericPayloadFormat.Json">JSON</MudSelectItem>
-                <MudSelectItem T="GenericPayloadFormat" Value="GenericPayloadFormat.PlainText">Plain text</MudSelectItem>
-                <MudSelectItem T="GenericPayloadFormat" Value="GenericPayloadFormat.Hex">Hex</MudSelectItem>
+                <MudSelectItem T="string" Value="@("json")">JSON</MudSelectItem>
+                <MudSelectItem T="string" Value="@("plaintext")">Plain text</MudSelectItem>
+                <MudSelectItem T="string" Value="@("hex")">Hex</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" sm="8">
@@ -130,7 +130,7 @@
         {
             var device = Node.Devices.FirstOrDefault();
             if (device == null) return null;
-            if (Node.PayloadFormat == GenericPayloadFormat.Json)
+            if (Node.PayloadFormatId == "json")
                 return TopicTemplateRenderer.RenderDeviceTopic(Node, device.DeviceId);
             var metric = device.Metrics.FirstOrDefault();
             return metric == null ? null : TopicTemplateRenderer.RenderMetricTopic(Node, device.DeviceId, metric.Name);

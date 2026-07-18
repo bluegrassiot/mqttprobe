@@ -1,10 +1,12 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MQTTnet;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Layout;
 using MqttProbe.Maui.Services;
+using MqttProbe.Models.Plugins;
 using MqttProbe.Services;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
@@ -12,6 +14,9 @@ using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
+using MqttProbe.Services.Plugins;
+using MqttProbe.Services.Plugins.Pipeline;
+using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using MudBlazor;
@@ -24,11 +29,6 @@ public static class MauiProgram
     public static MauiApp CreateMauiApp()
     {
 #if IOS
-        // WORKAROUND: MudBlazor satellite assemblies (MudBlazor.resources.dll) are not
-        // bundled on iOS, causing a FileNotFoundException during localization. Force a
-        // neutral culture so the runtime falls back to the embedded default resources.
-        // See: https://github.com/MudBlazor/MudBlazor/issues — replace with proper
-        // satellite assembly inclusion once a permanent fix is applied.
         CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("en-US");
         CultureInfo.DefaultThreadCurrentUICulture = new CultureInfo("en-US");
 #endif
@@ -58,7 +58,6 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        // MAUI has one local app session, so MQTT and UI state services are shared across pages.
         var client = new MqttFactory().CreateManagedMqttClient();
         builder.Services.AddSingleton(client);
         builder.Services.AddSingleton<ISessionState, SessionState>();
@@ -71,6 +70,7 @@ public static class MauiProgram
                 sp.GetRequiredService<IUxMetricsService>(),
                 sp.GetRequiredService<ICertificateAssetStore>(),
                 sp.GetRequiredService<ICertificateSessionQuarantine>(),
+                sp.GetRequiredService<PayloadPipeline>(),
                 sp.GetRequiredService<ILogger<EmulationService>>(),
                 sp.GetRequiredService<IAppHealthMetricsCollector>()));
         builder.Services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
@@ -99,8 +99,6 @@ public static class MauiProgram
         var secretStorage = new MauiSecretStorage();
         builder.Services.AddSingleton<ISecretStorage>(secretStorage);
 
-        // Only iOS has a platform-specific secret store and file protection. Mac Catalyst runs
-        // on macOS, which has no NSFileProtection, and the iOS types are themselves #if IOS.
 #if IOS
         builder.Services.AddSingleton<ICertificateEnvelopeKeyStore, IosCertificateEnvelopeKeyStore>();
         builder.Services.AddSingleton<IFileProtector>(new IosFileProtector());
@@ -110,10 +108,6 @@ public static class MauiProgram
         builder.Services.AddSingleton<IFileProtector, DefaultFileProtector>();
 #endif
 
-        // Separate question from the above: Apple's crypto stack cannot load a PKCS#12 with
-        // X509KeyStorageFlags.Exportable -- both the ephemeral and the default key set throw
-        // PlatformNotSupportedException -- so both Apple heads need the wrapper, which skips
-        // the canonical re-export and stores the original bytes and password instead.
 #if IOS || MACCATALYST
         builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
         {
@@ -141,8 +135,6 @@ public static class MauiProgram
 
         var configDir = Path.Combine(FileSystem.Current.AppDataDirectory, "config");
 #if WINDOWS
-        // v1.0.1 and earlier shipped with the MAUI template's placeholder publisher
-        // ("User Name"), so existing users' config lives under that directory.
         var legacyConfigDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "User Name", "com.bluegrassiot.mqttprobe", "Data", "config");
@@ -158,9 +150,22 @@ public static class MauiProgram
         builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
         builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
         builder.Services.AddScoped<IChartDataService, ChartDataService>();
-        builder.Services.AddSingleton<ISparkplugTopologyService, SparkplugTopologyService>();
-        builder.Services.AddSingleton<IPayloadDecoder, PayloadDecoder>();
         builder.Services.AddScoped<IThemes, Themes>();
+
+        builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));
+        builder.Services.AddSingleton<PluginRegistry>(sp =>
+        {
+            var config = sp.GetRequiredService<IOptions<PluginConfig>>().Value;
+            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            return MqttProbePluginStartup.BuildPluginRegistry(config, loggerFactory);
+        });
+        builder.Services.AddSingleton<PayloadPipeline>();
+
+        builder.Services.AddSingleton<ISparkplugTopologyService>(sp =>
+            new SparkplugTopologyService(
+                sp.GetRequiredService<IManagedMqttClient>(),
+                sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
+                autoSubscribeToClient: false));
 
         return builder.Build();
     }

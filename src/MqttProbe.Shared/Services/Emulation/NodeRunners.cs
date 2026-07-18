@@ -6,6 +6,8 @@ using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Metrics;
+using MqttProbe.Services.Plugins.Contracts;
+using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using SparkplugNet.Core.Enumerations;
@@ -84,7 +86,6 @@ public class SparkplugNodeRunner(
 
         try
         {
-            // Load certificate into a LOCAL resource first (not a field yet)
             if (connection.UseTls && connection.ClientCertificateAssetId is not null)
             {
                 localCertResource = new CertificateSessionResource();
@@ -104,7 +105,6 @@ public class SparkplugNodeRunner(
             };
             BuildAliasMaps(nodeMetrics);
 
-            // Rebuild with birth-mode aliases before passing to factory.
             var birthMetrics = nodeMetrics;
             if (_nodeAliases is not null)
             {
@@ -130,11 +130,9 @@ public class SparkplugNodeRunner(
             await localNode.Start(BuildNodeOptions(
                 connection, config, localCertResource, config.NodeId + _sessionSuffix));
 
-            // Publish device births BEFORE promoting locals to fields.
             foreach (var device in config.Devices)
                 await localNode.PublishDeviceBirthMessage(device.DeviceId, SampleDeviceMetrics(device, 0, isBirth: true));
 
-            // All success — promote locals to fields atomically
             _certResource = localCertResource;
             _node = localNode;
             Status = NodeRuntimeStatus.Connected;
@@ -145,7 +143,6 @@ public class SparkplugNodeRunner(
             logger.LogError(ex, "Emulator node {NodeId} failed to connect to {Host}:{Port}",
                 config.NodeId, connection.Host, connection.Port);
 
-            // Dispose node (best-effort)
             if (localNode is not null)
             {
                 try { (localNode as IDisposable)?.Dispose(); }
@@ -153,7 +150,6 @@ public class SparkplugNodeRunner(
                 {
                     _faulted = true;
 
-                    // node.Dispose failed — quarantine cert resource instead of disposing
                     if (localCertResource is not null)
                     {
                         quarantine.Quarantine(localCertResource,
@@ -163,7 +159,6 @@ public class SparkplugNodeRunner(
                 }
             }
 
-            // Dispose cert resource only if node.Dispose succeeded (or node was never created)
             localCertResource?.Dispose();
 
             throw;
@@ -212,14 +207,12 @@ public class SparkplugNodeRunner(
             Status = NodeRuntimeStatus.Error;
             logger.LogWarning(ex, "Emulator node {NodeId} failed to stop cleanly", config.NodeId);
 
-            // StopAsync failed — quarantine cert resource (do NOT dispose)
             if (_certResource is not null)
             {
                 quarantine.Quarantine(_certResource, $"StopAsync failed: {ex.Message}");
                 _certResource = null;
             }
 
-            // Best-effort death message and dispose
             try { await _node!.PublishNodeDeathMessage(); } catch { }
             try { (_node as IDisposable)?.Dispose(); } catch { }
             _node = null;
@@ -271,7 +264,7 @@ public class SparkplugNodeRunner(
         {
             m.Alias = alias;
             if (!isBirth)
-                m.Name = null!; // Data mode: alias-only (CS8625: SparkplugNet Name is non-nullable but null serializes as field omission)
+                m.Name = null!;
         }
 
         return m;
@@ -286,7 +279,6 @@ public class SparkplugNodeRunner(
             return;
         }
 
-        // Node-scoped aliases: health metrics + Node Control/Rebirth
         _nodeAliases = new Dictionary<string, ulong>();
         ulong alias = 1;
         foreach (var metric in nodeMetrics)
@@ -294,7 +286,6 @@ public class SparkplugNodeRunner(
             _nodeAliases[metric.Name!] = alias++;
         }
 
-        // Device-scoped aliases: per device, starting at 1
         _deviceAliases = new Dictionary<string, Dictionary<string, ulong>>();
         foreach (var device in config.Devices)
         {
@@ -350,12 +341,10 @@ public class SparkplugNodeRunner(
                     $"Missing alias for node metric '{source.Name}'. " +
                     "Alias map may be out of sync with config.");
 
-            // Rebuild from scratch — SparkplugNet Metric has no copy constructor.
-            // Use the same (name, DataType, value) constructor as ToSparkplugMetric.
             var m = new Metric(source.Name, source.DataType, source.Value);
             m.Alias = alias;
             if (!isBirth)
-                m.Name = null!; // Data mode: alias-only (CS8625: SparkplugNet Name is non-nullable but null serializes as field omission)
+                m.Name = null!;
             result.Add(m);
         }
 
@@ -372,10 +361,6 @@ public class SparkplugNodeRunner(
         if (connection.Protocol == Protocol.WebSocket)
         {
             var scheme = connection.UseTls ? "wss" : "ws";
-            // SparkplugNet 1.3.10 connects WebSocket nodes with WithUri(BrokerAddress) and ignores
-            // MqttClientWebSocketOptions.Uri, so the full ws(s) URI must travel through BrokerAddress.
-            // The options object is still passed (non-null) purely to select the library's WebSocket
-            // branch over TCP.
             var wsPath = (connection.WebsocketBasePath ?? string.Empty).Trim().TrimStart('/');
             brokerAddress = string.IsNullOrEmpty(wsPath)
                 ? $"{scheme}://{connection.Host}:{connection.Port}/"
@@ -401,9 +386,6 @@ public class SparkplugNodeRunner(
         mqttClientId ??= config.NodeId + "-" + Guid.NewGuid().ToString("N")[..6];
         var reconnectSeconds = connection.ReconnectDelay > 0 ? connection.ReconnectDelay : 5;
 
-        // SparkplugNet reuses CancellationToken for connect, publish, and reconnect for the
-        // whole node lifetime. Do not CancelAfter(ConnectTimeout); that would kill a healthy node.
-        // Keep-alive is also not exposed by SparkplugNodeOptions (library builds MQTTnet options internally).
         return new SparkplugNodeOptions(
             brokerAddress,
             connection.Port,
@@ -421,7 +403,7 @@ public class SparkplugNodeRunner(
     }
 }
 
-public class GenericNodeRunner(EmulatorNodeConfig config, IManagedMqttClient managedMqttClient) : INodeRunner
+public class GenericNodeRunner(EmulatorNodeConfig config, IManagedMqttClient managedMqttClient, PayloadPipeline pipeline, ILogger logger) : INodeRunner
 {
     private readonly Dictionary<Guid, WaveformState> _states = [];
 
@@ -431,37 +413,70 @@ public class GenericNodeRunner(EmulatorNodeConfig config, IManagedMqttClient man
 
     public Task StartAsync()
     {
-        // Generic nodes publish through the session's shared client, so there is no connection to open.
         Status = NodeRuntimeStatus.Connected;
         return Task.CompletedTask;
     }
 
     public async Task PublishTickAsync(double tSeconds, IReadOnlyList<Metric> nodeHealthMetrics)
     {
-        foreach (var device in config.Devices.Where(d => d.Metrics.Count > 0))
+        try
         {
-            if (config.PayloadFormat == GenericPayloadFormat.Json)
+            foreach (var device in config.Devices.Where(d => d.Metrics.Count > 0))
             {
-                var values = device.Metrics
-                    .Select(m => (Metric: m, Value: WaveformSampler.Next(m, State(m), tSeconds)))
-                    .ToList();
-                await EnqueueAsync(
-                    TopicTemplateRenderer.RenderDeviceTopic(config, device.DeviceId),
-                    GenericPayloadFormatter.FormatDeviceJson(DateTime.UtcNow, values));
-            }
-            else
-            {
-                foreach (var metric in device.Metrics)
+                if (config.PayloadFormatId == "json")
                 {
-                    var value = WaveformSampler.Next(metric, State(metric), tSeconds);
-                    var payload = config.PayloadFormat == GenericPayloadFormat.Hex
-                        ? GenericPayloadFormatter.FormatHex(metric, value)
-                        : GenericPayloadFormatter.FormatPlainText(metric, value);
-                    await EnqueueAsync(
-                        TopicTemplateRenderer.RenderMetricTopic(config, device.DeviceId, metric.Name),
-                        payload);
+                    var metrics = new Dictionary<string, object>(device.Metrics.Count);
+                    foreach (var m in device.Metrics)
+                    {
+                        var value = WaveformSampler.Next(m, State(m), tSeconds);
+                        metrics[m.Name] = m.ValueType switch
+                        {
+                            MetricValueType.Boolean => value >= 0.5,
+                            MetricValueType.Int64 => (long)Math.Round(value),
+                            _ => value
+                        };
+                    }
+
+                    var request = new PayloadEncoderRequest
+                    {
+                        Topic = TopicTemplateRenderer.RenderDeviceTopic(config, device.DeviceId),
+                        FormatId = config.PayloadFormatId,
+                        Metrics = metrics,
+                        TimestampUtc = DateTime.UtcNow
+                    };
+                    var bytes = pipeline.EncodeOutbound(request);
+                    await EnqueueAsync(request.Topic, bytes);
+                }
+                else
+                {
+                    foreach (var metric in device.Metrics)
+                    {
+                        var value = WaveformSampler.Next(metric, State(metric), tSeconds);
+                        var objectValue = (object)(metric.ValueType switch
+                        {
+                            MetricValueType.Boolean => value >= 0.5,
+                            MetricValueType.Int64 => (long)Math.Round(value),
+                            _ => value
+                        });
+
+                        var request = new PayloadEncoderRequest
+                        {
+                            Topic = TopicTemplateRenderer.RenderMetricTopic(config, device.DeviceId, metric.Name),
+                            FormatId = config.PayloadFormatId,
+                            Metrics = new Dictionary<string, object> { [metric.Name] = objectValue },
+                            TimestampUtc = DateTime.UtcNow
+                        };
+                        var bytes = pipeline.EncodeOutbound(request);
+                        await EnqueueAsync(request.Topic, bytes);
+                    }
                 }
             }
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex,
+                "No encoder found for format '{FormatId}' on node '{NodeId}'; skipping publish for this tick",
+                config.PayloadFormatId, config.NodeId);
         }
     }
 
@@ -482,8 +497,7 @@ public class GenericNodeRunner(EmulatorNodeConfig config, IManagedMqttClient man
         return state;
     }
 
-    private Task EnqueueAsync(string topic, string payload) =>
-        // QoS 0 and no retain are the MqttApplicationMessageBuilder defaults.
+    private Task EnqueueAsync(string topic, byte[] payload) =>
         managedMqttClient.EnqueueAsync(new MqttApplicationMessageBuilder()
             .WithTopic(topic)
             .WithPayload(payload)

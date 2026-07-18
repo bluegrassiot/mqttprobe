@@ -14,6 +14,7 @@ using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
+using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Shared.Tests.Services.Mqtt;
 
@@ -32,7 +33,8 @@ public class MessageStoreManagerMessageHandlerTests
         _mockLogger = Substitute.For<ILogger<MessageStoreManager>>();
         var mockSettings = Substitute.For<ISettingsStore>();
         mockSettings.Config.Returns(new AppConfiguration());
-        _manager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, Substitute.For<IUxMetricsService>(), CreateMockDecoder());
+        _manager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings,
+            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
 
         _capturedHandler = null;
         _mockClient.When(x =>
@@ -63,20 +65,6 @@ public class MessageStoreManagerMessageHandlerTests
 
     private Task Fire(string topic, string payload = "") =>
         _capturedHandler!(MakeArgs(topic, payload));
-
-    private static IPayloadDecoder CreateMockDecoder()
-    {
-        var decoder = Substitute.For<IPayloadDecoder>();
-        decoder.Decode(Arg.Any<MqttApplicationMessageReceivedEventArgs>())
-            .Returns(x =>
-            {
-                var e = (MqttApplicationMessageReceivedEventArgs)x[0]!;
-                var seg = e.ApplicationMessage.PayloadSegment;
-                var payload = seg.Count > 0 ? System.Text.Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count) : string.Empty;
-                return new DecodedPayload(payload, DetectedPayloadFormat.PlainText);
-            });
-        return decoder;
-    }
 
     [Test]
     public async Task MessageReceived_PlainText_StoresInCorrectTopicNode()
@@ -110,8 +98,6 @@ public class MessageStoreManagerMessageHandlerTests
     [Test]
     public async Task MessageReceived_SingleTopic_CapsAtGlobalMaxStoredMessages()
     {
-        // With a single active topic, that topic may hold the entire global budget.
-        // Default MaxStoredMessages is 10_000.
         for (var i = 0; i < 10_010; i++)
             await Fire("capped", $"msg-{i}");
 
@@ -191,8 +177,6 @@ public class MessageStoreManagerMessageHandlerTests
     [Test]
     public async Task MessageReceived_SparkplugTopic_WithEmptyPayload_DoesNotThrow()
     {
-        // An empty payload causes protobuf→JSON serialisation to fail.
-        // The MessageHandler catch block should absorb the exception.
         var act = async () => await Fire("spBv1.0/group/NBIRTH/eon1", "");
         await act.Should().NotThrowAsync();
     }
@@ -207,7 +191,7 @@ public class MessageStoreManagerMessageHandlerTests
         var msgs = _manager.MessageStores["spBv1.0"].SubTopics!["group"]
             .SubTopics!["DDATA"].SubTopics!["eon1"].Messages;
         msgs.Should().NotBeNull();
-        msgs!.Should().Contain(m => m.Payload == json);
+        msgs!.Should().Contain(m => m.Payload != null && m.Payload.Contains("Sparkplug protobuf parse failed"));
     }
 
     [Test]
@@ -241,7 +225,7 @@ public class MessageStoreManagerMessageHandlerTests
     [Test]
     public async Task Start_CalledTwice_SubscribesOnce()
     {
-        await _manager.Start(); // second call — already listening from [SetUp]
+        await _manager.Start();
         _mockClient.Received(1).ApplicationMessageReceivedAsync +=
             Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>();
     }
@@ -262,10 +246,10 @@ public class MessageStoreManagerMessageHandlerTests
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings, Substitute.For<IUxMetricsService>(), CreateMockDecoder());
+        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings,
+            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
         await manager.Start();
 
-        // Fire 3 messages immediately — only the first should be permitted in the 1-second window.
         await handler!(MakeArgs("rl", "first"));
         await handler!(MakeArgs("rl", "second"));
         await handler!(MakeArgs("rl", "third"));
@@ -284,7 +268,8 @@ public class MessageStoreManagerMessageHandlerTests
         mockSettings.Config.Returns(config);
 
         using var manager = new MessageStoreManager(Substitute.For<IManagedMqttClient>(),
-            Substitute.For<ILogger<MessageStoreManager>>(), mockSettings, Substitute.For<IUxMetricsService>(), CreateMockDecoder());
+            Substitute.For<ILogger<MessageStoreManager>>(), mockSettings,
+            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
 
         config.Performance.MaxStoredMessages = 25;
 
@@ -304,7 +289,7 @@ public class MessageStoreManagerMessageHandlerTests
         settings.Config.Returns(config);
 
         var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
-            settings, Substitute.For<IUxMetricsService>(), CreateMockDecoder());
+            settings, Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
         manager.Start().GetAwaiter().GetResult();
         return (manager, handler!, settings);
     }
@@ -332,7 +317,6 @@ public class MessageStoreManagerMessageHandlerTests
         using var manager = built.Manager;
         var fire = built.Fire;
 
-        // 12 messages across 12 distinct topics; global cap is 5.
         for (var i = 0; i < 12; i++)
             await fire(MakeArgs($"topic-{i}", $"msg-{i}"));
 
@@ -352,8 +336,6 @@ public class MessageStoreManagerMessageHandlerTests
         using var manager = built.Manager;
         var fire = built.Fire;
 
-        // Arrival order: a:0, b:1, a:2, c:3  -> retentionOrder [a,b,a,c], cap 3.
-        // Oldest overall (a's "0") is evicted; a keeps "2".
         await fire(MakeArgs("a", "0"));
         await fire(MakeArgs("b", "1"));
         await fire(MakeArgs("a", "2"));
@@ -379,7 +361,6 @@ public class MessageStoreManagerMessageHandlerTests
         for (var i = 0; i < 10; i++)
             await fire(MakeArgs("hot", $"msg-{i}"));
 
-        // Per-topic cap is gone: one busy topic may use the whole global budget.
         manager.TotalStoredMessages.Should().Be(4);
         manager.MessageStores["hot"].Messages!.Count.Should().Be(4);
         manager.MessageStores["hot"].Messages!.Select(m => m.Payload)
@@ -424,7 +405,6 @@ public class MessageStoreManagerMessageHandlerTests
         manager.TotalStoredMessages.Should().Be(0);
         manager.MessageStores.Should().BeEmpty();
 
-        // Counter was reset, so a subsequent message is retained (not instantly evicted).
         await fire(MakeArgs("after-clear", "y"));
         manager.TotalStoredMessages.Should().Be(1);
         CountStored(manager.MessageStores.Values).Should().Be(1);
@@ -470,7 +450,8 @@ public class MessageStoreManagerMessageHandlerTests
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings, Substitute.For<IUxMetricsService>(), CreateMockDecoder());
+        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings,
+            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
         await manager.Start();
 
         await handler!(MakeArgs("before", "x"));

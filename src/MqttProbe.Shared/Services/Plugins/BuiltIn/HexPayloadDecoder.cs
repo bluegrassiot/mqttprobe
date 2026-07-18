@@ -14,10 +14,29 @@ public sealed class HexPayloadDecoder : IPayloadDecoder
         var segment = e.ApplicationMessage.PayloadSegment;
         var raw = segment.Array is null ? [] : segment.ToArray();
 
-        return DecodedPayloadEnvelope.CreateSuccess(
-            FormatId,
-            topic,
-            raw,
-            Encoding.UTF8.GetString(raw));
+        if (raw.Length == 0)
+        {
+            return DecodedPayloadEnvelope.CreateSuccess(
+                FormatId, topic, raw, string.Empty);
+        }
+
+        try
+        {
+            var hexText = Encoding.UTF8.GetString(raw);
+            var decodedBytes = Convert.FromHexString(hexText);
+
+            var displayText = BinaryPayloadDecoder.IsValidUtf8(decodedBytes)
+                ? Encoding.UTF8.GetString(decodedBytes)
+                : BinaryPayloadDecoder.HexDump(decodedBytes);
+
+            return DecodedPayloadEnvelope.CreateSuccess(
+                FormatId, topic, raw, displayText);
+        }
+        catch (FormatException ex)
+        {
+            return DecodedPayloadEnvelope.CreateFailure(
+                FormatId, topic, raw,
+                $"Invalid hex: {ex.Message}");
+        }
     }
 }

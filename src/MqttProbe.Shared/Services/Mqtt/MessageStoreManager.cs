@@ -436,7 +436,8 @@ public class MessageStoreManager : IMessageStoreManager
             message = new MqttMessage(payloadText, topic,
                 arg.ApplicationMessage.Retain, arg.ApplicationMessage.QualityOfServiceLevel)
             {
-                AliasNames = aliasNames
+                AliasNames = aliasNames,
+                FormatId = formatId
             };
 
             AddMessage(topic, message);

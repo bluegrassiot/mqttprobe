@@ -25,4 +25,19 @@ public sealed class BinaryPayloadDecoder : IPayloadDecoder
             sb.Append(b.ToString("x2"));
         return sb.ToString();
     }
+
+    internal static bool IsValidUtf8(byte[] bytes)
+    {
+        var decoder = Encoding.UTF8.GetDecoder();
+        decoder.Fallback = DecoderFallback.ExceptionFallback;
+        try
+        {
+            decoder.GetCharCount(bytes, true);
+            return true;
+        }
+        catch (DecoderFallbackException)
+        {
+            return false;
+        }
+    }
 }

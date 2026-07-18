@@ -21,6 +21,7 @@ public sealed class PluginLoader
     {
         var plugins = new List<IMqttProbePlugin>();
         var diagnostics = new List<PluginDiagnosticEntry>();
+        var loadedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var folder in _config.PluginFolders)
         {
@@ -36,9 +37,26 @@ public sealed class PluginLoader
                 continue;
             }
 
-            var dlls = Directory.GetFiles(folder, "*.dll");
+            var dlls = new List<string>();
 
-            if (dlls.Length == 0)
+            dlls.AddRange(Directory.GetFiles(folder, "*.dll"));
+
+            foreach (var sub in Directory.GetDirectories(folder))
+            {
+                var subName = Path.GetFileName(sub);
+                var preferred = Path.Combine(sub, subName + ".dll");
+                if (File.Exists(preferred))
+                {
+                    dlls.Add(preferred);
+                }
+                else
+                {
+                    dlls.AddRange(Directory.GetFiles(sub, "*.dll")
+                        .Where(f => !f.EndsWith(".resources.dll", StringComparison.OrdinalIgnoreCase)));
+                }
+            }
+
+            if (dlls.Count == 0)
             {
                 diagnostics.Add(new PluginDiagnosticEntry
                 {
@@ -51,6 +69,9 @@ public sealed class PluginLoader
 
             foreach (var dll in dlls)
             {
+                if (!loadedPaths.Add(dll))
+                    continue;
+
                 LoadAssemblyPlugins(dll, plugins, diagnostics);
             }
         }

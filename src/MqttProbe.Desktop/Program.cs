@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -118,6 +119,12 @@ internal static class Program
         builder.Services.AddSingleton<IFileProtector, DefaultFileProtector>();
 
         var configPath = Path.Combine(configDir, "appsettings.json");
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(configDir)
+            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+            .Build();
+        builder.Services.AddSingleton<IConfiguration>(configuration);
+
         builder.Services.AddSingleton<ISettingsStore>(sp =>
             new SettingsStore(configPath, isMobile: false,
                 logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
@@ -142,7 +149,14 @@ internal static class Program
         builder.Services.AddScoped<IChartDataService, ChartDataService>();
         builder.Services.AddScoped<IThemes, Themes>();
 
-        builder.Services.Configure<PluginConfig>(options => { });
+        builder.Services.Configure<PluginConfig>(configuration.GetSection("Plugins"));
+        builder.Services.PostConfigure<PluginConfig>(cfg =>
+        {
+            var userPlugins = Path.Combine(configDir, "plugins");
+            Directory.CreateDirectory(userPlugins);
+            var appPlugins = Path.Combine(AppContext.BaseDirectory, "Plugins");
+            PluginFolderDefaults.Apply(cfg, configDir, userPlugins, appPlugins);
+        });
         builder.Services.AddSingleton<PluginRegistry>(sp =>
         {
             var config = sp.GetRequiredService<IOptions<PluginConfig>>().Value;

@@ -172,7 +172,8 @@ public class ReadPathIntegrationTests
 
         result.Envelope.IsFailure.Should().BeFalse();
         result.Envelope.FormatId.Should().Be("base64");
-        result.Envelope.DisplayText.Should().Be(b64);
+        // dGVzdA== decodes to "test"
+        result.Envelope.DisplayText.Should().Be("test");
         result.TopologyEvents.Should().BeEmpty();
     }
 

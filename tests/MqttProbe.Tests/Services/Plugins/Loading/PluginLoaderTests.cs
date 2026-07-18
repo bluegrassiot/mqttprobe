@@ -111,20 +111,34 @@ public class PluginLoaderTests
     [Test]
     public void LoadPlugins_AssemblyWithNoPluginImplementation_SkippedWithInfoDiagnostic()
     {
-        var config = new PluginConfig
+        var tempDir = Path.Combine(Path.GetTempPath(), $"no-plugin-{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+
+        try
         {
-            PluginFolders = [TestOutputDir]
-        };
-        var loader = new PluginLoader(config, NullLogger);
+            // Copy a DLL that has no IMqttProbePlugin implementations.
+            var srcDll = typeof(PluginLoaderTests).Assembly.Location;
+            File.Copy(srcDll, Path.Combine(tempDir, Path.GetFileName(srcDll)));
 
-        var result = loader.LoadPlugins();
+            var config = new PluginConfig
+            {
+                PluginFolders = [tempDir]
+            };
+            var loader = new PluginLoader(config, NullLogger);
 
-        result.Diagnostics.Should().Contain(d =>
-            d.Source == "loader" &&
-            d.Severity == DiagnosticSeverity.Info &&
-            d.Message.Contains("No IMqttProbePlugin"));
+            var result = loader.LoadPlugins();
 
-        result.Plugins.Should().BeEmpty();
+            result.Diagnostics.Should().Contain(d =>
+                d.Source == "loader" &&
+                d.Severity == DiagnosticSeverity.Info &&
+                d.Message.Contains("No IMqttProbePlugin"));
+
+            result.Plugins.Should().BeEmpty();
+        }
+        finally
+        {
+            TryDeleteDirectory(tempDir);
+        }
     }
 
     [Test]
@@ -236,5 +250,92 @@ public class PluginLoaderTests
         PluginLoadContext.IsSharedAssembly("SomeThirdPartyLib").Should().BeFalse();
         PluginLoadContext.IsSharedAssembly(null).Should().BeFalse();
         PluginLoadContext.IsSharedAssembly(string.Empty).Should().BeFalse();
+    }
+
+    // ── Subdirectory scanning ─────────────────────────────────────────────────
+
+    [Test]
+    public void LoadPlugins_SubdirectoryLayout_LoadsPluginFromNestedDll()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"plugin-subdir-{Guid.NewGuid()}");
+        var subDir = Path.Combine(root, "MyPlugin");
+        Directory.CreateDirectory(subDir);
+
+        try
+        {
+            var srcDll = Path.Combine(FixtureAssemblyDir, "MqttProbe.PluginLoader.Fixtures.dll");
+            var destDll = Path.Combine(subDir, "MyPlugin.dll");
+            File.Copy(srcDll, destDll);
+
+            var config = new PluginConfig { PluginFolders = [root] };
+            var loader = new PluginLoader(config, NullLogger);
+
+            var result = loader.LoadPlugins();
+
+            result.Plugins.Should().Contain(p => p.PluginId == "fixture-valid");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Test]
+    public void LoadPlugins_SubdirectoryWithoutMatchingName_FallsBackToAllDlls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"plugin-subdir2-{Guid.NewGuid()}");
+        var subDir = Path.Combine(root, "SomeFolder");
+        Directory.CreateDirectory(subDir);
+
+        try
+        {
+            var srcDll = Path.Combine(FixtureAssemblyDir, "MqttProbe.PluginLoader.Fixtures.dll");
+            var destDll = Path.Combine(subDir, "MqttProbe.PluginLoader.Fixtures.dll");
+            File.Copy(srcDll, destDll);
+
+            var config = new PluginConfig { PluginFolders = [root] };
+            var loader = new PluginLoader(config, NullLogger);
+
+            var result = loader.LoadPlugins();
+
+            result.Plugins.Should().Contain(p => p.PluginId == "fixture-valid");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Test]
+    public void LoadPlugins_Subdirectory_SkipsResourceDlls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"plugin-subdir3-{Guid.NewGuid()}");
+        var subDir = Path.Combine(root, "MyPlugin");
+        Directory.CreateDirectory(subDir);
+
+        try
+        {
+            var srcDll = Path.Combine(FixtureAssemblyDir, "MqttProbe.PluginLoader.Fixtures.dll");
+            File.Copy(srcDll, Path.Combine(subDir, "MyPlugin.dll"));
+            File.WriteAllText(Path.Combine(subDir, "MyPlugin.resources.dll"), "fake");
+
+            var config = new PluginConfig { PluginFolders = [root] };
+            var loader = new PluginLoader(config, NullLogger);
+
+            var result = loader.LoadPlugins();
+
+            result.Plugins.Should().Contain(p => p.PluginId == "fixture-valid");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try { Directory.Delete(path, recursive: true); }
+        catch (UnauthorizedAccessException) { }
+        catch (IOException) { }
     }
 }

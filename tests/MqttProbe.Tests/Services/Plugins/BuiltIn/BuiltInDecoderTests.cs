@@ -161,27 +161,70 @@ public class BuiltInDecoderTests
     // --- Hex decoder ---
 
     [Test]
-    public void HexDecoder_HexPayload_ReturnsHexString()
+    public void HexDecoder_HexPayload_ReturnsDecodedText()
     {
         var decoder = new HexPayloadDecoder();
         const string hex = "4a6f686e";
         var result = decoder.Decode(MakeArgs("sensor/data", hex));
         result.IsFailure.Should().BeFalse();
-        result.DisplayText.Should().Be(hex);
+        result.DisplayText.Should().Be("John");
         result.FormatId.Should().Be("hex");
+    }
+
+    [Test]
+    public void HexDecoder_HexPayload_JsonDecodedText()
+    {
+        var decoder = new HexPayloadDecoder();
+        // {"temp":22.5} → 7B2274656D70223A32322E357D
+        const string hex = "7b2274656d70223a32322e357d";
+        var result = decoder.Decode(MakeArgs("sensor/data", hex));
+        result.IsFailure.Should().BeFalse();
+        result.DisplayText.Should().Be("""{"temp":22.5}""");
+        result.FormatId.Should().Be("hex");
+    }
+
+    [Test]
+    public void HexDecoder_InvalidHex_ReturnsFailure()
+    {
+        var decoder = new HexPayloadDecoder();
+        var result = decoder.Decode(MakeArgs("sensor/data", "xyz!"));
+        result.IsFailure.Should().BeTrue();
+        result.FailureReason.Should().NotBeNullOrEmpty();
+        result.DisplayText.Should().Contain("Decode failed");
     }
 
     // --- Base64 decoder ---
 
     [Test]
-    public void Base64Decoder_Payload_ReturnsBase64String()
+    public void Base64Decoder_Payload_ReturnsDecodedText()
     {
         var decoder = new Base64PayloadDecoder();
         const string b64 = "SGVsbG8gV29ybGQ=";
         var result = decoder.Decode(MakeArgs("sensor/data", b64));
         result.IsFailure.Should().BeFalse();
-        result.DisplayText.Should().Be(b64);
+        result.DisplayText.Should().Be("Hello World");
         result.FormatId.Should().Be("base64");
+    }
+
+    [Test]
+    public void Base64Decoder_JsonPayload_ReturnsDecodedJson()
+    {
+        var decoder = new Base64PayloadDecoder();
+        const string b64 = "eyJ0ZW1wZXJhdHVyZSI6MjIuNSwicHJlc3N1cmUiOjEwMTMuMjUsImZsb3dSYXRlIjoxMi44LCJzdGF0dXMiOiJhY3RpdmUifQ==";
+        var result = decoder.Decode(MakeArgs("sensor/data", b64));
+        result.IsFailure.Should().BeFalse();
+        result.DisplayText.Should().Be("""{"temperature":22.5,"pressure":1013.25,"flowRate":12.8,"status":"active"}""");
+        result.FormatId.Should().Be("base64");
+    }
+
+    [Test]
+    public void Base64Decoder_InvalidBase64_ReturnsFailure()
+    {
+        var decoder = new Base64PayloadDecoder();
+        var result = decoder.Decode(MakeArgs("sensor/data", "not!valid@base64"));
+        result.IsFailure.Should().BeTrue();
+        result.FailureReason.Should().NotBeNullOrEmpty();
+        result.DisplayText.Should().Contain("Decode failed");
     }
 
     // --- Binary decoder ---
@@ -399,7 +442,7 @@ public class BuiltInDecoderTests
         var decoder = new Base64PayloadDecoder();
         const string b64 = "SGVsbG8gV29ybGQ=";
         decoder.Decode(MakeArgs("sensor/data", b64)).DisplayText
-            .Should().Be(b64);
+            .Should().Be("Hello World");
     }
 
     [Test]
@@ -408,7 +451,7 @@ public class BuiltInDecoderTests
         var decoder = new HexPayloadDecoder();
         const string hex = "4a6f686e";
         decoder.Decode(MakeArgs("sensor/data", hex)).DisplayText
-            .Should().Be(hex);
+            .Should().Be("John");
     }
 
     [Test]

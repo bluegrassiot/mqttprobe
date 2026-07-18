@@ -156,6 +156,11 @@ builder.Services.AddScoped<IChartDataService, ChartDataService>();
 builder.Services.AddScoped<IThemes, Themes>();
 
 builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));
+builder.Services.PostConfigure<PluginConfig>(cfg =>
+{
+    var contentPlugins = Path.Combine(builder.Environment.ContentRootPath, "Plugins");
+    PluginFolderDefaults.Apply(cfg, builder.Environment.ContentRootPath, contentPlugins);
+});
 builder.Services.AddSingleton<PluginRegistry>(sp =>
 {
     var config = sp.GetRequiredService<IOptions<PluginConfig>>().Value;

@@ -69,12 +69,12 @@ public class MessageStoreManagerMessageHandlerTests
     [Test]
     public async Task MessageReceived_PlainText_StoresInCorrectTopicNode()
     {
-        await Fire("sensors", "42");
+        await Fire("sensors", "42 degrees");
 
         _manager.MessageStores.Should().ContainKey("sensors");
         var msgs = _manager.MessageStores["sensors"].Messages;
         msgs.Should().NotBeNull();
-        msgs!.Should().Contain(m => m.Payload == "42");
+        msgs!.Should().Contain(m => m.Payload == "42 degrees");
     }
 
     [Test]
@@ -151,14 +151,14 @@ public class MessageStoreManagerMessageHandlerTests
     [Test]
     public async Task MessageReceived_NestedTopic_BuildsCorrectTree()
     {
-        await Fire("a/b/c", "deep");
+        await Fire("a/b/c", "deep value");
 
         _manager.MessageStores.Should().ContainKey("a");
         var a = _manager.MessageStores["a"];
         a.SubTopics.Should().ContainKey("b");
         a.SubTopics!["b"].SubTopics.Should().ContainKey("c");
         a.SubTopics["b"].SubTopics!["c"].Messages!
-            .Should().Contain(m => m.Payload == "deep");
+            .Should().Contain(m => m.Payload == "deep value");
     }
 
     [Test]
@@ -431,6 +431,33 @@ public class MessageStoreManagerMessageHandlerTests
 
         manager.TotalStoredMessages.Should().Be(3);
         CountStored(manager.MessageStores.Values).Should().Be(3);
+    }
+
+    [Test]
+    public async Task MessageReceived_ValidJson_SetsFormatIdToJson()
+    {
+        await Fire("fmt/test", """{"temp":21.5}""");
+
+        _manager.MessageStores["fmt"].SubTopics!["test"].Messages!
+            .Should().ContainSingle(m => m.FormatId == "json");
+    }
+
+    [Test]
+    public async Task MessageReceived_EmptyPayload_SetsFormatIdToEmpty()
+    {
+        await Fire("fmt/empty", "");
+
+        _manager.MessageStores["fmt"].SubTopics!["empty"].Messages!
+            .Should().ContainSingle(m => m.FormatId == "empty");
+    }
+
+    [Test]
+    public async Task MessageReceived_PlainText_SetsFormatIdToPlaintext()
+    {
+        await Fire("fmt/plain", "hello world");
+
+        _manager.MessageStores["fmt"].SubTopics!["plain"].Messages!
+            .Should().ContainSingle(m => m.FormatId == "plaintext");
     }
 
     [Test]

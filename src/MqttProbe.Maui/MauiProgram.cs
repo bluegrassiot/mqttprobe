@@ -153,6 +153,18 @@ public static class MauiProgram
         builder.Services.AddScoped<IThemes, Themes>();
 
         builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));
+        builder.Services.PostConfigure<PluginConfig>(cfg =>
+        {
+#if WINDOWS || MACCATALYST
+            var userPlugins = Path.Combine(FileSystem.Current.AppDataDirectory, "plugins");
+            Directory.CreateDirectory(userPlugins);
+            var appPlugins = Path.Combine(AppContext.BaseDirectory, "Plugins");
+            PluginFolderDefaults.Apply(cfg, FileSystem.Current.AppDataDirectory, userPlugins, appPlugins);
+#else
+            if (cfg.PluginFolders.Count > 0)
+                PluginFolderDefaults.Apply(cfg, AppContext.BaseDirectory);
+#endif
+        });
         builder.Services.AddSingleton<PluginRegistry>(sp =>
         {
             var config = sp.GetRequiredService<IOptions<PluginConfig>>().Value;

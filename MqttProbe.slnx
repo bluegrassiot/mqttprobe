@@ -59,8 +59,8 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MqttProbe.IntegrationTests/MqttProbe.IntegrationTests.csproj" />
+    <Project Path="tests/MqttProbe.PluginLoader.Fixtures/MqttProbe.PluginLoader.Fixtures.csproj" />
     <Project Path="tests/MqttProbe.TestInfrastructure/MqttProbe.TestInfrastructure.csproj" />
     <Project Path="tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj" />
-    <Project Path="tests/MqttProbe.PluginLoader.Fixtures/MqttProbe.PluginLoader.Fixtures.csproj" />
   </Folder>
 </Solution>

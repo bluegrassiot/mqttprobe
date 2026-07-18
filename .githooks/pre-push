@@ -1,59 +1,106 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-RESET='\033[0m'
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "$HOOK_DIR/lib.sh"
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(hook_root)"
+cd "$ROOT"
 
-pass() { printf "${GREEN}  PASS${RESET}  %s\n" "$1"; }
-fail() { printf "${RED}  FAIL${RESET}  %s\n" "$1"; }
-step() { printf "\n${CYAN}==> %s${RESET}\n" "$1"; }
-
-step "Build"
-if ! dotnet build "$ROOT/MqttProbe.slnx" --warnaserror -nologo -clp:NoSummary 2>&1; then
-    fail "Build failed — fix errors and warnings before pushing."
-    exit 1
+if env_truthy "${SKIP_PRE_PUSH:-}"; then
+    step "pre-push"
+    skip_msg "SKIP_PRE_PUSH set"
+    print_total
+    exit 0
 fi
-pass "Build"
 
-step "Tests (unit)"
-if ! dotnet test "$ROOT/tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj" \
-        --no-build -nologo 2>&1; then
-    fail "Unit tests failed — all tests must pass before pushing."
-    exit 1
-fi
-pass "Tests (unit)"
+step "Classify changes"
 
-step "Format"
-FORMAT_FAILED=0
-PROJECTS=(
-    "src/MqttProbe.Shared/MqttProbe.Shared.csproj"
-    "src/MqttProbe.Maui/MqttProbe.Maui.csproj"
-    "src/MqttProbe.Web/MqttProbe.Web.csproj"
-    "tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj"
+# Read all stdin first (git feeds ref lines on stdin).
+# Must capture before piping to collect_push_changed_paths because
+# command substitution $() does not pass the script's stdin through.
+REF_INPUT=$(cat || true)
+CHANGED=$(
+  printf '%s\n' "$REF_INPUT" | collect_push_changed_paths | sort -u || true
 )
-SHARED_EXCLUDES=("--exclude" "**/LucideIcons.cs" "--exclude" "**/SparkplugBProtobuf.cs")
 
-for PROJECT in "${PROJECTS[@]}"; do
-    ARGS=("$ROOT/$PROJECT" "--verify-no-changes")
-    if [[ "$PROJECT" == *"MqttProbe.Shared"* ]]; then
-        ARGS+=("${SHARED_EXCLUDES[@]}")
-    fi
-    OUTPUT=$(dotnet format "${ARGS[@]}" 2>&1) && STATUS=0 || STATUS=$?
-    if [[ -n "$OUTPUT" ]]; then printf "%s\n" "$OUTPUT"; fi
-    if [[ $STATUS -ne 0 ]]; then
-        FORMAT_FAILED=$((FORMAT_FAILED + 1))
-    fi
-done
-
-if [[ $FORMAT_FAILED -gt 0 ]]; then
-    fail "Formatting violations found — run: python scripts/format-check.py --fix"
-    exit 1
+if [[ -z "${CHANGED//[$'\t\r\n']/}" ]]; then
+    skip_msg "no changed files in push range"
+    print_total
+    exit 0
 fi
-pass "Format"
 
-printf "\n${GREEN}All checks passed.${RESET}\n\n"
+# Use here-string, not pipe: bash runs the right side of a pipe in a
+# subshell, so globals (NEED_*, CLASSIFY_DOCS_ONLY) would be lost.
+classify_push_paths <<< "$CHANGED"
+
+if [[ "$CLASSIFY_DOCS_ONLY" -eq 1 ]]; then
+    skip_msg "docs-only (skip build/test)"
+    print_total
+    exit 0
+fi
+
+BUILD_LABELS=()
+[[ "$NEED_NOMAUI_BUILD" -eq 1 ]] && BUILD_LABELS+=("MqttProbe.NoMaui.slnf")
+[[ "$NEED_MAUI_BUILD" -eq 1 ]] && BUILD_LABELS+=("MqttProbe.Maui")
+[[ "$NEED_DESKTOP_BUILD" -eq 1 ]] && BUILD_LABELS+=("MqttProbe.Desktop")
+
+if [[ ${#BUILD_LABELS[@]} -eq 0 && "$NEED_UNIT_TESTS" -eq 0 ]]; then
+    # Non-docs but nothing mapped (should not happen if unknown sets flags)
+    NEED_NOMAUI_BUILD=1
+    NEED_UNIT_TESTS=1
+    BUILD_LABELS=("MqttProbe.NoMaui.slnf")
+fi
+
+printf "  build: %s\n" "$([ ${#BUILD_LABELS[@]} -gt 0 ] && IFS=', ' && echo "${BUILD_LABELS[*]}" || echo none)"
+printf "  tests: %s\n" "$([ "$NEED_UNIT_TESTS" -eq 1 ] && echo yes || echo no)"
+pass "Classify changes"
+
+if [[ "$NEED_NOMAUI_BUILD" -eq 1 || "$NEED_MAUI_BUILD" -eq 1 || "$NEED_DESKTOP_BUILD" -eq 1 ]]; then
+    step "Build"
+    if [[ "$NEED_NOMAUI_BUILD" -eq 1 ]]; then
+        if ! dotnet build "$ROOT/MqttProbe.NoMaui.slnf" --warnaserror -nologo -clp:NoSummary; then
+            fail "Build (NoMaui)"
+            print_total
+            exit 1
+        fi
+    fi
+    if [[ "$NEED_MAUI_BUILD" -eq 1 ]]; then
+        if ! dotnet build "$ROOT/src/MqttProbe.Maui/MqttProbe.Maui.csproj" --warnaserror -nologo -clp:NoSummary; then
+            fail "Build (Maui)"
+            print_total
+            exit 1
+        fi
+    fi
+    if [[ "$NEED_DESKTOP_BUILD" -eq 1 ]]; then
+        if ! dotnet build "$ROOT/src/MqttProbe.Desktop/MqttProbe.Desktop.csproj" --warnaserror -nologo -clp:NoSummary; then
+            fail "Build (Desktop)"
+            print_total
+            exit 1
+        fi
+    fi
+    pass "Build"
+fi
+
+if [[ "$NEED_UNIT_TESTS" -eq 1 ]]; then
+    step "Tests (unit)"
+    # Ensure test assembly exists: if we only built platforms, still need NoMaui for tests.
+    if [[ "$NEED_NOMAUI_BUILD" -ne 1 ]]; then
+        if ! dotnet build "$ROOT/MqttProbe.NoMaui.slnf" --warnaserror -nologo -clp:NoSummary; then
+            fail "Build (NoMaui for tests)"
+            print_total
+            exit 1
+        fi
+    fi
+    if ! dotnet test "$ROOT/tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj" \
+            --no-build -nologo; then
+        fail "Tests (unit)"
+        print_total
+        exit 1
+    fi
+    pass "Tests (unit)"
+fi
+
+printf "\n${GREEN}All checks passed.${RESET}\n"
+print_total

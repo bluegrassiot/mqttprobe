@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "$HOOK_DIR/lib.sh"
+
+ROOT="$(hook_root)"
+cd "$ROOT"
+
+if env_truthy "${SKIP_PRE_COMMIT:-}"; then
+    step "pre-commit"
+    skip_msg "SKIP_PRE_COMMIT set"
+    print_total
+    exit 0
+fi
+
+step "Classify staged files"
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR || true)
+if [[ -z "${STAGED//[$'\t\r\n']/}" ]]; then
+    skip_msg "no staged files"
+    print_total
+    exit 0
+fi
+
+if ! printf '%s\n' "$STAGED" | any_format_relevant; then
+    skip_msg "no format-relevant staged files"
+    print_total
+    exit 0
+fi
+
+pass "Classify staged files"
+
+step "Format"
+if ! python "$ROOT/scripts/format-check.py"; then
+    fail "Format"
+    printf "\nFormatting violations found - run: python scripts/format-check.py --fix\n"
+    print_total
+    exit 1
+fi
+pass "Format"
+
+printf "\n${GREEN}pre-commit checks passed.${RESET}\n"
+print_total

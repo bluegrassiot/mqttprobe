@@ -5,6 +5,9 @@ services:
       - "8080:8080"
     volumes:
       - mqttprobe-config:/app/config
+      # Optional: drop payload format plugin DLLs here (e.g. CustomDemoPlugin/CustomDemoPlugin.dll).
+      # Restart the container after adding or updating plugins.
+      - mqttprobe-plugins:/app/Plugins
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
     networks:
@@ -57,6 +60,7 @@ services:
 
 volumes:
   mqttprobe-config:
+  mqttprobe-plugins:
 
 networks:
   mqttprobe-net:

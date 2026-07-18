@@ -24,12 +24,13 @@ RUN dotnet publish "MqttProbe.Web.csproj" -c Release -o /app/publish \
 
 FROM base AS final
 RUN addgroup -S appgroup && adduser -S -D -H -u 1000 -G appgroup appuser \
-    && mkdir -p /app/config \
-    && chown -R appuser:appgroup /app/config \
-    && chmod -R 755 /app/config
+    && mkdir -p /app/config /app/Plugins \
+    && chown -R appuser:appgroup /app/config /app/Plugins \
+    && chmod -R 755 /app/config /app/Plugins
 WORKDIR /app
 COPY --from=publish /app/publish .
-RUN mkdir -p /app/config && chown -R appuser:appgroup /app/config
+RUN mkdir -p /app/config /app/Plugins \
+    && chown -R appuser:appgroup /app/config /app/Plugins
 USER appuser
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD wget -q -O - http://127.0.0.1:8080/health >/dev/null || exit 1
 ENTRYPOINT ["dotnet", "MqttProbe.Web.dll"]

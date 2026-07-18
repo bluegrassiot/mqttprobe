@@ -14,6 +14,7 @@ services:
       - "8080:8080"
     volumes:
       - mqttprobe-config:/app/config
+      - mqttprobe-plugins:/app/Plugins
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
     networks:
@@ -38,6 +39,7 @@ services:
 
 volumes:
   mqttprobe-config:
+  mqttprobe-plugins:
 
 networks:
   mqttprobe-net:

@@ -33,6 +33,18 @@ public class CertificateAssetStoreTests
             Directory.Delete(_tempDir, true);
     }
 
+    [TestCase(true, false, X509KeyStorageFlags.DefaultKeySet)]
+    [TestCase(false, true, X509KeyStorageFlags.DefaultKeySet)]
+    [TestCase(false, false, X509KeyStorageFlags.EphemeralKeySet)]
+    public void GetClientCertificateLoadFlags_ReturnsPlatformCompatibleFlags(
+        bool isWindows,
+        bool isMacOs,
+        X509KeyStorageFlags expected)
+    {
+        CertificateAssetStore.GetClientCertificateLoadFlags(isWindows, isMacOs)
+            .Should().Be(expected);
+    }
+
     // --- Step 4.1/4.2: Import PFX ---
 
     [Test]

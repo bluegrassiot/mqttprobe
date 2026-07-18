@@ -4,7 +4,7 @@ using MqttProbe.Services.Security;
 
 namespace MqttProbe.Maui.Services;
 
-public class iOSFileProtector : IFileProtector
+public class IosFileProtector : IFileProtector
 {
     public bool ApplyProtections(string path)
     {

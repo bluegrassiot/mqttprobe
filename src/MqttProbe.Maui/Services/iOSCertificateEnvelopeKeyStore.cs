@@ -5,7 +5,7 @@ using Security;
 
 namespace MqttProbe.Maui.Services;
 
-public class iOSCertificateEnvelopeKeyStore : ICertificateEnvelopeKeyStore
+public class IosCertificateEnvelopeKeyStore : ICertificateEnvelopeKeyStore
 {
     private const string ServiceName = "MqttProbe.CertEnvelopes";
 

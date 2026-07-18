@@ -102,8 +102,8 @@ public static class MauiProgram
         // Only iOS has a platform-specific secret store and file protection. Mac Catalyst runs
         // on macOS, which has no NSFileProtection, and the iOS types are themselves #if IOS.
 #if IOS
-        builder.Services.AddSingleton<ICertificateEnvelopeKeyStore, iOSCertificateEnvelopeKeyStore>();
-        builder.Services.AddSingleton<IFileProtector>(new iOSFileProtector());
+        builder.Services.AddSingleton<ICertificateEnvelopeKeyStore, IosCertificateEnvelopeKeyStore>();
+        builder.Services.AddSingleton<IFileProtector>(new IosFileProtector());
 #else
         builder.Services.AddSingleton<ICertificateEnvelopeKeyStore>(sp =>
             new MauiCertificateEnvelopeKeyStore(sp.GetRequiredService<ISecretStorage>()));

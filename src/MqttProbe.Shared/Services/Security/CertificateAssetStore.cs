@@ -184,15 +184,9 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
 
         try
         {
-            // Windows Schannel cannot use an EphemeralKeySet (in-memory CNG) private key for
-            // TLS client authentication — AcquireClientCredentials fails with
-            // SEC_E_UNKNOWN_CREDENTIALS (0x8009030D). Load into a real (user) key container on
-            // Windows; without PersistKeySet the key is deleted when the cert is disposed, so no
-            // key files are left behind. OpenSSL (Linux/macOS) accepts the ephemeral key and
-            // keeps it off disk, so keep EphemeralKeySet there.
-            var loadFlags = OperatingSystem.IsWindows()
-                ? X509KeyStorageFlags.DefaultKeySet
-                : X509KeyStorageFlags.EphemeralKeySet;
+            var loadFlags = GetClientCertificateLoadFlags(
+                OperatingSystem.IsWindows(),
+                OperatingSystem.IsMacOS());
             var cert = X509CertificateLoader.LoadPkcs12(pfxBytes, intPwd, loadFlags);
             if (cert is null || !cert.HasPrivateKey) { cert?.Dispose(); return null; }
             return new ClientCertificateBundle(cert);
@@ -627,4 +621,11 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
             throw new CertificateImportException(
                 $"Invalid certificate asset ID '{assetId}': must be a valid GUID.");
     }
+
+    internal static X509KeyStorageFlags GetClientCertificateLoadFlags(
+        bool isWindows,
+        bool isMacOs) =>
+        isWindows || isMacOs
+            ? X509KeyStorageFlags.DefaultKeySet
+            : X509KeyStorageFlags.EphemeralKeySet;
 }

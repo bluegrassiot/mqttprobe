@@ -19,6 +19,9 @@
     <File Path="README.md" />
     <File Path="SECURITY.md" />
   </Folder>
+  <Folder Name="/docs/dev/">
+    <File Path="docs/dev/payload-formats.md" />
+  </Folder>
   <Folder Name="/general/">
     <File Path=".editorconfig" />
     <File Path=".gitattributes" />
@@ -50,6 +53,9 @@
     </Project>
     <Project Path="src/MqttProbe.Shared/MqttProbe.Shared.csproj" />
     <Project Path="src/MqttProbe.Web/MqttProbe.Web.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/MqttProbe.Benchmarks/MqttProbe.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MqttProbe.IntegrationTests/MqttProbe.IntegrationTests.csproj" />

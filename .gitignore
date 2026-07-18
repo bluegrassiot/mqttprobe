@@ -298,7 +298,7 @@ deploy/mtls/certs/**
 docs/*
 !docs/images/
 !docs/images/**
-!docs/payload-formats.md
+!docs/dev
 
 # Misc artifacts
 /profile-output/

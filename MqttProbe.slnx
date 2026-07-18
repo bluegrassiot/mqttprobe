@@ -57,6 +57,9 @@
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/MqttProbe.Benchmarks/MqttProbe.Benchmarks.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/CustomDemoPlugin/CustomDemoPlugin.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MqttProbe.IntegrationTests/MqttProbe.IntegrationTests.csproj" />
     <Project Path="tests/MqttProbe.PluginLoader.Fixtures/MqttProbe.PluginLoader.Fixtures.csproj" />

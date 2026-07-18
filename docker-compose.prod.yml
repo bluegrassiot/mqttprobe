@@ -16,6 +16,8 @@ services:
     volumes:
       # Persists credentials, Data Protection keys, configurations, and encrypted MQTT broker passwords.
       - mqttprobe-config:/app/config
+      # Optional: payload format plugin DLLs (subfolders per plugin). Restart after changes.
+      - mqttprobe-plugins:/app/Plugins
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       # Host filtering answers 400 to any Host header not listed here, so
@@ -102,6 +104,7 @@ services:
 
 volumes:
   mqttprobe-config:
+  mqttprobe-plugins:
   caddy-data:
   caddy-config:
 

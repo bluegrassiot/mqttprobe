@@ -5,15 +5,20 @@ using Microsoft.AspNetCore.DataProtection.XmlEncryption;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Options;
 using MQTTnet;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Layout;
+using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
+using MqttProbe.Services.Plugins;
+using MqttProbe.Services.Plugins.Pipeline;
+using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using MqttProbe.Web;
@@ -101,7 +106,6 @@ builder.Services.AddSingleton<ISecretStorage>(sp =>
         sp.GetRequiredService<IDataProtectionProvider>(),
         Path.Combine(configDir, "secrets.dat")));
 
-// Web circuits are independent user sessions, so MQTT and UI state services stay scoped per circuit.
 builder.Services.AddScoped<IManagedMqttClient>(_ => new MqttFactory().CreateManagedMqttClient());
 builder.Services.AddScoped<ISessionState, SessionState>();
 builder.Services.AddSingleton<ISettingsStore>(sp =>
@@ -130,6 +134,7 @@ sp.GetRequiredService<IManagedMqttClient>(),
 sp.GetRequiredService<IUxMetricsService>(),
 sp.GetRequiredService<ICertificateAssetStore>(),
 sp.GetRequiredService<ICertificateSessionQuarantine>(),
+sp.GetRequiredService<PayloadPipeline>(),
 sp.GetRequiredService<ILogger<EmulationService>>(),
 sp.GetRequiredService<IAppHealthMetricsCollector>()));
 builder.Services.AddScoped<IMessageStoreManager, MessageStoreManager>();
@@ -148,9 +153,27 @@ builder.Services.AddSingleton<IUserAuthService, SingleAdminUserAuthService>();
 builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
 builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
 builder.Services.AddScoped<IChartDataService, ChartDataService>();
-builder.Services.AddScoped<ISparkplugTopologyService, SparkplugTopologyService>();
-builder.Services.AddScoped<IPayloadDecoder, PayloadDecoder>();
 builder.Services.AddScoped<IThemes, Themes>();
+
+builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));
+builder.Services.PostConfigure<PluginConfig>(cfg =>
+{
+    var contentPlugins = Path.Combine(builder.Environment.ContentRootPath, "Plugins");
+    PluginFolderDefaults.Apply(cfg, builder.Environment.ContentRootPath, contentPlugins);
+});
+builder.Services.AddSingleton<PluginRegistry>(sp =>
+{
+    var config = sp.GetRequiredService<IOptions<PluginConfig>>().Value;
+    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+    return MqttProbePluginStartup.BuildPluginRegistry(config, loggerFactory);
+});
+builder.Services.AddSingleton<PayloadPipeline>();
+
+builder.Services.AddScoped<ISparkplugTopologyService>(sp =>
+    new SparkplugTopologyService(
+        sp.GetRequiredService<IManagedMqttClient>(),
+        sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
+        autoSubscribeToClient: false));
 
 var app = builder.Build();
 
@@ -189,7 +212,6 @@ app.MapRazorComponents<App>()
 
 await app.RunAsync();
 
-// Required for WebApplicationFactory<Program> in E2E tests.
 public partial class Program
 {
     protected Program() { }

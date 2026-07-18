@@ -8,7 +8,7 @@ public class TopicTemplateRendererTests
 {
     private static EmulatorNodeConfig GenericNode(
         string template = "{group}/{node}/{device}/{metric}",
-        GenericPayloadFormat format = GenericPayloadFormat.Json,
+        string format = "json",
         bool withDevice = true)
     {
         var node = new EmulatorNodeConfig
@@ -16,7 +16,7 @@ public class TopicTemplateRendererTests
             Type = EmulatorNodeType.Generic,
             GroupId = "Plant1",
             NodeId = "Press-01",
-            PayloadFormat = format,
+            PayloadFormatId = format,
             TopicTemplate = template
         };
         if (withDevice)
@@ -95,7 +95,7 @@ public class TopicTemplateRendererTests
     [Test]
     public void Validate_PlainTextTemplateWithoutMetricToken_ReturnsError()
     {
-        var node = GenericNode(template: "{group}/{node}/{device}", format: GenericPayloadFormat.PlainText);
+        var node = GenericNode(template: "{group}/{node}/{device}", format: "plaintext");
 
         TopicTemplateRenderer.Validate(node).Should().ContainSingle(e => e.Contains("{metric}"));
     }
@@ -103,7 +103,7 @@ public class TopicTemplateRendererTests
     [Test]
     public void Validate_HexTemplateWithoutMetricToken_ReturnsError()
     {
-        var node = GenericNode(template: "{group}/{node}/{device}", format: GenericPayloadFormat.Hex);
+        var node = GenericNode(template: "{group}/{node}/{device}", format: "hex");
 
         TopicTemplateRenderer.Validate(node).Should().ContainSingle(e => e.Contains("{metric}"));
     }
@@ -111,7 +111,7 @@ public class TopicTemplateRendererTests
     [Test]
     public void Validate_JsonTemplateWithoutMetricToken_IsValid()
     {
-        var node = GenericNode(template: "{group}/{node}/{device}", format: GenericPayloadFormat.Json);
+        var node = GenericNode(template: "{group}/{node}/{device}", format: "json");
 
         TopicTemplateRenderer.Validate(node).Should().BeEmpty();
     }
@@ -119,7 +119,7 @@ public class TopicTemplateRendererTests
     [Test]
     public void Validate_TemplateWithoutDeviceToken_WithDevices_ReturnsError()
     {
-        var node = GenericNode(template: "{group}/{node}/{metric}", format: GenericPayloadFormat.PlainText);
+        var node = GenericNode(template: "{group}/{node}/{metric}", format: "plaintext");
 
         TopicTemplateRenderer.Validate(node).Should().ContainSingle(e => e.Contains("{device}"));
     }
@@ -127,7 +127,7 @@ public class TopicTemplateRendererTests
     [Test]
     public void Validate_TemplateWithoutDeviceToken_WithoutDevices_IsValid()
     {
-        var node = GenericNode(template: "{group}/{node}/{metric}", format: GenericPayloadFormat.PlainText, withDevice: false);
+        var node = GenericNode(template: "{group}/{node}/{metric}", format: "plaintext", withDevice: false);
 
         TopicTemplateRenderer.Validate(node).Should().BeEmpty();
     }

@@ -56,7 +56,7 @@ public class EmulatorConfigurationStoreTests
             Type = EmulatorNodeType.Generic,
             GroupId = "BoilerRoom",
             NodeId = "Press-07",
-            PayloadFormat = GenericPayloadFormat.Hex,
+            PayloadFormatId = "hex",
             TopicTemplate = "{group}/{node}/{device}/{metric}",
             Devices =
             [
@@ -91,7 +91,7 @@ public class EmulatorConfigurationStoreTests
         loaded.Type.Should().Be(EmulatorNodeType.Generic);
         loaded.GroupId.Should().Be("BoilerRoom");
         loaded.NodeId.Should().Be("Press-07");
-        loaded.PayloadFormat.Should().Be(GenericPayloadFormat.Hex);
+        loaded.PayloadFormatId.Should().Be("hex");
         loaded.TopicTemplate.Should().Be("{group}/{node}/{device}/{metric}");
         loaded.Devices.Should().HaveCount(1);
         var device = loaded.Devices[0];

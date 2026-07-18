@@ -1,13 +1,16 @@
 using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MQTTnet;
 using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Layout;
 using MqttProbe.Desktop.Interop;
 using MqttProbe.Desktop.Services;
 using MqttProbe.Desktop.Services.Security;
+using MqttProbe.Models.Plugins;
 using MqttProbe.Services;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
@@ -15,6 +18,9 @@ using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
+using MqttProbe.Services.Plugins;
+using MqttProbe.Services.Plugins.Pipeline;
+using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using MudBlazor;
@@ -63,6 +69,7 @@ internal static class Program
                 sp.GetRequiredService<IUxMetricsService>(),
                 sp.GetRequiredService<ICertificateAssetStore>(),
                 sp.GetRequiredService<ICertificateSessionQuarantine>(),
+                sp.GetRequiredService<PayloadPipeline>(),
                 sp.GetRequiredService<ILogger<EmulationService>>(),
                 sp.GetRequiredService<IAppHealthMetricsCollector>()));
         builder.Services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
@@ -112,6 +119,12 @@ internal static class Program
         builder.Services.AddSingleton<IFileProtector, DefaultFileProtector>();
 
         var configPath = Path.Combine(configDir, "appsettings.json");
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(configDir)
+            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+            .Build();
+        builder.Services.AddSingleton<IConfiguration>(configuration);
+
         builder.Services.AddSingleton<ISettingsStore>(sp =>
             new SettingsStore(configPath, isMobile: false,
                 logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
@@ -133,10 +146,30 @@ internal static class Program
         builder.Services.AddScoped<IClipboardService, DesktopClipboardService>();
         builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
         builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
-        builder.Services.AddSingleton<IPayloadDecoder, PayloadDecoder>();
         builder.Services.AddScoped<IChartDataService, ChartDataService>();
-        builder.Services.AddSingleton<ISparkplugTopologyService, SparkplugTopologyService>();
         builder.Services.AddScoped<IThemes, Themes>();
+
+        builder.Services.Configure<PluginConfig>(configuration.GetSection("Plugins"));
+        builder.Services.PostConfigure<PluginConfig>(cfg =>
+        {
+            var userPlugins = Path.Combine(configDir, "plugins");
+            Directory.CreateDirectory(userPlugins);
+            var appPlugins = Path.Combine(AppContext.BaseDirectory, "Plugins");
+            PluginFolderDefaults.Apply(cfg, configDir, userPlugins, appPlugins);
+        });
+        builder.Services.AddSingleton<PluginRegistry>(sp =>
+        {
+            var config = sp.GetRequiredService<IOptions<PluginConfig>>().Value;
+            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            return MqttProbePluginStartup.BuildPluginRegistry(config, loggerFactory);
+        });
+        builder.Services.AddSingleton<PayloadPipeline>();
+
+        builder.Services.AddSingleton<ISparkplugTopologyService>(sp =>
+            new SparkplugTopologyService(
+                sp.GetRequiredService<IManagedMqttClient>(),
+                sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
+                autoSubscribeToClient: false));
 
         builder.RootComponents.Add<MqttProbe.Desktop.Main>("app");
 

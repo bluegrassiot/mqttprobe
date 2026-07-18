@@ -11,8 +11,10 @@ using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
+using MqttProbe.Tests.Utilities;
 using SparkplugNet.Core.Enumerations;
 using SparkplugNet.Core.Node;
 using SparkplugNet.VersionB;
@@ -45,6 +47,7 @@ public class EmulationServiceTests
     private ICertificateAssetStore _mockCertStore = null!;
     private ICertificateSessionQuarantine _mockQuarantine = null!;
     private IAppHealthMetricsCollector _mockHealthCollector = null!;
+    private PayloadPipeline _pipeline = null!;
     private EmulationService _service = null!;
     private Func<MqttClientDisconnectedEventArgs, Task>? _disconnectedHandler;
 
@@ -59,8 +62,6 @@ public class EmulationServiceTests
         _mockSessionState = Substitute.For<ISessionState>();
         _mockSessionState.SelectedConnection.Returns(new Connection());
 
-        // A long interval keeps the background loop from ticking during a test,
-        // so the single inline tick from StartAsync is the only publish observed.
         await settingsStore.SetEmulatorPublishIntervalAsync(_mockSessionState.SelectedConnection.Id, 120_000);
         _mockNodeFactory = Substitute.For<ISparkplugNodeFactory>();
         _mockMqttClient = Substitute.For<IManagedMqttClient>();
@@ -81,6 +82,8 @@ public class EmulationServiceTests
 
         SetupSuccessfulNode();
 
+        _pipeline = TestPipelineHelper.BuildBuiltInPipeline();
+
         _service = new EmulationService(
             settingsStore,
             _mockNodeFactory,
@@ -89,6 +92,7 @@ public class EmulationServiceTests
             _mockMetrics,
             _mockCertStore,
             _mockQuarantine,
+            _pipeline,
             Substitute.For<ILogger<EmulationService>>(),
             _mockHealthCollector);
         _service.SetConnection(_mockSessionState.SelectedConnection.Id);
@@ -291,7 +295,7 @@ public class EmulationServiceTests
             Type = EmulatorNodeType.Generic,
             GroupId = "Plant1",
             NodeId = "Press-01",
-            PayloadFormat = GenericPayloadFormat.Json
+            PayloadFormatId = "json"
         };
         config.Devices.Add(new EmulatorDeviceConfig
         {
@@ -321,7 +325,7 @@ public class EmulationServiceTests
             Type = EmulatorNodeType.Generic,
             GroupId = "Plant1",
             NodeId = "Press-01",
-            PayloadFormat = GenericPayloadFormat.PlainText
+            PayloadFormatId = "plaintext"
         };
         config.Devices.Add(new EmulatorDeviceConfig
         {
@@ -493,7 +497,7 @@ public class EmulationServiceTests
         await _service.AddNodeAsync(new EmulatorNodeConfig
         {
             Type = EmulatorNodeType.Generic,
-            PayloadFormat = GenericPayloadFormat.PlainText,
+            PayloadFormatId = "plaintext",
             NodeId = "Sensor-1",
             Devices =
             {
@@ -546,12 +550,10 @@ public class EmulationServiceTests
         var config = SparkplugNode();
         await _service.AddNodeAsync(config);
 
-        // With sequential rollback, StartAsync propagates the runner's exception
         var act = () => _service.StartAsync();
         await act.Should().ThrowAsync<Exception>().WithMessage("*Broker unavailable*");
 
         _service.IsRunning.Should().BeFalse();
-        // Runner was never promoted to _runners, so GetStatus returns Idle
         _service.GetStatus(config.Id).Should().Be(NodeRuntimeStatus.Idle);
     }
 
@@ -597,7 +599,7 @@ public class EmulationServiceTests
         var config = new EmulatorNodeConfig
         {
             Type = EmulatorNodeType.Generic,
-            PayloadFormat = GenericPayloadFormat.PlainText,
+            PayloadFormatId = "plaintext",
             NodeId = "Bulk-1"
         };
         for (var d = 0; d < 10; d++)
@@ -618,6 +620,32 @@ public class EmulationServiceTests
     }
 
     [Test]
+    public async Task StartAsync_UnknownPayloadFormatId_SkipsPublishWithoutCrash()
+    {
+        var messages = new List<MqttApplicationMessage>();
+        await _mockMqttClient.EnqueueAsync(Arg.Do<MqttApplicationMessage>(messages.Add));
+
+        var config = new EmulatorNodeConfig
+        {
+            Type = EmulatorNodeType.Generic,
+            GroupId = "Plant1",
+            NodeId = "Press-01",
+            PayloadFormatId = "nonexistent_format"
+        };
+        config.Devices.Add(new EmulatorDeviceConfig
+        {
+            DeviceId = "Sensor-1",
+            Metrics = [new EmulatorMetricConfig { Name = "Flow Rate" }]
+        });
+        await _service.AddNodeAsync(config);
+
+        var act = () => _service.StartAsync();
+        await act.Should().NotThrowAsync();
+
+        messages.Should().BeEmpty();
+    }
+
+    [Test]
     public async Task ResetForConnectionAsync_StopsRunningEmulation()
     {
         await _service.AddNodeAsync(SparkplugNode());
@@ -634,7 +662,6 @@ public class EmulationServiceTests
     public async Task ResetForConnectionAsync_SwitchesConnectionId()
     {
         var newConnId = Guid.NewGuid();
-        // Add a node config for the new connection in the store
         await _settingsStore.AddEmulatorNodeAsync(newConnId, new EmulatorNodeConfig { NodeId = "NewNode" });
 
         await _service.ResetForConnectionAsync(newConnId);
@@ -689,7 +716,6 @@ public class EmulationServiceTests
 
         await _service.ResetForConnectionAsync(newConnId);
 
-        // Old connection's saved configs are still in the store
         _settingsStore.GetEmulatorNodes(oldConnId).Should().HaveCount(1);
     }
 
@@ -723,14 +749,9 @@ public class EmulationServiceTests
         await _service.StartAsync();
 
         capturedKnownMetrics.Should().NotBeNull();
-        // knownMetrics includes health metrics + Node Control/Rebirth
-        // All should have non-null Name (birth mode)
         capturedKnownMetrics!.All(m => !string.IsNullOrEmpty(m.Name)).Should().BeTrue();
-        // All should have non-null, non-zero Alias
         capturedKnownMetrics.All(m => m.Alias is not null and not 0).Should().BeTrue();
-        // Aliases should be unique
         capturedKnownMetrics.Select(m => m.Alias).Should().OnlyHaveUniqueItems();
-        // First alias should be 1
         capturedKnownMetrics.First().Alias.Should().Be(1UL);
     }
 
@@ -758,7 +779,6 @@ public class EmulationServiceTests
 
         births.Should().ContainSingle(b => b.DeviceId == "Flow-1");
         var metrics = births.Single(b => b.DeviceId == "Flow-1").Metrics;
-        // Birth mode: Name is set, Alias is set
         metrics.All(m => !string.IsNullOrEmpty(m.Name)).Should().BeTrue();
         metrics.All(m => m.Alias is not null and not 0).Should().BeTrue();
         metrics.Select(m => m.Alias).Should().OnlyHaveUniqueItems();
@@ -780,7 +800,6 @@ public class EmulationServiceTests
         await _service.StartAsync();
 
         publishedMetrics.Should().NotBeNull();
-        // Data mode: Name is null, Alias is set
         publishedMetrics!.All(m => m.Name == null).Should().BeTrue();
         publishedMetrics.All(m => m.Alias is not null and not 0).Should().BeTrue();
         publishedMetrics.Select(m => m.Alias).Should().OnlyHaveUniqueItems();
@@ -876,7 +895,6 @@ public class EmulationServiceTests
     [Test]
     public async Task StartAsync_AliasesEnabled_AreDeterministicAcrossRuns()
     {
-        // Run 1 — capture NDATA aliases
         var node1 = SetupSuccessfulNode();
         List<Metric>? run1Metrics = null;
         node1.PublishMetrics(Arg.Do<List<Metric>>(m => run1Metrics = m))
@@ -889,7 +907,6 @@ public class EmulationServiceTests
         await _service.StopAsync();
         await _service.RemoveAllNodesAsync();
 
-        // Run 2 — identical config, same service instance, nodes cleared
         var node2 = SetupSuccessfulNode();
         List<Metric>? run2Metrics = null;
         node2.PublishMetrics(Arg.Do<List<Metric>>(m => run2Metrics = m))
@@ -900,7 +917,6 @@ public class EmulationServiceTests
         await _service.StartAsync();
         var run2Aliases = run2Metrics!.Select(m => m.Alias).ToList();
 
-        // Precondition: aliases must be set (not null) before comparing determinism
         run1Aliases.Should().AllSatisfy(a => a.Should().NotBeNull());
         run2Aliases.Should().AllSatisfy(a => a.Should().NotBeNull());
         run1Aliases.Should().Equal(run2Aliases);
@@ -941,12 +957,10 @@ public class EmulationServiceTests
         deviceMetrics.Should().ContainKey("Flow-1");
         deviceMetrics.Should().ContainKey("Valve-1");
 
-        // Flow-1 has 3 metrics: aliases 1, 2, 3
         var flowMetrics = deviceMetrics["Flow-1"];
         flowMetrics.Should().HaveCount(3);
         flowMetrics.Select(m => m.Alias).Should().BeEquivalentTo(new ulong?[] { 1, 2, 3 });
 
-        // Valve-1 has 1 metric: alias 1 (independent sequence)
         var valveMetrics = deviceMetrics["Valve-1"];
         valveMetrics.Should().HaveCount(1);
         valveMetrics.Single().Alias.Should().Be(1UL);
@@ -983,7 +997,6 @@ public class EmulationServiceTests
 
         await _service.StartAsync();
 
-        // Alias 0 is reserved; all aliases must be non-null and non-zero
         capturedKnownMetrics!.All(m => m.Alias is not null and not 0).Should().BeTrue();
         publishedMetrics!.All(m => m.Alias is not null and not 0).Should().BeTrue();
         deviceMetrics["Device-1"].All(m => m.Alias is not null and not 0).Should().BeTrue();
@@ -993,7 +1006,6 @@ public class EmulationServiceTests
     public async Task Rebirth_AliasesEnabled_KnownMetricsPassedToFactoryHaveAliases()
     {
         var node = SetupSuccessfulNode();
-        // Use Returns callback to capture metrics from the 4-param Create overload
         List<Metric>? capturedKnownMetrics = null;
         _mockNodeFactory.Create(
                 Arg.Any<List<Metric>>(),
@@ -1012,8 +1024,6 @@ public class EmulationServiceTests
         await _service.StartAsync();
 
         capturedKnownMetrics.Should().NotBeNull();
-        // All known metrics (health + Node Control/Rebirth) must carry aliases
-        // so that SparkplugNet's Rebirth method re-publishes NBIRTH with aliases.
         capturedKnownMetrics!.All(m => m.Alias is not null and not 0).Should().BeTrue();
         capturedKnownMetrics.All(m => !string.IsNullOrEmpty(m.Name)).Should().BeTrue();
         capturedKnownMetrics.Select(m => m.Alias).Should().OnlyHaveUniqueItems();
@@ -1033,14 +1043,9 @@ public class EmulationServiceTests
         await _service.AddNodeAsync(config);
         await _service.StartAsync();
 
-        // Initial DBIRTH during Start
         birthCalls.Should().ContainSingle();
         birthCalls[0].Metrics.All(m => m.Alias is not null and not 0).Should().BeTrue();
 
-        // The adapter is wired to republish DBIRTH on rebirth.
-        // Verify the factory was created with device-aware parameters by checking
-        // that the Create call included the device callback signature.
-        // The ISparkplugNodeFactory.Create overload with getDeviceBirthMetrics is called.
         _mockNodeFactory.Received(1).Create(
             Arg.Any<List<Metric>>(),
             Arg.Any<SparkplugSpecificationVersion>(),
@@ -1058,12 +1063,9 @@ public class EmulationServiceTests
         await _service.AddNodeAsync(config);
         await _service.StartAsync();
 
-        // When aliases are disabled, the 2-parameter Create overload is used
-        // (no device callback is needed).
         _mockNodeFactory.Received(1).Create(
             Arg.Any<List<Metric>>(),
             Arg.Any<SparkplugSpecificationVersion>());
-        // The 4-parameter overload must NOT be called.
         _mockNodeFactory.DidNotReceive().Create(
             Arg.Any<List<Metric>>(),
             Arg.Any<SparkplugSpecificationVersion>(),
@@ -1074,9 +1076,6 @@ public class EmulationServiceTests
     [Test]
     public void SparkplugNet_Metric_AliasIsSettableAndSerializes()
     {
-        // SparkplugNet uses an internal PayloadConverter → ProtoBufPayload → PayloadHelper
-        // pipeline for serialization. ProtoBuf.Serializer.Serialize does not work directly
-        // with the public Metric type (no protobuf-net contract). We exercise the real path.
         var metric = new Metric("Test", DataType.Double, 42.0);
         metric.Alias = 7;
 
@@ -1092,29 +1091,20 @@ public class EmulationServiceTests
     [Test]
     public void SparkplugNet_Metric_NameNull_OmitsFieldInSerialization()
     {
-        // The SparkplugB spec requires NDATA/DDATA to carry alias only, with no name.
-        // Metric.Name = null must cause the name field to be absent from the serialized
-        // payload — not present as an empty string.
         var metric = new Metric("Test", DataType.Double, 42.0);
         metric.Alias = 7;
-        metric.Name = null!; // Data mode: alias-only
+        metric.Name = null!;
 
         var bytesWithName = SerializeMetricThroughPayload(new Metric("Test", DataType.Double, 42.0) { Alias = 7 });
         var bytesNullName = SerializeMetricThroughPayload(metric);
 
-        // Null name must serialize to fewer bytes than a set name (field omitted).
         bytesNullName.Length.Should().BeLessThan(bytesWithName.Length,
             "Name=null must omit the name field from the serialized payload");
 
-        // Round-trip: alias must survive.
         var roundtripped = DeserializePayloadToMetric(bytesNullName);
         roundtripped.Alias.Should().Be(7UL);
     }
 
-    /// <summary>
-    /// Serializes a single <see cref="Metric"/> through SparkplugNet's internal
-    /// Payload → ProtoBufPayload → byte[] pipeline using reflection.
-    /// </summary>
     private static byte[] SerializeMetricThroughPayload(Metric metric)
     {
         var payload = new Payload();
@@ -1138,10 +1128,6 @@ public class EmulationServiceTests
         return (byte[])genericSerialize.Invoke(null, new object[] { protoPayload })!;
     }
 
-    /// <summary>
-    /// Deserializes bytes through SparkplugNet's internal pipeline and returns
-    /// the first <see cref="Metric"/> from the resulting payload.
-    /// </summary>
     private static Metric DeserializePayloadToMetric(byte[] data)
     {
         var sparkplugAsm = typeof(Metric).Assembly;

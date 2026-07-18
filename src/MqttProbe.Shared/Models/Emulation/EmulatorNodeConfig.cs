@@ -2,8 +2,6 @@ namespace MqttProbe.Models.Emulation;
 
 public enum EmulatorNodeType { SparkplugB, Generic }
 
-public enum GenericPayloadFormat { Json, PlainText, Hex }
-
 public enum MetricValueType { Double, Int64, Boolean }
 
 public enum WaveformKind
@@ -40,7 +38,7 @@ public class EmulatorNodeConfig
     public EmulatorNodeType Type { get; set; } = EmulatorNodeType.SparkplugB;
     public string GroupId { get; set; } = "Plant1";
     public string NodeId { get; set; } = "Node-1";
-    public GenericPayloadFormat PayloadFormat { get; set; } = GenericPayloadFormat.Json;
+    public string PayloadFormatId { get; set; } = "json";
     public string TopicTemplate { get; set; } = "{group}/{node}/{device}/{metric}";
     public List<EmulatorDeviceConfig> Devices { get; set; } = [];
     public bool UseMetricAliases { get; set; }

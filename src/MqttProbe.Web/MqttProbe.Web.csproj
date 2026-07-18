@@ -28,6 +28,7 @@
       <Content Update="wwwroot\favicon.svg">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </Content>
+      <None Include="Plugins\**" CopyToOutputDirectory="PreserveNewest" LinkBase="Plugins" />
     </ItemGroup>
 
     <!-- Runtime-generated config — never publish credentials or key material -->

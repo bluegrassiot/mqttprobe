@@ -295,10 +295,13 @@ deploy/mtls/certs/**
 /.claude
 /.opencode/
 /.obsidian
-docs/
-!docs/images
+docs/*
+!docs/images/
+!docs/images/**
+!docs/dev
 
 # Misc artifacts
 /profile-output/
 /.playwright-mcp
 /src/MqttProbe.Web/Config/certificates
+*.dll

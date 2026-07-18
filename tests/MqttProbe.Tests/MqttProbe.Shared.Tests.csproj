@@ -10,6 +10,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="AngleSharp" />
         <PackageReference Include="AwesomeAssertions" />
         <PackageReference Include="bunit" />
         <PackageReference Include="coverlet.collector">
@@ -34,6 +35,16 @@
       <ProjectReference Include="..\..\src\MqttProbe.Desktop\MqttProbe.Desktop.csproj" />
       <ProjectReference Include="..\..\src\MqttProbe.Shared\MqttProbe.Shared.csproj" />
       <ProjectReference Include="..\..\src\MqttProbe.Web\MqttProbe.Web.csproj" />
+      <ProjectReference Include="..\MqttProbe.PluginLoader.Fixtures\MqttProbe.PluginLoader.Fixtures.csproj"
+                        ReferenceOutputAssembly="false"
+                        Private="false" />
     </ItemGroup>
+
+    <Target Name="CopyPluginFixtures" AfterTargets="Build">
+      <ItemGroup>
+        <_FixtureFiles Include="..\MqttProbe.PluginLoader.Fixtures\bin\$(Configuration)\net10.0\**\*.*" />
+      </ItemGroup>
+      <Copy SourceFiles="@(_FixtureFiles)" DestinationFolder="$(TargetDir)PluginFixtures\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    </Target>
 
 </Project>

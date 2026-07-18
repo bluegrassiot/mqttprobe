@@ -439,6 +439,98 @@ public class PayloadBrowserTests : BunitTestContext
     }
 
 
+    [TestCase("empty", "Empty")]
+    [TestCase("sparkplug-b", "Sparkplug B")]
+    [TestCase("messagepack", "MessagePack")]
+    [TestCase("binary", "Binary")]
+    [TestCase("json", "JSON")]
+    [TestCase("xml", "XML")]
+    [TestCase("hex", "Hex text")]
+    [TestCase("base64", "Base64 text")]
+    [TestCase("plaintext", "Plain text")]
+    public void GetFormatDisplayName_KnownFormatIds_ReturnExpectedName(string formatId, string expected)
+    {
+        var cut = Render<PayloadBrowser>();
+
+        PayloadBrowser.GetFormatDisplayName(formatId).Should().Be(expected);
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    public void GetFormatDisplayName_NullOrWhitespace_ReturnsNull(string? formatId)
+    {
+        var cut = Render<PayloadBrowser>();
+
+        PayloadBrowser.GetFormatDisplayName(formatId).Should().BeNull();
+    }
+
+    [Test]
+    public void GetFormatDisplayName_UnknownFormatId_ReturnsRawId()
+    {
+        var cut = Render<PayloadBrowser>();
+
+        // Unknown non-null ids fall through so plugin formats still render informatively.
+        PayloadBrowser.GetFormatDisplayName("custom-plugin-format").Should().Be("custom-plugin-format");
+    }
+
+
+    [Test]
+    public async Task SelectedMessage_WithFormatId_RendersFormatInMetaTable()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            FormatId = "base64"
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var meta = cut.Find(".payload-detail-meta");
+        meta.TextContent.Should().Contain("Format");
+        meta.TextContent.Should().Contain("Base64 text");
+    }
+
+    [Test]
+    public async Task SelectedMessage_WithNoFormatId_OmitsFormatRow()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}"""
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        // Detail view is visible, but no Format label appears since FormatId is null.
+        cut.Markup.Should().Contain("Message Details");
+        var labels = cut.FindAll(".payload-detail-meta td.pb-meta-label")
+            .Select(td => td.TextContent.Trim());
+        labels.Should().NotContain("Format");
+    }
+
+    [Test]
+    public async Task SelectedMessage_WithJsonFormatId_StillShowsJsonContentChip()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            FormatId = "json"
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        // Format row reflects detection; payload content heuristic still labels the body.
+        cut.Find(".payload-detail-meta").TextContent.Should().Contain("JSON");
+        cut.Find(".payload-detail-body").TextContent.Should().Contain("JSON");
+    }
+
+
     [Test]
     public void TryFormatXml_ValidXml_ReturnsFormattedString()
     {

@@ -8,6 +8,7 @@ using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Sparkplug;
+using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Shared.Tests.Services.Mqtt;
 
@@ -25,16 +26,8 @@ public class MessageStoreManagerTests
         _mockLogger = Substitute.For<ILogger<MessageStoreManager>>();
         var mockSettings = Substitute.For<ISettingsStore>();
         mockSettings.Config.Returns(new AppConfiguration());
-        var mockDecoder = Substitute.For<IPayloadDecoder>();
-        mockDecoder.Decode(Arg.Any<MqttApplicationMessageReceivedEventArgs>())
-            .Returns(x =>
-            {
-                var e = (MqttApplicationMessageReceivedEventArgs)x[0]!;
-                var seg = e.ApplicationMessage.PayloadSegment;
-                var payload = seg.Count > 0 ? System.Text.Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count) : string.Empty;
-                return new DecodedPayload(payload, DetectedPayloadFormat.PlainText);
-            });
-        _messageStoreManager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, Substitute.For<IUxMetricsService>(), mockDecoder);
+        _messageStoreManager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings,
+            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
     }
 
     [TearDown]
@@ -369,15 +362,13 @@ public class MessageStoreManagerTests
         var room1 = temp.SubTopics!["room1"];
         var humidity = sensors.SubTopics!["humidity"];
 
-        // TopicCount: total descendant topics in subtree
-        sensors.TopicCount.Should().Be(3); // temp, room1, humidity
-        temp.TopicCount.Should().Be(1);    // room1
+        sensors.TopicCount.Should().Be(3);
+        temp.TopicCount.Should().Be(1);
         room1.TopicCount.Should().Be(0);
         humidity.TopicCount.Should().Be(0);
 
-        // MessageCount: total messages in subtree (own + all descendants)
-        sensors.MessageCount.Should().Be(5); // 3 from temp subtree + 2 from humidity
-        temp.MessageCount.Should().Be(3);    // 1 own + 2 from room1
+        sensors.MessageCount.Should().Be(5);
+        temp.MessageCount.Should().Be(3);
         room1.MessageCount.Should().Be(2);
         humidity.MessageCount.Should().Be(2);
     }

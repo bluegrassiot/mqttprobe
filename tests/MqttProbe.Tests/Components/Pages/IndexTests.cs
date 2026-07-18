@@ -54,7 +54,7 @@ public class IndexTests : BunitTestContext
 
         _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>());
         _mockChartStore.GetCharts(Arg.Any<Guid>()).Returns([]);
-        _mockSubManager.Topics.Returns(new HashSet<string>());
+        _mockSubManager.Subscriptions.Returns(Array.Empty<SubscribedTopic>());
         _emulatorNodes = [];
         _mockEmulation.Nodes.Returns(_ => _emulatorNodes);
         _mockEmulation.IsRunning.Returns(false);

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MQTTnet.Client;
 using MQTTnet.Extensions.ManagedClient;
+using MQTTnet.Protocol;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
 using MudBlazor;
@@ -10,9 +11,9 @@ namespace MqttProbe.Services.Mqtt;
 
 public interface ISubscriptionManager : IDisposable
 {
-    public IReadOnlySet<string> Topics { get; }
+    public IReadOnlyList<SubscribedTopic> Subscriptions { get; }
     public Task Remove(List<string> topics);
-    public Task Add(string topic);
+    public Task Add(string topic, MqttQualityOfServiceLevel qos = MqttQualityOfServiceLevel.AtLeastOnce);
     public void ClearActiveSubscriptions();
 }
 
@@ -25,7 +26,7 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
     private readonly ISessionState _sessionState;
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private readonly Lock _topicsSync = new();
-    private readonly HashSet<string> _topics = [];
+    private readonly Dictionary<string, MqttQualityOfServiceLevel> _topics = new(StringComparer.Ordinal);
 
     public SubscriptionManager(IManagedMqttClient managedMqttClient, ILogger<SubscriptionManager> logger,
         ISnackbar snackbar, ISettingsStore settingsStore, ISessionState sessionState)
@@ -41,12 +42,20 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
 
     private const int MaxSubscriptions = 500;
 
-    public IReadOnlySet<string> Topics
+    public IReadOnlyList<SubscribedTopic> Subscriptions
     {
         get
         {
             lock (_topicsSync)
-                return _topics.ToHashSet();
+            {
+                return _topics
+                    .Select(kv => new SubscribedTopic
+                    {
+                        Topic = kv.Key,
+                        QualityOfServiceLevel = kv.Value
+                    })
+                    .ToList();
+            }
         }
     }
 
@@ -75,7 +84,7 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
         }
     }
 
-    public async Task Add(string topic)
+    public async Task Add(string topic, MqttQualityOfServiceLevel qos = MqttQualityOfServiceLevel.AtLeastOnce)
     {
         if (string.IsNullOrWhiteSpace(topic) || topic.Contains('\0') || topic.Length > 65_535)
         {
@@ -87,30 +96,33 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
         await _operationLock.WaitAsync();
         try
         {
-            var isAtLimit = false;
             lock (_topicsSync)
             {
-                isAtLimit = _topics.Count >= MaxSubscriptions;
-            }
+                if (_topics.ContainsKey(topic))
+                {
+                    _snackbar.Add($"Already subscribed to {topic}", Severity.Warning);
+                    return;
+                }
 
-            if (isAtLimit)
-            {
-                _snackbar.Add($"Subscription limit ({MaxSubscriptions}) reached", Severity.Warning);
-                _logger.LogWarning("Subscription limit ({Limit}) reached; topic {Topic} not added",
-                    MaxSubscriptions, topic);
-                return;
+                if (_topics.Count >= MaxSubscriptions)
+                {
+                    _snackbar.Add($"Subscription limit ({MaxSubscriptions}) reached", Severity.Warning);
+                    _logger.LogWarning("Subscription limit ({Limit}) reached; topic {Topic} not added",
+                        MaxSubscriptions, topic);
+                    return;
+                }
             }
 
             var topicFilter = new MqttTopicFilterBuilder()
                 .WithTopic(topic)
-                .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
+                .WithQualityOfServiceLevel(qos)
                 .Build();
 
             await _managedMqttClient.SubscribeAsync([topicFilter]);
 
             lock (_topicsSync)
             {
-                _topics.Add(topic);
+                _topics[topic] = qos;
             }
 
             _snackbar.Add($"Subscribed to {topic}", Severity.Success);
@@ -138,33 +150,35 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
         await _operationLock.WaitAsync();
         try
         {
-            // Load saved topics from the connection profile if auto-resubscribe is on.
             if (_settingsStore.Config.Ui.AutoResubscribe)
             {
                 var connection = _sessionState.SelectedConnection;
                 lock (_topicsSync)
                 {
-                    foreach (var topic in connection.SubscribedTopics)
-                        _topics.Add(topic);
+                    foreach (var entry in connection.SubscribedTopics)
+                    {
+                        if (!_topics.ContainsKey(entry.Topic))
+                            _topics[entry.Topic] = entry.QualityOfServiceLevel;
+                    }
                 }
             }
 
-            HashSet<string> topics;
+            List<KeyValuePair<string, MqttQualityOfServiceLevel>> snapshot;
             lock (_topicsSync)
             {
                 if (_topics.Count == 0) return;
-                topics = _topics.ToHashSet();
+                snapshot = _topics.ToList();
             }
 
-            var filters = topics
-                .Select(t => new MqttTopicFilterBuilder()
-                    .WithTopic(t)
-                    .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
+            var filters = snapshot
+                .Select(kv => new MqttTopicFilterBuilder()
+                    .WithTopic(kv.Key)
+                    .WithQualityOfServiceLevel(kv.Value)
                     .Build())
                 .ToList();
             await _managedMqttClient.SubscribeAsync(filters);
             if (_logger.IsEnabled(LogLevel.Information))
-                _logger.LogInformation("Re-subscribed to {Count} topic(s) after connect", topics.Count);
+                _logger.LogInformation("Re-subscribed to {Count} topic(s) after connect", snapshot.Count);
         }
         catch (Exception ex)
         {
@@ -181,12 +195,18 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
         try
         {
             var connection = _sessionState.SelectedConnection;
-            List<string> topics;
+            List<SubscribedTopic> snapshot;
             lock (_topicsSync)
             {
-                topics = [.. _topics];
+                snapshot = _topics
+                    .Select(kv => new SubscribedTopic
+                    {
+                        Topic = kv.Key,
+                        QualityOfServiceLevel = kv.Value
+                    })
+                    .ToList();
             }
-            connection.SubscribedTopics = topics;
+            connection.SubscribedTopics = snapshot;
             await _settingsStore.AddConnectionAsync(connection);
         }
         catch (Exception ex)

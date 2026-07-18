@@ -144,7 +144,7 @@
         <div class="tab-panel-content">
             @if (CanShowWorkspaceContent("subscriptions"))
             {
-                @if (!SubscriptionManager.Topics.Any() && !SettingsStore.IsHintDismissed("subscriptions"))
+                @if (!SubscriptionManager.Subscriptions.Any() && !SettingsStore.IsHintDismissed("subscriptions"))
                 {
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
                               ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("subscriptions"))">
@@ -242,7 +242,7 @@
         SettingsStore.GetCharts(SessionState.SelectedConnection.Id).Count > 0 ? $"Charts ({SettingsStore.GetCharts(SessionState.SelectedConnection.Id).Count})" : "Charts";
 
     private string SubscriptionsTabLabel =>
-        SubscriptionManager.Topics.Count > 0 ? $"Subscriptions ({SubscriptionManager.Topics.Count})" : "Subscriptions";
+        SubscriptionManager.Subscriptions.Count > 0 ? $"Subscriptions ({SubscriptionManager.Subscriptions.Count})" : "Subscriptions";
 
     private string NodesTabLabel
     {

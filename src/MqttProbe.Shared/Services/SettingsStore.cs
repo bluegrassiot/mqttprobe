@@ -831,7 +831,7 @@ public class SettingsStore : ISettingsStore
             Port = 1883,
             Protocol = Protocol.Mqtt,
             UseTls = false,
-            SubscribedTopics = ["spBv1.0/#"]
+            SubscribedTopics = [new SubscribedTopic { Topic = "spBv1.0/#" }]
         },
         new()
         {
@@ -841,7 +841,7 @@ public class SettingsStore : ISettingsStore
             Protocol = Protocol.Mqtt,
             UseTls = true,
             AllowUntrustedCertificate = false,
-            SubscribedTopics = ["spBv1.0/#"]
+            SubscribedTopics = [new SubscribedTopic { Topic = "spBv1.0/#" }]
         },
         new()
         {
@@ -852,7 +852,7 @@ public class SettingsStore : ISettingsStore
             UseTls = true,
             AllowUntrustedCertificate = false,
             WebsocketBasePath = "mqtt",
-            SubscribedTopics = ["spBv1.0/#"]
+            SubscribedTopics = [new SubscribedTopic { Topic = "spBv1.0/#" }]
         }
     ];
 

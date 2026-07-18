@@ -19,9 +19,6 @@
     <File Path="README.md" />
     <File Path="SECURITY.md" />
   </Folder>
-  <Folder Name="/docs/dev/">
-    <File Path="docs/dev/payload-formats.md" />
-  </Folder>
   <Folder Name="/general/">
     <File Path=".editorconfig" />
     <File Path=".gitattributes" />

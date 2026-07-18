@@ -124,19 +124,19 @@ public sealed class MacKeychainNative : IMacKeychainNative
         var acct = CreateCFString(account);
         try
         {
-            var keyCount = returnData ? 6 : 4;
-            var keys = new IntPtr[keyCount];
-            var values = new IntPtr[keyCount];
-            var i = 0;
-            keys[i] = _secClass; values[i++] = _secClassGenericPassword;
-            keys[i] = _secAttrService; values[i++] = svc;
-            keys[i] = _secAttrAccount; values[i++] = acct;
-            if (returnData)
-            {
-                keys[i] = _secReturnData; values[i++] = _cfBooleanTrue;
-                keys[i] = _secMatchLimit; values[i++] = _secMatchLimitOne;
-            }
-            return CFDictionaryCreate(_cfAllocatorDefault, keys, values, keyCount, _cfTypeDictionaryKeyCallBacks, _cfTypeDictionaryValueCallBacks);
+            var (keys, values) = MacKeychainQueryEntries.Create(
+                _secClass,
+                _secClassGenericPassword,
+                _secAttrService,
+                svc,
+                _secAttrAccount,
+                acct,
+                _secReturnData,
+                _cfBooleanTrue,
+                _secMatchLimit,
+                _secMatchLimitOne,
+                returnData);
+            return CFDictionaryCreate(_cfAllocatorDefault, keys, values, keys.Length, _cfTypeDictionaryKeyCallBacks, _cfTypeDictionaryValueCallBacks);
         }
         finally
         {
@@ -244,4 +244,32 @@ public sealed class MacKeychainNative : IMacKeychainNative
     [DllImport("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")]
     private static extern IntPtr CFStringCreateWithBytes(
         IntPtr allocator, byte[] bytes, nint numBytes, int encoding, byte isExternalRepresentation);
+}
+
+internal static class MacKeychainQueryEntries
+{
+    public static (IntPtr[] Keys, IntPtr[] Values) Create(
+        IntPtr secClass,
+        IntPtr secClassGenericPassword,
+        IntPtr secAttrService,
+        IntPtr service,
+        IntPtr secAttrAccount,
+        IntPtr account,
+        IntPtr secReturnData,
+        IntPtr cfBooleanTrue,
+        IntPtr secMatchLimit,
+        IntPtr secMatchLimitOne,
+        bool returnData)
+    {
+        if (!returnData)
+        {
+            return (
+                [secClass, secAttrService, secAttrAccount],
+                [secClassGenericPassword, service, account]);
+        }
+
+        return (
+            [secClass, secAttrService, secAttrAccount, secReturnData, secMatchLimit],
+            [secClassGenericPassword, service, account, cfBooleanTrue, secMatchLimitOne]);
+    }
 }

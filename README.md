@@ -16,7 +16,7 @@ Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart
 
 - **Topic Browser** — live tree view of all topics received from the broker, with recursive hierarchy navigation
 - **Payload Browser** — structured JSON viewer for message payloads, with topic/payload copy-to-clipboard
-- **Subscriptions** — add and remove MQTT topic subscriptions (including wildcards) at runtime; subscriptions persist per connection and auto-resubscribe on reconnect (configurable)
+- **Subscriptions** — add and remove MQTT topic subscriptions (including wildcards) at runtime with per-subscription QoS (default 1); subscriptions persist per connection and auto-resubscribe on reconnect (configurable)
 - **Publish** — send messages to any topic with configurable QoS level
 - **MQTT/Sparkplug B Emulator** — simulate multiple Edge Nodes publishing metrics data at a configurable rate with and without Sparkplug B
 - **Sparkplug B EoN dashboard** — live view of all Edge of Network nodes, devices, and metrics; automatically requests Birth certificates for newly discovered nodes

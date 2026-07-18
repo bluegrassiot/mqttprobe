@@ -1,0 +1,163 @@
+@using MQTTnet.Protocol
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<div class="subscription-editor">
+    <div class="subscription-editor-add-row">
+        <MudTextField T="string" Class="subscription-editor-topic"
+                      @bind-Value="_topic" Label="Topic" Variant="Variant.Outlined"
+                      Clearable="true" Disabled="@Disabled"
+                      Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.ChevronRight"
+                      OnKeyDown="HandleKeyDown" />
+        <MudSelect T="MqttQualityOfServiceLevel" Class="subscription-editor-qos"
+                   Variant="Variant.Outlined"
+                   @bind-Value="_qos" Label="QoS Level" Disabled="@Disabled">
+            @foreach (MqttQualityOfServiceLevel item in Enum.GetValues(typeof(MqttQualityOfServiceLevel)))
+            {
+                <MudSelectItem T="MqttQualityOfServiceLevel" Value="@item">@item</MudSelectItem>
+            }
+        </MudSelect>
+        <AppPrimaryButton Class="subscription-editor-add"
+                          StartIcon="@LucideIcons.Plus" title="Add subscription"
+                          Disabled="@(Disabled || _busy)" OnClick="@AddAsync">
+            Add
+        </AppPrimaryButton>
+    </div>
+
+    <div class="subscription-editor-presets">
+        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Disabled="@Disabled"
+                 OnClick="@(() => ApplyPreset("spBv1.0/#"))">spBv1.0/#</MudChip>
+        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Disabled="@Disabled"
+                 OnClick="@(() => ApplyPreset("#"))">#</MudChip>
+        <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Disabled="@Disabled"
+                 OnClick="@(() => ApplyPreset("+/STATE/#"))">+/STATE/#</MudChip>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-2">
+            Wildcards: <code>+</code> matches one level, <code>#</code> matches remaining levels.
+        </MudText>
+    </div>
+
+    @if (Items is null || Items.Count == 0)
+    {
+        <div class="d-flex flex-column align-center pa-6">
+            <MudIcon Icon="@LucideIcons.Layers" Size="Size.Large" Color="Color.Secondary" />
+            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">@(EmptyText ?? "No subscriptions")</MudText>
+            @if (!string.IsNullOrWhiteSpace(EmptyHint))
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@EmptyHint</MudText>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="subscription-editor-table-wrap">
+            <MudTable T="SubscribedTopic"
+                      Items="@Items"
+                      MultiSelection="true"
+                      @bind-SelectedItems="_selected"
+                      Hover="true"
+                      Dense="true"
+                      Striped="true"
+                      Breakpoint="Breakpoint.None"
+                      Class="subscription-editor-table">
+                <ToolBarContent>
+                    <MudSpacer />
+                    <AppDestructiveButton StartIcon="@LucideIcons.Trash2" title="Remove"
+                                          Disabled="@(Disabled || _selected is null || _selected.Count == 0)"
+                                          OnClick="@RemoveSelectedAsync">
+                        Remove
+                    </AppDestructiveButton>
+                    <AppDestructiveButton StartIcon="@LucideIcons.Trash2" title="Clear all" Class="ml-2"
+                                          Disabled="@(Disabled || Items.Count == 0)"
+                                          OnClick="@ClearAllAsync">
+                        Clear all
+                    </AppDestructiveButton>
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Topic</MudTh>
+                    <MudTh>QoS</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd Class="metrics-mono metrics-compact">@context.Topic</MudTd>
+                    <MudTd>@context.QualityOfServiceLevel</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<SubscribedTopic> Items { get; set; } = [];
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? EmptyText { get; set; }
+    [Parameter] public string? EmptyHint { get; set; }
+    [Parameter] public EventCallback<(string Topic, MqttQualityOfServiceLevel Qos)> OnAdd { get; set; }
+    [Parameter] public EventCallback<IReadOnlyList<string>> OnRemove { get; set; }
+    [Parameter] public EventCallback OnClearAll { get; set; }
+
+    private string _topic = string.Empty;
+    private MqttQualityOfServiceLevel _qos = MqttQualityOfServiceLevel.AtLeastOnce;
+    private HashSet<SubscribedTopic> _selected = [];
+    private bool _busy;
+
+    internal string TopicDraft { get => _topic; set => _topic = value; }
+    internal MqttQualityOfServiceLevel QosDraft { get => _qos; set => _qos = value; }
+    internal Task AddForTests() => AddAsync();
+    internal Task RemoveSelectedForTests() => RemoveSelectedAsync();
+    internal Task ClearAllForTests() => ClearAllAsync();
+
+    private void ApplyPreset(string topicFilter)
+    {
+        if (Disabled) return;
+        _topic = topicFilter;
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await AddAsync();
+    }
+
+    private async Task AddAsync()
+    {
+        if (Disabled || _busy || string.IsNullOrWhiteSpace(_topic))
+            return;
+        _busy = true;
+        try
+        {
+            var topic = _topic.Trim();
+            await OnAdd.InvokeAsync((topic, _qos));
+            _topic = string.Empty;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveSelectedAsync()
+    {
+        if (Disabled) return;
+        if (_selected is null || _selected.Count == 0)
+        {
+            Snackbar.Add("Select at least one subscription to remove.", Severity.Info);
+            return;
+        }
+        await OnRemove.InvokeAsync(_selected.Select(s => s.Topic).ToList());
+        _selected = [];
+    }
+
+    private async Task ClearAllAsync()
+    {
+        if (Disabled || Items.Count == 0) return;
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Clear all subscriptions",
+            $"Remove all {Items.Count} subscriptions?",
+            yesText: "Clear all",
+            cancelText: "Cancel",
+            options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (confirmed != true)
+            return;
+        await OnClearAll.InvokeAsync();
+        _selected = [];
+    }
+}

@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using MQTTnet.Client
 @using MQTTnet.Extensions.ManagedClient
+@using MQTTnet.Protocol
 @using MudBlazor.Utilities
 @using MqttProbe.Services.Configuration
 @using MqttProbe.Services.Security
@@ -21,6 +22,7 @@
 @inject ICertificateAssetStore CertStore
 @inject ICertificateFilePicker FilePicker
 @inject ICertificateInputCapability InputCapability
+@inject ISnackbar Snackbar
 
 <MudDialog>
     <DialogContent>
@@ -286,10 +288,35 @@
                     </MudTabPanel>
 
                     <MudTabPanel Text="On Connect">
-                        <MudStack Spacing="1" Class="mt-2">
-                            <MudCheckBox @bind-Value="@_subscribeToSpb" Color="Color.Primary">
-                                Subscribe to Sparkplug B topics on connect (spBv1.0/#)
-                            </MudCheckBox>
+                        <MudStack Spacing="2" Class="mt-2">
+                            <div>
+                                <MudSwitch T="bool"
+                                           Value="@SettingsStore.Config.Ui.AutoResubscribe"
+                                           ValueChanged="@OnAutoResubscribeChanged"
+                                           Color="Color.Primary"
+                                           Label="Auto-resubscribe on connect" />
+                                @if (SettingsStore.Config.Ui.AutoResubscribe)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                        Saved topics below are subscribed when this connection connects.
+                                    </MudText>
+                                }
+                            </div>
+
+                            @if (!SettingsStore.Config.Ui.AutoResubscribe)
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                                    On-connect subscriptions are not applied until Auto-resubscribe is enabled. Turn it on above, or enable it in Settings.
+                                </MudAlert>
+                            }
+
+                            <SubscriptionEditor Items="@_selectedConnection.SubscribedTopics"
+                                                Disabled="@(!SettingsStore.Config.Ui.AutoResubscribe)"
+                                                EmptyText="No on-connect subscriptions yet"
+                                                EmptyHint="Add a topic above."
+                                                OnAdd="HandleOnConnectEditorAdd"
+                                                OnRemove="HandleOnConnectEditorRemove"
+                                                OnClearAll="HandleOnConnectEditorClearAll" />
                         </MudStack>
                     </MudTabPanel>
 
@@ -335,7 +362,7 @@
     private ConnectionState _connectionState;
     private Connection? _savedConnectionForSelector;
     private Connection _selectedConnection = new();
-    private bool _subscribeToSpb = true;
+    private const int MaxOnConnectSubscriptions = 500;
     private bool _canConnect;
     private bool _canSave;
     private bool _canDelete;
@@ -406,14 +433,6 @@
         Logger.LogInformation("Connected to broker {Host}:{Port}", _selectedConnection.Host, _selectedConnection.Port);
         await MessageStoreManagerService.Start();
         await ChartDataService.StartAsync();
-        if (_subscribeToSpb)
-        {
-            // Deferred from Connect(): IManagedMqttClient.StartAsync only kicks off the
-            // connection — actual subscribe must wait until the broker is confirmed
-            // reachable, otherwise the snackbar lies and the topic is "subscribed" on a
-            // dead client.
-            await SubscriptionManager.Add("spBv1.0/#");
-        }
         await InvokeAsync(() => MudDialog.Close(DialogResult.Ok(true)));
     }
 
@@ -899,6 +918,74 @@
         UpdateActionStates();
         StateHasChanged();
     }
+
+    private async Task OnAutoResubscribeChanged(bool value)
+    {
+        await SettingsStore.SetAutoResubscribeAsync(value);
+    }
+
+    private async Task HandleOnConnectEditorAdd((string Topic, MqttQualityOfServiceLevel Qos) request)
+    {
+        if (!SettingsStore.Config.Ui.AutoResubscribe)
+        {
+            Snackbar.Add("Enable Auto-resubscribe on connect to manage these topics.", Severity.Info);
+            return;
+        }
+
+        var topic = request.Topic?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(topic) || topic.Contains('\0') || topic.Length > 65_535)
+        {
+            Snackbar.Add("Invalid topic", Severity.Warning);
+            return;
+        }
+
+        if (_selectedConnection.SubscribedTopics.Any(s =>
+                string.Equals(s.Topic, topic, StringComparison.Ordinal)))
+        {
+            Snackbar.Add($"Already saved: {topic}", Severity.Warning);
+            return;
+        }
+
+        if (_selectedConnection.SubscribedTopics.Count >= MaxOnConnectSubscriptions)
+        {
+            Snackbar.Add($"Subscription limit ({MaxOnConnectSubscriptions}) reached", Severity.Warning);
+            return;
+        }
+
+        _selectedConnection.SubscribedTopics.Add(new SubscribedTopic
+        {
+            Topic = topic,
+            QualityOfServiceLevel = request.Qos
+        });
+
+        await SettingsStore.AddConnectionAsync(_selectedConnection);
+        Snackbar.Add($"Saved subscription {topic}", Severity.Success);
+    }
+
+    private async Task HandleOnConnectEditorRemove(IReadOnlyList<string> topics)
+    {
+        if (!SettingsStore.Config.Ui.AutoResubscribe)
+        {
+            Snackbar.Add("Enable Auto-resubscribe on connect to manage these topics.", Severity.Info);
+            return;
+        }
+
+        var set = topics.ToHashSet(StringComparer.Ordinal);
+        _selectedConnection.SubscribedTopics.RemoveAll(s => set.Contains(s.Topic));
+        await SettingsStore.AddConnectionAsync(_selectedConnection);
+    }
+
+    private async Task HandleOnConnectEditorClearAll()
+    {
+        if (!SettingsStore.Config.Ui.AutoResubscribe)
+        {
+            Snackbar.Add("Enable Auto-resubscribe on connect to manage these topics.", Severity.Info);
+            return;
+        }
+
+        _selectedConnection.SubscribedTopics.Clear();
+        await SettingsStore.AddConnectionAsync(_selectedConnection);
+}
 
     private void RemoveCertificate()
     {

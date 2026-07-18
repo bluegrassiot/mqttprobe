@@ -1,0 +1,72 @@
+.subscription-editor {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.subscription-editor-add-row,
+.subscription-editor-presets {
+    flex-shrink: 0;
+}
+
+.subscription-editor-add-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.subscription-editor-topic {
+    flex: 1 1 12rem;
+    min-width: 10rem;
+}
+
+.subscription-editor-qos {
+    flex: 0 1 12rem;
+    min-width: 11rem;
+}
+
+.subscription-editor-add {
+    flex: 0 0 auto;
+}
+
+.subscription-editor-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+
+.subscription-editor-presets .mud-chip {
+    cursor: pointer;
+}
+
+.subscription-editor-table-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.subscription-editor-table-wrap ::deep .mud-table {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.subscription-editor-table-wrap ::deep .mud-table-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.subscription-editor-table-wrap ::deep .mud-table-toolbar {
+    flex-shrink: 0;
+    gap: 8px;
+}

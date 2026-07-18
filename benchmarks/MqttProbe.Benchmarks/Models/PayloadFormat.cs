@@ -11,4 +11,5 @@ public enum PayloadFormat
     Hex,
     Base64,
     PlainText,
+    Csv,
 }

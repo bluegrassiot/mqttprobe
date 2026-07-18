@@ -30,6 +30,10 @@ public static class PayloadFactory
         PayloadFormat.Hex => _hexBytes,
         PayloadFormat.Base64 => _base64Bytes,
         PayloadFormat.PlainText => "hello from mqttprobe temperature=22.5"u8.ToArray(),
+        PayloadFormat.Csv => """
+                             ts,temp,pressure,status
+                             1700000000,22.5,1013.25,active
+                             """u8.ToArray(),
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, null)
     };
 

@@ -145,9 +145,9 @@ static void PrintUsage()
     Console.WriteLine($"Available formats: {formatNames}");
     Console.WriteLine();
     Console.WriteLine("Examples:");
-    Console.WriteLine("  dotnet run -c Release --publish");
-    Console.WriteLine("  dotnet run -c Release --publish --count 500 --rate 200");
-    Console.WriteLine("  dotnet run -c Release --publish --concurrency 8 --count 10000");
-    Console.WriteLine("  dotnet run -c Release --publish --host 192.168.1.100 --port 1883");
-    Console.WriteLine("  dotnet run -c Release --publish --format Sparkplug,Json");
+    Console.WriteLine("  dotnet run -c Release -- publish");
+    Console.WriteLine("  dotnet run -c Release -- publish --count 500 --rate 200");
+    Console.WriteLine("  dotnet run -c Release -- publish --concurrency 8 --count 10000");
+    Console.WriteLine("  dotnet run -c Release -- publish --host 192.168.1.100 --port 1883");
+    Console.WriteLine("  dotnet run -c Release -- publish --format Sparkplug,Json");
 }

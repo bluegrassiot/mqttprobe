@@ -50,6 +50,9 @@ Samples are crafted to win MqttProbe's first-match detector (priority order show
 | `Hex` | `benchmarks/payloads/hex` | Even-length lowercase hex, no spaces |
 | `Base64` | `benchmarks/payloads/base64` | Valid base64 with proper padding |
 | `PlainText` | `benchmarks/payloads/plaintext` | Valid UTF-8, not JSON/XML/hex/base64 |
+| `Csv` | `benchmarks/payloads/csv` | Multi-line CSV (requires `samples/CustomDemoPlugin` loaded) |
+
+The `Csv` format requires the sample payload format plugin. See [samples/CustomDemoPlugin/README.md](../../samples/CustomDemoPlugin/README.md) for build and install instructions.
 
 ## Usage
 
@@ -86,7 +89,7 @@ dotnet run --project benchmarks\MqttProbe.Benchmarks -c Release -- publish --con
 
 **Available format names:**
 
-`Empty`, `Sparkplug`, `MessagePack`, `Binary`, `Json`, `Xml`, `Hex`, `Base64`, `PlainText`
+`Empty`, `Sparkplug`, `MessagePack`, `Binary`, `Json`, `Xml`, `Hex`, `Base64`, `PlainText`, `Csv`
 
 ## Concurrency
 
@@ -104,7 +107,7 @@ Some brokers disallow the multi-level `#` wildcard. Prefer single-level `+` or e
 
 | Subscription | Covers |
 |---|---|
-| `benchmarks/payloads/+` | Empty, MessagePack, Binary, Json, Xml, Hex, Base64, PlainText |
+| `benchmarks/payloads/+` | Empty, MessagePack, Binary, Json, Xml, Hex, Base64, PlainText, Csv |
 | `spBv1.0/bench/DDATA/publisher` | Sparkplug |
 
 Add both filters in MqttProbe's Subscriptions tab before you run the publisher.

@@ -173,6 +173,7 @@ public static class PayloadPublisher
         PayloadFormat.Hex => "benchmarks/payloads/hex",
         PayloadFormat.Base64 => "benchmarks/payloads/base64",
         PayloadFormat.PlainText => "benchmarks/payloads/plaintext",
+        PayloadFormat.Csv => "benchmarks/payloads/csv",
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, null)
     };
 }

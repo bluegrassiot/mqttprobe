@@ -47,7 +47,7 @@ Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart
 The fastest way to get running:
 
 ```bash
-git clone https://github.com/bluegrassiot/mqttprobe
+git clone --recurse-submodules https://github.com/bluegrassiot/mqttprobe
 cd mqttprobe
 docker compose up -d
 ```
@@ -200,17 +200,17 @@ MqttProbe.slnx
 ```
 
 **Key libraries:**
-- [MQTTnet](https://github.com/dotnet/MQTTnet) v4 — MQTT client *(pinned to v4; see note below)*
+- [MQTTnet](https://github.com/dotnet/MQTTnet) v5.2.x — MQTT client (managed reconnect/resubscribe/queue behavior is provided by an in-house `IMqttManagedClient` wrapper)
 - [MudBlazor](https://mudblazor.com) — UI component library
 - [Blazor-ApexCharts](https://apexcharts.github.io/Blazor-ApexCharts/) — real-time charts
 - [Blazor.Lucide](https://github.com/mrpmorris/blazor-lucide) — icon library
-- [SparkplugNet](https://github.com/SeppPenner/SparkplugNet) — Sparkplug B emulator
+- [SparkplugNet](https://github.com/bluegrassiot/SparkplugNet) — Sparkplug B emulator, consumed from the `external/SparkplugNet` git submodule (a MQTTnet-5 fork of [SeppPenner/SparkplugNet](https://github.com/SeppPenner/SparkplugNet))
 - [Google.Protobuf](https://github.com/protocolbuffers/protobuf) + [Grpc.Tools](https://www.nuget.org/packages/Grpc.Tools) — Sparkplug B payload decoding; the C# types are generated at build time from `src/MqttProbe.Shared/Protos/sparkplug_b.proto` via `protoc` (bundled in `Grpc.Tools`, no separate install needed)
 - [MessagePack-CSharp](https://github.com/MessagePack-CSharp/MessagePack-CSharp) — MessagePack payload detection and decoding
 - [FluentValidation](https://docs.fluentvalidation.net/) — connection form validation
 - [ASP.NET Core Data Protection](https://learn.microsoft.com/aspnet/core/security/data-protection/introduction) — server-side secret encryption
 
-> **MQTTnet v4 note:** This project uses MQTTnet **v4** (not v5). MQTTnet v5 introduced breaking API changes and [SparkplugNet](https://github.com/SeppPenner/SparkplugNet) — the Sparkplug B library used by the emulator — depends on MQTTnet v4 and has not been updated for v5 compatibility. Upgrading to MQTTnet v5 is blocked until SparkplugNet ships a compatible release.
+> **MQTTnet v5 note:** This project runs on MQTTnet **5.2.x**. The v4 `MQTTnet.Extensions.ManagedClient` package was dropped; its reconnect, resubscribe, and offline-publish-queue behavior now lives in a project-owned `IMqttManagedClient` wrapper (`src/MqttProbe.Shared/Services/Mqtt/`). Sparkplug B emulation uses a MQTTnet-5 fork of SparkplugNet pinned as the `external/SparkplugNet` git submodule — remember to clone with `--recurse-submodules` (see below).
 
 ---
 
@@ -262,6 +262,14 @@ Remove the `caddy` service from `docker-compose.prod.yml`, point your proxy (ngi
 ---
 
 ## Development
+
+**Clone with submodules** (required for SparkplugNet source):
+
+```bash
+git clone --recurse-submodules https://github.com/bluegrassiot/mqttprobe.git
+# or if you already cloned without --recurse-submodules:
+git submodule update --init --recursive
+```
 
 ```bash
 # Run unit + component tests

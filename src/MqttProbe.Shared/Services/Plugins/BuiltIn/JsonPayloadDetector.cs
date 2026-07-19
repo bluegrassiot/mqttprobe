@@ -1,5 +1,5 @@
 using System.Text.Unicode;
-using MQTTnet.Client;
+using MQTTnet;
 using MqttProbe.Services.Plugins.Contracts;
 
 namespace MqttProbe.Services.Plugins.BuiltIn;
@@ -11,7 +11,7 @@ public sealed class JsonPayloadDetector : IPayloadDetector
 
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {
-        var segment = e.ApplicationMessage.PayloadSegment;
+        var segment = e.ApplicationMessage.GetPayloadSegment();
         if (segment.Count == 0)
             return false;
 

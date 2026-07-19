@@ -2,11 +2,11 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Logging;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
+using MQTTnet;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
+using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Sparkplug;
 
@@ -37,7 +37,7 @@ public class MessageStoreManager : IMessageStoreManager
 {
     public int MaxTopicNodes => _settingsStore.Config.Performance.MaxTopicNodes;
 
-    private readonly IManagedMqttClient _client;
+    private readonly IMqttManagedClient _client;
     private readonly ILogger<MessageStoreManager> _logger;
     private readonly ISettingsStore _settingsStore;
     private readonly IUxMetricsService _metrics;
@@ -57,7 +57,7 @@ public class MessageStoreManager : IMessageStoreManager
     private long _globalVersion;
     private long _selectedTopicVersion;
 
-    public MessageStoreManager(IManagedMqttClient client, ILogger<MessageStoreManager> logger,
+    public MessageStoreManager(IMqttManagedClient client, ILogger<MessageStoreManager> logger,
         ISettingsStore settingsStore, IUxMetricsService metrics,
         PayloadPipeline pipeline, ISparkplugTopologyService? topologyService = null)
     {
@@ -398,7 +398,7 @@ public class MessageStoreManager : IMessageStoreManager
         }
         _rateLimitLogged = false;
 
-        var payloadSize = arg.ApplicationMessage.PayloadSegment.Count;
+        var payloadSize = arg.ApplicationMessage.GetPayloadSegment().Count;
         _metrics.RecordPayloadSize(payloadSize);
 
         var sw = Stopwatch.StartNew();
@@ -427,8 +427,8 @@ public class MessageStoreManager : IMessageStoreManager
                 && _settingsStore.Config.Ui.EnrichSparkplugAliasNames
                 && _topologyService is not null)
             {
-                var rawPayload = arg.ApplicationMessage.PayloadSegment.Count > 0
-                    ? arg.ApplicationMessage.PayloadSegment.ToArray()
+                var rawPayload = arg.ApplicationMessage.GetPayloadSegment().Count > 0
+                    ? arg.ApplicationMessage.GetPayloadSegment().ToArray()
                     : [];
                 aliasNames = SparkplugAliasResolver.Resolve(topic, rawPayload, _topologyService.Groups);
             }

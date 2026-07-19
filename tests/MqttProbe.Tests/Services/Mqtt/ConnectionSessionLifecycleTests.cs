@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Security;
 using MqttProbe.Tests.Services.Security.TestHelpers;
@@ -9,7 +8,7 @@ namespace MqttProbe.Tests.Services.Mqtt;
 [TestFixture]
 public class ConnectionSessionLifecycleTests
 {
-    private IManagedMqttClient _mockMqttClient = null!;
+    private IMqttManagedClient _mockMqttClient = null!;
     private ISessionState _sessionState = null!;
     private ICertificateSessionQuarantine _mockQuarantine = null!;
     private ILogger<ConnectionSessionLifecycle> _mockLogger = null!;
@@ -18,7 +17,7 @@ public class ConnectionSessionLifecycleTests
     [SetUp]
     public void Setup()
     {
-        _mockMqttClient = Substitute.For<IManagedMqttClient>();
+        _mockMqttClient = Substitute.For<IMqttManagedClient>();
         _sessionState = new SessionState();
         _mockQuarantine = Substitute.For<ICertificateSessionQuarantine>();
         _mockLogger = Substitute.For<ILogger<ConnectionSessionLifecycle>>();

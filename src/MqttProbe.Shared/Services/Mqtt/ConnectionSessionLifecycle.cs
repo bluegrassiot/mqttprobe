@@ -1,12 +1,11 @@
 using Microsoft.Extensions.Logging;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Services.Security;
 
 namespace MqttProbe.Services.Mqtt;
 
 public sealed class ConnectionSessionLifecycle : IConnectionSessionLifecycle
 {
-    private readonly IManagedMqttClient _mqttClient;
+    private readonly IMqttManagedClient _mqttClient;
     private readonly ISessionState _sessionState;
     private readonly ICertificateSessionQuarantine _quarantine;
     private readonly ILogger<ConnectionSessionLifecycle> _logger;
@@ -14,7 +13,7 @@ public sealed class ConnectionSessionLifecycle : IConnectionSessionLifecycle
     public event Action? ActiveConnectionStopped;
 
     public ConnectionSessionLifecycle(
-        IManagedMqttClient mqttClient,
+        IMqttManagedClient mqttClient,
         ISessionState sessionState,
         ICertificateSessionQuarantine quarantine,
         ILogger<ConnectionSessionLifecycle> logger)

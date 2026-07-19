@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
+using MQTTnet;
 using MQTTnet.Protocol;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
@@ -13,7 +12,7 @@ namespace MqttProbe.Shared.Tests.Services.Mqtt;
 [TestFixture]
 public class SubscriptionManagerTests
 {
-    private IManagedMqttClient _mockClient = null!;
+    private IMqttManagedClient _mockClient = null!;
     private ILogger<SubscriptionManager> _mockLogger = null!;
     private ISnackbar _mockSnackbar = null!;
     private ISettingsStore _mockSettingsStore = null!;
@@ -21,12 +20,12 @@ public class SubscriptionManagerTests
     private SubscriptionManager _manager = null!;
 
     private Func<MqttClientConnectedEventArgs, Task>? _connectedHandler;
-    private Func<ManagedProcessFailedEventArgs, Task>? _syncFailedHandler;
+    private Func<MqttManagedProcessFailedEventArgs, Task>? _syncFailedHandler;
 
     [SetUp]
     public void Setup()
     {
-        _mockClient = Substitute.For<IManagedMqttClient>();
+        _mockClient = Substitute.For<IMqttManagedClient>();
         _mockLogger = Substitute.For<ILogger<SubscriptionManager>>();
         _mockSnackbar = Substitute.For<ISnackbar>();
         _mockSettingsStore = Substitute.For<ISettingsStore>();
@@ -42,8 +41,8 @@ public class SubscriptionManagerTests
             .When(x => x.ConnectedAsync += Arg.Any<Func<MqttClientConnectedEventArgs, Task>>())
             .Do(x => _connectedHandler = x.Arg<Func<MqttClientConnectedEventArgs, Task>>());
         _mockClient
-            .When(x => x.SynchronizingSubscriptionsFailedAsync += Arg.Any<Func<ManagedProcessFailedEventArgs, Task>>())
-            .Do(x => _syncFailedHandler = x.Arg<Func<ManagedProcessFailedEventArgs, Task>>());
+            .When(x => x.SynchronizingSubscriptionsFailedAsync += Arg.Any<Func<MqttManagedProcessFailedEventArgs, Task>>())
+            .Do(x => _syncFailedHandler = x.Arg<Func<MqttManagedProcessFailedEventArgs, Task>>());
 
         _manager = new SubscriptionManager(_mockClient, _mockLogger, _mockSnackbar, _mockSettingsStore, _mockSessionState);
     }
@@ -304,7 +303,7 @@ public class SubscriptionManagerTests
     {
         _syncFailedHandler.Should().NotBeNull("component should subscribe to SynchronizingSubscriptionsFailedAsync in constructor");
 
-        await _syncFailedHandler!(new ManagedProcessFailedEventArgs(new Exception("oops"), [], []));
+        await _syncFailedHandler!(new MqttManagedProcessFailedEventArgs(new Exception("oops")));
 
         _mockSnackbar.Received(1).Add(Arg.Any<string>(), Severity.Error, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
     }

@@ -1,4 +1,4 @@
-using MQTTnet.Client;
+using MQTTnet;
 using MqttProbe.Services.Plugins.Contracts;
 
 namespace MqttProbe.Services.Plugins.BuiltIn;

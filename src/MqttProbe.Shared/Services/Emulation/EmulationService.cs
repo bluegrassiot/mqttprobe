@@ -2,8 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
+using MQTTnet;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
@@ -39,7 +38,7 @@ public class EmulationService : IEmulationService
     private readonly ISettingsStore _settingsStore;
     private readonly ISparkplugNodeFactory _nodeFactory;
     private readonly ISessionState _sessionState;
-    private readonly IManagedMqttClient _managedMqttClient;
+    private readonly IMqttManagedClient _managedMqttClient;
     private readonly IUxMetricsService _metrics;
     private readonly ICertificateAssetStore _certStore;
     private readonly ICertificateSessionQuarantine _quarantine;
@@ -58,7 +57,7 @@ public class EmulationService : IEmulationService
     public EmulationService(ISettingsStore settingsStore,
         ISparkplugNodeFactory nodeFactory,
         ISessionState sessionState,
-        IManagedMqttClient managedMqttClient,
+        IMqttManagedClient managedMqttClient,
         IUxMetricsService metrics,
         ICertificateAssetStore certStore,
         ICertificateSessionQuarantine quarantine,

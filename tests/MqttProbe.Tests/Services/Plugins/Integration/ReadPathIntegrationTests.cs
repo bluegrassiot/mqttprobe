@@ -2,7 +2,6 @@ using System.Text;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
-using MQTTnet.Client;
 using MqttProbe.Services.Plugins.BuiltIn;
 using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Plugins.Pipeline;

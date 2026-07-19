@@ -2,12 +2,11 @@ using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using MqttProbe.TestInfrastructure.Fixtures;
@@ -56,7 +55,7 @@ public class MtlsIntegrationTests
         var resource = new CertificateSessionResource();
         var options = await builder.BuildAsync(conn, resource);
 
-        using var client = new MqttFactory().CreateManagedMqttClient();
+        using var client = new MqttManagedClient();
         var connected = new TaskCompletionSource<bool>();
         client.ConnectedAsync += _ => { connected.TrySetResult(true); return Task.CompletedTask; };
 
@@ -96,7 +95,7 @@ public class MtlsIntegrationTests
         var resource = new CertificateSessionResource();
         var options = await builder.BuildAsync(conn, resource);
 
-        using var client = new MqttFactory().CreateManagedMqttClient();
+        using var client = new MqttManagedClient();
         var connected = new TaskCompletionSource<bool>();
         client.ConnectedAsync += _ => { connected.TrySetResult(true); return Task.CompletedTask; };
 
@@ -162,7 +161,7 @@ public class MtlsIntegrationTests
         };
 
         // Verifier subscribes FIRST with its own client cert (broker requires mTLS)
-        using var verifier = new MqttFactory().CreateMqttClient();
+        using var verifier = new MqttClientFactory().CreateMqttClient();
         var verifierOpts = new MqttClientOptionsBuilder()
             .WithTcpServer("127.0.0.1", _broker.Port)
             .WithTlsOptions(o => o
@@ -195,7 +194,7 @@ public class MtlsIntegrationTests
                 && parts[2] == "NBIRTH"
                 && parts[3] == "TestNode")
             {
-                var payload = msg.PayloadSegment;
+                var payload = msg.GetPayloadSegment();
                 if (payload.Count > 0)
                 {
                     try

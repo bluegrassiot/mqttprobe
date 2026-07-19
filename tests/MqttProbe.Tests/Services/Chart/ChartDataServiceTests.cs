@@ -1,9 +1,8 @@
 using MQTTnet;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Chart;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Mqtt;
 using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Shared.Tests.Services.Chart;
@@ -11,7 +10,7 @@ namespace MqttProbe.Shared.Tests.Services.Chart;
 [TestFixture]
 public class ChartDataServiceTests
 {
-    private IManagedMqttClient _mockClient = null!;
+    private IMqttManagedClient _mockClient = null!;
     private IJsonFieldExtractor _extractor = null!;
     private IChartFieldRegistry _registry = null!;
     private ISettingsStore _mockSettingsStore = null!;
@@ -21,7 +20,7 @@ public class ChartDataServiceTests
     [SetUp]
     public void Setup()
     {
-        _mockClient = Substitute.For<IManagedMqttClient>();
+        _mockClient = Substitute.For<IMqttManagedClient>();
         _extractor = new JsonFieldExtractor();
         _registry = new ChartFieldRegistry();
         _mockSettingsStore = Substitute.For<ISettingsStore>();

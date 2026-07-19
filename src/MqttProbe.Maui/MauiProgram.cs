@@ -2,8 +2,6 @@ using System.Globalization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using MQTTnet;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Layout;
 using MqttProbe.Maui.Services;
 using MqttProbe.Models.Plugins;
@@ -58,15 +56,15 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        var client = new MqttFactory().CreateManagedMqttClient();
-        builder.Services.AddSingleton(client);
+        builder.Services.AddSingleton<IMqttManagedClient>(sp =>
+            new MqttManagedClient(sp.GetService<ILogger<MqttManagedClient>>()));
         builder.Services.AddSingleton<ISessionState, SessionState>();
         builder.Services.AddSingleton<IEmulationService>(sp =>
             new EmulationService(
                 sp.GetRequiredService<ISettingsStore>(),
                 sp.GetRequiredService<ISparkplugNodeFactory>(),
                 sp.GetRequiredService<ISessionState>(),
-                sp.GetRequiredService<IManagedMqttClient>(),
+                sp.GetRequiredService<IMqttManagedClient>(),
                 sp.GetRequiredService<IUxMetricsService>(),
                 sp.GetRequiredService<ICertificateAssetStore>(),
                 sp.GetRequiredService<ICertificateSessionQuarantine>(),
@@ -175,7 +173,7 @@ public static class MauiProgram
 
         builder.Services.AddSingleton<ISparkplugTopologyService>(sp =>
             new SparkplugTopologyService(
-                sp.GetRequiredService<IManagedMqttClient>(),
+                sp.GetRequiredService<IMqttManagedClient>(),
                 sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
                 autoSubscribeToClient: false));
 

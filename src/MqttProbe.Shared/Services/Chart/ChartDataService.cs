@@ -1,9 +1,10 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
+using MQTTnet;
 using MqttProbe.Models.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Sparkplug;
 
@@ -21,7 +22,7 @@ public interface IChartDataService : IDisposable
 }
 
 public class ChartDataService(
-    IManagedMqttClient client,
+    IMqttManagedClient client,
     IJsonFieldExtractor extractor,
     IChartFieldRegistry registry,
     ISettingsStore settingsStore,
@@ -98,8 +99,8 @@ public class ChartDataService(
                 && settingsStore.Config.Ui.EnrichSparkplugAliasNames
                 && topologyService is not null)
             {
-                var rawPayload = e.ApplicationMessage.PayloadSegment.Count > 0
-                    ? e.ApplicationMessage.PayloadSegment.ToArray()
+                var rawPayload = e.ApplicationMessage.GetPayloadSegment().Count > 0
+                    ? e.ApplicationMessage.GetPayloadSegment().ToArray()
                     : [];
                 aliasNames = SparkplugAliasResolver.Resolve(topic, rawPayload, topologyService.Groups);
             }

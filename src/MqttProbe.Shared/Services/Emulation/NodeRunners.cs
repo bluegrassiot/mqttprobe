@@ -1,11 +1,10 @@
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Metrics;
+using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Security;
@@ -403,7 +402,7 @@ public class SparkplugNodeRunner(
     }
 }
 
-public class GenericNodeRunner(EmulatorNodeConfig config, IManagedMqttClient managedMqttClient, PayloadPipeline pipeline, ILogger logger) : INodeRunner
+public class GenericNodeRunner(EmulatorNodeConfig config, IMqttManagedClient managedMqttClient, PayloadPipeline pipeline, ILogger logger) : INodeRunner
 {
     private readonly Dictionary<Guid, WaveformState> _states = [];
 

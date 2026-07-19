@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Emulation;
 using MqttProbe.Components.Layout;
 using MqttProbe.Models.Chart;
@@ -69,7 +68,7 @@ public class IndexTests : BunitTestContext
         Services.AddSingleton(mockSessionState);
         Services.AddSingleton<IThemes>(new Themes());
 
-        var mockMqtt = Substitute.For<IManagedMqttClient>();
+        var mockMqtt = Substitute.For<IMqttManagedClient>();
         mockMqtt.IsConnected.Returns(true);
         mockMqtt.IsStarted.Returns(true);
         Services.AddSingleton(mockMqtt);
@@ -376,7 +375,7 @@ public class IndexTests : BunitTestContext
     [Test]
     public void WhenDisconnected_OnBrowser_ShowsConnectionRequiredPanel_NotBrowserStub()
     {
-        var mqtt = Services.GetRequiredService<IManagedMqttClient>();
+        var mqtt = Services.GetRequiredService<IMqttManagedClient>();
         mqtt.IsConnected.Returns(false);
         mqtt.IsStarted.Returns(true);
 
@@ -388,7 +387,7 @@ public class IndexTests : BunitTestContext
     [Test]
     public void WhenDisconnected_OnSettings_ShowsSettings_NotReconnectPanel()
     {
-        var mqtt = Services.GetRequiredService<IManagedMqttClient>();
+        var mqtt = Services.GetRequiredService<IMqttManagedClient>();
         mqtt.IsConnected.Returns(false);
         mqtt.IsStarted.Returns(true);
 
@@ -406,7 +405,7 @@ public class IndexTests : BunitTestContext
     [Test]
     public void WhenDisconnected_NeverStarted_OnBrowser_ShowsConnectPrompt()
     {
-        var mqtt = Services.GetRequiredService<IManagedMqttClient>();
+        var mqtt = Services.GetRequiredService<IMqttManagedClient>();
         mqtt.IsConnected.Returns(false);
         mqtt.IsStarted.Returns(false);
 
@@ -419,7 +418,7 @@ public class IndexTests : BunitTestContext
     [Test]
     public void ActiveConnectionStopped_WhileOnBrowser_ShowsConnectionRequiredPanel()
     {
-        var mqtt = Services.GetRequiredService<IManagedMqttClient>();
+        var mqtt = Services.GetRequiredService<IMqttManagedClient>();
         mqtt.IsConnected.Returns(true);
         mqtt.IsStarted.Returns(true);
 
@@ -444,7 +443,7 @@ public class NotFoundPageTests : BunitTestContext
     [SetUp]
     public void SetupMocks()
     {
-        var mqttClient = Substitute.For<IManagedMqttClient>();
+        var mqttClient = Substitute.For<IMqttManagedClient>();
         mqttClient.IsConnected.Returns(true);
         mqttClient.IsStarted.Returns(true);
         var appInfo = Substitute.For<IAppInfoService>();

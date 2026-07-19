@@ -1,7 +1,5 @@
 using Microsoft.Extensions.Logging;
 using MQTTnet;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
 using MQTTnet.Protocol;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
@@ -19,7 +17,7 @@ public interface ISubscriptionManager : IDisposable
 
 public class SubscriptionManager : ISubscriptionManager, IDisposable
 {
-    private readonly IManagedMqttClient _managedMqttClient;
+    private readonly IMqttManagedClient _managedMqttClient;
     private readonly ILogger<SubscriptionManager> _logger;
     private readonly ISnackbar _snackbar;
     private readonly ISettingsStore _settingsStore;
@@ -28,7 +26,7 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
     private readonly Lock _topicsSync = new();
     private readonly Dictionary<string, MqttQualityOfServiceLevel> _topics = new(StringComparer.Ordinal);
 
-    public SubscriptionManager(IManagedMqttClient managedMqttClient, ILogger<SubscriptionManager> logger,
+    public SubscriptionManager(IMqttManagedClient managedMqttClient, ILogger<SubscriptionManager> logger,
         ISnackbar snackbar, ISettingsStore settingsStore, ISessionState sessionState)
     {
         _managedMqttClient = managedMqttClient;
@@ -215,7 +213,7 @@ public class SubscriptionManager : ISubscriptionManager, IDisposable
         }
     }
 
-    private Task OnSyncFailed(ManagedProcessFailedEventArgs args)
+    private Task OnSyncFailed(MqttManagedProcessFailedEventArgs args)
     {
         try
         {

@@ -4,8 +4,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using MQTTnet;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Layout;
 using MqttProbe.Desktop.Interop;
 using MqttProbe.Desktop.Services;
@@ -57,15 +55,15 @@ internal static class Program
         });
 
         // Singleton DI model matching MAUI host (one native session).
-        var client = new MqttFactory().CreateManagedMqttClient();
-        builder.Services.AddSingleton(client);
+        builder.Services.AddSingleton<IMqttManagedClient>(sp =>
+            new MqttManagedClient(sp.GetService<ILogger<MqttManagedClient>>()));
         builder.Services.AddSingleton<ISessionState, SessionState>();
         builder.Services.AddSingleton<IEmulationService>(sp =>
             new EmulationService(
                 sp.GetRequiredService<ISettingsStore>(),
                 sp.GetRequiredService<ISparkplugNodeFactory>(),
                 sp.GetRequiredService<ISessionState>(),
-                sp.GetRequiredService<IManagedMqttClient>(),
+                sp.GetRequiredService<IMqttManagedClient>(),
                 sp.GetRequiredService<IUxMetricsService>(),
                 sp.GetRequiredService<ICertificateAssetStore>(),
                 sp.GetRequiredService<ICertificateSessionQuarantine>(),
@@ -167,7 +165,7 @@ internal static class Program
 
         builder.Services.AddSingleton<ISparkplugTopologyService>(sp =>
             new SparkplugTopologyService(
-                sp.GetRequiredService<IManagedMqttClient>(),
+                sp.GetRequiredService<IMqttManagedClient>(),
                 sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
                 autoSubscribeToClient: false));
 

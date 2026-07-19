@@ -14,10 +14,10 @@
     <PackageVersion Include="MudBlazor" Version="9.7.0" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.10" />
-    <!-- MQTTnet v4 — pinned; SparkplugNet is incompatible with v5 -->
-    <PackageVersion Include="MQTTnet" Version="4.3.7.1207" />
-    <PackageVersion Include="MQTTnet.Extensions.ManagedClient" Version="4.3.7.1207" />
-    <PackageVersion Include="SparkplugNet" Version="1.3.10" />
+    <!-- MQTTnet 5.2.x. ManagedClient is removed (replaced by the in-house
+         IMqttManagedClient wrapper). SparkplugNet is consumed via the
+         external/SparkplugNet git submodule ProjectReference (same MQTTnet pin). -->
+    <PackageVersion Include="MQTTnet" Version="5.2.0.1603" />
     <!-- ============================================================ -->
     <!-- ASP.NET Core / Web                                           -->
     <!-- ============================================================ -->

@@ -2,10 +2,9 @@ using System.Collections.Concurrent;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
 using MQTTnet.Protocol;
 using MqttProbe.Models.Sparkplug;
+using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Plugins.Contracts;
 using Org.Eclipse.Tahu.Protobuf;
 
@@ -26,7 +25,7 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
 {
     private static readonly TimeSpan _rebirthCooldown = TimeSpan.FromSeconds(30);
 
-    private readonly IManagedMqttClient _client;
+    private readonly IMqttManagedClient _client;
     private readonly ILogger<SparkplugTopologyService> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly bool _autoSubscribeToClient;
@@ -36,7 +35,7 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
     public IReadOnlyDictionary<string, SpbGroup> Groups => _groups;
     public event Action? TopologyChanged;
 
-    public SparkplugTopologyService(IManagedMqttClient client, ILogger<SparkplugTopologyService> logger,
+    public SparkplugTopologyService(IMqttManagedClient client, ILogger<SparkplugTopologyService> logger,
         TimeProvider? timeProvider = null, bool autoSubscribeToClient = true)
     {
         _client = client;
@@ -533,17 +532,15 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         });
 
         var topic = $"spBv1.0/{groupId}/NCMD/{nodeId}";
-        var managedMessage = new ManagedMqttApplicationMessageBuilder()
-            .WithApplicationMessage(new MqttApplicationMessageBuilder()
-                .WithTopic(topic)
-                .WithPayload(payload.ToByteArray())
-                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
-                .Build())
+        var message = new MqttApplicationMessageBuilder()
+            .WithTopic(topic)
+            .WithPayload(payload.ToByteArray())
+            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
             .Build();
 
         try
         {
-            await _client.EnqueueAsync(managedMessage);
+            await _client.EnqueueAsync(message);
             if (_logger.IsEnabled(LogLevel.Information))
                 _logger.LogInformation("Requested rebirth for node {GroupId}/{NodeId}", groupId, nodeId);
         }
@@ -560,7 +557,7 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
 
         try
         {
-            var payload = TryParsePayload(arg.ApplicationMessage.PayloadSegment);
+            var payload = TryParsePayload(arg.ApplicationMessage.GetPayloadSegment());
 
             switch (verb)
             {

@@ -2,10 +2,9 @@ using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using MQTTnet;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
 using MQTTnet.Protocol;
 using MqttProbe.Models.Sparkplug;
+using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Sparkplug;
 using Org.Eclipse.Tahu.Protobuf;
@@ -15,7 +14,7 @@ namespace MqttProbe.Shared.Tests.Services.Sparkplug;
 [TestFixture]
 public class SparkplugTopologyServiceTests
 {
-    private IManagedMqttClient _mockClient = null!;
+    private IMqttManagedClient _mockClient = null!;
     private ILogger<SparkplugTopologyService> _mockLogger = null!;
     private SparkplugTopologyService _service = null!;
     private Func<MqttApplicationMessageReceivedEventArgs, Task>? _handler;
@@ -23,7 +22,7 @@ public class SparkplugTopologyServiceTests
     [SetUp]
     public void Setup()
     {
-        _mockClient = Substitute.For<IManagedMqttClient>();
+        _mockClient = Substitute.For<IMqttManagedClient>();
         _mockLogger = Substitute.For<ILogger<SparkplugTopologyService>>();
 
         _handler = null;
@@ -556,8 +555,8 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -567,7 +566,7 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 25.0)));
 
         await _mockClient.DidNotReceive().EnqueueAsync(
-            Arg.Any<ManagedMqttApplicationMessage>());
+            Arg.Any<MqttApplicationMessage>());
     }
 
     [Test]
@@ -578,8 +577,8 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -593,8 +592,8 @@ public class SparkplugTopologyServiceTests
         // First NDATA without birth — triggers rebirth
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
 
         // Advance past the 30-second cooldown
         fakeClock.Advance(TimeSpan.FromSeconds(31));
@@ -602,8 +601,8 @@ public class SparkplugTopologyServiceTests
         // Second NDATA without birth — should trigger another rebirth
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 23.0)));
         await _mockClient.Received(2).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -615,21 +614,21 @@ public class SparkplugTopologyServiceTests
         await Task.WhenAll(tasks);
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
     public async Task NDATA_WithoutBirth_EnqueueAsyncThrows_DoesNotPropagateException()
     {
-        _mockClient.EnqueueAsync(Arg.Any<ManagedMqttApplicationMessage>())
+        _mockClient.EnqueueAsync(Arg.Any<MqttApplicationMessage>())
             .Returns(Task.FromException(new InvalidOperationException("connection lost")));
 
         var act = () => Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
 
         await act.Should().NotThrowAsync();
         // LogWarning is an extension method; verify via the Log interface method
-        await _mockClient.Received(1).EnqueueAsync(Arg.Any<ManagedMqttApplicationMessage>());
+        await _mockClient.Received(1).EnqueueAsync(Arg.Any<MqttApplicationMessage>());
     }
 
     [Test]
@@ -648,8 +647,8 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/DDATA/edge-01/sensor-A", SpbPayload(("Voltage", 0, 10, 220.0)));
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -660,8 +659,8 @@ public class SparkplugTopologyServiceTests
         await _service.RequestNodeRebirthAsync("factory", "edge-01");
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -670,7 +669,7 @@ public class SparkplugTopologyServiceTests
         await _service.RequestNodeRebirthAsync("missing", "edge-01");
 
         await _mockClient.DidNotReceive().EnqueueAsync(
-            Arg.Any<ManagedMqttApplicationMessage>());
+            Arg.Any<MqttApplicationMessage>());
     }
 
     [Test]
@@ -679,9 +678,9 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"
-                && VerifyRebirthPayload(m!.ApplicationMessage!.PayloadSegment)));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"
+                && VerifyRebirthPayload(m!.GetPayloadSegment())));
     }
 
     private static bool VerifyRebirthPayload(ReadOnlyMemory<byte> payloadBytes)
@@ -699,9 +698,9 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"
-                && m!.ApplicationMessage!.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"
+                && m!.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce));
     }
 
     [Test]

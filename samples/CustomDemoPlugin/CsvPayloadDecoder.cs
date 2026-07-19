@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.Json;
-using MQTTnet.Client;
+using MQTTnet;
 using MqttProbe.Services.Plugins.Contracts;
 
 namespace CustomDemoPlugin;
@@ -12,7 +12,7 @@ public sealed class CsvPayloadDecoder : IPayloadDecoder
     public DecodedPayloadEnvelope Decode(MqttApplicationMessageReceivedEventArgs e)
     {
         var topic = e.ApplicationMessage.Topic;
-        var segment = e.ApplicationMessage.PayloadSegment;
+        var segment = e.ApplicationMessage.GetPayloadSegment();
         var raw = segment.Array is null ? [] : segment.ToArray();
 
         if (raw.Length == 0)

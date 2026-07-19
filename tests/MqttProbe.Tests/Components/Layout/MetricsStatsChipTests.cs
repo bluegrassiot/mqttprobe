@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Layout;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
@@ -12,14 +11,14 @@ namespace MqttProbe.Shared.Tests.Components.Layout;
 public class MetricsStatsChipTests : BunitTestContext
 {
     private IUxMetricsService _mockMetrics = null!;
-    private IManagedMqttClient _mockMqttClient = null!;
+    private IMqttManagedClient _mockMqttClient = null!;
     private IMessageStoreManager _mockMsgStore = null!;
 
     [SetUp]
     public void Setup()
     {
         _mockMetrics = Substitute.For<IUxMetricsService>();
-        _mockMqttClient = Substitute.For<IManagedMqttClient>();
+        _mockMqttClient = Substitute.For<IMqttManagedClient>();
         _mockMqttClient.IsConnected.Returns(false);
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
 

@@ -3,14 +3,13 @@ using System.Reflection;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
@@ -41,7 +40,7 @@ public class EmulationServiceTests
     private string _filePath = null!;
     private ISettingsStore _settingsStore = null!;
     private ISparkplugNodeFactory _mockNodeFactory = null!;
-    private IManagedMqttClient _mockMqttClient = null!;
+    private IMqttManagedClient _mockMqttClient = null!;
     private ISessionState _mockSessionState = null!;
     private IUxMetricsService _mockMetrics = null!;
     private ICertificateAssetStore _mockCertStore = null!;
@@ -64,7 +63,7 @@ public class EmulationServiceTests
 
         await settingsStore.SetEmulatorPublishIntervalAsync(_mockSessionState.SelectedConnection.Id, 120_000);
         _mockNodeFactory = Substitute.For<ISparkplugNodeFactory>();
-        _mockMqttClient = Substitute.For<IManagedMqttClient>();
+        _mockMqttClient = Substitute.For<IMqttManagedClient>();
         _mockMqttClient.EnqueueAsync(Arg.Any<MqttApplicationMessage>()).Returns(Task.CompletedTask);
         _mockMetrics = Substitute.For<IUxMetricsService>();
         _mockCertStore = Substitute.For<ICertificateAssetStore>();
@@ -308,7 +307,7 @@ public class EmulationServiceTests
 
         messages.Should().HaveCount(1);
         messages[0].Topic.Should().Be("Plant1/Press-01/Sensor-1");
-        var payload = Encoding.UTF8.GetString(messages[0].PayloadSegment);
+        var payload = Encoding.UTF8.GetString(messages[0].GetPayloadSegment());
         payload.Should().Contain("\"Flow Rate\"");
         payload.Should().Contain("\"Valve Open\"");
         payload.Should().Contain("\"timestamp\"");
@@ -511,7 +510,7 @@ public class EmulationServiceTests
         await _service.StartAsync();
 
         var publishCountBeforeDispose = (await _mockMqttClient.ReceivedCalls()
-            .Where(c => c.GetMethodInfo().Name == nameof(IManagedMqttClient.EnqueueAsync))
+            .Where(c => c.GetMethodInfo().Name == nameof(IMqttManagedClient.EnqueueAsync))
             .ToAsyncEnumerable()
             .ToListAsync()).Count;
 

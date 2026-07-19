@@ -6,8 +6,6 @@ using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
-using MQTTnet;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Layout;
 using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Chart;
@@ -106,7 +104,8 @@ builder.Services.AddSingleton<ISecretStorage>(sp =>
         sp.GetRequiredService<IDataProtectionProvider>(),
         Path.Combine(configDir, "secrets.dat")));
 
-builder.Services.AddScoped<IManagedMqttClient>(_ => new MqttFactory().CreateManagedMqttClient());
+builder.Services.AddScoped<IMqttManagedClient>(sp =>
+    new MqttManagedClient(sp.GetService<ILogger<MqttManagedClient>>()));
 builder.Services.AddScoped<ISessionState, SessionState>();
 builder.Services.AddSingleton<ISettingsStore>(sp =>
     new SettingsStore(Path.Combine(configDir, "appsettings.json"),
@@ -130,7 +129,7 @@ new EmulationService(
 sp.GetRequiredService<ISettingsStore>(),
 sp.GetRequiredService<ISparkplugNodeFactory>(),
 sp.GetRequiredService<ISessionState>(),
-sp.GetRequiredService<IManagedMqttClient>(),
+sp.GetRequiredService<IMqttManagedClient>(),
 sp.GetRequiredService<IUxMetricsService>(),
 sp.GetRequiredService<ICertificateAssetStore>(),
 sp.GetRequiredService<ICertificateSessionQuarantine>(),
@@ -171,7 +170,7 @@ builder.Services.AddSingleton<PayloadPipeline>();
 
 builder.Services.AddScoped<ISparkplugTopologyService>(sp =>
     new SparkplugTopologyService(
-        sp.GetRequiredService<IManagedMqttClient>(),
+        sp.GetRequiredService<IMqttManagedClient>(),
         sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
         autoSubscribeToClient: false));
 

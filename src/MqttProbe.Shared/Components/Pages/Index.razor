@@ -1,11 +1,10 @@
 @page "/"
 @using Microsoft.AspNetCore.Components.Authorization
-@using MQTTnet.Extensions.ManagedClient
 @using MqttProbe.Services.Configuration
 @using MqttProbe.Services.Mqtt
 @attribute [Authorize]
 @implements IDisposable
-@inject IManagedMqttClient MqttClient
+@inject IMqttManagedClient MqttClient
 @inject IConnectionSessionLifecycle SessionLifecycle
 @inject IMessageStoreManager MessageStoreManager
 @inject ISettingsStore SettingsStore

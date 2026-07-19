@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
+using MQTTnet;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
@@ -15,14 +14,14 @@ namespace MqttProbe.Shared.Tests.Services.Mqtt;
 [TestFixture]
 public class MessageStoreManagerTests
 {
-    private IManagedMqttClient _mockClient;
+    private IMqttManagedClient _mockClient;
     private ILogger<MessageStoreManager> _mockLogger;
     private MessageStoreManager _messageStoreManager;
 
     [SetUp]
     public void Setup()
     {
-        _mockClient = Substitute.For<IManagedMqttClient>();
+        _mockClient = Substitute.For<IMqttManagedClient>();
         _mockLogger = Substitute.For<ILogger<MessageStoreManager>>();
         var mockSettings = Substitute.For<ISettingsStore>();
         mockSettings.Config.Returns(new AppConfiguration());

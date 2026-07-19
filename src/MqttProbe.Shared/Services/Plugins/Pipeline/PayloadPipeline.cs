@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Logging;
-using MQTTnet.Client;
+using MQTTnet;
 using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Plugins.Registry;
 
@@ -20,7 +20,7 @@ public sealed class PayloadPipeline
     {
         var diagnostics = new List<string>();
         var topic = e.ApplicationMessage.Topic;
-        var segment = e.ApplicationMessage.PayloadSegment;
+        var segment = e.ApplicationMessage.GetPayloadSegment();
         var rawPayload = segment.Array is null ? [] : segment.ToArray();
 
         var detector = _registry.FindDetector(e);

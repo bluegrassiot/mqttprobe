@@ -1,0 +1,13 @@
+<Project>
+  <!--
+    Isolation boundary for vendored git submodules (e.g. external/SparkplugNet).
+    MSBuild uses the first Directory.Build.props found walking up from a project,
+    so this file intentionally shadows the repository-root Directory.Build.props.
+    Submodules keep their own build settings (Nullable, warnings, LangVersion) and
+    are not subject to mqttprobe-wide policies.
+  -->
+  <PropertyGroup>
+    <!-- Referenced as a ProjectReference, not packaged from this repo. -->
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+</Project>

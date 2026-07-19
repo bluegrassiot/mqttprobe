@@ -1,8 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Chart;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
@@ -21,7 +19,7 @@ namespace MqttProbe.Shared.Tests.Services.Mqtt;
 [TestFixture]
 public class MessageStoreManagerMessageHandlerTests
 {
-    private IManagedMqttClient _mockClient = null!;
+    private IMqttManagedClient _mockClient = null!;
     private ILogger<MessageStoreManager> _mockLogger = null!;
     private MessageStoreManager _manager = null!;
     private Func<MqttApplicationMessageReceivedEventArgs, Task>? _capturedHandler;
@@ -29,7 +27,7 @@ public class MessageStoreManagerMessageHandlerTests
     [SetUp]
     public async Task Setup()
     {
-        _mockClient = Substitute.For<IManagedMqttClient>();
+        _mockClient = Substitute.For<IMqttManagedClient>();
         _mockLogger = Substitute.For<ILogger<MessageStoreManager>>();
         var mockSettings = Substitute.For<ISettingsStore>();
         mockSettings.Config.Returns(new AppConfiguration());
@@ -234,7 +232,7 @@ public class MessageStoreManagerMessageHandlerTests
     public async Task MessageHandler_RateLimit_ExcessMessagesDropped()
     {
         var rateLimitedLogger = Substitute.For<ILogger<MessageStoreManager>>();
-        var rateLimitedClient = Substitute.For<IManagedMqttClient>();
+        var rateLimitedClient = Substitute.For<IMqttManagedClient>();
         var mockSettings = Substitute.For<ISettingsStore>();
         mockSettings.Config.Returns(new AppConfiguration
         {
@@ -267,7 +265,7 @@ public class MessageStoreManagerMessageHandlerTests
         var mockSettings = Substitute.For<ISettingsStore>();
         mockSettings.Config.Returns(config);
 
-        using var manager = new MessageStoreManager(Substitute.For<IManagedMqttClient>(),
+        using var manager = new MessageStoreManager(Substitute.For<IMqttManagedClient>(),
             Substitute.For<ILogger<MessageStoreManager>>(), mockSettings,
             Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
 
@@ -280,7 +278,7 @@ public class MessageStoreManagerMessageHandlerTests
     private static (MessageStoreManager Manager, Func<MqttApplicationMessageReceivedEventArgs, Task> Fire, ISettingsStore Settings)
         BuildManager(AppConfiguration config)
     {
-        var client = Substitute.For<IManagedMqttClient>();
+        var client = Substitute.For<IMqttManagedClient>();
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
               .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
@@ -464,7 +462,7 @@ public class MessageStoreManagerMessageHandlerTests
     public async Task PerformanceSettingsChanged_RebuildsRateLimiter()
     {
         var rateLimitedLogger = Substitute.For<ILogger<MessageStoreManager>>();
-        var rateLimitedClient = Substitute.For<IManagedMqttClient>();
+        var rateLimitedClient = Substitute.For<IMqttManagedClient>();
         var config = new AppConfiguration
         {
             Performance = new PerformanceSettings { MaxMessagesPerSecond = 1, MaxStoredMessages = 10_000 }

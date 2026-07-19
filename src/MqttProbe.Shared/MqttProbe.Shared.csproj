@@ -22,11 +22,15 @@
         <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" />
         <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
         <PackageReference Include="MQTTnet" />
-        <PackageReference Include="MQTTnet.Extensions.ManagedClient" />
         <PackageReference Include="MudBlazor" />
-        <PackageReference Include="SparkplugNet" />
         <PackageReference Include="System.Threading.RateLimiting" />
         <PackageReference Include="Blazor-ApexCharts" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- SparkplugNet consumed from the git submodule (fork on MQTTnet 5.2.x)
+             instead of the NuGet package (which pins MQTTnet 4). -->
+        <ProjectReference Include="..\..\external\SparkplugNet\src\SparkplugNet\SparkplugNet.csproj" />
     </ItemGroup>
 
 </Project>

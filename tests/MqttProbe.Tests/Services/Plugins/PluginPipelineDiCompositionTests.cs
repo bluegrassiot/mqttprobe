@@ -3,8 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MQTTnet;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Plugins;
 using MqttProbe.Models.Sparkplug;
@@ -28,7 +26,7 @@ namespace MqttProbe.Tests.Services.Plugins;
 public class PluginPipelineDiCompositionTests
 {
     private ServiceProvider _serviceProvider = null!;
-    private IManagedMqttClient _mockClient = null!;
+    private IMqttManagedClient _mockClient = null!;
     private Func<MqttApplicationMessageReceivedEventArgs, Task>? _capturedHandler;
 
     [SetUp]
@@ -37,7 +35,7 @@ public class PluginPipelineDiCompositionTests
         var services = new ServiceCollection();
 
         // --- Mocks, same pattern as MessageStoreManagerMessageHandlerTests ---
-        _mockClient = Substitute.For<IManagedMqttClient>();
+        _mockClient = Substitute.For<IMqttManagedClient>();
         _capturedHandler = null;
         _mockClient
             .When(x => x.ApplicationMessageReceivedAsync +=
@@ -68,7 +66,7 @@ public class PluginPipelineDiCompositionTests
 
         services.AddSingleton<ISparkplugTopologyService>(sp =>
             new SparkplugTopologyService(
-                sp.GetRequiredService<IManagedMqttClient>(),
+                sp.GetRequiredService<IMqttManagedClient>(),
                 sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
                 autoSubscribeToClient: false));
 

@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    Imported after each submodule .csproj, so this wins over project-level
+    settings. SparkplugNet.csproj sets GeneratePackageOnBuild=true for its own
+    release pipeline; here it is consumed via ProjectReference only, so suppress
+    packaging to keep mqttprobe builds fast and quiet.
+  -->
+  <PropertyGroup>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+</Project>

@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.Unicode;
-using MQTTnet.Client;
+using MQTTnet;
 using MqttProbe.Services.Plugins.Contracts;
 
 namespace CustomDemoPlugin;
@@ -12,7 +12,7 @@ public sealed class CsvPayloadDetector : IPayloadDetector
 
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {
-        var segment = e.ApplicationMessage.PayloadSegment;
+        var segment = e.ApplicationMessage.GetPayloadSegment();
         if (segment.Count == 0)
             return false;
 

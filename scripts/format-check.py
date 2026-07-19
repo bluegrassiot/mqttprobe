@@ -31,7 +31,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FIX = "--fix" in sys.argv
 
-EXCLUDES = ["**/LucideIcons.cs", "**/SparkplugBProtobuf.cs"]
+# external/ holds vendored git submodules (e.g. SparkplugNet fork); they keep
+# their own upstream code style and must not be reformatted by mqttprobe rules.
+EXCLUDES = ["**/LucideIcons.cs", "**/SparkplugBProtobuf.cs", "external/**"]
 
 if sys.platform == "win32":
     TARGETS = [

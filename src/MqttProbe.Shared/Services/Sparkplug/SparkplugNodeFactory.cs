@@ -130,7 +130,7 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
             {
                 await _node.Rebirth(_knownMetrics);
             }
-            catch (MQTTnet.Client.MqttClientDisconnectedException ex)
+            catch (MQTTnet.Exceptions.MqttClientDisconnectedException ex)
             {
                 _logger?.LogWarning(ex,
                     "Rebirth aborted for node {GroupId}/{NodeId}: client disconnected mid-rebirth. " +

@@ -1,14 +1,13 @@
 @using Microsoft.Extensions.Logging
 @using Microsoft.AspNetCore.Components.Forms
-@using MQTTnet.Client
-@using MQTTnet.Extensions.ManagedClient
+@using MQTTnet
 @using MQTTnet.Protocol
 @using MudBlazor.Utilities
 @using MqttProbe.Services.Configuration
 @using MqttProbe.Services.Security
 @implements IAsyncDisposable
 @inject IMessageStoreManager MessageStoreManagerService
-@inject IManagedMqttClient ManagedMqttClient
+@inject IMqttManagedClient ManagedMqttClient
 @inject ISettingsStore SettingsStore
 @inject ISubscriptionManager SubscriptionManager
 @inject ILogger<ConnectionDialog> Logger
@@ -415,7 +414,7 @@
         base.OnInitialized();
     }
 
-    private async Task OnConnectingFailed(ConnectingFailedEventArgs args)
+    private async Task OnConnectingFailed(MqttConnectingFailedEventArgs args)
     {
         _connectionState = ConnectionState.Failed;
         UxMetrics?.RecordConnectFailure();
@@ -582,7 +581,7 @@
 
         _activeCertResource = new CertificateSessionResource();
 
-        ManagedMqttClientOptions builtOptions;
+        MqttManagedClientOptions builtOptions;
         try
         {
             builtOptions = await MqttOptionsBuilder.BuildAsync(connection, _activeCertResource);

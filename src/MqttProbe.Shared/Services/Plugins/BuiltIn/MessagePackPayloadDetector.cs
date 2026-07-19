@@ -1,6 +1,6 @@
 using System.Buffers;
 using MessagePack;
-using MQTTnet.Client;
+using MQTTnet;
 using MqttProbe.Services.Plugins.Contracts;
 
 namespace MqttProbe.Services.Plugins.BuiltIn;
@@ -12,7 +12,7 @@ public sealed class MessagePackPayloadDetector : IPayloadDetector
 
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {
-        var segment = e.ApplicationMessage.PayloadSegment;
+        var segment = e.ApplicationMessage.GetPayloadSegment();
         if (segment.Count == 0)
             return false;
 

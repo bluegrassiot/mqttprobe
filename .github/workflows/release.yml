@@ -30,6 +30,8 @@ jobs:
             os: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -85,6 +87,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -135,6 +139,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -228,6 +234,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - uses: actions/setup-dotnet@v5
         with:

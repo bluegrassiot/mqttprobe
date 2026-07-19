@@ -67,6 +67,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -136,6 +138,8 @@ jobs:
         run: |
           [ -n "$NOTARY_KEY_P8" ] || { echo "::error::NOTARY_KEY_P8 secret is not set"; exit 1; }
           echo "$NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+          # NOTARY_KEY_ID / NOTARY_ISSUER_ID are provided by the env: block above.
+          # shellcheck disable=SC2153
           xcrun notarytool store-credentials velopack-profile \
             --key "$RUNNER_TEMP/notary.p8" \
             --key-id "$NOTARY_KEY_ID" \

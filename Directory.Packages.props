@@ -12,7 +12,7 @@
     <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
     <PackageVersion Include="MessagePack" Version="3.1.8" />
     <PackageVersion Include="MudBlazor" Version="9.7.0" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
     <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.10" />
     <!-- MQTTnet 5.2.x. ManagedClient is removed (replaced by the in-house
          IMqttManagedClient wrapper). SparkplugNet is consumed via the
@@ -47,7 +47,7 @@
     <!-- Tests                                                         -->
     <!-- ============================================================ -->
     <PackageVersion Include="AngleSharp" Version="1.5.2" />
-    <PackageVersion Include="AwesomeAssertions" Version="9.4.0" />
+    <PackageVersion Include="AwesomeAssertions" Version="9.5.0" />
     <PackageVersion Include="bunit" Version="2.7.2" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="JunitXml.TestLogger" Version="8.0.0" />

@@ -32,8 +32,6 @@ public class ProtobufSchemaRegistryTests
         }
         """;
 
-    // Two vendors each shipping their own common/common.proto is the case that motivated
-    // per-source import roots: with a shared FileDescriptorSet, one silently shadows the other.
     [Test]
     public void Separate_Schema_Sets_Do_Not_Shadow_Each_Others_Imports()
     {
@@ -93,7 +91,6 @@ public class ProtobufSchemaRegistryTests
         registry.TryResolveByTopic("acme/x", out var telemetry).Should().BeTrue();
         telemetry.Name.Should().Be("Telemetry");
 
-        // Distinct packages, so both Location types survive with their own fields.
         registry.TryResolveMessage(".common.Location", out var commonLocation).Should().BeTrue();
         commonLocation.Fields[0].Name.Should().Be("latitude");
         registry.TryResolveMessage(".acme.Location", out var acmeLocation).Should().BeTrue();

@@ -119,8 +119,6 @@ public class MqttProbePluginStartupTests
         registry.FindDecoder("json").Should().NotBeNull();
     }
 
-    // A rooted path in "files" throws out of FileDescriptorSet.Add. PluginRegistry is a
-    // DI singleton, so an escaping exception would fail application startup outright.
     [Test]
     public void BuildPluginRegistry_RootedProtobufSchemaFile_DoesNotThrow()
     {
@@ -150,7 +148,6 @@ public class MqttProbePluginStartupTests
         act().Should().NotBeNull();
     }
 
-    // A malformed manifest is a config typo, not a reason to take the app down.
     [Test]
     public void BuildPluginRegistry_MalformedProtobufManifest_DoesNotThrow()
     {

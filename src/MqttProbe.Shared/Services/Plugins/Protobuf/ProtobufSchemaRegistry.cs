@@ -22,9 +22,9 @@ public sealed class ProtobufSchemaRegistry
 
     public ProtobufSchemaRegistry(IReadOnlyList<ProtobufSchemaSource> sources, ILogger? logger = null)
     {
-        // Each source is parsed against its own import root. Sharing one FileDescriptorSet
-        // would let two unrelated schema sets resolve each other's imports — so a vendor
-        // shipping its own common/common.proto could silently shadow another's.
+        // One FileDescriptorSet per source: a shared set would let unrelated schemas
+        // resolve each other's imports, so two vendors both shipping common/common.proto
+        // would silently shadow one another.
         foreach (var source in sources)
         {
             if (source.Manifest.Schemas.Count == 0)
@@ -145,9 +145,6 @@ public sealed class ProtobufSchemaRegistry
             WarnDuplicate("enum", fqn, schemaRoot, logger);
     }
 
-    // Two schema sets declaring the same fully-qualified name is legal but ambiguous:
-    // routes bind to their own descriptor, while nested-type lookups resolve to whichever
-    // was indexed first. Surface it rather than letting one silently win.
     private void WarnDuplicate(string kind, string fqn, string schemaRoot, ILogger? logger)
     {
         var warning = $"WARN: {kind} '{fqn}' from '{schemaRoot}' is already defined by another " +

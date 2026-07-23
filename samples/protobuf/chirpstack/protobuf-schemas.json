@@ -4,6 +4,41 @@
       "files": [ "integration/integration.proto" ],
       "topicPattern": "application/+/device/+/event/up",
       "messageType": "integration.UplinkEvent"
+    },
+    {
+      "files": [ "integration/integration.proto" ],
+      "topicPattern": "application/+/device/+/event/join",
+      "messageType": "integration.JoinEvent"
+    },
+    {
+      "files": [ "integration/integration.proto" ],
+      "topicPattern": "application/+/device/+/event/ack",
+      "messageType": "integration.AckEvent"
+    },
+    {
+      "files": [ "integration/integration.proto" ],
+      "topicPattern": "application/+/device/+/event/txack",
+      "messageType": "integration.TxAckEvent"
+    },
+    {
+      "files": [ "integration/integration.proto" ],
+      "topicPattern": "application/+/device/+/event/log",
+      "messageType": "integration.LogEvent"
+    },
+    {
+      "files": [ "integration/integration.proto" ],
+      "topicPattern": "application/+/device/+/event/status",
+      "messageType": "integration.StatusEvent"
+    },
+    {
+      "files": [ "integration/integration.proto" ],
+      "topicPattern": "application/+/device/+/event/location",
+      "messageType": "integration.LocationEvent"
+    },
+    {
+      "files": [ "integration/integration.proto" ],
+      "topicPattern": "application/+/device/+/command/down",
+      "messageType": "integration.DownlinkCommand"
     }
   ]
 }

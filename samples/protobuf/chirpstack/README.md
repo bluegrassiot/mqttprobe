@@ -59,11 +59,31 @@ host:
   topics map to which message type.
 - `integration/`, `gw/`, `common/` — unmodified ChirpStack v4 schema files, in their
   original directory layout so the `import` statements resolve as written.
-- `sample-uplink.b64` — a base64-encoded sample uplink payload for replay/testing.
+- `sample-uplink.b64` — a base64-encoded sample uplink payload for replay/testing. It
+  covers the `up` topic only; the other mappings are exercised against live traffic.
 
 `integration.proto` also imports `google/protobuf/timestamp.proto` and `struct.proto`.
 You do **not** need to supply those — mqttprobe's protobuf parser resolves the Google
 well-known types itself.
+
+## What gets decoded
+
+The manifest maps **every** topic ChirpStack uses — all seven device events plus the
+downlink command topic:
+
+| Topic | Message |
+|-------|---------|
+| `application/+/device/+/event/up` | `integration.UplinkEvent` |
+| `application/+/device/+/event/join` | `integration.JoinEvent` |
+| `application/+/device/+/event/ack` | `integration.AckEvent` |
+| `application/+/device/+/event/txack` | `integration.TxAckEvent` |
+| `application/+/device/+/event/log` | `integration.LogEvent` |
+| `application/+/device/+/event/status` | `integration.StatusEvent` |
+| `application/+/device/+/event/location` | `integration.LocationEvent` |
+| `application/+/device/+/command/down` | `integration.DownlinkCommand` |
+
+The command topic is included because applications *publish* downlinks there — those
+messages cross the broker, so mqttprobe sees them too.
 
 ## The manifest
 
@@ -80,12 +100,12 @@ well-known types itself.
 ```
 
 - `files` — paths relative to this folder. Only entry points are listed; imports are
-  followed automatically.
+  followed automatically. Repeating the same file across entries is fine — it is loaded
+  once.
 - `topicPattern` — an MQTT topic filter, `+` and `#` wildcards supported.
 - `messageType` — the fully-qualified protobuf message name.
 
-Add a `schemas` entry per event type you want decoded — e.g. `.../event/join` with
-`integration.JoinEvent`. The first matching topic pattern wins.
+The first matching topic pattern wins, so put more specific patterns before broader ones.
 
 ## How ChirpStack publishes protobuf
 
@@ -94,8 +114,12 @@ publishes device events to:
 
     application/{application_id}/device/{dev_eui}/event/{event_type}
 
-where `event_type` is `up`, `join`, `ack`, `txack`, `log`, `status`, `location`.
-The `up` topic carries an `integration.UplinkEvent`.
+and subscribes for downlinks on:
+
+    application/{application_id}/device/{dev_eui}/command/{command}
+
+Both templates are configurable in ChirpStack; if you have changed them, adjust
+`topicPattern` to match.
 
 ### Tracking upstream instead
 

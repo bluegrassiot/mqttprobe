@@ -21,8 +21,6 @@ public class ProtobufChirpStackEndToEndTests
     private static string ChirpStackSampleDir() =>
         Path.Combine(SamplesProtobufDir(), "chirpstack");
 
-    // The documented install: copy samples/protobuf into the plugin folder, so the
-    // ChirpStack set lands at <plugin-folder>/protobuf/chirpstack/.
     private static string StageAsDroppedInPluginFolder()
     {
         var pluginFolder = Path.Combine(Path.GetTempPath(), "mqttprobe-plugins-" + Guid.NewGuid().ToString("N"));
@@ -78,6 +76,25 @@ public class ProtobufChirpStackEndToEndTests
         doc.RootElement.GetProperty("f_port").GetInt64().Should().Be(10);
         doc.RootElement.GetProperty("device_info").GetProperty("dev_eui").GetString().Should().Be("0102030405060708");
         doc.RootElement.GetProperty("device_info").GetProperty("device_name").GetString().Should().Be("sensor-a");
+    }
+
+    [TestCase("event/up", "UplinkEvent")]
+    [TestCase("event/join", "JoinEvent")]
+    [TestCase("event/ack", "AckEvent")]
+    [TestCase("event/txack", "TxAckEvent")]
+    [TestCase("event/log", "LogEvent")]
+    [TestCase("event/status", "StatusEvent")]
+    [TestCase("event/location", "LocationEvent")]
+    [TestCase("command/down", "DownlinkCommand")]
+    public void Every_ChirpStack_Topic_Routes_To_Its_Message(string suffix, string expectedMessage)
+    {
+        var sources = ProtobufSchemaFolderLoader.Discover([StageAsDroppedInPluginFolder()]);
+        var registry = new ProtobufSchemaRegistry(sources);
+        registry.Diagnostics.Should().BeEmpty();
+
+        registry.TryResolveByTopic($"application/1/device/0102030405060708/{suffix}", out var message)
+            .Should().BeTrue($"the sample manifest must map {suffix}");
+        message.Name.Should().Be(expectedMessage);
     }
 
     [Test]

@@ -4,8 +4,6 @@ A sample **payload format plugin** that detects and decodes CSV (comma-separated
 
 This plugin implements `IMqttProbePlugin` with a detector and decoder. When loaded, MqttProbe recognizes CSV messages and displays them as a JSON array of objects in the Payload Browser tree view. The `FormatId` is `csv`.
 
-For the full authoring guide, see [docs/dev/payload-format-plugins.md](../../docs/dev/payload-format-plugins.md).
-
 ## Build
 
 ```powershell
@@ -38,7 +36,7 @@ src/MqttProbe.Web/Plugins/CustomDemoPlugin/CustomDemoPlugin.dll
 {AppDataDirectory}/plugins/CustomDemoPlugin/CustomDemoPlugin.dll
 ```
 
-On this machine a typical Windows MAUI path looks like:
+A typical Windows MAUI path looks like:
 
 ```
 %LOCALAPPDATA%\Bluegrass IoT\com.bluegrassiot.mqttprobe\Data\plugins\CustomDemoPlugin\CustomDemoPlugin.dll

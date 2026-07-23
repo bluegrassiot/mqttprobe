@@ -18,6 +18,8 @@
         <PackageReference Include="Blazor.Lucide" />
         <PackageReference Include="FluentValidation" />
         <PackageReference Include="Google.Protobuf" />
+        <!-- Aliased: Google.Protobuf and protobuf-net.Reflection collide -->
+        <PackageReference Include="protobuf-net.Reflection" Aliases="ProtoReflection" />
         <PackageReference Include="MessagePack" />
         <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" />
         <PackageReference Include="Microsoft.AspNetCore.Components.Web" />

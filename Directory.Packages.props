@@ -10,6 +10,7 @@
     <PackageVersion Include="Blazor.Lucide" Version="1.0.6" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
+    <PackageVersion Include="protobuf-net.Reflection" Version="3.2.52" />
     <PackageVersion Include="MessagePack" Version="3.1.8" />
     <PackageVersion Include="MudBlazor" Version="9.7.0" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />

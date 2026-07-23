@@ -1,0 +1,9 @@
+{
+  "schemas": [
+    {
+      "files": [ "integration/integration.proto" ],
+      "topicPattern": "application/+/device/+/event/up",
+      "messageType": "integration.UplinkEvent"
+    }
+  ]
+}

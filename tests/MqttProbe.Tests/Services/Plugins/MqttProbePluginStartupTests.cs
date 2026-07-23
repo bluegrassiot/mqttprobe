@@ -1,8 +1,7 @@
 using Microsoft.Extensions.Logging;
 using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Plugins;
-using MqttProbe.Services.Plugins.BuiltIn;
-using MqttProbe.Services.Plugins.Registry;
+using MqttProbe.Services.Plugins.Protobuf;
 
 namespace MqttProbe.Tests.Services.Plugins;
 
@@ -118,5 +117,53 @@ public class MqttProbePluginStartupTests
         // Override references a plugin that didn't register; with a single provider
         // (the built-in), the override is silently ignored and the built-in wins.
         registry.FindDecoder("json").Should().NotBeNull();
+    }
+
+    // A rooted path in "files" throws out of FileDescriptorSet.Add. PluginRegistry is a
+    // DI singleton, so an escaping exception would fail application startup outright.
+    [Test]
+    public void BuildPluginRegistry_RootedProtobufSchemaFile_DoesNotThrow()
+    {
+        var pluginFolder = Path.Combine(Path.GetTempPath(), "mqttprobe-plugins-" + Guid.NewGuid().ToString("N"));
+        var schemaRoot = Path.Combine(pluginFolder, ProtobufSchemaFolderLoader.FolderName);
+        Directory.CreateDirectory(schemaRoot);
+        var rootedPath = Path.Combine(schemaRoot, "demo.proto");
+        File.WriteAllText(rootedPath, "syntax = \"proto3\"; package demo; message Reading { int32 id = 1; }");
+        File.WriteAllText(Path.Combine(schemaRoot, ProtobufSchemaFolderLoader.ManifestFileName),
+            $$"""
+              {
+                "schemas": [
+                  {
+                    "files": [ {{System.Text.Json.JsonSerializer.Serialize(rootedPath)}} ],
+                    "topicPattern": "sensors/+/data",
+                    "messageType": "demo.Reading"
+                  }
+                ]
+              }
+              """);
+        var config = new PluginConfig { PluginFolders = { pluginFolder } };
+        var loggerFactory = Substitute.For<ILoggerFactory>();
+
+        var act = () => MqttProbePluginStartup.BuildPluginRegistry(config, loggerFactory);
+
+        act.Should().NotThrow();
+        act().Should().NotBeNull();
+    }
+
+    // A malformed manifest is a config typo, not a reason to take the app down.
+    [Test]
+    public void BuildPluginRegistry_MalformedProtobufManifest_DoesNotThrow()
+    {
+        var pluginFolder = Path.Combine(Path.GetTempPath(), "mqttprobe-plugins-" + Guid.NewGuid().ToString("N"));
+        var schemaRoot = Path.Combine(pluginFolder, ProtobufSchemaFolderLoader.FolderName);
+        Directory.CreateDirectory(schemaRoot);
+        File.WriteAllText(Path.Combine(schemaRoot, ProtobufSchemaFolderLoader.ManifestFileName), "{ not json");
+        var config = new PluginConfig { PluginFolders = { pluginFolder } };
+        var loggerFactory = Substitute.For<ILoggerFactory>();
+
+        var act = () => MqttProbePluginStartup.BuildPluginRegistry(config, loggerFactory);
+
+        act.Should().NotThrow();
+        act().FindDecoder("protobuf").Should().BeNull();
     }
 }

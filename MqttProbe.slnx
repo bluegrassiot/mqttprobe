@@ -34,6 +34,21 @@
     <File Path=".github/workflows/ci.yml" />
     <File Path=".github/workflows/release.yml" />
   </Folder>
+  <Folder Name="/samples/chirpstack/">
+    <File Path="samples/chirpstack/appsettings.snippet.json" />
+    <File Path="samples/chirpstack/README.md" />
+    <File Path="samples/chirpstack/sample-uplink.b64" />
+  </Folder>
+  <Folder Name="/samples/chirpstack/proto/" />
+  <Folder Name="/samples/chirpstack/proto/common/">
+    <File Path="samples/chirpstack/proto/common/common.proto" />
+  </Folder>
+  <Folder Name="/samples/chirpstack/proto/gw/">
+    <File Path="samples/chirpstack/proto/gw/gw.proto" />
+  </Folder>
+  <Folder Name="/samples/chirpstack/proto/integration/">
+    <File Path="samples/chirpstack/proto/integration/integration.proto" />
+  </Folder>
   <Folder Name="/scripts/">
     <File Path="scripts/actionlint.py" />
     <File Path="scripts/build-linux-desktop.ps1" />

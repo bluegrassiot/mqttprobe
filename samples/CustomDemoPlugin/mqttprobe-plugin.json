@@ -1,0 +1,8 @@
+{
+  "id": "sample-csv",
+  "name": "CSV Sample Plugin",
+  "version": "1.0.0",
+  "kind": "assembly",
+  "description": "Detects and decodes CSV sensor payloads.",
+  "author": "MQTT Probe"
+}

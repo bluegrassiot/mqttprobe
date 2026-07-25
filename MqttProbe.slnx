@@ -34,20 +34,21 @@
     <File Path=".github/workflows/ci.yml" />
     <File Path=".github/workflows/release.yml" />
   </Folder>
-  <Folder Name="/samples/chirpstack/">
-    <File Path="samples/chirpstack/appsettings.snippet.json" />
-    <File Path="samples/chirpstack/README.md" />
-    <File Path="samples/chirpstack/sample-uplink.b64" />
+  <Folder Name="/samples/protobuf/" />
+  <Folder Name="/samples/protobuf/chirpstack/">
+    <File Path="samples/protobuf/chirpstack/mqttprobe-plugin.json" />
+    <File Path="samples/protobuf/chirpstack/protobuf-schemas.json" />
+    <File Path="samples/protobuf/chirpstack/README.md" />
+    <File Path="samples/protobuf/chirpstack/sample-uplink.b64" />
   </Folder>
-  <Folder Name="/samples/chirpstack/proto/" />
-  <Folder Name="/samples/chirpstack/proto/common/">
-    <File Path="samples/chirpstack/proto/common/common.proto" />
+  <Folder Name="/samples/protobuf/chirpstack/common/">
+    <File Path="samples/protobuf/chirpstack/common/common.proto" />
   </Folder>
-  <Folder Name="/samples/chirpstack/proto/gw/">
-    <File Path="samples/chirpstack/proto/gw/gw.proto" />
+  <Folder Name="/samples/protobuf/chirpstack/gw/">
+    <File Path="samples/protobuf/chirpstack/gw/gw.proto" />
   </Folder>
-  <Folder Name="/samples/chirpstack/proto/integration/">
-    <File Path="samples/chirpstack/proto/integration/integration.proto" />
+  <Folder Name="/samples/protobuf/chirpstack/integration/">
+    <File Path="samples/protobuf/chirpstack/integration/integration.proto" />
   </Folder>
   <Folder Name="/scripts/">
     <File Path="scripts/actionlint.py" />
@@ -56,6 +57,7 @@
     <File Path="scripts/format-check.py" />
     <File Path="scripts/generate-mtls-certs.py" />
     <File Path="scripts/manage-windows-config.ps1" />
+    <File Path="scripts/pack-plugin.py" />
     <File Path="scripts/reset-password.py" />
     <File Path="scripts/velopack-windows-test.ps1" />
   </Folder>

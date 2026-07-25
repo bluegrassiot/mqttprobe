@@ -11,6 +11,12 @@ public static class PayloadFactory
     private const string SampleJson = """{"temperature":22.5,"pressure":1013.25,"flowRate":12.8,"status":"active"}""";
     private const ulong SparkplugTimestamp = 1700000000000;
 
+    // A real integration.UplinkEvent, byte-identical to samples/protobuf/chirpstack/sample-uplink.b64.
+    // Embedded rather than generated: ChirpStack has no generated C# in this repo, and adding protoc
+    // codegen for one fixture is not worth the build step.
+    private const string ChirpStackUplinkBase64 =
+        "CgdkZWR1cC0xGhw6CHNlbnNvci1hQhAwMTAyMDMwNDA1MDYwNzA4OCpAClIDqrvM";
+
     private const uint DataTypeDouble = 10;
     private const uint DataTypeString = 12;
 
@@ -18,6 +24,7 @@ public static class PayloadFactory
     private static readonly byte[] _jsonBytes = Encoding.UTF8.GetBytes(SampleJson);
     private static readonly byte[] _hexBytes = Encoding.UTF8.GetBytes(ConvertToHex(_jsonBytes));
     private static readonly byte[] _base64Bytes = Encoding.UTF8.GetBytes(Convert.ToBase64String(_jsonBytes));
+    private static readonly byte[] _chirpStackBytes = Convert.FromBase64String(ChirpStackUplinkBase64);
 
     public static byte[] CreateSample(PayloadFormat format) => format switch
     {
@@ -34,6 +41,7 @@ public static class PayloadFactory
                              ts,temp,pressure,status
                              1700000000,22.5,1013.25,active
                              """u8.ToArray(),
+        PayloadFormat.ChirpStack => _chirpStackBytes,
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, null)
     };
 

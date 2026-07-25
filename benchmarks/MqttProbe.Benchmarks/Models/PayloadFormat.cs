@@ -12,4 +12,5 @@ public enum PayloadFormat
     Base64,
     PlainText,
     Csv,
+    ChirpStack,
 }

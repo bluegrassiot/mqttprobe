@@ -174,6 +174,9 @@ public static class PayloadPublisher
         PayloadFormat.Base64 => "benchmarks/payloads/base64",
         PayloadFormat.PlainText => "benchmarks/payloads/plaintext",
         PayloadFormat.Csv => "benchmarks/payloads/csv",
+        // Must match a topicPattern in the ChirpStack schema manifest, or the protobuf detector
+        // never fires and the payload falls through to binary.
+        PayloadFormat.ChirpStack => "application/1/device/0102030405060708/event/up",
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, null)
     };
 }

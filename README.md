@@ -274,9 +274,21 @@ If you swap this for a bind mount (e.g. `./plugins:/app/Plugins`) to inspect or 
 folder from the host, keep the mount in place — an uploaded plugin lost from an unmounted path
 cannot be recovered.
 
-Binary plugin packages (those containing a `.dll`) are refused unless `Plugins:AllowBinaryPackages`
-is set to `true`, because installing one executes third-party code inside the app. Protobuf schema
-packages contain no executable code and are always permitted.
+Binary plugin packages (those containing a `.dll`) are permitted by default, since a host whose
+filesystem you cannot reach has no other way to install one. Installing one executes third-party
+code inside the app, so a deployment that does not want that turns it off explicitly:
+
+```yaml
+- Plugins__AllowBinaryPackages=false
+```
+
+or in `appsettings.json`:
+
+```json
+"Plugins": { "AllowBinaryPackages": false }
+```
+
+Protobuf schema packages contain no executable code and are always permitted.
 
 ---
 

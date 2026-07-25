@@ -10,7 +10,8 @@ public sealed class PluginConfig
 
     public List<PluginOverrideConfig> Overrides { get; init; } = [];
 
-    // Uploading an assembly through the UI is remote code execution by design,
-    // so it stays off unless an operator turns it on deliberately.
-    public bool AllowBinaryPackages { get; init; }
+    // On by default so the feature works on a host whose filesystem an operator cannot
+    // reach. Installing an assembly runs third-party code in-process, so a deployment that
+    // does not want that sets this false explicitly.
+    public bool AllowBinaryPackages { get; init; } = true;
 }

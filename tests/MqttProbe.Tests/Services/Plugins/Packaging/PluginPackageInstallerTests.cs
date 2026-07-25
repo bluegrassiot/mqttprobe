@@ -538,7 +538,7 @@ public class PluginPackageInstallerTests
         var installPath = Path.Combine(_pluginFolder, ProtobufSchemaFolderLoader.FolderName, "demo");
         WriteSchemaFilesToDisk(installPath);
 
-        var outcome = await installer.RemoveAsync("demo", installPath, CancellationToken.None);
+        var outcome = await installer.RemoveAsync("demo", installPath, isLoaded: false, CancellationToken.None);
 
         outcome.Succeeded.Should().BeTrue(outcome.Error);
         Directory.Exists(installPath).Should().BeFalse();
@@ -566,7 +566,7 @@ public class PluginPackageInstallerTests
         Directory.CreateDirectory(installPath);
         File.WriteAllText(Path.Combine(installPath, "demoplugin.dll"), "MZ");
 
-        var outcome = await installer.RemoveAsync("demoplugin", installPath, CancellationToken.None);
+        var outcome = await installer.RemoveAsync("demoplugin", installPath, isLoaded: true, CancellationToken.None);
 
         outcome.Succeeded.Should().BeTrue(outcome.Error);
         outcome.RequiresRestart.Should().BeTrue("a loaded assembly still needs the .pending marker, not a direct delete");
@@ -575,6 +575,38 @@ public class PluginPackageInstallerTests
         PluginPendingOperations.HasPendingOperation(firstFolder, "demoplugin").Should().BeFalse();
 
         Directory.Delete(firstFolder, recursive: true);
+    }
+
+    [Test]
+    public async Task Removing_An_Assembly_That_Was_Never_Loaded_Deletes_It_And_Clears_The_Restart_Notice()
+    {
+        var session = new PluginInstallSession();
+
+        var appInfo = Substitute.For<IAppInfoService>();
+        appInfo.GetVersion().Returns("1.0.3");
+
+        var config = new PluginConfig { AllowBinaryPackages = true };
+        config.PluginFolders.Add(_pluginFolder);
+
+        var installer = new PluginPackageInstaller(
+            config, appInfo, session, new PluginArchiveLimits(), NullLoggerFactory.Instance);
+
+        // Mirrors installing an assembly package this session: on disk, recorded as awaiting
+        // restart, but never loaded, so nothing holds the DLL open.
+        var installPath = Path.Combine(_pluginFolder, "demoplugin");
+        Directory.CreateDirectory(installPath);
+        File.WriteAllText(Path.Combine(installPath, "demoplugin.dll"), "MZ");
+        session.Record("demoplugin", requiresRestart: true);
+
+        var outcome = await installer.RemoveAsync("demoplugin", installPath, isLoaded: false, CancellationToken.None);
+
+        outcome.Succeeded.Should().BeTrue(outcome.Error);
+        outcome.RequiresRestart.Should().BeFalse("nothing had loaded it, so there is nothing to restart for");
+        Directory.Exists(installPath).Should().BeFalse("the package must actually be gone, not just marked");
+        PluginPendingOperations.HasPendingOperation(_pluginFolder, "demoplugin").Should().BeFalse();
+
+        session.HasPending.Should().BeFalse("the install and its removal cancel out");
+        session.RequiresRestart.Should().BeFalse();
     }
 
     [Test]
@@ -587,7 +619,7 @@ public class PluginPackageInstallerTests
         Directory.CreateDirectory(installPath);
         File.WriteAllText(Path.Combine(installPath, "demoplugin.dll"), "MZ");
 
-        var outcome = await installer.RemoveAsync("demoplugin", installPath, CancellationToken.None);
+        var outcome = await installer.RemoveAsync("demoplugin", installPath, isLoaded: false, CancellationToken.None);
 
         outcome.Succeeded.Should().BeFalse();
         outcome.Error.Should().Contain("not writable");

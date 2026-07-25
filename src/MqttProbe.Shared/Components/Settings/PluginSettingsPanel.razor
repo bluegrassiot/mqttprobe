@@ -50,7 +50,10 @@
 
     @if (_error is not null)
     {
-        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_error</MudAlert>
+        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3"
+                  ShowCloseIcon="true" CloseIconClicked="@(() => _error = null)">
+            @_error
+        </MudAlert>
     }
 
     @if (Session.CanApplyWithoutRestart)
@@ -71,7 +74,7 @@
     @if (Session.RequiresRestart)
     {
         <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
-            Restart MQTT Probe to finish applying the pending plugin changes.
+            Restart MQTTProbe to finish applying the pending plugin changes.
         </MudAlert>
     }
 
@@ -216,7 +219,11 @@
 
         try
         {
-            var outcome = await Installer.RemoveAsync(plugin.Manifest.Id, plugin.InstallPath, CancellationToken.None);
+            var outcome = await Installer.RemoveAsync(
+                plugin.Manifest.Id,
+                plugin.InstallPath,
+                isLoaded: plugin.Status == PluginStatus.Active,
+                CancellationToken.None);
             _error = outcome.Succeeded ? null : outcome.Error;
 
             // A schema removal deletes the folder outright, so the confirmed action is only

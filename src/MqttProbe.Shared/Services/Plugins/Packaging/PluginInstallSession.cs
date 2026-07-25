@@ -22,6 +22,17 @@ public sealed class PluginInstallSession
         }
     }
 
+    // Record only ever raises the restart flag, so an id that was fully undone has to be
+    // dropped outright: re-recording it as false would leave the earlier true in place and
+    // strand a restart notice for a plugin that is no longer installed.
+    public void Forget(string id)
+    {
+        lock (_gate)
+        {
+            _pending.Remove(id);
+        }
+    }
+
     // A reload only ever applies the non-restart entries (schema packages); an entry still
     // waiting on a restart has nothing to apply yet and must stay recorded, or its row loses
     // the pending-operation marker match and falls back to "Installed but not loaded".

@@ -252,7 +252,7 @@ public sealed class PluginPackageInstaller
         if (!_config.AllowBinaryPackages)
         {
             return PluginValidationResult.Fail(
-                "Binary plugin packages are not enabled on this instance. Set Plugins:AllowBinaryPackages to true to allow them.");
+                "Binary plugin packages are disabled on this instance. An administrator re-enables them by setting Plugins:AllowBinaryPackages back to true.");
         }
 
         if (!PluginAssemblyInspector.AssemblyPluginsSupported)
@@ -443,7 +443,7 @@ public sealed class PluginPackageInstaller
     // PluginInventoryService's InstallPath does): resolving against WritablePluginFolder alone
     // picks only the *first* writable entry in PluginFolders, which is wrong whenever the
     // package actually lives under a later one.
-    public Task<PluginInstallOutcome> RemoveAsync(string id, string installPath, CancellationToken ct)
+    public Task<PluginInstallOutcome> RemoveAsync(string id, string installPath, bool isLoaded, CancellationToken ct)
     {
         _ = ct;
 
@@ -484,7 +484,15 @@ public sealed class PluginPackageInstaller
                         $"Plugin '{id}' is installed in a folder that is not writable on this host; it cannot be removed."));
                 }
 
-                // The running process holds this DLL open, so deletion has to wait for restart.
+                // Only a plugin this process actually loaded holds its DLL open. One installed
+                // but never loaded can go straight away, so changing your mind before restarting
+                // does not strand a restart notice for a plugin that was never live.
+                if (!isLoaded && PluginPendingOperations.RemoveNow(resolvedInstallPath))
+                {
+                    _session.Forget(id);
+                    return Task.FromResult(new PluginInstallOutcome(true, null, null, resolvedInstallPath, false));
+                }
+
                 try
                 {
                     PluginPendingOperations.MarkForRemoval(pluginFolder, id, _logger);

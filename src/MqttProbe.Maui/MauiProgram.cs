@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MqttProbe.Components.Layout;
@@ -141,6 +142,10 @@ public static class MauiProgram
         ConfigMigrator.MigrateIfNeeded(legacyConfigDir, configDir);
 #endif
         var configPath = Path.Combine(configDir, "appsettings.json");
+
+        Directory.CreateDirectory(configDir);
+        builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: false);
+
         var isMobile = DeviceInfo.Idiom == DeviceIdiom.Phone || DeviceInfo.Idiom == DeviceIdiom.Tablet;
         builder.Services.AddSingleton<ISettingsStore>(sp =>
             new SettingsStore(configPath, isMobile,

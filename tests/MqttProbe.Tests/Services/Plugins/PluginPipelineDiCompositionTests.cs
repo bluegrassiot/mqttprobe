@@ -9,10 +9,14 @@ using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Platform;
 using MqttProbe.Services.Plugins;
+using MqttProbe.Services.Plugins.Loading;
+using MqttProbe.Services.Plugins.Packaging;
 using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Sparkplug;
+using MqttProbe.Web.Services;
 using Org.Eclipse.Tahu.Protobuf;
 
 namespace MqttProbe.Tests.Services.Plugins;
@@ -54,12 +58,27 @@ public class PluginPipelineDiCompositionTests
         services.AddLogging();
 
         services.AddSingleton(Options.Create(new PluginConfig()));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<PluginConfig>>().Value);
+
+        // Packaging services, registered the same way as Web/Desktop/MAUI Program.cs so this
+        // test doubles as a smoke test for the host wiring: if a constructor stops matching
+        // what's registered here, resolution fails the same way it would at app startup.
+        services.AddSingleton(Substitute.For<IAppInfoService>());
+        services.AddSingleton<PluginArchiveLimits>();
+        services.AddSingleton<PluginAssemblyCache>();
+        services.AddSingleton<PluginInstallSession>();
+        services.AddSingleton<PluginPackageInstaller>();
+        services.AddSingleton<PluginInventoryService>();
+        services.AddSingleton<PluginReloadService>();
+        services.AddSingleton<IPluginPackagePicker, WebPluginPackagePicker>();
+        services.AddSingleton<IPluginInputCapability, WebPluginInputCapability>();
 
         services.AddSingleton<PluginRegistry>(sp =>
         {
-            var config = sp.GetRequiredService<IOptions<PluginConfig>>().Value;
+            var config = sp.GetRequiredService<PluginConfig>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return MqttProbePluginStartup.BuildPluginRegistry(config, loggerFactory);
+            return MqttProbePluginStartup.BuildPluginRegistry(
+                config, loggerFactory, sp.GetRequiredService<PluginAssemblyCache>());
         });
 
         services.AddSingleton<PayloadPipeline>();
@@ -127,6 +146,40 @@ public class PluginPipelineDiCompositionTests
         var topology = _serviceProvider.GetRequiredService<ISparkplugTopologyService>();
         topology.Should().NotBeNull();
         topology.Should().BeOfType<SparkplugTopologyService>();
+    }
+
+    [Test]
+    public void ResolveFromDi_BuildsPluginPackagingServices()
+    {
+        _serviceProvider.GetRequiredService<PluginInventoryService>().Should().NotBeNull();
+        _serviceProvider.GetRequiredService<PluginPackageInstaller>().Should().NotBeNull();
+        _serviceProvider.GetRequiredService<PluginReloadService>().Should().NotBeNull();
+    }
+
+    [Test]
+    public void ResolveFromDi_BuildsPluginPickerAndInputCapability()
+    {
+        _serviceProvider.GetRequiredService<IPluginPackagePicker>().Should().NotBeNull();
+
+        var inputCapability = _serviceProvider.GetRequiredService<IPluginInputCapability>();
+        inputCapability.Should().NotBeNull();
+        inputCapability.UsesInputFileComponent.Should().BeTrue();
+    }
+
+    [Test]
+    public void ResolveFromDi_PluginAssemblyCache_IsASingletonSharedByRegistryAndReloadService()
+    {
+        // PluginRegistry's factory and PluginReloadService both resolve PluginAssemblyCache
+        // from sp rather than constructing their own; a singleton lifetime is what makes
+        // Reload() reuse already-loaded assemblies instead of leaking a second
+        // AssemblyLoadContext for the same DLLs. Force both through DI to prove it.
+        _ = _serviceProvider.GetRequiredService<PluginRegistry>();
+        _ = _serviceProvider.GetRequiredService<PluginReloadService>();
+
+        var first = _serviceProvider.GetRequiredService<PluginAssemblyCache>();
+        var second = _serviceProvider.GetRequiredService<PluginAssemblyCache>();
+
+        first.Should().BeSameAs(second);
     }
 
     [Test]

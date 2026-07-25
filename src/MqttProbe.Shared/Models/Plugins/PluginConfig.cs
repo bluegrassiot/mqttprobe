@@ -9,4 +9,8 @@ public sealed class PluginConfig
     public HashSet<string> DisabledPluginIds { get; init; } = [];
 
     public List<PluginOverrideConfig> Overrides { get; init; } = [];
+
+    // Uploading an assembly through the UI is remote code execution by design,
+    // so it stays off unless an operator turns it on deliberately.
+    public bool AllowBinaryPackages { get; init; }
 }

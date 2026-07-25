@@ -6,6 +6,7 @@ public sealed class PluginDiagnosticEntry
     public required DiagnosticSeverity Severity { get; init; }
     public required string Message { get; init; }
     public string? Details { get; init; }
+    public string? SourcePath { get; init; }
 }
 
 public enum DiagnosticSeverity

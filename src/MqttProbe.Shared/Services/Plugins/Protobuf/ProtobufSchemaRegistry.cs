@@ -49,6 +49,16 @@ public sealed class ProtobufSchemaRegistry
                 logger?.LogError("protobuf schema: {Detail}", rootedPathError);
                 continue;
             }
+
+            if (HasParentDirectorySegment(file))
+            {
+                var traversalError = $"ERROR: schema file '{file}' contains a '..' segment; " +
+                                      "'files' entries must not traverse outside the manifest's own directory.";
+                _diagnostics.Add(traversalError);
+                logger?.LogError("protobuf schema: {Detail}", traversalError);
+                continue;
+            }
+
             set.Add(file, includeInOutput: true);
         }
 
@@ -155,6 +165,9 @@ public sealed class ProtobufSchemaRegistry
 
     private static string Normalize(string fqn) =>
         fqn.StartsWith('.') ? fqn : "." + fqn;
+
+    private static bool HasParentDirectorySegment(string path) =>
+        path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries).Any(segment => segment == "..");
 
     private static bool OverlapsSparkplugNamespace(string topicPattern)
     {

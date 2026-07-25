@@ -1,0 +1,8 @@
+{
+  "id": "chirpstack",
+  "name": "ChirpStack Protobuf Schemas",
+  "version": "1.0.0",
+  "kind": "protobuf-schemas",
+  "description": "Decodes ChirpStack gateway and integration payloads.",
+  "author": "MQTT Probe"
+}

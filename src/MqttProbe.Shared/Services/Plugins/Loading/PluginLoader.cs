@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.Extensions.Logging;
 using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Plugins.Contracts;
+using MqttProbe.Services.Plugins.Packaging;
 
 namespace MqttProbe.Services.Plugins.Loading;
 
@@ -20,7 +21,8 @@ public sealed class PluginLoader
     {
         var plugins = new List<IMqttProbePlugin>();
         var diagnostics = new List<PluginDiagnosticEntry>();
-        var loadedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var loadedPaths = new List<string>();
+        var seenDlls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var folder in _config.PluginFolders)
         {
@@ -31,7 +33,8 @@ public sealed class PluginLoader
                 {
                     Source = "loader",
                     Severity = DiagnosticSeverity.Info,
-                    Message = $"Plugin folder not found: {folder}"
+                    Message = $"Plugin folder not found: {folder}",
+                    SourcePath = folder
                 });
                 continue;
             }
@@ -43,6 +46,14 @@ public sealed class PluginLoader
             foreach (var sub in Directory.GetDirectories(folder))
             {
                 var subName = Path.GetFileName(sub);
+
+                // Skips every dot-prefixed directory: .staging/.pending hold half-written
+                // packages mid-install, and .*.previous-<guid> are leaked upgrade backups.
+                if (PluginPackagePaths.IsReservedDirectoryName(subName))
+                {
+                    continue;
+                }
+
                 var preferred = Path.Combine(sub, subName + ".dll");
                 if (File.Exists(preferred))
                 {
@@ -61,27 +72,29 @@ public sealed class PluginLoader
                 {
                     Source = "loader",
                     Severity = DiagnosticSeverity.Info,
-                    Message = $"No DLLs found in plugin folder: {folder}"
+                    Message = $"No DLLs found in plugin folder: {folder}",
+                    SourcePath = folder
                 });
                 continue;
             }
 
             foreach (var dll in dlls)
             {
-                if (!loadedPaths.Add(dll))
+                if (!seenDlls.Add(dll))
                     continue;
 
-                LoadAssemblyPlugins(dll, plugins, diagnostics);
+                LoadAssemblyPlugins(dll, plugins, diagnostics, loadedPaths);
             }
         }
 
-        return new PluginLoadResult(plugins.AsReadOnly(), diagnostics.AsReadOnly());
+        return new PluginLoadResult(plugins.AsReadOnly(), diagnostics.AsReadOnly(), loadedPaths.AsReadOnly());
     }
 
     private void LoadAssemblyPlugins(
         string dllPath,
         List<IMqttProbePlugin> plugins,
-        List<PluginDiagnosticEntry> diagnostics)
+        List<PluginDiagnosticEntry> diagnostics,
+        List<string> loadedPaths)
     {
         PluginLoadContext? loadContext = null;
         Assembly? assembly = null;
@@ -99,7 +112,8 @@ public sealed class PluginLoader
                 Source = "loader",
                 Severity = DiagnosticSeverity.Warning,
                 Message = $"Failed to load assembly: {Path.GetFileName(dllPath)}",
-                Details = ex.Message
+                Details = ex.Message,
+                SourcePath = dllPath
             });
             loadContext?.Unload();
             return;
@@ -120,7 +134,8 @@ public sealed class PluginLoader
                     Source = "loader",
                     Severity = DiagnosticSeverity.Warning,
                     Message = $"No loadable types in assembly: {Path.GetFileName(dllPath)}",
-                    Details = string.Join("; ", ex.LoaderExceptions.Select(e => e?.Message))
+                    Details = string.Join("; ", ex.LoaderExceptions.Select(e => e?.Message)),
+                    SourcePath = dllPath
                 });
                 loadContext.Unload();
                 return;
@@ -133,7 +148,8 @@ public sealed class PluginLoader
                 Source = "loader",
                 Severity = DiagnosticSeverity.Warning,
                 Message = $"Failed to enumerate types in assembly: {Path.GetFileName(dllPath)}",
-                Details = ex.Message
+                Details = ex.Message,
+                SourcePath = dllPath
             });
             loadContext.Unload();
             return;
@@ -150,7 +166,8 @@ public sealed class PluginLoader
             {
                 Source = "loader",
                 Severity = DiagnosticSeverity.Info,
-                Message = $"No IMqttProbePlugin implementations in: {Path.GetFileName(dllPath)}"
+                Message = $"No IMqttProbePlugin implementations in: {Path.GetFileName(dllPath)}",
+                SourcePath = dllPath
             });
             loadContext.Unload();
             return;
@@ -171,7 +188,8 @@ public sealed class PluginLoader
                     Source = pluginType.FullName ?? pluginType.Name,
                     Severity = DiagnosticSeverity.Error,
                     Message = $"Failed to instantiate plugin type: {pluginType.Name}",
-                    Details = ex.Message
+                    Details = ex.Message,
+                    SourcePath = dllPath
                 });
                 continue;
             }
@@ -182,7 +200,8 @@ public sealed class PluginLoader
                 {
                     Source = pluginType.FullName ?? pluginType.Name,
                     Severity = DiagnosticSeverity.Error,
-                    Message = $"Plugin type returned null instance: {pluginType.Name}"
+                    Message = $"Plugin type returned null instance: {pluginType.Name}",
+                    SourcePath = dllPath
                 });
                 continue;
             }
@@ -196,12 +215,14 @@ public sealed class PluginLoader
                 {
                     Source = plugin.PluginId,
                     Severity = DiagnosticSeverity.Info,
-                    Message = $"Plugin '{plugin.PluginId}' is disabled; skipped."
+                    Message = $"Plugin '{plugin.PluginId}' is disabled; skipped.",
+                    SourcePath = dllPath
                 });
                 continue;
             }
 
             plugins.Add(plugin);
+            loadedPaths.Add(Path.GetDirectoryName(dllPath)!);
             _logger.LogDebug("Loaded plugin: {PluginId} from {Assembly}",
                 plugin.PluginId, Path.GetFileName(dllPath));
         }
@@ -212,12 +233,15 @@ public sealed class PluginLoadResult
 {
     public IReadOnlyList<IMqttProbePlugin> Plugins { get; }
     public IReadOnlyList<PluginDiagnosticEntry> Diagnostics { get; }
+    public IReadOnlyList<string> LoadedPaths { get; }
 
     public PluginLoadResult(
         IReadOnlyList<IMqttProbePlugin> plugins,
-        IReadOnlyList<PluginDiagnosticEntry> diagnostics)
+        IReadOnlyList<PluginDiagnosticEntry> diagnostics,
+        IReadOnlyList<string> loadedPaths)
     {
         Plugins = plugins;
         Diagnostics = diagnostics;
+        LoadedPaths = loadedPaths;
     }
 }

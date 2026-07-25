@@ -1,10 +1,16 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using MqttProbe.Components.Layout;
 using MqttProbe.Components.Pages;
 using MqttProbe.Models.Configuration;
+using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Platform;
+using MqttProbe.Services.Plugins.Loading;
+using MqttProbe.Services.Plugins.Packaging;
+using MqttProbe.Services.Plugins.Pipeline;
+using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
 using MqttProbe.Shared.Tests.TestHelpers;
 using MudBlazor;
@@ -36,8 +42,26 @@ public class SettingsTests : BunitTestContext
         Services.AddSingleton<IThemes>(_themes);
         Services.AddSingleton(_mockAppInfo);
         Services.AddSingleton(_mockUpdateService);
+        RegisterPluginSettingsDependencies(Services);
         AuthorizationContext.SetAuthorized("admin").SetRoles(AppRoles.Admin);
         EnsureMudProviders();
+    }
+
+    internal static void RegisterPluginSettingsDependencies(IServiceCollection services)
+    {
+        var pluginConfig = new PluginConfig();
+        var registry = new PluginRegistryBuilder().Build([], []);
+        var pipeline = new PayloadPipeline(registry, NullLogger<PayloadPipeline>.Instance);
+        var session = new PluginInstallSession();
+
+        services.AddSingleton(session);
+        services.AddSingleton(new PluginInventoryService(pluginConfig, pipeline, session));
+        services.AddSingleton(new PluginPackageInstaller(
+            pluginConfig, Substitute.For<IAppInfoService>(), session, new PluginArchiveLimits(), NullLoggerFactory.Instance));
+        services.AddSingleton(new PluginReloadService(
+            pluginConfig, pipeline, session, new PluginAssemblyCache(), NullLoggerFactory.Instance));
+        services.AddSingleton(Substitute.For<IPluginPackagePicker>());
+        services.AddSingleton(Substitute.For<IPluginInputCapability>());
     }
 
     [Test]

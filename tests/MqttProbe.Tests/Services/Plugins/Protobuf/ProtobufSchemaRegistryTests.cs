@@ -189,6 +189,30 @@ public class ProtobufSchemaRegistryTests
     }
 
     [Test]
+    public void Parent_Directory_Traversal_Does_Not_Throw_And_Adds_Diagnostic()
+    {
+        var dir = WriteProtos(("demo.proto", SampleProto));
+        var config = new ProtobufSchemaManifest
+        {
+            Schemas =
+            {
+                new ProtobufSchemaMapping
+                {
+                    Files = { "../demo.proto" },
+                    TopicPattern = "x",
+                    MessageType = "demo.Outer"
+                }
+            }
+        };
+
+        var act = () => new ProtobufSchemaRegistry(config, dir);
+
+        act.Should().NotThrow();
+        var registry = act();
+        registry.Diagnostics.Should().Contain(d => d.Contains("..") && d.Contains("traverse"));
+    }
+
+    [Test]
     public void Empty_Config_Has_No_Schemas()
     {
         var registry = new ProtobufSchemaRegistry(new ProtobufSchemaManifest(), Path.GetTempPath());

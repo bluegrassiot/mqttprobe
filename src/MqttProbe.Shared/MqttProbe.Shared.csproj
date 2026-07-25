@@ -25,6 +25,7 @@
         <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
         <PackageReference Include="MQTTnet" />
         <PackageReference Include="MudBlazor" />
+        <PackageReference Include="System.Reflection.MetadataLoadContext" />
         <PackageReference Include="System.Threading.RateLimiting" />
         <PackageReference Include="Blazor-ApexCharts" />
     </ItemGroup>

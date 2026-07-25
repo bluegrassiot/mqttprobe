@@ -35,6 +35,7 @@ public class SettingsUpdateSectionTests : BunitTestContext
         Services.AddSingleton<IThemes>(_themes);
         Services.AddSingleton(_mockAppInfo);
         Services.AddSingleton(_updateService);
+        SettingsTests.RegisterPluginSettingsDependencies(Services);
         AuthorizationContext.SetAuthorized("admin").SetRoles(AppRoles.Admin);
         EnsureMudProviders();
     }

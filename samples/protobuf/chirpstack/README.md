@@ -53,9 +53,22 @@ host:
 | Photino Desktop (Windows) | `%USERPROFILE%\.config\mqttprobe\plugins` |
 | MAUI Windows | `%LOCALAPPDATA%\Bluegrass IoT\com.bluegrassiot.mqttprobe\Data\plugins` |
 
+## Installing from the UI
+
+Build a package and install it from **Settings → Plugins → Install plugin**:
+
+```bash
+python scripts/pack-plugin.py samples/protobuf/chirpstack
+```
+
+Schema packages activate as soon as you press **Apply now** — no restart needed. Messages already
+in the store keep the decoding they were captured with; new messages use the new schemas.
+
 ## Files
 
-- `protobuf-schemas.json` — the manifest: which `.proto` files to load, and which MQTT
+- `mqttprobe-plugin.json` — the package manifest read by **Install plugin**; identifies this as a
+  `protobuf-schemas` package so it can be built with `pack-plugin.py` and installed from the UI.
+- `protobuf-schemas.json` — the schema manifest: which `.proto` files to load, and which MQTT
   topics map to which message type.
 - `integration/`, `gw/`, `common/` — unmodified ChirpStack v4 schema files, in their
   original directory layout so the `import` statements resolve as written.

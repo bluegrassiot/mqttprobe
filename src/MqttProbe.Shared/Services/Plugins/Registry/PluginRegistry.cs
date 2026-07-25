@@ -11,6 +11,7 @@ public sealed class PluginRegistry
     public IReadOnlyDictionary<string, IPayloadEncoder> Encoders { get; }
     public IReadOnlyDictionary<string, IPayloadTemplateProvider> TemplateProviders { get; }
     public IReadOnlyList<PluginDiagnosticEntry> Diagnostics { get; }
+    public IReadOnlySet<string> LoadedPackagePaths { get; }
 
     internal PluginRegistry(
         IReadOnlyList<IPayloadDetector> detectors,
@@ -18,7 +19,8 @@ public sealed class PluginRegistry
         IReadOnlyDictionary<string, ITopologyExtractor> topologyExtractors,
         IReadOnlyDictionary<string, IPayloadEncoder> encoders,
         IReadOnlyDictionary<string, IPayloadTemplateProvider> templateProviders,
-        IReadOnlyList<PluginDiagnosticEntry> diagnostics)
+        IReadOnlyList<PluginDiagnosticEntry> diagnostics,
+        IReadOnlySet<string> loadedPackagePaths)
     {
         Detectors = detectors;
         Decoders = decoders;
@@ -26,6 +28,7 @@ public sealed class PluginRegistry
         Encoders = encoders;
         TemplateProviders = templateProviders;
         Diagnostics = diagnostics;
+        LoadedPackagePaths = loadedPackagePaths;
     }
 
     public IPayloadDetector? FindDetector(MqttApplicationMessageReceivedEventArgs e)
@@ -62,10 +65,15 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
     private readonly List<(IPayloadTemplateProvider Provider, string PluginId, int InsertionOrder)> _templateProviders = [];
     private readonly List<PluginDiagnosticEntry> _diagnostics = [];
     private readonly HashSet<string> _registeredPluginIds = [];
+    private readonly HashSet<string> _loadedPackagePaths = new(StringComparer.OrdinalIgnoreCase);
 
     private string _currentPluginId = BuiltInPluginId;
     private bool _duplicateIdActive;
     private int _insertionCounter;
+
+    public void AddDiagnostic(PluginDiagnosticEntry entry) => _diagnostics.Add(entry);
+
+    public void RegisterPackagePath(string path) => _loadedPackagePaths.Add(Path.GetFullPath(path));
 
     public void RegisterPlugin(string pluginId, Action<IPluginRegistrationContext> configure)
     {
@@ -213,7 +221,8 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
             topologyExtractors,
             encoders,
             templateProviders,
-            _diagnostics.ToList().AsReadOnly());
+            _diagnostics.ToList().AsReadOnly(),
+            new HashSet<string>(_loadedPackagePaths, StringComparer.OrdinalIgnoreCase));
     }
 
     private static Dictionary<(string Capability, string FormatId), string> BuildOverrideMap(

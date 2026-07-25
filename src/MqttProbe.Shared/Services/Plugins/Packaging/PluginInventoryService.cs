@@ -114,7 +114,7 @@ public sealed class PluginInventoryService
         if (_session.TryGet(manifest.Id, out var requiresRestart))
         {
             return requiresRestart
-                ? (PluginStatus.PendingRestart, "Restart MQTT Probe to load this plugin.")
+                ? (PluginStatus.PendingRestart, "Restart MQTTProbe to load this plugin.")
                 : (PluginStatus.PendingActivation, "Apply to activate without restarting.");
         }
 

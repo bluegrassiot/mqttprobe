@@ -32,7 +32,7 @@ public static class PluginAssemblyInspector
         if (string.IsNullOrEmpty(contractPath))
         {
             return PluginValidationResult.Fail(
-                "Assembly packages cannot be validated in a single-file build of MQTT Probe.");
+                "Assembly packages cannot be validated in a single-file build of MQTTProbe.");
         }
 
         // Walking a candidate's types resolves its entire dependency graph (Google.Protobuf, the

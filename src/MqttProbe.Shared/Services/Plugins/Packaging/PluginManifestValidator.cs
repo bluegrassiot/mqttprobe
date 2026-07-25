@@ -81,7 +81,7 @@ public static partial class PluginManifestValidator
             if (PluginVersion.TryParse(appVersion, out var current) && current < required)
             {
                 return PluginValidationResult.Fail(
-                    $"Package requires MQTT Probe {manifest.MinAppVersion} or newer; this build is {appVersion}.");
+                    $"Package requires MQTTProbe {manifest.MinAppVersion} or newer; this build is {appVersion}.");
             }
         }
 

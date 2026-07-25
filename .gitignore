@@ -305,4 +305,10 @@ docs/*
 /.playwright-mcp
 /src/MqttProbe.Web/Config/certificates
 *.dll
-/src/MqttProbe.Web/Plugins/protobuf
+# Plugins installed at runtime through Settings, not source
+/src/MqttProbe.Web/Plugins/*
+!/src/MqttProbe.Web/Plugins/.gitkeep
+
+# Plugin packages built by scripts/pack-plugin.py (default output is <id>-<version>.zip
+# in the working directory). Root-only so committed fixtures elsewhere still show up.
+/*.zip

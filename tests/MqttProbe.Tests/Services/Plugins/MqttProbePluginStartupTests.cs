@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Plugins;
 using MqttProbe.Services.Plugins.Protobuf;
@@ -162,5 +163,182 @@ public class MqttProbePluginStartupTests
 
         act.Should().NotThrow();
         act().FindDecoder("protobuf").Should().BeNull();
+    }
+
+    private static string WriteSchemaPackage(string pluginFolder, string id, string messageType)
+    {
+        var root = Path.Combine(pluginFolder, ProtobufSchemaFolderLoader.FolderName, id);
+        Directory.CreateDirectory(root);
+
+        File.WriteAllText(Path.Combine(root, "demo.proto"),
+            """
+            syntax = "proto3";
+            package demo;
+            message Reading { int32 id = 1; }
+            """);
+
+        File.WriteAllText(Path.Combine(root, ProtobufSchemaFolderLoader.ManifestFileName),
+            $$"""
+            {
+              "schemas": [
+                {
+                  "files": [ "demo.proto" ],
+                  "topicPattern": "{{id}}/+/reading",
+                  "messageType": "{{messageType}}"
+                }
+              ]
+            }
+            """);
+
+        return root;
+    }
+
+    [Test]
+    public void One_Broken_Schema_Bundle_Does_Not_Disable_The_Others()
+    {
+        var pluginFolder = Path.Combine(Path.GetTempPath(), "mqttprobe-startup-" + Guid.NewGuid().ToString("N"));
+        var goodRoot = WriteSchemaPackage(pluginFolder, "good", "demo.Reading");
+        var badRoot = WriteSchemaPackage(pluginFolder, "bad", "demo.DoesNotExist");
+
+        var config = new PluginConfig();
+        config.PluginFolders.Add(pluginFolder);
+
+        var registry = MqttProbePluginStartup.BuildPluginRegistry(config, NullLoggerFactory.Instance);
+
+        registry.LoadedPackagePaths.Should().Contain(goodRoot,
+            "a valid bundle must still load when a sibling bundle is broken");
+        registry.LoadedPackagePaths.Should().NotContain(badRoot);
+
+        registry.Diagnostics.Should().Contain(d =>
+            d.SourcePath == badRoot && d.Severity >= DiagnosticSeverity.Warning);
+
+        Directory.Delete(pluginFolder, recursive: true);
+    }
+
+    [Test]
+    public void One_Source_Throwing_During_Compilation_Does_Not_Disable_The_Others()
+    {
+        // A null messageType survives JSON deserialization (System.Text.Json assigns null to a
+        // non-nullable reference property rather than rejecting it) and reaches
+        // ProtobufSchemaRegistry.BuildRoutingTable, where Normalize(null) throws a
+        // NullReferenceException. This was verified empirically: malformed .proto syntax and a
+        // manifest referencing a missing .proto file are both reported through
+        // ProtobufSchemaRegistry.Diagnostics rather than by throwing, so neither reaches the
+        // per-source catch block; a null messageType does.
+        var pluginFolder = Path.Combine(Path.GetTempPath(), "mqttprobe-startup-" + Guid.NewGuid().ToString("N"));
+        var goodRoot = WriteSchemaPackage(pluginFolder, "good", "demo.Reading");
+
+        var badRoot = Path.Combine(pluginFolder, ProtobufSchemaFolderLoader.FolderName, "bad");
+        Directory.CreateDirectory(badRoot);
+        File.WriteAllText(Path.Combine(badRoot, "demo.proto"),
+            """
+            syntax = "proto3";
+            package demo;
+            message Reading { int32 id = 1; }
+            """);
+        File.WriteAllText(Path.Combine(badRoot, ProtobufSchemaFolderLoader.ManifestFileName),
+            """
+            {
+              "schemas": [
+                {
+                  "files": [ "demo.proto" ],
+                  "topicPattern": "bad/+/reading",
+                  "messageType": null
+                }
+              ]
+            }
+            """);
+
+        var config = new PluginConfig();
+        config.PluginFolders.Add(pluginFolder);
+
+        var registry = MqttProbePluginStartup.BuildPluginRegistry(config, NullLoggerFactory.Instance);
+
+        registry.LoadedPackagePaths.Should().Contain(goodRoot,
+            "a valid bundle must still load when a sibling bundle's compilation throws");
+        registry.LoadedPackagePaths.Should().NotContain(badRoot);
+
+        // "Failed to load protobuf schemas" (from the per-source catch) is distinct from
+        // "No schemas compiled" (the non-throwing HasAnySchemas branch also covered above),
+        // so matching on it confirms the exception path, not just a diagnostic-reported failure.
+        registry.Diagnostics.Should().Contain(d =>
+            d.SourcePath == badRoot &&
+            d.Severity == DiagnosticSeverity.Error &&
+            d.Message.Contains("Failed to load protobuf schemas"));
+
+        Directory.Delete(pluginFolder, recursive: true);
+    }
+
+    [Test]
+    public void Combined_Build_Failure_Reports_Sources_As_Failed_Not_Active()
+    {
+        // Nothing in ProtobufSchemaRegistry's current schema-content handling can make the
+        // combine step fail while every per-source probe passed (duplicates only warn), so
+        // the failure is forced directly through the internal combiner seam; the assertions
+        // below are what a genuinely failing combine step must still produce correctly.
+        var pluginFolder = Path.Combine(Path.GetTempPath(), "mqttprobe-startup-" + Guid.NewGuid().ToString("N"));
+        var rootA = WriteSchemaPackage(pluginFolder, "pkgA", "demo.Reading");
+        var rootB = WriteSchemaPackage(pluginFolder, "pkgB", "demo.Reading");
+
+        var config = new PluginConfig();
+        config.PluginFolders.Add(pluginFolder);
+
+        var registry = MqttProbePluginStartup.BuildPluginRegistry(
+            config,
+            NullLoggerFactory.Instance,
+            assemblyCache: null,
+            combineProtobufSources: (_, _) => throw new InvalidOperationException("simulated combine failure"));
+
+        registry.FindDecoder("protobuf").Should().BeNull();
+        registry.LoadedPackagePaths.Should().NotContain(rootA,
+            "the combine step never succeeded, so no package backing it should read as loaded");
+        registry.LoadedPackagePaths.Should().NotContain(rootB);
+
+        registry.Diagnostics.Should().Contain(d =>
+            d.SourcePath == rootA && d.Severity == DiagnosticSeverity.Error,
+            "each source needs its own SourcePath so PluginInventoryService can derive Failed for it");
+        registry.Diagnostics.Should().Contain(d =>
+            d.SourcePath == rootB && d.Severity == DiagnosticSeverity.Error);
+
+        Directory.Delete(pluginFolder, recursive: true);
+    }
+
+    [Test]
+    public void Combined_Build_With_No_Usable_Schemas_Reports_Sources_As_Failed_Not_Active()
+    {
+        var pluginFolder = Path.Combine(Path.GetTempPath(), "mqttprobe-startup-" + Guid.NewGuid().ToString("N"));
+        var rootA = WriteSchemaPackage(pluginFolder, "pkgA", "demo.Reading");
+
+        var config = new PluginConfig();
+        config.PluginFolders.Add(pluginFolder);
+
+        var registry = MqttProbePluginStartup.BuildPluginRegistry(
+            config,
+            NullLoggerFactory.Instance,
+            assemblyCache: null,
+            combineProtobufSources: (sources, logger) => new ProtobufSchemaRegistry(
+                new ProtobufSchemaManifest(), sources[0].SchemaRoot, logger));
+
+        registry.FindDecoder("protobuf").Should().BeNull();
+        registry.LoadedPackagePaths.Should().NotContain(rootA);
+        registry.Diagnostics.Should().Contain(d =>
+            d.SourcePath == rootA && d.Severity == DiagnosticSeverity.Error);
+
+        Directory.Delete(pluginFolder, recursive: true);
+    }
+
+    [Test]
+    public void Loaded_Package_Paths_Are_Empty_When_No_Packages_Are_Installed()
+    {
+        var pluginFolder = Path.Combine(Path.GetTempPath(), "mqttprobe-startup-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(pluginFolder);
+
+        var config = new PluginConfig();
+        config.PluginFolders.Add(pluginFolder);
+
+        MqttProbePluginStartup.BuildPluginRegistry(config, NullLoggerFactory.Instance)
+            .LoadedPackagePaths.Should().BeEmpty();
+
+        Directory.Delete(pluginFolder, recursive: true);
     }
 }

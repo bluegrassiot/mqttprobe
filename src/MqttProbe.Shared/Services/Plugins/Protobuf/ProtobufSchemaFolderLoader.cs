@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using MqttProbe.Models.Plugins;
+using MqttProbe.Services.Plugins.Packaging;
 
 namespace MqttProbe.Services.Plugins.Protobuf;
 
@@ -31,7 +32,14 @@ public static class ProtobufSchemaFolderLoader
 
             TryAddSource(protobufFolder, required: false);
             foreach (var subfolder in Directory.GetDirectories(protobufFolder))
+            {
+                if (PluginPackagePaths.IsReservedDirectoryName(Path.GetFileName(subfolder)))
+                {
+                    continue;
+                }
+
                 TryAddSource(subfolder, required: false);
+            }
         }
 
         if (sources.Count == 0)

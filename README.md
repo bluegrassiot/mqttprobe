@@ -259,6 +259,37 @@ The container runs as a **non-root user** on port `8080` using the `mcr.microsof
 
 Remove the `caddy` service from `docker-compose.prod.yml`, point your proxy (nginx, Traefik, etc.) at port `8080`, and set the `AllowedHosts` environment variable on the app container to match your public hostname to avoid 400 responses from host filtering.
 
+### Plugin storage
+
+Plugins installed from **Settings → Plugins → Install plugin** are written to `/app/Plugins` inside
+the container. The included compose files already mount this as the named `mqttprobe-plugins`
+volume, so installed plugins survive container restarts and re-deployments without extra setup:
+
+```yaml
+volumes:
+  - mqttprobe-plugins:/app/Plugins
+```
+
+If you swap this for a bind mount (e.g. `./plugins:/app/Plugins`) to inspect or version-control the
+folder from the host, keep the mount in place — an uploaded plugin lost from an unmounted path
+cannot be recovered.
+
+Binary plugin packages (those containing a `.dll`) are permitted by default, since a host whose
+filesystem you cannot reach has no other way to install one. Installing one executes third-party
+code inside the app, so a deployment that does not want that turns it off explicitly:
+
+```yaml
+- Plugins__AllowBinaryPackages=false
+```
+
+or in `appsettings.json`:
+
+```json
+"Plugins": { "AllowBinaryPackages": false }
+```
+
+Protobuf schema packages contain no executable code and are always permitted.
+
 ---
 
 ## Development

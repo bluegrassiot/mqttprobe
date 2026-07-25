@@ -1,8 +1,13 @@
+using System.IO.Compression;
 using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
 using MQTTnet;
 using MqttProbe.Models.Plugins;
+using MqttProbe.Services.Platform;
 using MqttProbe.Services.Plugins;
+using MqttProbe.Services.Plugins.Packaging;
 using MqttProbe.Services.Plugins.Protobuf;
+using NSubstitute;
 
 namespace MqttProbe.Tests.Services.Plugins.Protobuf;
 
@@ -108,5 +113,64 @@ public class ProtobufChirpStackEndToEndTests
         registry.FindDecoder("protobuf").Should().NotBeNull();
         registry.FindDetector(MakeArgs("application/1/device/0102030405060708/event/up", SamplePayload()))
             !.FormatId.Should().Be("protobuf");
+    }
+
+    private static MemoryStream PackSampleAsPackage()
+    {
+        var buffer = new MemoryStream();
+        var sourceDir = ChirpStackSampleDir();
+
+        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(sourceDir, file).Replace('\\', '/');
+
+                if (relative.EndsWith(".b64", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                zip.CreateEntryFromFile(file, relative);
+            }
+        }
+
+        buffer.Position = 0;
+        return buffer;
+    }
+
+    [Test]
+    public async Task Sample_Installs_As_A_Package_And_Decodes_An_Uplink()
+    {
+        var pluginFolder = Path.Combine(Path.GetTempPath(), "mqttprobe-e2e-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(pluginFolder);
+
+        var appInfo = Substitute.For<IAppInfoService>();
+        appInfo.GetVersion().Returns("1.0.3");
+
+        var config = new PluginConfig();
+        config.PluginFolders.Add(pluginFolder);
+
+        var installer = new PluginPackageInstaller(
+            config, appInfo, new PluginInstallSession(), new PluginArchiveLimits(), NullLoggerFactory.Instance);
+
+        var outcome = await installer.InstallAsync(PackSampleAsPackage(), CancellationToken.None);
+
+        outcome.Succeeded.Should().BeTrue(outcome.Error);
+        outcome.Manifest!.Id.Should().Be("chirpstack");
+        outcome.RequiresRestart.Should().BeFalse();
+
+        var sources = ProtobufSchemaFolderLoader.Discover([pluginFolder]);
+        sources.Should().ContainSingle("the installed package must be discovered by the existing loader");
+
+        var registry = new ProtobufSchemaRegistry(sources);
+        registry.HasAnySchemas.Should().BeTrue();
+
+        var envelope = new ProtobufPayloadDecoder(registry)
+            .Decode(MakeArgs("application/1/device/0102030405060708/event/up", SamplePayload()));
+
+        envelope.IsFailure.Should().BeFalse(envelope.FailureReason);
+
+        Directory.Delete(pluginFolder, recursive: true);
     }
 }

@@ -10,7 +10,27 @@ This plugin implements `IMqttProbePlugin` with a detector and decoder. When load
 dotnet build samples/CustomDemoPlugin -c Release
 ```
 
-## Install
+## Install from the UI
+
+Build a package and install it from **Settings → Plugins → Install plugin**. This is the only route
+on a hardened host where you have no filesystem access.
+
+```powershell
+python scripts/pack-plugin.py samples/CustomDemoPlugin --dll samples/CustomDemoPlugin/bin/Release/net10.0/CustomDemoPlugin.dll
+```
+
+`--dll` renames the assembly to `sample-csv.dll` to match the `id` in
+[mqttprobe-plugin.json](mqttprobe-plugin.json). The loader resolves a package's primary assembly by
+its id, and ids are lowercase-only, so `CustomDemoPlugin.dll` would never be found on a
+case-sensitive filesystem. Repeat `--dll` for any additional dependencies; only the first is renamed.
+
+Two things differ from schema packages:
+
+- Restart afterwards. Only protobuf schema packages activate without one.
+- If the install is refused, `Plugins:AllowBinaryPackages` has been set to `false` on that host.
+  It defaults to `true`; a deployment that does not want in-process third-party code opts out.
+
+## Install by hand
 
 Copy **only** `CustomDemoPlugin.dll` (not `MqttProbe.Shared.dll`) into a `CustomDemoPlugin` subfolder under the host plugins directory. Create folders if needed. Restart the app after copying; plugins do not hot-reload.
 

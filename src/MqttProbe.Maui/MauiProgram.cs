@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MqttProbe.Components.Layout;
@@ -13,6 +14,8 @@ using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Plugins;
+using MqttProbe.Services.Plugins.Loading;
+using MqttProbe.Services.Plugins.Packaging;
 using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
@@ -139,6 +142,10 @@ public static class MauiProgram
         ConfigMigrator.MigrateIfNeeded(legacyConfigDir, configDir);
 #endif
         var configPath = Path.Combine(configDir, "appsettings.json");
+
+        Directory.CreateDirectory(configDir);
+        builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: false);
+
         var isMobile = DeviceInfo.Idiom == DeviceIdiom.Phone || DeviceInfo.Idiom == DeviceIdiom.Tablet;
         builder.Services.AddSingleton<ISettingsStore>(sp =>
             new SettingsStore(configPath, isMobile,
@@ -153,21 +160,32 @@ public static class MauiProgram
         builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));
         builder.Services.PostConfigure<PluginConfig>(cfg =>
         {
-#if WINDOWS || MACCATALYST
             var userPlugins = Path.Combine(FileSystem.Current.AppDataDirectory, "plugins");
             Directory.CreateDirectory(userPlugins);
             var appPlugins = Path.Combine(AppContext.BaseDirectory, "Plugins");
             PluginFolderDefaults.Apply(cfg, FileSystem.Current.AppDataDirectory, userPlugins, appPlugins);
-#else
-            if (cfg.PluginFolders.Count > 0)
-                PluginFolderDefaults.Apply(cfg, AppContext.BaseDirectory);
-#endif
         });
+        builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<PluginConfig>>().Value);
+        builder.Services.AddSingleton<PluginArchiveLimits>();
+        builder.Services.AddSingleton<PluginAssemblyCache>();
+        builder.Services.AddSingleton<PluginInstallSession>();
+        builder.Services.AddSingleton<PluginPackageInstaller>();
+        builder.Services.AddSingleton<PluginInventoryService>();
+        builder.Services.AddSingleton<PluginReloadService>();
+        builder.Services.AddSingleton<IPluginPackagePicker, MauiPluginPackagePicker>();
+        builder.Services.AddSingleton<IPluginInputCapability, MauiPluginInputCapability>();
         builder.Services.AddSingleton<PluginRegistry>(sp =>
         {
-            var config = sp.GetRequiredService<IOptions<PluginConfig>>().Value;
+            var config = sp.GetRequiredService<PluginConfig>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return MqttProbePluginStartup.BuildPluginRegistry(config, loggerFactory);
+
+            // Must run before BuildPluginRegistry: it deletes/moves plugin directories that
+            // PluginLoader or ProtobufSchemaFolderLoader would otherwise hold open once loaded.
+            PluginPendingOperations.Apply(
+                config.PluginFolders, loggerFactory.CreateLogger(typeof(PluginPendingOperations).FullName!));
+
+            return MqttProbePluginStartup.BuildPluginRegistry(
+                config, loggerFactory, sp.GetRequiredService<PluginAssemblyCache>());
         });
         builder.Services.AddSingleton<PayloadPipeline>();
 

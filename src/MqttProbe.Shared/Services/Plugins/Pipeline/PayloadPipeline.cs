@@ -7,7 +7,7 @@ namespace MqttProbe.Services.Plugins.Pipeline;
 
 public sealed class PayloadPipeline
 {
-    private readonly PluginRegistry _registry;
+    private volatile PluginRegistry _registry;
     private readonly ILogger<PayloadPipeline> _logger;
 
     public PayloadPipeline(PluginRegistry registry, ILogger<PayloadPipeline> logger)
@@ -15,6 +15,10 @@ public sealed class PayloadPipeline
         _registry = registry;
         _logger = logger;
     }
+
+    public PluginRegistry Registry => _registry;
+
+    public void SwapRegistry(PluginRegistry registry) => _registry = registry;
 
     public PipelineDecodeResult ProcessInbound(MqttApplicationMessageReceivedEventArgs e)
     {

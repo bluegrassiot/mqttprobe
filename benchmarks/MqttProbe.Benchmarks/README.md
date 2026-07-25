@@ -51,8 +51,15 @@ Samples are crafted to win MqttProbe's first-match detector (priority order show
 | `Base64` | `benchmarks/payloads/base64` | Valid base64 with proper padding |
 | `PlainText` | `benchmarks/payloads/plaintext` | Valid UTF-8, not JSON/XML/hex/base64 |
 | `Csv` | `benchmarks/payloads/csv` | Multi-line CSV (requires `samples/CustomDemoPlugin` loaded) |
+| `ChirpStack` | `application/1/device/0102030405060708/event/up` | Real ChirpStack `integration.UplinkEvent` (requires the ChirpStack schema package installed) |
 
 The `Csv` format requires the sample payload format plugin. See [samples/CustomDemoPlugin/README.md](../../samples/CustomDemoPlugin/README.md) for build and install instructions.
+
+`ChirpStack` publishes the same payload as `samples/protobuf/chirpstack/sample-uplink.b64` on a topic
+that matches the schema manifest's `application/+/device/+/event/up` pattern. Without that schema
+package installed the bytes are still delivered, but no protobuf schema matches the topic, so they
+are detected as binary rather than decoded — install it from **Settings → Plugins** first. See
+[samples/protobuf/chirpstack/README.md](../../samples/protobuf/chirpstack/README.md).
 
 ## Usage
 
@@ -89,7 +96,7 @@ dotnet run --project benchmarks\MqttProbe.Benchmarks -c Release -- publish --con
 
 **Available format names:**
 
-`Empty`, `Sparkplug`, `MessagePack`, `Binary`, `Json`, `Xml`, `Hex`, `Base64`, `PlainText`, `Csv`
+`Empty`, `Sparkplug`, `MessagePack`, `Binary`, `Json`, `Xml`, `Hex`, `Base64`, `PlainText`, `Csv`, `ChirpStack`
 
 ## Concurrency
 
@@ -109,6 +116,7 @@ Some brokers disallow the multi-level `#` wildcard. Prefer single-level `+` or e
 |---|---|
 | `benchmarks/payloads/+` | Empty, MessagePack, Binary, Json, Xml, Hex, Base64, PlainText, Csv |
 | `spBv1.0/bench/DDATA/publisher` | Sparkplug |
+| `application/+/device/+/event/up` | ChirpStack |
 
 Add both filters in MqttProbe's Subscriptions tab before you run the publisher.
 

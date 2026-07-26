@@ -202,4 +202,16 @@ public class PluginSettingsPanelTests : BunitTestContext
 
         cut.Markup.Should().Contain("Declared message type not found");
     }
+
+    [Test]
+    public void Panel_RendersNoPanelChrome()
+    {
+        RegisterPluginServices(ConfigForFolder());
+        EnsureMudProviders();
+
+        var cut = Render<PluginSettingsPanel>();
+
+        cut.FindAll(".app-chrome-panel").Should().BeEmpty();
+        cut.Markup.Should().NotContain("mud-typography-h6");
+    }
 }

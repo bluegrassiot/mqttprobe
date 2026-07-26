@@ -1,43 +1,35 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
-using MqttProbe.Components.Layout;
-using MqttProbe.Components.Pages;
-using MqttProbe.Models.Configuration;
-using MqttProbe.Services.Configuration;
+using MqttProbe.Components.Settings;
 using MqttProbe.Services.Platform;
-using MqttProbe.Services.Security;
 using MqttProbe.Shared.Tests.TestHelpers;
 
-namespace MqttProbe.Shared.Tests.Components.Pages;
+namespace MqttProbe.Shared.Tests.Components.Settings;
 
 [TestFixture]
-public class SettingsUpdateSectionTests : BunitTestContext
+public class AboutSectionTests : BunitTestContext
 {
-    private ISettingsStore _mockStore = null!;
-    private Themes _themes = null!;
     private IAppInfoService _mockAppInfo = null!;
     private IUpdateService _updateService = null!;
 
     [SetUp]
     public void Setup()
     {
-        _mockStore = Substitute.For<ISettingsStore>();
-        _mockStore.Config.Returns(new AppConfiguration
-        {
-            Ui = new UiPreferences { Theme = "dark", FontAccessible = false, AutoResubscribe = true },
-            Performance = new PerformanceSettings { MaxStoredMessages = 10_000, MaxMessagesPerSecond = 50_000 }
-        });
-        _themes = new Themes();
         _mockAppInfo = Substitute.For<IAppInfoService>();
-        _mockAppInfo.RequiresAuthentication.Returns(true);
         _updateService = Substitute.For<IUpdateService>();
-        Services.AddSingleton(_mockStore);
-        Services.AddSingleton<IThemes>(_themes);
         Services.AddSingleton(_mockAppInfo);
         Services.AddSingleton(_updateService);
-        SettingsTests.RegisterPluginSettingsDependencies(Services);
-        AuthorizationContext.SetAuthorized("admin").SetRoles(AppRoles.Admin);
         EnsureMudProviders();
+    }
+
+    [Test]
+    public void ShowsVersion()
+    {
+        _mockAppInfo.GetVersion().Returns("1.0.0-test");
+
+        var cut = Render<AboutSection>();
+
+        cut.Markup.Should().Contain("Version 1.0.0-test");
     }
 
     [Test]
@@ -45,7 +37,7 @@ public class SettingsUpdateSectionTests : BunitTestContext
     {
         _updateService.IsSupported.Returns(false);
 
-        var cut = Render<Settings>();
+        var cut = Render<AboutSection>();
 
         cut.FindAll("[data-testid=check-updates-button]").Should().BeEmpty();
     }
@@ -56,7 +48,7 @@ public class SettingsUpdateSectionTests : BunitTestContext
         _updateService.IsSupported.Returns(true);
         _updateService.CheckForUpdateAsync(Arg.Any<CancellationToken>()).Returns((string?)null);
 
-        var cut = Render<Settings>();
+        var cut = Render<AboutSection>();
         cut.Find("[data-testid=check-updates-button]").Click();
 
         await cut.InvokeAsync(() => Task.CompletedTask);
@@ -70,7 +62,7 @@ public class SettingsUpdateSectionTests : BunitTestContext
         _updateService.IsSupported.Returns(true);
         _updateService.CheckForUpdateAsync(Arg.Any<CancellationToken>()).Returns("1.2.0");
 
-        var cut = Render<Settings>();
+        var cut = Render<AboutSection>();
         cut.Find("[data-testid=check-updates-button]").Click();
 
         await cut.InvokeAsync(() => Task.CompletedTask);

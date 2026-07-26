@@ -295,6 +295,9 @@ deploy/mtls/certs/**
 /.claude
 /.opencode/
 /.obsidian
+/.superpowers/
+
+# docs
 docs/*
 !docs/images/
 !docs/images/**
@@ -305,6 +308,7 @@ docs/*
 /.playwright-mcp
 /src/MqttProbe.Web/Config/certificates
 *.dll
+
 # Plugins installed at runtime through Settings, not source
 /src/MqttProbe.Web/Plugins/*
 !/src/MqttProbe.Web/Plugins/.gitkeep

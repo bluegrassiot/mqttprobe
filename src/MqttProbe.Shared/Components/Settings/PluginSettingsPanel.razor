@@ -9,117 +9,113 @@
 @inject IPluginInputCapability InputCapability
 @inject IDialogService DialogService
 
-<MudPaper Elevation="0" Class="pa-4 app-chrome-panel">
-    <div class="d-flex align-center justify-space-between mb-3">
-        <MudText Typo="Typo.h6">Plugins</MudText>
-
-        @if (_writableFolder is not null)
+<div class="d-flex align-center justify-end mb-3">
+    @if (_writableFolder is not null)
+    {
+        @if (InputCapability.UsesInputFileComponent)
         {
-            @if (InputCapability.UsesInputFileComponent)
-            {
-                <MudFileUpload T="IBrowserFile" Accept=".zip" FilesChanged="OnFileSelected"
-                               @ref="_upload">
-                    <CustomContent>
-                        <AppSecondaryButton data-testid="install-plugin-button"
-                                            StartIcon="@LucideIcons.Upload"
-                                            Disabled="@_busy"
-                                            OnClick="@(() => context.OpenFilePickerAsync())">
-                            Install plugin
-                        </AppSecondaryButton>
-                    </CustomContent>
-                </MudFileUpload>
-            }
-            else
-            {
-                <AppSecondaryButton data-testid="install-plugin-button"
-                                    StartIcon="@LucideIcons.Upload"
-                                    Disabled="@_busy"
-                                    OnClick="PickAndInstallAsync">
-                    Install plugin
-                </AppSecondaryButton>
-            }
+            <MudFileUpload T="IBrowserFile" Accept=".zip" FilesChanged="OnFileSelected"
+                           @ref="_upload">
+                <CustomContent>
+                    <AppSecondaryButton data-testid="install-plugin-button"
+                                        StartIcon="@LucideIcons.Upload"
+                                        Disabled="@_busy"
+                                        OnClick="@(() => context.OpenFilePickerAsync())">
+                        Install plugin
+                    </AppSecondaryButton>
+                </CustomContent>
+            </MudFileUpload>
         }
-    </div>
-
-    @if (_writableFolder is null)
-    {
-        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-            No writable plugin folder is configured on this host, so plugins cannot be installed here.
-        </MudAlert>
+        else
+        {
+            <AppSecondaryButton data-testid="install-plugin-button"
+                                StartIcon="@LucideIcons.Upload"
+                                Disabled="@_busy"
+                                OnClick="PickAndInstallAsync">
+                Install plugin
+            </AppSecondaryButton>
+        }
     }
+</div>
 
-    @if (_error is not null)
-    {
-        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3"
-                  ShowCloseIcon="true" CloseIconClicked="@(() => _error = null)">
-            @_error
-        </MudAlert>
-    }
+@if (_writableFolder is null)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+        No writable plugin folder is configured on this host, so plugins cannot be installed here.
+    </MudAlert>
+}
 
-    @if (Session.CanApplyWithoutRestart)
-    {
-        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
-            <div class="d-flex align-center justify-space-between gap-4 flex-wrap">
-                <span>Schema changes are ready. Messages already stored keep their previous decoding.</span>
-                <AppPrimaryButton data-testid="apply-plugins-button"
-                                  Size="Size.Small"
-                                  Disabled="@_busy"
-                                  OnClick="ApplyAsync">
-                    Apply now
-                </AppPrimaryButton>
-            </div>
-        </MudAlert>
-    }
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3"
+              ShowCloseIcon="true" CloseIconClicked="@(() => _error = null)">
+        @_error
+    </MudAlert>
+}
 
-    @if (Session.RequiresRestart)
-    {
-        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
-            Restart MQTTProbe to finish applying the pending plugin changes.
-        </MudAlert>
-    }
+@if (Session.CanApplyWithoutRestart)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+        <div class="d-flex align-center justify-space-between gap-4 flex-wrap">
+            <span>Schema changes are ready. Messages already stored keep their previous decoding.</span>
+            <AppPrimaryButton data-testid="apply-plugins-button"
+                              Size="Size.Small"
+                              Disabled="@_busy"
+                              OnClick="ApplyAsync">
+                Apply now
+            </AppPrimaryButton>
+        </div>
+    </MudAlert>
+}
 
-    <MudTable Items="_plugins" Dense="true" Hover="true" Elevation="0" T="InstalledPlugin">
-        <HeaderContent>
-            <MudTh>Name</MudTh>
-            <MudTh>Id</MudTh>
-            <MudTh>Version</MudTh>
-            <MudTh>Kind</MudTh>
-            <MudTh>Status</MudTh>
-            <MudTh></MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Name">@context.Manifest.Name</MudTd>
-            <MudTd DataLabel="Id">@context.Manifest.Id</MudTd>
-            <MudTd DataLabel="Version">@context.Manifest.Version</MudTd>
-            <MudTd DataLabel="Kind">@context.Manifest.Kind</MudTd>
-            <MudTd DataLabel="Status">
-                <MudChip T="string" Size="Size.Small" Color="@StatusColour(context.Status)">
-                    @StatusLabel(context.Status)
-                </MudChip>
-                @if (context.StatusDetail is not null)
-                {
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
-                        @context.StatusDetail
-                    </MudText>
-                }
-            </MudTd>
-            <MudTd>
-                <AppSecondaryButton Size="Size.Small"
-                                    Disabled="@_busy"
-                                    OnClick="@(() => RemoveAsync(context))">
-                    Remove
-                </AppSecondaryButton>
-            </MudTd>
-        </RowTemplate>
-    </MudTable>
+@if (Session.RequiresRestart)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+        Restart MQTTProbe to finish applying the pending plugin changes.
+    </MudAlert>
+}
 
-    @if (_plugins.Count == 0)
-    {
-        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
-            No plugins installed.
-        </MudText>
-    }
-</MudPaper>
+<MudTable Items="_plugins" Dense="true" Hover="true" Elevation="0" T="InstalledPlugin">
+    <HeaderContent>
+        <MudTh>Name</MudTh>
+        <MudTh>Id</MudTh>
+        <MudTh>Version</MudTh>
+        <MudTh>Kind</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Manifest.Name</MudTd>
+        <MudTd DataLabel="Id">@context.Manifest.Id</MudTd>
+        <MudTd DataLabel="Version">@context.Manifest.Version</MudTd>
+        <MudTd DataLabel="Kind">@context.Manifest.Kind</MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@StatusColour(context.Status)">
+                @StatusLabel(context.Status)
+            </MudChip>
+            @if (context.StatusDetail is not null)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                    @context.StatusDetail
+                </MudText>
+            }
+        </MudTd>
+        <MudTd>
+            <AppSecondaryButton Size="Size.Small"
+                                Disabled="@_busy"
+                                OnClick="@(() => RemoveAsync(context))">
+                Remove
+            </AppSecondaryButton>
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@if (_plugins.Count == 0)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+        No plugins installed.
+    </MudText>
+}
 
 @code {
     private IReadOnlyList<InstalledPlugin> _plugins = [];

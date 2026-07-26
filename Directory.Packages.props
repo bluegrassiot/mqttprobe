@@ -6,7 +6,7 @@
     <!-- ============================================================ -->
     <!-- Core / Shared                                                -->
     <!-- ============================================================ -->
-    <PackageVersion Include="Blazor-ApexCharts" Version="6.1.0" />
+    <PackageVersion Include="Blazor-ApexCharts" Version="7.0.0" />
     <PackageVersion Include="Blazor.Lucide" Version="1.0.6" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
@@ -33,10 +33,10 @@
     <!-- ============================================================ -->
     <!-- MAUI                                                          -->
     <!-- ============================================================ -->
-    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.80" />
-    <PackageVersion Include="Microsoft.Maui.Controls.Compatibility" Version="10.0.80" />
-    <PackageVersion Include="Microsoft.Maui.Essentials" Version="10.0.80" />
-    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.80" />
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.90" />
+    <PackageVersion Include="Microsoft.Maui.Controls.Compatibility" Version="10.0.90" />
+    <PackageVersion Include="Microsoft.Maui.Essentials" Version="10.0.90" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.90" />
     <!-- ============================================================ -->
     <!-- Photino                                                       -->
     <!-- ============================================================ -->

@@ -25,9 +25,12 @@
     display: none;
 }
 
+/* justify-content is explicit because a <button> centres its content per the HTML
+   rendering spec — it does not fall back to flex-start the way a <div> would. */
 .settings-nav-item {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 8px;
     width: 100%;
     padding: 8px 12px;
@@ -43,6 +46,12 @@
     cursor: pointer;
     transition: color 150ms ease-out, background-color 150ms ease-out;
     -webkit-tap-highlight-color: transparent;
+}
+
+/* The icon is a flex item sized in em, so without this a label long enough to fill
+   the rail would squeeze it narrower and stagger the labels. */
+.settings-nav-item ::deep .mud-icon-root {
+    flex-shrink: 0;
 }
 
 .settings-nav-item:hover,

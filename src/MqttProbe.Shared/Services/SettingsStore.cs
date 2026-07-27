@@ -148,22 +148,22 @@ public class SettingsStore : ISettingsStore
                     try
                     {
                         File.Delete(tmpFile);
-                        try { await envelopeKeyStore.RemoveAsync($"cert-env-{tmpAssetId}"); } catch { }
+                        try { await envelopeKeyStore.RemoveAsync($"cert-env-{tmpAssetId}"); } catch { /* best-effort; retried next startup */ }
                         var staleMarker = Path.Combine(certStore.CertificatesDirectory, $"cert-{tmpAssetId}.cleanup-retry");
                         if (File.Exists(staleMarker))
-                            try { File.Delete(staleMarker); } catch { }
+                            try { File.Delete(staleMarker); } catch { /* best-effort; retried next startup */ }
                     }
                     catch
                     {
                         var quarantinePath = Path.Combine(certStore.CertificatesDirectory, $"cert-{tmpAssetId}.quarantine");
-                        try { File.Delete(quarantinePath); } catch { }
+                        try { File.Delete(quarantinePath); } catch { /* stale quarantine file; the move below overwrites or fails loudly */ }
                         bool renamed = false;
-                        try { File.Move(tmpFile, quarantinePath); renamed = true; } catch { }
+                        try { File.Move(tmpFile, quarantinePath); renamed = true; } catch { /* handled via the renamed flag below */ }
                         if (!renamed)
                         {
                             var retryMarker = Path.Combine(certStore.CertificatesDirectory, $"cert-{tmpAssetId}.cleanup-retry");
                             if (!File.Exists(retryMarker))
-                                try { await File.WriteAllTextAsync(retryMarker, $"staging cleanup failed at {DateTime.UtcNow:o}"); } catch { }
+                                try { await File.WriteAllTextAsync(retryMarker, $"staging cleanup failed at {DateTime.UtcNow:o}"); } catch { /* marker is only a retry hint; the LogCritical below is the real signal */ }
                             _logger?.LogCritical(
                                 "Could not delete or quarantine staging temp {Path}. Cleanup retry scheduled.",
                                 tmpFile);
@@ -171,7 +171,7 @@ public class SettingsStore : ISettingsStore
                         else
                         {
                             _logger?.LogWarning("Could not delete staging temp {Path}; quarantined.", tmpFile);
-                            try { await envelopeKeyStore.RemoveAsync($"cert-env-{tmpAssetId}"); } catch { }
+                            try { await envelopeKeyStore.RemoveAsync($"cert-env-{tmpAssetId}"); } catch { /* best-effort; retried next startup */ }
                         }
                     }
                 }
@@ -183,8 +183,8 @@ public class SettingsStore : ISettingsStore
                     var correspondingTmp = Path.Combine(certStore.CertificatesDirectory, $"cert-{markerAssetId}.bin.tmp");
                     if (!File.Exists(correspondingTmp))
                     {
-                        try { File.Delete(marker); } catch { }
-                        try { await envelopeKeyStore.RemoveAsync($"cert-env-{markerAssetId}"); } catch { }
+                        try { File.Delete(marker); } catch { /* best-effort; retried next startup */ }
+                        try { await envelopeKeyStore.RemoveAsync($"cert-env-{markerAssetId}"); } catch { /* best-effort; retried next startup */ }
                     }
                 }
 
@@ -198,7 +198,7 @@ public class SettingsStore : ISettingsStore
                         {
                             File.Delete(qFile);
                             var qAssetId = Path.GetFileNameWithoutExtension(qFile)["cert-".Length..];
-                            try { await envelopeKeyStore.RemoveAsync($"cert-env-{qAssetId}"); } catch { }
+                            try { await envelopeKeyStore.RemoveAsync($"cert-env-{qAssetId}"); } catch { /* best-effort; retried next startup */ }
                         }
                     }
                     catch (Exception ex)
@@ -220,16 +220,18 @@ public class SettingsStore : ISettingsStore
                     {
                         if (!configuredPairs.Contains((ownerId, assetId)))
                         {
-                            try { await certStore.DeleteAsync(ownerId, assetId); } catch { }
+                            try { await certStore.DeleteAsync(ownerId, assetId); } catch { /* orphan sweep is best-effort; retried next startup */ }
                         }
                     }
 
-                    var verifiedAssetIds = knownPairs.Select(p => p.AssetId).ToHashSet();
+                    var verifiedAssetIds = knownPairs.Select(p => p.AssetId).ToHashSet(StringComparer.Ordinal);
                     var knownOwnerIds = Config.Connections.Select(c => c.Id).ToHashSet();
                     foreach (var binFile in Directory.EnumerateFiles(certStore.CertificatesDirectory, "cert-*.bin"))
                     {
                         var fileName = Path.GetFileName(binFile);
-                        if (fileName.EndsWith(".tmp") || fileName.EndsWith(".quarantine") || fileName.EndsWith(".cleanup-retry"))
+                        if (fileName.EndsWith(".tmp", StringComparison.Ordinal)
+                            || fileName.EndsWith(".quarantine", StringComparison.Ordinal)
+                            || fileName.EndsWith(".cleanup-retry", StringComparison.Ordinal))
                             continue;
                         var fileAssetId = fileName["cert-".Length..^".bin".Length];
                         if (verifiedAssetIds.Contains(fileAssetId))
@@ -249,7 +251,7 @@ public class SettingsStore : ISettingsStore
                             else
                             {
                                 File.Delete(binFile);
-                                try { await envelopeKeyStore.RemoveAsync($"cert-env-{fileAssetId}"); } catch { }
+                                try { await envelopeKeyStore.RemoveAsync($"cert-env-{fileAssetId}"); } catch { /* best-effort; retried next startup */ }
                             }
                         }
                         catch (Exception ex)
@@ -452,7 +454,7 @@ public class SettingsStore : ISettingsStore
         // After successful persistence, delete the associated cert asset (best-effort)
         if (removed?.ClientCertificateAssetId is not null && _certStore is not null)
         {
-            try { await _certStore.DeleteAsync(removed.Id, removed.ClientCertificateAssetId); } catch { }
+            try { await _certStore.DeleteAsync(removed.Id, removed.ClientCertificateAssetId); } catch { /* config already persisted; the orphan sweep at next startup deletes it */ }
         }
     }
 

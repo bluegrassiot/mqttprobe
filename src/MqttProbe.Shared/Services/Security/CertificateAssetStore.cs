@@ -93,7 +93,7 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
                 System.Runtime.InteropServices.RuntimeInformation.OSDescription,
                 ex.GetType().FullName, ex.Message, _envelopeKeyStore.GetType().FullName);
             TryDelete(tempPath);
-            try { await _envelopeKeyStore.RemoveAsync($"cert-env-{assetId}"); } catch { }
+            try { await _envelopeKeyStore.RemoveAsync($"cert-env-{assetId}"); } catch { /* best-effort rollback; the staging failure above is rethrown */ }
             throw;
         }
 
@@ -113,7 +113,7 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         catch
         {
             TryDelete(tempPath);
-            try { await _envelopeKeyStore.RemoveAsync($"cert-env-{assetId}"); } catch { }
+            try { await _envelopeKeyStore.RemoveAsync($"cert-env-{assetId}"); } catch { /* best-effort rollback; the publish failure is reported below */ }
             throw new CertificateImportException("Failed to publish certificate asset.");
         }
     }
@@ -254,7 +254,7 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
 
         if (TryDelete(path))
         {
-            try { await _envelopeKeyStore.RemoveAsync($"cert-env-{assetId}"); } catch { }
+            try { await _envelopeKeyStore.RemoveAsync($"cert-env-{assetId}"); } catch { /* an envelope key with no blob is inert; startup cleanup sweeps it */ }
         }
     }
 
@@ -267,7 +267,9 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         foreach (var file in Directory.EnumerateFiles(CertificatesDirectory, "cert-*.bin"))
         {
             var name = Path.GetFileName(file);
-            if (name.EndsWith(".tmp") || name.EndsWith(".quarantine") || name.EndsWith(".cleanup-retry"))
+            if (name.EndsWith(".tmp", StringComparison.Ordinal)
+                || name.EndsWith(".quarantine", StringComparison.Ordinal)
+                || name.EndsWith(".cleanup-retry", StringComparison.Ordinal))
                 continue;
 
             try
@@ -305,7 +307,7 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
 
                 results.Add((oid, aid.ToString("D")));
             }
-            catch { }
+            catch { /* unreadable or undecryptable blob; omit it rather than fail the whole listing */ }
         }
         return results;
     }
@@ -512,11 +514,11 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
     private static bool LooksLikeDerPrivateKey(byte[] rawBytes)
     {
         try { using var rsa = RSA.Create(); rsa.ImportPkcs8PrivateKey(rawBytes, out _); return true; }
-        catch { }
+        catch { /* not PKCS#8; try the next format */ }
         try { using var rsa = RSA.Create(); rsa.ImportRSAPrivateKey(rawBytes, out _); return true; }
-        catch { }
+        catch { /* not PKCS#1; try the next format */ }
         try { using var ecdsa = ECDsa.Create(); ecdsa.ImportPkcs8PrivateKey(rawBytes, out _); return true; }
-        catch { }
+        catch { /* not an EC key either; no formats left */ }
         return false;
     }
 
@@ -528,7 +530,7 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
             {
                 return X509Certificate2.CreateFromPem(certText);
             }
-            catch { }
+            catch { /* whole-text parse failed; retry below with just the certificate block */ }
 
             var extracted = ExtractCertificatePem(certText);
             if (extracted is not null)

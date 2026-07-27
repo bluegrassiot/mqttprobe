@@ -187,16 +187,16 @@ public sealed class LinuxLibsecretNative : ILinuxLibsecretNative
 
         var msg = message.ToLowerInvariant();
 
-        if (msg.Contains("cannot autolaunch") ||
-            msg.Contains("service unknown") ||
-            msg.Contains("no such service") ||
-            msg.Contains("no d-bus") ||
-            msg.Contains("not available") ||
-            msg.Contains("no session") ||
-            msg.Contains("org.freedesktop.secrets"))
+        if (msg.Contains("cannot autolaunch", StringComparison.Ordinal) ||
+            msg.Contains("service unknown", StringComparison.Ordinal) ||
+            msg.Contains("no such service", StringComparison.Ordinal) ||
+            msg.Contains("no d-bus", StringComparison.Ordinal) ||
+            msg.Contains("not available", StringComparison.Ordinal) ||
+            msg.Contains("no session", StringComparison.Ordinal) ||
+            msg.Contains("org.freedesktop.secrets", StringComparison.Ordinal))
             return 2;
 
-        if (msg.Contains("spawn") && msg.Contains("failed"))
+        if (msg.Contains("spawn", StringComparison.Ordinal) && msg.Contains("failed", StringComparison.Ordinal))
             return 2;
 
         return 3;

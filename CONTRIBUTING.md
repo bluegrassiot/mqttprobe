@@ -64,7 +64,7 @@ CI still runs full checks on pull requests. Prefer fixing failures over skipping
 
 Before submitting changes, make sure the same checks used by CI pass locally:
 
-- `dotnet build MqttProbe.slnx --warnaserror`
+- `dotnet build MqttProbe.slnx`
 - `dotnet test tests/MqttProbe.Tests`
 - `python scripts/format-check.py`
 

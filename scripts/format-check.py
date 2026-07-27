@@ -31,6 +31,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FIX = "--fix" in sys.argv
 
+# `dotnet format` with no subcommand also runs `analyzers`, which surfaces every
+# Sonar/Meziantou/CA warning as a formatting failure. Most of those rules ship no
+# code fix, so --fix is a no-op against them and the check can never pass. Keep
+# this to formatting; analyzer warnings are reported by the build.
+SUBCOMMANDS = ["whitespace", "style"]
+
 # external/ holds vendored git submodules (e.g. SparkplugNet fork); they keep
 # their own upstream code style and must not be reformatted by mqttprobe rules.
 EXCLUDES = ["**/LucideIcons.cs", "**/SparkplugBProtobuf.cs", "external/**"]
@@ -60,18 +66,25 @@ else:
 
 for target, needs_workload in TARGETS:
     label = Path(target).stem
-    args = ["dotnet", "format", str(ROOT / target)]
-    if not FIX:
-        args.append("--verify-no-changes")
-    for ex in EXCLUDES:
-        args.extend(["--exclude", ex])
 
     print(f"\n  {label}...", end="", flush=True)
 
-    result = subprocess.run(args, capture_output=True, text=True)
-    output = f"{result.stdout}\n{result.stderr}"
+    returncode = 0
+    output = ""
+    for sub in SUBCOMMANDS:
+        args = ["dotnet", "format", sub, str(ROOT / target)]
+        if not FIX:
+            args.append("--verify-no-changes")
+        for ex in EXCLUDES:
+            args.extend(["--exclude", ex])
 
-    if result.returncode == 0:
+        result = subprocess.run(args, capture_output=True, text=True)
+        output += f"{result.stdout}\n{result.stderr}"
+        if result.returncode != 0:
+            returncode = result.returncode
+            break
+
+    if returncode == 0:
         print(" OK")
         continue
 

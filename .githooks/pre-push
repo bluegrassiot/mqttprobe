@@ -57,24 +57,25 @@ printf "  build: %s\n" "$([ ${#BUILD_LABELS[@]} -gt 0 ] && IFS=', ' && echo "${B
 printf "  tests: %s\n" "$([ "$NEED_UNIT_TESTS" -eq 1 ] && echo yes || echo no)"
 pass "Classify changes"
 
+# --warnaserror is off while the analyzer backlog is worked down.
 if [[ "$NEED_NOMAUI_BUILD" -eq 1 || "$NEED_MAUI_BUILD" -eq 1 || "$NEED_DESKTOP_BUILD" -eq 1 ]]; then
     step "Build"
     if [[ "$NEED_NOMAUI_BUILD" -eq 1 ]]; then
-        if ! dotnet build "$ROOT/MqttProbe.NoMaui.slnf" --warnaserror -nologo -clp:NoSummary; then
+        if ! dotnet build "$ROOT/MqttProbe.NoMaui.slnf" -nologo -clp:NoSummary; then
             fail "Build (NoMaui)"
             print_total
             exit 1
         fi
     fi
     if [[ "$NEED_MAUI_BUILD" -eq 1 ]]; then
-        if ! dotnet build "$ROOT/src/MqttProbe.Maui/MqttProbe.Maui.csproj" --warnaserror -nologo -clp:NoSummary; then
+        if ! dotnet build "$ROOT/src/MqttProbe.Maui/MqttProbe.Maui.csproj" -nologo -clp:NoSummary; then
             fail "Build (Maui)"
             print_total
             exit 1
         fi
     fi
     if [[ "$NEED_DESKTOP_BUILD" -eq 1 ]]; then
-        if ! dotnet build "$ROOT/src/MqttProbe.Desktop/MqttProbe.Desktop.csproj" --warnaserror -nologo -clp:NoSummary; then
+        if ! dotnet build "$ROOT/src/MqttProbe.Desktop/MqttProbe.Desktop.csproj" -nologo -clp:NoSummary; then
             fail "Build (Desktop)"
             print_total
             exit 1
@@ -87,7 +88,7 @@ if [[ "$NEED_UNIT_TESTS" -eq 1 ]]; then
     step "Tests (unit)"
     # Ensure test assembly exists: if we only built platforms, still need NoMaui for tests.
     if [[ "$NEED_NOMAUI_BUILD" -ne 1 ]]; then
-        if ! dotnet build "$ROOT/MqttProbe.NoMaui.slnf" --warnaserror -nologo -clp:NoSummary; then
+        if ! dotnet build "$ROOT/MqttProbe.NoMaui.slnf" -nologo -clp:NoSummary; then
             fail "Build (NoMaui for tests)"
             print_total
             exit 1

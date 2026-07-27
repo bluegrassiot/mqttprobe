@@ -8,6 +8,9 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <IsPackable>false</IsPackable>
         <IsTestProject>false</IsTestProject>
+        <!-- See MqttProbe.Shared.Tests.csproj — library analyzers are noise on
+             benchmark code, which is deliberately unidiomatic. -->
+        <AnalysisMode>None</AnalysisMode>
     </PropertyGroup>
 
     <ItemGroup>

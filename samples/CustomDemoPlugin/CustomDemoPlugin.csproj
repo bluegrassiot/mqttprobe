@@ -3,6 +3,9 @@
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <LangVersion>latest</LangVersion>
+        <!-- Sample plugin: kept deliberately minimal for readers to copy, so
+             library analyzers work against its purpose. -->
+        <AnalysisMode>None</AnalysisMode>
     </PropertyGroup>
 
     <ItemGroup>

@@ -192,3 +192,37 @@ dotnet_diagnostic.CS8618.severity = none
 dotnet_diagnostic.CS8625.severity = none
 dotnet_diagnostic.CS8765.severity = none
 dotnet_diagnostic.CS8767.severity = none
+
+###############################################################
+# Analyzer severities
+###############################################################
+
+[*.{cs,razor}]
+
+# MA0048 (file name must match type name) is purely mechanical, and most hits
+# are partial classes and nested helper types that read fine where they are.
+dotnet_diagnostic.MA0048.severity = none
+
+# CA1848 (LoggerMessage source-gen delegates) is a real win on a hot path and
+# pure churn everywhere else. Revisit if profiling points at logging.
+dotnet_diagnostic.CA1848.severity = suggestion
+
+# MA0006 wants string.Equals over ==, but == on string is already ordinal, so
+# every fix is churn with no behaviour change. The comparisons that could
+# actually be culture-sensitive are MA0074 (EndsWith/StartsWith), still a warning.
+dotnet_diagnostic.MA0006.severity = suggestion
+
+# MA0004: the one place a missing ConfigureAwait can actually deadlock is a
+# chain blocked on by Dispose via GetAwaiter().GetResult() — see
+# EmulationService.RunPublishLoop, which is fixed. Elsewhere in Shared the
+# awaits are never blocked on, so this is advisory rather than a build warning.
+# NB the analyzer reports nothing inside .razor components; do not add
+# ConfigureAwait(false) there, it would move continuations off the renderer context.
+dotnet_diagnostic.MA0004.severity = suggestion
+
+# ── ConfigureAwait ───────────────────────────────────────────────────────────
+# MA0004 stays on in MqttProbe.Shared: it is library code consumed by MAUI,
+# which has a synchronisation context. The app projects own their own context,
+# so ConfigureAwait(false) there is noise at best and wrong at worst.
+[src/MqttProbe.{Web,Desktop,Maui}/**.{cs,razor}]
+dotnet_diagnostic.MA0004.severity = none

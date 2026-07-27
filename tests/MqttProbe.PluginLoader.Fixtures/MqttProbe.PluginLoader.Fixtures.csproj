@@ -6,6 +6,8 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <IsPackable>false</IsPackable>
+        <!-- See MqttProbe.Shared.Tests.csproj — library analyzers are noise on test code. -->
+        <AnalysisMode>None</AnalysisMode>
     </PropertyGroup>
 
     <ItemGroup>

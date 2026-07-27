@@ -7,6 +7,11 @@
         <Nullable>enable</Nullable>
 
         <IsPackable>false</IsPackable>
+
+        <!-- Library-code analyzers (CA/Sonar/Meziantou) have no signal on test
+             code — they flagged ~2.6k naming and style issues across tests/.
+             NUnit.Analyzers is kept; it catches real test bugs. -->
+        <AnalysisMode>None</AnalysisMode>
     </PropertyGroup>
 
     <ItemGroup>
@@ -35,9 +40,7 @@
       <ProjectReference Include="..\..\src\MqttProbe.Desktop\MqttProbe.Desktop.csproj" />
       <ProjectReference Include="..\..\src\MqttProbe.Shared\MqttProbe.Shared.csproj" />
       <ProjectReference Include="..\..\src\MqttProbe.Web\MqttProbe.Web.csproj" />
-      <ProjectReference Include="..\MqttProbe.PluginLoader.Fixtures\MqttProbe.PluginLoader.Fixtures.csproj"
-                        ReferenceOutputAssembly="false"
-                        Private="false" />
+      <ProjectReference Include="..\MqttProbe.PluginLoader.Fixtures\MqttProbe.PluginLoader.Fixtures.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
 
     <Target Name="CopyPluginFixtures" AfterTargets="Build">

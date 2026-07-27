@@ -73,21 +73,21 @@ public sealed class Connection : IEquatable<Connection>
     public override int GetHashCode()
     {
         var hash = new HashCode();
-        hash.Add(Name);
-        hash.Add(Host);
+        hash.Add(Name, StringComparer.Ordinal);
+        hash.Add(Host, StringComparer.Ordinal);
         hash.Add(Port);
-        hash.Add(User);
-        hash.Add(Password);
+        hash.Add(User, StringComparer.Ordinal);
+        hash.Add(Password, StringComparer.Ordinal);
         hash.Add(Protocol);
         hash.Add(MqttVersion);
-        hash.Add(ClientId);
+        hash.Add(ClientId, StringComparer.Ordinal);
         hash.Add(UseTls);
         hash.Add(AllowUntrustedCertificate);
         hash.Add(ConnectTimeout);
         hash.Add(ReconnectDelay);
         hash.Add(KeepAlivePeriod);
-        hash.Add(WebsocketBasePath);
-        hash.Add(ClientCertificateAssetId);
+        hash.Add(WebsocketBasePath, StringComparer.Ordinal);
+        hash.Add(ClientCertificateAssetId, StringComparer.Ordinal);
         return hash.ToHashCode();
     }
 }

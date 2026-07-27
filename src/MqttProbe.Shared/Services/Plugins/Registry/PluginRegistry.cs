@@ -194,7 +194,7 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
         IReadOnlyCollection<PluginOverrideConfig>? overrides = null)
     {
         var disabled = disabledPluginIds is { Count: > 0 }
-            ? new HashSet<string>(disabledPluginIds)
+            ? new HashSet<string>(disabledPluginIds, StringComparer.Ordinal)
             : [];
 
         foreach (var id in disabled)
@@ -316,7 +316,7 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
     {
         var groups = GroupByFormatId(entries, disabled, getFormatId, getPluginId);
 
-        var result = new Dictionary<string, TCapability>();
+        var result = new Dictionary<string, TCapability>(StringComparer.Ordinal);
 
         foreach (var (formatId, group) in groups)
         {
@@ -384,7 +384,7 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
         Func<TTuple, string> getFormatId,
         Func<TTuple, string> getPluginId)
     {
-        var groups = new Dictionary<string, List<TTuple>>();
+        var groups = new Dictionary<string, List<TTuple>>(StringComparer.Ordinal);
         var order = new List<string>();
 
         foreach (var entry in entries)

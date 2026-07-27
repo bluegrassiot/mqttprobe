@@ -43,7 +43,7 @@ public class MessageStoreManager : IMessageStoreManager
     private readonly IUxMetricsService _metrics;
     private readonly PayloadPipeline _pipeline;
     private readonly ISparkplugTopologyService? _topologyService;
-    private readonly object _rateLimiterSync = new();
+    private readonly Lock _rateLimiterSync = new();
     private FixedWindowRateLimiter _rateLimiter;
 
     private int _totalNodeCount;
@@ -104,7 +104,7 @@ public class MessageStoreManager : IMessageStoreManager
     }
 
     public MessageStore? SelectedMessageStore { get; set; }
-    public ConcurrentDictionary<string, MessageStore> MessageStores { get; } = new();
+    public ConcurrentDictionary<string, MessageStore> MessageStores { get; } = new(StringComparer.Ordinal);
     public bool IsListening { get; private set; }
 
     public event Func<MqttMessage, Task>? MessageReceived;
@@ -301,7 +301,7 @@ public class MessageStoreManager : IMessageStoreManager
 
             var fullPath = fullTopic[..segEnd];
             var candidate = new MessageStore { Topic = levelKey, FullTopic = fullPath, Parent = parent };
-            var subTopics = parent.SubTopics ??= new ConcurrentDictionary<string, MessageStore>();
+            var subTopics = parent.SubTopics ??= new ConcurrentDictionary<string, MessageStore>(StringComparer.Ordinal);
             child = subTopics.GetOrAdd(levelKey, candidate);
             if (ReferenceEquals(child, candidate))
             {

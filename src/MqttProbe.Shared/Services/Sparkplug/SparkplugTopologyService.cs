@@ -29,7 +29,7 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
     private readonly ILogger<SparkplugTopologyService> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly bool _autoSubscribeToClient;
-    private readonly ConcurrentDictionary<string, SpbGroup> _groups = new();
+    private readonly ConcurrentDictionary<string, SpbGroup> _groups = new(StringComparer.Ordinal);
     private bool _disposed;
 
     public IReadOnlyDictionary<string, SpbGroup> Groups => _groups;

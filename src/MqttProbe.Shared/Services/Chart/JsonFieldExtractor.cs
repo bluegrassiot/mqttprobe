@@ -19,7 +19,7 @@ public class JsonFieldExtractor : IJsonFieldExtractor
     public IReadOnlyDictionary<string, ExtractedField> Extract(
         string jsonPayload, IReadOnlyDictionary<ulong, string>? aliasNames)
     {
-        var result = new Dictionary<string, ExtractedField>();
+        var result = new Dictionary<string, ExtractedField>(StringComparer.Ordinal);
         if (string.IsNullOrWhiteSpace(jsonPayload)) return result;
 
         // Skip any leading non-JSON prefix (e.g. "--" framing markers)

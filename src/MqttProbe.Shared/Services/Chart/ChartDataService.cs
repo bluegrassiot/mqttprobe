@@ -127,7 +127,7 @@ public class ChartDataService(
         IReadOnlyDictionary<ulong, string>? aliasNames,
         out IReadOnlyDictionary<string, ExtractedField> fields)
     {
-        fields = new Dictionary<string, ExtractedField>();
+        fields = new Dictionary<string, ExtractedField>(StringComparer.Ordinal);
         if (string.IsNullOrEmpty(payload))
             return false;
 

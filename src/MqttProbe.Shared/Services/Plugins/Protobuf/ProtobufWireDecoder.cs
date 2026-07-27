@@ -26,7 +26,7 @@ public sealed class ProtobufWireDecoder
         foreach (var f in message.Fields)
             fields[f.Number] = f;
 
-        var result = new Dictionary<string, object?>();
+        var result = new Dictionary<string, object?>(StringComparer.Ordinal);
         var reader = new ProtobufWireReader(payload);
 
         while (reader.TryReadTag(out var number, out var wireType))

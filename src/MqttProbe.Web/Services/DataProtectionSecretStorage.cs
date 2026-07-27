@@ -76,12 +76,12 @@ public class DataProtectionSecretStorage : ISecretStorage
 
     private async Task<Dictionary<string, string>> LoadStoreAsync()
     {
-        if (!File.Exists(_storePath)) return new();
+        if (!File.Exists(_storePath)) return new(StringComparer.Ordinal);
         try
         {
             var cipherText = await File.ReadAllTextAsync(_storePath);
             var json = _protector.Unprotect(cipherText);
-            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new(StringComparer.Ordinal);
         }
         catch (Exception ex)
         {

@@ -7,7 +7,7 @@ namespace MqttProbe.Services.Plugins.BuiltIn;
 public sealed class SparkplugTopologyExtractor : ITopologyExtractor
 {
     // Key: "group/node" for node-scoped, "group/node/device" for device-scoped.
-    private readonly ConcurrentDictionary<string, Dictionary<ulong, string>> _aliasMaps = new();
+    private readonly ConcurrentDictionary<string, Dictionary<ulong, string>> _aliasMaps = new(StringComparer.Ordinal);
 
     public string FormatId => "sparkplug-b";
 

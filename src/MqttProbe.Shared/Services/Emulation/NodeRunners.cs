@@ -212,7 +212,7 @@ public class SparkplugNodeRunner(
                 _certResource = null;
             }
 
-            try { await _node!.PublishNodeDeathMessage(); } catch { }
+            try { await _node.PublishNodeDeathMessage(); } catch { }
             try { (_node as IDisposable)?.Dispose(); } catch { }
             _node = null;
 
@@ -278,17 +278,17 @@ public class SparkplugNodeRunner(
             return;
         }
 
-        _nodeAliases = new Dictionary<string, ulong>();
+        _nodeAliases = new Dictionary<string, ulong>(StringComparer.Ordinal);
         ulong alias = 1;
         foreach (var metric in nodeMetrics)
         {
-            _nodeAliases[metric.Name!] = alias++;
+            _nodeAliases[metric.Name] = alias++;
         }
 
-        _deviceAliases = new Dictionary<string, Dictionary<string, ulong>>();
+        _deviceAliases = new Dictionary<string, Dictionary<string, ulong>>(StringComparer.Ordinal);
         foreach (var device in config.Devices)
         {
-            var deviceMap = new Dictionary<string, ulong>();
+            var deviceMap = new Dictionary<string, ulong>(StringComparer.Ordinal);
             ulong deviceAlias = 1;
             foreach (var metric in device.Metrics)
             {
@@ -424,7 +424,7 @@ public class GenericNodeRunner(EmulatorNodeConfig config, IMqttManagedClient man
             {
                 if (config.PayloadFormatId == "json")
                 {
-                    var metrics = new Dictionary<string, object>(device.Metrics.Count);
+                    var metrics = new Dictionary<string, object>(device.Metrics.Count, StringComparer.Ordinal);
                     foreach (var m in device.Metrics)
                     {
                         var value = WaveformSampler.Next(m, State(m), tSeconds);
@@ -462,7 +462,7 @@ public class GenericNodeRunner(EmulatorNodeConfig config, IMqttManagedClient man
                         {
                             Topic = TopicTemplateRenderer.RenderMetricTopic(config, device.DeviceId, metric.Name),
                             FormatId = config.PayloadFormatId,
-                            Metrics = new Dictionary<string, object> { [metric.Name] = objectValue },
+                            Metrics = new Dictionary<string, object>(StringComparer.Ordinal) { [metric.Name] = objectValue },
                             TimestampUtc = DateTime.UtcNow
                         };
                         var bytes = pipeline.EncodeOutbound(request);

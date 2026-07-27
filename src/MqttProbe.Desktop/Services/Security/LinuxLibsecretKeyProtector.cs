@@ -15,7 +15,7 @@ public sealed class LinuxLibsecretKeyProtector : ISecretKeyProtector
     }
 
     private static Dictionary<string, string> Attributes() =>
-        new() { ["key-id"] = MasterKeyConstants.KeyVersionId };
+        new(StringComparer.Ordinal) { ["key-id"] = MasterKeyConstants.KeyVersionId };
 
     public Task<SecretKeyLoadResult> LoadAsync(CancellationToken cancellationToken = default)
     {

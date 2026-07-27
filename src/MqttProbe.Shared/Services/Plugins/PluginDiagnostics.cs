@@ -18,7 +18,7 @@ public enum DiagnosticSeverity
 
 public sealed class PluginOverrideConfig
 {
-    public required string FormatId { get; init; }
-    public required string Capability { get; init; }
-    public required string PluginId { get; init; }
+    public string FormatId { get; init; } = "";
+    public string Capability { get; init; } = "";
+    public string PluginId { get; init; } = "";
 }

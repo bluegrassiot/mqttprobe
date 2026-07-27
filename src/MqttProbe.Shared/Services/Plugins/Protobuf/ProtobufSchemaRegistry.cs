@@ -105,10 +105,10 @@ public sealed class ProtobufSchemaRegistry
     }
 
     public bool TryResolveMessage(string fullyQualifiedName, out DescriptorProto messageType) =>
-        _messages.TryGetValue(Normalize(fullyQualifiedName), out messageType!);
+        _messages.TryGetValue(Normalize(fullyQualifiedName), out messageType);
 
     public bool TryResolveEnum(string fullyQualifiedName, out EnumDescriptorProto enumType) =>
-        _enums.TryGetValue(Normalize(fullyQualifiedName), out enumType!);
+        _enums.TryGetValue(Normalize(fullyQualifiedName), out enumType);
 
     private void BuildRoutingTable(IReadOnlyList<ProtobufSchemaMapping> mappings, ILogger? logger)
     {

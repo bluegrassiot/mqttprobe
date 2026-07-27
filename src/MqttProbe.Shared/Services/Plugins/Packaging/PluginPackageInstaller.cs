@@ -207,7 +207,7 @@ public sealed class PluginPackageInstaller
             Extract(archive, extractPath, ct);
         }
 
-        var contentResult = ValidateExtractedContent(manifest!, extractPath, ct);
+        var contentResult = ValidateExtractedContent(manifest, extractPath, ct);
 
         if (!contentResult.IsValid)
         {

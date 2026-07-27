@@ -15,7 +15,7 @@ public interface ISubscriptionManager : IDisposable
     public void ClearActiveSubscriptions();
 }
 
-public class SubscriptionManager : ISubscriptionManager, IDisposable
+public class SubscriptionManager : ISubscriptionManager
 {
     private readonly IMqttManagedClient _managedMqttClient;
     private readonly ILogger<SubscriptionManager> _logger;

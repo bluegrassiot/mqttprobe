@@ -5,7 +5,6 @@ namespace MqttProbe.Desktop.Services.Security;
 public sealed class MacKeychainNative : IMacKeychainNative
 {
     private const int ErrSecSuccess = 0;
-    private const int ErrSecItemNotFound = -25300;
     private const int CfStringEncodingUtf8 = 0x08000100;
 
     private static readonly IntPtr _cfAllocatorDefault = IntPtr.Zero;

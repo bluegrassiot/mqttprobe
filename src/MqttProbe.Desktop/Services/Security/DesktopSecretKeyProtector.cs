@@ -49,11 +49,11 @@ public sealed class DesktopSecretKeyProtector : ISecretProtectionStatus
                     "OS keyring facility failed during initialization.", unexpected.Error);
 
             case SecretKeyLoadResult.FacilityUnavailable:
-                await InitializeFileFallbackAsync(cancellationToken);
+                await InitializeFileFallbackAsync();
                 return;
 
             case SecretKeyLoadResult.Found found:
-                await InitializeWithOsKeyAsync(found.Key, cancellationToken);
+                await InitializeWithOsKeyAsync(found.Key);
                 return;
 
             case SecretKeyLoadResult.NotFound:
@@ -106,17 +106,10 @@ public sealed class DesktopSecretKeyProtector : ISecretProtectionStatus
         throw new InvalidOperationException("Unreachable");
     }
 
-    private Task InitializeFileFallbackAsync(CancellationToken cancellationToken)
+    private Task InitializeFileFallbackAsync()
     {
         byte[]? rawKey;
-        try
-        {
-            rawKey = _raw.TryRead();
-        }
-        catch (SecretStorageException)
-        {
-            throw;
-        }
+        rawKey = _raw.TryRead();
 
         if (rawKey is not null)
         {
@@ -144,19 +137,12 @@ public sealed class DesktopSecretKeyProtector : ISecretProtectionStatus
             "Ciphertext files exist but no raw key file is present and OS keyring is unavailable.");
     }
 
-    private Task InitializeWithOsKeyAsync(byte[] osKey, CancellationToken cancellationToken)
+    private Task InitializeWithOsKeyAsync(byte[] osKey)
     {
         if (_raw.Exists)
         {
             byte[]? rawKey;
-            try
-            {
-                rawKey = _raw.TryRead();
-            }
-            catch (SecretStorageException)
-            {
-                throw;
-            }
+            rawKey = _raw.TryRead();
 
             if (rawKey is not null && CryptographicOperations.FixedTimeEquals(osKey, rawKey))
             {
@@ -195,14 +181,7 @@ public sealed class DesktopSecretKeyProtector : ISecretProtectionStatus
         if (_raw.Exists)
         {
             byte[]? rawKey;
-            try
-            {
-                rawKey = _raw.TryRead();
-            }
-            catch (SecretStorageException)
-            {
-                throw;
-            }
+            rawKey = _raw.TryRead();
 
             if (rawKey is not null)
             {

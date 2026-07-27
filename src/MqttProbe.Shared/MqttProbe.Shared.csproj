@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Razor">
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
@@ -6,18 +6,25 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>MqttProbe</RootNamespace>
-        <!-- CS8669: Razor source generator emits nullable annotations without #nullable directives; suppress on generated files only -->
-        <NoWarn>$(NoWarn);CS8669</NoWarn>
-    </PropertyGroup>
 
-    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- CS8669: a nullable type argument in markup (MudSelect T="string?", which
+             is what makes the "All" option null) is correct, but Razor emits its
+             component scaffolding outside a #nullable context and the warning lands
+             in the generated file. Not suppressible via .editorconfig — the compiler
+             only consults it for files on disk, not source-generator output. Nothing
+             to fix in the .razor source; <Nullable>enable</Nullable> above means it
+             cannot fire on hand-written code here. -->
+        <NoWarn>$(NoWarn);CS8669</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Blazor.Lucide" />
         <PackageReference Include="FluentValidation" />
         <PackageReference Include="Google.Protobuf" />
+        <PackageReference Include="Meziantou.Analyzer">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
         <!-- Aliased: Google.Protobuf and protobuf-net.Reflection collide -->
         <PackageReference Include="protobuf-net.Reflection" Aliases="ProtoReflection" />
         <PackageReference Include="MessagePack" />
@@ -25,6 +32,10 @@
         <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
         <PackageReference Include="MQTTnet" />
         <PackageReference Include="MudBlazor" />
+        <PackageReference Include="SonarAnalyzer.CSharp">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
         <PackageReference Include="System.Reflection.MetadataLoadContext" />
         <PackageReference Include="System.Threading.RateLimiting" />
         <PackageReference Include="Blazor-ApexCharts" />

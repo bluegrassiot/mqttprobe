@@ -19,10 +19,14 @@
     <File Path="README.md" />
     <File Path="SECURITY.md" />
   </Folder>
+  <Folder Name="/external/">
+    <Project Path="external/SparkplugNet/src/SparkplugNet/SparkplugNet.csproj" />
+  </Folder>
   <Folder Name="/general/">
     <File Path=".editorconfig" />
     <File Path=".gitattributes" />
     <File Path=".gitignore" />
+    <File Path=".gitmodules" />
     <File Path="Directory.Build.props" />
     <File Path="dotnet-tools.json" />
     <File Path="global.json" />

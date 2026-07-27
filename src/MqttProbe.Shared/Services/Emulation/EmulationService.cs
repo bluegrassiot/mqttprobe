@@ -292,6 +292,9 @@ public class EmulationService : IEmulationService
             throw new InvalidOperationException("Emulator configuration is locked while the emulator is running.");
     }
 
+    // ConfigureAwait(false) throughout this chain: Dispose blocks on _publishLoop with
+    // GetAwaiter().GetResult(), so on MAUI (which has a real SynchronizationContext) a
+    // captured context here would deadlock against the thread doing the disposing.
     private async Task RunPublishLoop(int rateMs, CancellationToken ct)
     {
         var lastTickDuration = TimeSpan.Zero;
@@ -300,14 +303,14 @@ public class EmulationService : IEmulationService
             var remaining = TimeSpan.FromMilliseconds(rateMs) - lastTickDuration;
             if (remaining > TimeSpan.Zero)
             {
-                try { await Task.Delay(remaining, ct); }
+                try { await Task.Delay(remaining, ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
             }
 
             if (ct.IsCancellationRequested) break;
 
             var start = Stopwatch.GetTimestamp();
-            await TickSafelyAsync();
+            await TickSafelyAsync().ConfigureAwait(false);
             lastTickDuration = Stopwatch.GetElapsedTime(start);
         }
     }
@@ -325,7 +328,7 @@ public class EmulationService : IEmulationService
 
             _metrics.UpdateEmulatorHealth(publishersOnline, Interlocked.Read(ref _publishCycles), nodesInError);
 
-            await Task.WhenAll(runners.Select(r => r.PublishTickAsync(tSeconds, health)));
+            await Task.WhenAll(runners.Select(r => r.PublishTickAsync(tSeconds, health))).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

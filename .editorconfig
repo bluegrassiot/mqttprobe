@@ -238,3 +238,14 @@ dotnet_diagnostic.MA0004.severity = suggestion
 # so ConfigureAwait(false) there is noise at best and wrong at worst.
 [src/MqttProbe.{Web,Desktop,Maui}/**.{cs,razor}]
 dotnet_diagnostic.MA0004.severity = none
+
+# ── Serialised config models ─────────────────────────────────────────────────
+# MA0016 wants collection interfaces on public members so callers are not bound
+# to the implementation. That is right for API surface — the parameters in
+# ISparkplugNode, ISubscriptionManager and PipelineDiagnostics were widened —
+# but these types are System.Text.Json DTOs whose whole contract is being a
+# mutable bag of settings. IList<T> on a { get; set; } DTO hides nothing and
+# risks the on-disk config format for no runtime benefit. The rule already
+# exempts XML-serialised properties; it simply predates JSON DTOs.
+[src/MqttProbe.Shared/Models/**.cs]
+dotnet_diagnostic.MA0016.severity = none

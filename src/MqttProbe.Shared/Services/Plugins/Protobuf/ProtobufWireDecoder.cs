@@ -14,7 +14,7 @@ public sealed class ProtobufWireDecoder
 
     public ProtobufWireDecoder(ProtobufSchemaRegistry registry) => _registry = registry;
 
-    public Dictionary<string, object?> Decode(ReadOnlySpan<byte> payload, DescriptorProto message) =>
+    public IReadOnlyDictionary<string, object?> Decode(ReadOnlySpan<byte> payload, DescriptorProto message) =>
         Decode(payload, message, 0);
 
     private Dictionary<string, object?> Decode(ReadOnlySpan<byte> payload, DescriptorProto message, int depth)

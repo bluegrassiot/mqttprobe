@@ -28,7 +28,7 @@ public interface INodeRunner
 
 public class NodeHealthMetricsProvider(IAppHealthMetricsCollector collector)
 {
-    public List<Metric> BuildSnapshot(int publishersOnline, long publishCycles)
+    public IReadOnlyList<Metric> BuildSnapshot(int publishersOnline, long publishCycles)
     {
         var health = collector.GetSnapshot();
         var metrics = new List<Metric>();

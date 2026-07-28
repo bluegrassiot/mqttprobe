@@ -223,7 +223,7 @@ public class EmulationService : IEmulationService
     public NodeRuntimeStatus GetStatus(Guid nodeId) =>
         _runners.FirstOrDefault(r => r.NodeId == nodeId)?.Status ?? NodeRuntimeStatus.Idle;
 
-    public static List<string> GenerateCopyNames(
+    public static IReadOnlyList<string> GenerateCopyNames(
         string sourceNodeId,
         string groupId,
         IEnumerable<EmulatorNodeConfig> existingNodes,
@@ -233,7 +233,7 @@ public class EmulationService : IEmulationService
             existingNodes.Where(n => n.GroupId == groupId).Select(n => n.NodeId),
             copies);
 
-    public static List<string> GenerateCopyNames(string sourceName, IEnumerable<string> takenNames, int copies)
+    public static IReadOnlyList<string> GenerateCopyNames(string sourceName, IEnumerable<string> takenNames, int copies)
     {
         var (stem, next, padWidth) = ParseNodeIdSuffix(sourceName);
         var taken = takenNames.ToHashSet(StringComparer.Ordinal);

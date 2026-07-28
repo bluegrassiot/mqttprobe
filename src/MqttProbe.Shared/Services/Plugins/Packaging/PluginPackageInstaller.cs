@@ -168,58 +168,85 @@ public sealed class PluginPackageInstaller
     private async Task<PluginInstallOutcome> PublishAsync(
         string pluginFolder, string archivePath, string extractPath, CancellationToken ct)
     {
-        PluginPackageManifest? manifest;
+        var (manifest, failure) = await ReadManifestAndExtractAsync(archivePath, extractPath, ct);
 
-        using (var archive = ZipFile.OpenRead(archivePath))
+        if (failure is not null)
         {
-            var manifestEntry = archive.GetEntry(PluginManifestValidator.FileName);
-
-            if (manifestEntry is null)
-            {
-                return PluginInstallOutcome.Fail(
-                    $"Package does not contain {PluginManifestValidator.FileName} at its root.");
-            }
-
-            using var reader = new StreamReader(manifestEntry.Open());
-            manifest = PluginManifestValidator.Deserialize(await reader.ReadToEndAsync(ct));
-
-            var manifestResult = PluginManifestValidator.Validate(manifest, _appInfo.GetVersion());
-
-            if (!manifestResult.IsValid)
-            {
-                return PluginInstallOutcome.Fail(manifestResult.Error!);
-            }
-
-            var kindResult = ValidateKindIsPermitted(manifest!.Kind);
-
-            if (!kindResult.IsValid)
-            {
-                return PluginInstallOutcome.Fail(kindResult.Error!);
-            }
-
-            var entryResult = PluginArchiveValidator.ValidateEntries(archive, manifest.Kind, _limits);
-
-            if (!entryResult.IsValid)
-            {
-                return PluginInstallOutcome.Fail(entryResult.Error!);
-            }
-
-            Extract(archive, extractPath, ct);
+            return failure;
         }
 
-        var contentResult = ValidateExtractedContent(manifest, extractPath, ct);
+        var contentResult = ValidateExtractedContent(manifest!, extractPath, ct);
 
         if (!contentResult.IsValid)
         {
             return PluginInstallOutcome.Fail(contentResult.Error!);
         }
 
-        var installPath = PluginPackagePaths.ResolveInstallPath(pluginFolder, manifest.Kind, manifest.Id);
+        var installPath = PluginPackagePaths.ResolveInstallPath(pluginFolder, manifest!.Kind, manifest.Id);
 
-        // The running process may already have this assembly loaded, which holds
-        // its directory open on Windows; stage the upgrade under .pending instead
-        // of swapping in place, and let PluginPendingOperations.Apply move it into
-        // place at next start, before anything has had a chance to load it again.
+        ApplyExtractedPackage(pluginFolder, manifest, extractPath, installPath);
+
+        var requiresRestart = manifest.Kind == PluginPackageKinds.Assembly;
+        _session.Record(manifest.Id, requiresRestart);
+
+        _logger.LogInformation("Installed plugin package {Id} {Version} to {Path}.",
+            manifest.Id, manifest.Version, installPath);
+
+        return PluginInstallOutcome.Success(manifest, installPath, requiresRestart);
+    }
+
+    // Reads and validates the package manifest against the open archive, then extracts
+    // it. Kept separate from PublishAsync so the archive's using-scope (and its several
+    // early-exit validation failures) don't have to interleave with the post-extraction
+    // install/upgrade logic.
+    private async Task<(PluginPackageManifest? Manifest, PluginInstallOutcome? Failure)> ReadManifestAndExtractAsync(
+        string archivePath, string extractPath, CancellationToken ct)
+    {
+        using var archive = ZipFile.OpenRead(archivePath);
+        var manifestEntry = archive.GetEntry(PluginManifestValidator.FileName);
+
+        if (manifestEntry is null)
+        {
+            return (null, PluginInstallOutcome.Fail(
+                $"Package does not contain {PluginManifestValidator.FileName} at its root."));
+        }
+
+        using var reader = new StreamReader(manifestEntry.Open());
+        var manifest = PluginManifestValidator.Deserialize(await reader.ReadToEndAsync(ct));
+
+        var manifestResult = PluginManifestValidator.Validate(manifest, _appInfo.GetVersion());
+
+        if (!manifestResult.IsValid)
+        {
+            return (null, PluginInstallOutcome.Fail(manifestResult.Error!));
+        }
+
+        var kindResult = ValidateKindIsPermitted(manifest!.Kind);
+
+        if (!kindResult.IsValid)
+        {
+            return (null, PluginInstallOutcome.Fail(kindResult.Error!));
+        }
+
+        var entryResult = PluginArchiveValidator.ValidateEntries(archive, manifest.Kind, _limits);
+
+        if (!entryResult.IsValid)
+        {
+            return (null, PluginInstallOutcome.Fail(entryResult.Error!));
+        }
+
+        Extract(archive, extractPath, ct);
+
+        return (manifest, null);
+    }
+
+    // The running process may already have this assembly loaded, which holds
+    // its directory open on Windows; stage the upgrade under .pending instead
+    // of swapping in place, and let PluginPendingOperations.Apply move it into
+    // place at next start, before anything has had a chance to load it again.
+    private void ApplyExtractedPackage(
+        string pluginFolder, PluginPackageManifest manifest, string extractPath, string installPath)
+    {
         var deferUpgrade = manifest.Kind == PluginPackageKinds.Assembly && Directory.Exists(installPath);
 
         if (deferUpgrade)
@@ -232,14 +259,6 @@ public sealed class PluginPackageInstaller
         {
             Swap(extractPath, installPath);
         }
-
-        var requiresRestart = manifest.Kind == PluginPackageKinds.Assembly;
-        _session.Record(manifest.Id, requiresRestart);
-
-        _logger.LogInformation("Installed plugin package {Id} {Version} to {Path}.",
-            manifest.Id, manifest.Version, installPath);
-
-        return PluginInstallOutcome.Success(manifest, installPath, requiresRestart);
     }
 
     private PluginValidationResult ValidateKindIsPermitted(string kind)
@@ -277,6 +296,11 @@ public sealed class PluginPackageInstaller
             return PluginValidationResult.Success;
         }
 
+        return ValidateProtobufSchemaPackage(extractPath, ct);
+    }
+
+    private PluginValidationResult ValidateProtobufSchemaPackage(string extractPath, CancellationToken ct)
+    {
         ct.ThrowIfCancellationRequested();
 
         var schemaManifestPath = Path.Combine(extractPath, ProtobufSchemaFolderLoader.ManifestFileName);
@@ -451,65 +475,90 @@ public sealed class PluginPackageInstaller
 
         foreach (var pluginFolder in _config.PluginFolders)
         {
-            var schemaPath = PluginPackagePaths.ResolveInstallPath(pluginFolder, PluginPackageKinds.ProtobufSchemas, id);
+            var outcome = TryRemoveFromFolder(pluginFolder, id, resolvedInstallPath, isLoaded);
 
-            if (PathsEqual(schemaPath, resolvedInstallPath))
+            if (outcome is not null)
             {
-                if (!Directory.Exists(resolvedInstallPath))
-                {
-                    return Task.FromResult(PluginInstallOutcome.Fail($"Plugin '{id}' is not installed."));
-                }
-
-                if (!PluginPendingOperations.RemoveNow(resolvedInstallPath))
-                {
-                    return Task.FromResult(PluginInstallOutcome.Fail($"Could not delete {resolvedInstallPath}."));
-                }
-
-                _session.Record(id, requiresRestart: false);
-                return Task.FromResult(new PluginInstallOutcome(true, null, null, resolvedInstallPath, false));
-            }
-
-            var assemblyPath = PluginPackagePaths.ResolveInstallPath(pluginFolder, PluginPackageKinds.Assembly, id);
-
-            if (PathsEqual(assemblyPath, resolvedInstallPath))
-            {
-                if (!Directory.Exists(resolvedInstallPath))
-                {
-                    return Task.FromResult(PluginInstallOutcome.Fail($"Plugin '{id}' is not installed."));
-                }
-
-                if (!IsWritable(pluginFolder))
-                {
-                    return Task.FromResult(PluginInstallOutcome.Fail(
-                        $"Plugin '{id}' is installed in a folder that is not writable on this host; it cannot be removed."));
-                }
-
-                // Only a plugin this process actually loaded holds its DLL open. One installed
-                // but never loaded can go straight away, so changing your mind before restarting
-                // does not strand a restart notice for a plugin that was never live.
-                if (!isLoaded && PluginPendingOperations.RemoveNow(resolvedInstallPath))
-                {
-                    _session.Forget(id);
-                    return Task.FromResult(new PluginInstallOutcome(true, null, null, resolvedInstallPath, false));
-                }
-
-                try
-                {
-                    PluginPendingOperations.MarkForRemoval(pluginFolder, id, _logger);
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    _logger.LogWarning(ex, "Could not mark plugin {Id} for removal; it will be retried on next start.", id);
-                    return Task.FromResult(
-                        PluginInstallOutcome.Fail($"Could not remove plugin '{id}'. It will be retried on next start."));
-                }
-
-                _session.Record(id, requiresRestart: true);
-                return Task.FromResult(new PluginInstallOutcome(true, null, null, resolvedInstallPath, true));
+                return Task.FromResult(outcome);
             }
         }
 
         return Task.FromResult(PluginInstallOutcome.Fail($"Plugin '{id}' is not installed."));
+    }
+
+    // Returns null when this folder doesn't back the requested install path, so the
+    // caller's foreach keeps looking; a non-null result is always the final answer.
+    private PluginInstallOutcome? TryRemoveFromFolder(
+        string pluginFolder, string id, string resolvedInstallPath, bool isLoaded)
+    {
+        var schemaPath = PluginPackagePaths.ResolveInstallPath(pluginFolder, PluginPackageKinds.ProtobufSchemas, id);
+
+        if (PathsEqual(schemaPath, resolvedInstallPath))
+        {
+            return RemoveSchemaPackage(id, resolvedInstallPath);
+        }
+
+        var assemblyPath = PluginPackagePaths.ResolveInstallPath(pluginFolder, PluginPackageKinds.Assembly, id);
+
+        if (PathsEqual(assemblyPath, resolvedInstallPath))
+        {
+            return RemoveAssemblyPackage(pluginFolder, id, resolvedInstallPath, isLoaded);
+        }
+
+        return null;
+    }
+
+    private PluginInstallOutcome RemoveSchemaPackage(string id, string resolvedInstallPath)
+    {
+        if (!Directory.Exists(resolvedInstallPath))
+        {
+            return PluginInstallOutcome.Fail($"Plugin '{id}' is not installed.");
+        }
+
+        if (!PluginPendingOperations.RemoveNow(resolvedInstallPath))
+        {
+            return PluginInstallOutcome.Fail($"Could not delete {resolvedInstallPath}.");
+        }
+
+        _session.Record(id, requiresRestart: false);
+        return new PluginInstallOutcome(true, null, null, resolvedInstallPath, false);
+    }
+
+    private PluginInstallOutcome RemoveAssemblyPackage(
+        string pluginFolder, string id, string resolvedInstallPath, bool isLoaded)
+    {
+        if (!Directory.Exists(resolvedInstallPath))
+        {
+            return PluginInstallOutcome.Fail($"Plugin '{id}' is not installed.");
+        }
+
+        if (!IsWritable(pluginFolder))
+        {
+            return PluginInstallOutcome.Fail(
+                $"Plugin '{id}' is installed in a folder that is not writable on this host; it cannot be removed.");
+        }
+
+        // Only a plugin this process actually loaded holds its DLL open. One installed
+        // but never loaded can go straight away, so changing your mind before restarting
+        // does not strand a restart notice for a plugin that was never live.
+        if (!isLoaded && PluginPendingOperations.RemoveNow(resolvedInstallPath))
+        {
+            _session.Forget(id);
+            return new PluginInstallOutcome(true, null, null, resolvedInstallPath, false);
+        }
+
+        try
+        {
+            PluginPendingOperations.MarkForRemoval(pluginFolder, id, _logger);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Could not mark plugin {Id} for removal; it will be retried on next start.", id);
+            return PluginInstallOutcome.Fail($"Could not remove plugin '{id}'. It will be retried on next start.");
+        }
+
+        _session.Record(id, requiresRestart: true);
+        return new PluginInstallOutcome(true, null, null, resolvedInstallPath, true);
     }
 
     private static bool PathsEqual(string a, string b) =>

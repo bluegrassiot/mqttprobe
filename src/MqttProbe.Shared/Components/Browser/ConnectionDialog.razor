@@ -448,7 +448,7 @@
 
         if (_stagedAssetId is not null)
         {
-            try { await CertStore.DeleteAsync(_selectedConnection.Id, _stagedAssetId); } catch { }
+            try { await CertStore.DeleteAsync(_selectedConnection.Id, _stagedAssetId); } catch { /* unreferenced staged asset; the startup orphan sweep collects it */ }
             _stagedAssetId = null;
         }
     }
@@ -553,7 +553,7 @@
                 var stagedId = await CertStore.ImportAsync(connection.Id, request);
                 connection.ClientCertificateAssetId = stagedId;
                 if (_stagedAssetId is not null && _stagedAssetId != stagedId)
-                    try { await CertStore.DeleteAsync(connection.Id, _stagedAssetId); } catch { }
+                    try { await CertStore.DeleteAsync(connection.Id, _stagedAssetId); } catch { /* superseded staged asset; the startup orphan sweep collects it */ }
                 _stagedAssetId = stagedId;
             }
             catch (CertificateImportException ex)
@@ -650,7 +650,7 @@
                     : new CertificateImportRequest(CertificateInputMode.Pem, _pemCertFileBytes!, _pemKeyFileBytes, _certPassword);
                 stagedAssetId = await CertStore.ImportAsync(connection.Id, request);
                 if (_stagedAssetId is not null && _stagedAssetId != stagedAssetId)
-                    try { await CertStore.DeleteAsync(connection.Id, _stagedAssetId); } catch { }
+                    try { await CertStore.DeleteAsync(connection.Id, _stagedAssetId); } catch { /* superseded staged asset; the startup orphan sweep collects it */ }
                 _stagedAssetId = stagedAssetId;
                 connection.ClientCertificateAssetId = stagedAssetId;
             }
@@ -676,7 +676,7 @@
         {
             if (stagedAssetId is not null)
             {
-                try { await CertStore.DeleteAsync(connection.Id, stagedAssetId); } catch { }
+                try { await CertStore.DeleteAsync(connection.Id, stagedAssetId); } catch { /* save failed; the startup orphan sweep collects the unreferenced asset */ }
                 _stagedAssetId = null;
             }
             _certError = $"Failed to save: {ex.Message}";
@@ -690,7 +690,7 @@
             bool removedByUser = stagedAssetId is null && connection.ClientCertificateAssetId is null;
             if (replacedByNew || removedByUser)
             {
-                try { await CertStore.DeleteAsync(connection.Id, previousAssetId); } catch { }
+                try { await CertStore.DeleteAsync(connection.Id, previousAssetId); } catch { /* replaced asset; the startup orphan sweep collects it */ }
             }
         }
 

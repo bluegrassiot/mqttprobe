@@ -16,7 +16,7 @@ public class IosFileProtector : IFileProtector
             var url = NSUrl.FromFilename(path);
             backupOk = url.SetResource(NSUrl.IsExcludedFromBackupKey, new NSNumber(true), out _);
         }
-        catch { }
+        catch { /* backupOk stays false; the combined result below reports the failure */ }
 
         try
         {
@@ -26,7 +26,7 @@ public class IosFileProtector : IFileProtector
             };
             protectionOk = NSFileManager.DefaultManager.SetAttributes(attrs, path, out _);
         }
-        catch { }
+        catch { /* protectionOk stays false; the combined result below reports the failure */ }
 
         return backupOk && protectionOk;
     }

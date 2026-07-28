@@ -575,6 +575,9 @@ public sealed class PluginPackageInstaller
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // Try-prefixed by contract: a file left behind is picked up by the next
+            // install sweep, and callers that need to report failure use
+            // TryDeleteDirectory, which returns a result.
         }
     }
 

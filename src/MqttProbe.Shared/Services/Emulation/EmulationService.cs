@@ -374,9 +374,11 @@ public class EmulationService : IEmulationService
             _cts?.Cancel();
             if (_publishLoop != null)
             {
+                // The token was cancelled just above, so cancellation is the expected
+                // outcome here, not a failure. Anything else propagates.
                 try { _publishLoop.GetAwaiter().GetResult(); }
-                catch (OperationCanceledException) { }
-                catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException)) { }
+                catch (OperationCanceledException) { /* expected: we cancelled it */ }
+                catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException)) { /* same, wrapped */ }
             }
 
             _cts?.Dispose();

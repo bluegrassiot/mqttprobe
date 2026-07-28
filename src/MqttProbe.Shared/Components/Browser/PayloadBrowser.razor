@@ -280,7 +280,7 @@ else
                 if (needsRefresh)
                 {
                     try { await InvokeAsync(StateHasChanged); }
-                    catch (Exception) when (_disposed) { }
+                    catch (Exception) when (_disposed) { /* component torn down mid-refresh; nothing left to render */ }
                 }
                 return;
             }

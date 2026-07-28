@@ -82,7 +82,7 @@
     {
         BuildVisibleRows();
         try { await InvokeAsync(StateHasChanged); }
-        catch (ObjectDisposedException) when (_disposed) { }
+        catch (ObjectDisposedException) when (_disposed) { /* component torn down mid-refresh; nothing left to render */ }
         catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser refresh render failed"); }
     }
 

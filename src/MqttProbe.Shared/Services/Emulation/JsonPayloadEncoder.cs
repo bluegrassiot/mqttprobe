@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Services.Plugins.Contracts;
@@ -38,6 +39,8 @@ public sealed class JsonPayloadEncoder : IPayloadEncoder
             int i => (MetricValueType.Int64, (double)i),
             double d => (MetricValueType.Double, d),
             float f => (MetricValueType.Double, (double)f),
-            _ => (MetricValueType.Double, Convert.ToDouble(raw))
+            // Invariant, not current culture: a string like "1.5" parses to 15 under a
+            // comma-decimal locale, silently corrupting the outbound payload.
+            _ => (MetricValueType.Double, Convert.ToDouble(raw, CultureInfo.InvariantCulture))
         };
 }

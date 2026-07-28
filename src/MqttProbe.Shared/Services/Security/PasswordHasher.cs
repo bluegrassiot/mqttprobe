@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -15,7 +16,10 @@ public static class PasswordHasher
         var hash = Rfc2898DeriveBytes.Pbkdf2(
             Encoding.UTF8.GetBytes(password), salt, Iterations, HashAlgorithmName.SHA256, HashSize);
 
-        return $"{Convert.ToBase64String(salt)}:{Convert.ToBase64String(hash)}:{Iterations}";
+        // Both sides of the iteration count are invariant so a stored hash stays
+        // verifiable regardless of the locale it was written under.
+        return $"{Convert.ToBase64String(salt)}:{Convert.ToBase64String(hash)}:"
+            + Iterations.ToString(CultureInfo.InvariantCulture);
     }
 
     public static bool Verify(string password, string storedHash)
@@ -23,7 +27,8 @@ public static class PasswordHasher
         var parts = storedHash.Split(':');
         if (parts.Length != 3) return false;
 
-        if (!int.TryParse(parts[2], out var iterations)) return false;
+        if (!int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var iterations))
+            return false;
 
         var salt = Convert.FromBase64String(parts[0]);
         var expectedHash = Convert.FromBase64String(parts[1]);

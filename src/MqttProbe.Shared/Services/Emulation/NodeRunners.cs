@@ -212,8 +212,13 @@ public class SparkplugNodeRunner(
                 _certResource = null;
             }
 
-            try { await _node.PublishNodeDeathMessage(); } catch { }
-            try { (_node as IDisposable)?.Dispose(); } catch { }
+            // Best-effort teardown after a failed stop; the original failure is logged
+            // above and rethrown below, so a second exception here would mask it.
+            if (_node is not null)
+            {
+                try { await _node.PublishNodeDeathMessage(); } catch { /* broker may already be gone */ }
+                try { (_node as IDisposable)?.Dispose(); } catch { /* node is being discarded regardless */ }
+            }
             _node = null;
 
             throw;

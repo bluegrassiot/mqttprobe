@@ -10,7 +10,7 @@ namespace MqttProbe.Services.Mqtt;
 public interface ISubscriptionManager : IDisposable
 {
     public IReadOnlyList<SubscribedTopic> Subscriptions { get; }
-    public Task Remove(List<string> topics);
+    public Task Remove(IReadOnlyList<string> topics);
     public Task Add(string topic, MqttQualityOfServiceLevel qos = MqttQualityOfServiceLevel.AtLeastOnce);
     public void ClearActiveSubscriptions();
 }
@@ -57,7 +57,7 @@ public class SubscriptionManager : ISubscriptionManager
         }
     }
 
-    public async Task Remove(List<string> topics)
+    public async Task Remove(IReadOnlyList<string> topics)
     {
         await _operationLock.WaitAsync();
         try

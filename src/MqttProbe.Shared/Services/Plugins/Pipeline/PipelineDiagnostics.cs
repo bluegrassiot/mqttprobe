@@ -12,7 +12,7 @@ public sealed class PipelineDecodeResult
         string formatId,
         string topic,
         byte[] rawPayload,
-        List<string> diagnostics) =>
+        IReadOnlyList<string> diagnostics) =>
         new()
         {
             Envelope = DecodedPayloadEnvelope.CreateFailure(
@@ -21,6 +21,6 @@ public sealed class PipelineDecodeResult
                 rawPayload,
                 failureReason: diagnostics.Count > 0 ? diagnostics[0] : "Unknown error"),
             TopologyEvents = [],
-            Diagnostics = diagnostics.AsReadOnly()
+            Diagnostics = diagnostics
         };
 }

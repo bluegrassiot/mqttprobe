@@ -15,17 +15,17 @@ public interface ISparkplugNode
     public event Func<SparkplugBase<Metric>.SparkplugEventArgs, Task>? Disconnected;
     public Task Start(SparkplugNodeOptions options);
     public Task Stop();
-    public Task PublishMetrics(List<Metric> metrics);
+    public Task PublishMetrics(IReadOnlyList<Metric> metrics);
     public Task PublishNodeDeathMessage();
-    public Task PublishDeviceBirthMessage(string deviceId, List<Metric> metrics);
-    public Task PublishDeviceMetrics(string deviceId, List<Metric> metrics);
+    public Task PublishDeviceBirthMessage(string deviceId, IReadOnlyList<Metric> metrics);
+    public Task PublishDeviceMetrics(string deviceId, IReadOnlyList<Metric> metrics);
 }
 
 public interface ISparkplugNodeFactory
 {
-    public ISparkplugNode Create(List<Metric> knownMetrics, SparkplugSpecificationVersion version);
-    public ISparkplugNode Create(List<Metric> knownMetrics, SparkplugSpecificationVersion version,
-        IReadOnlyList<string>? deviceIds, Func<string, List<Metric>>? getDeviceBirthMetrics);
+    public ISparkplugNode Create(IReadOnlyList<Metric> knownMetrics, SparkplugSpecificationVersion version);
+    public ISparkplugNode Create(IReadOnlyList<Metric> knownMetrics, SparkplugSpecificationVersion version,
+        IReadOnlyList<string>? deviceIds, Func<string, IReadOnlyList<Metric>>? getDeviceBirthMetrics);
 }
 
 /// <summary>
@@ -89,13 +89,13 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
 {
     private readonly SparkplugNode _node;
     private readonly ILogger? _logger;
-    private readonly List<Metric> _knownMetrics;
+    private readonly IReadOnlyList<Metric> _knownMetrics;
     private readonly IReadOnlyList<string>? _deviceIds;
-    private readonly Func<string, List<Metric>>? _getDeviceBirthMetrics;
+    private readonly Func<string, IReadOnlyList<Metric>>? _getDeviceBirthMetrics;
 
-    public SparkplugNodeAdapter(SparkplugNode node, List<Metric> knownMetrics,
+    public SparkplugNodeAdapter(SparkplugNode node, IReadOnlyList<Metric> knownMetrics,
         IReadOnlyList<string>? deviceIds = null,
-        Func<string, List<Metric>>? getDeviceBirthMetrics = null,
+        Func<string, IReadOnlyList<Metric>>? getDeviceBirthMetrics = null,
         ILogger? logger = null)
     {
         _node = node;
@@ -154,7 +154,9 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
                 foreach (var deviceId in _deviceIds)
                 {
                     var metrics = _getDeviceBirthMetrics(deviceId);
-                    await _node.PublishDeviceBirthMessage(metrics, deviceId);
+                    // SparkplugNet takes IEnumerable<T> everywhere except this one
+                    // method, which requires a List<T>.
+                    await _node.PublishDeviceBirthMessage(metrics.ToList(), deviceId);
                 }
             }
         }
@@ -176,7 +178,7 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
 
     public Task Start(SparkplugNodeOptions options) => _node.Start(options);
     public Task Stop() => _node.Stop();
-    public Task PublishMetrics(List<Metric> metrics) => _node.PublishMetrics(metrics);
+    public Task PublishMetrics(IReadOnlyList<Metric> metrics) => _node.PublishMetrics(metrics);
 
     public Task PublishNodeDeathMessage()
     {
@@ -201,29 +203,31 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
             "Update the reflection call in SparkplugNodeAdapter.PublishNodeDeathMessage.");
     }
 
-    public async Task PublishDeviceBirthMessage(string deviceId, List<Metric> metrics)
+    public async Task PublishDeviceBirthMessage(string deviceId, IReadOnlyList<Metric> metrics)
     {
-        await _node.PublishDeviceBirthMessage(metrics, deviceId);
+        // SparkplugNet takes IEnumerable<T> everywhere except this one method,
+        // which requires a List<T>.
+        await _node.PublishDeviceBirthMessage(metrics.ToList(), deviceId);
         // SparkplugNet creates a plain KnownMetricStorage for the device, which
         // lacks alias tracking. Replace with alias-aware version so DDATA
         // alias-only metrics survive FilterMetrics.
         _node.KnownDevices[deviceId] = new AliasAwareKnownMetricStorage(metrics);
     }
 
-    public Task PublishDeviceMetrics(string deviceId, List<Metric> metrics)
+    public Task PublishDeviceMetrics(string deviceId, IReadOnlyList<Metric> metrics)
         => _node.PublishDeviceData(metrics, deviceId);
 }
 
 public class SparkplugNodeFactory(ILogger<SparkplugNodeFactory>? logger = null) : ISparkplugNodeFactory
 {
-    public ISparkplugNode Create(List<Metric> knownMetrics, SparkplugSpecificationVersion version)
+    public ISparkplugNode Create(IReadOnlyList<Metric> knownMetrics, SparkplugSpecificationVersion version)
     {
         var storage = new AliasAwareKnownMetricStorage(knownMetrics);
         return new SparkplugNodeAdapter(new SparkplugNode(storage, version), knownMetrics, logger: logger);
     }
 
-    public ISparkplugNode Create(List<Metric> knownMetrics, SparkplugSpecificationVersion version,
-        IReadOnlyList<string>? deviceIds, Func<string, List<Metric>>? getDeviceBirthMetrics)
+    public ISparkplugNode Create(IReadOnlyList<Metric> knownMetrics, SparkplugSpecificationVersion version,
+        IReadOnlyList<string>? deviceIds, Func<string, IReadOnlyList<Metric>>? getDeviceBirthMetrics)
     {
         var storage = new AliasAwareKnownMetricStorage(knownMetrics);
         return new SparkplugNodeAdapter(new SparkplugNode(storage, version), knownMetrics,

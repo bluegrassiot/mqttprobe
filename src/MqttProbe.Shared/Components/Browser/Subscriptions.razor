@@ -53,7 +53,7 @@
 
     private async Task HandleRemove(IReadOnlyList<string> topics)
     {
-        await SubscriptionManager.Remove(topics.ToList());
+        await SubscriptionManager.Remove(topics);
     }
 
     private async Task HandleClearAll()

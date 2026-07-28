@@ -412,26 +412,12 @@ public class MessageStoreManager : IMessageStoreManager
             var payloadText = result.Envelope.DisplayText;
             formatId = result.Envelope.FormatId;
 
-            if (result.Diagnostics.Count > 0)
-            {
-                foreach (var diag in result.Diagnostics)
-                    _logger.LogWarning("Pipeline diagnostic on topic {Topic}: {Diagnostic}", topic, diag);
-            }
+            LogPipelineDiagnostics(topic, result.Diagnostics);
 
             if (_topologyService is not null && result.TopologyEvents.Count > 0)
                 _topologyService.ApplyTopologyEvents(result.TopologyEvents);
 
-            IReadOnlyDictionary<ulong, string>? aliasNames = null;
-            if (formatId == "sparkplug-b"
-                && !result.Envelope.IsFailure
-                && _settingsStore.Config.Ui.EnrichSparkplugAliasNames
-                && _topologyService is not null)
-            {
-                var rawPayload = arg.ApplicationMessage.GetPayloadSegment().Count > 0
-                    ? arg.ApplicationMessage.GetPayloadSegment().ToArray()
-                    : [];
-                aliasNames = SparkplugAliasResolver.Resolve(topic, rawPayload, _topologyService.Groups);
-            }
+            var aliasNames = ResolveSparkplugAliasNames(topic, arg, result);
 
             message = new MqttMessage(payloadText, topic,
                 arg.ApplicationMessage.Retain, arg.ApplicationMessage.QualityOfServiceLevel)
@@ -452,16 +438,51 @@ public class MessageStoreManager : IMessageStoreManager
         if (formatId is not null)
             _metrics.RecordMessageProcessed(formatId);
 
-        if (message != null && MessageReceived is { } handler)
+        if (message != null)
         {
-            try
-            {
-                await handler(message);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "MessageReceived handler threw on topic {Topic}", message.Topic);
-            }
+            await NotifyMessageReceivedAsync(message);
+        }
+    }
+
+    private void LogPipelineDiagnostics(string topic, IReadOnlyList<string> diagnostics)
+    {
+        foreach (var diagnostic in diagnostics)
+        {
+            _logger.LogWarning("Pipeline diagnostic on topic {Topic}: {Diagnostic}", topic, diagnostic);
+        }
+    }
+
+    private IReadOnlyDictionary<ulong, string>? ResolveSparkplugAliasNames(
+        string topic, MqttApplicationMessageReceivedEventArgs arg, PipelineDecodeResult result)
+    {
+        if (result.Envelope.FormatId != "sparkplug-b"
+            || result.Envelope.IsFailure
+            || !_settingsStore.Config.Ui.EnrichSparkplugAliasNames
+            || _topologyService is null)
+        {
+            return null;
+        }
+
+        var rawPayload = arg.ApplicationMessage.GetPayloadSegment().Count > 0
+            ? arg.ApplicationMessage.GetPayloadSegment().ToArray()
+            : [];
+        return SparkplugAliasResolver.Resolve(topic, rawPayload, _topologyService.Groups);
+    }
+
+    private async Task NotifyMessageReceivedAsync(MqttMessage message)
+    {
+        if (MessageReceived is not { } handler)
+        {
+            return;
+        }
+
+        try
+        {
+            await handler(message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MessageReceived handler threw on topic {Topic}", message.Topic);
         }
     }
 

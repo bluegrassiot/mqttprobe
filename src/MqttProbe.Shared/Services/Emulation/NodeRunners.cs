@@ -98,27 +98,7 @@ public class SparkplugNodeRunner(
                 localCertResource.Set(bundle.Certificate);
             }
 
-            var nodeMetrics = new List<Metric>(initialKnownMetrics)
-            {
-                new("Node Control/Rebirth", DataType.Boolean, false)
-            };
-            BuildAliasMaps(nodeMetrics);
-
-            var birthMetrics = nodeMetrics;
-            if (_nodeAliases is not null)
-            {
-                birthMetrics = new List<Metric>(nodeMetrics.Count);
-                foreach (var source in nodeMetrics)
-                {
-                    if (!_nodeAliases.TryGetValue(source.Name, out var alias))
-                        throw new InvalidOperationException(
-                            $"Missing alias for node metric '{source.Name}'.");
-
-                    var m = new Metric(source.Name, source.DataType, source.Value);
-                    m.Alias = alias;
-                    birthMetrics.Add(m);
-                }
-            }
+            var birthMetrics = BuildBirthMetrics();
 
             localNode = config.UseMetricAliases
                 ? nodeFactory.Create(birthMetrics, SparkplugSpecificationVersion.Version30,
@@ -142,26 +122,65 @@ public class SparkplugNodeRunner(
             logger.LogError(ex, "Emulator node {NodeId} failed to connect to {Host}:{Port}",
                 config.NodeId, connection.Host, connection.Port);
 
-            if (localNode is not null)
-            {
-                try { (localNode as IDisposable)?.Dispose(); }
-                catch (Exception disposeEx)
-                {
-                    _faulted = true;
-
-                    if (localCertResource is not null)
-                    {
-                        quarantine.Quarantine(localCertResource,
-                            $"StartAsync failed ({ex.Message}), node.Dispose also failed ({disposeEx.Message})");
-                        localCertResource = null;
-                    }
-                }
-            }
-
-            localCertResource?.Dispose();
+            DisposeAfterStartFailure(ex, localNode, localCertResource);
 
             throw;
         }
+    }
+
+    // BuildAliasMaps populates _nodeAliases as a side effect, so it must run before the
+    // alias lookup below.
+    private List<Metric> BuildBirthMetrics()
+    {
+        var nodeMetrics = new List<Metric>(initialKnownMetrics)
+        {
+            new("Node Control/Rebirth", DataType.Boolean, false)
+        };
+        BuildAliasMaps(nodeMetrics);
+
+        if (_nodeAliases is null)
+        {
+            return nodeMetrics;
+        }
+
+        var birthMetrics = new List<Metric>(nodeMetrics.Count);
+        foreach (var source in nodeMetrics)
+        {
+            if (!_nodeAliases.TryGetValue(source.Name, out var alias))
+                throw new InvalidOperationException(
+                    $"Missing alias for node metric '{source.Name}'.");
+
+            var m = new Metric(source.Name, source.DataType, source.Value);
+            m.Alias = alias;
+            birthMetrics.Add(m);
+        }
+
+        return birthMetrics;
+    }
+
+    // localCertResource is passed by value deliberately: nulling it here only suppresses
+    // the Dispose below, exactly as the inline version did, because a quarantined resource
+    // is owned by the quarantine from that point on.
+    private void DisposeAfterStartFailure(
+        Exception ex, ISparkplugNode? localNode, CertificateSessionResource? localCertResource)
+    {
+        if (localNode is not null)
+        {
+            try { (localNode as IDisposable)?.Dispose(); }
+            catch (Exception disposeEx)
+            {
+                _faulted = true;
+
+                if (localCertResource is not null)
+                {
+                    quarantine.Quarantine(localCertResource,
+                        $"StartAsync failed ({ex.Message}), node.Dispose also failed ({disposeEx.Message})");
+                    localCertResource = null;
+                }
+            }
+        }
+
+        localCertResource?.Dispose();
     }
 
     public async Task PublishTickAsync(double tSeconds, IReadOnlyList<Metric> nodeHealthMetrics)

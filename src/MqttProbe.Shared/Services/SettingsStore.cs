@@ -308,11 +308,7 @@ public class SettingsStore : ISettingsStore
     public async Task AddConnectionAsync(Connection connection)
     {
         await _lock.WaitAsync();
-        var snapshot = _config.Connections.Select(c => c.Clone()).ToList();
-        var chartsSnapshot = _config.ChartsByConnection
-            .ToDictionary(kv => kv.Key, kv => new List<ChartConfiguration>(kv.Value));
-        var emulatorsSnapshot = _config.EmulatorsByConnection
-            .ToDictionary(kv => kv.Key, kv => kv.Value);
+        var snapshot = CaptureConnectionSnapshot();
         string? previousPassword = null;
         string? oldSecretKey = null;
         bool configMutated = false;
@@ -320,21 +316,7 @@ public class SettingsStore : ISettingsStore
 
         try
         {
-            var existingIdx = _config.Connections.FindIndex(c => c.Id == connection.Id);
-            if (existingIdx >= 0)
-            {
-                var existing = _config.Connections[existingIdx];
-                oldSecretKey = SecretKey(existing);
-                if (_secretStorage != null)
-                {
-                    previousPassword = await _secretStorage.GetAsync(oldSecretKey);
-                }
-                _config.Connections[existingIdx] = connection.Clone();
-            }
-            else
-            {
-                _config.Connections.Add(connection.Clone());
-            }
+            (oldSecretKey, previousPassword) = await UpsertConnectionAsync(connection);
             configMutated = true;
 
             if (_secretStorage != null)
@@ -358,40 +340,85 @@ public class SettingsStore : ISettingsStore
         {
             if (configMutated)
             {
-                _config.Connections = snapshot;
-                _config.ChartsByConnection = chartsSnapshot;
-                _config.EmulatorsByConnection = emulatorsSnapshot;
+                RestoreConnectionSnapshot(snapshot);
             }
 
             if (secretsMutated && _secretStorage != null)
             {
-                try
-                {
-                    await _secretStorage.RemoveAsync(SecretKey(connection));
-                }
-                catch (Exception ex)
-                {
-                    _logger?.LogWarning(ex, "Failed to remove new secret key {Key} during rollback",
-                        SecretKey(connection));
-                }
-                try
-                {
-                    if (previousPassword is not null && oldSecretKey is not null)
-                        await _secretStorage.SetAsync(oldSecretKey, previousPassword);
-                    else if (oldSecretKey is not null)
-                        await _secretStorage.RemoveAsync(oldSecretKey);
-                }
-                catch (Exception ex)
-                {
-                    _logger?.LogWarning(ex, "Failed to restore old secret key {Key} during rollback",
-                        oldSecretKey);
-                }
+                await RestoreSecretsAfterFailureAsync(
+                    _secretStorage, connection, oldSecretKey, previousPassword);
             }
             throw;
         }
         finally
         {
             _lock.Release();
+        }
+    }
+
+    // Returns the replaced connection's secret key and password so the caller can roll them
+    // back; both are null when this is an insert rather than a replace.
+    private async Task<(string? OldSecretKey, string? PreviousPassword)> UpsertConnectionAsync(
+        Connection connection)
+    {
+        var existingIdx = _config.Connections.FindIndex(c => c.Id == connection.Id);
+        if (existingIdx < 0)
+        {
+            _config.Connections.Add(connection.Clone());
+            return (null, null);
+        }
+
+        var existing = _config.Connections[existingIdx];
+        var oldSecretKey = SecretKey(existing);
+        var previousPassword = _secretStorage != null
+            ? await _secretStorage.GetAsync(oldSecretKey)
+            : null;
+        _config.Connections[existingIdx] = connection.Clone();
+        return (oldSecretKey, previousPassword);
+    }
+
+    private sealed record ConnectionSnapshot(
+        List<Connection> Connections,
+        Dictionary<Guid, List<ChartConfiguration>> Charts,
+        Dictionary<Guid, EmulatorDocument> Emulators);
+
+    private ConnectionSnapshot CaptureConnectionSnapshot() => new(
+        _config.Connections.Select(c => c.Clone()).ToList(),
+        _config.ChartsByConnection.ToDictionary(kv => kv.Key, kv => new List<ChartConfiguration>(kv.Value)),
+        _config.EmulatorsByConnection.ToDictionary(kv => kv.Key, kv => kv.Value));
+
+    private void RestoreConnectionSnapshot(ConnectionSnapshot snapshot)
+    {
+        _config.Connections = snapshot.Connections;
+        _config.ChartsByConnection = snapshot.Charts;
+        _config.EmulatorsByConnection = snapshot.Emulators;
+    }
+
+    // Each step is guarded separately: failing to remove the new secret must not stop the
+    // attempt to put the old one back.
+    private async Task RestoreSecretsAfterFailureAsync(
+        ISecretStorage secretStorage, Connection connection, string? oldSecretKey, string? previousPassword)
+    {
+        try
+        {
+            await secretStorage.RemoveAsync(SecretKey(connection));
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to remove new secret key {Key} during rollback",
+                SecretKey(connection));
+        }
+        try
+        {
+            if (previousPassword is not null && oldSecretKey is not null)
+                await secretStorage.SetAsync(oldSecretKey, previousPassword);
+            else if (oldSecretKey is not null)
+                await secretStorage.RemoveAsync(oldSecretKey);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to restore old secret key {Key} during rollback",
+                oldSecretKey);
         }
     }
 

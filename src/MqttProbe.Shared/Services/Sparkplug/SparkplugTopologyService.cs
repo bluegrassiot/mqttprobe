@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
@@ -157,10 +158,12 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
 
         var value = metric.ValueCase switch
         {
-            Payload.Types.Metric.ValueOneofCase.IntValue => metric.IntValue.ToString(),
-            Payload.Types.Metric.ValueOneofCase.LongValue => metric.LongValue.ToString(),
-            Payload.Types.Metric.ValueOneofCase.FloatValue => metric.FloatValue.ToString("F4"),
-            Payload.Types.Metric.ValueOneofCase.DoubleValue => metric.DoubleValue.ToString("F4"),
+            // Invariant so the displayed value matches what is on the wire rather than
+            // the viewer's locale — this is a protocol diagnostic, not localised UI.
+            Payload.Types.Metric.ValueOneofCase.IntValue => metric.IntValue.ToString(CultureInfo.InvariantCulture),
+            Payload.Types.Metric.ValueOneofCase.LongValue => metric.LongValue.ToString(CultureInfo.InvariantCulture),
+            Payload.Types.Metric.ValueOneofCase.FloatValue => metric.FloatValue.ToString("F4", CultureInfo.InvariantCulture),
+            Payload.Types.Metric.ValueOneofCase.DoubleValue => metric.DoubleValue.ToString("F4", CultureInfo.InvariantCulture),
             Payload.Types.Metric.ValueOneofCase.BooleanValue => metric.BooleanValue ? "true" : "false",
             Payload.Types.Metric.ValueOneofCase.StringValue => metric.StringValue,
             _ => "—"

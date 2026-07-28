@@ -212,6 +212,18 @@ dotnet_diagnostic.CA1848.severity = suggestion
 # actually be culture-sensitive are MA0074 (EndsWith/StartsWith), still a warning.
 dotnet_diagnostic.MA0006.severity = suggestion
 
+# MA0046 wants the EventHandler<T> convention: void return, (sender, args).
+# These events are Func<TArgs, Task>, mirroring MQTTnet's own async event API.
+# A void-returning handler cannot be awaited, so "fixing" this would turn every
+# subscriber into fire-and-forget and lose exception propagation.
+dotnet_diagnostic.MA0046.severity = none
+
+# MA0011 fires on any method that has an IFormatProvider overload, which here is
+# mostly noise: object.Equals, RedirectToPage and Console.WriteLine take no
+# meaningful culture. The genuine number formatting and parsing sites are fixed
+# and covered by CA1305, which stays a warning.
+dotnet_diagnostic.MA0011.severity = suggestion
+
 # MA0004: the one place a missing ConfigureAwait can actually deadlock is a
 # chain blocked on by Dispose via GetAwaiter().GetResult() — see
 # EmulationService.RunPublishLoop, which is fixed. Elsewhere in Shared the

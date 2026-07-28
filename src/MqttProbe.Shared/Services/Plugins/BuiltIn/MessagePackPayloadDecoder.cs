@@ -38,11 +38,6 @@ public sealed class MessagePackPayloadDecoder : IPayloadDecoder
         }
     }
 
-    internal static string HexDump(byte[] bytes)
-    {
-        var sb = new StringBuilder(bytes.Length * 2);
-        foreach (var b in bytes)
-            sb.Append(b.ToString("x2"));
-        return sb.ToString();
-    }
+    internal static string HexDump(byte[] bytes) =>
+        Convert.ToHexString(bytes).ToLowerInvariant();
 }

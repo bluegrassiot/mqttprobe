@@ -26,65 +26,79 @@ public static class ProtobufSchemaFolderLoader
 
         foreach (var pluginFolder in pluginFolders)
         {
-            var protobufFolder = Path.Combine(pluginFolder, FolderName);
-            if (!Directory.Exists(protobufFolder))
-                continue;
-
-            TryAddSource(protobufFolder, required: false);
-            foreach (var subfolder in Directory.GetDirectories(protobufFolder))
-            {
-                if (PluginPackagePaths.IsReservedDirectoryName(Path.GetFileName(subfolder)))
-                {
-                    continue;
-                }
-
-                TryAddSource(subfolder, required: false);
-            }
+            DiscoverFromPluginFolder(pluginFolder, seen, sources, logger);
         }
 
         if (sources.Count == 0)
             logger?.LogDebug("No protobuf schema manifests found in any plugin folder.");
 
         return sources;
+    }
 
-        void TryAddSource(string schemaRoot, bool required)
+    private static void DiscoverFromPluginFolder(
+        string pluginFolder,
+        HashSet<string> seen,
+        List<ProtobufSchemaSource> sources,
+        ILogger? logger)
+    {
+        var protobufFolder = Path.Combine(pluginFolder, FolderName);
+        if (!Directory.Exists(protobufFolder))
+            return;
+
+        TryAddSource(protobufFolder, required: false, seen, sources, logger);
+        foreach (var subfolder in Directory.GetDirectories(protobufFolder))
         {
-            if (!seen.Add(schemaRoot))
-                return;
-
-            var manifestPath = Path.Combine(schemaRoot, ManifestFileName);
-            if (!File.Exists(manifestPath))
+            if (PluginPackagePaths.IsReservedDirectoryName(Path.GetFileName(subfolder)))
             {
-                if (required)
-                {
-                    logger?.LogWarning(
-                        "Protobuf schema folder {Folder} has no {Manifest}; no schemas loaded from it.",
-                        schemaRoot, ManifestFileName);
-                }
-                return;
+                continue;
             }
 
-            ProtobufSchemaManifest? manifest;
-            try
-            {
-                manifest = JsonSerializer.Deserialize<ProtobufSchemaManifest>(
-                    File.ReadAllText(manifestPath), _manifestOptions);
-            }
-            catch (Exception ex)
-            {
-                logger?.LogError(ex, "Failed to read protobuf manifest {Path}; skipping.", manifestPath);
-                return;
-            }
-
-            if (manifest is null || manifest.Schemas.Count == 0)
-            {
-                logger?.LogWarning("Protobuf manifest {Path} declares no schemas.", manifestPath);
-                return;
-            }
-
-            sources.Add(new ProtobufSchemaSource(manifest, schemaRoot));
-            logger?.LogInformation(
-                "Loaded {Count} protobuf schema mapping(s) from {Path}.", manifest.Schemas.Count, manifestPath);
+            TryAddSource(subfolder, required: false, seen, sources, logger);
         }
+    }
+
+    private static void TryAddSource(
+        string schemaRoot,
+        bool required,
+        HashSet<string> seen,
+        List<ProtobufSchemaSource> sources,
+        ILogger? logger)
+    {
+        if (!seen.Add(schemaRoot))
+            return;
+
+        var manifestPath = Path.Combine(schemaRoot, ManifestFileName);
+        if (!File.Exists(manifestPath))
+        {
+            if (required)
+            {
+                logger?.LogWarning(
+                    "Protobuf schema folder {Folder} has no {Manifest}; no schemas loaded from it.",
+                    schemaRoot, ManifestFileName);
+            }
+            return;
+        }
+
+        ProtobufSchemaManifest? manifest;
+        try
+        {
+            manifest = JsonSerializer.Deserialize<ProtobufSchemaManifest>(
+                File.ReadAllText(manifestPath), _manifestOptions);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogError(ex, "Failed to read protobuf manifest {Path}; skipping.", manifestPath);
+            return;
+        }
+
+        if (manifest is null || manifest.Schemas.Count == 0)
+        {
+            logger?.LogWarning("Protobuf manifest {Path} declares no schemas.", manifestPath);
+            return;
+        }
+
+        sources.Add(new ProtobufSchemaSource(manifest, schemaRoot));
+        logger?.LogInformation(
+            "Loaded {Count} protobuf schema mapping(s) from {Path}.", manifest.Schemas.Count, manifestPath);
     }
 }

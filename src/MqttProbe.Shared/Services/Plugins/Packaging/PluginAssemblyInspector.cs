@@ -35,20 +35,31 @@ public static class PluginAssemblyInspector
                 "Assembly packages cannot be validated in a single-file build of MQTTProbe.");
         }
 
-        // Walking a candidate's types resolves its entire dependency graph (Google.Protobuf, the
-        // ASP.NET Core shared framework, ...), so the core runtime directory alone is not enough.
-        // TRUSTED_PLATFORM_ASSEMBLIES is the host's own resolved list, ';'-delimited on every OS.
+        var searchPaths = BuildSearchPaths(extractPath, contractPath);
+
+        return ValidateAgainstContract(primaryPath, contractPath, searchPaths, id);
+    }
+
+    // Walking a candidate's types resolves its entire dependency graph (Google.Protobuf, the
+    // ASP.NET Core shared framework, ...), so the core runtime directory alone is not enough.
+    // TRUSTED_PLATFORM_ASSEMBLIES is the host's own resolved list, ';'-delimited on every OS.
+    private static string[] BuildSearchPaths(string extractPath, string contractPath)
+    {
         var platformAssemblies = (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string)?
             .Split(';', StringSplitOptions.RemoveEmptyEntries) ?? [];
 
-        var searchPaths = Directory
+        return Directory
             .GetFiles(RuntimeEnvironment.GetRuntimeDirectory(), "*.dll")
             .Concat(platformAssemblies)
             .Concat(Directory.GetFiles(extractPath, "*.dll", SearchOption.AllDirectories))
             .Append(contractPath)
             .DistinctBy(Path.GetFileNameWithoutExtension, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
 
+    private static PluginValidationResult ValidateAgainstContract(
+        string primaryPath, string contractPath, string[] searchPaths, string id)
+    {
         try
         {
             using var context = new MetadataLoadContext(new PathAssemblyResolver(searchPaths));

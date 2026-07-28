@@ -29,6 +29,23 @@ public static class MqttProbePluginStartup
         BuiltInPluginRegistration.RegisterBuiltIns(registryBuilder);
 
         var protobufLogger = loggerFactory.CreateLogger<ProtobufSchemaRegistry>();
+        var usableSources = DiscoverUsableProtobufSources(config, protobufLogger, registryBuilder);
+
+        if (usableSources.Count > 0)
+        {
+            CombineAndRegisterProtobufSources(usableSources, protobufLogger, combineProtobufSources, registryBuilder);
+        }
+
+        LoadAssemblyPlugins(config, loggerFactory, assemblyCache, registryBuilder);
+
+        return registryBuilder.Build(config.DisabledPluginIds, config.Overrides);
+    }
+
+    private static List<ProtobufSchemaSource> DiscoverUsableProtobufSources(
+        PluginConfig config,
+        ILogger protobufLogger,
+        PluginRegistryBuilder registryBuilder)
+    {
         var usableSources = new List<ProtobufSchemaSource>();
 
         foreach (var source in ProtobufSchemaFolderLoader.Discover(config.PluginFolders, protobufLogger))
@@ -68,43 +85,35 @@ public static class MqttProbePluginStartup
             }
         }
 
-        if (usableSources.Count > 0)
+        return usableSources;
+    }
+
+    private static void CombineAndRegisterProtobufSources(
+        List<ProtobufSchemaSource> usableSources,
+        ILogger protobufLogger,
+        Func<IReadOnlyList<ProtobufSchemaSource>, ILogger, ProtobufSchemaRegistry> combineProtobufSources,
+        PluginRegistryBuilder registryBuilder)
+    {
+        // Combining sources is a distinct operation from probing them individually, so it can
+        // still fail even though every source compiled on its own; falling back to built-ins
+        // here matches the resilience the per-source loop already provides.
+        try
         {
-            // Combining sources is a distinct operation from probing them individually, so it can
-            // still fail even though every source compiled on its own; falling back to built-ins
-            // here matches the resilience the per-source loop already provides.
-            try
+            var schemaRegistry = combineProtobufSources(usableSources, protobufLogger);
+
+            if (schemaRegistry.HasAnySchemas)
             {
-                var schemaRegistry = combineProtobufSources(usableSources, protobufLogger);
+                registryBuilder.RegisterDetector(new ProtobufPayloadDetector(schemaRegistry));
+                registryBuilder.RegisterDecoder(new ProtobufPayloadDecoder(schemaRegistry));
 
-                if (schemaRegistry.HasAnySchemas)
-                {
-                    registryBuilder.RegisterDetector(new ProtobufPayloadDetector(schemaRegistry));
-                    registryBuilder.RegisterDecoder(new ProtobufPayloadDecoder(schemaRegistry));
-
-                    // Only mark sources as loaded once the combined registry that actually
-                    // backs the decoder/detector has been built successfully; registering
-                    // them earlier (per-source) would report a package as Active even when
-                    // the combine step below never wired up any decoding for it.
-                    foreach (var source in usableSources)
-                        registryBuilder.RegisterPackagePath(source.SchemaRoot);
-                }
-                else
-                {
-                    foreach (var source in usableSources)
-                    {
-                        registryBuilder.AddDiagnostic(new PluginDiagnosticEntry
-                        {
-                            Source = "protobuf",
-                            SourcePath = source.SchemaRoot,
-                            Severity = DiagnosticSeverity.Error,
-                            Message = "Combined protobuf schema registry produced no usable schemas.",
-                            Details = string.Join(" ", schemaRegistry.Diagnostics)
-                        });
-                    }
-                }
+                // Only mark sources as loaded once the combined registry that actually
+                // backs the decoder/detector has been built successfully; registering
+                // them earlier (per-source) would report a package as Active even when
+                // the combine step below never wired up any decoding for it.
+                foreach (var source in usableSources)
+                    registryBuilder.RegisterPackagePath(source.SchemaRoot);
             }
-            catch (Exception ex)
+            else
             {
                 foreach (var source in usableSources)
                 {
@@ -113,13 +122,34 @@ public static class MqttProbePluginStartup
                         Source = "protobuf",
                         SourcePath = source.SchemaRoot,
                         Severity = DiagnosticSeverity.Error,
-                        Message = "Failed to build combined protobuf schema registry from usable sources.",
-                        Details = ex.Message
+                        Message = "Combined protobuf schema registry produced no usable schemas.",
+                        Details = string.Join(" ", schemaRegistry.Diagnostics)
                     });
                 }
             }
         }
+        catch (Exception ex)
+        {
+            foreach (var source in usableSources)
+            {
+                registryBuilder.AddDiagnostic(new PluginDiagnosticEntry
+                {
+                    Source = "protobuf",
+                    SourcePath = source.SchemaRoot,
+                    Severity = DiagnosticSeverity.Error,
+                    Message = "Failed to build combined protobuf schema registry from usable sources.",
+                    Details = ex.Message
+                });
+            }
+        }
+    }
 
+    private static void LoadAssemblyPlugins(
+        PluginConfig config,
+        ILoggerFactory loggerFactory,
+        PluginAssemblyCache? assemblyCache,
+        PluginRegistryBuilder registryBuilder)
+    {
         try
         {
             var loadResult = (assemblyCache ?? new PluginAssemblyCache())
@@ -139,7 +169,5 @@ public static class MqttProbePluginStartup
             loggerFactory.CreateLogger(typeof(MqttProbePluginStartup).FullName!)
                 .LogError(ex, "Plugin loading failed; falling back to built-ins only.");
         }
-
-        return registryBuilder.Build(config.DisabledPluginIds, config.Overrides);
     }
 }

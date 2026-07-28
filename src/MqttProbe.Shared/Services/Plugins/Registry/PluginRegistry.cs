@@ -427,42 +427,72 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
             return 0;
         }
 
-        if (overrideMap.TryGetValue((capability, formatId), out var overridePluginId))
+        var overrideWinner = TryResolveOverrideWinner(
+            formatId, entries, disabled, overrideMap, capability, getPluginId);
+
+        if (overrideWinner.HasValue)
         {
-            var overrideIndex = entries.FindIndex(e => getPluginId(e) == overridePluginId);
-
-            if (overrideIndex >= 0)
-            {
-                for (var i = 0; i < entries.Count; i++)
-                {
-                    if (i == overrideIndex)
-                    {
-                        continue;
-                    }
-
-                    _diagnostics.Add(new PluginDiagnosticEntry
-                    {
-                        Source = getPluginId(entries[i]),
-                        Severity = DiagnosticSeverity.Info,
-                        Message = $"{capability} for '{formatId}' overridden by plugin '{overridePluginId}'."
-                    });
-                }
-
-                return overrideIndex;
-            }
-
-            var isDisabled = disabled.Contains(overridePluginId);
-
-            _diagnostics.Add(new PluginDiagnosticEntry
-            {
-                Source = capability,
-                Severity = DiagnosticSeverity.Warning,
-                Message = isDisabled
-                    ? $"{capability} override for '{formatId}' targets plugin '{overridePluginId}' which is disabled; default precedence applies."
-                    : $"{capability} override for '{formatId}' targets plugin '{overridePluginId}' which did not register; default precedence applies."
-            });
+            return overrideWinner;
         }
 
+        return ResolveDefaultWinner(formatId, entries, capability, getPluginId);
+    }
+
+    private int? TryResolveOverrideWinner<TTuple>(
+        string formatId,
+        List<TTuple> entries,
+        HashSet<string> disabled,
+        Dictionary<(string, string), string> overrideMap,
+        string capability,
+        Func<TTuple, string> getPluginId)
+    {
+        if (!overrideMap.TryGetValue((capability, formatId), out var overridePluginId))
+        {
+            return null;
+        }
+
+        var overrideIndex = entries.FindIndex(e => getPluginId(e) == overridePluginId);
+
+        if (overrideIndex >= 0)
+        {
+            for (var i = 0; i < entries.Count; i++)
+            {
+                if (i == overrideIndex)
+                {
+                    continue;
+                }
+
+                _diagnostics.Add(new PluginDiagnosticEntry
+                {
+                    Source = getPluginId(entries[i]),
+                    Severity = DiagnosticSeverity.Info,
+                    Message = $"{capability} for '{formatId}' overridden by plugin '{overridePluginId}'."
+                });
+            }
+
+            return overrideIndex;
+        }
+
+        var isDisabled = disabled.Contains(overridePluginId);
+
+        _diagnostics.Add(new PluginDiagnosticEntry
+        {
+            Source = capability,
+            Severity = DiagnosticSeverity.Warning,
+            Message = isDisabled
+                ? $"{capability} override for '{formatId}' targets plugin '{overridePluginId}' which is disabled; default precedence applies."
+                : $"{capability} override for '{formatId}' targets plugin '{overridePluginId}' which did not register; default precedence applies."
+        });
+
+        return null;
+    }
+
+    private int ResolveDefaultWinner<TTuple>(
+        string formatId,
+        List<TTuple> entries,
+        string capability,
+        Func<TTuple, string> getPluginId)
+    {
         var builtInIndex = entries.FindIndex(e => getPluginId(e) == BuiltInPluginId);
 
         if (builtInIndex >= 0)

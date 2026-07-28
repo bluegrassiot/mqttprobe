@@ -44,61 +44,77 @@ public sealed class PayloadPipeline
             return PipelineDecodeResult.Failure(formatId, topic, rawPayload, diagnostics);
         }
 
-        DecodedPayloadEnvelope envelope;
-
-        try
+        if (!TryDecode(decoder, e, formatId, diagnostics, out var envelope))
         {
-            envelope = decoder.Decode(e);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Decoder for format '{FormatId}' threw an exception.", formatId);
-            diagnostics.Add($"Decoder threw: {ex.Message}");
             return PipelineDecodeResult.Failure(formatId, topic, rawPayload, diagnostics);
         }
 
         if (envelope.IsFailure)
         {
-            return new PipelineDecodeResult
-            {
-                Envelope = envelope,
-                TopologyEvents = [],
-                Diagnostics = diagnostics.AsReadOnly()
-            };
+            return BuildDecodeResult(envelope, [], diagnostics);
         }
 
         var extractor = _registry.FindTopologyExtractor(formatId);
 
         if (extractor is null)
         {
-            return new PipelineDecodeResult
-            {
-                Envelope = envelope,
-                TopologyEvents = [],
-                Diagnostics = diagnostics.AsReadOnly()
-            };
+            return BuildDecodeResult(envelope, [], diagnostics);
         }
 
-        IReadOnlyList<TopologyEvent> topologyEvents;
+        var topologyEvents = ExtractTopologyEvents(extractor, envelope, formatId, diagnostics);
 
+        return BuildDecodeResult(envelope, topologyEvents, diagnostics);
+    }
+
+    private bool TryDecode(
+        IPayloadDecoder decoder,
+        MqttApplicationMessageReceivedEventArgs e,
+        string formatId,
+        List<string> diagnostics,
+        out DecodedPayloadEnvelope envelope)
+    {
         try
         {
-            topologyEvents = extractor.Extract(envelope);
+            envelope = decoder.Decode(e);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Decoder for format '{FormatId}' threw an exception.", formatId);
+            diagnostics.Add($"Decoder threw: {ex.Message}");
+            envelope = default!;
+            return false;
+        }
+    }
+
+    private IReadOnlyList<TopologyEvent> ExtractTopologyEvents(
+        ITopologyExtractor extractor,
+        DecodedPayloadEnvelope envelope,
+        string formatId,
+        List<string> diagnostics)
+    {
+        try
+        {
+            return extractor.Extract(envelope);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Topology extractor for format '{FormatId}' threw an exception.", formatId);
             diagnostics.Add($"Topology extractor threw: {ex.Message}");
-            topologyEvents = [];
+            return [];
         }
+    }
 
-        return new PipelineDecodeResult
+    private static PipelineDecodeResult BuildDecodeResult(
+        DecodedPayloadEnvelope envelope,
+        IReadOnlyList<TopologyEvent> topologyEvents,
+        List<string> diagnostics) =>
+        new()
         {
             Envelope = envelope,
             TopologyEvents = topologyEvents,
             Diagnostics = diagnostics.AsReadOnly()
         };
-    }
 
     public byte[] EncodeOutbound(PayloadEncoderRequest request)
     {

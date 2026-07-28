@@ -14,9 +14,9 @@ namespace MqttProbe.Shared.Tests.Services.Mqtt;
 [TestFixture]
 public class MessageStoreManagerTests
 {
-    private IMqttManagedClient? _mockClient;
-    private ILogger<MessageStoreManager>? _mockLogger;
-    private MessageStoreManager? _messageStoreManager;
+    private IMqttManagedClient _mockClient = null!;
+    private ILogger<MessageStoreManager> _mockLogger = null!;
+    private MessageStoreManager _messageStoreManager = null!;
 
     [SetUp]
     public void Setup()

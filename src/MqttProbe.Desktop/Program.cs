@@ -37,18 +37,7 @@ internal static class Program
 
         var builder = PhotinoBlazorAppBuilder.CreateDefault(args);
 
-        builder.Services.AddMudServices(config =>
-        {
-            config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.TopCenter;
-            config.SnackbarConfiguration.RequireInteraction = false;
-            config.SnackbarConfiguration.PreventDuplicates = true;
-            config.SnackbarConfiguration.NewestOnTop = false;
-            config.SnackbarConfiguration.ShowCloseIcon = true;
-            config.SnackbarConfiguration.VisibleStateDuration = 3000;
-            config.SnackbarConfiguration.HideTransitionDuration = 500;
-            config.SnackbarConfiguration.ShowTransitionDuration = 500;
-            config.SnackbarConfiguration.SnackbarVariant = Variant.Filled;
-        });
+        builder.Services.AddMqttProbeMud();
 
         builder.Services.AddLogging(logging =>
         {
@@ -56,32 +45,23 @@ internal static class Program
             logging.AddDebug();
         });
 
-        // Singleton DI model matching MAUI host (one native session).
-        builder.Services.AddSingleton<IMqttManagedClient>(sp =>
-            new MqttManagedClient(sp.GetService<ILogger<MqttManagedClient>>()));
-        builder.Services.AddSingleton<ISessionState, SessionState>();
-        builder.Services.AddSingleton<IEmulationService>(sp =>
-            new EmulationService(
-                sp.GetRequiredService<ISettingsStore>(),
-                sp.GetRequiredService<ISparkplugNodeFactory>(),
-                sp.GetRequiredService<ISessionState>(),
-                sp.GetRequiredService<IMqttManagedClient>(),
-                sp.GetRequiredService<IUxMetricsService>(),
-                sp.GetRequiredService<ICertificateAssetStore>(),
-                sp.GetRequiredService<ICertificateSessionQuarantine>(),
-                sp.GetRequiredService<PayloadPipeline>(),
-                sp.GetRequiredService<ILogger<EmulationService>>(),
-                sp.GetRequiredService<IAppHealthMetricsCollector>()));
-        builder.Services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
-        builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
-        builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
-        builder.Services.AddSingleton<IMqttOptionsBuilder>(sp =>
-            new MqttOptionsBuilder(sp.GetRequiredService<ICertificateAssetStore>()));
-        builder.Services.AddSingleton<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
-        builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
-        builder.Services.AddSingleton<IAppHealthMetricsCollector, AppHealthMetricsCollector>();
-        builder.Services.AddSingleton<IUxMetricsService, UxMetricsService>();
-        builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
+        builder.Services.AddMqttProbeCore(HostSessionModel.SingleSession);
+        ConfigureServices(builder);
+
+        builder.RootComponents.Add<MqttProbe.Desktop.Main>("app");
+
+        var app = builder.Build();
+
+        app.Services.GetRequiredService<IPhotinoWindowAccessor>().Window = app.MainWindow;
+
+        InitializeStorage(app);
+        ConfigureWindow(app);
+
+        app.Run();
+    }
+
+    private static void ConfigureServices(PhotinoBlazorAppBuilder builder)
+    {
         builder.Services.AddSingleton<IAppInfoService, DesktopAppInfoService>();
         builder.Services.AddSingleton<IUpdateService, DesktopVelopackUpdateService>();
         builder.Services.AddAuthorizationCore();
@@ -96,22 +76,7 @@ internal static class Program
         var secretsDir = Path.Combine(configDir, "secrets");
         Directory.CreateDirectory(secretsDir);
 
-        builder.Services.AddSingleton(sp =>
-        {
-            ISecretKeyProtector os =
-                OperatingSystem.IsWindows() ? new WindowsDpapiSecretKeyProtector(secretsDir) :
-                OperatingSystem.IsMacOS() ? new MacKeychainSecretKeyProtector(new MacKeychainNative()) :
-                OperatingSystem.IsLinux() ? new LinuxLibsecretKeyProtector(new LinuxLibsecretNative()) :
-                new UnavailableSecretKeyProtector();
-
-            var raw = new RawSecretKeyFile(secretsDir);
-            var file = new FileSecretKeyProtector(raw);
-            return new DesktopSecretKeyProtector(secretsDir, os, file, raw);
-        });
-        builder.Services.AddSingleton<ISecretProtectionStatus>(sp =>
-            sp.GetRequiredService<DesktopSecretKeyProtector>());
-        builder.Services.AddSingleton<ISecretStorage>(sp =>
-            new DesktopSecretStorage(secretsDir, sp.GetRequiredService<DesktopSecretKeyProtector>()));
+        AddSecretStorage(builder, secretsDir);
 
         builder.Services.AddSingleton<IPhotinoWindowAccessor, PhotinoWindowAccessor>();
         builder.Services.AddSingleton<ICertificateEnvelopeKeyStore>(sp =>
@@ -137,18 +102,41 @@ internal static class Program
                 sp.GetRequiredService<ILogger<CertificateAssetStore>>());
             return store;
         });
-        builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
         builder.Services.AddSingleton<ICertificateFilePicker>(sp =>
             new DesktopCertificateFilePicker(sp.GetRequiredService<IPhotinoWindowAccessor>()));
         builder.Services.AddSingleton<ICertificateInputCapability, DesktopCertificateInputCapability>();
-        builder.Services.AddSingleton<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
 
         builder.Services.AddScoped<IClipboardService, DesktopClipboardService>();
-        builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
-        builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
-        builder.Services.AddScoped<IChartDataService, ChartDataService>();
-        builder.Services.AddScoped<IThemes, Themes>();
+        builder.Services.AddMqttProbeCharts();
 
+        AddPluginServices(builder, configuration, configDir);
+
+        builder.Services.AddMqttProbeSparkplugTopology(HostSessionModel.SingleSession);
+    }
+
+    private static void AddSecretStorage(PhotinoBlazorAppBuilder builder, string secretsDir)
+    {
+        builder.Services.AddSingleton(sp =>
+        {
+            ISecretKeyProtector os =
+                OperatingSystem.IsWindows() ? new WindowsDpapiSecretKeyProtector(secretsDir) :
+                OperatingSystem.IsMacOS() ? new MacKeychainSecretKeyProtector(new MacKeychainNative()) :
+                OperatingSystem.IsLinux() ? new LinuxLibsecretKeyProtector(new LinuxLibsecretNative()) :
+                new UnavailableSecretKeyProtector();
+
+            var raw = new RawSecretKeyFile(secretsDir);
+            var file = new FileSecretKeyProtector(raw);
+            return new DesktopSecretKeyProtector(secretsDir, os, file, raw);
+        });
+        builder.Services.AddSingleton<ISecretProtectionStatus>(sp =>
+            sp.GetRequiredService<DesktopSecretKeyProtector>());
+        builder.Services.AddSingleton<ISecretStorage>(sp =>
+            new DesktopSecretStorage(secretsDir, sp.GetRequiredService<DesktopSecretKeyProtector>()));
+    }
+
+    private static void AddPluginServices(
+        PhotinoBlazorAppBuilder builder, IConfiguration configuration, string configDir)
+    {
         builder.Services.Configure<PluginConfig>(configuration.GetSection("Plugins"));
         builder.Services.PostConfigure<PluginConfig>(cfg =>
         {
@@ -157,42 +145,13 @@ internal static class Program
             var appPlugins = Path.Combine(AppContext.BaseDirectory, "Plugins");
             PluginFolderDefaults.Apply(cfg, configDir, userPlugins, appPlugins);
         });
-        builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<PluginConfig>>().Value);
-        builder.Services.AddSingleton<PluginArchiveLimits>();
-        builder.Services.AddSingleton<PluginAssemblyCache>();
-        builder.Services.AddSingleton<PluginInstallSession>();
-        builder.Services.AddSingleton<PluginPackageInstaller>();
-        builder.Services.AddSingleton<PluginInventoryService>();
-        builder.Services.AddSingleton<PluginReloadService>();
         builder.Services.AddSingleton<IPluginPackagePicker, DesktopPluginPackagePicker>();
         builder.Services.AddSingleton<IPluginInputCapability, DesktopPluginInputCapability>();
-        builder.Services.AddSingleton<PluginRegistry>(sp =>
-        {
-            var config = sp.GetRequiredService<PluginConfig>();
-            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+        builder.Services.AddMqttProbePlugins();
+    }
 
-            // Must run before BuildPluginRegistry: it deletes/moves plugin directories that
-            // PluginLoader or ProtobufSchemaFolderLoader would otherwise hold open once loaded.
-            PluginPendingOperations.Apply(
-                config.PluginFolders, loggerFactory.CreateLogger(typeof(PluginPendingOperations).FullName!));
-
-            return MqttProbePluginStartup.BuildPluginRegistry(
-                config, loggerFactory, sp.GetRequiredService<PluginAssemblyCache>());
-        });
-        builder.Services.AddSingleton<PayloadPipeline>();
-
-        builder.Services.AddSingleton<ISparkplugTopologyService>(sp =>
-            new SparkplugTopologyService(
-                sp.GetRequiredService<IMqttManagedClient>(),
-                sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
-                autoSubscribeToClient: false));
-
-        builder.RootComponents.Add<MqttProbe.Desktop.Main>("app");
-
-        var app = builder.Build();
-
-        app.Services.GetRequiredService<IPhotinoWindowAccessor>().Window = app.MainWindow;
-
+    private static void InitializeStorage(PhotinoBlazorApp app)
+    {
         try
         {
             var keyProtector = app.Services.GetRequiredService<DesktopSecretKeyProtector>();
@@ -211,7 +170,10 @@ internal static class Program
                 ShowWindowsError(message);
             Environment.Exit(1);
         }
+    }
 
+    private static void ConfigureWindow(PhotinoBlazorApp app)
+    {
         // .ico for the Win32 window/titlebar; .png for the Linux WM/dock.
         var iconFile = OperatingSystem.IsWindows() ? "icon.ico" : "icon.png";
         app.MainWindow
@@ -229,8 +191,6 @@ internal static class Program
                 if (OperatingSystem.IsWindows())
                     WindowsTitleBar.ApplyBrandTint(app.MainWindow.WindowHandle);
             });
-
-        app.Run();
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

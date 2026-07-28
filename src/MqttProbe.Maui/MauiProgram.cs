@@ -40,18 +40,7 @@ public static class MauiProgram
             .UseMauiApp<App>()
             .ConfigureFonts(fonts => { fonts.AddFont("Inter-Variable.ttf", "Inter"); });
 
-        builder.Services.AddMudServices(config =>
-        {
-            config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.TopCenter;
-            config.SnackbarConfiguration.RequireInteraction = false;
-            config.SnackbarConfiguration.PreventDuplicates = true;
-            config.SnackbarConfiguration.NewestOnTop = false;
-            config.SnackbarConfiguration.ShowCloseIcon = true;
-            config.SnackbarConfiguration.VisibleStateDuration = 3000;
-            config.SnackbarConfiguration.HideTransitionDuration = 500;
-            config.SnackbarConfiguration.ShowTransitionDuration = 500;
-            config.SnackbarConfiguration.SnackbarVariant = Variant.Filled;
-        });
+        builder.Services.AddMqttProbeMud();
         builder.Services.AddMauiBlazorWebView();
 
 #if DEBUG
@@ -59,31 +48,22 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        builder.Services.AddSingleton<IMqttManagedClient>(sp =>
-            new MqttManagedClient(sp.GetService<ILogger<MqttManagedClient>>()));
-        builder.Services.AddSingleton<ISessionState, SessionState>();
-        builder.Services.AddSingleton<IEmulationService>(sp =>
-            new EmulationService(
-                sp.GetRequiredService<ISettingsStore>(),
-                sp.GetRequiredService<ISparkplugNodeFactory>(),
-                sp.GetRequiredService<ISessionState>(),
-                sp.GetRequiredService<IMqttManagedClient>(),
-                sp.GetRequiredService<IUxMetricsService>(),
-                sp.GetRequiredService<ICertificateAssetStore>(),
-                sp.GetRequiredService<ICertificateSessionQuarantine>(),
-                sp.GetRequiredService<PayloadPipeline>(),
-                sp.GetRequiredService<ILogger<EmulationService>>(),
-                sp.GetRequiredService<IAppHealthMetricsCollector>()));
-        builder.Services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
-        builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
-        builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
-        builder.Services.AddSingleton<IMqttOptionsBuilder>(sp =>
-            new MqttOptionsBuilder(sp.GetRequiredService<ICertificateAssetStore>()));
-        builder.Services.AddSingleton<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
-        builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
-        builder.Services.AddSingleton<IAppHealthMetricsCollector, AppHealthMetricsCollector>();
-        builder.Services.AddSingleton<IUxMetricsService, UxMetricsService>();
-        builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
+        builder.Services.AddMqttProbeCore(HostSessionModel.SingleSession);
+        AddPlatformServices(builder);
+        AddCertificateServices(builder);
+        AddConfiguration(builder);
+
+        builder.Services.AddScoped<IClipboardService, MauiClipboardService>();
+        builder.Services.AddMqttProbeCharts();
+
+        AddPluginServices(builder);
+        builder.Services.AddMqttProbeSparkplugTopology(HostSessionModel.SingleSession);
+
+        return builder.Build();
+    }
+
+    private static void AddPlatformServices(MauiAppBuilder builder)
+    {
         builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
 #if WINDOWS
         builder.Services.AddSingleton<IUpdateService, MqttProbe.WinUI.VelopackUpdateService>();
@@ -96,10 +76,11 @@ public static class MauiProgram
         builder.Services.AddCascadingAuthenticationState();
         builder.Services.AddScoped<AuthenticationStateProvider, UnauthenticatedStateProvider>();
         builder.Services.AddTransient<MainPage>();
+        builder.Services.AddSingleton<ISecretStorage>(new MauiSecretStorage());
+    }
 
-        var secretStorage = new MauiSecretStorage();
-        builder.Services.AddSingleton<ISecretStorage>(secretStorage);
-
+    private static void AddCertificateServices(MauiAppBuilder builder)
+    {
 #if IOS
         builder.Services.AddSingleton<ICertificateEnvelopeKeyStore, IosCertificateEnvelopeKeyStore>();
         builder.Services.AddSingleton<IFileProtector>(new IosFileProtector());
@@ -133,7 +114,10 @@ public static class MauiProgram
 #endif
         builder.Services.AddSingleton<ICertificateFilePicker, MauiCertificateFilePicker>();
         builder.Services.AddSingleton<ICertificateInputCapability, MauiCertificateInputCapability>();
+    }
 
+    private static void AddConfiguration(MauiAppBuilder builder)
+    {
         var configDir = Path.Combine(FileSystem.Current.AppDataDirectory, "config");
 #if WINDOWS
         var legacyConfigDir = Path.Combine(
@@ -150,13 +134,10 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISettingsStore>(sp =>
             new SettingsStore(configPath, isMobile,
                 logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
+    }
 
-        builder.Services.AddScoped<IClipboardService, MauiClipboardService>();
-        builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
-        builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
-        builder.Services.AddScoped<IChartDataService, ChartDataService>();
-        builder.Services.AddScoped<IThemes, Themes>();
-
+    private static void AddPluginServices(MauiAppBuilder builder)
+    {
         builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));
         builder.Services.PostConfigure<PluginConfig>(cfg =>
         {
@@ -165,36 +146,8 @@ public static class MauiProgram
             var appPlugins = Path.Combine(AppContext.BaseDirectory, "Plugins");
             PluginFolderDefaults.Apply(cfg, FileSystem.Current.AppDataDirectory, userPlugins, appPlugins);
         });
-        builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<PluginConfig>>().Value);
-        builder.Services.AddSingleton<PluginArchiveLimits>();
-        builder.Services.AddSingleton<PluginAssemblyCache>();
-        builder.Services.AddSingleton<PluginInstallSession>();
-        builder.Services.AddSingleton<PluginPackageInstaller>();
-        builder.Services.AddSingleton<PluginInventoryService>();
-        builder.Services.AddSingleton<PluginReloadService>();
         builder.Services.AddSingleton<IPluginPackagePicker, MauiPluginPackagePicker>();
         builder.Services.AddSingleton<IPluginInputCapability, MauiPluginInputCapability>();
-        builder.Services.AddSingleton<PluginRegistry>(sp =>
-        {
-            var config = sp.GetRequiredService<PluginConfig>();
-            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-
-            // Must run before BuildPluginRegistry: it deletes/moves plugin directories that
-            // PluginLoader or ProtobufSchemaFolderLoader would otherwise hold open once loaded.
-            PluginPendingOperations.Apply(
-                config.PluginFolders, loggerFactory.CreateLogger(typeof(PluginPendingOperations).FullName!));
-
-            return MqttProbePluginStartup.BuildPluginRegistry(
-                config, loggerFactory, sp.GetRequiredService<PluginAssemblyCache>());
-        });
-        builder.Services.AddSingleton<PayloadPipeline>();
-
-        builder.Services.AddSingleton<ISparkplugTopologyService>(sp =>
-            new SparkplugTopologyService(
-                sp.GetRequiredService<IMqttManagedClient>(),
-                sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
-                autoSubscribeToClient: false));
-
-        return builder.Build();
+        builder.Services.AddMqttProbePlugins();
     }
 }

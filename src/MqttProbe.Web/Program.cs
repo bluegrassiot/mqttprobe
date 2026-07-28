@@ -32,18 +32,7 @@ StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configurat
 
 builder.Services.AddRazorPages();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
-builder.Services.AddMudServices(config =>
-{
-    config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.TopCenter;
-    config.SnackbarConfiguration.RequireInteraction = false;
-    config.SnackbarConfiguration.PreventDuplicates = true;
-    config.SnackbarConfiguration.NewestOnTop = false;
-    config.SnackbarConfiguration.ShowCloseIcon = true;
-    config.SnackbarConfiguration.VisibleStateDuration = 3000;
-    config.SnackbarConfiguration.HideTransitionDuration = 500;
-    config.SnackbarConfiguration.ShowTransitionDuration = 500;
-    config.SnackbarConfiguration.SnackbarVariant = Variant.Filled;
-});
+builder.Services.AddMqttProbeMud();
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -106,9 +95,7 @@ builder.Services.AddSingleton<ISecretStorage>(sp =>
         sp.GetRequiredService<IDataProtectionProvider>(),
         Path.Combine(configDir, "secrets.dat")));
 
-builder.Services.AddScoped<IMqttManagedClient>(sp =>
-    new MqttManagedClient(sp.GetService<ILogger<MqttManagedClient>>()));
-builder.Services.AddScoped<ISessionState, SessionState>();
+builder.Services.AddMqttProbeCore(HostSessionModel.PerCircuit);
 builder.Services.AddSingleton<ISettingsStore>(sp =>
     new SettingsStore(Path.Combine(configDir, "appsettings.json"),
         logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
@@ -123,38 +110,9 @@ builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
         sp.GetRequiredService<ILogger<CertificateAssetStore>>());
     return store;
 });
-builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
 builder.Services.AddSingleton<ICertificateFilePicker, WebCertificateFilePicker>();
 builder.Services.AddSingleton<ICertificateInputCapability, WebCertificateInputCapability>();
-builder.Services.AddScoped<IEmulationService>(sp =>
-new EmulationService(
-sp.GetRequiredService<ISettingsStore>(),
-sp.GetRequiredService<ISparkplugNodeFactory>(),
-sp.GetRequiredService<ISessionState>(),
-sp.GetRequiredService<IMqttManagedClient>(),
-sp.GetRequiredService<IUxMetricsService>(),
-sp.GetRequiredService<ICertificateAssetStore>(),
-sp.GetRequiredService<ICertificateSessionQuarantine>(),
-sp.GetRequiredService<PayloadPipeline>(),
-sp.GetRequiredService<ILogger<EmulationService>>(),
-sp.GetRequiredService<IAppHealthMetricsCollector>()));
-builder.Services.AddScoped<IMessageStoreManager, MessageStoreManager>();
-builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
-builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
-builder.Services.AddScoped<IMqttOptionsBuilder>(sp =>
-    new MqttOptionsBuilder(sp.GetRequiredService<ICertificateAssetStore>()));
-builder.Services.AddScoped<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
-builder.Services.AddSingleton<IAppHealthMetricsCollector, AppHealthMetricsCollector>();
-builder.Services.AddScoped<IUxMetricsService, UxMetricsService>();
-builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
-builder.Services.AddScoped<IClipboardService, WebClipboardService>();
-builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
-builder.Services.AddSingleton<IUpdateService, NoOpUpdateService>();
-builder.Services.AddSingleton<IUserAuthService, SingleAdminUserAuthService>();
-builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
-builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
-builder.Services.AddScoped<IChartDataService, ChartDataService>();
-builder.Services.AddScoped<IThemes, Themes>();
+builder.Services.AddMqttProbeCharts();
 
 builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));
 builder.Services.PostConfigure<PluginConfig>(cfg =>
@@ -162,35 +120,11 @@ builder.Services.PostConfigure<PluginConfig>(cfg =>
     var contentPlugins = Path.Combine(builder.Environment.ContentRootPath, "Plugins");
     PluginFolderDefaults.Apply(cfg, builder.Environment.ContentRootPath, contentPlugins);
 });
-builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<PluginConfig>>().Value);
-builder.Services.AddSingleton<PluginArchiveLimits>();
-builder.Services.AddSingleton<PluginAssemblyCache>();
-builder.Services.AddSingleton<PluginInstallSession>();
-builder.Services.AddSingleton<PluginPackageInstaller>();
-builder.Services.AddSingleton<PluginInventoryService>();
-builder.Services.AddSingleton<PluginReloadService>();
 builder.Services.AddSingleton<IPluginPackagePicker, WebPluginPackagePicker>();
 builder.Services.AddSingleton<IPluginInputCapability, WebPluginInputCapability>();
-builder.Services.AddSingleton<PluginRegistry>(sp =>
-{
-    var config = sp.GetRequiredService<PluginConfig>();
-    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+builder.Services.AddMqttProbePlugins();
 
-    // Must run before BuildPluginRegistry: it deletes/moves plugin directories that
-    // PluginLoader or ProtobufSchemaFolderLoader would otherwise hold open once loaded.
-    PluginPendingOperations.Apply(
-        config.PluginFolders, loggerFactory.CreateLogger(typeof(PluginPendingOperations).FullName!));
-
-    return MqttProbePluginStartup.BuildPluginRegistry(
-        config, loggerFactory, sp.GetRequiredService<PluginAssemblyCache>());
-});
-builder.Services.AddSingleton<PayloadPipeline>();
-
-builder.Services.AddScoped<ISparkplugTopologyService>(sp =>
-    new SparkplugTopologyService(
-        sp.GetRequiredService<IMqttManagedClient>(),
-        sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
-        autoSubscribeToClient: false));
+builder.Services.AddMqttProbeSparkplugTopology(HostSessionModel.PerCircuit);
 
 var app = builder.Build();
 

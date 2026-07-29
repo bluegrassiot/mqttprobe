@@ -128,46 +128,17 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         try { blob = await File.ReadAllBytesAsync(path); } catch { return null; }
         if (blob.Length < 73 + NonceLength + TagLength) return null;
 
-        string headerAssetId;
-        string headerOwner;
-        byte headerVersion;
-        try
-        {
-            headerAssetId = Encoding.ASCII.GetString(blob, 0, 36);
-            headerOwner = Encoding.ASCII.GetString(blob, 36, 36);
-            headerVersion = blob[72];
-        }
-        catch { return null; }
-
-        if (!Guid.TryParse(headerAssetId, out var parsedAssetId) || parsedAssetId.ToString("D") != assetId)
-            return null;
-        if (!Guid.TryParse(headerOwner, out var parsedOwner) || parsedOwner != ownerConnectionId)
+        if (!TryReadHeader(blob, assetId, ownerConnectionId,
+                out var headerAssetId, out var headerOwner, out var headerVersion))
             return null;
 
         var nonce = blob[73..(73 + NonceLength)];
         var ciphertext = blob[(73 + NonceLength)..^TagLength];
         var tag = blob[^TagLength..];
 
-        string? envelopeJson;
-        try
-        {
-            envelopeJson = await _envelopeKeyStore.GetAsync($"cert-env-{assetId}");
-        }
-        catch { return null; }
-        if (envelopeJson is null) return null;
-
-        byte[] encKey;
-        string intPwd;
-        try
-        {
-            var envelope = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(envelopeJson);
-            var keyB64 = envelope.GetProperty("k").GetString()
-                ?? throw new InvalidOperationException("Missing 'k' property");
-            encKey = Convert.FromBase64String(keyB64);
-            intPwd = envelope.GetProperty("p").GetString()
-                ?? throw new InvalidOperationException("Missing 'p' property");
-        }
-        catch { return null; }
+        var envelope = await ReadEnvelopeAsync(assetId);
+        if (envelope is null) return null;
+        var (encKey, intPwd) = envelope.Value;
 
         var aad = Encoding.UTF8.GetBytes($"{assetId}|{headerAssetId}|{headerOwner}|{headerVersion}");
         var pfxBytes = new byte[ciphertext.Length];
@@ -182,6 +153,104 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
             return null;
         }
 
+        return LoadBundleFromPfx(pfxBytes, intPwd);
+    }
+
+    // Deliberately separate from ReadEnvelopeAsync: delete logs why it is backing off, and
+    // needs only the key, not the internal password.
+    private async Task<byte[]?> ReadEnvelopeKeyForDeleteAsync(string assetId)
+    {
+        string? envelopeJson;
+        try
+        {
+            envelopeJson = await _envelopeKeyStore.GetAsync($"cert-env-{assetId}");
+        }
+        catch
+        {
+            _logger.LogWarning("Cannot read envelope for {AssetId}; skipping delete", assetId);
+            return null;
+        }
+        if (envelopeJson is null) return null;
+
+        try
+        {
+            var envelope = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(envelopeJson);
+            return Convert.FromBase64String(envelope.GetProperty("k").GetString()!);
+        }
+        catch
+        {
+            _logger.LogWarning("Malformed envelope for {AssetId}; skipping delete", assetId);
+            return null;
+        }
+    }
+
+    // Decrypt-and-discard: proves the blob has not been tampered with before deleting it, so
+    // a corrupted file is preserved for inspection rather than quietly destroyed.
+    private bool VerifyBlobIntact(
+        byte[] encKey, byte[] nonce, byte[] ciphertext, byte[] tag, byte[] aad, string assetId)
+    {
+        try
+        {
+            using var aes = new AesGcm(encKey, TagLength);
+            var verifyBuf = new byte[ciphertext.Length];
+            aes.Decrypt(nonce, ciphertext, tag, verifyBuf, aad);
+            return true;
+        }
+        catch (Exception ex) when (ex is CryptographicException or ArgumentException or FormatException)
+        {
+            _logger.LogWarning("Tampered blob {AssetId}; not deleting", assetId);
+            return false;
+        }
+    }
+
+    // The header is the only thing tying a blob to its asset and owner, so a mismatch is
+    // treated exactly like a corrupt file: no bundle, no exception.
+    private static bool TryReadHeader(
+        byte[] blob, string assetId, Guid ownerConnectionId,
+        out string headerAssetId, out string headerOwner, out byte headerVersion)
+    {
+        headerAssetId = string.Empty;
+        headerOwner = string.Empty;
+        headerVersion = 0;
+
+        try
+        {
+            headerAssetId = Encoding.ASCII.GetString(blob, 0, 36);
+            headerOwner = Encoding.ASCII.GetString(blob, 36, 36);
+            headerVersion = blob[72];
+        }
+        catch { return false; }
+
+        if (!Guid.TryParse(headerAssetId, out var parsedAssetId) || parsedAssetId.ToString("D") != assetId)
+            return false;
+
+        return Guid.TryParse(headerOwner, out var parsedOwner) && parsedOwner == ownerConnectionId;
+    }
+
+    private async Task<(byte[] Key, string Password)?> ReadEnvelopeAsync(string assetId)
+    {
+        string? envelopeJson;
+        try
+        {
+            envelopeJson = await _envelopeKeyStore.GetAsync($"cert-env-{assetId}");
+        }
+        catch { return null; }
+        if (envelopeJson is null) return null;
+
+        try
+        {
+            var envelope = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(envelopeJson);
+            var keyB64 = envelope.GetProperty("k").GetString()
+                ?? throw new InvalidOperationException("Missing 'k' property");
+            var intPwd = envelope.GetProperty("p").GetString()
+                ?? throw new InvalidOperationException("Missing 'p' property");
+            return (Convert.FromBase64String(keyB64), intPwd);
+        }
+        catch { return null; }
+    }
+
+    private static ClientCertificateBundle? LoadBundleFromPfx(byte[] pfxBytes, string intPwd)
+    {
         try
         {
             var loadFlags = GetClientCertificateLoadFlags(
@@ -215,42 +284,11 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         var ciphertext = blob[(73 + NonceLength)..^TagLength];
         var tag = blob[^TagLength..];
 
-        string? envelopeJson;
-        try
-        {
-            envelopeJson = await _envelopeKeyStore.GetAsync($"cert-env-{assetId}");
-        }
-        catch
-        {
-            _logger.LogWarning("Cannot read envelope for {AssetId}; skipping delete", assetId);
-            return;
-        }
-        if (envelopeJson is null) return;
-
-        byte[] encKey;
-        try
-        {
-            var envelope = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(envelopeJson);
-            encKey = Convert.FromBase64String(envelope.GetProperty("k").GetString()!);
-        }
-        catch
-        {
-            _logger.LogWarning("Malformed envelope for {AssetId}; skipping delete", assetId);
-            return;
-        }
+        var encKey = await ReadEnvelopeKeyForDeleteAsync(assetId);
+        if (encKey is null) return;
 
         var aad = Encoding.UTF8.GetBytes($"{assetId}|{headerAssetId}|{headerOwner}|{headerVersion}");
-        try
-        {
-            using var aes = new AesGcm(encKey, TagLength);
-            var verifyBuf = new byte[ciphertext.Length];
-            aes.Decrypt(nonce, ciphertext, tag, verifyBuf, aad);
-        }
-        catch (Exception ex) when (ex is CryptographicException or ArgumentException or FormatException)
-        {
-            _logger.LogWarning("Tampered blob {AssetId}; not deleting", assetId);
-            return;
-        }
+        if (!VerifyBlobIntact(encKey, nonce, ciphertext, tag, aad, assetId)) return;
 
         if (TryDelete(path))
         {
@@ -325,57 +363,9 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
     private (byte[] pfxBytes, string internalPassword) ImportPfx(CertificateImportRequest request)
     {
         if (request.SkipCanonicalExport)
-        {
-            X509Certificate2 cert;
-            try
-            {
-                cert = X509CertificateLoader.LoadPkcs12(
-                    request.CertificateBytes, request.Password,
-                    X509KeyStorageFlags.EphemeralKeySet);
-            }
-            catch (CryptographicException ex)
-            {
-                throw new CertificateImportException("The PFX password is incorrect or the file is corrupt.", ex);
-            }
+            return ImportPfxAsIs(request);
 
-            if (!cert.HasPrivateKey)
-            {
-                cert.Dispose();
-                throw new CertificateImportException("The certificate does not contain a private key.");
-            }
-
-            cert.Dispose();
-            return (request.CertificateBytes, request.Password!);
-        }
-
-        X509Certificate2 loadedCert;
-        try
-        {
-            loadedCert = X509CertificateLoader.LoadPkcs12(
-                request.CertificateBytes, request.Password,
-                X509KeyStorageFlags.EphemeralKeySet | X509KeyStorageFlags.Exportable);
-        }
-        catch (PlatformNotSupportedException)
-        {
-            try
-            {
-                loadedCert = X509CertificateLoader.LoadPkcs12(
-                    request.CertificateBytes, request.Password,
-                    X509KeyStorageFlags.DefaultKeySet | X509KeyStorageFlags.Exportable);
-            }
-            catch (PlatformNotSupportedException)
-            {
-                throw new CertificateImportException("Platform does not support certificate key export.");
-            }
-            catch (CryptographicException ex)
-            {
-                throw new CertificateImportException("The PFX password is incorrect or the file is corrupt.", ex);
-            }
-        }
-        catch (CryptographicException ex)
-        {
-            throw new CertificateImportException("The PFX password is incorrect or the file is corrupt.", ex);
-        }
+        var loadedCert = LoadExportablePfx(request);
 
         if (!loadedCert.HasPrivateKey)
         {
@@ -386,11 +376,10 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         return ExportCanonicalPfx(loadedCert);
     }
 
-    private (byte[] pfxBytes, string internalPassword) ImportPem(CertificateImportRequest request)
+    // Catches the common mix-up of passing the certificate and key files the wrong way round,
+    // which otherwise surfaces much later as an opaque crypto error.
+    private static void ValidatePemFilesNotSwapped(string certText, string keyText)
     {
-        var certText = DecodePemText(request.CertificateBytes);
-        var keyText = DecodePemText(request.PrivateKeyBytes!);
-
         if (LooksLikePrivateKeyPem(certText) && !LooksLikeCertificatePem(certText))
             throw new CertificateImportException(
                 "The certificate file looks like a private key. Select the certificate (.crt/.pem) for the certificate field and the private key (.key/.pem) for the key field.");
@@ -398,13 +387,14 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         if (LooksLikeCertificatePem(keyText) && !LooksLikePrivateKeyPem(keyText))
             throw new CertificateImportException(
                 "The private key file looks like a certificate. Select the private key (.key/.pem) for the key field.");
+    }
 
-        using var cert = LoadCertificateFromPemOrDer(request.CertificateBytes, certText);
-
-        var isEncrypted = keyText.Contains("BEGIN ENCRYPTED PRIVATE KEY", StringComparison.OrdinalIgnoreCase);
-        if (isEncrypted && string.IsNullOrEmpty(request.Password))
-            throw new CertificateImportException("The private key is encrypted. Enter the key password.");
-
+    // The algorithm object is only needed long enough for CopyWithPrivateKey to take its own
+    // copy, so it is disposed on every path — including the finally, which is why the catch
+    // blocks can dispose too without harm.
+    private static X509Certificate2 AttachPrivateKey(
+        X509Certificate2 cert, string keyText, bool isEncrypted, string? password)
+    {
         X509Certificate2 validatedCert;
         AsymmetricAlgorithm? key = null;
         try
@@ -414,7 +404,7 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
             {
                 var rsa = RSA.Create();
                 key = rsa;
-                if (isEncrypted) rsa.ImportFromEncryptedPem(keyText, request.Password);
+                if (isEncrypted) rsa.ImportFromEncryptedPem(keyText, password);
                 else rsa.ImportFromPem(keyText);
                 validatedCert = cert.CopyWithPrivateKey(rsa);
             }
@@ -422,7 +412,7 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
             {
                 var ecdsa = ECDsa.Create();
                 key = ecdsa;
-                if (isEncrypted) ecdsa.ImportFromEncryptedPem(keyText, request.Password);
+                if (isEncrypted) ecdsa.ImportFromEncryptedPem(keyText, password);
                 else ecdsa.ImportFromPem(keyText);
                 validatedCert = cert.CopyWithPrivateKey(ecdsa);
             }
@@ -448,6 +438,83 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         {
             key?.Dispose();
         }
+
+        return validatedCert;
+    }
+
+    // The caller already has a usable PFX, so this only proves the password works and a
+    // private key is present, then hands the original bytes back untouched.
+    private static (byte[] pfxBytes, string internalPassword) ImportPfxAsIs(CertificateImportRequest request)
+    {
+        X509Certificate2 cert;
+        try
+        {
+            cert = X509CertificateLoader.LoadPkcs12(
+                request.CertificateBytes, request.Password,
+                X509KeyStorageFlags.EphemeralKeySet);
+        }
+        catch (CryptographicException ex)
+        {
+            throw new CertificateImportException("The PFX password is incorrect or the file is corrupt.", ex);
+        }
+
+        if (!cert.HasPrivateKey)
+        {
+            cert.Dispose();
+            throw new CertificateImportException("The certificate does not contain a private key.");
+        }
+
+        cert.Dispose();
+        return (request.CertificateBytes, request.Password!);
+    }
+
+    // EphemeralKeySet is not supported everywhere, so fall back to DefaultKeySet before
+    // giving up. Both paths report a bad password identically.
+    private static X509Certificate2 LoadExportablePfx(CertificateImportRequest request)
+    {
+        try
+        {
+            return X509CertificateLoader.LoadPkcs12(
+                request.CertificateBytes, request.Password,
+                X509KeyStorageFlags.EphemeralKeySet | X509KeyStorageFlags.Exportable);
+        }
+        catch (PlatformNotSupportedException)
+        {
+            try
+            {
+                return X509CertificateLoader.LoadPkcs12(
+                    request.CertificateBytes, request.Password,
+                    X509KeyStorageFlags.DefaultKeySet | X509KeyStorageFlags.Exportable);
+            }
+            catch (PlatformNotSupportedException)
+            {
+                throw new CertificateImportException("Platform does not support certificate key export.");
+            }
+            catch (CryptographicException ex)
+            {
+                throw new CertificateImportException("The PFX password is incorrect or the file is corrupt.", ex);
+            }
+        }
+        catch (CryptographicException ex)
+        {
+            throw new CertificateImportException("The PFX password is incorrect or the file is corrupt.", ex);
+        }
+    }
+
+    private (byte[] pfxBytes, string internalPassword) ImportPem(CertificateImportRequest request)
+    {
+        var certText = DecodePemText(request.CertificateBytes);
+        var keyText = DecodePemText(request.PrivateKeyBytes!);
+
+        ValidatePemFilesNotSwapped(certText, keyText);
+
+        using var cert = LoadCertificateFromPemOrDer(request.CertificateBytes, certText);
+
+        var isEncrypted = keyText.Contains("BEGIN ENCRYPTED PRIVATE KEY", StringComparison.OrdinalIgnoreCase);
+        if (isEncrypted && string.IsNullOrEmpty(request.Password))
+            throw new CertificateImportException("The private key is encrypted. Enter the key password.");
+
+        var validatedCert = AttachPrivateKey(cert, keyText, isEncrypted, request.Password);
 
         if (!validatedCert.HasPrivateKey)
         {

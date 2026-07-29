@@ -157,7 +157,7 @@ public sealed class PluginLoader
         }
     }
 
-    private Type[]? TryGetExportedTypes(
+    private static Type[]? TryGetExportedTypes(
         Assembly assembly, PluginLoadContext loadContext, string dllPath, List<PluginDiagnosticEntry> diagnostics)
     {
         try
@@ -166,7 +166,7 @@ public sealed class PluginLoader
         }
         catch (ReflectionTypeLoadException ex)
         {
-            var exportedTypes = ex.Types.Where(t => t != null).ToArray()!;
+            var exportedTypes = ex.Types.OfType<Type>().ToArray();
             if (exportedTypes.Length == 0)
             {
                 diagnostics.Add(new PluginDiagnosticEntry
@@ -253,8 +253,9 @@ public sealed class PluginLoader
 
         plugins.Add(plugin);
         loadedPaths.Add(Path.GetDirectoryName(dllPath)!);
-        _logger.LogDebug("Loaded plugin: {PluginId} from {Assembly}",
-            plugin.PluginId, Path.GetFileName(dllPath));
+        if (_logger.IsEnabled(LogLevel.Debug))
+            _logger.LogDebug("Loaded plugin: {PluginId} from {Assembly}",
+                plugin.PluginId, Path.GetFileName(dllPath));
     }
 }
 

@@ -57,7 +57,7 @@
     private bool _disposed;
     private long _lastVersion;
     private List<TopicTreeRowModel> _visibleRows = [];
-    private HashSet<string> _expandedPaths = [];
+    private readonly HashSet<string> _expandedPaths = [];
     private bool _hasFilter;
     private string? _selectedFullPath;
 

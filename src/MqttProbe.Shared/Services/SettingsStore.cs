@@ -76,7 +76,6 @@ public class SettingsStore : ISettingsStore, IDisposable
     private AppConfiguration _config = new();
     private ISecretStorage? _secretStorage;
     private ICertificateAssetStore? _certStore;
-    private ICertificateEnvelopeKeyStore? _envelopeKeyStore;
 
     public SettingsStore(string configPath, bool isMobile = false, ILogger<SettingsStore>? logger = null)
     {
@@ -99,7 +98,6 @@ public class SettingsStore : ISettingsStore, IDisposable
         {
             _secretStorage = secretStorage;
             _certStore = certStore;
-            _envelopeKeyStore = envelopeKeyStore;
 
             var configLoadedSuccessfully = await LoadOrCreateConfigAsync();
 
@@ -240,7 +238,7 @@ public class SettingsStore : ISettingsStore, IDisposable
         }
     }
 
-    private async Task DeleteCleanupRetryMarkersAsync(
+    private static async Task DeleteCleanupRetryMarkersAsync(
         ICertificateAssetStore certStore, ICertificateEnvelopeKeyStore envelopeKeyStore)
     {
         foreach (var marker in Directory.EnumerateFiles(certStore.CertificatesDirectory, "cert-*.cleanup-retry"))

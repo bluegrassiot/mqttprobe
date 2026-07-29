@@ -4,11 +4,13 @@ namespace MqttProbe.Maui.Services;
 
 public class MauiCertificateFilePicker : ICertificateFilePicker
 {
+    private static readonly string[] _androidAnyType = ["*/*"];
+
     public async Task<byte[]?> PickFileAsync(string title, string[] extensions, long maxBytes)
     {
         var fileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
         {
-            { DevicePlatform.Android, new[] { "*/*" } },
+            { DevicePlatform.Android, _androidAnyType },
             { DevicePlatform.iOS, extensions.Select(ext => ext.ToLowerInvariant() switch
             {
                 ".pfx" => "com.rsa.pkcs-12",
@@ -58,7 +60,7 @@ public class MauiCertificateFilePicker : ICertificateFilePicker
                 totalRead += bytesRead;
                 if (totalRead > maxBytes)
                     throw new CertificateImportException("File exceeds maximum size of 1 MB.");
-                ms.Write(buffer, 0, bytesRead);
+                await ms.WriteAsync(buffer.AsMemory(0, bytesRead));
             }
             return ms.ToArray();
         }

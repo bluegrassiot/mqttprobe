@@ -4,6 +4,8 @@ namespace MqttProbe.Maui.Services;
 
 public class MauiPluginPackagePicker : IPluginPackagePicker
 {
+    private static readonly string[] _androidAnyType = ["*/*"];
+
     public async Task<byte[]?> PickPackageAsync(string title, string[] extensions, long maxBytes)
     {
         var fileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
@@ -12,7 +14,7 @@ public class MauiPluginPackagePicker : IPluginPackagePicker
             // Downloads providers) report zip files as application/octet-stream rather than
             // application/zip, which hides legitimate .zip files from the picker; matches the
             // certificate picker's approach of not filtering by MIME type on Android at all.
-            { DevicePlatform.Android, new[] { "*/*" } },
+            { DevicePlatform.Android, _androidAnyType },
             { DevicePlatform.iOS, extensions.Select(ext => ext.ToLowerInvariant() switch
             {
                 ".zip" => "public.zip-archive",
@@ -56,7 +58,7 @@ public class MauiPluginPackagePicker : IPluginPackagePicker
                 totalRead += bytesRead;
                 if (totalRead > maxBytes)
                     return null;
-                ms.Write(buffer, 0, bytesRead);
+                await ms.WriteAsync(buffer.AsMemory(0, bytesRead));
             }
             return ms.ToArray();
         }

@@ -14,7 +14,10 @@ public interface ISparkplugNode
     public event Func<SparkplugBase<Metric>.SparkplugEventArgs, Task>? Connected;
     public event Func<SparkplugBase<Metric>.SparkplugEventArgs, Task>? Disconnected;
     public Task Start(SparkplugNodeOptions options);
+    // CA1716: "Stop" matches a VB keyword. Plugin-facing public API — do not rename.
+#pragma warning disable CA1716
     public Task Stop();
+#pragma warning restore CA1716
     public Task PublishMetrics(IReadOnlyList<Metric> metrics);
     public Task PublishNodeDeathMessage();
     public Task PublishDeviceBirthMessage(string deviceId, IReadOnlyList<Metric> metrics);

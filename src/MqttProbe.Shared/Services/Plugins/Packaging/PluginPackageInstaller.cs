@@ -42,15 +42,7 @@ public sealed class PluginPackageInstaller
     {
         get
         {
-            foreach (var folder in _config.PluginFolders)
-            {
-                if (IsWritable(folder))
-                {
-                    return folder;
-                }
-            }
-
-            return null;
+            return _config.PluginFolders.FirstOrDefault(IsWritable);
         }
     }
 
@@ -189,8 +181,9 @@ public sealed class PluginPackageInstaller
         var requiresRestart = manifest.Kind == PluginPackageKinds.Assembly;
         _session.Record(manifest.Id, requiresRestart);
 
-        _logger.LogInformation("Installed plugin package {Id} {Version} to {Path}.",
-            manifest.Id, manifest.Version, installPath);
+        if (_logger.IsEnabled(LogLevel.Information))
+            _logger.LogInformation("Installed plugin package {Id} {Version} to {Path}.",
+                manifest.Id, manifest.Version, installPath);
 
         return PluginInstallOutcome.Success(manifest, installPath, requiresRestart);
     }
@@ -202,7 +195,7 @@ public sealed class PluginPackageInstaller
     private async Task<(PluginPackageManifest? Manifest, PluginInstallOutcome? Failure)> ReadManifestAndExtractAsync(
         string archivePath, string extractPath, CancellationToken ct)
     {
-        using var archive = ZipFile.OpenRead(archivePath);
+        await using var archive = await ZipFile.OpenReadAsync(archivePath, ct);
         var manifestEntry = archive.GetEntry(PluginManifestValidator.FileName);
 
         if (manifestEntry is null)
@@ -211,7 +204,7 @@ public sealed class PluginPackageInstaller
                 $"Package does not contain {PluginManifestValidator.FileName} at its root."));
         }
 
-        using var reader = new StreamReader(manifestEntry.Open());
+        using var reader = new StreamReader(await manifestEntry.OpenAsync(ct));
         var manifest = PluginManifestValidator.Deserialize(await reader.ReadToEndAsync(ct));
 
         var manifestResult = PluginManifestValidator.Validate(manifest, _appInfo.GetVersion());
@@ -339,6 +332,7 @@ public sealed class PluginPackageInstaller
                 $"No schemas compiled from this package. {string.Join(" ", registry.Diagnostics)}".Trim());
         }
 
+#pragma warning disable S3267 // ThrowIfCancellationRequested must run per iteration
         foreach (var mapping in schemaManifest.Schemas)
         {
             ct.ThrowIfCancellationRequested();

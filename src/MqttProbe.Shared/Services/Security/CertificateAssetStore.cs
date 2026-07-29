@@ -75,7 +75,6 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         Buffer.BlockCopy(tag, 0, blob, header.Length + nonce.Length + ciphertext.Length, tag.Length);
 
         var tempPath = Path.Combine(CertificatesDirectory, $"cert-{assetId}.bin.tmp");
-        var finalPath = Path.Combine(CertificatesDirectory, $"cert-{assetId}.bin");
 
         try
         {
@@ -360,7 +359,7 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
             throw new CertificateImportException("PEM private key bytes are required.");
     }
 
-    private (byte[] pfxBytes, string internalPassword) ImportPfx(CertificateImportRequest request)
+    private static (byte[] pfxBytes, string internalPassword) ImportPfx(CertificateImportRequest request)
     {
         if (request.SkipCanonicalExport)
             return ImportPfxAsIs(request);
@@ -501,7 +500,7 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         }
     }
 
-    private (byte[] pfxBytes, string internalPassword) ImportPem(CertificateImportRequest request)
+    private static (byte[] pfxBytes, string internalPassword) ImportPem(CertificateImportRequest request)
     {
         var certText = DecodePemText(request.CertificateBytes);
         var keyText = DecodePemText(request.PrivateKeyBytes!);
@@ -527,7 +526,8 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
 
     private static readonly Regex _certPemBlock = new(
         @"-----BEGIN (?<label>[^-]+)-----(?<body>.*?)-----END \k<label>-----",
-        RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(250));
 
     private static string DecodePemText(byte[] bytes)
     {
@@ -564,18 +564,18 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
 
     private static string? ExtractCertificatePem(string text)
     {
-        foreach (Match m in _certPemBlock.Matches(text))
+        var match = _certPemBlock.Matches(text).FirstOrDefault(m =>
         {
             var label = m.Groups["label"].Value.Trim();
-            if (label.Contains("CERTIFICATE", StringComparison.OrdinalIgnoreCase)
-                && !label.Contains("REQUEST", StringComparison.OrdinalIgnoreCase))
-            {
-                return "-----BEGIN CERTIFICATE-----\n"
-                    + m.Groups["body"].Value.Trim()
-                    + "\n-----END CERTIFICATE-----";
-            }
-        }
-        return null;
+            return label.Contains("CERTIFICATE", StringComparison.OrdinalIgnoreCase)
+                && !label.Contains("REQUEST", StringComparison.OrdinalIgnoreCase);
+        });
+
+        return match is null
+            ? null
+            : "-----BEGIN CERTIFICATE-----\n"
+                + match.Groups["body"].Value.Trim()
+                + "\n-----END CERTIFICATE-----";
     }
 
     private static bool LooksLikeDerPrivateKey(byte[] rawBytes)
@@ -642,7 +642,7 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         }
     }
 
-    private (byte[] pfxBytes, string internalPassword) ExportCanonicalPfx(X509Certificate2 validatedCert)
+    private static (byte[] pfxBytes, string internalPassword) ExportCanonicalPfx(X509Certificate2 validatedCert)
     {
         var internalPassword = Guid.NewGuid().ToString("D");
         byte[] pfxBytes;

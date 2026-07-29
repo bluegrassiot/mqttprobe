@@ -67,7 +67,9 @@ public sealed class MqttManagedClient : IMqttManagedClient
         {
             _options = options;
             _isStarted = true;
+#pragma warning disable S6966 // cannot await inside a lock; see StopAsync for the async path
             _reconnectCts?.Cancel();
+#pragma warning restore S6966
             _reconnectCts?.Dispose();
             _reconnectCts = new CancellationTokenSource();
         }
@@ -306,7 +308,7 @@ public sealed class MqttManagedClient : IMqttManagedClient
             var builder = new MqttClientSubscribeOptionsBuilder();
             foreach (var filter in filters)
                 builder.WithTopicFilter(filter);
-            await _client.SubscribeAsync(builder.Build()).ConfigureAwait(false);
+            await _client.SubscribeAsync(builder.Build(), CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -330,7 +332,7 @@ public sealed class MqttManagedClient : IMqttManagedClient
 
             try
             {
-                await _client.PublishAsync(message).ConfigureAwait(false);
+                await _client.PublishAsync(message, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

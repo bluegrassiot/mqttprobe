@@ -207,6 +207,31 @@ dotnet_diagnostic.MA0048.severity = none
 # pure churn everywhere else. Revisit if profiling points at logging.
 dotnet_diagnostic.CA1848.severity = suggestion
 
+# CA1873 wants expensive log arguments guarded by IsEnabled, and the Debug and
+# Information sites are guarded. The three that remain are LogCritical on
+# certificate cleanup failures — the paths that must be loudest when they fire.
+# Wrapping those in a conditional risks a misconfigured logger silently swallowing
+# them, and their arguments are property reads, not real work.
+dotnet_diagnostic.CA1873.severity = suggestion
+
+# S3011 flags the two reflection calls in SparkplugNodeFactory that reach
+# SparkplugNet internals: SendNodeDeathMessage, which the library does not expose,
+# and the knownMetrics field, which Rebirth replaces with storage that loses alias
+# tracking. Both are documented at the call site and both throw a descriptive
+# exception if the member disappears in a SparkplugNet update.
+dotnet_diagnostic.S3011.severity = none
+
+# S2245 fires on WaveformSampler's use of Random. The seed is deliberately derived
+# from the metric id so an emulated waveform is reproducible across runs — a
+# cryptographic generator would defeat the entire point. No security decision is
+# made from these values.
+dotnet_diagnostic.S2245.severity = none
+
+# S3871 wants PackageExpansionLimitExceededException public. It is thrown and caught
+# entirely within PluginPackageInstaller, which converts it into a failure outcome,
+# so it never crosses an assembly boundary.
+dotnet_diagnostic.S3871.severity = none
+
 # MA0006 wants string.Equals over ==, but == on string is already ordinal, so
 # every fix is churn with no behaviour change. The comparisons that could
 # actually be culture-sensitive are MA0074 (EndsWith/StartsWith), still a warning.

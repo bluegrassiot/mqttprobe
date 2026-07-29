@@ -206,7 +206,8 @@ public class SparkplugNodeRunner(
                 try { await _node.PublishNodeDeathMessage(); }
                 catch (Exception ex)
                 {
-                    logger.LogDebug(ex, "Could not publish NDEATH for node {NodeId} (connection already gone — LWT will handle it)", config.NodeId);
+                    if (logger.IsEnabled(LogLevel.Debug))
+                        logger.LogDebug(ex, "Could not publish NDEATH for node {NodeId} (connection already gone — LWT will handle it)", config.NodeId);
                 }
             }
 
@@ -257,15 +258,13 @@ public class SparkplugNodeRunner(
 
             var value = WaveformSampler.Next(metric, state, tSeconds);
             ulong alias = 0;
-            if (_deviceAliases is not null)
+            if (_deviceAliases is not null
+                && (!_deviceAliases.TryGetValue(device.DeviceId, out var deviceMap)
+                    || !deviceMap.TryGetValue(metric.Name, out alias)))
             {
-                if (!_deviceAliases.TryGetValue(device.DeviceId, out var deviceMap)
-                    || !deviceMap.TryGetValue(metric.Name, out alias))
-                {
-                    throw new InvalidOperationException(
-                        $"Missing alias for metric '{metric.Name}' in device '{device.DeviceId}'. " +
-                        "Alias maps may be out of sync with config.");
-                }
+                throw new InvalidOperationException(
+                    $"Missing alias for metric '{metric.Name}' in device '{device.DeviceId}'. " +
+                    "Alias maps may be out of sync with config.");
             }
 
             metrics.Add(ToSparkplugMetric(metric, value, alias, isBirth));

@@ -57,7 +57,6 @@ printf "  build: %s\n" "$([ ${#BUILD_LABELS[@]} -gt 0 ] && IFS=', ' && echo "${B
 printf "  tests: %s\n" "$([ "$NEED_UNIT_TESTS" -eq 1 ] && echo yes || echo no)"
 pass "Classify changes"
 
-# --warnaserror is off while the analyzer backlog is worked down.
 if [[ "$NEED_NOMAUI_BUILD" -eq 1 || "$NEED_MAUI_BUILD" -eq 1 || "$NEED_DESKTOP_BUILD" -eq 1 ]]; then
     step "Build"
     if [[ "$NEED_NOMAUI_BUILD" -eq 1 ]]; then

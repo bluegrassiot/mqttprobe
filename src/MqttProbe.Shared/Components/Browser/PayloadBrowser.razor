@@ -250,7 +250,6 @@ else
     private JsonTreeView? _jsonTreeView;
     private Func<MqttMessage, bool> _filterFunc = null!;
     internal bool _disposed;
-    private DateTime _lastMessageTimestamp;
     private int _lastAppliedMaxCount;
     private string? _lastTopicPath;
     private long _lastVersion;
@@ -306,7 +305,6 @@ else
             var list = _newestFirst
                 ? messages.ToList()
                 : messages.Reverse().ToList();
-            _lastMessageTimestamp = list.Count > 0 ? list[0].DateTimeReceived : DateTime.MinValue;
             _messageList = list;
             Metrics.SetDisplayedMessageCount(_messageList.Count);
             // Guard against the circuit being torn down between the _disposed check

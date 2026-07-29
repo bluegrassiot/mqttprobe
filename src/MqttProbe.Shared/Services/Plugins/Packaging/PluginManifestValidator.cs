@@ -22,10 +22,12 @@ public static partial class PluginManifestValidator
         AllowTrailingCommas = true
     };
 
-    [GeneratedRegex("^[a-z0-9][a-z0-9._-]{0,63}$")]
+    // Explicit timeout: these validate attacker-controlled plugin manifest JSON
+    // (MA0009/S6444 ReDoS guard).
+    [GeneratedRegex("^[a-z0-9][a-z0-9._-]{0,63}$", RegexOptions.None, matchTimeoutMilliseconds: 250)]
     private static partial Regex IdPattern();
 
-    [GeneratedRegex(@"^\d+\.\d+\.\d+(?:[-+].*)?$")]
+    [GeneratedRegex(@"^\d+\.\d+\.\d+(?:[-+].*)?$", RegexOptions.None, matchTimeoutMilliseconds: 250)]
     private static partial Regex SemVerPattern();
 
     public static PluginPackageManifest? Deserialize(string json)

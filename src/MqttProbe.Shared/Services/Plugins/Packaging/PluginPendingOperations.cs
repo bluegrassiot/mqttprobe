@@ -166,7 +166,10 @@ public static class PluginPendingOperations
         try
         {
             action();
-            logger?.LogInformation("Applied pending plugin {Operation} for {Id}.", operation, id);
+            if (logger != null && logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation("Applied pending plugin {Operation} for {Id}.", operation, id);
+            }
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

@@ -154,6 +154,12 @@
             return;
         }
 
+        // S5693 (suppressed project-wide via NoWarn in MqttProbe.Shared.csproj —
+        // like CS8669/S8970 there, it is reported against the Razor @code block and
+        // neither #pragma nor a .editorconfig entry can scope it to this file):
+        // 32 MiB is a deliberate limit, not a missing one — it matches
+        // PluginArchiveLimits.MaxCompressedBytes (PluginArchiveLimits.cs), the cap
+        // already enforced when the archive is opened for install.
         await using (var stream = file.OpenReadStream(maxAllowedSize: 33_554_432))
         {
             await InstallAsync(stream);

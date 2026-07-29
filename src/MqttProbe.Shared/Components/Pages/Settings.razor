@@ -6,7 +6,7 @@
 
 <div class="settings-layout">
     <nav class="settings-nav-rail" aria-label="Settings sections">
-        @foreach (var section in VisibleSections)
+        @foreach (var section in GetVisibleSections())
         {
             <button type="button"
                     class="@(IsActive(section) ? "settings-nav-item active" : "settings-nav-item")"
@@ -23,7 +23,7 @@
                    Value="@ActiveSection.Slug"
                    ValueChanged="@SelectSection"
                    Variant="Variant.Outlined" Dense="true">
-            @foreach (var section in VisibleSections)
+            @foreach (var section in GetVisibleSections())
             {
                 <MudSelectItem Value="@section.Slug">@section.Title</MudSelectItem>
             }
@@ -76,14 +76,14 @@
         new("about", "About", LucideIcons.Info, () => true, _about),
     ];
 
-    private IReadOnlyList<SettingsSection> VisibleSections =>
+    private IReadOnlyList<SettingsSection> GetVisibleSections() =>
         _sections.Where(s => s.IsVisible()).ToList();
 
     private SettingsSection ActiveSection
     {
         get
         {
-            var visible = VisibleSections;
+            var visible = GetVisibleSections();
             return visible.FirstOrDefault(s =>
                 string.Equals(s.Slug, _activeSlug, StringComparison.OrdinalIgnoreCase)) ?? visible[0];
         }
@@ -113,11 +113,11 @@
             if (eq <= 0) continue;
             if (!string.Equals(pair[..eq], "section", StringComparison.OrdinalIgnoreCase)) continue;
             var value = Uri.UnescapeDataString(pair[(eq + 1)..]);
-            var match = VisibleSections.FirstOrDefault(s =>
+            var match = GetVisibleSections().FirstOrDefault(s =>
                 string.Equals(s.Slug, value, StringComparison.OrdinalIgnoreCase));
             if (match is not null) return match.Slug;
         }
-        return VisibleSections[0].Slug;
+        return GetVisibleSections()[0].Slug;
     }
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)

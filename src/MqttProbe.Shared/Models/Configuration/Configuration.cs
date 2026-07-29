@@ -46,6 +46,10 @@ public class AppConfiguration
 
     public Dictionary<Guid, EmulatorDocument> EmulatorsByConnection { get; set; } = [];
 
+    // S1133: kept intentionally — these carry the pre-multi-connection config
+    // shape so SettingsStore can migrate old files into ChartsByConnection /
+    // EmulatorsByConnection. Do not remove.
+#pragma warning disable S1133
     [JsonPropertyName("charts")]
     [Obsolete("Use ChartsByConnection")]
     [EditorBrowsable(EditorBrowsableState.Never)]
@@ -55,4 +59,5 @@ public class AppConfiguration
     [Obsolete("Use EmulatorsByConnection")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public EmulatorDocument Emulators { get; set; } = new();
+#pragma warning restore S1133
 }

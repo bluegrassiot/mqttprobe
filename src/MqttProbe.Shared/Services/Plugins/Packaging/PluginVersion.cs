@@ -13,7 +13,8 @@ public static class PluginVersion
             return false;
         }
 
-        var core = value.Split('-', '+')[0];
+        char[] separators = ['-', '+'];
+        var core = value.Split(separators)[0];
         var parts = core.Split('.');
 
         if (parts.Length is < 2 or > 4)

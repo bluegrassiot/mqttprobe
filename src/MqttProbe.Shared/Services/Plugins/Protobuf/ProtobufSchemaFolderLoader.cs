@@ -98,7 +98,10 @@ public static class ProtobufSchemaFolderLoader
         }
 
         sources.Add(new ProtobufSchemaSource(manifest, schemaRoot));
-        logger?.LogInformation(
-            "Loaded {Count} protobuf schema mapping(s) from {Path}.", manifest.Schemas.Count, manifestPath);
+        if (logger != null && logger.IsEnabled(LogLevel.Information))
+        {
+            logger.LogInformation(
+                "Loaded {Count} protobuf schema mapping(s) from {Path}.", manifest.Schemas.Count, manifestPath);
+        }
     }
 }

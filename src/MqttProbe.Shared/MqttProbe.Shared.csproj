@@ -20,8 +20,15 @@
              S8970: claims the ! operators in markup are pointless "because nullable
              warnings are disabled". They are not pointless — the generated context is
              simply not annotated. They document real intent and would become
-             load-bearing if that is ever fixed. -->
-        <NoWarn>$(NoWarn);CS8669;S8970</NoWarn>
+             load-bearing if that is ever fixed.
+
+             S2292 (SubscriptionEditor.razor TopicDraft/QosDraft) and S5693
+             (PluginSettingsPanel.razor OnFileSelected) are the same story: both are
+             reported against Razor @code blocks, so neither #pragma nor a
+             file-scoped .editorconfig entry suppresses them (confirmed: a global
+             [*.razor] severity=none for both still left them firing). See the
+             comments at each flagged member for why each is a deliberate no-op. -->
+        <NoWarn>$(NoWarn);CS8669;S8970;S2292;S5693</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

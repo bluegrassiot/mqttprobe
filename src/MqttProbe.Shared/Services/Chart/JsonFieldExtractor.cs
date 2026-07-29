@@ -30,7 +30,11 @@ public class JsonFieldExtractor : IJsonFieldExtractor
         try
         {
             // Collapse consecutive commas emitted by malformed upstream publishers (e.g. ", , ," → ",")
-            jsonPayload = System.Text.RegularExpressions.Regex.Replace(jsonPayload, @",(\s*,)+", ",");
+            // Explicit timeout: this runs over untrusted MQTT payloads, so a pathological
+            // input must not be able to hang the pattern (MA0009/S6444 ReDoS guard).
+            jsonPayload = System.Text.RegularExpressions.Regex.Replace(
+                jsonPayload, @",(?:\s*,)+", ",",
+                System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromMilliseconds(250));
 
             var options = new JsonDocumentOptions { AllowTrailingCommas = true };
             using var doc = JsonDocument.Parse(jsonPayload, options);

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using MQTTnet;
 using MqttProbe.Services.Plugins.Contracts;
 
@@ -31,18 +32,8 @@ public sealed class PluginRegistry
         LoadedPackagePaths = loadedPackagePaths;
     }
 
-    public IPayloadDetector? FindDetector(MqttApplicationMessageReceivedEventArgs e)
-    {
-        foreach (var detector in Detectors)
-        {
-            if (detector.CanDetect(e))
-            {
-                return detector;
-            }
-        }
-
-        return null;
-    }
+    public IPayloadDetector? FindDetector(MqttApplicationMessageReceivedEventArgs e) =>
+        Detectors.FirstOrDefault(detector => detector.CanDetect(e));
 
     public IPayloadDecoder? FindDecoder(string formatId) =>
         Decoders.TryGetValue(formatId, out var decoder) ? decoder : null;
@@ -242,7 +233,7 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
         return map;
     }
 
-    private IReadOnlyList<IPayloadDetector> BuildDetectors(
+    private ReadOnlyCollection<IPayloadDetector> BuildDetectors(
         HashSet<string> disabled,
         Dictionary<(string, string), string> overrideMap)
     {
@@ -276,35 +267,35 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
         return selected.Select(d => d.Detector).ToList().AsReadOnly();
     }
 
-    private IReadOnlyDictionary<string, IPayloadDecoder> BuildDecoders(
+    private ReadOnlyDictionary<string, IPayloadDecoder> BuildDecoders(
         HashSet<string> disabled,
         Dictionary<(string, string), string> overrideMap) =>
         BuildUniqueCapabilityMap(
             _decoders, disabled, overrideMap, "Decoder",
             d => d.Decoder, d => d.Decoder.FormatId, d => d.PluginId);
 
-    private IReadOnlyDictionary<string, IPayloadEncoder> BuildEncoders(
+    private ReadOnlyDictionary<string, IPayloadEncoder> BuildEncoders(
         HashSet<string> disabled,
         Dictionary<(string, string), string> overrideMap) =>
         BuildUniqueCapabilityMap(
             _encoders, disabled, overrideMap, "Encoder",
             e => e.Encoder, e => e.Encoder.FormatId, e => e.PluginId);
 
-    private IReadOnlyDictionary<string, ITopologyExtractor> BuildTopologyExtractors(
+    private ReadOnlyDictionary<string, ITopologyExtractor> BuildTopologyExtractors(
         HashSet<string> disabled,
         Dictionary<(string, string), string> overrideMap) =>
         BuildUniqueCapabilityMap(
             _topologyExtractors, disabled, overrideMap, "TopologyExtractor",
             t => t.Extractor, t => t.Extractor.FormatId, t => t.PluginId);
 
-    private IReadOnlyDictionary<string, IPayloadTemplateProvider> BuildTemplateProviders(
+    private ReadOnlyDictionary<string, IPayloadTemplateProvider> BuildTemplateProviders(
         HashSet<string> disabled,
         Dictionary<(string, string), string> overrideMap) =>
         BuildUniqueCapabilityMap(
             _templateProviders, disabled, overrideMap, "TemplateProvider",
             p => p.Provider, p => p.Provider.FormatId, p => p.PluginId);
 
-    private IReadOnlyDictionary<string, TCapability> BuildUniqueCapabilityMap<TTuple, TCapability>(
+    private ReadOnlyDictionary<string, TCapability> BuildUniqueCapabilityMap<TTuple, TCapability>(
         List<TTuple> entries,
         HashSet<string> disabled,
         Dictionary<(string, string), string> overrideMap,

@@ -1,4 +1,3 @@
-@using System.Runtime.InteropServices
 @using System.Text.Json
 @using MQTTnet
 @using MQTTnet.Protocol
@@ -28,7 +27,7 @@
 
 <div class="tab-panel-scroll">
     <MudGrid Spacing="2">
-        @if (AppInfoService.IsNative || RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        @if (AppInfoService.IsNative || OperatingSystem.IsWindows())
         {
             <MudItem xs="12">
                 <AppTertiaryButton StartIcon="@LucideIcons.ClipboardPaste"

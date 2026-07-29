@@ -99,6 +99,13 @@
     private HashSet<SubscribedTopic> _selected = [];
     private bool _busy;
 
+    // S2292 (suppressed project-wide via NoWarn in MqttProbe.Shared.csproj — like
+    // CS8669/S8970 there, it is reported against the Razor @code block and neither
+    // #pragma nor a .editorconfig entry can scope it to this file): these forward
+    // to _topic/_qos rather than being auto-properties because the fields are also
+    // bound directly from the markup above (@bind-Value) and read/written
+    // throughout this class; the properties exist only as an internal, test-only
+    // accessor pair (see *ForTests below).
     internal string TopicDraft { get => _topic; set => _topic = value; }
     internal MqttQualityOfServiceLevel QosDraft { get => _qos; set => _qos = value; }
     internal Task AddForTests() => AddAsync();

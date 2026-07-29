@@ -80,7 +80,7 @@
     }
 </nav>
 
-<MudTabs @key="RenderedDestinations.Count"
+<MudTabs @key="GetRenderedDestinations().Count"
          ActivePanelIndex="@_activeTabIndex"
          Class="desktop-tabs"
          ActivePanelIndexChanged="@OnActivePanelChanged"
@@ -262,12 +262,12 @@
     private bool _suppressUrlUpdate;
     private Func<EventArgs, Task>? _connectionStateChangedHandler;
 
-    private IReadOnlyList<NavigationDestination> RenderedDestinations =>
+    private IReadOnlyList<NavigationDestination> GetRenderedDestinations() =>
         _destinations.Where(d => d.IsVisible()).ToList();
 
     private void SyncActiveTabIndex()
     {
-        var rendered = RenderedDestinations;
+        var rendered = GetRenderedDestinations();
         for (int i = 0; i < rendered.Count; i++)
         {
             if (string.Equals(rendered[i].Slug, _activeSlug, StringComparison.OrdinalIgnoreCase))
@@ -401,7 +401,7 @@
 
     private void OnActivePanelChanged(int physicalIndex)
     {
-        var rendered = RenderedDestinations;
+        var rendered = GetRenderedDestinations();
         if (physicalIndex < 0 || physicalIndex >= rendered.Count) return;
         var dest = rendered[physicalIndex];
         _activeSlug = dest.Slug;

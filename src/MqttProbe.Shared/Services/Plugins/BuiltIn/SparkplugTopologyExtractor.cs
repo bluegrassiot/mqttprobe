@@ -159,7 +159,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
         return true;
     }
 
-    private static IReadOnlyList<MetricSnapshot> ExtractMetrics(Payload payload)
+    private static List<MetricSnapshot> ExtractMetrics(Payload payload)
     {
         var result = new List<MetricSnapshot>();
 
@@ -180,16 +180,20 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
         return result;
     }
 
-    private static IReadOnlyList<MetricSnapshot> ExtractMetricsWithAliasResolution(
+    private static List<MetricSnapshot> ExtractMetricsWithAliasResolution(
         Payload payload, Dictionary<ulong, string>? aliasMap)
     {
         var result = new List<MetricSnapshot>();
 
         foreach (var metric in payload.Metrics)
         {
-            var name = !string.IsNullOrEmpty(metric.Name)
-                ? metric.Name
-                : aliasMap != null ? aliasMap.GetValueOrDefault(metric.Alias) : null;
+            string? name;
+            if (!string.IsNullOrEmpty(metric.Name))
+                name = metric.Name;
+            else if (aliasMap != null)
+                name = aliasMap.GetValueOrDefault(metric.Alias);
+            else
+                name = null;
 
             if (name == null)
                 continue;

@@ -41,8 +41,11 @@ public sealed class PluginReloadService
             _pipeline.SwapRegistry(registry);
             _session.ClearNonRestartEntries();
 
-            _logger.LogInformation("Plugin registry reloaded with {Count} package(s).",
-                registry.LoadedPackagePaths.Count);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Plugin registry reloaded with {Count} package(s).",
+                    registry.LoadedPackagePaths.Count);
+            }
 
             return new PluginReloadOutcome(true, null);
         }

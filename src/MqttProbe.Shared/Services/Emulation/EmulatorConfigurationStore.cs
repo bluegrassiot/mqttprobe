@@ -125,11 +125,24 @@ public class EmulatorConfigurationStore(string filePath, ILogger<EmulatorConfigu
         await FileHelper.WriteAtomicallyAsync(filePath, JsonSerializer.Serialize(snapshot, _jsonOptions));
     }
 
+    private bool _disposed;
+
     // CA1001: the type owns a SemaphoreSlim. These are app-lifetime singletons, so this
     // only runs at container teardown, but leaving the handle undisposed is still a leak.
+    // Full Dispose(bool) pattern because the type is not sealed (S3881).
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        if (disposing)
+        {
+            _mutationLock.Dispose();
+        }
+        _disposed = true;
+    }
+
     public void Dispose()
     {
-        _mutationLock.Dispose();
+        Dispose(true);
         GC.SuppressFinalize(this);
     }
 

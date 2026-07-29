@@ -92,9 +92,9 @@ public class ProtobufSchemaRegistryTests
         telemetry.Name.Should().Be("Telemetry");
 
         registry.TryResolveMessage(".common.Location", out var commonLocation).Should().BeTrue();
-        commonLocation.Fields[0].Name.Should().Be("latitude");
+        commonLocation!.Fields[0].Name.Should().Be("latitude");
         registry.TryResolveMessage(".acme.Location", out var acmeLocation).Should().BeTrue();
-        acmeLocation.Fields[0].Name.Should().Be("site_code");
+        acmeLocation!.Fields[0].Name.Should().Be("site_code");
     }
 
     [Test]
@@ -119,7 +119,7 @@ public class ProtobufSchemaRegistryTests
         registry.HasAnySchemas.Should().BeTrue();
         registry.Diagnostics.Should().NotContain(d => d.Contains("ERROR"));
         registry.TryResolveByTopic("sensors/abc/data", out var msg).Should().BeTrue();
-        msg.Name.Should().Be("Outer");
+        msg!.Name.Should().Be("Outer");
         registry.TryResolveByTopic("sensors/abc/other", out _).Should().BeFalse();
     }
 
@@ -141,9 +141,9 @@ public class ProtobufSchemaRegistryTests
         var registry = new ProtobufSchemaRegistry(config, dir);
 
         registry.TryResolveMessage(".demo.Inner", out var inner).Should().BeTrue();
-        inner.Name.Should().Be("Inner");
+        inner!.Name.Should().Be("Inner");
         registry.TryResolveEnum(".demo.Color", out var color).Should().BeTrue();
-        color.Name.Should().Be("Color");
+        color!.Name.Should().Be("Color");
     }
 
     [Test]

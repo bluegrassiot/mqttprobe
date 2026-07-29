@@ -973,11 +973,24 @@ public class SettingsStore : ISettingsStore, IDisposable
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
+    private bool _disposed;
+
     // CA1001: the type owns a SemaphoreSlim. These are app-lifetime singletons, so this
     // only runs at container teardown, but leaving the handle undisposed is still a leak.
+    // Full Dispose(bool) pattern because the type is not sealed (S3881).
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        if (disposing)
+        {
+            _lock.Dispose();
+        }
+        _disposed = true;
+    }
+
     public void Dispose()
     {
-        _lock.Dispose();
+        Dispose(true);
         GC.SuppressFinalize(this);
     }
 

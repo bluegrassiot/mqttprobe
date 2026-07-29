@@ -93,7 +93,7 @@ public class ProtobufWireDecoderTests
         registry.TryResolveMessage("demo.Outer", out var outer).Should().BeTrue();
 
         var decoder = new ProtobufWireDecoder(registry);
-        var result = decoder.Decode(EncodeOuter(), outer);
+        var result = decoder.Decode(EncodeOuter(), outer!);
 
         result["id"].Should().Be(42L);
         ((Dictionary<string, object?>)result["inner"]!)["label"].Should().Be("hi");
@@ -118,7 +118,7 @@ public class ProtobufWireDecoderTests
         cos.Flush();
 
         var decoder = new ProtobufWireDecoder(registry);
-        var result = decoder.Decode(ms.ToArray(), inner);
+        var result = decoder.Decode(ms.ToArray(), inner!);
 
         result.Keys.Should().Contain("field_99");
     }
@@ -143,7 +143,7 @@ public class ProtobufWireDecoderTests
         cos.Flush();
 
         var decoder = new ProtobufWireDecoder(registry);
-        var result = decoder.Decode(ms.ToArray(), drift);
+        var result = decoder.Decode(ms.ToArray(), drift!);
 
         result["dup"].Should().Be(1234L);
         result.Keys.Should().Contain("field_15");
@@ -176,7 +176,7 @@ public class ProtobufWireDecoderTests
         }
 
         var decoder = new ProtobufWireDecoder(registry);
-        var act = () => decoder.Decode(payload, node);
+        var act = () => decoder.Decode(payload, node!);
 
         act.Should().Throw<InvalidDataException>().WithMessage("*nesting*");
     }
@@ -196,7 +196,7 @@ public class ProtobufWireDecoderTests
         cos.Flush();
 
         var decoder = new ProtobufWireDecoder(registry);
-        var result = decoder.Decode(ms.ToArray(), drift);
+        var result = decoder.Decode(ms.ToArray(), drift!);
 
         result["dup"].Should().Be(6L);
         result["dup"].Should().NotBeAssignableTo<System.Collections.IEnumerable>();
@@ -220,7 +220,7 @@ public class ProtobufWireDecoderTests
         cos.Flush();
 
         var decoder = new ProtobufWireDecoder(registry);
-        var result = decoder.Decode(ms.ToArray(), inner);
+        var result = decoder.Decode(ms.ToArray(), inner!);
 
         var expected = tags.Select(t => Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(t)));
 
@@ -237,7 +237,7 @@ public class ProtobufWireDecoderTests
         byte[] payload = [0x72, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F];
 
         var decoder = new ProtobufWireDecoder(registry);
-        var act = () => decoder.Decode(payload, drift);
+        var act = () => decoder.Decode(payload, drift!);
 
         act.Should().Throw<InvalidDataException>().WithMessage("*Truncated length-delimited*");
     }

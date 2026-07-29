@@ -17,7 +17,7 @@ public interface IEmulatorConfigurationStore
     public Task SetPublishIntervalAsync(int intervalMs);
 }
 
-public class EmulatorConfigurationStore(string filePath, ILogger<EmulatorConfigurationStore>? logger = null) : IEmulatorConfigurationStore
+public class EmulatorConfigurationStore(string filePath, ILogger<EmulatorConfigurationStore>? logger = null) : IEmulatorConfigurationStore, IDisposable
 {
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -124,4 +124,13 @@ public class EmulatorConfigurationStore(string filePath, ILogger<EmulatorConfigu
     {
         await FileHelper.WriteAtomicallyAsync(filePath, JsonSerializer.Serialize(snapshot, _jsonOptions));
     }
+
+    // CA1001: the type owns a SemaphoreSlim. These are app-lifetime singletons, so this
+    // only runs at container teardown, but leaving the handle undisposed is still a leak.
+    public void Dispose()
+    {
+        _mutationLock.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
 }

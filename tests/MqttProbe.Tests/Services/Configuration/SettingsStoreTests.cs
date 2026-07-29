@@ -21,6 +21,7 @@ public class SettingsStoreTests
     [TearDown]
     public void TearDown()
     {
+        _store.Dispose();
         if (File.Exists(_configPath)) File.Delete(_configPath);
     }
 

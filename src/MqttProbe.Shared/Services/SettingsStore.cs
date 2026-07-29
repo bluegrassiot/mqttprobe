@@ -60,7 +60,7 @@ public interface ISettingsStore
     public Task SetPasswordAsync(string username, string newPassword);
 }
 
-public class SettingsStore : ISettingsStore
+public class SettingsStore : ISettingsStore, IDisposable
 {
     private readonly string _configPath;
     private readonly ILogger<SettingsStore>? _logger;
@@ -972,4 +972,13 @@ public class SettingsStore : ISettingsStore
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
+
+    // CA1001: the type owns a SemaphoreSlim. These are app-lifetime singletons, so this
+    // only runs at container teardown, but leaving the handle undisposed is still a leak.
+    public void Dispose()
+    {
+        _lock.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
 }

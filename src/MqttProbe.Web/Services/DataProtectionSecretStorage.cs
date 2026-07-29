@@ -5,7 +5,7 @@ using MqttProbe.Services.Security;
 
 namespace MqttProbe.Web.Services;
 
-public class DataProtectionSecretStorage : ISecretStorage
+public class DataProtectionSecretStorage : ISecretStorage, IDisposable
 {
     private readonly IDataProtector _protector;
     private readonly string _storePath;
@@ -97,4 +97,13 @@ public class DataProtectionSecretStorage : ISecretStorage
         var cipherText = _protector.Protect(json);
         await File.WriteAllTextAsync(_storePath, cipherText);
     }
+
+    // CA1001: the type owns a SemaphoreSlim. These are app-lifetime singletons, so this
+    // only runs at container teardown, but leaving the handle undisposed is still a leak.
+    public void Dispose()
+    {
+        _lock.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
 }

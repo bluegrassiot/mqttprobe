@@ -3,7 +3,7 @@ using MqttProbe.Services.Security;
 
 namespace MqttProbe.Desktop.Services.Security;
 
-public sealed class DesktopSecretKeyProtector : ISecretProtectionStatus
+public sealed class DesktopSecretKeyProtector : ISecretProtectionStatus, IDisposable
 {
     private readonly string _secretsDir;
     private readonly ISecretKeyProtector _os;
@@ -282,4 +282,13 @@ public sealed class DesktopSecretKeyProtector : ISecretProtectionStatus
         _cachedKey = found.Key;
         return (byte[])_cachedKey.Clone();
     }
+
+    // CA1001: the type owns a SemaphoreSlim. These are app-lifetime singletons, so this
+    // only runs at container teardown, but leaving the handle undisposed is still a leak.
+    public void Dispose()
+    {
+        _keyLock.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
 }

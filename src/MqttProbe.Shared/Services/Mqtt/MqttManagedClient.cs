@@ -86,8 +86,13 @@ public sealed class MqttManagedClient : IMqttManagedClient
             _pending.Clear();
         }
 
-        cts?.Cancel();
-        cts?.Dispose();
+        if (cts is not null)
+        {
+            // CancelAsync rather than Cancel: registered callbacks then run on the pool
+            // instead of synchronously on the thread calling StopAsync.
+            await cts.CancelAsync().ConfigureAwait(false);
+            cts.Dispose();
+        }
 
         if (_client.IsConnected)
         {

@@ -224,6 +224,13 @@ dotnet_diagnostic.MA0046.severity = none
 # and covered by CA1305, which stays a warning.
 dotnet_diagnostic.MA0011.severity = suggestion
 
+# S2139 offers "log and handle" or "rethrow with context" as the only options. The recurring
+# pattern here is neither: the catch performs real recovery (quarantine a certificate, roll
+# back a staged envelope key, mark a node faulted) and logs context the caller cannot
+# reconstruct, then rethrows so the caller still decides the outcome. Wrapping in a new
+# exception type to satisfy the rule would change what callers catch.
+dotnet_diagnostic.S2139.severity = suggestion
+
 # MA0004: the one place a missing ConfigureAwait can actually deadlock is a
 # chain blocked on by Dispose via GetAwaiter().GetResult() — see
 # EmulationService.RunPublishLoop, which is fixed. Elsewhere in Shared the

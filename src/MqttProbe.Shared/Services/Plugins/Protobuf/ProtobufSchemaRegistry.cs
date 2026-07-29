@@ -1,5 +1,6 @@
 extern alias ProtoReflection;
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using MqttProbe.Models.Plugins;
 using DescriptorProto = ProtoReflection::Google.Protobuf.Reflection.DescriptorProto;
@@ -104,10 +105,12 @@ public sealed class ProtobufSchemaRegistry
         return false;
     }
 
-    public bool TryResolveMessage(string fullyQualifiedName, out DescriptorProto messageType) =>
+    public bool TryResolveMessage(
+        string fullyQualifiedName, [MaybeNullWhen(false)] out DescriptorProto messageType) =>
         _messages.TryGetValue(Normalize(fullyQualifiedName), out messageType);
 
-    public bool TryResolveEnum(string fullyQualifiedName, out EnumDescriptorProto enumType) =>
+    public bool TryResolveEnum(
+        string fullyQualifiedName, [MaybeNullWhen(false)] out EnumDescriptorProto enumType) =>
         _enums.TryGetValue(Normalize(fullyQualifiedName), out enumType);
 
     private void BuildRoutingTable(IReadOnlyList<ProtobufSchemaMapping> mappings, ILogger? logger)

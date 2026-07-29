@@ -165,9 +165,9 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         {
             envelopeJson = await _envelopeKeyStore.GetAsync($"cert-env-{assetId}");
         }
-        catch
+        catch (Exception ex)
         {
-            _logger.LogWarning("Cannot read envelope for {AssetId}; skipping delete", assetId);
+            _logger.LogWarning(ex, "Cannot read envelope for {AssetId}; skipping delete", assetId);
             return null;
         }
         if (envelopeJson is null) return null;
@@ -177,9 +177,9 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
             var envelope = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(envelopeJson);
             return Convert.FromBase64String(envelope.GetProperty("k").GetString()!);
         }
-        catch
+        catch (Exception ex)
         {
-            _logger.LogWarning("Malformed envelope for {AssetId}; skipping delete", assetId);
+            _logger.LogWarning(ex, "Malformed envelope for {AssetId}; skipping delete", assetId);
             return null;
         }
     }
@@ -198,7 +198,7 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         }
         catch (Exception ex) when (ex is CryptographicException or ArgumentException or FormatException)
         {
-            _logger.LogWarning("Tampered blob {AssetId}; not deleting", assetId);
+            _logger.LogWarning(ex, "Tampered blob {AssetId}; not deleting", assetId);
             return false;
         }
     }

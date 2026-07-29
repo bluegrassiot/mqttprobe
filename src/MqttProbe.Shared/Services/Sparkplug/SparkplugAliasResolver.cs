@@ -11,7 +11,7 @@ public static class SparkplugAliasResolver
         IReadOnlyDictionary<string, SpbGroup> groups)
     {
         if (!SparkplugTopologyService.TryParseTopic(
-                topic, out var group, out var verb, out var node, out var device))
+                topic, out var group, out _, out var node, out var device))
             return null;
 
         Payload? parsed;

@@ -28,6 +28,8 @@ using MudBlazor.Services;
 using Photino.Blazor;
 using Velopack;
 
+namespace MqttProbe.Desktop;
+
 internal static class Program
 {
     [STAThread]
@@ -118,11 +120,15 @@ internal static class Program
     {
         builder.Services.AddSingleton(sp =>
         {
-            ISecretKeyProtector os =
-                OperatingSystem.IsWindows() ? new WindowsDpapiSecretKeyProtector(secretsDir) :
-                OperatingSystem.IsMacOS() ? new MacKeychainSecretKeyProtector(new MacKeychainNative()) :
-                OperatingSystem.IsLinux() ? new LinuxLibsecretKeyProtector(new LinuxLibsecretNative()) :
-                new UnavailableSecretKeyProtector();
+            ISecretKeyProtector os;
+            if (OperatingSystem.IsWindows())
+                os = new WindowsDpapiSecretKeyProtector(secretsDir);
+            else if (OperatingSystem.IsMacOS())
+                os = new MacKeychainSecretKeyProtector(new MacKeychainNative());
+            else if (OperatingSystem.IsLinux())
+                os = new LinuxLibsecretKeyProtector(new LinuxLibsecretNative());
+            else
+                os = new UnavailableSecretKeyProtector();
 
             var raw = new RawSecretKeyFile(secretsDir);
             var file = new FileSecretKeyProtector(raw);
@@ -200,6 +206,6 @@ internal static class Program
     {
         const uint MB_OK = 0x00000000;
         const uint MB_ICONERROR = 0x00000010;
-        MessageBoxW(IntPtr.Zero, message, "MQTTProbe - Secret Storage Error", MB_OK | MB_ICONERROR);
+        _ = MessageBoxW(IntPtr.Zero, message, "MQTTProbe - Secret Storage Error", MB_OK | MB_ICONERROR);
     }
 }

@@ -27,7 +27,12 @@ public interface IMessageStoreManager : IDisposable
     public long GetVersion();
     public long GetSelectedTopicVersion();
     public Task ClearAllMessages();
+
+    // CA1716: "Stop" clashes with a VB keyword. This is public API surface
+    // consumed by third-party plugins (MqttProbe.Shared) — do not rename.
+#pragma warning disable CA1716 // Identifiers should not match keywords
     public Task Stop();
+#pragma warning restore CA1716
     public Task Start();
 
     public event Func<MqttMessage, Task>? MessageReceived;

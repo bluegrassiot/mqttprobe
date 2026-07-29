@@ -40,6 +40,10 @@ public class SubscriptionManager : ISubscriptionManager
 
     private const int MaxSubscriptions = 500;
 
+    // S2365: this is a real copy (the live dictionary needs its lock released
+    // before returning), but it's public API surface consumed by third-party
+    // plugins as a property — converting it to a method is a breaking change.
+#pragma warning disable S2365 // Properties should not make collection copies
     public IReadOnlyList<SubscribedTopic> Subscriptions
     {
         get
@@ -56,6 +60,7 @@ public class SubscriptionManager : ISubscriptionManager
             }
         }
     }
+#pragma warning restore S2365
 
     public async Task Remove(IReadOnlyList<string> topics)
     {
@@ -153,10 +158,9 @@ public class SubscriptionManager : ISubscriptionManager
                 var connection = _sessionState.SelectedConnection;
                 lock (_topicsSync)
                 {
-                    foreach (var entry in connection.SubscribedTopics)
+                    foreach (var entry in connection.SubscribedTopics.Where(entry => !_topics.ContainsKey(entry.Topic)))
                     {
-                        if (!_topics.ContainsKey(entry.Topic))
-                            _topics[entry.Topic] = entry.QualityOfServiceLevel;
+                        _topics[entry.Topic] = entry.QualityOfServiceLevel;
                     }
                 }
             }

@@ -130,7 +130,8 @@ public sealed class AppHealthMetricsCollector : IAppHealthMetricsCollector
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "{MetricName} metric unavailable on this platform", metricName);
+            if (_logger.IsEnabled(LogLevel.Debug))
+                _logger.LogDebug(ex, "{MetricName} metric unavailable on this platform", metricName);
             return false;
         }
     }

@@ -42,11 +42,14 @@ public static class PluginAssemblyInspector
 
     // Walking a candidate's types resolves its entire dependency graph (Google.Protobuf, the
     // ASP.NET Core shared framework, ...), so the core runtime directory alone is not enough.
-    // TRUSTED_PLATFORM_ASSEMBLIES is the host's own resolved list, ';'-delimited on every OS.
+    // TRUSTED_PLATFORM_ASSEMBLIES is the host's own resolved list, delimited by
+    // Path.PathSeparator -- ';' on Windows but ':' everywhere else. Splitting on a
+    // literal ';' collapsed the whole list into one bogus path on Linux and macOS,
+    // so every plugin dependency failed to resolve there.
     private static string[] BuildSearchPaths(string extractPath, string contractPath)
     {
         var platformAssemblies = (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string)?
-            .Split(';', StringSplitOptions.RemoveEmptyEntries) ?? [];
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries) ?? [];
 
         return Directory
             .GetFiles(RuntimeEnvironment.GetRuntimeDirectory(), "*.dll")

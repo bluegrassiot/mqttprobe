@@ -2,333 +2,77 @@
 
 **The MQTT diagnostic tool built for IIoT.**
 
-Connect to any MQTT broker, browse live topic trees, inspect payloads, and chart JSON metrics in real time. Native Sparkplug B decode and EoN node emulation built in. Open source, no cloud required.
+Connect to any broker, browse live topics, inspect payloads, chart JSON metrics. Native Sparkplug B decode and EoN emulation. Open source, no cloud required.
 
 [![CI](https://github.com/bluegrassiot/mqttprobe/actions/workflows/ci.yml/badge.svg)](https://github.com/bluegrassiot/mqttprobe/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
-[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
 
-![MQTTProbe demo — connecting to a broker, browsing topics, and decoding Sparkplug B messages](docs/images/demo.gif)
+![MQTTProbe demo: connecting to a broker, browsing topics, and decoding Sparkplug B messages](docs/images/demo.gif)
 
-## Features
+## Highlights
 
 ![MQTTProbe interface](docs/images/screenshot-browser.png)
 
-- **Topic Browser** — live tree view of all topics received from the broker, with recursive hierarchy navigation
-- **Payload Browser** — structured JSON viewer for message payloads, with topic/payload copy-to-clipboard
-- **Subscriptions** — add and remove MQTT topic subscriptions (including wildcards) at runtime with per-subscription QoS (default 1); subscriptions persist per connection and auto-resubscribe on reconnect (configurable)
-- **Publish** — send messages to any topic with configurable QoS level
-- **MQTT/Sparkplug B Emulator** — simulate multiple Edge Nodes publishing metrics data at a configurable rate with and without Sparkplug B
-- **Sparkplug B EoN dashboard** — live view of all Edge of Network nodes, devices, and metrics; automatically requests Birth certificates for newly discovered nodes
-- **Multiple Connections** — save and switch between multiple broker configurations
-- **TLS / MQTTS** — connect to brokers over TLS (port 8883) or plain MQTT (port 1883), with optional untrusted certificate override
-- **WebSocket support** — connect via `ws://` or `wss://` in addition to raw TCP
-- **Charts** — live time-series visualization of JSON payload fields with configurable field selection; chart configurations are saved per connection across sessions
-- **Authentication** — cookie-based login with PBKDF2-SHA256 hashed passwords; first-run setup wizard, in-app password change
-- **Secure credential storage** — MQTT broker passwords stored in platform-appropriate secure storage (iOS Keychain / Android Keystore / ASP.NET Data Protection on Web); desktop encrypts secrets with AES-256-GCM on disk, with the master key protected by an OS-backed facility when available; never written in plaintext
+- Live topic tree
+- Payload browser (JSON, MessagePack, binary)
+- Sparkplug B decode and EoN dashboard
+- Node and MQTT emulator
+- Live charts from payload fields
+- Multi-connection, TLS/MQTTS, WebSocket
+- Plugins (payload formats, protobuf schemas)
+- Runs local: desktop, Android, Docker, web
 
----
+## Get MQTTProbe
 
-## Platform Support
+| Platform | Artifact | Notes |
+|----------|----------|-------|
+| Windows | [MQTTProbe-win-Setup.exe](https://github.com/bluegrassiot/mqttprobe/releases/latest/download/MQTTProbe-win-Setup.exe) | Per-user, auto-update. SmartScreen: More info, Run anyway |
+| macOS | [MQTTProbe-osx-Setup.pkg](https://github.com/bluegrassiot/mqttprobe/releases/latest/download/MQTTProbe-osx-Setup.pkg) | Signed and notarized, auto-update, installs to Applications |
+| Linux | [MQTTProbe.AppImage](https://github.com/bluegrassiot/mqttprobe/releases/latest/download/MQTTProbe.AppImage) | `chmod +x` and run. Needs `libwebkit2gtk-4.1`; `libfuse2` on Ubuntu 22.04+ |
+| Android | [APK on latest release](https://github.com/bluegrassiot/mqttprobe/releases/latest) | `mqttprobe-android-*.apk`; sideload, allow unknown apps if prompted |
+| Docker | `bluegrassiot/mqttprobe` (compose) | See Docker section |
+| iOS | -- | Not available yet |
 
-| Platform | How it runs |
-|---------------------|----------------------------------------------------|
-| **Web browser**     | Blazor Server — self-host on any machine or server |
-| **Docker**          | Official `docker-compose.yml` included             |
-| **iOS**             | MAUI app (built from source on macOS)              |
-| **Android**         | MAUI app                                           |
-| **Windows desktop** | MAUI app                                           |
-| **macOS**           | MAUI app (built from source on macOS)              |
+Portable zips and web self-host builds are on the [latest release page](https://github.com/bluegrassiot/mqttprobe/releases/latest).
 
----
-
-## Quick Start — Docker
-
-The fastest way to get running:
+## Docker
 
 ```bash
-git clone --recurse-submodules https://github.com/bluegrassiot/mqttprobe
+git clone https://github.com/bluegrassiot/mqttprobe
 cd mqttprobe
 docker compose up -d
 ```
 
-Open **http://localhost:8080** in your browser. On first launch you will be taken to a setup page to create your admin password.
+Open http://localhost:8080. On first launch, create your admin password.
 
-> **Data persistence:** Config, encrypted broker passwords, and Data Protection keys are stored in a named Docker volume (`mqttprobe-config`) and survive container restarts and re-deployments.
+Config persists in a Docker volume across restarts. For LAN access, TLS, reverse proxy, and plugin storage details, see the [Docker Deployment wiki](https://github.com/bluegrassiot/mqttprobe/wiki/05-Docker-Deployment).
 
-> **Broker access without exposing ports:** MQTTProbe connects to brokers by container name on the same Docker network — no need to expose broker ports to the host or external network. If your broker (e.g., Mosquitto) is on a shared Docker network, MQTTProbe can reach it directly using the container hostname.
+## After install
 
-### Access from other machines
+1. Create your admin password on first launch
+2. Add a broker connection
+3. Subscribe to topics and browse
 
-The quickstart compose (`docker-compose.yml`) serves plain HTTP on port 8080 — fine for the machine running Docker, but browsers on other machines will reject the `Secure` auth cookie over plain HTTP.
+See [Getting Started](https://github.com/bluegrassiot/mqttprobe/wiki/01-Getting-Started) and [Connection Setup](https://github.com/bluegrassiot/mqttprobe/wiki/02-Connection-Setup).
 
-For LAN access from other machines, use the production compose which adds a Caddy TLS proxy:
+## Docs
 
-```bash
-cp .env.example .env
-# Edit .env: set MQTTPROBE_HOST to the IP or hostname other machines will use
-docker compose -f docker-compose.prod.yml up -d
-```
+- [Home](https://github.com/bluegrassiot/mqttprobe/wiki)
+- [Getting Started](https://github.com/bluegrassiot/mqttprobe/wiki/01-Getting-Started)
+- [Connection Setup](https://github.com/bluegrassiot/mqttprobe/wiki/02-Connection-Setup)
+- [Sparkplug B Decode](https://github.com/bluegrassiot/mqttprobe/wiki/03-Sparkplug-B-Decode)
+- [Emulation](https://github.com/bluegrassiot/mqttprobe/wiki/04-Emulation)
+- [Docker Deployment](https://github.com/bluegrassiot/mqttprobe/wiki/05-Docker-Deployment)
+- [Troubleshooting](https://github.com/bluegrassiot/mqttprobe/wiki/06-Troubleshooting)
 
-Then browse **https://\<MQTTPROBE_HOST\>** from any machine on the network. Caddy issues a self-signed certificate from its own local CA — browsers will warn on first visit. To remove the warning, trust Caddy's root CA on client machines:
-
-```bash
-docker compose -f docker-compose.prod.yml cp caddy:/data/caddy/pki/authorities/local/root.crt caddy-root.crt
-# Windows: certutil -addstore -user Root caddy-root.crt
-```
-
-### Connecting to a LAN broker
-
-If you use MQTTS (TLS, port 8883) and experience connection failures on Docker Desktop for Windows, this is a known WSL2 MTU issue — `docker-compose.prod.yml` already sets `com.docker.network.driver.mtu: 1400` to work around it.
-
----
-
-## Quick Start — Blazor Server (Windows / Linux / macOS)
-
-**Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-
-```bash
-cd src/MqttProbe.Web
-dotnet run
-```
-
-The app starts on `https://localhost:5001`. On first launch it redirects to `/Setup` to create your password.
-
----
-
-## Quick Start — Desktop Apps
-
-### Windows
-
-- **Recommended:** Download [`MQTTProbe-win-Setup.exe`](https://github.com/bluegrassiot/mqttprobe/releases/latest) — per-user install, no admin rights, auto-updates in-app.
-- **Portable:** Download the portable `mqttprobe-windows-<version>.zip`, extract, and run `MqttProbe.Maui.exe` (no auto-update).
-
-> **Windows SmartScreen warning:** Releases are not yet code-signed, so Windows may warn on first run. Choose "More info" → "Run anyway" to proceed.
-
-### Linux
-
-- **Recommended:** Download the `MQTTProbe` AppImage from the [latest release](https://github.com/bluegrassiot/mqttprobe/releases/latest), `chmod +x`, run — auto-updates in-app.
-  Requires `libwebkit2gtk-4.1` and, on Ubuntu 22.04+, `libfuse2` (`sudo apt install libfuse2 libwebkit2gtk-4.1-0`).
-- **Portable:** Download `mqttprobe-desktop-linux-x64-<version>.zip`, extract, and run `MqttProbe.Desktop` (no auto-update).
-
-### macOS
-
-- **Recommended:** Download the `MQTTProbe` installer `.pkg` from the [latest release](https://github.com/bluegrassiot/mqttprobe/releases/latest) — signed & notarized, installs to Applications, auto-updates in-app.
-- **Portable:** Download the Velopack portable zip on the release page (no auto-update).
-
----
-
-## Quick Start — MAUI (iOS / Android / Windows)
-
-**For developers:** build from source for testing and development.
-
-**Prerequisites:** .NET 10 SDK + MAUI workload
-
-```bash
-dotnet workload install maui
-```
-
-Open `MqttProbe.slnx` in **Visual Studio 2026** (v18.0+) and select your target platform.
-
-> **Windows:** Enable **Developer Mode** in *Settings → System → For Developers* and check **Deploy** in *Build → Configuration Manager* before running.
-
----
-
-## Configuration
-
-On first run the app creates `config/appsettings.json` (gitignored, never committed). All settings — connections, auth, charts, emulators, and UI preferences — live in this single file:
-
-```json
-{
-  "Connections": [
-    {
-      "Name": "My Broker",
-      "Host": "192.168.1.100",
-      "Port": 1883,
-      "User": "mqttuser",
-      "Protocol": 0,
-      "ClientId": "mqttprobe_my-device",
-      "WebsocketBasePath": "mqtt",
-      "UseTls": false,
-      "AllowUntrustedCertificate": false,
-      "SubscribedTopics": []
-    }
-  ],
-  "Auth": {
-    "Username": "admin",
-    "PasswordHash": ""
-  },
-  "Performance": {
-    "MaxStoredMessages": 10000,
-    "MaxMessagesPerSecond": 50000
-  },
-  "Ui": {
-    "FontAccessible": false,
-    "Theme": "dark",
-    "FontFamily": "Inter",
-    "AutoResubscribe": true,
-    "DismissedHints": []
-  },
-  "ChartsByConnection": {},
-  "EmulatorsByConnection": {}
-}
-```
-
-Charts and emulator configurations are stored per connection, keyed by connection GUID.
-
-> **Passwords are never stored here.** MQTT broker passwords are stored in platform-secure storage (ASP.NET Data Protection on the server, iOS Keychain / Android Keystore on MAUI). If `PasswordHash` is empty, the app redirects to `/Setup` on next start.
-
-### Protocol values
-
-| Value | Protocol |
-|---|---|
-| `0` | MQTT (TCP) |
-| `1` | WebSocket |
-
----
-
-## Architecture
-
-```
-MqttProbe.slnx
-├── src/
-│   ├── MqttProbe.Shared   # Blazor components, models, services (shared by all hosts)
-│   ├── MqttProbe.Web      # ASP.NET Core web host (web + Docker)
-│   └── MqttProbe.Maui     # .NET MAUI host (iOS, Android, Windows)
-└── tests/
-    └── MqttProbe.Tests    # NUnit + bUnit unit & component tests
-```
-
-**Key libraries:**
-- [MQTTnet](https://github.com/dotnet/MQTTnet) v5.2.x — MQTT client (managed reconnect/resubscribe/queue behavior is provided by an in-house `IMqttManagedClient` wrapper)
-- [MudBlazor](https://mudblazor.com) — UI component library
-- [Blazor-ApexCharts](https://apexcharts.github.io/Blazor-ApexCharts/) — real-time charts
-- [Blazor.Lucide](https://github.com/mrpmorris/blazor-lucide) — icon library
-- [SparkplugNet](https://github.com/bluegrassiot/SparkplugNet) — Sparkplug B emulator, consumed from the `external/SparkplugNet` git submodule (a MQTTnet-5 fork of [SeppPenner/SparkplugNet](https://github.com/SeppPenner/SparkplugNet))
-- [Google.Protobuf](https://github.com/protocolbuffers/protobuf) + [Grpc.Tools](https://www.nuget.org/packages/Grpc.Tools) — Sparkplug B payload decoding; the C# types are generated at build time from `src/MqttProbe.Shared/Protos/sparkplug_b.proto` via `protoc` (bundled in `Grpc.Tools`, no separate install needed)
-- [MessagePack-CSharp](https://github.com/MessagePack-CSharp/MessagePack-CSharp) — MessagePack payload detection and decoding
-- [FluentValidation](https://docs.fluentvalidation.net/) — connection form validation
-- [ASP.NET Core Data Protection](https://learn.microsoft.com/aspnet/core/security/data-protection/introduction) — server-side secret encryption
-
-> **MQTTnet v5 note:** This project runs on MQTTnet **5.2.x**. The v4 `MQTTnet.Extensions.ManagedClient` package was dropped; its reconnect, resubscribe, and offline-publish-queue behavior now lives in a project-owned `IMqttManagedClient` wrapper (`src/MqttProbe.Shared/Services/Mqtt/`). Sparkplug B emulation uses a MQTTnet-5 fork of SparkplugNet pinned as the `external/SparkplugNet` git submodule — remember to clone with `--recurse-submodules` (see below).
-
----
-
-## Security
-
-- Passwords are hashed with **PBKDF2-SHA256** (100,000 iterations, random salt, constant-time verification)
-- `config/appsettings.json` is restricted to **owner read/write only** (mode 600) on Linux/macOS
-- MQTT broker passwords are stored in **platform-appropriate secure storage** (OS keystore on MAUI, ASP.NET Data Protection on Web); desktop encrypts secrets with AES-256-GCM on disk — never in the config file
-- **Desktop secret key protection:**
-  - Master key is protected by an OS-backed facility when available.
-  - Windows: current-user DPAPI (`.master-key-v1.dpapi`)
-  - macOS: Keychain (`com.bluegrassiot.mqttprobe` / `master-key-v1`)
-  - Linux: libsecret schema `com.bluegrassiot.mqttprobe.MasterKey` with attribute `key-id=master-key-v1`
-  - If no OS facility is available, a local `.key` file is used and the UI shows a warning.
-- When OS protection is active, copying the secrets directory alone does not yield a usable key.
-- File-fallback mode is weaker: directory disclosure includes key and ciphertext, relying on filesystem permissions only.
-- An existing OS-protected store cannot automatically switch to file fallback if the keyring becomes temporarily unavailable; restore access to the original OS facility.
-- Client certificate payloads are stored in an AES-256-GCM-encrypted file; the AES key and certificate password are held separately in platform secret storage, see [Client Certificate Security](docs/client-certificate-security.md) for details
-- Authentication cookies are `HttpOnly`, `SameSite=Strict`, and expire after 8 hours with sliding renewal
-- No credentials are ever committed to the repository
-
----
-
-## Docker Reference
-
-```bash
-# Start (quickstart — localhost only)
-docker compose up -d
-
-# Start (production — TLS via Caddy, LAN access)
-docker compose -f docker-compose.prod.yml up -d
-
-# View logs
-docker compose logs -f
-
-# Stop
-docker compose down
-
-# Rebuild after a code change
-docker compose up --build -d
-```
-
-The container runs as a **non-root user** on port `8080` using the `mcr.microsoft.com/dotnet/aspnet:10.0-alpine` base image (~130 MB).
-
-### Using your own reverse proxy
-
-Remove the `caddy` service from `docker-compose.prod.yml`, point your proxy (nginx, Traefik, etc.) at port `8080`, and set the `AllowedHosts` environment variable on the app container to match your public hostname to avoid 400 responses from host filtering.
-
-### Plugin storage
-
-Plugins installed from **Settings → Plugins → Install plugin** are written to `/app/Plugins` inside
-the container. The included compose files already mount this as the named `mqttprobe-plugins`
-volume, so installed plugins survive container restarts and re-deployments without extra setup:
-
-```yaml
-volumes:
-  - mqttprobe-plugins:/app/Plugins
-```
-
-If you swap this for a bind mount (e.g. `./plugins:/app/Plugins`) to inspect or version-control the
-folder from the host, keep the mount in place — an uploaded plugin lost from an unmounted path
-cannot be recovered.
-
-Binary plugin packages (those containing a `.dll`) are permitted by default, since a host whose
-filesystem you cannot reach has no other way to install one. Installing one executes third-party
-code inside the app, so a deployment that does not want that turns it off explicitly:
-
-```yaml
-- Plugins__AllowBinaryPackages=false
-```
-
-or in `appsettings.json`:
-
-```json
-"Plugins": { "AllowBinaryPackages": false }
-```
-
-Protobuf schema packages contain no executable code and are always permitted.
-
----
-
-## Development
-
-**Clone with submodules** (required for SparkplugNet source):
-
-```bash
-git clone --recurse-submodules https://github.com/bluegrassiot/mqttprobe.git
-# or if you already cloned without --recurse-submodules:
-git submodule update --init --recursive
-```
-
-```bash
-# Run unit + component tests
-dotnet test tests/MqttProbe.Tests
-
-# Run the web host with hot reload
-dotnet watch --project src/MqttProbe.Web
-
-# Generate a local HTML coverage report (opens automatically)
-python scripts/coverage.py -open
-
-# Check code formatting (CI enforces this)
-python scripts/format-check.py
-
-# Auto-fix formatting violations
-python scripts/format-check.py --fix
-```
-
----
+Website: https://mqttprobe.com
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on getting started, code style, comment philosophy, and the CI pipeline.
-
----
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on getting started, code style, and the CI pipeline.
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE).
 
 Third-party components and their licenses are documented in [NOTICES](NOTICES).

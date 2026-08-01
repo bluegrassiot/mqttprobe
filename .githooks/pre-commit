@@ -38,6 +38,23 @@ if ! SCAN_OUT=$(python "$ROOT/scripts/inspect.py" --tool devskim --fail-on warni
 fi
 pass "Security scan"
 
+step "Workflow lint"
+if ! printf '%s\n' "$STAGED" | any_workflow_relevant; then
+    skip_msg "no staged workflow files"
+# scripts/actionlint.py picks a local binary over its Docker fallback. Neither is a
+# dotnet tool we restore, so skip rather than block a contributor who has neither.
+elif ! command -v actionlint >/dev/null 2>&1 && ! command -v docker >/dev/null 2>&1; then
+    skip_msg "no actionlint or docker (see scripts/actionlint.py)"
+else
+    if ! python "$ROOT/scripts/actionlint.py"; then
+        fail "Workflow lint"
+        printf "\nIf Docker is not running, start it or use: SKIP_PRE_COMMIT=1 git commit ...\n"
+        print_total
+        exit 1
+    fi
+    pass "Workflow lint"
+fi
+
 step "Format"
 if ! printf '%s\n' "$STAGED" | any_format_relevant; then
     skip_msg "no format-relevant staged files"

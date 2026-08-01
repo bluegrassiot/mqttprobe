@@ -109,6 +109,28 @@ all_paths_docs_only() {
     [[ $any -eq 1 ]]
 }
 
+# Returns 0 if path is a GitHub Actions workflow.
+is_workflow_path() {
+    local p=$1
+    p=${p//\\//}
+    case "$p" in
+        .github/workflows/*.yml|.github/workflows/*.yaml) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# stdin: one path per line. Returns 0 if any path is a workflow.
+any_workflow_relevant() {
+    local p
+    while IFS= read -r p || [[ -n "$p" ]]; do
+        [[ -z "$p" ]] && continue
+        if is_workflow_path "$p"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # stdin: one path per line. Returns 0 if any path is format-relevant.
 any_format_relevant() {
     local p

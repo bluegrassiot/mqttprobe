@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -45,6 +45,11 @@ jobs:
 
       - name: Restore tools
         run: dotnet tool restore
+
+      # Same gate as .githooks/pre-commit. Keep --fail-on matching there so a commit
+      # that passes locally cannot fail here. ~5s, so it runs before the slow steps.
+      - name: Security scan
+        run: python3 scripts/inspect.py --tool devskim --fail-on warning
 
       # whitespace + style only. Bare `dotnet format` also runs `analyzers`, which
       # fails on every Sonar/Meziantou/CA warning and cannot auto-fix most of them.
@@ -98,7 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -135,7 +140,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -173,7 +178,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -218,7 +223,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -270,7 +275,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -323,7 +328,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
 
       - uses: actions/setup-dotnet@v5
         with:

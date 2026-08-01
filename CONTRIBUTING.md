@@ -30,12 +30,14 @@ git config core.hooksPath .githooks
 
 | Hook | What it runs |
 |------|----------------|
-| `pre-commit` | Security scan (`devskim`, ~3s) on any staged change, then a format check (`python scripts/format-check.py`) when staged files include C#/Razor/project/editorconfig |
+| `pre-commit` | Security scan (`devskim`, ~3s) on any staged change; workflow lint (`python scripts/actionlint.py`, ~1s) when staged files include `.github/workflows/*.yml`; format check (`python scripts/format-check.py`) when staged files include C#/Razor/project/editorconfig |
 | `pre-push` | Path-aware build (usually `MqttProbe.NoMaui.slnf`) and unit tests when code changes |
 
 Both hooks print per-step and total timing. Docs-only changes (markdown under `docs/`, `*.md`, license files) skip the heavy steps automatically — but not the security scan, since a pasted token in a README is exactly what it looks for.
 
 The security scan blocks the commit on a devskim finding at `warning` or above; notes are reported by `scripts/inspect.py` but do not block. If a finding is a false positive, put a `DevSkim: ignore DS######` comment on the flagged line using that file's comment syntax. It needs the local tools, so run `dotnet tool restore` after cloning.
+
+The workflow lint prefers a locally installed `actionlint` and otherwise runs the pinned Docker image, so it needs one of the two — with neither, the step skips rather than blocking. Install the binary if you would rather not depend on Docker; `scripts/actionlint.py` picks it up automatically.
 
 To skip intentionally:
 
@@ -69,6 +71,7 @@ Before submitting changes, make sure the same checks used by CI pass locally:
 - `dotnet build MqttProbe.slnx`
 - `dotnet test tests/MqttProbe.Tests`
 - `python scripts/format-check.py`
+- `python scripts/inspect.py --tool devskim --fail-on warning`
 
 Local hooks cover a faster subset; still run the commands above before a PR if you skipped hooks.
 

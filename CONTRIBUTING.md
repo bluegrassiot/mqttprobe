@@ -30,10 +30,12 @@ git config core.hooksPath .githooks
 
 | Hook | What it runs |
 |------|----------------|
-| `pre-commit` | Format check (`python scripts/format-check.py`) when staged files include C#/Razor/project/editorconfig |
+| `pre-commit` | Security scan (`devskim`, ~3s) on any staged change, then a format check (`python scripts/format-check.py`) when staged files include C#/Razor/project/editorconfig |
 | `pre-push` | Path-aware build (usually `MqttProbe.NoMaui.slnf`) and unit tests when code changes |
 
-Both hooks print per-step and total timing. Docs-only changes (markdown under `docs/`, `*.md`, license files) skip the heavy steps automatically.
+Both hooks print per-step and total timing. Docs-only changes (markdown under `docs/`, `*.md`, license files) skip the heavy steps automatically — but not the security scan, since a pasted token in a README is exactly what it looks for.
+
+The security scan blocks the commit on a devskim finding at `warning` or above; notes are reported by `scripts/inspect.py` but do not block. If a finding is a false positive, put a `DevSkim: ignore DS######` comment on the flagged line using that file's comment syntax. It needs the local tools, so run `dotnet tool restore` after cloning.
 
 To skip intentionally:
 

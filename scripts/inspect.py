@@ -201,6 +201,10 @@ def main():
                         help="sites listed per rule before summarising (default: 25)")
     parser.add_argument("--keep-sarif", action="store_true",
                         help="keep the raw SARIF files next to the report")
+    parser.add_argument("--fail-on", default="never",
+                        choices=["error", "warning", "note", "never"],
+                        help="exit non-zero if any finding is at this level or worse "
+                             "(default: never; the pre-commit hook uses warning)")
     args = parser.parse_args()
 
     ARTIFACTS.mkdir(exist_ok=True)
@@ -252,10 +256,14 @@ def main():
 
     sections = []
     totals = []
+    gated = []
     for label, sarif in runs:
         findings, rules = parse_sarif(sarif)
         totals.append(f"{len(findings)} from {label}")
         sections += render(label, findings, rules, args.max_per_rule)
+        if args.fail_on != "never":
+            gated += [f for f in findings
+                      if level_key(f["level"]) <= level_key(args.fail_on)]
 
     report = [
         "# Static analysis report",
@@ -278,6 +286,15 @@ def main():
     print(f"\n=== Report: {output.relative_to(ROOT) if output.is_relative_to(ROOT) else output} ===")
     for total in totals:
         print(f"  {total}")
+
+    if gated:
+        print(f"\n=== {len(gated)} finding(s) at or above {args.fail_on} ===")
+        # Same collapse as the report: one line can match a rule several times over.
+        for file, line, rule, level in sorted({
+            (f["file"], f["line"], f["rule"], f["level"]) for f in gated
+        })[:25]:
+            print(f"  {level:8} {rule:10} {file}:{line}")
+        return 1
 
     return 1 if failures else 0
 

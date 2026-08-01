@@ -23,22 +23,33 @@ if [[ -z "${STAGED//[$'\t\r\n']/}" ]]; then
     exit 0
 fi
 
-if ! printf '%s\n' "$STAGED" | any_format_relevant; then
-    skip_msg "no format-relevant staged files"
-    print_total
-    exit 0
-fi
-
 pass "Classify staged files"
 
-step "Format"
-if ! python "$ROOT/scripts/format-check.py"; then
-    fail "Format"
-    printf "\nFormatting violations found - run: python scripts/format-check.py --fix\n"
+# Runs for every staged change, docs included: devskim scans all file types, and a
+# pasted token in a README is exactly what it is for. Whole-tree scan, ~3s.
+step "Security scan"
+if ! SCAN_OUT=$(python "$ROOT/scripts/inspect.py" --tool devskim --fail-on warning \
+        -o "$ROOT/artifacts/inspect-precommit.md" 2>&1); then
+    fail "Security scan"
+    printf '%s\n' "$SCAN_OUT"
+    printf "\nFalse positive? Put a 'DevSkim: ignore DS######' comment on the flagged line.\n"
     print_total
     exit 1
 fi
-pass "Format"
+pass "Security scan"
+
+step "Format"
+if ! printf '%s\n' "$STAGED" | any_format_relevant; then
+    skip_msg "no format-relevant staged files"
+else
+    if ! python "$ROOT/scripts/format-check.py"; then
+        fail "Format"
+        printf "\nFormatting violations found - run: python scripts/format-check.py --fix\n"
+        print_total
+        exit 1
+    fi
+    pass "Format"
+fi
 
 printf "\n${GREEN}pre-commit checks passed.${RESET}\n"
 print_total

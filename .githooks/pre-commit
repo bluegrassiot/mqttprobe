@@ -46,8 +46,9 @@ if ! printf '%s\n' "$STAGED" | any_workflow_relevant; then
 elif ! command -v actionlint >/dev/null 2>&1 && ! command -v docker >/dev/null 2>&1; then
     skip_msg "no actionlint or docker (see scripts/actionlint.py)"
 else
-    if ! python "$ROOT/scripts/actionlint.py"; then
+    if ! LINT_OUT=$(python "$ROOT/scripts/actionlint.py" 2>&1); then
         fail "Workflow lint"
+        printf '%s\n' "$LINT_OUT"
         printf "\nIf Docker is not running, start it or use: SKIP_PRE_COMMIT=1 git commit ...\n"
         print_total
         exit 1

@@ -24,7 +24,7 @@ public class PluginLoaderTests
 
         if (!File.Exists(fixturePath))
         {
-            NUnit.Framework.Assert.Ignore(
+            Assert.Ignore(
                 "MqttProbe.PluginLoader.Fixtures.dll not found; build the solution before running loader integration tests.");
         }
     }
@@ -201,6 +201,24 @@ public class PluginLoaderTests
             d.Source == "fixture-valid" &&
             d.Severity == DiagnosticSeverity.Info &&
             d.Message.Contains("disabled"));
+    }
+
+    [Test]
+    public void LoadPlugins_DisabledPluginId_CasingMismatch_StillSkipsAndReportsTheId()
+    {
+        // The fixture's PluginId is "fixture-valid". Hand-edited config is the only way to
+        // populate this list, so a casing slip must not silently leave the plugin enabled.
+        var config = new PluginConfig
+        {
+            PluginFolders = [FixtureAssemblyDir],
+            DisabledPluginIds = ["Fixture-Valid"]
+        };
+        var loader = new PluginLoader(config, NullLogger);
+
+        var result = loader.LoadPlugins();
+
+        result.Plugins.Should().NotContain(p => p.PluginId == "fixture-valid");
+        result.DisabledIds.Should().Contain("fixture-valid");
     }
 
     [Test]

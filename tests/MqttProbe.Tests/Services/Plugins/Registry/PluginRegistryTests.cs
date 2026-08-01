@@ -371,6 +371,66 @@ public class PluginRegistryTests
         registry.Detectors[0].Should().BeSameAs(detectorB);
     }
 
+    [TestCase("PLUGIN-A")]
+    [TestCase("Plugin-A")]
+    [TestCase("plugin-a")]
+    public void DisabledPluginId_MatchesRegardlessOfCasing(string configuredId)
+    {
+        var builder = new PluginRegistryBuilder();
+
+        builder.SetCurrentPluginId("plugin-a");
+        builder.RegisterDetector(MakeDetector("json", 100));
+
+        var registry = builder.Build(disabledPluginIds: [configuredId]);
+
+        registry.Detectors.Should().BeEmpty();
+    }
+
+    [Test]
+    public void DisabledPluginId_MatchingNothing_WarnsInsteadOfClaimingItWasDisabled()
+    {
+        var builder = new PluginRegistryBuilder();
+
+        builder.SetCurrentPluginId("plugin-a");
+        builder.RegisterDetector(MakeDetector("json", 100));
+
+        var registry = builder.Build(disabledPluginIds: ["plugin-typo"]);
+
+        registry.Detectors.Should().HaveCount(1, "the id matches no installed plugin");
+        registry.Diagnostics.Should().Contain(d =>
+            d.Source == "plugin-typo" &&
+            d.Severity == DiagnosticSeverity.Warning &&
+            d.Message.Contains("no installed plugin"));
+    }
+
+    [Test]
+    public void DisabledPluginId_LoaderSkippedPlugin_StillReportsAsDisabledNotUnknown()
+    {
+        // The loader drops disabled plugins before they register, so without
+        // NoteInstalledDisabledPlugin the registry would call this a typo.
+        var builder = new PluginRegistryBuilder();
+        builder.NoteInstalledDisabledPlugin("assembly-plugin");
+
+        var registry = builder.Build(disabledPluginIds: ["assembly-plugin"]);
+
+        registry.Diagnostics.Should().Contain(d =>
+            d.Source == "assembly-plugin" &&
+            d.Severity == DiagnosticSeverity.Info);
+    }
+
+    [Test]
+    public void DuplicatePluginId_DetectedRegardlessOfCasing()
+    {
+        var builder = new PluginRegistryBuilder();
+
+        builder.SetCurrentPluginId("plugin-a");
+        builder.SetCurrentPluginId("PLUGIN-A");
+
+        builder.Build().Diagnostics.Should().Contain(d =>
+            d.Severity == DiagnosticSeverity.Error &&
+            d.Message.Contains("Duplicate plugin ID"));
+    }
+
     // --- Override (target present) ---
 
     [Test]
@@ -392,6 +452,29 @@ public class PluginRegistryTests
                 FormatId = "json",
                 Capability = "Decoder",
                 PluginId = "external-plugin"
+            }]);
+
+        registry.Decoders["json"].Should().BeSameAs(external);
+    }
+
+    [Test]
+    public void Override_TargetPluginId_MatchesRegardlessOfCasing()
+    {
+        var builder = new PluginRegistryBuilder();
+
+        builder.SetCurrentPluginId(PluginRegistryBuilder.BuiltInPluginId);
+        builder.RegisterDecoder(MakeDecoder("json"));
+
+        builder.SetCurrentPluginId("external-plugin");
+        var external = MakeDecoder("json");
+        builder.RegisterDecoder(external);
+
+        var registry = builder.Build(
+            overrides: [new PluginOverrideConfig
+            {
+                FormatId = "json",
+                Capability = "Decoder",
+                PluginId = "External-Plugin"
             }]);
 
         registry.Decoders["json"].Should().BeSameAs(external);
@@ -421,7 +504,7 @@ public class PluginRegistryTests
             d.Severity == DiagnosticSeverity.Info);
 
         overrideDiagnostic.Should().NotBeNull();
-        overrideDiagnostic!.Message.ToLowerInvariant().Should().Contain("overridden");
+        overrideDiagnostic.Message.ToLowerInvariant().Should().Contain("overridden");
     }
 
     // --- Override (target absent) ---

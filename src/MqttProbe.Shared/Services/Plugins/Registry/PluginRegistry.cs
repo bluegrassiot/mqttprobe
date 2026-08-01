@@ -55,8 +55,9 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
     private readonly List<(IPayloadEncoder Encoder, string PluginId, int InsertionOrder)> _encoders = [];
     private readonly List<(IPayloadTemplateProvider Provider, string PluginId, int InsertionOrder)> _templateProviders = [];
     private readonly List<PluginDiagnosticEntry> _diagnostics = [];
-    private readonly HashSet<string> _registeredPluginIds = [];
+    private readonly HashSet<string> _registeredPluginIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _loadedPackagePaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _installedDisabledIds = new(StringComparer.OrdinalIgnoreCase);
 
     private string _currentPluginId = BuiltInPluginId;
     private bool _duplicateIdActive;
@@ -65,6 +66,10 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
     public void AddDiagnostic(PluginDiagnosticEntry entry) => _diagnostics.Add(entry);
 
     public void RegisterPackagePath(string path) => _loadedPackagePaths.Add(Path.GetFullPath(path));
+
+    // The loader drops disabled plugins before they ever register, so Build() cannot tell a
+    // correctly-disabled plugin from an id that matches nothing. This carries that fact across.
+    public void NoteInstalledDisabledPlugin(string pluginId) => _installedDisabledIds.Add(pluginId);
 
     public void RegisterPlugin(string pluginId, Action<IPluginRegistrationContext> configure)
     {
@@ -185,16 +190,22 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
         IReadOnlyCollection<PluginOverrideConfig>? overrides = null)
     {
         var disabled = disabledPluginIds is { Count: > 0 }
-            ? new HashSet<string>(disabledPluginIds, StringComparer.Ordinal)
+            ? new HashSet<string>(disabledPluginIds, StringComparer.OrdinalIgnoreCase)
             : [];
 
         foreach (var id in disabled)
         {
+            // An id matching nothing is a typo, and reporting it as "registrations skipped"
+            // confirmed an edit that had in fact done nothing at all.
+            var installed = _registeredPluginIds.Contains(id) || _installedDisabledIds.Contains(id);
+
             _diagnostics.Add(new PluginDiagnosticEntry
             {
                 Source = id,
-                Severity = DiagnosticSeverity.Info,
-                Message = $"Plugin '{id}' is disabled; all registrations skipped."
+                Severity = installed ? DiagnosticSeverity.Info : DiagnosticSeverity.Warning,
+                Message = installed
+                    ? $"Plugin '{id}' is disabled; all registrations skipped."
+                    : $"Plugin '{id}' is listed in DisabledPluginIds but no installed plugin has that ID; the entry has no effect."
             });
         }
 
@@ -346,8 +357,10 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
             return;
         }
 
+        // overridePluginId comes from hand-written config; matched the same way as DisabledPluginIds.
         var hadRegistered = allEntries.Any(e =>
-            getFormatId(e) == formatId && getPluginId(e) == overridePluginId);
+            getFormatId(e) == formatId
+            && string.Equals(getPluginId(e), overridePluginId, StringComparison.OrdinalIgnoreCase));
 
         if (hadRegistered)
         {
@@ -442,7 +455,8 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
             return null;
         }
 
-        var overrideIndex = entries.FindIndex(e => getPluginId(e) == overridePluginId);
+        var overrideIndex = entries.FindIndex(e =>
+            string.Equals(getPluginId(e), overridePluginId, StringComparison.OrdinalIgnoreCase));
 
         if (overrideIndex >= 0)
         {

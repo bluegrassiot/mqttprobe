@@ -6,29 +6,21 @@ using MqttProbe.Services.Plugins.Packaging;
 
 namespace MqttProbe.Services.Plugins.Loading;
 
-public sealed class PluginLoader
+public sealed class PluginLoader(PluginConfig config, ILogger<PluginLoader> logger)
 {
-    private readonly PluginConfig _config;
-    private readonly ILogger<PluginLoader> _logger;
-
-    public PluginLoader(PluginConfig config, ILogger<PluginLoader> logger)
-    {
-        _config = config;
-        _logger = logger;
-    }
-
     public PluginLoadResult LoadPlugins()
     {
         var plugins = new List<IMqttProbePlugin>();
         var diagnostics = new List<PluginDiagnosticEntry>();
         var loadedPaths = new List<string>();
+        var disabledIds = new List<string>();
         var seenDlls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var folder in _config.PluginFolders)
+        foreach (var folder in config.PluginFolders)
         {
             if (!Directory.Exists(folder))
             {
-                _logger.LogWarning("Plugin folder not found: {Folder}", folder);
+                logger.LogWarning("Plugin folder not found: {Folder}", folder);
                 diagnostics.Add(new PluginDiagnosticEntry
                 {
                     Source = "loader",
@@ -58,11 +50,12 @@ public sealed class PluginLoader
                 if (!seenDlls.Add(dll))
                     continue;
 
-                LoadAssemblyPlugins(dll, plugins, diagnostics, loadedPaths);
+                LoadAssemblyPlugins(dll, plugins, diagnostics, loadedPaths, disabledIds);
             }
         }
 
-        return new PluginLoadResult(plugins.AsReadOnly(), diagnostics.AsReadOnly(), loadedPaths.AsReadOnly());
+        return new PluginLoadResult(
+            plugins.AsReadOnly(), diagnostics.AsReadOnly(), loadedPaths.AsReadOnly(), disabledIds.AsReadOnly());
     }
 
     private static List<string> DiscoverPluginDlls(string folder)
@@ -101,10 +94,11 @@ public sealed class PluginLoader
         string dllPath,
         List<IMqttProbePlugin> plugins,
         List<PluginDiagnosticEntry> diagnostics,
-        List<string> loadedPaths)
+        List<string> loadedPaths,
+        List<string> disabledIds)
     {
         PluginLoadContext? loadContext = null;
-        Assembly? assembly = null;
+        Assembly? assembly;
 
         try
         {
@@ -113,7 +107,7 @@ public sealed class PluginLoader
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to load assembly: {Path}", dllPath);
+            logger.LogWarning(ex, "Failed to load assembly: {Path}", dllPath);
             diagnostics.Add(new PluginDiagnosticEntry
             {
                 Source = "loader",
@@ -153,7 +147,7 @@ public sealed class PluginLoader
 
         foreach (var pluginType in pluginTypes)
         {
-            TryLoadPluginType(pluginType, dllPath, plugins, diagnostics, loadedPaths);
+            TryLoadPluginType(pluginType, dllPath, plugins, diagnostics, loadedPaths, disabledIds);
         }
     }
 
@@ -203,9 +197,10 @@ public sealed class PluginLoader
         string dllPath,
         List<IMqttProbePlugin> plugins,
         List<PluginDiagnosticEntry> diagnostics,
-        List<string> loadedPaths)
+        List<string> loadedPaths,
+        List<string> disabledIds)
     {
-        IMqttProbePlugin? plugin = null;
+        IMqttProbePlugin? plugin;
 
         try
         {
@@ -236,11 +231,9 @@ public sealed class PluginLoader
             return;
         }
 
-        // Disabled check happens after instantiation because PluginId is an
-        // instance property.  The alternative (an attribute-based pre-check)
-        // would couple the loader to a convention outside the interface.
-        if (_config.DisabledPluginIds.Contains(plugin.PluginId))
+        if (config.DisabledPluginIds.Contains(plugin.PluginId))
         {
+            disabledIds.Add(plugin.PluginId);
             diagnostics.Add(new PluginDiagnosticEntry
             {
                 Source = plugin.PluginId,
@@ -253,25 +246,21 @@ public sealed class PluginLoader
 
         plugins.Add(plugin);
         loadedPaths.Add(Path.GetDirectoryName(dllPath)!);
-        if (_logger.IsEnabled(LogLevel.Debug))
-            _logger.LogDebug("Loaded plugin: {PluginId} from {Assembly}",
+        if (logger.IsEnabled(LogLevel.Debug))
+            logger.LogDebug("Loaded plugin: {PluginId} from {Assembly}",
                 plugin.PluginId, Path.GetFileName(dllPath));
     }
 }
 
-public sealed class PluginLoadResult
+public sealed class PluginLoadResult(
+    IReadOnlyList<IMqttProbePlugin> plugins,
+    IReadOnlyList<PluginDiagnosticEntry> diagnostics,
+    IReadOnlyList<string> loadedPaths,
+    IReadOnlyList<string>? disabledIds = null)
 {
-    public IReadOnlyList<IMqttProbePlugin> Plugins { get; }
-    public IReadOnlyList<PluginDiagnosticEntry> Diagnostics { get; }
-    public IReadOnlyList<string> LoadedPaths { get; }
+    public IReadOnlyList<IMqttProbePlugin> Plugins { get; } = plugins;
+    public IReadOnlyList<PluginDiagnosticEntry> Diagnostics { get; } = diagnostics;
+    public IReadOnlyList<string> LoadedPaths { get; } = loadedPaths;
 
-    public PluginLoadResult(
-        IReadOnlyList<IMqttProbePlugin> plugins,
-        IReadOnlyList<PluginDiagnosticEntry> diagnostics,
-        IReadOnlyList<string> loadedPaths)
-    {
-        Plugins = plugins;
-        Diagnostics = diagnostics;
-        LoadedPaths = loadedPaths;
-    }
+    public IReadOnlyList<string> DisabledIds { get; } = disabledIds ?? [];
 }

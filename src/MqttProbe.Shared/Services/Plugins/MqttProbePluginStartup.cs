@@ -50,8 +50,6 @@ public static class MqttProbePluginStartup
 
         foreach (var source in ProtobufSchemaFolderLoader.Discover(config.PluginFolders, protobufLogger))
         {
-            // Each source is probed on its own so one malformed bundle cannot
-            // disable protobuf decoding for every other bundle.
             try
             {
                 var probe = new ProtobufSchemaRegistry(source.Manifest, source.SchemaRoot, protobufLogger);
@@ -94,9 +92,6 @@ public static class MqttProbePluginStartup
         Func<IReadOnlyList<ProtobufSchemaSource>, ILogger, ProtobufSchemaRegistry> combineProtobufSources,
         PluginRegistryBuilder registryBuilder)
     {
-        // Combining sources is a distinct operation from probing them individually, so it can
-        // still fail even though every source compiled on its own; falling back to built-ins
-        // here matches the resilience the per-source loop already provides.
         try
         {
             var schemaRegistry = combineProtobufSources(usableSources, protobufLogger);
@@ -106,10 +101,6 @@ public static class MqttProbePluginStartup
                 registryBuilder.RegisterDetector(new ProtobufPayloadDetector(schemaRegistry));
                 registryBuilder.RegisterDecoder(new ProtobufPayloadDecoder(schemaRegistry));
 
-                // Only mark sources as loaded once the combined registry that actually
-                // backs the decoder/detector has been built successfully; registering
-                // them earlier (per-source) would report a package as Active even when
-                // the combine step below never wired up any decoding for it.
                 foreach (var source in usableSources)
                     registryBuilder.RegisterPackagePath(source.SchemaRoot);
             }
@@ -160,6 +151,9 @@ public static class MqttProbePluginStartup
 
             foreach (var path in loadResult.LoadedPaths)
                 registryBuilder.RegisterPackagePath(path);
+
+            foreach (var id in loadResult.DisabledIds)
+                registryBuilder.NoteInstalledDisabledPlugin(id);
 
             foreach (var plugin in loadResult.Plugins)
                 registryBuilder.RegisterPlugin(plugin.PluginId, ctx => plugin.RegisterServices(ctx));

@@ -62,6 +62,9 @@ public sealed class WindowsDpapiSecretKeyProtector : ISecretKeyProtector
             var dir = Path.GetDirectoryName(_blobPath);
             if (!string.IsNullOrEmpty(dir))
                 Directory.CreateDirectory(dir);
+            // optionalEntropy stays null: any value would be a constant in this binary, so it buys
+            // obfuscation only, and adding it now needs a dual-read migration for existing blobs.
+            // CurrentUser scope is the real boundary. Load must keep matching this.
             var protectedBytes = ProtectedData.Protect(
                 key.ToArray(), optionalEntropy: null, DataProtectionScope.CurrentUser);
             File.WriteAllBytes(_blobPath, protectedBytes);

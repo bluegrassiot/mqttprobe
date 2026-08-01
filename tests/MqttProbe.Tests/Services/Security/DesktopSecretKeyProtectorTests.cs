@@ -239,7 +239,7 @@ public class DesktopSecretKeyProtectorTests
 
         var plain = Encoding.UTF8.GetBytes("legacy-secret");
 #pragma warning disable CA1416
-        var blob = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser);
+        var blob = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser); // DevSkim: ignore DS112266 - must match the legacy no-entropy blob being migrated
 #pragma warning restore CA1416
         File.WriteAllBytes(Path.Combine(_tmpDir, "x.dat"), blob);
         var sut = CreateSut();
@@ -256,7 +256,7 @@ public class DesktopSecretKeyProtectorTests
 
         var plain = Encoding.UTF8.GetBytes("legacy-secret");
 #pragma warning disable CA1416
-        var dpapiBlob = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser);
+        var dpapiBlob = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser); // DevSkim: ignore DS112266 - must match the legacy no-entropy blob being migrated
 #pragma warning restore CA1416
         File.WriteAllBytes(Path.Combine(_tmpDir, "legacy.dat"), dpapiBlob);
         File.WriteAllBytes(Path.Combine(_tmpDir, "modern.dat"), new byte[] { 0xDE, 0xAD, 0xBE, 0xEF });

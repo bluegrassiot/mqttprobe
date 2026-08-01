@@ -92,7 +92,7 @@
         <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
         <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
         <PackageCertificateThumbprint></PackageCertificateThumbprint>
-        <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+        <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm> <!-- DevSkim: ignore DS197836 -->
         <AppxAutoIncrementPackageRevision>false</AppxAutoIncrementPackageRevision>
         <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>
         <GenerateTestArtifacts>True</GenerateTestArtifacts>

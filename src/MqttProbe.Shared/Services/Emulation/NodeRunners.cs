@@ -393,9 +393,10 @@ public class SparkplugNodeRunner(
         var tlsOptions = new MqttClientTlsOptions();
         if (connection.UseTls)
         {
+            // Pinned, not SslProtocols.None: None defers to OS policy, which on older Windows still allows pre-1.2.
             var tlsBuilder = new MqttClientTlsOptionsBuilder()
-                .WithSslProtocols(System.Security.Authentication.SslProtocols.Tls12 |
-                                  System.Security.Authentication.SslProtocols.Tls13);
+                .WithSslProtocols(System.Security.Authentication.SslProtocols.Tls12 | // DevSkim: ignore DS440020,DS112836,DS440001
+                                  System.Security.Authentication.SslProtocols.Tls13); // DevSkim: ignore DS440020,DS112836,DS440001
             if (connection.AllowUntrustedCertificate)
                 tlsBuilder = tlsBuilder.WithAllowUntrustedCertificates()
                                        .WithCertificateValidationHandler(_ => true);

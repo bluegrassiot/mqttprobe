@@ -12,7 +12,6 @@ using MqttProbe.Services.Plugins;
 using MqttProbe.Services.Plugins.Loading;
 using MqttProbe.Services.Plugins.Packaging;
 using MqttProbe.Services.Plugins.Pipeline;
-using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using MudBlazor;
@@ -20,22 +19,12 @@ using MudBlazor.Services;
 
 namespace MqttProbe.Services.Platform;
 
-/// <summary>
-/// How a host scopes the services that represent one broker session.
-/// </summary>
 public enum HostSessionModel
 {
-    /// <summary>Blazor Server: one session per circuit, so session services are scoped.</summary>
     PerCircuit,
-
-    /// <summary>Photino and MAUI: one native window means one session, so they are singletons.</summary>
     SingleSession
 }
 
-/// <summary>
-/// Registrations shared by the Web, Desktop and MAUI hosts. Anything platform-specific
-/// (secret storage, file pickers, update services, authentication) stays in the host.
-/// </summary>
 public static class MqttProbeServiceRegistration
 {
     public static IServiceCollection AddMqttProbeMud(this IServiceCollection services) =>
@@ -52,9 +41,6 @@ public static class MqttProbeServiceRegistration
             config.SnackbarConfiguration.SnackbarVariant = Variant.Filled;
         });
 
-    /// <summary>
-    /// MQTT session, emulation and metrics services.
-    /// </summary>
     public static IServiceCollection AddMqttProbeCore(
         this IServiceCollection services, HostSessionModel sessionModel)
     {
@@ -106,10 +92,6 @@ public static class MqttProbeServiceRegistration
         return services;
     }
 
-    /// <summary>
-    /// Plugin loading and packaging. The host still registers its own
-    /// <see cref="IPluginPackagePicker"/> and <see cref="IPluginInputCapability"/>.
-    /// </summary>
     public static IServiceCollection AddMqttProbePlugins(this IServiceCollection services)
     {
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<PluginConfig>>().Value);

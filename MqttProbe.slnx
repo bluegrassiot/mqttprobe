@@ -60,6 +60,7 @@
     <File Path="scripts/coverage.py" />
     <File Path="scripts/format-check.py" />
     <File Path="scripts/generate-mtls-certs.py" />
+    <File Path="scripts/inspect.py" />
     <File Path="scripts/manage-windows-config.ps1" />
     <File Path="scripts/pack-plugin.py" />
     <File Path="scripts/reset-password.py" />

@@ -45,7 +45,7 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
         else
         {
             var wsScheme = connection.UseTls ? "wss" : "ws";
-            var path = (connection.WebsocketBasePath ?? string.Empty).Trim().TrimStart('/');
+            var path = (connection.WebsocketBasePath).Trim().TrimStart('/');
             clientOptionsBuilder.WithWebSocketServer(opt =>
             {
                 opt.WithUri(string.IsNullOrEmpty(path)
@@ -56,8 +56,9 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
 
         if (connection.UseTls)
         {
+            // Pinned, not SslProtocols.None: None defers to OS policy, which on older Windows still allows pre-1.2.
             var tlsBuilder = new MqttClientTlsOptionsBuilder()
-                .WithSslProtocols(System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13);
+                .WithSslProtocols(System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13); // DevSkim: ignore DS440020,DS112836,DS440001
             if (connection.AllowUntrustedCertificate)
                 tlsBuilder = tlsBuilder.WithAllowUntrustedCertificates().WithCertificateValidationHandler(_ => true);
             clientOptionsBuilder.WithTlsOptions(tlsBuilder.Build());
@@ -106,7 +107,7 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
         else
         {
             var wsScheme = connection.UseTls ? "wss" : "ws";
-            var path = (connection.WebsocketBasePath ?? string.Empty).Trim().TrimStart('/');
+            var path = (connection.WebsocketBasePath).Trim().TrimStart('/');
             clientOptionsBuilder.WithWebSocketServer(opt =>
             {
                 opt.WithUri(string.IsNullOrEmpty(path)
@@ -117,8 +118,9 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
 
         if (connection.UseTls)
         {
+            // Pinned, not SslProtocols.None: None defers to OS policy, which on older Windows still allows pre-1.2.
             var tlsBuilder = new MqttClientTlsOptionsBuilder()
-                .WithSslProtocols(System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13);
+                .WithSslProtocols(System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13); // DevSkim: ignore DS440020,DS112836,DS440001
             if (connection.AllowUntrustedCertificate)
                 tlsBuilder = tlsBuilder.WithAllowUntrustedCertificates().WithCertificateValidationHandler(_ => true);
             if (clientCerts is not null)

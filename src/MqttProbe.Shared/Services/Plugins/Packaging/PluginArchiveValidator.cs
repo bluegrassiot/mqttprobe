@@ -81,7 +81,7 @@ public static class PluginArchiveValidator
             if (!IsSafeEntryPath(entry.FullName))
             {
                 return PluginValidationResult.Fail(
-                    $"Package contains an unsafe entry path: {entry.FullName}");
+                    $"Package contains an unsafe entry path: {entry.FullName}"); // DevSkim: ignore DS172412 - the word in a message, not the keyword
             }
 
             if ((entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\'))

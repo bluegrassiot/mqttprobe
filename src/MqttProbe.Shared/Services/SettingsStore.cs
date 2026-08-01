@@ -177,7 +177,7 @@ public class SettingsStore : ISettingsStore, IDisposable
         if (!configLoadedSuccessfully)
         {
             _logger?.LogWarning(
-                "Config file was missing or corrupt; skipping orphan and AEAD verification cleanup. " +
+                "Config file was missing or corrupt; skipping orphan and AEAD verification cleanup. " + // DevSkim: ignore DS187371
                 "Staging temp files, retry markers, and aged quarantine files were still cleaned. " +
                 "Verified certificate assets were preserved. Re-import certificates if needed.");
             return;
@@ -320,7 +320,7 @@ public class SettingsStore : ISettingsStore, IDisposable
                 if (Guid.TryParse(headerOwner, out var parsedOwner) && knownOwnerIds.Contains(parsedOwner))
                 {
                     _logger?.LogCritical(
-                        "Certificate blob {Path} has known owner {OwnerId} but failed AEAD verification. " +
+                        "Certificate blob {Path} has known owner {OwnerId} but failed AEAD verification. " + // DevSkim: ignore DS187371
                         "Preserving; re-import or manually delete.", binFile, parsedOwner);
                 }
                 else

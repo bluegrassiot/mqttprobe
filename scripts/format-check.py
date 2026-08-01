@@ -51,7 +51,10 @@ else:
         ("src/MqttProbe.Maui/MqttProbe.Maui.csproj", True),
     ]
 
-WORKLOAD_ERROR = re.compile(r"NETSDK1147|workload", re.IGNORECASE)
+# "Restore operation failed" is how a missing workload surfaces in the style pass:
+# it needs semantics, so it restores first, and the platform TFMs cannot resolve.
+# That message never mentions workloads, so match it too or CI can never skip MAUI.
+WORKLOAD_ERROR = re.compile(r"NETSDK1147|workload|Restore operation failed", re.IGNORECASE)
 REAL_ERROR_LINE = re.compile(r"error (?!ENDOFLINE)\w+:")
 
 failed = 0

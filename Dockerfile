@@ -11,6 +11,10 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine3.23 AS publish
 WORKDIR /src
 COPY ["Directory.Packages.props", "."]
 COPY ["Directory.Build.props", "."]
+# EnforceCodeStyleInBuild makes .editorconfig a build input: it holds the analyzer
+# severities (MA0048 = none and 20 others) that TreatWarningsAsErrors would
+# otherwise promote to build errors here but nowhere else.
+COPY [".editorconfig", "."]
 # Build-isolation config for the vendored SparkplugNet submodule (see
 # external/Directory.Build.props): keeps the fork on its own settings, off central
 # package management, and off GitVersion (no .git in the Docker build context).

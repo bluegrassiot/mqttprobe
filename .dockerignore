@@ -19,7 +19,10 @@ src/MqttProbe.Web/Config/
 src/MqttProbe.Maui/
 tests/
 
-# Docs and IDE config
+# Docs
 **/*.md
 **/*.txt
-.editorconfig
+
+# .editorconfig is deliberately NOT ignored: EnforceCodeStyleInBuild makes it a
+# build input, and without it the analyzer severities it sets (MA0048 = none and
+# 20 others) revert to defaults that TreatWarningsAsErrors turns into errors.

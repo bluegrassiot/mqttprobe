@@ -41,6 +41,9 @@ SOLUTION = "MqttProbe.slnx"
 SKIP_DIRS = [
     ".git", ".vs", ".claude", ".opencode", "bin", "obj", "node_modules",
     "external", "artifacts", "publish", "TestResults",
+    # CI points NUGET_PACKAGES at the workspace, so the restored package cache
+    # lands in the tree; scanning it added ~2900 findings from third-party XML.
+    ".nuget",
 ]
 
 # Column-aligned icon constants and generated protobuf; neither is hand-maintained.

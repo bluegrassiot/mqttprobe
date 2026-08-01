@@ -112,6 +112,12 @@ builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
 });
 builder.Services.AddSingleton<ICertificateFilePicker, WebCertificateFilePicker>();
 builder.Services.AddSingleton<ICertificateInputCapability, WebCertificateInputCapability>();
+
+builder.Services.AddScoped<IClipboardService, WebClipboardService>();
+builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
+builder.Services.AddSingleton<IUpdateService, NoOpUpdateService>();
+builder.Services.AddSingleton<IUserAuthService, SingleAdminUserAuthService>();
+
 builder.Services.AddMqttProbeCharts();
 
 builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));

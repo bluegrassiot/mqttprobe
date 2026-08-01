@@ -24,6 +24,10 @@
         </PackageReference>
         <PackageReference Include="JunitXml.TestLogger" />
         <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" />
+        <!-- Boots the real Web host in WebHostCompositionTests. Program.cs already carried
+             the `public partial class Program` marker this needs; nothing used it until a
+             missing DI registration shipped and only surfaced at app startup. -->
+        <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" />
         <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
         <PackageReference Include="MudBlazor" />

@@ -50,48 +50,29 @@ public class PluginPipelineDiCompositionTests
         var mockSettings = Substitute.For<ISettingsStore>();
         mockSettings.Config.Returns(new AppConfiguration());
 
-        // --- DI registrations mirroring Program.cs / MauiProgram.cs ---
+        services.AddLogging();
+        services.AddSingleton(Options.Create(new PluginConfig()));
+        services.AddSingleton(Substitute.For<IAppInfoService>());
+
+        // The real shared registrations, not a copy of them. An earlier version of this test
+        // re-declared the host wiring by hand and drifted out of sync with it, so it kept
+        // passing while a host was genuinely broken.
+        services.AddMqttProbeCore(HostSessionModel.SingleSession);
+        services.AddMqttProbePlugins();
+        services.AddMqttProbeSparkplugTopology(HostSessionModel.SingleSession);
+
+        // Host-specific pieces the shared extensions deliberately leave to each host.
+        services.AddSingleton<IPluginPackagePicker, WebPluginPackagePicker>();
+        services.AddSingleton<IPluginInputCapability, WebPluginInputCapability>();
+
+        // Substitutes registered last so they win over the real implementations above:
+        // this fixture drives the pipeline through a captured message handler rather than a
+        // live broker, and asserts against an in-memory config.
         services.AddSingleton(_mockClient);
         services.AddSingleton(mockSettings);
         services.AddSingleton(Substitute.For<IUxMetricsService>());
 
-        services.AddLogging();
-
-        services.AddSingleton(Options.Create(new PluginConfig()));
-        services.AddSingleton(sp => sp.GetRequiredService<IOptions<PluginConfig>>().Value);
-
-        // Packaging services, registered the same way as Web/Desktop/MAUI Program.cs so this
-        // test doubles as a smoke test for the host wiring: if a constructor stops matching
-        // what's registered here, resolution fails the same way it would at app startup.
-        services.AddSingleton(Substitute.For<IAppInfoService>());
-        services.AddSingleton<PluginArchiveLimits>();
-        services.AddSingleton<PluginAssemblyCache>();
-        services.AddSingleton<PluginInstallSession>();
-        services.AddSingleton<PluginPackageInstaller>();
-        services.AddSingleton<PluginInventoryService>();
-        services.AddSingleton<PluginReloadService>();
-        services.AddSingleton<IPluginPackagePicker, WebPluginPackagePicker>();
-        services.AddSingleton<IPluginInputCapability, WebPluginInputCapability>();
-
-        services.AddSingleton<PluginRegistry>(sp =>
-        {
-            var config = sp.GetRequiredService<PluginConfig>();
-            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return MqttProbePluginStartup.BuildPluginRegistry(
-                config, loggerFactory, sp.GetRequiredService<PluginAssemblyCache>());
-        });
-
-        services.AddSingleton<PayloadPipeline>();
-
-        services.AddSingleton<ISparkplugTopologyService>(sp =>
-            new SparkplugTopologyService(
-                sp.GetRequiredService<IMqttManagedClient>(),
-                sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
-                autoSubscribeToClient: false));
-
-        services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
-
-        _serviceProvider = services.BuildServiceProvider();
+        _serviceProvider = services.BuildServiceProvider(validateScopes: true);
     }
 
     [TearDown]

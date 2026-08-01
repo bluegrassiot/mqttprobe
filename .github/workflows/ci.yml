@@ -51,16 +51,11 @@ jobs:
       - name: Security scan
         run: python3 scripts/inspect.py --tool devskim --fail-on warning
 
-      # whitespace + style only. Bare `dotnet format` also runs `analyzers`, which
-      # fails on every Sonar/Meziantou/CA warning and cannot auto-fix most of them.
-      # Keep this matching scripts/format-check.py so local and CI cannot drift.
+      # Same script the contributor guide tells you to run. Inlining the dotnet
+      # format invocation here is what let CI drift from local: it missed the
+      # external/** exclude and reformatted the vendored SparkplugNet fork.
       - name: Format check
-        run: |
-          for pass in whitespace style; do
-            dotnet format $pass MqttProbe.NoMaui.slnf --verify-no-changes \
-              --exclude "**/LucideIcons.cs" \
-              --exclude "**/SparkplugBProtobuf.cs"
-          done
+        run: python3 scripts/format-check.py
 
       - name: Unit tests
         run: |

@@ -1,7 +1,14 @@
+using System.Text.RegularExpressions;
+
 namespace MqttProbe.Services.Platform;
 
-public static class AppVersionResolver
+public static partial class AppVersionResolver
 {
+#pragma warning disable MA0009 // GeneratedRegex with constant pattern has no backtracking risk
+    [GeneratedRegex(@"^\d+\.\d+\.\d+\.0$")]
+    private static partial Regex TrailingZeroRevision();
+#pragma warning restore MA0009
+
     public static string Resolve(params Func<string?>[] providers)
     {
         foreach (var provider in providers)
@@ -19,7 +26,7 @@ public static class AppVersionResolver
             if (string.IsNullOrWhiteSpace(value))
                 continue;
 
-            return TrimAfterPlus(value);
+            return Normalize(TrimAfterPlus(value));
         }
 
         return "unknown";
@@ -30,4 +37,9 @@ public static class AppVersionResolver
         var index = version.IndexOf('+');
         return index != -1 ? version[..index] : version;
     }
+
+    private static string Normalize(string version) =>
+        TrailingZeroRevision().IsMatch(version)
+            ? version[..version.LastIndexOf('.')]
+            : version;
 }

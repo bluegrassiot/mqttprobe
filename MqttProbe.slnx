@@ -65,6 +65,7 @@
     <File Path="scripts/pack-plugin.py" />
     <File Path="scripts/reset-password.py" />
     <File Path="scripts/velopack-windows-test.ps1" />
+    <File Path="scripts/verify-app-version.py" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/MqttProbe.Desktop/MqttProbe.Desktop.csproj" />

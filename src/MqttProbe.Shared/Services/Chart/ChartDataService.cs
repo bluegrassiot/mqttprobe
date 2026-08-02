@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
+using MQTTnet;
 using MqttProbe.Models.Chart;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Plugins.Contracts;
+using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Sparkplug;
 
 namespace MqttProbe.Services.Chart;
@@ -20,11 +22,12 @@ public interface IChartDataService : IDisposable
 }
 
 public class ChartDataService(
-    IManagedMqttClient client,
-    IPayloadDecoder payloadDecoder,
+    IMqttManagedClient client,
     IJsonFieldExtractor extractor,
     IChartFieldRegistry registry,
     ISettingsStore settingsStore,
+    PayloadPipeline pipeline,
+    ISparkplugTopologyService? topologyService = null,
     ILogger<ChartDataService>? logger = null)
     : IChartDataService
 {
@@ -87,9 +90,22 @@ public class ChartDataService(
         try
         {
             var topic = e.ApplicationMessage.Topic;
-            var decoded = payloadDecoder.Decode(e);
-            var payload = decoded.Payload;
-            if (!TryExtractFields(payload, decoded.AliasNames, out var fields))
+            var result = pipeline.ProcessInbound(e);
+            var payload = result.Envelope.DisplayText;
+
+            IReadOnlyDictionary<ulong, string>? aliasNames = null;
+            if (result.Envelope.FormatId == "sparkplug-b"
+                && !result.Envelope.IsFailure
+                && settingsStore.Config.Ui.EnrichSparkplugAliasNames
+                && topologyService is not null)
+            {
+                var rawPayload = e.ApplicationMessage.GetPayloadSegment().Count > 0
+                    ? e.ApplicationMessage.GetPayloadSegment().ToArray()
+                    : [];
+                aliasNames = SparkplugAliasResolver.Resolve(topic, rawPayload, topologyService.Groups);
+            }
+
+            if (!TryExtractFields(payload, aliasNames, out var fields))
                 return Task.CompletedTask;
 
             registry.Update(topic, fields);
@@ -111,7 +127,7 @@ public class ChartDataService(
         IReadOnlyDictionary<ulong, string>? aliasNames,
         out IReadOnlyDictionary<string, ExtractedField> fields)
     {
-        fields = new Dictionary<string, ExtractedField>();
+        fields = new Dictionary<string, ExtractedField>(StringComparer.Ordinal);
         if (string.IsNullOrEmpty(payload))
             return false;
 

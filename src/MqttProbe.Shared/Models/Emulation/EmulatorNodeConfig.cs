@@ -2,9 +2,12 @@ namespace MqttProbe.Models.Emulation;
 
 public enum EmulatorNodeType { SparkplugB, Generic }
 
-public enum GenericPayloadFormat { Json, PlainText, Hex }
-
+// CA1720: member names match type names (Double, Int64, Boolean) by design — this
+// enum is JSON-serialised into the on-disk emulator config, so renaming members
+// would break existing config files. Do not rename.
+#pragma warning disable CA1720
 public enum MetricValueType { Double, Int64, Boolean }
+#pragma warning restore CA1720
 
 public enum WaveformKind
 {
@@ -18,11 +21,11 @@ public class EmulatorMetricConfig
     public string Name { get; set; } = "Metric-1";
     public MetricValueType ValueType { get; set; } = MetricValueType.Double;
     public WaveformKind Waveform { get; set; } = WaveformKind.Sine;
-    public double Min { get; set; } = 0;
+    public double Min { get; set; }
     public double Max { get; set; } = 100;
     public double PeriodSeconds { get; set; } = 60;
     public double StepAmplitude { get; set; } = 1;
-    public double ConstantValue { get; set; } = 0;
+    public double ConstantValue { get; set; }
     public bool BooleanValue { get; set; }
     public double TrueProbability { get; set; } = 0.5;
 }
@@ -40,7 +43,7 @@ public class EmulatorNodeConfig
     public EmulatorNodeType Type { get; set; } = EmulatorNodeType.SparkplugB;
     public string GroupId { get; set; } = "Plant1";
     public string NodeId { get; set; } = "Node-1";
-    public GenericPayloadFormat PayloadFormat { get; set; } = GenericPayloadFormat.Json;
+    public string PayloadFormatId { get; set; } = "json";
     public string TopicTemplate { get; set; } = "{group}/{node}/{device}/{metric}";
     public List<EmulatorDeviceConfig> Devices { get; set; } = [];
     public bool UseMetricAliases { get; set; }

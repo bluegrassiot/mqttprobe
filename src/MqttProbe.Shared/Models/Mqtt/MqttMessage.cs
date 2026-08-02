@@ -38,4 +38,5 @@ public class MqttMessage
     }
 
     public IReadOnlyDictionary<ulong, string>? AliasNames { get; init; }
+    public string? FormatId { get; init; }
 }

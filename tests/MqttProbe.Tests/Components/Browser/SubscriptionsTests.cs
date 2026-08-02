@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using MQTTnet.Protocol;
+using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Security;
 using MqttProbe.Shared.Tests.TestHelpers;
@@ -11,18 +13,25 @@ public class SubscriptionsTests : BunitTestContext
 {
     private ISubscriptionManager _mockSubMgr = null!;
     private ISnackbar _mockSnackbar = null!;
+    private IDialogService _mockDialog = null!;
 
     [SetUp]
     public void SetupMocks()
     {
         _mockSubMgr = Substitute.For<ISubscriptionManager>();
-        _mockSubMgr.Topics.Returns(new HashSet<string>());
+        _mockSubMgr.Subscriptions.Returns(Array.Empty<SubscribedTopic>());
         Services.AddSingleton(_mockSubMgr);
 
         _mockSnackbar = Substitute.For<ISnackbar>();
         Services.AddSingleton(_mockSnackbar);
 
-        // Build service provider and register MudPopoverProvider (required by MudTable's rows-per-page select)
+        _mockDialog = Substitute.For<IDialogService>();
+        _mockDialog.ShowMessageBoxAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
+            .Returns(Task.FromResult<bool?>(true));
+        Services.AddSingleton(_mockDialog);
+
         EnsureMudProviders();
     }
 
@@ -30,43 +39,50 @@ public class SubscriptionsTests : BunitTestContext
     {
         AuthorizationContext.SetAuthorized("testuser").SetRoles(AppRoles.Operator);
     }
+
     [Test]
     public void Renders_ActiveSubscriptions_FromManager()
     {
-        _mockSubMgr.Topics.Returns(new HashSet<string> { "spBv1.0/+/DDATA/#", "my/topic" });
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "spBv1.0/+/DDATA/#", QualityOfServiceLevel = MqttQualityOfServiceLevel.AtLeastOnce },
+            new() { Topic = "my/topic", QualityOfServiceLevel = MqttQualityOfServiceLevel.AtMostOnce }
+        });
 
         var cut = Render<Subscriptions>();
 
         var markup = cut.Markup;
         markup.Should().Contain("spBv1.0/+/DDATA/#");
         markup.Should().Contain("my/topic");
+        markup.Should().Contain("AtLeastOnce");
+        markup.Should().Contain("AtMostOnce");
     }
 
     [Test]
     public async Task AddButton_CallsSubscribeAsync_WithEnteredTopic()
     {
         AuthorizeAsOperator();
-        _mockSubMgr.Add(Arg.Any<string>()).Returns(Task.CompletedTask);
+        _mockSubMgr.Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>()).Returns(Task.CompletedTask);
         var cut = Render<Subscriptions>();
 
-        // The topic MudTextField is the LAST text input (search field comes first in the toolbar).
-        // Find all text-type inputs and change the last one (the topic field).
-        var topicInput = cut.FindAll("input").Last(e => e.GetAttribute("type") != "checkbox");
+        var topicInput = cut.FindAll("input").First(e => !e.HasAttribute("readonly") && e.GetAttribute("type") != "checkbox");
         topicInput.Change("sensors/#");
-        cut.Find("button[title='Subscribe']").Click();
+        cut.Find("button[title='Add subscription']").Click();
 
-        await _mockSubMgr.Received(1).Add("sensors/#");
+        await _mockSubMgr.Received(1).Add("sensors/#", MqttQualityOfServiceLevel.AtLeastOnce);
     }
 
     [Test]
     public async Task DeleteSelected_CallsUnsubscribeAsync()
     {
         AuthorizeAsOperator();
-        _mockSubMgr.Topics.Returns(new HashSet<string> { "a/topic" });
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "a/topic" }
+        });
         _mockSubMgr.Remove(Arg.Any<List<string>>()).Returns(Task.CompletedTask);
         var cut = Render<Subscriptions>();
 
-        // Select the checkbox and click Remove
         cut.Find("input[type='checkbox']").Change(true);
         cut.Find("button[title='Remove']").Click();
 
@@ -78,39 +94,39 @@ public class SubscriptionsTests : BunitTestContext
     {
         AuthorizeAsOperator();
         var pending = new TaskCompletionSource();
-        _mockSubMgr.Add("sensors/#").Returns(pending.Task);
+        _mockSubMgr.Add("sensors/#", Arg.Any<MqttQualityOfServiceLevel>()).Returns(pending.Task);
         var cut = Render<Subscriptions>();
 
-        var topicInput = cut.FindAll("input").Last(e => e.GetAttribute("type") != "checkbox");
+        var topicInput = cut.FindAll("input").First(e => !e.HasAttribute("readonly") && e.GetAttribute("type") != "checkbox");
         topicInput.Change("sensors/#");
-        cut.Find("button[title='Subscribe']").Click();
+        cut.Find("button[title='Add subscription']").Click();
 
-        cut.Find("button[title='Subscribe']").HasAttribute("disabled")
+        cut.Find("button[title='Add subscription']").HasAttribute("disabled")
             .Should().BeTrue("the add button stays disabled while the Add task is in flight");
 
         pending.SetResult();
 
         cut.WaitForAssertion(() =>
         {
-            cut.Find("button[title='Subscribe']").HasAttribute("disabled").Should().BeFalse();
-            cut.FindAll("input").Last(e => e.GetAttribute("type") != "checkbox")
+            cut.Find("button[title='Add subscription']").HasAttribute("disabled").Should().BeFalse();
+            cut.FindAll("input").First(e => !e.HasAttribute("readonly") && e.GetAttribute("type") != "checkbox")
                 .GetAttribute("value").Should().BeNullOrEmpty();
         });
 
-        await _mockSubMgr.Received(1).Add("sensors/#");
+        await _mockSubMgr.Received(1).Add("sensors/#", Arg.Any<MqttQualityOfServiceLevel>());
     }
 
     [Test]
     public void AddButton_WhenAddFails_SurfacesErrorSnackbar()
     {
         AuthorizeAsOperator();
-        _mockSubMgr.Add("bad/#")
+        _mockSubMgr.Add("bad/#", Arg.Any<MqttQualityOfServiceLevel>())
             .Returns(Task.FromException(new InvalidOperationException("broker rejected")));
         var cut = Render<Subscriptions>();
 
-        var topicInput = cut.FindAll("input").Last(e => e.GetAttribute("type") != "checkbox");
+        var topicInput = cut.FindAll("input").First(e => !e.HasAttribute("readonly") && e.GetAttribute("type") != "checkbox");
         topicInput.Change("bad/#");
-        cut.Find("button[title='Subscribe']").Click();
+        cut.Find("button[title='Add subscription']").Click();
 
         cut.WaitForAssertion(() =>
             _mockSnackbar.Received().Add(
@@ -123,12 +139,46 @@ public class SubscriptionsTests : BunitTestContext
     [Test]
     public void RowTemplate_UsesMudTd_NotMudTh()
     {
-        _mockSubMgr.Topics.Returns(new HashSet<string> { "some/topic" });
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "some/topic" }
+        });
 
         var cut = Render<Subscriptions>();
 
-        // Regression guard: row data cells must be <td>, not <th>
         cut.FindAll("td").Should().NotBeEmpty();
-        cut.FindAll("th[data-label]").Should().BeEmpty();
+        cut.FindAll("th").Should().NotBeEmpty();
+    }
+
+    [Test]
+    public async Task ClearAll_RemovesAllSubscriptions()
+    {
+        AuthorizeAsOperator();
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "a" },
+            new() { Topic = "b" }
+        });
+        _mockSubMgr.Remove(Arg.Any<List<string>>()).Returns(Task.CompletedTask);
+        var cut = Render<Subscriptions>();
+
+        cut.Find("button[title='Clear all']").Click();
+        await cut.InvokeAsync(() => { });
+
+        await _mockSubMgr.Received(1).Remove(Arg.Is<List<string>>(l =>
+            l != null && l.Count == 2 && l.Contains("a") && l.Contains("b")));
+    }
+
+    [Test]
+    public void NotAuthorized_RendersDisabledEditor()
+    {
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "a/topic" }
+        });
+
+        var cut = Render<Subscriptions>();
+
+        cut.Find("button[title='Add subscription']").HasAttribute("disabled").Should().BeTrue();
     }
 }

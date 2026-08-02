@@ -290,7 +290,7 @@ public class BrokerStateResetCoordinatorTests
     public async Task AutoReconnectPath_DoesNotCallCoordinator()
     {
         // Auto-reconnect bypasses ConnectionDialog.Connect() entirely —
-        // it is handled by IManagedMqttClient internals. This test documents
+        // it is handled by IMqttManagedClient internals. This test documents
         // that the coordinator is never invoked from auto-reconnect.
         // The coordinator has no auto-reconnect entry point; this is by design.
         // If someone accidentally wires it into a reconnect handler, this

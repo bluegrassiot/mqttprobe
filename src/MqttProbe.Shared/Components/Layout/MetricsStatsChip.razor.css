@@ -27,6 +27,13 @@
     line-height: 1.6;
 }
 
+::deep .metrics-subsection-title {
+    font-weight: 600;
+    color: var(--mud-palette-text-secondary);
+    letter-spacing: 0.02em;
+    margin-bottom: 2px;
+}
+
 .metrics-sparkline svg {
     display: block;
 }
@@ -37,12 +44,4 @@
 
 .metrics-error {
     color: var(--mud-palette-error);
-}
-
-.metrics-health {
-    font-size: 0.8rem;
-}
-
-.metrics-diagnostics {
-    font-size: 0.8rem;
 }

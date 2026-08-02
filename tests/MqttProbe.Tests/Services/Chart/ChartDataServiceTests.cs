@@ -1,18 +1,16 @@
 using MQTTnet;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Chart;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Sparkplug;
+using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Shared.Tests.Services.Chart;
 
 [TestFixture]
 public class ChartDataServiceTests
 {
-    private IManagedMqttClient _mockClient = null!;
+    private IMqttManagedClient _mockClient = null!;
     private IJsonFieldExtractor _extractor = null!;
     private IChartFieldRegistry _registry = null!;
     private ISettingsStore _mockSettingsStore = null!;
@@ -22,7 +20,7 @@ public class ChartDataServiceTests
     [SetUp]
     public void Setup()
     {
-        _mockClient = Substitute.For<IManagedMqttClient>();
+        _mockClient = Substitute.For<IMqttManagedClient>();
         _extractor = new JsonFieldExtractor();
         _registry = new ChartFieldRegistry();
         _mockSettingsStore = Substitute.For<ISettingsStore>();
@@ -33,16 +31,8 @@ public class ChartDataServiceTests
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => _handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        var mockDecoder = Substitute.For<IPayloadDecoder>();
-        mockDecoder.Decode(Arg.Any<MqttApplicationMessageReceivedEventArgs>())
-            .Returns(x =>
-            {
-                var e = (MqttApplicationMessageReceivedEventArgs)x[0]!;
-                var seg = e.ApplicationMessage.PayloadSegment;
-                var payload = seg.Count > 0 ? System.Text.Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count) : string.Empty;
-                return new DecodedPayload(payload, DetectedPayloadFormat.PlainText);
-            });
-        _service = new ChartDataService(_mockClient, mockDecoder, _extractor, _registry, _mockSettingsStore);
+        _service = new ChartDataService(_mockClient, _extractor, _registry, _mockSettingsStore,
+            TestPipelineHelper.BuildBuiltInPipeline());
     }
 
     [TearDown]
@@ -89,7 +79,7 @@ public class ChartDataServiceTests
     {
         Action? captured = null;
         _service.OnDataUpdated += () => captured = () => { };
-        captured.Should().BeNull(); // event hasn't fired
+        captured.Should().BeNull();
     }
 
     [TestCase(0)]
@@ -232,7 +222,6 @@ public class ChartDataServiceTests
 
         await _service.StartAsync();
 
-        // Fire a message to populate the buffer
         var msg = new MqttApplicationMessageBuilder()
             .WithTopic("data/temp")
             .WithPayload("""{"value":42}""")
@@ -277,9 +266,6 @@ public class ChartDataServiceTests
 
         _service.ClearBuffers();
 
-        // Verify buffers are clear but connection ID is unchanged by
-        // checking that GetCharts is still called with the same ID
-        // when new messages arrive.
         _mockSettingsStore.ClearReceivedCalls();
         _mockSettingsStore.GetCharts(connId).Returns([]);
 

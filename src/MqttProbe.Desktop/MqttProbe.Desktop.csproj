@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Razor">
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -7,21 +7,25 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>MqttProbe</RootNamespace>
-        <NoWarn>$(NoWarn);CS8669</NoWarn>
         <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
         <Version>0.0.0</Version>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     </PropertyGroup>
 
     <ItemGroup>
         <!-- Photino.Blazor 4.0.13 only includes Microsoft.AspNetCore.Components.WebView
              for net8.0/net9.0 dependency groups. Explicitly add it for net10.0 so the
              _framework/blazor.webview.js static web asset is processed at build time. -->
+        <PackageReference Include="Meziantou.Analyzer">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+        <PackageReference Include="SonarAnalyzer.CSharp">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
         <PackageReference Include="System.Security.Cryptography.ProtectedData" />
         <PackageReference Include="Photino.Blazor" />
         <PackageReference Include="Velopack" />

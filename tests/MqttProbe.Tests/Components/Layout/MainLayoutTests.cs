@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Layout;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
@@ -18,7 +17,7 @@ namespace MqttProbe.Shared.Tests.Components.Layout;
 [TestFixture]
 public class MainLayoutTests : BunitTestContext
 {
-    private IManagedMqttClient _mockMqttClient = null!;
+    private IMqttManagedClient _mockMqttClient = null!;
     private IMessageStoreManager _mockMsgStore = null!;
     private IDialogService _mockDialogService = null!;
     private IAppInfoService _mockAppInfo = null!;
@@ -31,7 +30,7 @@ public class MainLayoutTests : BunitTestContext
     [SetUp]
     public void SetupMocks()
     {
-        _mockMqttClient = Substitute.For<IManagedMqttClient>();
+        _mockMqttClient = Substitute.For<IMqttManagedClient>();
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _mockDialogService = Substitute.For<IDialogService>();
         _mockAppInfo = Substitute.For<IAppInfoService>();

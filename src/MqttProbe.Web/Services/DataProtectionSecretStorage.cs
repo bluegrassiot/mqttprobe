@@ -5,7 +5,7 @@ using MqttProbe.Services.Security;
 
 namespace MqttProbe.Web.Services;
 
-public class DataProtectionSecretStorage : ISecretStorage
+public class DataProtectionSecretStorage : ISecretStorage, IDisposable
 {
     private readonly IDataProtector _protector;
     private readonly string _storePath;
@@ -76,12 +76,12 @@ public class DataProtectionSecretStorage : ISecretStorage
 
     private async Task<Dictionary<string, string>> LoadStoreAsync()
     {
-        if (!File.Exists(_storePath)) return new();
+        if (!File.Exists(_storePath)) return new(StringComparer.Ordinal);
         try
         {
             var cipherText = await File.ReadAllTextAsync(_storePath);
             var json = _protector.Unprotect(cipherText);
-            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new(StringComparer.Ordinal);
         }
         catch (Exception ex)
         {
@@ -97,4 +97,26 @@ public class DataProtectionSecretStorage : ISecretStorage
         var cipherText = _protector.Protect(json);
         await File.WriteAllTextAsync(_storePath, cipherText);
     }
+
+    private bool _disposed;
+
+    // CA1001: the type owns a SemaphoreSlim. These are app-lifetime singletons, so this
+    // only runs at container teardown, but leaving the handle undisposed is still a leak.
+    // Full Dispose(bool) pattern because the type is not sealed (S3881).
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        if (disposing)
+        {
+            _lock.Dispose();
+        }
+        _disposed = true;
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
 }

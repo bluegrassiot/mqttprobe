@@ -11,25 +11,44 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine3.23 AS publish
 WORKDIR /src
 COPY ["Directory.Packages.props", "."]
 COPY ["Directory.Build.props", "."]
-COPY ["src/MqttProbe.Web/MqttProbe.Web.csproj", "MqttProbe.Web/"]
-COPY ["src/MqttProbe.Shared/MqttProbe.Shared.csproj", "MqttProbe.Shared/"]
-RUN dotnet restore "MqttProbe.Web/MqttProbe.Web.csproj"
-COPY src/MqttProbe.Web/ MqttProbe.Web/
-COPY src/MqttProbe.Shared/ MqttProbe.Shared/
-WORKDIR "/src/MqttProbe.Web"
+# EnforceCodeStyleInBuild makes .editorconfig a build input: it holds the analyzer
+# severities (MA0048 = none and 20 others) that TreatWarningsAsErrors would
+# otherwise promote to build errors here but nowhere else.
+COPY [".editorconfig", "."]
+# Build-isolation config for the vendored SparkplugNet submodule (see
+# external/Directory.Build.props): keeps the fork on its own settings, off central
+# package management, and off GitVersion (no .git in the Docker build context).
+COPY ["external/Directory.Packages.props", "external/"]
+COPY ["external/Directory.Build.props", "external/"]
+COPY ["external/Directory.Build.targets", "external/"]
+# Project files first so `restore` is cached independently of source changes.
+# Paths mirror the repo layout so the Web -> Shared -> SparkplugNet ProjectReferences resolve.
+COPY ["src/MqttProbe.Web/MqttProbe.Web.csproj", "src/MqttProbe.Web/"]
+COPY ["src/MqttProbe.Shared/MqttProbe.Shared.csproj", "src/MqttProbe.Shared/"]
+COPY ["external/SparkplugNet/src/SparkplugNet/SparkplugNet.csproj", "external/SparkplugNet/src/SparkplugNet/"]
+RUN dotnet restore "src/MqttProbe.Web/MqttProbe.Web.csproj"
+COPY src/MqttProbe.Web/ src/MqttProbe.Web/
+COPY src/MqttProbe.Shared/ src/MqttProbe.Shared/
+COPY external/SparkplugNet/ external/SparkplugNet/
+WORKDIR "/src/src/MqttProbe.Web"
+# DisableGitVersionTask: the SparkplugNet submodule uses GitVersion.MsBuild, but the
+# Docker build context has no .git (.dockerignore excludes it). A global property is
+# guaranteed to win regardless of import ordering, so the submodule build never touches git.
 RUN dotnet publish "MqttProbe.Web.csproj" -c Release -o /app/publish \
     /p:UseAppHost=false \
     /p:DebugType=none \
-    /p:DebugSymbols=false
+    /p:DebugSymbols=false \
+    /p:DisableGitVersionTask=true
 
 FROM base AS final
 RUN addgroup -S appgroup && adduser -S -D -H -u 1000 -G appgroup appuser \
-    && mkdir -p /app/config \
-    && chown -R appuser:appgroup /app/config \
-    && chmod -R 755 /app/config
+    && mkdir -p /app/config /app/Plugins \
+    && chown -R appuser:appgroup /app/config /app/Plugins \
+    && chmod -R 755 /app/config /app/Plugins
 WORKDIR /app
 COPY --from=publish /app/publish .
-RUN mkdir -p /app/config && chown -R appuser:appgroup /app/config
+RUN mkdir -p /app/config /app/Plugins \
+    && chown -R appuser:appgroup /app/config /app/Plugins
 USER appuser
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD wget -q -O - http://127.0.0.1:8080/health >/dev/null || exit 1
 ENTRYPOINT ["dotnet", "MqttProbe.Web.dll"]

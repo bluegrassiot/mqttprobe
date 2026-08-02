@@ -30,7 +30,7 @@ public sealed class SpbNode
     public DateTime? LastDeathAt { get; set; }
     public DateTime? LastRebirthRequestAt { get; set; }
     public IReadOnlyList<SpbMetricSnapshot> Metrics { get; internal set; } = [];
-    public ConcurrentDictionary<string, SpbDevice> Devices { get; } = new();
+    public ConcurrentDictionary<string, SpbDevice> Devices { get; } = new(StringComparer.Ordinal);
     internal Lock SyncRoot { get; } = new();
     internal Dictionary<ulong, string> AliasMap { get; } = [];
 }
@@ -38,5 +38,5 @@ public sealed class SpbNode
 public sealed class SpbGroup
 {
     public string GroupId { get; init; } = string.Empty;
-    public ConcurrentDictionary<string, SpbNode> Nodes { get; } = new();
+    public ConcurrentDictionary<string, SpbNode> Nodes { get; } = new(StringComparer.Ordinal);
 }

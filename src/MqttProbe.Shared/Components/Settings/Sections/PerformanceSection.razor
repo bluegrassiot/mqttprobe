@@ -1,0 +1,61 @@
+@namespace MqttProbe.Components.Settings
+@using MqttProbe.Services.Configuration
+@inject ISettingsStore SettingsStore
+
+<MudNumericField T="int" Label="Max stored messages"
+                 Value="@SettingsStore.Config.Performance.MaxStoredMessages"
+                 ValueChanged="@OnMaxStoredMessagesChanged"
+                 Min="100" Max="100000" Step="1000"
+                 Variant="Variant.Outlined" />
+<MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+    Maximum messages retained in memory per topic. Higher values use more memory.
+</MudText>
+
+<MudNumericField T="int" Label="Max messages per second"
+                 Value="@SettingsStore.Config.Performance.MaxMessagesPerSecond"
+                 ValueChanged="@OnMaxMessagesPerSecondChanged"
+                 Min="100" Max="1000000" Step="1000"
+                 Variant="Variant.Outlined" Class="mt-3" />
+<MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+    Rate limit for inbound messages. Messages exceeding this limit are dropped.
+</MudText>
+
+<MudNumericField T="int" Label="Max displayed messages"
+                 Value="@SettingsStore.Config.Performance.MaxDisplayMessages"
+                 ValueChanged="@OnMaxDisplayMessagesChanged"
+                 Min="10" Max="10000" Step="100"
+                 Variant="Variant.Outlined" Class="mt-3" />
+<MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+    Maximum messages shown in the payload browser. Higher values may slow rendering.
+</MudText>
+
+<MudNumericField T="int" Label="Max topic nodes"
+                 Value="@SettingsStore.Config.Performance.MaxTopicNodes"
+                 ValueChanged="@OnMaxTopicNodesChanged"
+                 Min="100" Max="100000" Step="1000"
+                 Variant="Variant.Outlined" Class="mt-3" />
+<MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+    Maximum topic tree nodes (prevents runaway topic cardinality).
+</MudText>
+
+@code {
+    private async Task OnMaxStoredMessagesChanged(int value)
+    {
+        await SettingsStore.SetMaxStoredMessagesAsync(value);
+    }
+
+    private async Task OnMaxMessagesPerSecondChanged(int value)
+    {
+        await SettingsStore.SetMaxMessagesPerSecondAsync(value);
+    }
+
+    private async Task OnMaxDisplayMessagesChanged(int value)
+    {
+        await SettingsStore.SetMaxDisplayMessagesAsync(value);
+    }
+
+    private async Task OnMaxTopicNodesChanged(int value)
+    {
+        await SettingsStore.SetMaxTopicNodesAsync(value);
+    }
+}

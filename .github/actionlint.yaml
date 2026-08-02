@@ -1,0 +1,7 @@
+# actionlint configuration — https://github.com/rhysd/actionlint/blob/main/docs/config.md
+self-hosted-runner:
+  # GitHub-hosted runner labels that are newer than actionlint's pinned runner
+  # database (so it would otherwise report them as "unknown label"). These are NOT
+  # self-hosted — listing them here just tells actionlint the labels are valid.
+  labels:
+    - macos-26

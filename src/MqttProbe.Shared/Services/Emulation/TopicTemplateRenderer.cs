@@ -39,7 +39,7 @@ public static class TopicTemplateRenderer
 
         if (!template.Contains(NodeToken, StringComparison.Ordinal))
             errors.Add($"Topic template must contain {NodeToken}.");
-        if (node.PayloadFormat is GenericPayloadFormat.PlainText or GenericPayloadFormat.Hex
+        if (node.PayloadFormatId is "plaintext" or "hex"
             && !template.Contains(MetricToken, StringComparison.Ordinal))
             errors.Add($"Topic template must contain {MetricToken} for per-metric payload formats.");
         if (node.Devices.Count > 0 && !template.Contains(DeviceToken, StringComparison.Ordinal))

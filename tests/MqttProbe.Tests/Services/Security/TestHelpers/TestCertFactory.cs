@@ -14,7 +14,7 @@ internal static class TestCertFactory
 
     internal static X509Certificate2 CreateEcdsaCert()
     {
-        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256); // DevSkim: ignore DS440100 - throwaway self-signed test cert
         var req = new CertificateRequest("CN=TestEC", ecdsa, HashAlgorithmName.SHA256);
         return req.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddHours(1));
     }

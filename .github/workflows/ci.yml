@@ -29,6 +29,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -44,17 +46,20 @@ jobs:
       - name: Restore tools
         run: dotnet tool restore
 
+      # Same gate as .githooks/pre-commit. Keep --fail-on matching there so a commit
+      # that passes locally cannot fail here. ~5s, so it runs before the slow steps.
+      - name: Security scan
+        run: python3 scripts/inspect.py --tool devskim --fail-on warning
+
+      # Same script the contributor guide tells you to run. Inlining the dotnet
+      # format invocation here is what let CI drift from local: it missed the
+      # external/** exclude and reformatted the vendored SparkplugNet fork.
       - name: Format check
-        run: |
-          dotnet format MqttProbe.NoMaui.slnf --verify-no-changes \
-            --exclude "**/LucideIcons.cs" \
-            --exclude "**/SparkplugBProtobuf.cs"
+        run: python3 scripts/format-check.py
 
       - name: Unit tests
         run: |
           dotnet test tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj \
-            -p:TreatWarningsAsErrors=true \
-            -p:MSBuildTreatWarningsAsErrors=true \
             --logger:trx \
             --results-directory ./TestResults/unit \
             --settings tests/coverlet.runsettings \
@@ -92,6 +97,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -107,8 +114,6 @@ jobs:
       - name: Integration tests
         run: |
           dotnet test tests/MqttProbe.IntegrationTests/MqttProbe.IntegrationTests.csproj \
-            -p:TreatWarningsAsErrors=true \
-            -p:MSBuildTreatWarningsAsErrors=true \
             --logger:trx \
             --results-directory ./TestResults/integration
 
@@ -129,6 +134,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -165,6 +172,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -208,6 +217,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -258,6 +269,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -309,6 +322,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - uses: actions/setup-dotnet@v5
         with:

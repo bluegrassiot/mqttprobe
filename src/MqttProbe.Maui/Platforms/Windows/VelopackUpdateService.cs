@@ -7,7 +7,11 @@ namespace MqttProbe.WinUI;
 
 public sealed class VelopackUpdateService : IUpdateService
 {
+    // Velopack's GithubSource requires the repo URL as a literal; there is no
+    // per-user configuration surface for the update feed, so S1075 is noise here.
+#pragma warning disable S1075 // URIs should not be hardcoded
     private const string RepoUrl = "https://github.com/bluegrassiot/mqttprobe";
+#pragma warning restore S1075
 
     private readonly ILogger<VelopackUpdateService> _logger;
     private readonly UpdateManager _manager;

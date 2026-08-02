@@ -22,7 +22,7 @@ public class BrokerStateResetCoordinator : IBrokerStateResetCoordinator
 
     private BrokerIdentity? _lastActiveIdentity;
     private string? _lastActiveCertificateAssetId;
-    private readonly object _identityLock = new();
+    private readonly Lock _identityLock = new();
 
     public BrokerStateResetCoordinator(
         IMessageStoreManager messageStore,

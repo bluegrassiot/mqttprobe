@@ -2,12 +2,12 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
+using MQTTnet;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 
@@ -38,10 +38,11 @@ public class EmulationService : IEmulationService
     private readonly ISettingsStore _settingsStore;
     private readonly ISparkplugNodeFactory _nodeFactory;
     private readonly ISessionState _sessionState;
-    private readonly IManagedMqttClient _managedMqttClient;
+    private readonly IMqttManagedClient _managedMqttClient;
     private readonly IUxMetricsService _metrics;
     private readonly ICertificateAssetStore _certStore;
     private readonly ICertificateSessionQuarantine _quarantine;
+    private readonly PayloadPipeline _pipeline;
     private readonly ILogger<EmulationService> _logger;
     private readonly NodeHealthMetricsProvider _healthMetrics;
 
@@ -56,10 +57,11 @@ public class EmulationService : IEmulationService
     public EmulationService(ISettingsStore settingsStore,
         ISparkplugNodeFactory nodeFactory,
         ISessionState sessionState,
-        IManagedMqttClient managedMqttClient,
+        IMqttManagedClient managedMqttClient,
         IUxMetricsService metrics,
         ICertificateAssetStore certStore,
         ICertificateSessionQuarantine quarantine,
+        PayloadPipeline pipeline,
         ILogger<EmulationService> logger,
         IAppHealthMetricsCollector healthCollector)
     {
@@ -70,6 +72,7 @@ public class EmulationService : IEmulationService
         _metrics = metrics;
         _certStore = certStore;
         _quarantine = quarantine;
+        _pipeline = pipeline;
         _logger = logger;
         _healthMetrics = new NodeHealthMetricsProvider(healthCollector);
         _settingsStore.EmulatorsChanged += OnEmulatorsChanged;
@@ -152,23 +155,19 @@ public class EmulationService : IEmulationService
     {
         if (IsRunning) return;
 
-        // Runners work on a deep snapshot so config edits from other circuits never tear a running loop.
         var snapshot = CloneNodes(_settingsStore.GetEmulatorNodes(_connectionId));
         var intervalMs = _settingsStore.GetEmulatorPublishIntervalMs(_connectionId);
         var connection = _sessionState.SelectedConnection;
         var sparkplugCount = snapshot.Count(n => n.Type == EmulatorNodeType.SparkplugB);
         var initialKnownMetrics = _healthMetrics.BuildSnapshot(sparkplugCount, 0);
 
-        // Build runners locally — do NOT overwrite _runners until all succeed.
         var newRunners = snapshot
             .Select(node => (INodeRunner)(node.Type == EmulatorNodeType.SparkplugB
                 ? new SparkplugNodeRunner(node, _nodeFactory, connection, initialKnownMetrics,
                     _certStore, _quarantine, _logger)
-                : new GenericNodeRunner(node, _managedMqttClient)))
+                : new GenericNodeRunner(node, _managedMqttClient, _pipeline, _logger)))
             .ToList();
 
-        // Start runners sequentially so we can track which ones succeeded.
-        // On any failure, stop already-started runners before rethrowing.
         var startedRunners = new List<INodeRunner>();
         try
         {
@@ -180,7 +179,6 @@ public class EmulationService : IEmulationService
         }
         catch (Exception)
         {
-            // Roll back: stop all runners that started successfully (best-effort).
             foreach (var started in startedRunners)
             {
                 try { await started.StopAsync(); }
@@ -194,7 +192,6 @@ public class EmulationService : IEmulationService
             throw;
         }
 
-        // All runners started successfully — promote to field.
         _runners = newRunners;
 
         _publishCycles = 0;
@@ -226,7 +223,7 @@ public class EmulationService : IEmulationService
     public NodeRuntimeStatus GetStatus(Guid nodeId) =>
         _runners.FirstOrDefault(r => r.NodeId == nodeId)?.Status ?? NodeRuntimeStatus.Idle;
 
-    public static List<string> GenerateCopyNames(
+    public static IReadOnlyList<string> GenerateCopyNames(
         string sourceNodeId,
         string groupId,
         IEnumerable<EmulatorNodeConfig> existingNodes,
@@ -236,7 +233,7 @@ public class EmulationService : IEmulationService
             existingNodes.Where(n => n.GroupId == groupId).Select(n => n.NodeId),
             copies);
 
-    public static List<string> GenerateCopyNames(string sourceName, IEnumerable<string> takenNames, int copies)
+    public static IReadOnlyList<string> GenerateCopyNames(string sourceName, IEnumerable<string> takenNames, int copies)
     {
         var (stem, next, padWidth) = ParseNodeIdSuffix(sourceName);
         var taken = takenNames.ToHashSet(StringComparer.Ordinal);
@@ -295,23 +292,25 @@ public class EmulationService : IEmulationService
             throw new InvalidOperationException("Emulator configuration is locked while the emulator is running.");
     }
 
+    // ConfigureAwait(false) throughout this chain: Dispose blocks on _publishLoop with
+    // GetAwaiter().GetResult(), so on MAUI (which has a real SynchronizationContext) a
+    // captured context here would deadlock against the thread doing the disposing.
     private async Task RunPublishLoop(int rateMs, CancellationToken ct)
     {
-        // The first tick already ran inline during StartAsync, so the loop always delays before publishing.
         var lastTickDuration = TimeSpan.Zero;
         while (!ct.IsCancellationRequested)
         {
             var remaining = TimeSpan.FromMilliseconds(rateMs) - lastTickDuration;
             if (remaining > TimeSpan.Zero)
             {
-                try { await Task.Delay(remaining, ct); }
+                try { await Task.Delay(remaining, ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
             }
 
             if (ct.IsCancellationRequested) break;
 
             var start = Stopwatch.GetTimestamp();
-            await TickSafelyAsync();
+            await TickSafelyAsync().ConfigureAwait(false);
             lastTickDuration = Stopwatch.GetElapsedTime(start);
         }
     }
@@ -329,7 +328,7 @@ public class EmulationService : IEmulationService
 
             _metrics.UpdateEmulatorHealth(publishersOnline, Interlocked.Read(ref _publishCycles), nodesInError);
 
-            await Task.WhenAll(runners.Select(r => r.PublishTickAsync(tSeconds, health)));
+            await Task.WhenAll(runners.Select(r => r.PublishTickAsync(tSeconds, health))).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -375,9 +374,11 @@ public class EmulationService : IEmulationService
             _cts?.Cancel();
             if (_publishLoop != null)
             {
+                // The token was cancelled just above, so cancellation is the expected
+                // outcome here, not a failure. Anything else propagates.
                 try { _publishLoop.GetAwaiter().GetResult(); }
-                catch (OperationCanceledException) { }
-                catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException)) { }
+                catch (OperationCanceledException) { /* expected: we cancelled it */ }
+                catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException)) { /* same, wrapped */ }
             }
 
             _cts?.Dispose();

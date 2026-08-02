@@ -1,10 +1,16 @@
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using MqttProbe.Components.Layout;
-using MqttProbe.Components.Pages;
 using MqttProbe.Models.Configuration;
+using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Platform;
+using MqttProbe.Services.Plugins.Loading;
+using MqttProbe.Services.Plugins.Packaging;
+using MqttProbe.Services.Plugins.Pipeline;
+using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
 using MqttProbe.Shared.Tests.TestHelpers;
 using MudBlazor;
@@ -36,128 +42,196 @@ public class SettingsTests : BunitTestContext
         Services.AddSingleton<IThemes>(_themes);
         Services.AddSingleton(_mockAppInfo);
         Services.AddSingleton(_mockUpdateService);
+        RegisterPluginSettingsDependencies(Services);
         AuthorizationContext.SetAuthorized("admin").SetRoles(AppRoles.Admin);
         EnsureMudProviders();
     }
 
-    [Test]
-    public void Theme_AppliesToLiveThemes()
+    internal static void RegisterPluginSettingsDependencies(IServiceCollection services)
     {
-        var cut = Render<Settings>();
+        var pluginConfig = new PluginConfig();
+        var registry = new PluginRegistryBuilder().Build([], []);
+        var pipeline = new PayloadPipeline(registry, NullLogger<PayloadPipeline>.Instance);
+        var session = new PluginInstallSession();
 
-        var themeSelect = cut.FindComponents<MudSelect<string>>()
-            .First(s => s.Instance.Label == "Theme");
-        cut.InvokeAsync(() => themeSelect.Instance.ValueChanged.InvokeAsync("light"));
-
-        _themes.IsDarkMode.Should().BeFalse();
+        services.AddSingleton(session);
+        services.AddSingleton(new PluginInventoryService(pluginConfig, pipeline, session));
+        services.AddSingleton(new PluginPackageInstaller(
+            pluginConfig, Substitute.For<IAppInfoService>(), session, new PluginArchiveLimits(), NullLoggerFactory.Instance));
+        services.AddSingleton(new PluginReloadService(
+            pluginConfig, pipeline, session, new PluginAssemblyCache(), NullLoggerFactory.Instance));
+        services.AddSingleton(Substitute.For<IPluginPackagePicker>());
+        services.AddSingleton(Substitute.For<IPluginInputCapability>());
     }
 
     [Test]
-    public void Font_AppliesToLiveThemes()
+    public void Nav_RendersEverySection()
     {
-        var cut = Render<Settings>();
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
 
-        var fontSelect = cut.FindComponents<MudSelect<string>>()
-            .First(s => s.Instance.Label == "Font");
-        cut.InvokeAsync(() => fontSelect.Instance.ValueChanged.InvokeAsync("open-dyslexic"));
-
-        _themes.IsFontAccessible.Should().BeTrue();
+        var items = cut.FindAll("nav[aria-label='Settings sections'] button");
+        items.Should().HaveCount(7);
+        items.Select(i => i.TextContent.Trim()).Should().Contain("Plugins");
     }
 
     [Test]
-    public async Task MaxStoredMessages_Change_UsesNewSetter()
-    {
-        _mockStore.SetMaxStoredMessagesAsync(Arg.Any<int>()).Returns(Task.CompletedTask);
-        var cut = Render<Settings>();
-
-        var numericFields = cut.FindComponents<MudNumericField<int>>();
-        var maxStored = numericFields.First(f => f.Instance.Label == "Max stored messages");
-        maxStored.Find("input").Change("5000");
-
-        await cut.InvokeAsync(() => Task.CompletedTask);
-
-        await _mockStore.Received(1).SetMaxStoredMessagesAsync(5000);
-    }
-
-    [Test]
-    public async Task MaxMessagesPerSecond_Change_UsesNewSetter()
-    {
-        _mockStore.SetMaxMessagesPerSecondAsync(Arg.Any<int>()).Returns(Task.CompletedTask);
-        var cut = Render<Settings>();
-
-        var numericFields = cut.FindComponents<MudNumericField<int>>();
-        var maxRate = numericFields.First(f => f.Instance.Label == "Max messages per second");
-        maxRate.Find("input").Change("2000");
-
-        await cut.InvokeAsync(() => Task.CompletedTask);
-
-        await _mockStore.Received(1).SetMaxMessagesPerSecondAsync(2000);
-    }
-
-    [Test]
-    public void MaxDisplayedMessages_Field_Renders()
-    {
-        var cut = Render<Settings>();
-
-        var numericFields = cut.FindComponents<MudNumericField<int>>();
-        numericFields.Should().Contain(f => f.Instance.Label == "Max displayed messages");
-    }
-
-    [Test]
-    public async Task MaxDisplayedMessages_Change_UsesNewSetter()
-    {
-        _mockStore.SetMaxDisplayMessagesAsync(Arg.Any<int>()).Returns(Task.CompletedTask);
-        var cut = Render<Settings>();
-
-        var numericFields = cut.FindComponents<MudNumericField<int>>();
-        var maxDisplayed = numericFields.First(f => f.Instance.Label == "Max displayed messages");
-        maxDisplayed.Find("input").Change("300");
-
-        await cut.InvokeAsync(() => Task.CompletedTask);
-
-        await _mockStore.Received(1).SetMaxDisplayMessagesAsync(300);
-    }
-
-    [Test]
-    public void Account_ChangePassword_ButtonHasHref()
-    {
-        var cut = Render<Settings>();
-
-        var link = cut.FindAll("a, button")
-            .First(b => b.TextContent.Contains("Change password"));
-        link.GetAttribute("href").Should().Be("/change-password");
-    }
-
-    [Test]
-    public void Account_Section_Hidden_WhenRequiresAuthenticationIsFalse()
+    public void Nav_OmitsAccount_WhenRequiresAuthenticationIsFalse()
     {
         _mockAppInfo.RequiresAuthentication.Returns(false);
-        var cut = Render<Settings>();
 
-        cut.Markup.Should().NotContain("Account");
-        cut.FindAll("a, button")
-            .Should().NotContain(b => b.TextContent.Contains("Change password"));
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
+
+        var items = cut.FindAll("nav[aria-label='Settings sections'] button");
+        items.Should().HaveCount(6);
+        items.Should().NotContain(i => i.TextContent.Contains("Account"));
     }
 
     [Test]
-    public void About_ShowsVersion()
+    public void DefaultSection_IsAppearance()
     {
-        _mockAppInfo.GetVersion().Returns("1.0.0-test");
-        var cut = Render<Settings>();
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
 
-        cut.Markup.Should().Contain("Version 1.0.0-test");
+        cut.FindComponents<MudSelect<string>>().Should().Contain(s => s.Instance.Label == "Theme");
+        cut.FindComponents<MudNumericField<int>>().Should().NotContain(f => f.Instance.Label == "Max stored messages");
     }
 
     [Test]
-    public async Task EnrichSparkplugAliasNames_Toggle_CallsSetter()
+    public void SelectingSection_SwapsRenderedContent()
     {
-        _mockStore.SetEnrichSparkplugAliasNamesAsync(Arg.Any<bool>()).Returns(Task.CompletedTask);
-        var cut = Render<Settings>();
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
 
-        var switches = cut.FindComponents<MudSwitch<bool>>();
-        var enrichSwitch = switches.First(s => s.Instance.Label == "Enrich Sparkplug alias names");
-        await cut.InvokeAsync(() => enrichSwitch.Instance.ValueChanged.InvokeAsync(false));
+        var performance = cut.FindAll("nav[aria-label='Settings sections'] button")
+            .First(b => b.TextContent.Contains("Performance"));
+        performance.Click();
 
-        await _mockStore.Received(1).SetEnrichSparkplugAliasNamesAsync(false);
+        cut.FindComponents<MudNumericField<int>>()
+            .Should().Contain(f => f.Instance.Label == "Max stored messages");
+        cut.FindComponents<MudSelect<string>>().Should().NotContain(s => s.Instance.Label == "Theme");
+    }
+
+    [Test]
+    public void ActiveSection_MarkedWithAriaCurrent()
+    {
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
+
+        var current = cut.FindAll("nav[aria-label='Settings sections'] button[aria-current='page']");
+        current.Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Appearance");
+    }
+
+    [Test]
+    public void MobileSelect_SwapsRenderedContent()
+    {
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
+
+        var sectionSelect = cut.FindComponents<MudSelect<string>>()
+            .First(s => s.Instance.Label == "Settings section");
+        cut.InvokeAsync(() => sectionSelect.Instance.ValueChanged.InvokeAsync("performance"));
+
+        cut.FindComponents<MudNumericField<int>>()
+            .Should().Contain(f => f.Instance.Label == "Max stored messages");
+    }
+
+    [Test]
+    public void MobileSelect_ContainsSameSectionsAsRail()
+    {
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
+
+        var sectionSelect = cut.FindComponents<MudSelect<string>>()
+            .First(s => s.Instance.Label == "Settings section");
+        var values = sectionSelect.FindComponents<MudSelectItem<string>>()
+            .Select(i => i.Instance.Value);
+
+        values.Should().BeEquivalentTo(
+            "appearance", "subscriptions", "sparkplug", "performance", "plugins", "account", "about");
+    }
+
+    [Test]
+    public void MobileSelect_OmitsAccount_WhenRequiresAuthenticationIsFalse()
+    {
+        _mockAppInfo.RequiresAuthentication.Returns(false);
+
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
+
+        var sectionSelect = cut.FindComponents<MudSelect<string>>()
+            .First(s => s.Instance.Label == "Settings section");
+        var values = sectionSelect.FindComponents<MudSelectItem<string>>()
+            .Select(i => i.Instance.Value);
+
+        values.Should().NotContain("account");
+    }
+
+    [Test]
+    public void SectionRouting_QueryParam_SelectsSection()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=settings&section=performance");
+
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
+
+        cut.FindComponents<MudNumericField<int>>()
+            .Should().Contain(f => f.Instance.Label == "Max stored messages");
+    }
+
+    [Test]
+    public void SectionRouting_UnknownSlug_FallsBackToFirstSection()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=settings&section=performance");
+
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
+        cut.FindComponents<MudNumericField<int>>()
+            .Should().Contain(f => f.Instance.Label == "Max stored messages");
+
+        cut.InvokeAsync(() => nav.NavigateTo("/?tab=settings&section=garbage"));
+
+        cut.FindComponents<MudSelect<string>>().Should().Contain(s => s.Instance.Label == "Theme");
+    }
+
+    [Test]
+    public void SectionRouting_HiddenSection_FallsBackToFirstSection()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=settings&section=performance");
+
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
+        cut.FindComponents<MudNumericField<int>>()
+            .Should().Contain(f => f.Instance.Label == "Max stored messages");
+
+        _mockAppInfo.RequiresAuthentication.Returns(false);
+        cut.InvokeAsync(() => nav.NavigateTo("/?tab=settings&section=account"));
+
+        cut.FindComponents<MudSelect<string>>().Should().Contain(s => s.Instance.Label == "Theme");
+    }
+
+    [Test]
+    public void LocationChanged_AfterRender_UpdatesActiveSection()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=settings");
+
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
+        cut.FindComponents<MudNumericField<int>>()
+            .Should().NotContain(f => f.Instance.Label == "Max stored messages");
+
+        cut.InvokeAsync(() => nav.NavigateTo("/?tab=settings&section=performance"));
+
+        cut.FindComponents<MudNumericField<int>>()
+            .Should().Contain(f => f.Instance.Label == "Max stored messages");
+    }
+
+    [Test]
+    public void SelectingSection_WritesQueryParam()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=settings");
+
+        var cut = Render<MqttProbe.Components.Pages.Settings>();
+        cut.FindAll("nav[aria-label='Settings sections'] button")
+            .First(b => b.TextContent.Contains("Performance"))
+            .Click();
+
+        nav.Uri.Should().Contain("section=performance");
+        nav.Uri.Should().Contain("tab=settings");
     }
 }

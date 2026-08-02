@@ -283,3 +283,18 @@ body:has(.mud-dialog-container) .mobile-primary-nav {
         display: none;
     }
 }
+
+/* ── Metrics flyout (MudMenu popover) ───────────────────────────────────── */
+/* Global: MudPopover content is teleported outside MetricsStatsChip scope.  */
+/* Center on viewport so the panel is less likely to clip on small screens.  */
+.metrics-flyout-popover.mud-popover,
+.mud-popover.metrics-flyout-popover {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    max-height: min(90vh, 720px);
+    overflow-y: auto;
+    /* Keep above app bar clutter */
+    z-index: 1400;
+}

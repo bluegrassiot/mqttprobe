@@ -16,10 +16,10 @@ public class EmulationRateCalculatorTests
 
     private static EmulatorNodeConfig Node(
         EmulatorNodeType type,
-        GenericPayloadFormat format = GenericPayloadFormat.Json,
+        string format = "json",
         params int[] deviceMetricCounts)
     {
-        var node = new EmulatorNodeConfig { Type = type, PayloadFormat = format };
+        var node = new EmulatorNodeConfig { Type = type, PayloadFormatId = format };
         foreach (var count in deviceMetricCounts)
             node.Devices.Add(Device(count));
         return node;
@@ -48,7 +48,7 @@ public class EmulationRateCalculatorTests
     [Test]
     public void ProjectedMessagesPerSecond_GenericJson_CountsDevicesWithMetrics()
     {
-        var nodes = new[] { Node(EmulatorNodeType.Generic, GenericPayloadFormat.Json, 3, 2, 0) };
+        var nodes = new[] { Node(EmulatorNodeType.Generic, "json", 3, 2, 0) };
 
         var rate = EmulationRateCalculator.ProjectedMessagesPerSecond(nodes, 1000);
 
@@ -58,7 +58,7 @@ public class EmulationRateCalculatorTests
     [Test]
     public void ProjectedMessagesPerSecond_GenericPlainText_CountsEveryMetric()
     {
-        var nodes = new[] { Node(EmulatorNodeType.Generic, GenericPayloadFormat.PlainText, 3, 2) };
+        var nodes = new[] { Node(EmulatorNodeType.Generic, "plaintext", 3, 2) };
 
         var rate = EmulationRateCalculator.ProjectedMessagesPerSecond(nodes, 500);
 
@@ -68,7 +68,7 @@ public class EmulationRateCalculatorTests
     [Test]
     public void ProjectedMessagesPerSecond_GenericHex_CountsEveryMetric()
     {
-        var nodes = new[] { Node(EmulatorNodeType.Generic, GenericPayloadFormat.Hex, 4) };
+        var nodes = new[] { Node(EmulatorNodeType.Generic, "hex", 4) };
 
         var rate = EmulationRateCalculator.ProjectedMessagesPerSecond(nodes, 1000);
 
@@ -81,8 +81,8 @@ public class EmulationRateCalculatorTests
         var nodes = new[]
         {
             Node(EmulatorNodeType.SparkplugB, deviceMetricCounts: [1]),
-            Node(EmulatorNodeType.Generic, GenericPayloadFormat.Json, 1, 1),
-            Node(EmulatorNodeType.Generic, GenericPayloadFormat.Hex, 2, 3)
+            Node(EmulatorNodeType.Generic, "json", 1, 1),
+            Node(EmulatorNodeType.Generic, "hex", 2, 3)
         };
 
         var rate = EmulationRateCalculator.ProjectedMessagesPerSecond(nodes, 1000);

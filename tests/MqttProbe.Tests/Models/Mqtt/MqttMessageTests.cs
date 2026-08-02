@@ -103,4 +103,21 @@ public class MqttMessageTests
         msg.Should().NotBeNull();
         msg!.DateTimeReceived.Should().BeOnOrAfter(before).And.BeOnOrBefore(DateTime.UtcNow);
     }
+
+    [Test]
+    public void FormatId_DefaultsToNull()
+    {
+        var msg = new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce);
+        msg.FormatId.Should().BeNull();
+    }
+
+    [Test]
+    public void FormatId_CanBeSetViaInit()
+    {
+        var msg = new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce)
+        {
+            FormatId = "json"
+        };
+        msg.FormatId.Should().Be("json");
+    }
 }

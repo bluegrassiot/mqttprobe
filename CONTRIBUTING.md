@@ -17,8 +17,39 @@ Bug fixes and small improvements are welcome. For larger changes, open an issue 
 ### Setup
 
 1. Install [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-2. Clone the repo
+2. Clone the repo with submodules: `git clone --recurse-submodules https://github.com/bluegrassiot/mqttprobe`. If you already cloned without that flag, run `git submodule update --init --recursive`.
 3. Run tests: `dotnet test tests/MqttProbe.Tests`
+
+### Architecture and Development
+
+For the solution layout, library choices, and common development commands, see the [Development wiki](https://github.com/bluegrassiot/mqttprobe/wiki/07-Development).
+
+### Git hooks
+
+This repo uses hooks in `.githooks` (not `.git/hooks`). After clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+| Hook | What it runs |
+|------|----------------|
+| `pre-commit` | Security scan (`devskim`, ~3s) on any staged change; workflow lint (`python scripts/actionlint.py`, ~1s) when staged files include `.github/workflows/*.yml`; format check (`python scripts/format-check.py`) when staged files include C#/Razor/project/editorconfig |
+| `pre-push` | Path-aware build (usually `MqttProbe.NoMaui.slnf`) and unit tests when code changes |
+
+Both hooks print per-step and total timing. Docs-only changes (markdown under `docs/`, `*.md`, license files) skip the heavy steps automatically — but not the security scan, since a pasted token in a README is exactly what it looks for.
+
+The security scan blocks the commit on a devskim finding at `warning` or above; notes are reported by `scripts/inspect.py` but do not block. If a finding is a false positive, put a `DevSkim: ignore DS######` comment on the flagged line using that file's comment syntax. It needs the local tools, so run `dotnet tool restore` after cloning.
+
+The workflow lint prefers a locally installed `actionlint` and otherwise runs the pinned Docker image, so it needs one of the two — with neither, the step skips rather than blocking. Install the binary if you would rather not depend on Docker; `scripts/actionlint.py` picks it up automatically.
+
+To skip intentionally:
+
+- `SKIP_PRE_COMMIT=1 git commit ...`
+- `SKIP_PRE_PUSH=1 git push ...`
+- `git commit --no-verify` / `git push --no-verify` (bypasses the hook entirely)
+
+CI still runs full checks on pull requests. Prefer fixing failures over skipping.
 
 ### Code Style
 
@@ -41,9 +72,12 @@ Bug fixes and small improvements are welcome. For larger changes, open an issue 
 
 Before submitting changes, make sure the same checks used by CI pass locally:
 
-- `dotnet build MqttProbe.slnx --warnaserror`
+- `dotnet build MqttProbe.slnx`
 - `dotnet test tests/MqttProbe.Tests`
 - `python scripts/format-check.py`
+- `python scripts/inspect.py --tool devskim --fail-on warning`
+
+Local hooks cover a faster subset; still run the commands above before a PR if you skipped hooks.
 
 ### Commit Messages
 

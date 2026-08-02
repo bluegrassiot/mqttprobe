@@ -71,6 +71,16 @@
                             }
                         </td>
                     </tr>
+                    @{
+                        var formatName = GetFormatDisplayName(msg.FormatId);
+                    }
+                    @if (formatName != null)
+                    {
+                        <tr>
+                            <td class="pb-meta-label">Format</td>
+                            <td class="pb-meta-value">@formatName</td>
+                        </tr>
+                    }
                 </tbody>
             </table>
         </div>
@@ -240,7 +250,6 @@ else
     private JsonTreeView? _jsonTreeView;
     private Func<MqttMessage, bool> _filterFunc = null!;
     internal bool _disposed;
-    private DateTime _lastMessageTimestamp;
     private int _lastAppliedMaxCount;
     private string? _lastTopicPath;
     private long _lastVersion;
@@ -270,7 +279,7 @@ else
                 if (needsRefresh)
                 {
                     try { await InvokeAsync(StateHasChanged); }
-                    catch (Exception) when (_disposed) { }
+                    catch (Exception) when (_disposed) { /* component torn down mid-refresh; nothing left to render */ }
                 }
                 return;
             }
@@ -296,7 +305,6 @@ else
             var list = _newestFirst
                 ? messages.ToList()
                 : messages.Reverse().ToList();
-            _lastMessageTimestamp = list.Count > 0 ? list[0].DateTimeReceived : DateTime.MinValue;
             _messageList = list;
             Metrics.SetDisplayedMessageCount(_messageList.Count);
             // Guard against the circuit being torn down between the _disposed check
@@ -338,6 +346,25 @@ else
         if (bool.TryParse(trimmed, out _)) return PayloadType.Boolean;
         if (double.TryParse(trimmed, NumberStyles.Any, CultureInfo.InvariantCulture, out _)) return PayloadType.Number;
         return PayloadType.Text;
+    }
+
+    internal static string? GetFormatDisplayName(string? formatId)
+    {
+        if (string.IsNullOrWhiteSpace(formatId)) return null;
+        return formatId switch
+        {
+            "empty"       => "Empty",
+            "sparkplug-b" => "Sparkplug B",
+            "protobuf"    => "Protobuf",
+            "messagepack" => "MessagePack",
+            "binary"      => "Binary",
+            "json"        => "JSON",
+            "xml"         => "XML",
+            "hex"         => "Hex text",
+            "base64"      => "Base64 text",
+            "plaintext"   => "Plain text",
+            _             => formatId
+        };
     }
 
     internal static string? TryFormatXml(string value)

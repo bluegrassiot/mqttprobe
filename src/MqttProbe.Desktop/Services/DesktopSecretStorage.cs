@@ -34,7 +34,7 @@ public sealed class DesktopSecretStorage : ISecretStorage
             }
             catch (CryptographicException)
             {
-                var migrated = TryMigrateLegacyDpapi(path, blob);
+                var migrated = TryMigrateLegacyDpapi(blob);
                 if (migrated is not null)
                 {
                     await SetAsync(key, migrated);
@@ -121,7 +121,7 @@ public sealed class DesktopSecretStorage : ISecretStorage
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
-    private static string? TryMigrateLegacyDpapi(string path, byte[] blob)
+    private static string? TryMigrateLegacyDpapi(byte[] blob)
     {
         if (!OperatingSystem.IsWindows())
             return null;

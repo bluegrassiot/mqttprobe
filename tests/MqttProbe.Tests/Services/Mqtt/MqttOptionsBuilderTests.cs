@@ -1,5 +1,5 @@
 using System.Net;
-using MQTTnet.Client;
+using MQTTnet;
 using MQTTnet.Formatter;
 using MqttProbe.Models.Chart;
 using MqttProbe.Models.Configuration;
@@ -32,8 +32,8 @@ public class MqttOptionsBuilderTests
     private static Connection TcpConnection(string host = "broker.local", int port = 1883) =>
         new() { Name = "Test", Host = host, Port = port, Protocol = Protocol.Mqtt, ClientId = "test-client" };
 
-    private static MqttClientTcpOptions TcpOpts(MQTTnet.Extensions.ManagedClient.ManagedMqttClientOptions opts) =>
-        (MqttClientTcpOptions)((MqttClientOptions)opts.ClientOptions).ChannelOptions!;
+    private static MqttClientTcpOptions TcpOpts(MqttManagedClientOptions opts) =>
+        (MqttClientTcpOptions)opts.ClientOptions.ChannelOptions!;
 
     [Test]
     public void Build_TcpConnection_UsesCorrectHostAndPort()

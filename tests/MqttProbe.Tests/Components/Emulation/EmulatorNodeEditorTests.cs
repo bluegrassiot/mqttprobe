@@ -67,7 +67,7 @@ public class EmulatorNodeEditorTests : BunitTestContext
     public void GenericJsonNode_ShowsResolvedDeviceTopicPreviewInMono()
     {
         _node.Type = EmulatorNodeType.Generic;
-        _node.PayloadFormat = GenericPayloadFormat.Json;
+        _node.PayloadFormatId = "json";
 
         var cut = RenderEditor();
 
@@ -79,7 +79,7 @@ public class EmulatorNodeEditorTests : BunitTestContext
     public void GenericPlainTextNode_ShowsResolvedMetricTopicPreview()
     {
         _node.Type = EmulatorNodeType.Generic;
-        _node.PayloadFormat = GenericPayloadFormat.PlainText;
+        _node.PayloadFormatId = "plaintext";
 
         var cut = RenderEditor();
 
@@ -91,7 +91,7 @@ public class EmulatorNodeEditorTests : BunitTestContext
     public void GenericNode_TemplateMissingMetricToken_ShowsValidationError()
     {
         _node.Type = EmulatorNodeType.Generic;
-        _node.PayloadFormat = GenericPayloadFormat.PlainText;
+        _node.PayloadFormatId = "plaintext";
         _node.TopicTemplate = "{group}/{node}/{device}";
 
         var cut = RenderEditor();

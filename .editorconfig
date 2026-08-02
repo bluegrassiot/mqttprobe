@@ -192,3 +192,92 @@ dotnet_diagnostic.CS8618.severity = none
 dotnet_diagnostic.CS8625.severity = none
 dotnet_diagnostic.CS8765.severity = none
 dotnet_diagnostic.CS8767.severity = none
+
+###############################################################
+# Analyzer severities
+###############################################################
+
+[*.{cs,razor}]
+
+# MA0048 (file name must match type name) is purely mechanical, and most hits
+# are partial classes and nested helper types that read fine where they are.
+dotnet_diagnostic.MA0048.severity = none
+
+# CA1848 (LoggerMessage source-gen delegates) is a real win on a hot path and
+# pure churn everywhere else. Revisit if profiling points at logging.
+dotnet_diagnostic.CA1848.severity = suggestion
+
+# CA1873 wants expensive log arguments guarded by IsEnabled, and the Debug and
+# Information sites are guarded. The three that remain are LogCritical on
+# certificate cleanup failures — the paths that must be loudest when they fire.
+# Wrapping those in a conditional risks a misconfigured logger silently swallowing
+# them, and their arguments are property reads, not real work.
+dotnet_diagnostic.CA1873.severity = suggestion
+
+# S3011 flags the two reflection calls in SparkplugNodeFactory that reach
+# SparkplugNet internals: SendNodeDeathMessage, which the library does not expose,
+# and the knownMetrics field, which Rebirth replaces with storage that loses alias
+# tracking. Both are documented at the call site and both throw a descriptive
+# exception if the member disappears in a SparkplugNet update.
+dotnet_diagnostic.S3011.severity = none
+
+# S2245 fires on WaveformSampler's use of Random. The seed is deliberately derived
+# from the metric id so an emulated waveform is reproducible across runs — a
+# cryptographic generator would defeat the entire point. No security decision is
+# made from these values.
+dotnet_diagnostic.S2245.severity = none
+
+# S3871 wants PackageExpansionLimitExceededException public. It is thrown and caught
+# entirely within PluginPackageInstaller, which converts it into a failure outcome,
+# so it never crosses an assembly boundary.
+dotnet_diagnostic.S3871.severity = none
+
+# MA0006 wants string.Equals over ==, but == on string is already ordinal, so
+# every fix is churn with no behaviour change. The comparisons that could
+# actually be culture-sensitive are MA0074 (EndsWith/StartsWith), still a warning.
+dotnet_diagnostic.MA0006.severity = suggestion
+
+# MA0046 wants the EventHandler<T> convention: void return, (sender, args).
+# These events are Func<TArgs, Task>, mirroring MQTTnet's own async event API.
+# A void-returning handler cannot be awaited, so "fixing" this would turn every
+# subscriber into fire-and-forget and lose exception propagation.
+dotnet_diagnostic.MA0046.severity = none
+
+# MA0011 fires on any method that has an IFormatProvider overload, which here is
+# mostly noise: object.Equals, RedirectToPage and Console.WriteLine take no
+# meaningful culture. The genuine number formatting and parsing sites are fixed
+# and covered by CA1305, which stays a warning.
+dotnet_diagnostic.MA0011.severity = suggestion
+
+# S2139 offers "log and handle" or "rethrow with context" as the only options. The recurring
+# pattern here is neither: the catch performs real recovery (quarantine a certificate, roll
+# back a staged envelope key, mark a node faulted) and logs context the caller cannot
+# reconstruct, then rethrows so the caller still decides the outcome. Wrapping in a new
+# exception type to satisfy the rule would change what callers catch.
+dotnet_diagnostic.S2139.severity = suggestion
+
+# MA0004: the one place a missing ConfigureAwait can actually deadlock is a
+# chain blocked on by Dispose via GetAwaiter().GetResult() — see
+# EmulationService.RunPublishLoop, which is fixed. Elsewhere in Shared the
+# awaits are never blocked on, so this is advisory rather than a build warning.
+# NB the analyzer reports nothing inside .razor components; do not add
+# ConfigureAwait(false) there, it would move continuations off the renderer context.
+dotnet_diagnostic.MA0004.severity = suggestion
+
+# ── ConfigureAwait ───────────────────────────────────────────────────────────
+# MA0004 stays on in MqttProbe.Shared: it is library code consumed by MAUI,
+# which has a synchronisation context. The app projects own their own context,
+# so ConfigureAwait(false) there is noise at best and wrong at worst.
+[src/MqttProbe.{Web,Desktop,Maui}/**.{cs,razor}]
+dotnet_diagnostic.MA0004.severity = none
+
+# ── Serialised config models ─────────────────────────────────────────────────
+# MA0016 wants collection interfaces on public members so callers are not bound
+# to the implementation. That is right for API surface — the parameters in
+# ISparkplugNode, ISubscriptionManager and PipelineDiagnostics were widened —
+# but these types are System.Text.Json DTOs whose whole contract is being a
+# mutable bag of settings. IList<T> on a { get; set; } DTO hides nothing and
+# risks the on-disk config format for no runtime benefit. The rule already
+# exempts XML-serialised properties; it simply predates JSON DTOs.
+[src/MqttProbe.Shared/Models/**.cs]
+dotnet_diagnostic.MA0016.severity = none

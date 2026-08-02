@@ -57,7 +57,7 @@
     private bool _disposed;
     private long _lastVersion;
     private List<TopicTreeRowModel> _visibleRows = [];
-    private HashSet<string> _expandedPaths = [];
+    private readonly HashSet<string> _expandedPaths = [];
     private bool _hasFilter;
     private string? _selectedFullPath;
 
@@ -82,7 +82,7 @@
     {
         BuildVisibleRows();
         try { await InvokeAsync(StateHasChanged); }
-        catch (ObjectDisposedException) when (_disposed) { }
+        catch (ObjectDisposedException) when (_disposed) { /* component torn down mid-refresh; nothing left to render */ }
         catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser refresh render failed"); }
     }
 

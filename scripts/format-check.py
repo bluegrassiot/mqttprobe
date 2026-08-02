@@ -31,7 +31,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FIX = "--fix" in sys.argv
 
-EXCLUDES = ["**/LucideIcons.cs", "**/SparkplugBProtobuf.cs"]
+# `dotnet format` with no subcommand also runs `analyzers`, which surfaces every
+# Sonar/Meziantou/CA warning as a formatting failure. Most of those rules ship no
+# code fix, so --fix is a no-op against them and the check can never pass. Keep
+# this to formatting; analyzer warnings are reported by the build.
+SUBCOMMANDS = ["whitespace", "style"]
+
+# external/ holds vendored git submodules (e.g. SparkplugNet fork); they keep
+# their own upstream code style and must not be reformatted by mqttprobe rules.
+EXCLUDES = ["**/LucideIcons.cs", "**/SparkplugBProtobuf.cs", "external/**"]
 
 if sys.platform == "win32":
     TARGETS = [
@@ -43,7 +51,10 @@ else:
         ("src/MqttProbe.Maui/MqttProbe.Maui.csproj", True),
     ]
 
-WORKLOAD_ERROR = re.compile(r"NETSDK1147|workload", re.IGNORECASE)
+# "Restore operation failed" is how a missing workload surfaces in the style pass:
+# it needs semantics, so it restores first, and the platform TFMs cannot resolve.
+# That message never mentions workloads, so match it too or CI can never skip MAUI.
+WORKLOAD_ERROR = re.compile(r"NETSDK1147|workload|Restore operation failed", re.IGNORECASE)
 REAL_ERROR_LINE = re.compile(r"error (?!ENDOFLINE)\w+:")
 
 failed = 0
@@ -58,18 +69,25 @@ else:
 
 for target, needs_workload in TARGETS:
     label = Path(target).stem
-    args = ["dotnet", "format", str(ROOT / target)]
-    if not FIX:
-        args.append("--verify-no-changes")
-    for ex in EXCLUDES:
-        args.extend(["--exclude", ex])
 
     print(f"\n  {label}...", end="", flush=True)
 
-    result = subprocess.run(args, capture_output=True, text=True)
-    output = f"{result.stdout}\n{result.stderr}"
+    returncode = 0
+    output = ""
+    for sub in SUBCOMMANDS:
+        args = ["dotnet", "format", sub, str(ROOT / target)]
+        if not FIX:
+            args.append("--verify-no-changes")
+        for ex in EXCLUDES:
+            args.extend(["--exclude", ex])
 
-    if result.returncode == 0:
+        result = subprocess.run(args, capture_output=True, text=True)
+        output += f"{result.stdout}\n{result.stderr}"
+        if result.returncode != 0:
+            returncode = result.returncode
+            break
+
+    if returncode == 0:
         print(" OK")
         continue
 

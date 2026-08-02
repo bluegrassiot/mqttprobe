@@ -37,7 +37,7 @@ public static class LucideIcons
     // Connectivity / MQTT
     public const string Wifi           = $"<path {S} d='M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0'/>";
     public const string WifiOff        = $"<path {S} d='M1.42 9a16 16 0 0 1 21.16 0M5 12.55a11 11 0 0 1 14.08 0M8.53 16.11a6 6 0 0 1 6.95 0M1 1l22 22'/>";
-    public const string Radio          = $"<path {S} d='M18.89 8.11a7 7 0 0 0-9.9 0M15.46 10.54a4 4 0 0 0-5.66 0'/>";
+    public const string Radio          = $"<path {S} d='M7.75 16.25a6 6 0 0 1 0-8.49M16.25 7.76a6 6 0 0 1 0 8.49M4.93 19.07a10 10 0 0 1 0-14.14M19.07 4.93a10 10 0 0 1 0 14.14'/><circle {S} cx='12' cy='12' r='2'/>";
     public const string Hash           = $"<path {S} d='M4 9h16M4 15h16M10 3L8 21M16 3l-2 18'/>";
     public const string GitHub         = $"<path {S} d='M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4M9 18c-4.51 2-5-2-7-2'/>";
 
@@ -81,11 +81,13 @@ public static class LucideIcons
     public const string CheckCircle    = $"<path {S} d='M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3'/>";
     public const string Sparkles       = $"<path {S} d='M12 3l1.09 2.36L15.75 6l-2.66 1.09L12 9.75l-1.09-2.66L8.25 6l2.66-1.09L12 3zM5 14l.54 1.09L6.75 15.5 5.54 16.09 5 17.5l-.54-1.41L3.25 15.5l1.21-.41L5 14zM19 2l.54 1.09L20.75 3.5l-1.21.5L19 5.25l-.54-1.25L17.25 3.5l1.21-.41L19 2z'/>";
     public const string Cpu            = $"<rect {S} x='9' y='9' width='6' height='6'/><path {S} d='M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18M3 9h18M3 15h18M15 3v6M15 15v6'/>";
+    public const string Puzzle         = $"<path {S} d='M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z'/>";
     public const string Network        = $"<rect {S} x='9' y='2' width='6' height='6'/><rect {S} x='2' y='16' width='6' height='6'/><rect {S} x='16' y='16' width='6' height='6'/><path {S} d='M12 8v4M8 19H5a3 3 0 0 1 0-6h14a3 3 0 0 1 0 6h-3'/>";
     public const string Clock          = $"<circle {S} cx='12' cy='12' r='10'/><path {S} d='M12 6v6l4 2'/>";
     public const string Zap            = $"<path {S} d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/>";
     public const string Maximize2      = $"<polyline {S} points='15 3 21 3 21 9'/><polyline {S} points='9 21 3 21 3 15'/><line {S} x1='21' y1='3' x2='14' y2='10'/><line {S} x1='3' y1='21' x2='10' y2='14'/>";
     public const string Download       = $"<path {S} d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline {S} points='7 10 12 15 17 10'/><line {S} x1='12' y1='15' x2='12' y2='3'/>";
+    public const string Upload         = $"<path {S} d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline {S} points='17 8 12 3 7 8'/><line {S} x1='12' y1='3' x2='12' y2='15'/>";
     public const string Minimize2      = $"<polyline {S} points='4 14 10 14 10 20'/><polyline {S} points='20 10 14 10 14 4'/><line {S} x1='10' y1='14' x2='21' y2='3'/><line {S} x1='3' y1='21' x2='14' y2='10'/>";
     public const string Settings       = $"<path {S} d='M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z'/><circle {S} cx='12' cy='12' r='3'/>";
 

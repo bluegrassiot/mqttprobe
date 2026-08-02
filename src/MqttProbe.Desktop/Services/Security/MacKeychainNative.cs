@@ -5,7 +5,6 @@ namespace MqttProbe.Desktop.Services.Security;
 public sealed class MacKeychainNative : IMacKeychainNative
 {
     private const int ErrSecSuccess = 0;
-    private const int ErrSecItemNotFound = -25300;
     private const int CfStringEncodingUtf8 = 0x08000100;
 
     private static readonly IntPtr _cfAllocatorDefault = IntPtr.Zero;
@@ -24,6 +23,11 @@ public sealed class MacKeychainNative : IMacKeychainNative
 
     private static readonly IntPtr _cfBooleanTrue;
 
+    // S3963: NativeLibrary.Load throwing here (framework missing) is intentional
+    // fail-fast — this type is only ever touched on macOS, where both frameworks
+    // are guaranteed present. Catching and lazily retrying would change behaviour
+    // (silently degraded secret storage) for no real-world benefit.
+#pragma warning disable S3963 // "static" constructors should not throw exceptions
     static MacKeychainNative()
     {
         var cfHandle = NativeLibrary.Load(
@@ -45,6 +49,7 @@ public sealed class MacKeychainNative : IMacKeychainNative
         _cfTypeDictionaryKeyCallBacks = ResolveExport(cfHandle, "kCFTypeDictionaryKeyCallBacks");
         _cfTypeDictionaryValueCallBacks = ResolveExport(cfHandle, "kCFTypeDictionaryValueCallBacks");
     }
+#pragma warning restore S3963
 
     public int CopyMatching(string service, string account, out byte[]? data)
     {
@@ -191,12 +196,10 @@ public sealed class MacKeychainNative : IMacKeychainNative
         return CFDataCreate(IntPtr.Zero, arr, arr.Length);
     }
 
-    private static IntPtr ResolveCFBoolean(IntPtr handle, string name)
-    {
-        if (NativeLibrary.TryGetExport(handle, name, out var addr))
-            return Marshal.ReadIntPtr(addr);
-        return IntPtr.Zero;
-    }
+    // Same lookup as ResolveCFString: a CFBooleanRef export is read the same way
+    // as a CFStringRef export (both are a pointer stored at the exported symbol).
+    // S4144: kept as a distinct, descriptively-named call site rather than merged.
+    private static IntPtr ResolveCFBoolean(IntPtr handle, string name) => ResolveCFString(handle, name);
 
     private static IntPtr ResolveCFString(IntPtr handle, string name)
     {

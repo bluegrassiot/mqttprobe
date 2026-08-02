@@ -21,6 +21,7 @@ public class SettingsStoreTests
     [TearDown]
     public void TearDown()
     {
+        _store.Dispose();
         if (File.Exists(_configPath)) File.Delete(_configPath);
     }
 
@@ -224,7 +225,7 @@ public class SettingsStoreTests
         await _store.LoadAsync();
 
         _store.Config.Connections.Should()
-            .AllSatisfy(c => c.SubscribedTopics.Should().Contain("spBv1.0/#"));
+            .AllSatisfy(c => c.SubscribedTopics.Should().Contain(s => s.Topic == "spBv1.0/#"));
         var clientIds = _store.Config.Connections.Select(c => c.ClientId).ToList();
         clientIds.Should().OnlyHaveUniqueItems("shared client IDs evict each other on public brokers");
         clientIds.Should().AllSatisfy(id => id.Should().StartWith("mqttprobe_"));

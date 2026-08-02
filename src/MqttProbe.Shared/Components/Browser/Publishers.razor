@@ -1,13 +1,11 @@
-@using System.Runtime.InteropServices
 @using System.Text.Json
 @using MQTTnet
-@using MQTTnet.Extensions.ManagedClient
 @using MQTTnet.Protocol
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.Extensions.Logging
 @using MqttProbe.Models
 @using MqttProbe.Services.Security
-@inject IManagedMqttClient ManagedMqttClient
+@inject IMqttManagedClient ManagedMqttClient
 @inject ILogger<Publishers> Logger
 @inject ISnackbar Snackbar
 @inject IAppInfoService AppInfoService
@@ -29,7 +27,7 @@
 
 <div class="tab-panel-scroll">
     <MudGrid Spacing="2">
-        @if (AppInfoService.IsNative || RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        @if (AppInfoService.IsNative || OperatingSystem.IsWindows())
         {
             <MudItem xs="12">
                 <AppTertiaryButton StartIcon="@LucideIcons.ClipboardPaste"

@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Components.Layout;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Shared.Tests.TestHelpers;
@@ -10,14 +9,14 @@ namespace MqttProbe.Shared.Tests.Components.Layout;
 [TestFixture]
 public class ConnectionRequiredPanelTests : BunitTestContext
 {
-    private IManagedMqttClient _mqtt = null!;
+    private IMqttManagedClient _mqtt = null!;
     private IConnectionSessionLifecycle _lifecycle = null!;
     private IRenderedComponent<MudSnackbarProvider> _snackbarProvider = null!;
 
     [SetUp]
     public void Setup()
     {
-        _mqtt = Substitute.For<IManagedMqttClient>();
+        _mqtt = Substitute.For<IMqttManagedClient>();
         _lifecycle = Substitute.For<IConnectionSessionLifecycle>();
         _lifecycle.StopActiveConnectionAsync().Returns(Task.CompletedTask);
 

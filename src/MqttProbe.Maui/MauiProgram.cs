@@ -1,10 +1,11 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using MQTTnet;
-using MQTTnet.Extensions.ManagedClient;
+using Microsoft.Extensions.Options;
 using MqttProbe.Components.Layout;
 using MqttProbe.Maui.Services;
+using MqttProbe.Models.Plugins;
 using MqttProbe.Services;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
@@ -12,6 +13,11 @@ using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
+using MqttProbe.Services.Plugins;
+using MqttProbe.Services.Plugins.Loading;
+using MqttProbe.Services.Plugins.Packaging;
+using MqttProbe.Services.Plugins.Pipeline;
+using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using MudBlazor;
@@ -24,11 +30,6 @@ public static class MauiProgram
     public static MauiApp CreateMauiApp()
     {
 #if IOS
-        // WORKAROUND: MudBlazor satellite assemblies (MudBlazor.resources.dll) are not
-        // bundled on iOS, causing a FileNotFoundException during localization. Force a
-        // neutral culture so the runtime falls back to the embedded default resources.
-        // See: https://github.com/MudBlazor/MudBlazor/issues — replace with proper
-        // satellite assembly inclusion once a permanent fix is applied.
         CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("en-US");
         CultureInfo.DefaultThreadCurrentUICulture = new CultureInfo("en-US");
 #endif
@@ -39,18 +40,7 @@ public static class MauiProgram
             .UseMauiApp<App>()
             .ConfigureFonts(fonts => { fonts.AddFont("Inter-Variable.ttf", "Inter"); });
 
-        builder.Services.AddMudServices(config =>
-        {
-            config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.TopCenter;
-            config.SnackbarConfiguration.RequireInteraction = false;
-            config.SnackbarConfiguration.PreventDuplicates = true;
-            config.SnackbarConfiguration.NewestOnTop = false;
-            config.SnackbarConfiguration.ShowCloseIcon = true;
-            config.SnackbarConfiguration.VisibleStateDuration = 3000;
-            config.SnackbarConfiguration.HideTransitionDuration = 500;
-            config.SnackbarConfiguration.ShowTransitionDuration = 500;
-            config.SnackbarConfiguration.SnackbarVariant = Variant.Filled;
-        });
+        builder.Services.AddMqttProbeMud();
         builder.Services.AddMauiBlazorWebView();
 
 #if DEBUG
@@ -58,31 +48,22 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        // MAUI has one local app session, so MQTT and UI state services are shared across pages.
-        var client = new MqttFactory().CreateManagedMqttClient();
-        builder.Services.AddSingleton(client);
-        builder.Services.AddSingleton<ISessionState, SessionState>();
-        builder.Services.AddSingleton<IEmulationService>(sp =>
-            new EmulationService(
-                sp.GetRequiredService<ISettingsStore>(),
-                sp.GetRequiredService<ISparkplugNodeFactory>(),
-                sp.GetRequiredService<ISessionState>(),
-                sp.GetRequiredService<IManagedMqttClient>(),
-                sp.GetRequiredService<IUxMetricsService>(),
-                sp.GetRequiredService<ICertificateAssetStore>(),
-                sp.GetRequiredService<ICertificateSessionQuarantine>(),
-                sp.GetRequiredService<ILogger<EmulationService>>(),
-                sp.GetRequiredService<IAppHealthMetricsCollector>()));
-        builder.Services.AddSingleton<IMessageStoreManager, MessageStoreManager>();
-        builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
-        builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
-        builder.Services.AddSingleton<IMqttOptionsBuilder>(sp =>
-            new MqttOptionsBuilder(sp.GetRequiredService<ICertificateAssetStore>()));
-        builder.Services.AddSingleton<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
-        builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
-        builder.Services.AddSingleton<IAppHealthMetricsCollector, AppHealthMetricsCollector>();
-        builder.Services.AddSingleton<IUxMetricsService, UxMetricsService>();
-        builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
+        builder.Services.AddMqttProbeCore(HostSessionModel.SingleSession);
+        AddPlatformServices(builder);
+        AddCertificateServices(builder);
+        AddConfiguration(builder);
+
+        builder.Services.AddScoped<IClipboardService, MauiClipboardService>();
+        builder.Services.AddMqttProbeCharts();
+
+        AddPluginServices(builder);
+        builder.Services.AddMqttProbeSparkplugTopology(HostSessionModel.SingleSession);
+
+        return builder.Build();
+    }
+
+    private static void AddPlatformServices(MauiAppBuilder builder)
+    {
         builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
 #if WINDOWS
         builder.Services.AddSingleton<IUpdateService, MqttProbe.WinUI.VelopackUpdateService>();
@@ -95,12 +76,11 @@ public static class MauiProgram
         builder.Services.AddCascadingAuthenticationState();
         builder.Services.AddScoped<AuthenticationStateProvider, UnauthenticatedStateProvider>();
         builder.Services.AddTransient<MainPage>();
+        builder.Services.AddSingleton<ISecretStorage>(new MauiSecretStorage());
+    }
 
-        var secretStorage = new MauiSecretStorage();
-        builder.Services.AddSingleton<ISecretStorage>(secretStorage);
-
-        // Only iOS has a platform-specific secret store and file protection. Mac Catalyst runs
-        // on macOS, which has no NSFileProtection, and the iOS types are themselves #if IOS.
+    private static void AddCertificateServices(MauiAppBuilder builder)
+    {
 #if IOS
         builder.Services.AddSingleton<ICertificateEnvelopeKeyStore, IosCertificateEnvelopeKeyStore>();
         builder.Services.AddSingleton<IFileProtector>(new IosFileProtector());
@@ -110,10 +90,6 @@ public static class MauiProgram
         builder.Services.AddSingleton<IFileProtector, DefaultFileProtector>();
 #endif
 
-        // Separate question from the above: Apple's crypto stack cannot load a PKCS#12 with
-        // X509KeyStorageFlags.Exportable -- both the ephemeral and the default key set throw
-        // PlatformNotSupportedException -- so both Apple heads need the wrapper, which skips
-        // the canonical re-export and stores the original bytes and password instead.
 #if IOS || MACCATALYST
         builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
         {
@@ -138,30 +114,40 @@ public static class MauiProgram
 #endif
         builder.Services.AddSingleton<ICertificateFilePicker, MauiCertificateFilePicker>();
         builder.Services.AddSingleton<ICertificateInputCapability, MauiCertificateInputCapability>();
+    }
 
+    private static void AddConfiguration(MauiAppBuilder builder)
+    {
         var configDir = Path.Combine(FileSystem.Current.AppDataDirectory, "config");
 #if WINDOWS
-        // v1.0.1 and earlier shipped with the MAUI template's placeholder publisher
-        // ("User Name"), so existing users' config lives under that directory.
         var legacyConfigDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "User Name", "com.bluegrassiot.mqttprobe", "Data", "config");
         ConfigMigrator.MigrateIfNeeded(legacyConfigDir, configDir);
 #endif
         var configPath = Path.Combine(configDir, "appsettings.json");
+
+        Directory.CreateDirectory(configDir);
+        builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: false);
+
         var isMobile = DeviceInfo.Idiom == DeviceIdiom.Phone || DeviceInfo.Idiom == DeviceIdiom.Tablet;
         builder.Services.AddSingleton<ISettingsStore>(sp =>
             new SettingsStore(configPath, isMobile,
                 logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
+    }
 
-        builder.Services.AddScoped<IClipboardService, MauiClipboardService>();
-        builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
-        builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
-        builder.Services.AddScoped<IChartDataService, ChartDataService>();
-        builder.Services.AddSingleton<ISparkplugTopologyService, SparkplugTopologyService>();
-        builder.Services.AddSingleton<IPayloadDecoder, PayloadDecoder>();
-        builder.Services.AddScoped<IThemes, Themes>();
-
-        return builder.Build();
+    private static void AddPluginServices(MauiAppBuilder builder)
+    {
+        builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));
+        builder.Services.PostConfigure<PluginConfig>(cfg =>
+        {
+            var userPlugins = Path.Combine(FileSystem.Current.AppDataDirectory, "plugins");
+            Directory.CreateDirectory(userPlugins);
+            var appPlugins = Path.Combine(AppContext.BaseDirectory, "Plugins");
+            PluginFolderDefaults.Apply(cfg, FileSystem.Current.AppDataDirectory, userPlugins, appPlugins);
+        });
+        builder.Services.AddSingleton<IPluginPackagePicker, MauiPluginPackagePicker>();
+        builder.Services.AddSingleton<IPluginInputCapability, MauiPluginInputCapability>();
+        builder.Services.AddMqttProbePlugins();
     }
 }

@@ -1,19 +1,17 @@
 using Microsoft.Extensions.Logging;
 using MQTTnet;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Models.Chart;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Sparkplug;
+using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Shared.Tests.Services.Chart;
 
 [TestFixture]
 public class ChartDataServiceMessageHandlerTests
 {
-    private IManagedMqttClient _mockClient = null!;
+    private IMqttManagedClient _mockClient = null!;
     private ChartFieldRegistry _registry = null!;
     private ISettingsStore _mockSettingsStore = null!;
     private ChartDataService _service = null!;
@@ -22,20 +20,12 @@ public class ChartDataServiceMessageHandlerTests
     [SetUp]
     public async Task Setup()
     {
-        _mockClient = Substitute.For<IManagedMqttClient>();
+        _mockClient = Substitute.For<IMqttManagedClient>();
         _registry = new ChartFieldRegistry();
         _mockSettingsStore = Substitute.For<ISettingsStore>();
         _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns([]);
-        var mockDecoder = Substitute.For<IPayloadDecoder>();
-        mockDecoder.Decode(Arg.Any<MqttApplicationMessageReceivedEventArgs>())
-            .Returns(x =>
-            {
-                var e = (MqttApplicationMessageReceivedEventArgs)x[0]!;
-                var seg = e.ApplicationMessage.PayloadSegment;
-                var payload = seg.Count > 0 ? System.Text.Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count) : string.Empty;
-                return new DecodedPayload(payload, DetectedPayloadFormat.PlainText);
-            });
-        _service = new ChartDataService(_mockClient, mockDecoder, new JsonFieldExtractor(), _registry, _mockSettingsStore);
+        _service = new ChartDataService(_mockClient, new JsonFieldExtractor(), _registry, _mockSettingsStore,
+            TestPipelineHelper.BuildBuiltInPipeline());
 
         _handler = null;
         _mockClient
@@ -232,7 +222,6 @@ public class ChartDataServiceMessageHandlerTests
             ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "t", JsonPath = "name" })
         ]);
 
-        // "name" is a string value — JsonFieldExtractor only extracts numeric fields
         await Fire("t", """{"name": "sensor-1", "temp": 21.5}""");
 
         _service.GetPoints(seriesId).Should().BeEmpty();
@@ -241,7 +230,7 @@ public class ChartDataServiceMessageHandlerTests
     [Test]
     public async Task MessageHandler_WhenRegistryThrows_LogsAndDoesNotPropagate()
     {
-        var client = Substitute.For<IManagedMqttClient>();
+        var client = Substitute.For<IMqttManagedClient>();
         var registry = Substitute.For<IChartFieldRegistry>();
         registry.When(x => x.Update(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, ExtractedField>>()))
             .Do(_ => throw new InvalidOperationException("registry failed"));
@@ -253,22 +242,13 @@ public class ChartDataServiceMessageHandlerTests
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        var mockDecoder = Substitute.For<IPayloadDecoder>();
-        mockDecoder.Decode(Arg.Any<MqttApplicationMessageReceivedEventArgs>())
-            .Returns(x =>
-            {
-                var e = (MqttApplicationMessageReceivedEventArgs)x[0]!;
-                var seg = e.ApplicationMessage.PayloadSegment;
-                var payload = seg.Count > 0 ? System.Text.Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count) : string.Empty;
-                return new DecodedPayload(payload, DetectedPayloadFormat.PlainText);
-            });
         using var service = new ChartDataService(
             client,
-            mockDecoder,
             new JsonFieldExtractor(),
             registry,
             configStore,
-            logger);
+            TestPipelineHelper.BuildBuiltInPipeline(),
+            logger: logger);
         await service.StartAsync();
 
         var act = async () => await handler!(MakeArgs("sensor/data", """{"temp":22.0}"""));

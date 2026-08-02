@@ -87,7 +87,7 @@ public partial class App
     private Task<Page> ResolveInitialPageAsync()
         => Task.FromResult<Page>(_serviceProvider.GetRequiredService<MainPage>());
 
-    private static Page CreateLoadingPage() =>
+    private static ContentPage CreateLoadingPage() =>
         new ContentPage
         {
             BackgroundColor = Color.FromArgb("#0F172A"),
@@ -115,7 +115,7 @@ public partial class App
             }
         };
 
-    private Page CreateStartupErrorPage(Window window)
+    private ContentPage CreateStartupErrorPage(Window window)
     {
         var retryButton = new Button
         {

@@ -30,7 +30,7 @@ public static class ConfigMigrator
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            try { Directory.Delete(stagingDir, recursive: true); } catch { }
+            try { Directory.Delete(stagingDir, recursive: true); } catch { /* migration already failed; a leftover staging dir is reported by the false return */ }
             return false;
         }
     }

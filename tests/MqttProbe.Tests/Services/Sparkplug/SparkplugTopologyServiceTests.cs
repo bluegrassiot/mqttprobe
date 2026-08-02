@@ -2,10 +2,10 @@ using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using MQTTnet;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
 using MQTTnet.Protocol;
 using MqttProbe.Models.Sparkplug;
+using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Sparkplug;
 using Org.Eclipse.Tahu.Protobuf;
 
@@ -14,7 +14,7 @@ namespace MqttProbe.Shared.Tests.Services.Sparkplug;
 [TestFixture]
 public class SparkplugTopologyServiceTests
 {
-    private IManagedMqttClient _mockClient = null!;
+    private IMqttManagedClient _mockClient = null!;
     private ILogger<SparkplugTopologyService> _mockLogger = null!;
     private SparkplugTopologyService _service = null!;
     private Func<MqttApplicationMessageReceivedEventArgs, Task>? _handler;
@@ -22,7 +22,7 @@ public class SparkplugTopologyServiceTests
     [SetUp]
     public void Setup()
     {
-        _mockClient = Substitute.For<IManagedMqttClient>();
+        _mockClient = Substitute.For<IMqttManagedClient>();
         _mockLogger = Substitute.For<ILogger<SparkplugTopologyService>>();
 
         _handler = null;
@@ -555,8 +555,8 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -566,7 +566,7 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 25.0)));
 
         await _mockClient.DidNotReceive().EnqueueAsync(
-            Arg.Any<ManagedMqttApplicationMessage>());
+            Arg.Any<MqttApplicationMessage>());
     }
 
     [Test]
@@ -577,8 +577,8 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -592,8 +592,8 @@ public class SparkplugTopologyServiceTests
         // First NDATA without birth — triggers rebirth
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
 
         // Advance past the 30-second cooldown
         fakeClock.Advance(TimeSpan.FromSeconds(31));
@@ -601,8 +601,8 @@ public class SparkplugTopologyServiceTests
         // Second NDATA without birth — should trigger another rebirth
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 23.0)));
         await _mockClient.Received(2).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -614,21 +614,21 @@ public class SparkplugTopologyServiceTests
         await Task.WhenAll(tasks);
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
     public async Task NDATA_WithoutBirth_EnqueueAsyncThrows_DoesNotPropagateException()
     {
-        _mockClient.EnqueueAsync(Arg.Any<ManagedMqttApplicationMessage>())
+        _mockClient.EnqueueAsync(Arg.Any<MqttApplicationMessage>())
             .Returns(Task.FromException(new InvalidOperationException("connection lost")));
 
         var act = () => Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
 
         await act.Should().NotThrowAsync();
         // LogWarning is an extension method; verify via the Log interface method
-        await _mockClient.Received(1).EnqueueAsync(Arg.Any<ManagedMqttApplicationMessage>());
+        await _mockClient.Received(1).EnqueueAsync(Arg.Any<MqttApplicationMessage>());
     }
 
     [Test]
@@ -647,8 +647,8 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/DDATA/edge-01/sensor-A", SpbPayload(("Voltage", 0, 10, 220.0)));
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -659,8 +659,8 @@ public class SparkplugTopologyServiceTests
         await _service.RequestNodeRebirthAsync("factory", "edge-01");
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
     [Test]
@@ -669,7 +669,7 @@ public class SparkplugTopologyServiceTests
         await _service.RequestNodeRebirthAsync("missing", "edge-01");
 
         await _mockClient.DidNotReceive().EnqueueAsync(
-            Arg.Any<ManagedMqttApplicationMessage>());
+            Arg.Any<MqttApplicationMessage>());
     }
 
     [Test]
@@ -678,9 +678,9 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"
-                && VerifyRebirthPayload(m!.ApplicationMessage!.PayloadSegment)));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"
+                && VerifyRebirthPayload(m!.GetPayloadSegment())));
     }
 
     private static bool VerifyRebirthPayload(ReadOnlyMemory<byte> payloadBytes)
@@ -698,9 +698,9 @@ public class SparkplugTopologyServiceTests
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
 
         await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<ManagedMqttApplicationMessage>(m =>
-                m!.ApplicationMessage!.Topic == "spBv1.0/factory/NCMD/edge-01"
-                && m!.ApplicationMessage!.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce));
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"
+                && m!.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce));
     }
 
     [Test]
@@ -763,5 +763,682 @@ public class SparkplugTopologyServiceTests
 
         _service.Groups.Should().ContainKey("grp");
         _service.Groups["grp"].Nodes.Should().ContainKey("node2");
+    }
+
+    // --- ApplyTopologyEvents tests ---
+
+    private static MetricSnapshot Ms(string name, string dataType = "double", string value = "1.0000") =>
+        new() { Name = name, DataType = dataType, Value = value };
+
+    [Test]
+    public void ApplyTopologyEvents_NodeBirth_CreatesOnlineNodeWithMetrics()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/factory/NBIRTH/edge-01",
+                GroupId = "factory",
+                NodeId = "edge-01",
+                Metrics = [Ms("Temperature", "double", "23.5000"), Ms("Pressure", "double", "1013.2000")]
+            }
+        ]);
+
+        _service.Groups.Should().ContainKey("factory");
+        var node = _service.Groups["factory"].Nodes["edge-01"];
+        node.Status.Should().Be(SpbNodeStatus.Online);
+        node.Metrics.Should().HaveCount(2);
+        node.Metrics.Should().Contain(m => m.Name == "Temperature" && m.Value == "23.5000");
+        node.Metrics.Should().Contain(m => m.Name == "Pressure" && m.Value == "1013.2000");
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_NodeBirth_ClearsOldMetrics()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = [Ms("OldMetric")]
+            }
+        ]);
+
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = [Ms("NewMetric")]
+            }
+        ]);
+
+        var node = _service.Groups["g"].Nodes["n"];
+        node.Metrics.Should().HaveCount(1);
+        node.Metrics.Single().Name.Should().Be("NewMetric");
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_NodeDeath_MarksNodeOffline()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = [Ms("Metric")]
+            }
+        ]);
+
+        _service.ApplyTopologyEvents(
+        [
+            new NodeDeathEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDEATH/n",
+                GroupId = "g",
+                NodeId = "n"
+            }
+        ]);
+
+        _service.Groups["g"].Nodes["n"].Status.Should().Be(SpbNodeStatus.Offline);
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_NodeDeath_PropagatesOfflineToAllDevices()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = []
+            },
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("DevMetric")]
+            }
+        ]);
+
+        _service.ApplyTopologyEvents(
+        [
+            new NodeDeathEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDEATH/n",
+                GroupId = "g",
+                NodeId = "n"
+            }
+        ]);
+
+        _service.Groups["g"].Nodes["n"].Devices["d1"].Status.Should().Be(SpbNodeStatus.Offline);
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_NodeData_UpdatesExistingMetric()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = [Ms("Temp", "double", "20.0000")]
+            }
+        ]);
+
+        _service.ApplyTopologyEvents(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDATA/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = [Ms("Temp", "double", "25.0000")]
+            }
+        ]);
+
+        var node = _service.Groups["g"].Nodes["n"];
+        node.Metrics.Should().HaveCount(1);
+        node.Metrics.Single().Value.Should().Be("25.0000");
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_NodeData_AddsNewMetric()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = [Ms("Temp", "double", "20.0000")]
+            }
+        ]);
+
+        _service.ApplyTopologyEvents(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDATA/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = [Ms("Pressure", "double", "101.0000")]
+            }
+        ]);
+
+        var node = _service.Groups["g"].Nodes["n"];
+        node.Metrics.Should().HaveCount(2);
+        node.Metrics.Should().Contain(m => m.Name == "Pressure");
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_DeviceBirth_CreatesOnlineDeviceWithMetrics()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = []
+            }
+        ]);
+
+        _service.ApplyTopologyEvents(
+        [
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("Voltage", "double", "220.0000")]
+            }
+        ]);
+
+        var device = _service.Groups["g"].Nodes["n"].Devices["d1"];
+        device.Status.Should().Be(SpbNodeStatus.Online);
+        device.Metrics.Should().HaveCount(1);
+        device.Metrics.Single().Name.Should().Be("Voltage");
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_DeviceDeath_MarksDeviceOffline()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = []
+            },
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("DevMetric")]
+            }
+        ]);
+
+        _service.ApplyTopologyEvents(
+        [
+            new DeviceDeathEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DDEATH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1"
+            }
+        ]);
+
+        _service.Groups["g"].Nodes["n"].Devices["d1"].Status.Should().Be(SpbNodeStatus.Offline);
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_DeviceData_UpdatesDeviceMetric()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = []
+            },
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("Current", "double", "1.5000")]
+            }
+        ]);
+
+        _service.ApplyTopologyEvents(
+        [
+            new DeviceDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DDATA/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("Current", "double", "2.0000")]
+            }
+        ]);
+
+        var device = _service.Groups["g"].Nodes["n"].Devices["d1"];
+        device.Metrics.Should().HaveCount(1);
+        device.Metrics.Single().Value.Should().Be("2.0000");
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_DeviceData_AddsNewDeviceMetric()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = []
+            },
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("Current", "double", "1.5000")]
+            }
+        ]);
+
+        _service.ApplyTopologyEvents(
+        [
+            new DeviceDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DDATA/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("Voltage", "double", "220.0000")]
+            }
+        ]);
+
+        var device = _service.Groups["g"].Nodes["n"].Devices["d1"];
+        device.Metrics.Should().HaveCount(2);
+        device.Metrics.Should().Contain(m => m.Name == "Voltage");
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_MultipleEventsInSingleCall_ProcessesAll()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = [Ms("Temp", "double", "20.0000")]
+            },
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("Voltage", "double", "220.0000")]
+            }
+        ]);
+
+        _service.Groups["g"].Nodes["n"].Status.Should().Be(SpbNodeStatus.Online);
+        _service.Groups["g"].Nodes["n"].Devices["d1"].Status.Should().Be(SpbNodeStatus.Online);
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_EmptyEvents_DoesNotThrow()
+    {
+        var act = () => _service.ApplyTopologyEvents([]);
+
+        act.Should().NotThrow();
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_NodeBirth_RaisesTopologyChanged()
+    {
+        var raised = false;
+        _service.TopologyChanged += () => raised = true;
+
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = [Ms("Temp")]
+            }
+        ]);
+
+        raised.Should().BeTrue();
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_NodeDeath_RaisesTopologyChanged()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = []
+            }
+        ]);
+
+        var raised = false;
+        _service.TopologyChanged += () => raised = true;
+
+        _service.ApplyTopologyEvents(
+        [
+            new NodeDeathEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDEATH/n",
+                GroupId = "g",
+                NodeId = "n"
+            }
+        ]);
+
+        raised.Should().BeTrue();
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_NodeData_RaisesTopologyChanged()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = [Ms("Temp")]
+            }
+        ]);
+
+        var raised = false;
+        _service.TopologyChanged += () => raised = true;
+
+        _service.ApplyTopologyEvents(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDATA/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = [Ms("Temp", "double", "25.0000")]
+            }
+        ]);
+
+        raised.Should().BeTrue();
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_DeviceBirth_RaisesTopologyChanged()
+    {
+        var raised = false;
+        _service.TopologyChanged += () => raised = true;
+
+        _service.ApplyTopologyEvents(
+        [
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("Voltage")]
+            }
+        ]);
+
+        raised.Should().BeTrue();
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_DeviceDeath_RaisesTopologyChanged()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = []
+            }
+        ]);
+
+        var raised = false;
+        _service.TopologyChanged += () => raised = true;
+
+        _service.ApplyTopologyEvents(
+        [
+            new DeviceDeathEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DDEATH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1"
+            }
+        ]);
+
+        raised.Should().BeTrue();
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_DeviceData_RaisesTopologyChanged()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("Current")]
+            }
+        ]);
+
+        var raised = false;
+        _service.TopologyChanged += () => raised = true;
+
+        _service.ApplyTopologyEvents(
+        [
+            new DeviceDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DDATA/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("Current", "double", "2.0000")]
+            }
+        ]);
+
+        raised.Should().BeTrue();
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_FullLifecycle_MatchesProtobufPath()
+    {
+        // Simulate: NBIRTH → DBIRTH → NDATA → DDATA → DDEATH → NDEATH
+        // via ApplyTopologyEvents, then verify state matches expected
+
+        _service.ApplyTopologyEvents(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/factory/NBIRTH/edge-01",
+                GroupId = "factory",
+                NodeId = "edge-01",
+                Metrics = [Ms("Temp", "double", "20.0000"), Ms("Pressure", "double", "1013.0000")]
+            }
+        ]);
+
+        var node = _service.Groups["factory"].Nodes["edge-01"];
+        node.Status.Should().Be(SpbNodeStatus.Online);
+        node.Metrics.Should().HaveCount(2);
+
+        _service.ApplyTopologyEvents(
+        [
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/factory/DBIRTH/edge-01/sensor-A",
+                GroupId = "factory",
+                NodeId = "edge-01",
+                DeviceId = "sensor-A",
+                Metrics = [Ms("Voltage", "double", "220.0000")]
+            }
+        ]);
+
+        var device = node.Devices["sensor-A"];
+        device.Status.Should().Be(SpbNodeStatus.Online);
+        device.Metrics.Should().HaveCount(1);
+
+        _service.ApplyTopologyEvents(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/factory/NDATA/edge-01",
+                GroupId = "factory",
+                NodeId = "edge-01",
+                Metrics = [Ms("Temp", "double", "25.0000")]
+            },
+            new DeviceDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/factory/DDATA/edge-01/sensor-A",
+                GroupId = "factory",
+                NodeId = "edge-01",
+                DeviceId = "sensor-A",
+                Metrics = [Ms("Voltage", "double", "230.0000")]
+            }
+        ]);
+
+        node.Metrics.Should().Contain(m => m.Name == "Temp" && m.Value == "25.0000");
+        node.Metrics.Should().Contain(m => m.Name == "Pressure" && m.Value == "1013.0000");
+        device.Metrics.Single().Value.Should().Be("230.0000");
+
+        _service.ApplyTopologyEvents(
+        [
+            new DeviceDeathEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/factory/DDEATH/edge-01/sensor-A",
+                GroupId = "factory",
+                NodeId = "edge-01",
+                DeviceId = "sensor-A"
+            }
+        ]);
+
+        device.Status.Should().Be(SpbNodeStatus.Offline);
+
+        _service.ApplyTopologyEvents(
+        [
+            new NodeDeathEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/factory/NDEATH/edge-01",
+                GroupId = "factory",
+                NodeId = "edge-01"
+            }
+        ]);
+
+        node.Status.Should().Be(SpbNodeStatus.Offline);
+        // NDEATH also propagates offline to devices
+        device.Status.Should().Be(SpbNodeStatus.Offline);
+    }
+
+    [Test]
+    public void ApplyTopologyEvents_DeviceBirth_WithoutPriorNodeBirth_CreatesNodeImplicitly()
+    {
+        _service.ApplyTopologyEvents(
+        [
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("Voltage")]
+            }
+        ]);
+
+        _service.Groups.Should().ContainKey("g");
+        _service.Groups["g"].Nodes.Should().ContainKey("n");
+        _service.Groups["g"].Nodes["n"].Devices.Should().ContainKey("d1");
+        _service.Groups["g"].Nodes["n"].Devices["d1"].Status.Should().Be(SpbNodeStatus.Online);
     }
 }

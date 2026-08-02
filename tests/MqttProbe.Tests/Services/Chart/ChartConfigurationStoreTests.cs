@@ -31,6 +31,7 @@ public class ChartConfigurationStoreTests
     [TearDown]
     public void TearDown()
     {
+        _store.Dispose();
         if (File.Exists(_filePath)) File.Delete(_filePath);
     }
 

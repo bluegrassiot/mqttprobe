@@ -95,12 +95,12 @@ if [[ "$SIGN" -eq 1 ]]; then
         case "${#_ids[@]}" in
             0) die "no 'Developer ID Application' identity in the keychain.
     security find-identity -v -p codesigning
-    Then set CODESIGN_KEY=<sha1> and re-run." ;;
+    Then set CODESIGN_KEY=<fingerprint> and re-run." ;;
             1) CODESIGN_KEY="${_ids[0]}" ;;
             *) die "${#_ids[@]} 'Developer ID Application' identities found; the name is ambiguous.
     Pick one and set it explicitly:
     security find-identity -v -p codesigning
-    CODESIGN_KEY=<sha1> $0 --sign" ;;
+    CODESIGN_KEY=<fingerprint> $0 --sign" ;;
         esac
     fi
     info "signing identity: $CODESIGN_KEY"

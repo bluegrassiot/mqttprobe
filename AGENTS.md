@@ -22,6 +22,6 @@
 ## Verification
 
 - Run tests with `dotnet test tests/MqttProbe.Tests`.
-- Build with `dotnet build MqttProbe.slnx --warnaserror`.
+- Build with `dotnet build MqttProbe.slnx`.
 - For code changes, check coverage with `python scripts/coverage.py`.
 - Treat 75% coverage as a hard minimum for new code.

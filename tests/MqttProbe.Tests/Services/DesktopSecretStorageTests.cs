@@ -164,7 +164,7 @@ public class DesktopSecretStorageTests
         // Write a DPAPI-protected blob directly to disk
         var plain = Encoding.UTF8.GetBytes("legacy-secret");
 #pragma warning disable CA1416
-        var blob = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser);
+        var blob = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser); // DevSkim: ignore DS112266 - must match the legacy no-entropy blob being migrated
 #pragma warning restore CA1416
         var path = Path.Combine(_dir, "bGVnYWN5LWtleQ.dat");
         Directory.CreateDirectory(_dir);

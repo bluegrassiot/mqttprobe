@@ -45,9 +45,9 @@ public class EmulationPanelTests : BunitTestContext
         int devices = 1,
         int metricsPerDevice = 1,
         EmulatorNodeType type = EmulatorNodeType.SparkplugB,
-        GenericPayloadFormat format = GenericPayloadFormat.Json)
+        string format = "json")
     {
-        var node = new EmulatorNodeConfig { NodeId = nodeId, GroupId = groupId, Type = type, PayloadFormat = format };
+        var node = new EmulatorNodeConfig { NodeId = nodeId, GroupId = groupId, Type = type, PayloadFormatId = format };
         for (var d = 0; d < devices; d++)
         {
             var device = new EmulatorDeviceConfig { DeviceId = $"Device-{d + 1}" };
@@ -133,7 +133,7 @@ public class EmulationPanelTests : BunitTestContext
     [Test]
     public void HighThroughput_AtOrAbove200PerSecond_RendersWarningAlert()
     {
-        _nodes.Add(Node("Bulk-1", metricsPerDevice: 100, type: EmulatorNodeType.Generic, format: GenericPayloadFormat.PlainText));
+        _nodes.Add(Node("Bulk-1", metricsPerDevice: 100, type: EmulatorNodeType.Generic, format: "plaintext"));
 
         var cut = Render<EmulationPanel>();
 

@@ -4,12 +4,8 @@ namespace MqttProbe.Desktop.Services.Security;
 
 public sealed class LinuxLibsecretNative : ILinuxLibsecretNative
 {
-    private static readonly IntPtr _libsecretHandle;
-    private static readonly IntPtr _glibHandle;
     private static readonly bool _loaded;
 
-    private static readonly IntPtr _schemaNamePtr;
-    private static readonly IntPtr _attrKeyIdPtr;
     private static readonly SecretSchema _schema;
 
     private static readonly IntPtr _gStrHash;
@@ -18,29 +14,32 @@ public sealed class LinuxLibsecretNative : ILinuxLibsecretNative
 
     static LinuxLibsecretNative()
     {
-        NativeLibrary.TryLoad("libsecret-1.so.0", typeof(LinuxLibsecretNative).Assembly, null, out _libsecretHandle);
-        NativeLibrary.TryLoad("libglib-2.0.so.0", typeof(LinuxLibsecretNative).Assembly, null, out _glibHandle);
+        // S1450: these are only ever read within this constructor, so they stay
+        // locals rather than fields. NativeLibrary handles/StringToHGlobalAnsi
+        // pointers are unmanaged and outlive the local's scope regardless.
+        NativeLibrary.TryLoad("libsecret-1.so.0", typeof(LinuxLibsecretNative).Assembly, null, out var libsecretHandle);
+        NativeLibrary.TryLoad("libglib-2.0.so.0", typeof(LinuxLibsecretNative).Assembly, null, out var glibHandle);
 
-        _loaded = _libsecretHandle != IntPtr.Zero && _glibHandle != IntPtr.Zero;
+        _loaded = libsecretHandle != IntPtr.Zero && glibHandle != IntPtr.Zero;
 
         if (!_loaded)
             return;
 
-        _schemaNamePtr = Marshal.StringToHGlobalAnsi("com.bluegrassiot.mqttprobe.MasterKey");
-        _attrKeyIdPtr = Marshal.StringToHGlobalAnsi("key-id");
+        var schemaNamePtr = Marshal.StringToHGlobalAnsi("com.bluegrassiot.mqttprobe.MasterKey");
+        var attrKeyIdPtr = Marshal.StringToHGlobalAnsi("key-id");
 
         _schema = new SecretSchema
         {
-            Name = _schemaNamePtr,
+            Name = schemaNamePtr,
             Flags = 0,
             Attributes = new SecretSchemaAttribute[32],
             Reserved = 0,
         };
-        _schema.Attributes[0] = new SecretSchemaAttribute { Name = _attrKeyIdPtr, Type = 0 };
+        _schema.Attributes[0] = new SecretSchemaAttribute { Name = attrKeyIdPtr, Type = 0 };
 
-        NativeLibrary.TryGetExport(_glibHandle, "g_str_hash", out _gStrHash);
-        NativeLibrary.TryGetExport(_glibHandle, "g_str_equal", out _gStrEqual);
-        NativeLibrary.TryGetExport(_glibHandle, "g_free", out _gFree);
+        NativeLibrary.TryGetExport(glibHandle, "g_str_hash", out _gStrHash);
+        NativeLibrary.TryGetExport(glibHandle, "g_str_equal", out _gStrEqual);
+        NativeLibrary.TryGetExport(glibHandle, "g_free", out _gFree);
     }
 
     public int Lookup(string schemaName, IReadOnlyDictionary<string, string> attributes,
@@ -187,16 +186,16 @@ public sealed class LinuxLibsecretNative : ILinuxLibsecretNative
 
         var msg = message.ToLowerInvariant();
 
-        if (msg.Contains("cannot autolaunch") ||
-            msg.Contains("service unknown") ||
-            msg.Contains("no such service") ||
-            msg.Contains("no d-bus") ||
-            msg.Contains("not available") ||
-            msg.Contains("no session") ||
-            msg.Contains("org.freedesktop.secrets"))
+        if (msg.Contains("cannot autolaunch", StringComparison.Ordinal) ||
+            msg.Contains("service unknown", StringComparison.Ordinal) ||
+            msg.Contains("no such service", StringComparison.Ordinal) ||
+            msg.Contains("no d-bus", StringComparison.Ordinal) ||
+            msg.Contains("not available", StringComparison.Ordinal) ||
+            msg.Contains("no session", StringComparison.Ordinal) ||
+            msg.Contains("org.freedesktop.secrets", StringComparison.Ordinal))
             return 2;
 
-        if (msg.Contains("spawn") && msg.Contains("failed"))
+        if (msg.Contains("spawn", StringComparison.Ordinal) && msg.Contains("failed", StringComparison.Ordinal))
             return 2;
 
         return 3;

@@ -5,15 +5,20 @@ using Microsoft.AspNetCore.DataProtection.XmlEncryption;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
-using MQTTnet;
-using MQTTnet.Extensions.ManagedClient;
+using Microsoft.Extensions.Options;
 using MqttProbe.Components.Layout;
+using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
+using MqttProbe.Services.Plugins;
+using MqttProbe.Services.Plugins.Loading;
+using MqttProbe.Services.Plugins.Packaging;
+using MqttProbe.Services.Plugins.Pipeline;
+using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using MqttProbe.Web;
@@ -27,18 +32,7 @@ StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configurat
 
 builder.Services.AddRazorPages();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
-builder.Services.AddMudServices(config =>
-{
-    config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.TopCenter;
-    config.SnackbarConfiguration.RequireInteraction = false;
-    config.SnackbarConfiguration.PreventDuplicates = true;
-    config.SnackbarConfiguration.NewestOnTop = false;
-    config.SnackbarConfiguration.ShowCloseIcon = true;
-    config.SnackbarConfiguration.VisibleStateDuration = 3000;
-    config.SnackbarConfiguration.HideTransitionDuration = 500;
-    config.SnackbarConfiguration.ShowTransitionDuration = 500;
-    config.SnackbarConfiguration.SnackbarVariant = Variant.Filled;
-});
+builder.Services.AddMqttProbeMud();
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -101,9 +95,7 @@ builder.Services.AddSingleton<ISecretStorage>(sp =>
         sp.GetRequiredService<IDataProtectionProvider>(),
         Path.Combine(configDir, "secrets.dat")));
 
-// Web circuits are independent user sessions, so MQTT and UI state services stay scoped per circuit.
-builder.Services.AddScoped<IManagedMqttClient>(_ => new MqttFactory().CreateManagedMqttClient());
-builder.Services.AddScoped<ISessionState, SessionState>();
+builder.Services.AddMqttProbeCore(HostSessionModel.PerCircuit);
 builder.Services.AddSingleton<ISettingsStore>(sp =>
     new SettingsStore(Path.Combine(configDir, "appsettings.json"),
         logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
@@ -118,39 +110,27 @@ builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
         sp.GetRequiredService<ILogger<CertificateAssetStore>>());
     return store;
 });
-builder.Services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
 builder.Services.AddSingleton<ICertificateFilePicker, WebCertificateFilePicker>();
 builder.Services.AddSingleton<ICertificateInputCapability, WebCertificateInputCapability>();
-builder.Services.AddScoped<IEmulationService>(sp =>
-new EmulationService(
-sp.GetRequiredService<ISettingsStore>(),
-sp.GetRequiredService<ISparkplugNodeFactory>(),
-sp.GetRequiredService<ISessionState>(),
-sp.GetRequiredService<IManagedMqttClient>(),
-sp.GetRequiredService<IUxMetricsService>(),
-sp.GetRequiredService<ICertificateAssetStore>(),
-sp.GetRequiredService<ICertificateSessionQuarantine>(),
-sp.GetRequiredService<ILogger<EmulationService>>(),
-sp.GetRequiredService<IAppHealthMetricsCollector>()));
-builder.Services.AddScoped<IMessageStoreManager, MessageStoreManager>();
-builder.Services.AddScoped<ISubscriptionManager, SubscriptionManager>();
-builder.Services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
-builder.Services.AddScoped<IMqttOptionsBuilder>(sp =>
-    new MqttOptionsBuilder(sp.GetRequiredService<ICertificateAssetStore>()));
-builder.Services.AddScoped<IConnectionSessionLifecycle, ConnectionSessionLifecycle>();
-builder.Services.AddSingleton<IAppHealthMetricsCollector, AppHealthMetricsCollector>();
-builder.Services.AddScoped<IUxMetricsService, UxMetricsService>();
-builder.Services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
+
 builder.Services.AddScoped<IClipboardService, WebClipboardService>();
 builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
 builder.Services.AddSingleton<IUpdateService, NoOpUpdateService>();
 builder.Services.AddSingleton<IUserAuthService, SingleAdminUserAuthService>();
-builder.Services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
-builder.Services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
-builder.Services.AddScoped<IChartDataService, ChartDataService>();
-builder.Services.AddScoped<ISparkplugTopologyService, SparkplugTopologyService>();
-builder.Services.AddScoped<IPayloadDecoder, PayloadDecoder>();
-builder.Services.AddScoped<IThemes, Themes>();
+
+builder.Services.AddMqttProbeCharts();
+
+builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));
+builder.Services.PostConfigure<PluginConfig>(cfg =>
+{
+    var contentPlugins = Path.Combine(builder.Environment.ContentRootPath, "Plugins");
+    PluginFolderDefaults.Apply(cfg, builder.Environment.ContentRootPath, contentPlugins);
+});
+builder.Services.AddSingleton<IPluginPackagePicker, WebPluginPackagePicker>();
+builder.Services.AddSingleton<IPluginInputCapability, WebPluginInputCapability>();
+builder.Services.AddMqttProbePlugins();
+
+builder.Services.AddMqttProbeSparkplugTopology(HostSessionModel.PerCircuit);
 
 var app = builder.Build();
 
@@ -189,7 +169,6 @@ app.MapRazorComponents<App>()
 
 await app.RunAsync();
 
-// Required for WebApplicationFactory<Program> in E2E tests.
 public partial class Program
 {
     protected Program() { }

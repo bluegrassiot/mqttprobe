@@ -6,7 +6,7 @@ public sealed class CertificateSessionQuarantine : ICertificateSessionQuarantine
 {
     private readonly List<CertificateSessionResource> _quarantined = [];
     private readonly ILogger<CertificateSessionQuarantine> _logger;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public CertificateSessionQuarantine(ILogger<CertificateSessionQuarantine> logger)
     {

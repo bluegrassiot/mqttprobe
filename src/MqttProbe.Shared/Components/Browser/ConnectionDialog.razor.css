@@ -173,6 +173,10 @@
     color: var(--mud-palette-text-primary);
 }
 
+.on-connect-subs-table {
+    overflow-x: auto;
+}
+
 @media (max-width: 599px) {
     .step-selector {
         display: flex;

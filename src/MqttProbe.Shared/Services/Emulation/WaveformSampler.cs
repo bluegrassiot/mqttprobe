@@ -18,7 +18,7 @@ public static class WaveformSampler
 {
     public static WaveformState CreateState(EmulatorMetricConfig metric) =>
         // Seeded from the metric Id so previews and runtime walks are reproducible per metric.
-        new(new Random(metric.Id.GetHashCode()), (metric.Min + metric.Max) / 2.0);
+        new(new Random(metric.Id.GetHashCode()), (metric.Min + metric.Max) / 2.0); // DevSkim: ignore DS148264
 
     public static double Next(EmulatorMetricConfig metric, WaveformState state, double tSeconds)
     {

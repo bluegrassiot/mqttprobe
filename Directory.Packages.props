@@ -6,18 +6,22 @@
     <!-- ============================================================ -->
     <!-- Core / Shared                                                -->
     <!-- ============================================================ -->
-    <PackageVersion Include="Blazor-ApexCharts" Version="6.1.0" />
+    <PackageVersion Include="Blazor-ApexCharts" Version="7.0.0" />
     <PackageVersion Include="Blazor.Lucide" Version="1.0.6" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.126" />
+    <PackageVersion Include="protobuf-net.Reflection" Version="3.2.52" />
     <PackageVersion Include="MessagePack" Version="3.1.8" />
     <PackageVersion Include="MudBlazor" Version="9.7.0" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.30.0.144632" />
+    <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.10" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
     <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.10" />
-    <!-- MQTTnet v4 — pinned; SparkplugNet is incompatible with v5 -->
-    <PackageVersion Include="MQTTnet" Version="4.3.7.1207" />
-    <PackageVersion Include="MQTTnet.Extensions.ManagedClient" Version="4.3.7.1207" />
-    <PackageVersion Include="SparkplugNet" Version="1.3.10" />
+    <!-- MQTTnet 5.2.x. ManagedClient is removed (replaced by the in-house
+         IMqttManagedClient wrapper). SparkplugNet is consumed via the
+         external/SparkplugNet git submodule ProjectReference (same MQTTnet pin). -->
+    <PackageVersion Include="MQTTnet" Version="5.2.0.1603" />
     <!-- ============================================================ -->
     <!-- ASP.NET Core / Web                                           -->
     <!-- ============================================================ -->
@@ -25,15 +29,16 @@
     <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.10" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="10.0.10" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.10" />
     <!-- ============================================================ -->
     <!-- MAUI                                                          -->
     <!-- ============================================================ -->
-    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.80" />
-    <PackageVersion Include="Microsoft.Maui.Controls.Compatibility" Version="10.0.80" />
-    <PackageVersion Include="Microsoft.Maui.Essentials" Version="10.0.80" />
-    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.80" />
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.90" />
+    <PackageVersion Include="Microsoft.Maui.Controls.Compatibility" Version="10.0.90" />
+    <PackageVersion Include="Microsoft.Maui.Essentials" Version="10.0.90" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.90" />
     <!-- ============================================================ -->
     <!-- Photino                                                       -->
     <!-- ============================================================ -->
@@ -45,7 +50,8 @@
     <!-- ============================================================ -->
     <!-- Tests                                                         -->
     <!-- ============================================================ -->
-    <PackageVersion Include="AwesomeAssertions" Version="9.4.0" />
+    <PackageVersion Include="AngleSharp" Version="1.5.2" />
+    <PackageVersion Include="AwesomeAssertions" Version="9.5.0" />
     <PackageVersion Include="bunit" Version="2.7.2" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="JunitXml.TestLogger" Version="8.0.0" />
@@ -58,9 +64,5 @@
     <PackageVersion Include="Microsoft.Playwright.NUnit" Version="1.60.0" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.60.0" />
     <PackageVersion Include="Testcontainers" Version="4.13.0" />
-    <!-- ============================================================ -->
-    <!-- Benchmarks                                                    -->
-    <!-- ============================================================ -->
-    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
   </ItemGroup>
 </Project>

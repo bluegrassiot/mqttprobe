@@ -1,7 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
+using MQTTnet;
+using MQTTnet.Protocol;
+using MqttProbe.Components.Browser;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Chart;
@@ -12,13 +13,14 @@ using MqttProbe.Services.Security;
 using MqttProbe.Shared.Tests.TestHelpers;
 using MqttProbe.Tests.Services.Security.TestHelpers;
 using MudBlazor;
+using MudBlazor.Extensions;
 
 namespace MqttProbe.Shared.Tests.Components.Browser;
 
 [TestFixture]
 public class ConnectionDialogTests : BunitTestContext
 {
-    private IManagedMqttClient _mockClient = null!;
+    private IMqttManagedClient _mockClient = null!;
     private ISettingsStore _mockConfigMgr = null!;
     private IMessageStoreManager _mockMsgStore = null!;
     private ISubscriptionManager _mockSubMgr = null!;
@@ -31,12 +33,12 @@ public class ConnectionDialogTests : BunitTestContext
     private ICertificateInputCapability _mockInputCapability = null!;
 
     private Func<MqttClientConnectedEventArgs, Task>? _connectedHandler;
-    private Func<ConnectingFailedEventArgs, Task>? _failedHandler;
+    private Func<MqttConnectingFailedEventArgs, Task>? _failedHandler;
 
     [SetUp]
     public void SetupMocks()
     {
-        _mockClient = Substitute.For<IManagedMqttClient>();
+        _mockClient = Substitute.For<IMqttManagedClient>();
         _mockConfigMgr = Substitute.For<ISettingsStore>();
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _mockSubMgr = Substitute.For<ISubscriptionManager>();
@@ -51,9 +53,10 @@ public class ConnectionDialogTests : BunitTestContext
         _mockConfigMgr.Config.Returns(new AppConfiguration());
         _mockMsgStore.Start().Returns(Task.CompletedTask);
         _mockOptionsBuilder.Build(Arg.Any<Connection>()).Returns(
-            new ManagedMqttClientOptionsBuilder()
-                .WithClientOptions(b => b.WithTcpServer("localhost"))
-                .Build());
+            new MqttManagedClientOptions
+            {
+                ClientOptions = new MqttClientOptionsBuilder().WithTcpServer("localhost").Build()
+            });
 
         _connectedHandler = null;
         _failedHandler = null;
@@ -61,8 +64,8 @@ public class ConnectionDialogTests : BunitTestContext
             .When(x => x.ConnectedAsync += Arg.Any<Func<MqttClientConnectedEventArgs, Task>>())
             .Do(x => _connectedHandler = x.Arg<Func<MqttClientConnectedEventArgs, Task>>());
         _mockClient
-            .When(x => x.ConnectingFailedAsync += Arg.Any<Func<ConnectingFailedEventArgs, Task>>())
-            .Do(x => _failedHandler = x.Arg<Func<ConnectingFailedEventArgs, Task>>());
+            .When(x => x.ConnectingFailedAsync += Arg.Any<Func<MqttConnectingFailedEventArgs, Task>>())
+            .Do(x => _failedHandler = x.Arg<Func<MqttConnectingFailedEventArgs, Task>>());
 
         Services.AddSingleton(_mockClient);
         Services.AddSingleton(_mockConfigMgr);
@@ -175,7 +178,7 @@ public class ConnectionDialogTests : BunitTestContext
     [Test]
     public async Task ConnectButton_CallsStartAsync_OnManagedClient()
     {
-        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
+        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var cfg = new AppConfiguration
         {
             Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
@@ -186,7 +189,7 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        await _mockClient.Received(1).StartAsync(Arg.Any<ManagedMqttClientOptions>());
+        await _mockClient.Received(1).StartAsync(Arg.Any<MqttManagedClientOptions>());
     }
 
     [Test]
@@ -244,27 +247,10 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task Connect_WithSubscribeToEverythingChecked_DoesNotCallSubscriptionManagerAdd()
+    public async Task Connect_DoesNotCallSubscriptionManagerAdd()
     {
-        _mockSubMgr.Add(Arg.Any<string>()).Returns(Task.CompletedTask);
-        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
-        var cfg = new AppConfiguration
-        {
-            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
-        };
-        await OpenDialog(cfg);
-
-        await SelectConnection(cfg.Connections[0]);
-        _dialogProvider.Find("button[title='Connect']").Click();
-
-        await _mockSubMgr.DidNotReceive().Add(Arg.Any<string>());
-    }
-
-    [Test]
-    public async Task ConnectedAsync_WithSubscribeToEverythingChecked_CallsSubscriptionManagerAdd()
-    {
-        _mockSubMgr.Add(Arg.Any<string>()).Returns(Task.CompletedTask);
-        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
+        _mockSubMgr.Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>()).Returns(Task.CompletedTask);
+        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var cfg = new AppConfiguration
         {
             Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
@@ -273,50 +259,17 @@ public class ConnectionDialogTests : BunitTestContext
         await SelectConnection(cfg.Connections[0]);
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        _connectedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
-
-        await _mockSubMgr.Received(1).Add("spBv1.0/#");
+        await _mockSubMgr.DidNotReceive().Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>());
     }
 
     [Test]
-    public async Task ConnectedAsync_WithSubscribeToEverythingUnchecked_DoesNotCallSubscriptionManagerAdd()
+    public async Task ConnectedAsync_DoesNotCallSubscriptionManagerAddOrRemove()
     {
-        _mockSubMgr.Add(Arg.Any<string>()).Returns(Task.CompletedTask);
-        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
-        var cfg = new AppConfiguration
-        {
-            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
-        };
-        await OpenDialog(cfg);
-        await SelectConnection(cfg.Connections[0]);
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>());
+        _mockSubMgr.Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>()).Returns(Task.CompletedTask);
+        _mockSubMgr.Remove(Arg.Any<List<string>>()).Returns(Task.CompletedTask);
+        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
 
-        // Toggle the "On Connect" subscription checkbox off (defaults to true).
-        // The dialog has two checkbox inputs (Use TLS, Subscribe to Sparkplug B);
-        // the Sparkplug checkbox is the one whose surrounding label mentions it.
-        var checkboxes = _dialogProvider.FindAll("input[type='checkbox']").ToList();
-        var sparkplugCheckbox = checkboxes
-            .First(c => c.Closest("label")?.TextContent.Contains("Sparkplug B") == true);
-        sparkplugCheckbox.Change(false);
-
-        _dialogProvider.Find("button[title='Connect']").Click();
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
-
-        await _mockSubMgr.DidNotReceive().Add(Arg.Any<string>());
-    }
-
-    [Test]
-    public async Task Connect_SetsSelectedConnection_BeforeCallingStartAsync()
-    {
-        // Regression: SessionState.SelectedConnection must be assigned BEFORE
-        // _managedMqttClient.StartAsync is invoked. Otherwise the SubscriptionManager,
-        // which subscribes to IManagedMqttClient.ConnectedAsync during app startup
-        // (before this dialog opens), reads the default empty SelectedConnection in
-        // its OnConnected handler and fails to re-subscribe to saved topics on
-        // app restart. The dialog's OnConnected handler runs too late — by the time
-        // it sets SelectedConnection, the SubscriptionManager has already read the
-        // default value and given up.
-        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
         var cfg = new AppConfiguration
         {
             Connections =
@@ -326,7 +279,168 @@ public class ConnectionDialogTests : BunitTestContext
                     Name = "TestConn",
                     Host = "localhost",
                     Port = 1883,
-                    SubscribedTopics = ["saved/topic"]
+                    SubscribedTopics = [new() { Topic = "spBv1.0/#" }]
+                }
+            ]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        _connectedHandler.Should().NotBeNull();
+        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
+
+        await _mockSubMgr.DidNotReceive().Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>());
+        await _mockSubMgr.DidNotReceive().Remove(Arg.Any<List<string>>());
+    }
+
+    [Test]
+    public async Task OnConnectTab_RendersSavedSubscriptions()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections =
+            [
+                new Connection
+                {
+                    Name = "TestConn",
+                    Host = "localhost",
+                    Port = 1883,
+                    SubscribedTopics =
+                    [
+                        new() { Topic = "spBv1.0/#", QualityOfServiceLevel = MqttQualityOfServiceLevel.AtLeastOnce },
+                        new() { Topic = "sensors/#", QualityOfServiceLevel = MqttQualityOfServiceLevel.AtMostOnce }
+                    ]
+                }
+            ]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        GoToOnConnectTab();
+
+        _dialogProvider.Markup.Should().Contain("spBv1.0/#");
+        _dialogProvider.Markup.Should().Contain("sensors/#");
+        _dialogProvider.Markup.Should().Contain("AtMostOnce");
+    }
+
+    [Test]
+    public async Task OnConnectTab_Add_PersistsTopicWithDefaultQos()
+    {
+        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>().Instance;
+        editor.TopicDraft = "factory/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        await _mockConfigMgr.Received().AddConnectionAsync(
+            Arg.Is<Connection>(c =>
+                c!.SubscribedTopics.Any(s =>
+                    s.Topic == "factory/#" &&
+                    s.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce)));
+    }
+
+    [Test]
+    public async Task OnConnectTab_AddDuplicate_DoesNotPersistSecondEntry()
+    {
+        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        var conn = new Connection
+        {
+            Name = "TestConn",
+            Host = "localhost",
+            Port = 1883,
+            SubscribedTopics = [new() { Topic = "dup/#" }]
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>().Instance;
+        editor.TopicDraft = "dup/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        conn.SubscribedTopics.Count(s => s.Topic == "dup/#").Should().Be(1);
+        await _mockConfigMgr.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+    }
+
+    [Test]
+    public async Task OnConnectTab_Remove_PersistsWithoutTopic()
+    {
+        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        var conn = new Connection
+        {
+            Name = "TestConn",
+            Host = "localhost",
+            Port = 1883,
+            SubscribedTopics =
+            [
+                new() { Topic = "keep/#" },
+                new() { Topic = "drop/#" }
+            ]
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        // Select the "drop/#" row checkbox and click Remove
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>();
+        var checkboxes = editor.FindAll("input[type='checkbox']");
+        // [0] = header select-all, [1] = keep/#, [2] = drop/#
+        checkboxes.Should().HaveCount(3);
+        checkboxes[2].Change(true);
+        _dialogProvider.Find("button[title='Remove']").Click();
+
+        await _mockConfigMgr.Received().AddConnectionAsync(
+            Arg.Is<Connection>(c =>
+                c!.SubscribedTopics.All(s => s.Topic != "drop/#") &&
+                c.SubscribedTopics.Any(s => s.Topic == "keep/#")));
+    }
+
+    [Test]
+    public async Task OnConnectTab_Preset_FillsTopicDraftOnly()
+    {
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        await OpenDialog(new AppConfiguration { Connections = [conn] });
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var chip = _dialogProvider.FindAll("button, .mud-chip")
+            .First(e => e.TextContent.Contains("spBv1.0/#"));
+        chip.Click();
+
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>().Instance;
+        editor.TopicDraft.Should().Be("spBv1.0/#");
+        conn.SubscribedTopics.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Connect_SetsSelectedConnection_BeforeCallingStartAsync()
+    {
+        // Regression: SessionState.SelectedConnection must be assigned BEFORE
+        // _managedMqttClient.StartAsync is invoked. Otherwise the SubscriptionManager,
+        // which subscribes to IMqttManagedClient.ConnectedAsync during app startup
+        // (before this dialog opens), reads the default empty SelectedConnection in
+        // its OnConnected handler and fails to re-subscribe to saved topics on
+        // app restart. The dialog's OnConnected handler runs too late — by the time
+        // it sets SelectedConnection, the SubscriptionManager has already read the
+        // default value and given up.
+        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
+        var cfg = new AppConfiguration
+        {
+            Connections =
+            [
+                new Connection
+                {
+                    Name = "TestConn",
+                    Host = "localhost",
+                    Port = 1883,
+                    SubscribedTopics = [new SubscribedTopic { Topic = "saved/topic" }]
                 }
             ]
         };
@@ -335,11 +449,11 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        await _mockClient.Received(1).StartAsync(Arg.Any<ManagedMqttClientOptions>());
+        await _mockClient.Received(1).StartAsync(Arg.Any<MqttManagedClientOptions>());
         Received.InOrder(() =>
         {
-            _mockSessionState.SelectedConnection = Arg.Is<Connection>(c => c!.SubscribedTopics.Contains("saved/topic"));
-            _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>());
+            _mockSessionState.SelectedConnection = Arg.Is<Connection>(c => c!.SubscribedTopics.Any(s => s.Topic == "saved/topic"));
+            _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>());
         });
     }
 
@@ -347,7 +461,7 @@ public class ConnectionDialogTests : BunitTestContext
     public async Task ConnectingFailed_DoesNotCallSubscriptionManagerAdd()
     {
         _mockSubMgr.Add(Arg.Any<string>()).Returns(Task.CompletedTask);
-        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
+        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var cfg = new AppConfiguration
         {
             Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
@@ -357,7 +471,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Find("button[title='Connect']").Click();
 
         await _dialogProvider.InvokeAsync(() =>
-            _failedHandler!(new ConnectingFailedEventArgs(null, new Exception("refused"))));
+            _failedHandler!(new MqttConnectingFailedEventArgs(new Exception("refused"))));
 
         await _mockSubMgr.DidNotReceive().Add(Arg.Any<string>());
     }
@@ -411,7 +525,7 @@ public class ConnectionDialogTests : BunitTestContext
         await SelectConnection(cfg.Connections[0]);
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        await _dialogProvider.InvokeAsync(() => _failedHandler!(new ConnectingFailedEventArgs(null, new Exception("refused"))));
+        await _dialogProvider.InvokeAsync(() => _failedHandler!(new MqttConnectingFailedEventArgs(new Exception("refused"))));
 
         _dialogProvider.Markup.Should().Contain("Connection failed. Verify broker, credentials, and transport settings.");
     }
@@ -592,7 +706,7 @@ public class ConnectionDialogTests : BunitTestContext
 
         await _dialogProvider.WaitForAssertionAsync(() =>
             _dialogProvider.Markup.Should().Contain("Unsaved changes"));
-        await _mockClient.DidNotReceive().StartAsync(Arg.Any<ManagedMqttClientOptions>());
+        await _mockClient.DidNotReceive().StartAsync(Arg.Any<MqttManagedClientOptions>());
     }
 
     private void DirtyNameField(string newName)
@@ -614,6 +728,13 @@ public class ConnectionDialogTests : BunitTestContext
         var tab = _dialogProvider.FindAll(".mud-tab")
             .First(t => t.TextContent.Contains(text));
         tab.Click();
+    }
+
+    private void GoToOnConnectTab()
+    {
+        var tabs = _dialogProvider.FindAll(".mud-tab");
+        var onConnect = tabs.First(t => t.TextContent.Contains("On Connect", StringComparison.OrdinalIgnoreCase));
+        onConnect.Click();
     }
 
     [Test]
@@ -677,7 +798,7 @@ public class ConnectionDialogTests : BunitTestContext
     [Test]
     public async Task Connect_CallsResetCoordinatorBeforeStartAsync()
     {
-        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
+        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var cfg = new AppConfiguration
         {
             Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
@@ -690,14 +811,14 @@ public class ConnectionDialogTests : BunitTestContext
         Received.InOrder(() =>
         {
             _mockCoordinator.ResetIfBrokerChangedAsync(Arg.Any<Connection>());
-            _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>());
+            _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>());
         });
     }
 
     [Test]
     public async Task Connect_PassesSelectedConnectionToCoordinator()
     {
-        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
+        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var conn = new Connection { Name = "TestConn", Host = "broker.example.com", Port = 8883 };
         var cfg = new AppConfiguration { Connections = [conn] };
         await OpenDialog(cfg);
@@ -714,7 +835,7 @@ public class ConnectionDialogTests : BunitTestContext
     {
         _mockCoordinator.ResetIfBrokerChangedAsync(Arg.Any<Connection>())
             .Returns(Task.FromException(new Exception("reset failed")));
-        _mockClient.StartAsync(Arg.Any<ManagedMqttClientOptions>()).Returns(Task.CompletedTask);
+        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var cfg = new AppConfiguration
         {
             Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
@@ -724,7 +845,7 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        await _mockClient.Received(1).StartAsync(Arg.Any<ManagedMqttClientOptions>());
+        await _mockClient.Received(1).StartAsync(Arg.Any<MqttManagedClientOptions>());
     }
 
     [Test]
@@ -767,7 +888,7 @@ public class ConnectionDialogTests : BunitTestContext
         var refreshedButtons = _dialogProvider.FindAll(".step-btn");
         refreshedButtons[2].ClassName.Should().Contain("active", "On Connect was clicked");
         refreshedButtons[0].ClassName.Should().NotContain("active", "Identity is no longer selected");
-        _dialogProvider.Markup.Should().Contain("Sparkplug B");
+        _dialogProvider.Markup.Should().Contain("No on-connect subscriptions yet");
     }
 
     [Test]
@@ -929,7 +1050,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Find("button[title='Connect']").Click();
 
         _dialogProvider.Markup.Should().Contain("unavailable or corrupt");
-        await _mockClient.DidNotReceive().StartAsync(Arg.Any<ManagedMqttClientOptions>());
+        await _mockClient.DidNotReceive().StartAsync(Arg.Any<MqttManagedClientOptions>());
     }
 
     [Test]
@@ -951,5 +1072,108 @@ public class ConnectionDialogTests : BunitTestContext
         mqttVersionSelect.Instance.PopoverFixed.Should().BeTrue();
         mqttVersionSelect.Instance.AnchorOrigin.Should().Be(Origin.BottomLeft);
         mqttVersionSelect.Instance.TransformOrigin.Should().Be(Origin.TopLeft);
+    }
+
+    [Test]
+    public async Task OnConnectTab_RendersAutoResubscribeSwitch_BoundToConfig()
+    {
+        await OpenDialog(new AppConfiguration
+        {
+            Ui = new UiPreferences { AutoResubscribe = true },
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        });
+        await SelectConnection(_dialogProvider
+            .FindComponents<MudSelectItem<Connection?>>().First().Instance.Value!);
+
+        var sw = _dialogProvider.FindComponents<MudSwitch<bool>>()
+            .Single(s => s.Instance.Label == "Auto-resubscribe on connect");
+        sw.Instance.GetState(x => x.Value).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task OnConnectTab_AutoResubscribeOff_DisablesAddControlsAndShowsAlert()
+    {
+        await OpenDialog(new AppConfiguration
+        {
+            Ui = new UiPreferences { AutoResubscribe = false },
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        });
+        await SelectConnection(_dialogProvider
+            .FindComponents<MudSelectItem<Connection?>>().First().Instance.Value!);
+        GoToOnConnectTab();
+
+        _dialogProvider.Markup.Should().Contain("On-connect subscriptions are not applied until Auto-resubscribe is enabled");
+
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>().Instance;
+        editor.Disabled.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task OnConnectTab_AutoResubscribeOff_AddDoesNotPersistOrAlert()
+    {
+        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        await OpenDialog(new AppConfiguration
+        {
+            Ui = new UiPreferences { AutoResubscribe = false },
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        });
+        await SelectConnection(_dialogProvider
+            .FindComponents<MudSelectItem<Connection?>>().First().Instance.Value!);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>().Instance;
+        editor.TopicDraft = "factory/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        await _mockConfigMgr.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+        editor.TopicDraft.Should().Be("factory/#",
+            "the draft topic should remain unchanged when add is blocked");
+    }
+
+    [Test]
+    public async Task OnConnectTab_AutoResubscribeOff_RemoveDoesNotPersist()
+    {
+        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        var conn = new Connection
+        {
+            Name = "TestConn",
+            Host = "localhost",
+            Port = 1883,
+            SubscribedTopics = [new() { Topic = "keep/#" }]
+        };
+        await OpenDialog(new AppConfiguration
+        {
+            Ui = new UiPreferences { AutoResubscribe = false },
+            Connections = [conn]
+        });
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        // Select the row checkbox and click Remove
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>();
+        editor.Find("input[type='checkbox']").Change(true);
+        _dialogProvider.Find("button[title='Remove']").Click();
+
+        await _mockConfigMgr.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+        conn.SubscribedTopics.Should().ContainSingle(s => s.Topic == "keep/#");
+    }
+
+    [Test]
+    public async Task OnConnectTab_AutoResubscribeSwitch_Toggle_CallsSetter()
+    {
+        _mockConfigMgr.SetAutoResubscribeAsync(Arg.Any<bool>()).Returns(Task.CompletedTask);
+        await OpenDialog(new AppConfiguration
+        {
+            Ui = new UiPreferences { AutoResubscribe = true },
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        });
+        await SelectConnection(_dialogProvider
+            .FindComponents<MudSelectItem<Connection?>>().First().Instance.Value!);
+
+        var sw = _dialogProvider.FindComponents<MudSwitch<bool>>()
+            .Single(s => s.Instance.Label == "Auto-resubscribe on connect");
+        await _dialogProvider.InvokeAsync(() => sw.Instance.ValueChanged.InvokeAsync(false));
+
+        await _mockConfigMgr.Received(1).SetAutoResubscribeAsync(false);
     }
 }

@@ -74,7 +74,7 @@ public class MauiCertificateAssetStore : ICertificateAssetStore
             if (!renamed)
             {
                 var retryMarker = Path.Combine(_certificatesDirectory, $"cert-{assetId}.cleanup-retry");
-                try { await File.WriteAllTextAsync(retryMarker, reason); } catch { }
+                try { await File.WriteAllTextAsync(retryMarker, reason); } catch { /* marker is only a retry hint; the LogCritical below is the real signal */ }
                 _logger.LogCritical(
                     "CRITICAL: Could not delete or quarantine staged temp {Path}. " +
                     "Cleanup retry scheduled via {Marker}. Reason: {Reason}",
@@ -87,6 +87,6 @@ public class MauiCertificateAssetStore : ICertificateAssetStore
             }
         }
 
-        try { await _envelopeKeyStore.RemoveAsync($"cert-env-{assetId}"); } catch { }
+        try { await _envelopeKeyStore.RemoveAsync($"cert-env-{assetId}"); } catch { /* an envelope key with no blob is inert; startup cleanup sweeps it */ }
     }
 }

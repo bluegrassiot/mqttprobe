@@ -1,0 +1,12 @@
+<Project>
+  <!--
+    Disable Central Package Management for vendored submodules. The root
+    Directory.Packages.props enables CPM repo-wide, but submodules (e.g.
+    SparkplugNet) pin their own package versions inline via Version= on
+    PackageReference. This first-found-wins file stops the CPM cascade so those
+    inline versions are honored (avoids NU1008).
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

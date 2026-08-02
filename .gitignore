@@ -295,10 +295,24 @@ deploy/mtls/certs/**
 /.claude
 /.opencode/
 /.obsidian
-docs/
-!docs/images
+/.superpowers/
+
+# docs
+docs/*
+!docs/images/
+!docs/images/**
+!docs/dev
 
 # Misc artifacts
 /profile-output/
 /.playwright-mcp
 /src/MqttProbe.Web/Config/certificates
+*.dll
+
+# Plugins installed at runtime through Settings, not source
+/src/MqttProbe.Web/Plugins/*
+!/src/MqttProbe.Web/Plugins/.gitkeep
+
+# Plugin packages built by scripts/pack-plugin.py (default output is <id>-<version>.zip
+# in the working directory). Root-only so committed fixtures elsewhere still show up.
+/*.zip

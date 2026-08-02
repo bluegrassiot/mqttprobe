@@ -1,0 +1,18 @@
+@namespace MqttProbe.Components.Settings
+@using MqttProbe.Services.Configuration
+@inject ISettingsStore SettingsStore
+
+<MudSwitch T="bool" Value="@SettingsStore.Config.Ui.AutoResubscribe"
+           ValueChanged="@OnAutoResubscribeChanged"
+           Color="Color.Primary"
+           Label="Auto-resubscribe on connect" />
+<MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+    When enabled, saved subscriptions are automatically re-subscribed when connecting to a broker.
+</MudText>
+
+@code {
+    private async Task OnAutoResubscribeChanged(bool value)
+    {
+        await SettingsStore.SetAutoResubscribeAsync(value);
+    }
+}

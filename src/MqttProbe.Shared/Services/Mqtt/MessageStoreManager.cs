@@ -2,11 +2,12 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Logging;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
+using MQTTnet;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
+using MqttProbe.Services.Plugins.Contracts;
+using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Sparkplug;
 
 namespace MqttProbe.Services.Mqtt;
@@ -26,7 +27,12 @@ public interface IMessageStoreManager : IDisposable
     public long GetVersion();
     public long GetSelectedTopicVersion();
     public Task ClearAllMessages();
+
+    // CA1716: "Stop" clashes with a VB keyword. This is public API surface
+    // consumed by third-party plugins (MqttProbe.Shared) — do not rename.
+#pragma warning disable CA1716 // Identifiers should not match keywords
     public Task Stop();
+#pragma warning restore CA1716
     public Task Start();
 
     public event Func<MqttMessage, Task>? MessageReceived;
@@ -36,12 +42,13 @@ public class MessageStoreManager : IMessageStoreManager
 {
     public int MaxTopicNodes => _settingsStore.Config.Performance.MaxTopicNodes;
 
-    private readonly IManagedMqttClient _client;
+    private readonly IMqttManagedClient _client;
     private readonly ILogger<MessageStoreManager> _logger;
     private readonly ISettingsStore _settingsStore;
     private readonly IUxMetricsService _metrics;
-    private readonly IPayloadDecoder _payloadDecoder;
-    private readonly object _rateLimiterSync = new();
+    private readonly PayloadPipeline _pipeline;
+    private readonly ISparkplugTopologyService? _topologyService;
+    private readonly Lock _rateLimiterSync = new();
     private FixedWindowRateLimiter _rateLimiter;
 
     private int _totalNodeCount;
@@ -55,14 +62,16 @@ public class MessageStoreManager : IMessageStoreManager
     private long _globalVersion;
     private long _selectedTopicVersion;
 
-    public MessageStoreManager(IManagedMqttClient client, ILogger<MessageStoreManager> logger,
-        ISettingsStore settingsStore, IUxMetricsService metrics, IPayloadDecoder payloadDecoder)
+    public MessageStoreManager(IMqttManagedClient client, ILogger<MessageStoreManager> logger,
+        ISettingsStore settingsStore, IUxMetricsService metrics,
+        PayloadPipeline pipeline, ISparkplugTopologyService? topologyService = null)
     {
         _client = client;
         _logger = logger;
         _settingsStore = settingsStore;
         _metrics = metrics;
-        _payloadDecoder = payloadDecoder;
+        _pipeline = pipeline;
+        _topologyService = topologyService;
         _rateLimiter = BuildRateLimiter(settingsStore.Config.Performance.MaxMessagesPerSecond);
         settingsStore.PerformanceSettingsChanged += OnPerformanceSettingsChanged;
     }
@@ -100,7 +109,7 @@ public class MessageStoreManager : IMessageStoreManager
     }
 
     public MessageStore? SelectedMessageStore { get; set; }
-    public ConcurrentDictionary<string, MessageStore> MessageStores { get; } = new();
+    public ConcurrentDictionary<string, MessageStore> MessageStores { get; } = new(StringComparer.Ordinal);
     public bool IsListening { get; private set; }
 
     public event Func<MqttMessage, Task>? MessageReceived;
@@ -265,13 +274,11 @@ public class MessageStoreManager : IMessageStoreManager
         var storePath = store.FullTopic;
         if (selectedPath is null || storePath is null) return false;
 
-        // store is a descendant of selected: "sensors/temp" starts with "sensors/"
         if (storePath.StartsWith(selectedPath, StringComparison.Ordinal)
             && storePath.Length > selectedPath.Length
             && storePath[selectedPath.Length] == '/')
             return true;
 
-        // selected is a descendant of store (store is an ancestor): "sensors" is prefix of "sensors/temp"
         if (selectedPath.StartsWith(storePath, StringComparison.Ordinal)
             && selectedPath.Length > storePath.Length
             && selectedPath[storePath.Length] == '/')
@@ -299,7 +306,7 @@ public class MessageStoreManager : IMessageStoreManager
 
             var fullPath = fullTopic[..segEnd];
             var candidate = new MessageStore { Topic = levelKey, FullTopic = fullPath, Parent = parent };
-            var subTopics = parent.SubTopics ??= new ConcurrentDictionary<string, MessageStore>();
+            var subTopics = parent.SubTopics ??= new ConcurrentDictionary<string, MessageStore>(StringComparer.Ordinal);
             child = subTopics.GetOrAdd(levelKey, candidate);
             if (ReferenceEquals(child, candidate))
             {
@@ -327,10 +334,6 @@ public class MessageStoreManager : IMessageStoreManager
         TrimToLimit();
     }
 
-    // Evicts the globally-oldest message(s) until the total is within MaxStoredMessages.
-    // Called only while holding _storeSync. The node at the head of _retentionOrder owns
-    // the oldest message overall (per-topic queues and the global index share arrival order),
-    // so dequeuing that node's queue removes exactly the right message — O(1), no scanning.
     private void TrimToLimit()
     {
         var limit = MaxStoredMessages;
@@ -400,23 +403,35 @@ public class MessageStoreManager : IMessageStoreManager
         }
         _rateLimitLogged = false;
 
-        var payloadSize = arg.ApplicationMessage.PayloadSegment.Count;
+        var payloadSize = arg.ApplicationMessage.GetPayloadSegment().Count;
         _metrics.RecordPayloadSize(payloadSize);
 
         var sw = Stopwatch.StartNew();
         MqttMessage? message = null;
-        DecodedPayload? decodedPayload = null;
+        string? formatId = null;
 
         try
         {
-            decodedPayload = _payloadDecoder.Decode(arg);
-            message = new MqttMessage(decodedPayload.Payload, arg.ApplicationMessage.Topic,
+            var topic = arg.ApplicationMessage.Topic;
+            var result = _pipeline.ProcessInbound(arg);
+            var payloadText = result.Envelope.DisplayText;
+            formatId = result.Envelope.FormatId;
+
+            LogPipelineDiagnostics(topic, result.Diagnostics);
+
+            if (_topologyService is not null && result.TopologyEvents.Count > 0)
+                _topologyService.ApplyTopologyEvents(result.TopologyEvents);
+
+            var aliasNames = ResolveSparkplugAliasNames(topic, arg, result);
+
+            message = new MqttMessage(payloadText, topic,
                 arg.ApplicationMessage.Retain, arg.ApplicationMessage.QualityOfServiceLevel)
             {
-                AliasNames = decodedPayload.AliasNames
+                AliasNames = aliasNames,
+                FormatId = formatId
             };
 
-            AddMessage(arg.ApplicationMessage.Topic, message);
+            AddMessage(topic, message);
         }
         catch (Exception ex)
         {
@@ -425,19 +440,54 @@ public class MessageStoreManager : IMessageStoreManager
 
         sw.Stop();
         _metrics.RecordProcessingTime(sw.Elapsed.TotalMicroseconds);
-        if (decodedPayload is not null)
-            _metrics.RecordMessageProcessed(decodedPayload.Format.ToString());
+        if (formatId is not null)
+            _metrics.RecordMessageProcessed(formatId);
 
-        if (message != null && MessageReceived is { } handler)
+        if (message != null)
         {
-            try
-            {
-                await handler(message);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "MessageReceived handler threw on topic {Topic}", message.Topic);
-            }
+            await NotifyMessageReceivedAsync(message);
+        }
+    }
+
+    private void LogPipelineDiagnostics(string topic, IReadOnlyList<string> diagnostics)
+    {
+        foreach (var diagnostic in diagnostics)
+        {
+            _logger.LogWarning("Pipeline diagnostic on topic {Topic}: {Diagnostic}", topic, diagnostic);
+        }
+    }
+
+    private IReadOnlyDictionary<ulong, string>? ResolveSparkplugAliasNames(
+        string topic, MqttApplicationMessageReceivedEventArgs arg, PipelineDecodeResult result)
+    {
+        if (result.Envelope.FormatId != "sparkplug-b"
+            || result.Envelope.IsFailure
+            || !_settingsStore.Config.Ui.EnrichSparkplugAliasNames
+            || _topologyService is null)
+        {
+            return null;
+        }
+
+        var rawPayload = arg.ApplicationMessage.GetPayloadSegment().Count > 0
+            ? arg.ApplicationMessage.GetPayloadSegment().ToArray()
+            : [];
+        return SparkplugAliasResolver.Resolve(topic, rawPayload, _topologyService.Groups);
+    }
+
+    private async Task NotifyMessageReceivedAsync(MqttMessage message)
+    {
+        if (MessageReceived is not { } handler)
+        {
+            return;
+        }
+
+        try
+        {
+            await handler(message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "MessageReceived handler threw on topic {Topic}", message.Topic);
         }
     }
 

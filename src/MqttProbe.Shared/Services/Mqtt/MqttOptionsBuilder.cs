@@ -1,6 +1,5 @@
 using System.Security.Cryptography.X509Certificates;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
+using MQTTnet;
 using MQTTnet.Formatter;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Security;
@@ -9,8 +8,8 @@ namespace MqttProbe.Services.Mqtt;
 
 public interface IMqttOptionsBuilder
 {
-    public ManagedMqttClientOptions Build(Connection connection);
-    public Task<ManagedMqttClientOptions> BuildAsync(Connection connection, CertificateSessionResource certResource);
+    public MqttManagedClientOptions Build(Connection connection);
+    public Task<MqttManagedClientOptions> BuildAsync(Connection connection, CertificateSessionResource certResource);
 }
 
 public class MqttOptionsBuilder : IMqttOptionsBuilder
@@ -23,7 +22,7 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
         _certStore = certStore;
     }
 
-    public ManagedMqttClientOptions Build(Connection connection)
+    public MqttManagedClientOptions Build(Connection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
@@ -46,7 +45,7 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
         else
         {
             var wsScheme = connection.UseTls ? "wss" : "ws";
-            var path = (connection.WebsocketBasePath ?? string.Empty).Trim().TrimStart('/');
+            var path = (connection.WebsocketBasePath).Trim().TrimStart('/');
             clientOptionsBuilder.WithWebSocketServer(opt =>
             {
                 opt.WithUri(string.IsNullOrEmpty(path)
@@ -57,21 +56,23 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
 
         if (connection.UseTls)
         {
+            // Pinned, not SslProtocols.None: None defers to OS policy, which on older Windows still allows pre-1.2.
             var tlsBuilder = new MqttClientTlsOptionsBuilder()
-                .WithSslProtocols(System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13);
+                .WithSslProtocols(System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13); // DevSkim: ignore DS440020,DS112836,DS440001
             if (connection.AllowUntrustedCertificate)
                 tlsBuilder = tlsBuilder.WithAllowUntrustedCertificates().WithCertificateValidationHandler(_ => true);
             clientOptionsBuilder.WithTlsOptions(tlsBuilder.Build());
         }
 
-        return new ManagedMqttClientOptionsBuilder()
-            .WithAutoReconnectDelay(TimeSpan.FromSeconds(
-                connection.ReconnectDelay > 0 ? connection.ReconnectDelay : 5))
-            .WithClientOptions(clientOptionsBuilder)
-            .Build();
+        return new MqttManagedClientOptions
+        {
+            ClientOptions = clientOptionsBuilder.Build(),
+            AutoReconnectDelay = TimeSpan.FromSeconds(
+                connection.ReconnectDelay > 0 ? connection.ReconnectDelay : 5)
+        };
     }
 
-    public async Task<ManagedMqttClientOptions> BuildAsync(
+    public async Task<MqttManagedClientOptions> BuildAsync(
         Connection connection, CertificateSessionResource certResource)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -106,7 +107,7 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
         else
         {
             var wsScheme = connection.UseTls ? "wss" : "ws";
-            var path = (connection.WebsocketBasePath ?? string.Empty).Trim().TrimStart('/');
+            var path = (connection.WebsocketBasePath).Trim().TrimStart('/');
             clientOptionsBuilder.WithWebSocketServer(opt =>
             {
                 opt.WithUri(string.IsNullOrEmpty(path)
@@ -117,8 +118,9 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
 
         if (connection.UseTls)
         {
+            // Pinned, not SslProtocols.None: None defers to OS policy, which on older Windows still allows pre-1.2.
             var tlsBuilder = new MqttClientTlsOptionsBuilder()
-                .WithSslProtocols(System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13);
+                .WithSslProtocols(System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13); // DevSkim: ignore DS440020,DS112836,DS440001
             if (connection.AllowUntrustedCertificate)
                 tlsBuilder = tlsBuilder.WithAllowUntrustedCertificates().WithCertificateValidationHandler(_ => true);
             if (clientCerts is not null)
@@ -126,10 +128,11 @@ public class MqttOptionsBuilder : IMqttOptionsBuilder
             clientOptionsBuilder.WithTlsOptions(tlsBuilder.Build());
         }
 
-        return new ManagedMqttClientOptionsBuilder()
-            .WithAutoReconnectDelay(TimeSpan.FromSeconds(
-                connection.ReconnectDelay > 0 ? connection.ReconnectDelay : 5))
-            .WithClientOptions(clientOptionsBuilder)
-            .Build();
+        return new MqttManagedClientOptions
+        {
+            ClientOptions = clientOptionsBuilder.Build(),
+            AutoReconnectDelay = TimeSpan.FromSeconds(
+                connection.ReconnectDelay > 0 ? connection.ReconnectDelay : 5)
+        };
     }
 }

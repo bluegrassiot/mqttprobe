@@ -19,10 +19,14 @@
     <File Path="README.md" />
     <File Path="SECURITY.md" />
   </Folder>
+  <Folder Name="/external/">
+    <Project Path="external/SparkplugNet/src/SparkplugNet/SparkplugNet.csproj" />
+  </Folder>
   <Folder Name="/general/">
     <File Path=".editorconfig" />
     <File Path=".gitattributes" />
     <File Path=".gitignore" />
+    <File Path=".gitmodules" />
     <File Path="Directory.Build.props" />
     <File Path="dotnet-tools.json" />
     <File Path="global.json" />
@@ -34,12 +38,31 @@
     <File Path=".github/workflows/ci.yml" />
     <File Path=".github/workflows/release.yml" />
   </Folder>
+  <Folder Name="/samples/protobuf/" />
+  <Folder Name="/samples/protobuf/chirpstack/">
+    <File Path="samples/protobuf/chirpstack/mqttprobe-plugin.json" />
+    <File Path="samples/protobuf/chirpstack/protobuf-schemas.json" />
+    <File Path="samples/protobuf/chirpstack/README.md" />
+    <File Path="samples/protobuf/chirpstack/sample-uplink.b64" />
+  </Folder>
+  <Folder Name="/samples/protobuf/chirpstack/common/">
+    <File Path="samples/protobuf/chirpstack/common/common.proto" />
+  </Folder>
+  <Folder Name="/samples/protobuf/chirpstack/gw/">
+    <File Path="samples/protobuf/chirpstack/gw/gw.proto" />
+  </Folder>
+  <Folder Name="/samples/protobuf/chirpstack/integration/">
+    <File Path="samples/protobuf/chirpstack/integration/integration.proto" />
+  </Folder>
   <Folder Name="/scripts/">
+    <File Path="scripts/actionlint.py" />
     <File Path="scripts/build-linux-desktop.ps1" />
     <File Path="scripts/coverage.py" />
     <File Path="scripts/format-check.py" />
     <File Path="scripts/generate-mtls-certs.py" />
+    <File Path="scripts/inspect.py" />
     <File Path="scripts/manage-windows-config.ps1" />
+    <File Path="scripts/pack-plugin.py" />
     <File Path="scripts/reset-password.py" />
     <File Path="scripts/velopack-windows-test.ps1" />
   </Folder>
@@ -51,8 +74,15 @@
     <Project Path="src/MqttProbe.Shared/MqttProbe.Shared.csproj" />
     <Project Path="src/MqttProbe.Web/MqttProbe.Web.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/MqttProbe.Benchmarks/MqttProbe.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/CustomDemoPlugin/CustomDemoPlugin.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MqttProbe.IntegrationTests/MqttProbe.IntegrationTests.csproj" />
+    <Project Path="tests/MqttProbe.PluginLoader.Fixtures/MqttProbe.PluginLoader.Fixtures.csproj" />
     <Project Path="tests/MqttProbe.TestInfrastructure/MqttProbe.TestInfrastructure.csproj" />
     <Project Path="tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj" />
   </Folder>

@@ -6,11 +6,11 @@
                     taskmanage="true" type="dotnet" launch_mode="single">
         <label>maui-application-title-placeholder</label>
         <icon>maui-appicon-placeholder</icon>
-        <metadata key="http://tizen.org/metadata/prefer_dotnet_aot" value="true"/>
+        <metadata key="http://tizen.org/metadata/prefer_dotnet_aot" value="true"/> <!-- DevSkim: ignore DS137138 - Tizen metadata key, never fetched -->
     </ui-application>
     <shortcut-list/>
     <privileges>
-        <privilege>http://tizen.org/privilege/internet</privilege>
+        <privilege>http://tizen.org/privilege/internet</privilege> <!-- DevSkim: ignore DS137138 - Tizen privilege identifier, never fetched -->
     </privileges>
     <dependencies/>
     <provides-appdefined-privileges/>

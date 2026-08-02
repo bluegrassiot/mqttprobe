@@ -90,10 +90,10 @@ def main():
     if match:
         line_coverage = float(match.group(1))
         if line_coverage < args.threshold:
-            print(f"\n\u274c Line coverage {line_coverage}% is below threshold {args.threshold}%")
+            print(f"\nLine coverage {line_coverage}% is below threshold {args.threshold}%")
             sys.exit(1)
         else:
-            print(f"\n\u2705 Line coverage {line_coverage}% meets threshold {args.threshold}%")
+            print(f"\nLine coverage {line_coverage}% meets threshold {args.threshold}%")
 
     index_html = REPORT_DIR / "index.html"
     print(f"\nReport: {index_html}")

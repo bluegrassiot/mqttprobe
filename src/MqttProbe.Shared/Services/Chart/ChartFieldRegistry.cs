@@ -13,11 +13,11 @@ public interface IChartFieldRegistry
 
 public class ChartFieldRegistry : IChartFieldRegistry
 {
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, DiscoveredField>> _registry = new();
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, DiscoveredField>> _registry = new(StringComparer.Ordinal);
 
     public void Update(string topic, IReadOnlyDictionary<string, ExtractedField> fields)
     {
-        var topicFields = _registry.GetOrAdd(topic, static _ => new ConcurrentDictionary<string, DiscoveredField>());
+        var topicFields = _registry.GetOrAdd(topic, static _ => new ConcurrentDictionary<string, DiscoveredField>(StringComparer.Ordinal));
         var now = DateTime.UtcNow;
         foreach (var (path, extracted) in fields)
         {

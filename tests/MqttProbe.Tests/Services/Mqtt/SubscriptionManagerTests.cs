@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
-using MQTTnet.Client;
-using MQTTnet.Extensions.ManagedClient;
+using MQTTnet;
+using MQTTnet.Protocol;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
@@ -12,7 +12,7 @@ namespace MqttProbe.Shared.Tests.Services.Mqtt;
 [TestFixture]
 public class SubscriptionManagerTests
 {
-    private IManagedMqttClient _mockClient = null!;
+    private IMqttManagedClient _mockClient = null!;
     private ILogger<SubscriptionManager> _mockLogger = null!;
     private ISnackbar _mockSnackbar = null!;
     private ISettingsStore _mockSettingsStore = null!;
@@ -20,12 +20,12 @@ public class SubscriptionManagerTests
     private SubscriptionManager _manager = null!;
 
     private Func<MqttClientConnectedEventArgs, Task>? _connectedHandler;
-    private Func<ManagedProcessFailedEventArgs, Task>? _syncFailedHandler;
+    private Func<MqttManagedProcessFailedEventArgs, Task>? _syncFailedHandler;
 
     [SetUp]
     public void Setup()
     {
-        _mockClient = Substitute.For<IManagedMqttClient>();
+        _mockClient = Substitute.For<IMqttManagedClient>();
         _mockLogger = Substitute.For<ILogger<SubscriptionManager>>();
         _mockSnackbar = Substitute.For<ISnackbar>();
         _mockSettingsStore = Substitute.For<ISettingsStore>();
@@ -41,8 +41,8 @@ public class SubscriptionManagerTests
             .When(x => x.ConnectedAsync += Arg.Any<Func<MqttClientConnectedEventArgs, Task>>())
             .Do(x => _connectedHandler = x.Arg<Func<MqttClientConnectedEventArgs, Task>>());
         _mockClient
-            .When(x => x.SynchronizingSubscriptionsFailedAsync += Arg.Any<Func<ManagedProcessFailedEventArgs, Task>>())
-            .Do(x => _syncFailedHandler = x.Arg<Func<ManagedProcessFailedEventArgs, Task>>());
+            .When(x => x.SynchronizingSubscriptionsFailedAsync += Arg.Any<Func<MqttManagedProcessFailedEventArgs, Task>>())
+            .Do(x => _syncFailedHandler = x.Arg<Func<MqttManagedProcessFailedEventArgs, Task>>());
 
         _manager = new SubscriptionManager(_mockClient, _mockLogger, _mockSnackbar, _mockSettingsStore, _mockSessionState);
     }
@@ -56,9 +56,9 @@ public class SubscriptionManagerTests
     }
 
     [Test]
-    public void Constructor_InitializesWithEmptyTopicSet()
+    public void Constructor_InitializesWithEmptySubscriptions()
     {
-        _manager.Topics.Should().BeEmpty();
+        _manager.Subscriptions.Should().BeEmpty();
     }
 
     [Test]
@@ -70,11 +70,11 @@ public class SubscriptionManagerTests
     }
 
     [Test]
-    public async Task Add_AddsTopicToActiveTopics()
+    public async Task Add_AddsTopicToActiveSubscriptions()
     {
         await _manager.Add("test/topic");
 
-        _manager.Topics.Should().Contain("test/topic");
+        _manager.Subscriptions.Should().Contain(s => s.Topic == "test/topic");
     }
 
     [Test]
@@ -84,7 +84,7 @@ public class SubscriptionManagerTests
         await _manager.Add("c/d");
         await _manager.Add("e/f");
 
-        _manager.Topics.Should().HaveCount(3).And.Contain(["a/b", "c/d", "e/f"]);
+        _manager.Subscriptions.Select(s => s.Topic).Should().BeEquivalentTo(["a/b", "c/d", "e/f"]);
     }
 
     [Test]
@@ -98,13 +98,13 @@ public class SubscriptionManagerTests
     }
 
     [Test]
-    public async Task Remove_RemovesTopicFromActiveTopics()
+    public async Task Remove_RemovesTopicFromActiveSubscriptions()
     {
         await _manager.Add("test/topic");
 
         await _manager.Remove(["test/topic"]);
 
-        _manager.Topics.Should().NotContain("test/topic");
+        _manager.Subscriptions.Should().NotContain(s => s.Topic == "test/topic");
     }
 
     [Test]
@@ -116,53 +116,95 @@ public class SubscriptionManagerTests
     }
 
     [Test]
-    public async Task Topics_ReturnsStableReadOnlySnapshot()
+    public async Task Subscriptions_ReturnsStableReadOnlySnapshot()
     {
-        var snapshot = _manager.Topics;
+        var snapshot = _manager.Subscriptions;
 
         await _manager.Add("snapshot/topic");
 
         snapshot.Should().BeEmpty();
-        _manager.Topics.Should().Contain("snapshot/topic");
+        _manager.Subscriptions.Should().Contain(s => s.Topic == "snapshot/topic");
     }
 
-    [Test]
-    public async Task Add_UsesMqttQosAtLeastOnce_InTopicFilter()
+    [TestCase(MqttQualityOfServiceLevel.AtMostOnce)]
+    [TestCase(MqttQualityOfServiceLevel.AtLeastOnce)]
+    [TestCase(MqttQualityOfServiceLevel.ExactlyOnce)]
+    public async Task Add_UsesRequestedQos_InTopicFilter(MqttQualityOfServiceLevel qos)
     {
-        await _manager.Add("qos/test");
+        await _manager.Add("qos/test", qos);
 
         await _mockClient.Received(1).SubscribeAsync(
             Arg.Is<IEnumerable<MQTTnet.Packets.MqttTopicFilter>>(filters =>
-                filters!.Any(f => f.QualityOfServiceLevel == MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)));
+                filters!.Any(f => f.Topic == "qos/test" && f.QualityOfServiceLevel == qos)));
     }
 
     [Test]
-    public async Task Add_ThenRemove_LeavesEmptyTopicSet()
+    public async Task Add_DefaultQos_IsAtLeastOnce()
+    {
+        await _manager.Add("default/qos");
+
+        await _mockClient.Received(1).SubscribeAsync(
+            Arg.Is<IEnumerable<MQTTnet.Packets.MqttTopicFilter>>(filters =>
+                filters!.Any(f => f.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce)));
+    }
+
+    [Test]
+    public async Task Add_DuplicateTopic_DoesNotResubscribe()
+    {
+        await _manager.Add("dup/topic", MqttQualityOfServiceLevel.AtLeastOnce);
+        _mockClient.ClearReceivedCalls();
+        _mockSnackbar.ClearReceivedCalls();
+
+        await _manager.Add("dup/topic", MqttQualityOfServiceLevel.ExactlyOnce);
+
+        await _mockClient.DidNotReceive().SubscribeAsync(Arg.Any<IEnumerable<MQTTnet.Packets.MqttTopicFilter>>());
+        _manager.Subscriptions.Should().ContainSingle(s =>
+            s.Topic == "dup/topic" && s.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce);
+        _mockSnackbar.Received(1).Add(
+            Arg.Is<string>(m => m!.Contains("Already subscribed", StringComparison.OrdinalIgnoreCase)),
+            Severity.Warning,
+            Arg.Any<Action<SnackbarOptions>?>(),
+            Arg.Any<string?>());
+    }
+
+    [Test]
+    public async Task Add_PersistsTopicAndQos()
+    {
+        await _manager.Add("test/topic", MqttQualityOfServiceLevel.ExactlyOnce);
+
+        await _mockSettingsStore.Received(1).AddConnectionAsync(
+            Arg.Is<Connection>(c =>
+                c!.SubscribedTopics.Any(s =>
+                    s.Topic == "test/topic" &&
+                    s.QualityOfServiceLevel == MqttQualityOfServiceLevel.ExactlyOnce)));
+    }
+
+    [Test]
+    public async Task Add_ThenRemove_LeavesEmptySubscriptions()
     {
         await _manager.Add("test/topic");
         await _manager.Remove(["test/topic"]);
 
-        _manager.Topics.Should().BeEmpty();
+        _manager.Subscriptions.Should().BeEmpty();
     }
 
     [Test]
-    public async Task ConcurrentAddRemove_LeavesTopicSnapshotReadable()
+    public async Task ConcurrentAddRemove_LeavesSubscriptionsReadable()
     {
         var addTasks = Enumerable.Range(0, 100)
             .Select(i => _manager.Add($"topic/{i}"));
         await Task.WhenAll(addTasks);
 
         var readers = Enumerable.Range(0, 50)
-            .Select(_ => Task.Run(() => _manager.Topics.ToList()));
+            .Select(_ => Task.Run(() => _manager.Subscriptions.ToList()));
         var removers = Enumerable.Range(0, 100)
             .Select(i => _manager.Remove([$"topic/{i}"]));
 
         var act = async () => await Task.WhenAll(readers.Concat(removers));
 
         await act.Should().NotThrowAsync();
-        _manager.Topics.Should().BeEmpty();
+        _manager.Subscriptions.Should().BeEmpty();
     }
-
 
     [Test]
     public async Task OnConnected_WithTopics_ResubscribesAll()
@@ -171,12 +213,10 @@ public class SubscriptionManagerTests
 
         await _manager.Add("a/b");
         await _manager.Add("c/d");
-        // 2 SubscribeAsync calls from Add; reset to count only the reconnect ones
         _mockClient.ClearReceivedCalls();
 
         await _connectedHandler!(null!);
 
-        // One batched SubscribeAsync call for all topics
         await _mockClient.Received(1).SubscribeAsync(Arg.Any<IEnumerable<MQTTnet.Packets.MqttTopicFilter>>());
     }
 
@@ -192,11 +232,78 @@ public class SubscriptionManagerTests
     }
 
     [Test]
+    public async Task OnConnected_ResubscribesWithStoredQos()
+    {
+        await _manager.Add("a/b", MqttQualityOfServiceLevel.AtMostOnce);
+        await _manager.Add("c/d", MqttQualityOfServiceLevel.ExactlyOnce);
+        _mockClient.ClearReceivedCalls();
+
+        await _connectedHandler!(null!);
+
+        await _mockClient.Received(1).SubscribeAsync(
+            Arg.Is<IEnumerable<MQTTnet.Packets.MqttTopicFilter>>(filters =>
+                filters!.Any(f => f.Topic == "a/b" && f.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtMostOnce) &&
+                filters!.Any(f => f.Topic == "c/d" && f.QualityOfServiceLevel == MqttQualityOfServiceLevel.ExactlyOnce)));
+    }
+
+    [Test]
+    public async Task OnConnected_WithAutoResubscribe_LoadsSavedQos()
+    {
+        var connection = new Connection
+        {
+            Name = "Test",
+            Host = "localhost",
+            SubscribedTopics =
+            [
+                new() { Topic = "saved/topic1", QualityOfServiceLevel = MqttQualityOfServiceLevel.ExactlyOnce },
+                new() { Topic = "saved/topic2", QualityOfServiceLevel = MqttQualityOfServiceLevel.AtMostOnce }
+            ]
+        };
+        _mockSessionState.SelectedConnection.Returns(connection);
+        _mockClient.ClearReceivedCalls();
+
+        await _connectedHandler!(null!);
+
+        _manager.Subscriptions.Should().Contain(s =>
+            s.Topic == "saved/topic1" && s.QualityOfServiceLevel == MqttQualityOfServiceLevel.ExactlyOnce);
+        await _mockClient.Received(1).SubscribeAsync(
+            Arg.Is<IEnumerable<MQTTnet.Packets.MqttTopicFilter>>(filters =>
+                filters!.Any(f =>
+                    f.Topic == "saved/topic1" &&
+                    f.QualityOfServiceLevel == MqttQualityOfServiceLevel.ExactlyOnce)));
+    }
+
+    [Test]
+    public async Task OnConnected_Merge_DoesNotOverwriteInMemoryQos()
+    {
+        await _manager.Add("shared/topic", MqttQualityOfServiceLevel.ExactlyOnce);
+
+        var connection = new Connection
+        {
+            Name = "Test",
+            Host = "localhost",
+            SubscribedTopics =
+            [
+                new() { Topic = "shared/topic", QualityOfServiceLevel = MqttQualityOfServiceLevel.AtMostOnce },
+                new() { Topic = "saved/only", QualityOfServiceLevel = MqttQualityOfServiceLevel.AtLeastOnce }
+            ]
+        };
+        _mockSessionState.SelectedConnection.Returns(connection);
+        _mockClient.ClearReceivedCalls();
+
+        await _connectedHandler!(null!);
+
+        _manager.Subscriptions.Should().Contain(s =>
+            s.Topic == "shared/topic" && s.QualityOfServiceLevel == MqttQualityOfServiceLevel.ExactlyOnce);
+        _manager.Subscriptions.Should().Contain(s => s.Topic == "saved/only");
+    }
+
+    [Test]
     public async Task OnSyncFailed_ShowsErrorSnackbar()
     {
         _syncFailedHandler.Should().NotBeNull("component should subscribe to SynchronizingSubscriptionsFailedAsync in constructor");
 
-        await _syncFailedHandler!(new ManagedProcessFailedEventArgs(new Exception("oops"), [], []));
+        await _syncFailedHandler!(new MqttManagedProcessFailedEventArgs(new Exception("oops")));
 
         _mockSnackbar.Received(1).Add(Arg.Any<string>(), Severity.Error, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
     }
@@ -204,7 +311,6 @@ public class SubscriptionManagerTests
     [Test]
     public async Task Add_AtMaxSubscriptions_RejectsNewTopic()
     {
-        // Fill to the limit
         for (var i = 0; i < 500; i++)
             await _manager.Add($"topic/{i}");
 
@@ -213,7 +319,7 @@ public class SubscriptionManagerTests
 
         await _manager.Add("one/too/many");
 
-        _manager.Topics.Should().NotContain("one/too/many");
+        _manager.Subscriptions.Should().NotContain(s => s.Topic == "one/too/many");
         _mockSnackbar.Received(1).Add(Arg.Any<string>(), Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
         await _mockClient.DidNotReceive().SubscribeAsync(Arg.Any<IEnumerable<MQTTnet.Packets.MqttTopicFilter>>());
     }
@@ -255,7 +361,7 @@ public class SubscriptionManagerTests
         await _manager.Add("test/topic");
 
         await _mockSettingsStore.Received(1).AddConnectionAsync(
-            Arg.Is<Connection>(c => c!.SubscribedTopics!.Contains("test/topic")));
+            Arg.Is<Connection>(c => c!.SubscribedTopics!.Any(s => s.Topic == "test/topic")));
     }
 
     [Test]
@@ -268,7 +374,7 @@ public class SubscriptionManagerTests
         await _manager.Remove(["a/b"]);
 
         await _mockSettingsStore.Received(1).AddConnectionAsync(
-            Arg.Is<Connection>(c => c!.SubscribedTopics!.Contains("c/d") && !c.SubscribedTopics.Contains("a/b")));
+            Arg.Is<Connection>(c => c!.SubscribedTopics!.Any(s => s.Topic == "c/d") && !c.SubscribedTopics.Any(s => s.Topic == "a/b")));
     }
 
     [Test]
@@ -278,7 +384,7 @@ public class SubscriptionManagerTests
         {
             Name = "Test",
             Host = "localhost",
-            SubscribedTopics = ["saved/topic1", "saved/topic2"]
+            SubscribedTopics = [new SubscribedTopic { Topic = "saved/topic1" }, new SubscribedTopic { Topic = "saved/topic2" }]
         };
         _mockSessionState.SelectedConnection.Returns(connection);
 
@@ -286,8 +392,8 @@ public class SubscriptionManagerTests
 
         await _connectedHandler!(null!);
 
-        _manager.Topics.Should().Contain("saved/topic1");
-        _manager.Topics.Should().Contain("saved/topic2");
+        _manager.Subscriptions.Should().Contain(s => s.Topic == "saved/topic1");
+        _manager.Subscriptions.Should().Contain(s => s.Topic == "saved/topic2");
         await _mockClient.Received(1).SubscribeAsync(Arg.Any<IEnumerable<MQTTnet.Packets.MqttTopicFilter>>());
     }
 
@@ -301,7 +407,7 @@ public class SubscriptionManagerTests
         {
             Name = "Test",
             Host = "localhost",
-            SubscribedTopics = ["saved/topic1"]
+            SubscribedTopics = [new SubscribedTopic { Topic = "saved/topic1" }]
         };
         _mockSessionState.SelectedConnection.Returns(connection);
 
@@ -309,7 +415,7 @@ public class SubscriptionManagerTests
 
         await _connectedHandler!(null!);
 
-        _manager.Topics.Should().NotContain("saved/topic1");
+        _manager.Subscriptions.Should().NotContain(s => s.Topic == "saved/topic1");
         await _mockClient.DidNotReceive().SubscribeAsync(Arg.Any<IEnumerable<MQTTnet.Packets.MqttTopicFilter>>());
     }
 
@@ -322,7 +428,7 @@ public class SubscriptionManagerTests
         {
             Name = "Test",
             Host = "localhost",
-            SubscribedTopics = ["saved/topic"]
+            SubscribedTopics = [new SubscribedTopic { Topic = "saved/topic" }]
         };
         _mockSessionState.SelectedConnection.Returns(connection);
 
@@ -330,8 +436,8 @@ public class SubscriptionManagerTests
 
         await _connectedHandler!(null!);
 
-        _manager.Topics.Should().Contain("memory/topic");
-        _manager.Topics.Should().Contain("saved/topic");
+        _manager.Subscriptions.Should().Contain(s => s.Topic == "memory/topic");
+        _manager.Subscriptions.Should().Contain(s => s.Topic == "saved/topic");
     }
 
     [Test]
@@ -343,7 +449,7 @@ public class SubscriptionManagerTests
 
         _manager.ClearActiveSubscriptions();
 
-        _manager.Topics.Should().BeEmpty();
+        _manager.Subscriptions.Should().BeEmpty();
     }
 
     [Test]
@@ -362,8 +468,6 @@ public class SubscriptionManagerTests
 
         _manager.ClearActiveSubscriptions();
 
-        // ClearActiveSubscriptions must NOT call AddConnectionAsync —
-        // it is a runtime-only clear, not a user action.
         await _mockSettingsStore.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
     }
 
@@ -375,7 +479,6 @@ public class SubscriptionManagerTests
 
         _manager.ClearActiveSubscriptions();
 
-        // No MQTT unsubscribe — broker may already be disconnected.
         await _mockClient.DidNotReceive().UnsubscribeAsync(Arg.Any<IEnumerable<string>>());
     }
 
@@ -386,20 +489,18 @@ public class SubscriptionManagerTests
 
         _manager.ClearActiveSubscriptions();
 
-        // After clear, simulating a new connect with auto-resubscribe should
-        // only load the new connection's saved topics, not the old ones.
         var newConnection = new Connection
         {
             Name = "New",
             Host = "new-broker",
-            SubscribedTopics = ["new/topic"]
+            SubscribedTopics = [new SubscribedTopic { Topic = "new/topic" }]
         };
         _mockSessionState.SelectedConnection.Returns(newConnection);
         _mockClient.ClearReceivedCalls();
 
         await _connectedHandler!(null!);
 
-        _manager.Topics.Should().Contain("new/topic");
-        _manager.Topics.Should().NotContain("old/topic");
+        _manager.Subscriptions.Should().Contain(s => s.Topic == "new/topic");
+        _manager.Subscriptions.Should().NotContain(s => s.Topic == "old/topic");
     }
 }

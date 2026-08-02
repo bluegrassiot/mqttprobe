@@ -9,6 +9,18 @@
     <Authors>Mark Todd</Authors>
     <Company>Bluegrass IoT</Company>
     <Product>MQTTProbe</Product>
+    <!-- Set here rather than passed as -p:TreatWarningsAsErrors=true on the command line:
+         a global property would also reach external/SparkplugNet, which deliberately
+         shadows this file (see external/Directory.Build.props) to keep its own settings. -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- NuGet audit warnings come from the advisory feed, not from this repository: a newly
+         disclosed CVE on an unchanged package would otherwise break the build with no code
+         change. They stay visible as warnings so they still get triaged. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1900;NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+  </PropertyGroup>
+  <PropertyGroup>
+    <AnalysisMode>Recommended</AnalysisMode>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
   </PropertyGroup>
 </Project>

@@ -1,11 +1,10 @@
 @page "/"
 @using Microsoft.AspNetCore.Components.Authorization
-@using MQTTnet.Extensions.ManagedClient
 @using MqttProbe.Services.Configuration
 @using MqttProbe.Services.Mqtt
 @attribute [Authorize]
 @implements IDisposable
-@inject IManagedMqttClient MqttClient
+@inject IMqttManagedClient MqttClient
 @inject IConnectionSessionLifecycle SessionLifecycle
 @inject IMessageStoreManager MessageStoreManager
 @inject ISettingsStore SettingsStore
@@ -81,7 +80,7 @@
     }
 </nav>
 
-<MudTabs @key="RenderedDestinations.Count"
+<MudTabs @key="GetRenderedDestinations().Count"
          ActivePanelIndex="@_activeTabIndex"
          Class="desktop-tabs"
          ActivePanelIndexChanged="@OnActivePanelChanged"
@@ -144,7 +143,7 @@
         <div class="tab-panel-content">
             @if (CanShowWorkspaceContent("subscriptions"))
             {
-                @if (!SubscriptionManager.Topics.Any() && !SettingsStore.IsHintDismissed("subscriptions"))
+                @if (!SubscriptionManager.Subscriptions.Any() && !SettingsStore.IsHintDismissed("subscriptions"))
                 {
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
                               ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("subscriptions"))">
@@ -242,7 +241,7 @@
         SettingsStore.GetCharts(SessionState.SelectedConnection.Id).Count > 0 ? $"Charts ({SettingsStore.GetCharts(SessionState.SelectedConnection.Id).Count})" : "Charts";
 
     private string SubscriptionsTabLabel =>
-        SubscriptionManager.Topics.Count > 0 ? $"Subscriptions ({SubscriptionManager.Topics.Count})" : "Subscriptions";
+        SubscriptionManager.Subscriptions.Count > 0 ? $"Subscriptions ({SubscriptionManager.Subscriptions.Count})" : "Subscriptions";
 
     private string NodesTabLabel
     {
@@ -263,12 +262,12 @@
     private bool _suppressUrlUpdate;
     private Func<EventArgs, Task>? _connectionStateChangedHandler;
 
-    private IReadOnlyList<NavigationDestination> RenderedDestinations =>
+    private IReadOnlyList<NavigationDestination> GetRenderedDestinations() =>
         _destinations.Where(d => d.IsVisible()).ToList();
 
     private void SyncActiveTabIndex()
     {
-        var rendered = RenderedDestinations;
+        var rendered = GetRenderedDestinations();
         for (int i = 0; i < rendered.Count; i++)
         {
             if (string.Equals(rendered[i].Slug, _activeSlug, StringComparison.OrdinalIgnoreCase))
@@ -402,7 +401,7 @@
 
     private void OnActivePanelChanged(int physicalIndex)
     {
-        var rendered = RenderedDestinations;
+        var rendered = GetRenderedDestinations();
         if (physicalIndex < 0 || physicalIndex >= rendered.Count) return;
         var dest = rendered[physicalIndex];
         _activeSlug = dest.Slug;

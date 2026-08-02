@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
-using MQTTnet.Extensions.ManagedClient;
 using MqttProbe.Services.Metrics;
+using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Security;
 using MqttProbe.Shared.Tests.TestHelpers;
@@ -13,13 +13,13 @@ namespace MqttProbe.Shared.Tests.Components.Browser;
 [TestFixture]
 public class PublishersTests : BunitTestContext
 {
-    private IManagedMqttClient _mockClient = null!;
+    private IMqttManagedClient _mockClient = null!;
     private ISnackbar _mockSnackbar = null!;
 
     [SetUp]
     public void SetupMocks()
     {
-        _mockClient = Substitute.For<IManagedMqttClient>();
+        _mockClient = Substitute.For<IMqttManagedClient>();
         _mockClient.EnqueueAsync(Arg.Any<MqttApplicationMessage>()).Returns(Task.CompletedTask);
         Services.AddSingleton(_mockClient);
         Services.AddSingleton(Substitute.For<ILogger<Publishers>>());

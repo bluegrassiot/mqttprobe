@@ -130,7 +130,8 @@ public sealed class AppHealthMetricsCollector : IAppHealthMetricsCollector
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "{MetricName} metric unavailable on this platform", metricName);
+            if (_logger.IsEnabled(LogLevel.Debug))
+                _logger.LogDebug(ex, "{MetricName} metric unavailable on this platform", metricName);
             return false;
         }
     }
@@ -153,80 +154,7 @@ public sealed class AppHealthMetricsCollector : IAppHealthMetricsCollector
 
             if (_cpuAvailable || _workingSetAvailable || _threadsAvailable)
             {
-                Process? process = null;
-                try
-                {
-                    process = _getCurrentProcess();
-                }
-                catch (Exception ex)
-                {
-                    _cpuAvailable = false;
-                    _workingSetAvailable = false;
-                    _threadsAvailable = false;
-                    _logger.LogDebug(ex, "Process API unavailable; process metrics disabled");
-                }
-
-                if (process is not null)
-                {
-                    try
-                    {
-                        process.Refresh();
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogDebug(ex, "Process refresh failed");
-                    }
-
-                    using (process)
-                    {
-                        if (_cpuAvailable)
-                        {
-                            try
-                            {
-                                var cpuTime = _getCpuTime(process);
-                                var elapsedSec = (now - _lastCpuSample).TotalSeconds;
-                                var cpuUsage = elapsedSec > 0
-                                    ? Math.Min(100.0, (cpuTime - _lastCpuTime).TotalSeconds
-                                        / (elapsedSec * Environment.ProcessorCount) * 100.0)
-                                    : 0.0;
-                                _lastCpuSample = now;
-                                _lastCpuTime = cpuTime;
-                                Volatile.Write(ref _cpuUsagePercent, cpuUsage);
-                            }
-                            catch (Exception ex)
-                            {
-                                _cpuAvailable = false;
-                                _logger.LogDebug(ex, "CPU usage metric disabled mid-flight");
-                            }
-                        }
-
-                        if (_workingSetAvailable)
-                        {
-                            try
-                            {
-                                Volatile.Write(ref _workingSetMb, _getWorkingSet64(process) / 1048576.0);
-                            }
-                            catch (Exception ex)
-                            {
-                                _workingSetAvailable = false;
-                                _logger.LogDebug(ex, "Working Set metric disabled mid-flight");
-                            }
-                        }
-
-                        if (_threadsAvailable)
-                        {
-                            try
-                            {
-                                _threadCount = _getThreadCount(process);
-                            }
-                            catch (Exception ex)
-                            {
-                                _threadsAvailable = false;
-                                _logger.LogDebug(ex, "Thread Count metric disabled mid-flight");
-                            }
-                        }
-                    }
-                }
+                SampleProcessMetrics(now);
             }
 
             Volatile.Write(ref _managedHeapMb, GC.GetTotalMemory(false) / 1048576.0);
@@ -241,6 +169,109 @@ public sealed class AppHealthMetricsCollector : IAppHealthMetricsCollector
         finally
         {
             Interlocked.Exchange(ref _sampling, 0);
+        }
+    }
+
+    private void SampleProcessMetrics(DateTime now)
+    {
+        var process = AcquireProcessForSampling();
+
+        if (process is null)
+        {
+            return;
+        }
+
+        using (process)
+        {
+            if (_cpuAvailable)
+            {
+                SampleCpuUsage(process, now);
+            }
+
+            if (_workingSetAvailable)
+            {
+                SampleWorkingSet(process);
+            }
+
+            if (_threadsAvailable)
+            {
+                SampleThreadCount(process);
+            }
+        }
+    }
+
+    private Process? AcquireProcessForSampling()
+    {
+        Process? process = null;
+        try
+        {
+            process = _getCurrentProcess();
+        }
+        catch (Exception ex)
+        {
+            _cpuAvailable = false;
+            _workingSetAvailable = false;
+            _threadsAvailable = false;
+            _logger.LogDebug(ex, "Process API unavailable; process metrics disabled");
+            return null;
+        }
+
+        try
+        {
+            process.Refresh();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Process refresh failed");
+        }
+
+        return process;
+    }
+
+    private void SampleCpuUsage(Process process, DateTime now)
+    {
+        try
+        {
+            var cpuTime = _getCpuTime(process);
+            var elapsedSec = (now - _lastCpuSample).TotalSeconds;
+            var cpuUsage = elapsedSec > 0
+                ? Math.Min(100.0, (cpuTime - _lastCpuTime).TotalSeconds
+                    / (elapsedSec * Environment.ProcessorCount) * 100.0)
+                : 0.0;
+            _lastCpuSample = now;
+            _lastCpuTime = cpuTime;
+            Volatile.Write(ref _cpuUsagePercent, cpuUsage);
+        }
+        catch (Exception ex)
+        {
+            _cpuAvailable = false;
+            _logger.LogDebug(ex, "CPU usage metric disabled mid-flight");
+        }
+    }
+
+    private void SampleWorkingSet(Process process)
+    {
+        try
+        {
+            Volatile.Write(ref _workingSetMb, _getWorkingSet64(process) / 1048576.0);
+        }
+        catch (Exception ex)
+        {
+            _workingSetAvailable = false;
+            _logger.LogDebug(ex, "Working Set metric disabled mid-flight");
+        }
+    }
+
+    private void SampleThreadCount(Process process)
+    {
+        try
+        {
+            _threadCount = _getThreadCount(process);
+        }
+        catch (Exception ex)
+        {
+            _threadsAvailable = false;
+            _logger.LogDebug(ex, "Thread Count metric disabled mid-flight");
         }
     }
 

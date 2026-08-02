@@ -111,6 +111,6 @@ public class PasswordHasherTests
         // means wrong passwords always complete without early-exit.
         var hash = PasswordHasher.Hash("password");
         PasswordHasher.Verify("aaa", hash).Should().BeFalse();
-        PasswordHasher.Verify("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", hash).Should().BeFalse();
+        PasswordHasher.Verify("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", hash).Should().BeFalse(); // DevSkim: ignore DS173237
     }
 }

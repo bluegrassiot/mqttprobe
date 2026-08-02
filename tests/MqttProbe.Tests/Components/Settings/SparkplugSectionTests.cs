@@ -39,6 +39,19 @@ public class SparkplugSectionTests : BunitTestContext
     }
 
     [Test]
+    public async Task AutoRequestRebirth_Toggle_CallsSetter()
+    {
+        _mockStore.SetAutoRequestSparkplugRebirthAsync(Arg.Any<bool>()).Returns(Task.CompletedTask);
+        var cut = Render<SparkplugSection>();
+
+        var toggle = cut.FindComponents<MudSwitch<bool>>()
+            .First(s => s.Instance.Label == "Automatically request rebirth");
+        await cut.InvokeAsync(() => toggle.Instance.ValueChanged.InvokeAsync(false));
+
+        await _mockStore.Received(1).SetAutoRequestSparkplugRebirthAsync(false);
+    }
+
+    [Test]
     public void Section_RendersNoPanelChrome()
     {
         var cut = Render<SparkplugSection>();

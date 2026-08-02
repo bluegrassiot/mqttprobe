@@ -43,6 +43,7 @@ public interface ISettingsStore
     public Task SetFontAccessibleAsync(bool accessible);
     public Task SetAutoResubscribeAsync(bool autoResubscribe);
     public Task SetEnrichSparkplugAliasNamesAsync(bool enrich);
+    public Task SetAutoRequestSparkplugRebirthAsync(bool autoRequest);
     public Task DismissHintAsync(string hintId);
     public bool IsHintDismissed(string hintId);
 
@@ -220,7 +221,7 @@ public class SettingsStore : ISettingsStore, IDisposable
     {
         var quarantinePath = Path.Combine(certStore.CertificatesDirectory, $"cert-{tmpAssetId}.quarantine");
         try { File.Delete(quarantinePath); } catch { /* stale quarantine file; the move below overwrites or fails loudly */ }
-        bool renamed = false;
+        var renamed = false;
         try { File.Move(tmpFile, quarantinePath); renamed = true; } catch { /* handled via the renamed flag below */ }
         if (!renamed)
         {
@@ -829,6 +830,13 @@ public class SettingsStore : ISettingsStore, IDisposable
     public async Task SetEnrichSparkplugAliasNamesAsync(bool enrich)
     {
         _config.Ui.EnrichSparkplugAliasNames = enrich;
+        await SaveAsync();
+        UiPreferencesChanged?.Invoke();
+    }
+
+    public async Task SetAutoRequestSparkplugRebirthAsync(bool autoRequest)
+    {
+        _config.Ui.AutoRequestSparkplugRebirth = autoRequest;
         await SaveAsync();
         UiPreferencesChanged?.Invoke();
     }

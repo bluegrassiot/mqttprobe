@@ -70,6 +70,22 @@ public class SettingsStoreTests
     }
 
     [Test]
+    public async Task SetAutoRequestSparkplugRebirthAsync_PersistsAndRaisesUiPreferencesChanged()
+    {
+        var fired = false;
+        _store.UiPreferencesChanged += () => fired = true;
+        _store.Config.Ui.AutoRequestSparkplugRebirth.Should().BeFalse("auto-rebirth ships off");
+
+        await _store.SetAutoRequestSparkplugRebirthAsync(true);
+
+        fired.Should().BeTrue();
+
+        using var reloaded = new SettingsStore(_configPath);
+        await reloaded.LoadAsync();
+        reloaded.Config.Ui.AutoRequestSparkplugRebirth.Should().BeTrue();
+    }
+
+    [Test]
     public async Task DismissHintAsync_RaisesUiPreferencesChanged()
     {
         var fired = false;

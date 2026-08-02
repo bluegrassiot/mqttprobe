@@ -31,6 +31,7 @@ public class UiPreferences
     public string FontFamily { get; set; } = "OpenDyslexic";
     public bool AutoResubscribe { get; set; } = true;
     public bool EnrichSparkplugAliasNames { get; set; } = true;
+    public bool AutoRequestSparkplugRebirth { get; set; }
 
     public List<string> DismissedHints { get; set; } = [];
 }

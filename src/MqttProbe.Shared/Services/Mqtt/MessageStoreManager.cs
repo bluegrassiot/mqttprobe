@@ -420,7 +420,7 @@ public class MessageStoreManager : IMessageStoreManager
             LogPipelineDiagnostics(topic, result.Diagnostics);
 
             if (_topologyService is not null && result.TopologyEvents.Count > 0)
-                _topologyService.ApplyTopologyEvents(result.TopologyEvents);
+                await _topologyService.ApplyTopologyEventsAsync(result.TopologyEvents);
 
             var aliasNames = ResolveSparkplugAliasNames(topic, arg, result);
 

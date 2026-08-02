@@ -129,7 +129,7 @@ public static class MqttProbeServiceRegistration
             sp => new SparkplugTopologyService(
                 sp.GetRequiredService<IMqttManagedClient>(),
                 sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
-                autoSubscribeToClient: false), session));
+                sp.GetRequiredService<ISettingsStore>()), session));
         return services;
     }
 }

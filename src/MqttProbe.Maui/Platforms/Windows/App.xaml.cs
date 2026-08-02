@@ -1,5 +1,3 @@
-using Microsoft.UI.Xaml;
-
 namespace MqttProbe.WinUI;
 
 public partial class App : MauiWinUIApplication
@@ -24,7 +22,7 @@ public partial class App : MauiWinUIApplication
 #endif
     }
 
-    private static void OnDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
+    private static void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
 #if DEBUG
         System.Diagnostics.Debugger.Break();

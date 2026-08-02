@@ -192,10 +192,33 @@ public sealed class MqttManagedClient : IMqttManagedClient
         }
         catch (Exception ex)
         {
-            if (ConnectingFailedAsync is not null)
-                await ConnectingFailedAsync(new MqttConnectingFailedEventArgs(ex)).ConfigureAwait(false);
-
             StartReconnectLoop();
+            await RaiseAsync(ConnectingFailedAsync, new MqttConnectingFailedEventArgs(ex), nameof(ConnectingFailedAsync))
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Invokes each subscriber in turn, isolating faults. Subscribers are observers: one that
+    /// throws must not starve the rest of the multicast list, and must never take reconnect
+    /// down with it. MQTTnet swallows exceptions thrown out of its own event handlers, so an
+    /// escaping fault here disappears silently and the client stops retrying forever.
+    /// </summary>
+    private async Task RaiseAsync<TArgs>(Func<TArgs, Task>? handler, TArgs args, string eventName)
+    {
+        if (handler is null)
+            return;
+
+        foreach (var subscriber in handler.GetInvocationList())
+        {
+            try
+            {
+                await ((Func<TArgs, Task>)subscriber)(args).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "A {EventName} subscriber threw; continuing", eventName);
+            }
         }
     }
 
@@ -256,8 +279,8 @@ public sealed class MqttManagedClient : IMqttManagedClient
             }
             catch (Exception ex)
             {
-                if (ConnectingFailedAsync is not null)
-                    await ConnectingFailedAsync(new MqttConnectingFailedEventArgs(ex)).ConfigureAwait(false);
+                await RaiseAsync(ConnectingFailedAsync, new MqttConnectingFailedEventArgs(ex), nameof(ConnectingFailedAsync))
+                    .ConfigureAwait(false);
             }
         }
     }
@@ -267,19 +290,14 @@ public sealed class MqttManagedClient : IMqttManagedClient
         await ResubscribeAsync().ConfigureAwait(false);
         await DrainPendingAsync().ConfigureAwait(false);
 
-        if (ConnectedAsync is not null)
-            await ConnectedAsync(args).ConfigureAwait(false);
-
+        await RaiseAsync(ConnectedAsync, args, nameof(ConnectedAsync)).ConfigureAwait(false);
         await RaiseConnectionStateChangedAsync().ConfigureAwait(false);
     }
 
     private async Task OnClientDisconnectedAsync(MqttClientDisconnectedEventArgs args)
     {
-        if (DisconnectedAsync is not null)
-            await DisconnectedAsync(args).ConfigureAwait(false);
-
-        await RaiseConnectionStateChangedAsync().ConfigureAwait(false);
-
+        // Before the subscribers, not after: reconnect is this client's own job and must not
+        // wait on — or be skipped by — observers such as emulator teardown or a Blazor render.
         bool started;
         lock (_sync)
         {
@@ -288,6 +306,9 @@ public sealed class MqttManagedClient : IMqttManagedClient
 
         if (started)
             StartReconnectLoop();
+
+        await RaiseAsync(DisconnectedAsync, args, nameof(DisconnectedAsync)).ConfigureAwait(false);
+        await RaiseConnectionStateChangedAsync().ConfigureAwait(false);
     }
 
     private Task OnClientApplicationMessageReceivedAsync(MqttApplicationMessageReceivedEventArgs args) =>
@@ -313,8 +334,8 @@ public sealed class MqttManagedClient : IMqttManagedClient
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to restore {Count} subscription(s) after connect", filters.Count);
-            if (SynchronizingSubscriptionsFailedAsync is not null)
-                await SynchronizingSubscriptionsFailedAsync(new MqttManagedProcessFailedEventArgs(ex)).ConfigureAwait(false);
+            await RaiseAsync(SynchronizingSubscriptionsFailedAsync, new MqttManagedProcessFailedEventArgs(ex),
+                nameof(SynchronizingSubscriptionsFailedAsync)).ConfigureAwait(false);
         }
     }
 
@@ -349,7 +370,7 @@ public sealed class MqttManagedClient : IMqttManagedClient
     }
 
     private Task RaiseConnectionStateChangedAsync() =>
-        ConnectionStateChangedAsync?.Invoke(EventArgs.Empty) ?? Task.CompletedTask;
+        RaiseAsync(ConnectionStateChangedAsync, EventArgs.Empty, nameof(ConnectionStateChangedAsync));
 
     public void Dispose()
     {

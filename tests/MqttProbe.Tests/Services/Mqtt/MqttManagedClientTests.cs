@@ -1,9 +1,6 @@
-using AwesomeAssertions;
 using MQTTnet;
 using MQTTnet.Packets;
 using MqttProbe.Services.Mqtt;
-using NSubstitute;
-using NUnit.Framework;
 
 namespace MqttProbe.Shared.Tests.Services.Mqtt;
 
@@ -80,6 +77,54 @@ public class MqttManagedClientTests
             .Count(c => c.GetMethodInfo().Name == nameof(IMqttClient.ConnectAsync))
             .Should().BeGreaterThanOrEqualTo(2);
     }
+
+    [Test]
+    public async Task Disconnect_after_successful_connect_triggers_reconnect()
+    {
+        var client = Substitute.For<IMqttClient>();
+        client.IsConnected.Returns(true);
+        await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions(TimeSpan.FromMilliseconds(20)));
+
+        client.IsConnected.Returns(false);
+        client.DisconnectedAsync += Raise.Event<Func<MqttClientDisconnectedEventArgs, Task>>(DisconnectedArgs());
+
+        await WaitUntilAsync(() => ConnectCount(client) >= 2);
+        ConnectCount(client).Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    [Test]
+    public async Task Disconnect_still_reconnects_when_a_DisconnectedAsync_handler_throws()
+    {
+        var client = Substitute.For<IMqttClient>();
+        client.IsConnected.Returns(true);
+        await using var sut = new MqttManagedClient(client);
+        sut.DisconnectedAsync += _ => throw new InvalidOperationException("subscriber blew up");
+        await sut.StartAsync(BuildOptions(TimeSpan.FromMilliseconds(20)));
+
+        client.IsConnected.Returns(false);
+        client.DisconnectedAsync += Raise.Event<Func<MqttClientDisconnectedEventArgs, Task>>(DisconnectedArgs());
+
+        await WaitUntilAsync(() => ConnectCount(client) >= 2);
+        ConnectCount(client).Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    [Test]
+    public async Task A_throwing_subscriber_does_not_starve_the_rest_of_the_list()
+    {
+        var client = Substitute.For<IMqttClient>();
+        await using var sut = new MqttManagedClient(client);
+        var reached = false;
+        sut.ConnectionStateChangedAsync += _ => throw new InvalidOperationException("subscriber blew up");
+        sut.ConnectionStateChangedAsync += _ => { reached = true; return Task.CompletedTask; };
+
+        client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
+
+        reached.Should().BeTrue();
+    }
+
+    private static int ConnectCount(IMqttClient client) =>
+        client.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IMqttClient.ConnectAsync));
 
     [Test]
     public async Task StopAsync_disconnects_and_clears_started()

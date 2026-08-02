@@ -33,7 +33,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.x'
 
@@ -142,7 +142,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.x'
 
@@ -213,7 +213,7 @@ jobs:
           Remove-Item
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: maui-windows-velopack
           path: publish/velopack/
@@ -237,11 +237,11 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.x'
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v5.6.0
         with:
           distribution: 'microsoft'
           java-version: '17'

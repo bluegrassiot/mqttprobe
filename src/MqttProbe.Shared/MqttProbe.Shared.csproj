@@ -7,6 +7,11 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>MqttProbe</RootNamespace>
 
+        <!-- This assembly ships inside the single-file Web build, where IL3000-class
+             mistakes only surface at release time. Enabled here so an ordinary build
+             fails instead of the tag. -->
+        <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+
         <!-- Both of these come from Razor emitting component code outside a #nullable
              context, and neither is suppressible via .editorconfig: severity there is
              resolved against the generated document, and source-generator output is

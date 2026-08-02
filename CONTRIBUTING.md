@@ -17,8 +17,12 @@ Bug fixes and small improvements are welcome. For larger changes, open an issue 
 ### Setup
 
 1. Install [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-2. Clone the repo
+2. Clone the repo with submodules: `git clone --recurse-submodules https://github.com/bluegrassiot/mqttprobe`. If you already cloned without that flag, run `git submodule update --init --recursive`.
 3. Run tests: `dotnet test tests/MqttProbe.Tests`
+
+### Architecture and Development
+
+For the solution layout, library choices, and common development commands, see the [Development wiki](https://github.com/bluegrassiot/mqttprobe/wiki/07-Development).
 
 ### Git hooks
 

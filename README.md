@@ -64,6 +64,7 @@ See [Getting Started](https://github.com/bluegrassiot/mqttprobe/wiki/01-Getting-
 - [Emulation](https://github.com/bluegrassiot/mqttprobe/wiki/04-Emulation)
 - [Docker Deployment](https://github.com/bluegrassiot/mqttprobe/wiki/05-Docker-Deployment)
 - [Troubleshooting](https://github.com/bluegrassiot/mqttprobe/wiki/06-Troubleshooting)
+- [Development](https://github.com/bluegrassiot/mqttprobe/wiki/07-Development)
 
 Website: https://mqttprobe.com
 

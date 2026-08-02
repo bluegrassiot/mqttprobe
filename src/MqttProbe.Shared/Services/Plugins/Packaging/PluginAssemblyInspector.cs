@@ -27,7 +27,10 @@ public static class PluginAssemblyInspector
                 $"Assembly package must contain a primary assembly named {id}.dll at its root.");
         }
 
+        // IL3000: the empty-string single-file case is exactly what the next check handles.
+#pragma warning disable IL3000
         var contractPath = typeof(IMqttProbePlugin).Assembly.Location;
+#pragma warning restore IL3000
 
         if (string.IsNullOrEmpty(contractPath))
         {

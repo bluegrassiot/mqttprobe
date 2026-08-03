@@ -36,7 +36,9 @@ public class MainLayoutTests : BunitTestContext
         _mockAppInfo = Substitute.For<IAppInfoService>();
         _mockSessionState = Substitute.For<ISessionState>();
         _mockConfig = Substitute.For<ISettingsStore>();
-        _mockConfig.Config.Returns(new AppConfiguration());
+        var cfg = new AppConfiguration();
+        _mockConfig.Config.Returns(cfg);
+        _mockConfig.Ui.Returns(cfg.Ui);
         _mockJs = Substitute.For<IJSRuntime>();
         _mockUpdateService = Substitute.For<IUpdateService>();
         _mockUpdateService.IsSupported.Returns(false);
@@ -56,7 +58,7 @@ public class MainLayoutTests : BunitTestContext
         Services.AddSingleton(_mockDialogService);
         Services.AddSingleton(_mockAppInfo);
         Services.AddSingleton(_mockSessionState);
-        Services.AddSingleton(_mockConfig);
+        Services.AddSettingsSubstitute(_mockConfig);
         Services.AddSingleton(_mockJs);
         Services.AddSingleton(_mockUpdateService);
         _mockLifecycle = Substitute.For<IConnectionSessionLifecycle>();
@@ -249,6 +251,7 @@ public class MainLayoutTests : BunitTestContext
             Ui = new UiPreferences { Theme = "dark", FontAccessible = false }
         };
         _mockConfig.Config.Returns(cfg);
+        _mockConfig.Ui.Returns(cfg.Ui);
 
         var cut = RenderLayout();
 

@@ -4,7 +4,7 @@
 @inject IMessageStoreManager MessageStoreManager
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject ISettingsStore SettingsStore
+@inject IPerformanceSettings PerformanceSettings
 @inject IUxMetricsService Metrics
 @using System.Text.Json
 @using System.Xml.Linq
@@ -242,7 +242,7 @@ else
 @code {
     [Inject] public required IClipboardService Clipboard { get; set; }
 
-    private int MaxMessageCount => SettingsStore.Config.Performance.MaxDisplayMessages;
+    private int MaxMessageCount => PerformanceSettings.Performance.MaxDisplayMessages;
     internal string? _searchStringTerm;
     private List<MqttMessage> _messageList = [];
     private MqttMessage? _selectedMessage;

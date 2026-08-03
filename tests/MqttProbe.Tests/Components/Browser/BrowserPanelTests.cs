@@ -31,7 +31,7 @@ public class BrowserPanelTests : BunitTestContext
         _mockSnackbar = Substitute.For<ISnackbar>();
 
         Services.AddSingleton(_mockMsgStore);
-        Services.AddSingleton(_mockConfig);
+        Services.AddSettingsSubstitute(_mockConfig);
         Services.AddSingleton(_mockDialogService);
         Services.AddSingleton(_mockSnackbar);
 

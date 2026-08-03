@@ -19,12 +19,14 @@ public class AppearanceSectionTests : BunitTestContext
     public void Setup()
     {
         _mockStore = Substitute.For<ISettingsStore>();
-        _mockStore.Config.Returns(new AppConfiguration
+        var cfg = new AppConfiguration
         {
             Ui = new UiPreferences { Theme = "dark", FontAccessible = false }
-        });
+        };
+        _mockStore.Config.Returns(cfg);
+        _mockStore.Ui.Returns(cfg.Ui);
         _themes = new Themes();
-        Services.AddSingleton(_mockStore);
+        Services.AddSettingsSubstitute(_mockStore);
         Services.AddSingleton<IThemes>(_themes);
         EnsureMudProviders();
     }

@@ -33,8 +33,10 @@ public class PayloadBrowserTests : BunitTestContext
         Services.AddSingleton(_mockMsgStore);
 
         _mockSettingsStore = Substitute.For<ISettingsStore>();
-        _mockSettingsStore.Config.Returns(new AppConfiguration());
-        Services.AddSingleton(_mockSettingsStore);
+        var cfg = new AppConfiguration();
+        _mockSettingsStore.Config.Returns(cfg);
+        _mockSettingsStore.Performance.Returns(cfg.Performance);
+        Services.AddSettingsSubstitute(_mockSettingsStore);
 
         _mockMetrics = Substitute.For<IUxMetricsService>();
         Services.AddSingleton(_mockMetrics);
@@ -81,10 +83,12 @@ public class PayloadBrowserTests : BunitTestContext
     [Test]
     public void MessageList_WithConfiguredMaxDisplayMessages_ShowsCustomTruncationWarning()
     {
-        _mockSettingsStore.Config.Returns(new AppConfiguration
+        var customCfg = new AppConfiguration
         {
             Performance = new PerformanceSettings { MaxDisplayMessages = 3 }
-        });
+        };
+        _mockSettingsStore.Config.Returns(customCfg);
+        _mockSettingsStore.Performance.Returns(customCfg.Performance);
         var messages = Enumerable.Range(0, 3)
             .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
             .ToList();

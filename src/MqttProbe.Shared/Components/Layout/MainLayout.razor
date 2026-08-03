@@ -2,7 +2,7 @@
 @using MqttProbe.Services.Configuration
 @inherits LayoutComponentBase
 @implements IAsyncDisposable
-@inject ISettingsStore SettingsStore
+@inject IUiSettings UiSettings
 @inject IAppInfoService AppInfoService
 @inject IJSRuntime JsRuntime
 @inject IThemes Themes
@@ -41,23 +41,23 @@
     {
         Themes.ModeChanged += OnModeChanged;
         Themes.FontModeChanged += OnFontModeChanged;
-        SettingsStore.UiPreferencesChanged += OnUiPreferencesChangedFromStore;
+        UiSettings.UiPreferencesChanged += OnUiPreferencesChangedFromStore;
 
-        Themes.SetFontAccessible(SettingsStore.Config.Ui.FontAccessible);
+        Themes.SetFontAccessible(UiSettings.Ui.FontAccessible);
 
-        var savedTheme = SettingsStore.Config.Ui.Theme;
+        var savedTheme = UiSettings.Ui.Theme;
         Themes.SetTheme(!string.Equals(savedTheme, "light", StringComparison.OrdinalIgnoreCase));
     }
 
     private void OnModeChanged()
     {
-        _ = SettingsStore.SetThemeAsync(Themes.IsDarkMode ? "dark" : "light");
+        _ = UiSettings.SetThemeAsync(Themes.IsDarkMode ? "dark" : "light");
         InvokeAsync(StateHasChanged);
     }
 
     private void OnFontModeChanged()
     {
-        _ = SettingsStore.SetFontAccessibleAsync(Themes.IsFontAccessible);
+        _ = UiSettings.SetFontAccessibleAsync(Themes.IsFontAccessible);
         if (_hasRendered)
             _ = SetBodyFontClass();
         InvokeAsync(StateHasChanged);
@@ -65,7 +65,7 @@
 
     private void OnUiPreferencesChangedFromStore()
     {
-        var cfg = SettingsStore.Config.Ui;
+        var cfg = UiSettings.Ui;
         Themes.SetFontAccessible(cfg.FontAccessible);
         Themes.SetTheme(!string.Equals(cfg.Theme, "light", StringComparison.OrdinalIgnoreCase));
         InvokeAsync(StateHasChanged);
@@ -89,7 +89,7 @@
     {
         Themes.ModeChanged -= OnModeChanged;
         Themes.FontModeChanged -= OnFontModeChanged;
-        SettingsStore.UiPreferencesChanged -= OnUiPreferencesChangedFromStore;
+        UiSettings.UiPreferencesChanged -= OnUiPreferencesChangedFromStore;
         return ValueTask.CompletedTask;
     }
 }

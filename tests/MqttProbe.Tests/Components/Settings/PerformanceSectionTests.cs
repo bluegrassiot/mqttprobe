@@ -17,15 +17,17 @@ public class PerformanceSectionTests : BunitTestContext
     public void Setup()
     {
         _mockStore = Substitute.For<ISettingsStore>();
-        _mockStore.Config.Returns(new AppConfiguration
+        var cfg = new AppConfiguration
         {
             Performance = new PerformanceSettings
             {
                 MaxStoredMessages = 10_000,
                 MaxMessagesPerSecond = 50_000
             }
-        });
-        Services.AddSingleton(_mockStore);
+        };
+        _mockStore.Config.Returns(cfg);
+        _mockStore.Performance.Returns(cfg.Performance);
+        Services.AddSettingsSubstitute(_mockStore);
         EnsureMudProviders();
     }
 

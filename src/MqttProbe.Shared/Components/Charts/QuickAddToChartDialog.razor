@@ -1,6 +1,6 @@
 @using MqttProbe.Services.Configuration
 @using MqttProbe.Services.Mqtt
-@inject ISettingsStore SettingsStore
+@inject IChartSettings ChartSettings
 @inject ISessionState SessionState
 @inject IUxMetricsService? UxMetrics
 
@@ -29,7 +29,7 @@
         </MudAlert>
 
         <!-- Mode toggle (only show if charts exist) -->
-        @{ var charts = SettingsStore.GetCharts(SessionState.SelectedConnection.Id); }
+        @{ var charts = ChartSettings.GetCharts(SessionState.SelectedConnection.Id); }
         @if (charts.Any())
         {
             <MudToggleGroup T="ChartMode" @bind-Value="_mode" Class="mb-3" Color="Color.Primary"
@@ -102,7 +102,7 @@
     {
         _displayName = SeriesName;
         _newChartName = DefaultChartName(Topic, SeriesName);
-        var charts = SettingsStore.GetCharts(SessionState.SelectedConnection.Id);
+        var charts = ChartSettings.GetCharts(SessionState.SelectedConnection.Id);
         if (!charts.Any())
         {
             _mode = ChartMode.CreateNew;
@@ -164,13 +164,13 @@
                 Name = _newChartName.Trim(),
                 Series = [series]
             };
-            await SettingsStore.AddChartAsync(SessionState.SelectedConnection.Id, newChart);
+            await ChartSettings.AddChartAsync(SessionState.SelectedConnection.Id, newChart);
             UxMetrics?.RecordChartFunnel("payload-quick-add", createdNewChart: true);
             MudDialog.Close(DialogResult.Ok($"Chart created: {newChart.Name}"));
         }
         else
         {
-            var chart = SettingsStore.GetCharts(SessionState.SelectedConnection.Id).FirstOrDefault(c => c.Id == _selectedChartId);
+            var chart = ChartSettings.GetCharts(SessionState.SelectedConnection.Id).FirstOrDefault(c => c.Id == _selectedChartId);
             if (chart == null) { MudDialog.Cancel(); return; }
 
             var color = SeriesColors[chart.Series.Count % SeriesColors.Length];
@@ -191,7 +191,7 @@
                 TimeWindowMinutes = chart.TimeWindowMinutes,
                 Series = [.. chart.Series, newSeries]
             };
-            await SettingsStore.UpdateChartAsync(SessionState.SelectedConnection.Id, updated);
+            await ChartSettings.UpdateChartAsync(SessionState.SelectedConnection.Id, updated);
             UxMetrics?.RecordChartFunnel("payload-quick-add", createdNewChart: false);
             MudDialog.Close(DialogResult.Ok($"Series added to chart: {chart.Name}"));
         }

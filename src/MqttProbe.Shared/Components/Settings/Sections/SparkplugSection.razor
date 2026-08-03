@@ -1,8 +1,8 @@
 @namespace MqttProbe.Components.Settings
 @using MqttProbe.Services.Configuration
-@inject ISettingsStore SettingsStore
+@inject IUiSettings UiSettings
 
-<MudSwitch T="bool" Value="@SettingsStore.Config.Ui.EnrichSparkplugAliasNames"
+<MudSwitch T="bool" Value="@UiSettings.Ui.EnrichSparkplugAliasNames"
            ValueChanged="@OnEnrichAliasNamesChanged"
            Color="Color.Primary"
            Label="Enrich Sparkplug alias names" />
@@ -10,7 +10,7 @@
     When enabled, alias-only Sparkplug metrics are annotated with resolved names from the topology.
 </MudText>
 
-<MudSwitch T="bool" Value="@SettingsStore.Config.Ui.AutoRequestSparkplugRebirth"
+<MudSwitch T="bool" Value="@UiSettings.Ui.AutoRequestSparkplugRebirth"
            ValueChanged="@OnAutoRequestRebirthChanged"
            Color="Color.Primary"
            Class="mt-3"
@@ -22,11 +22,11 @@
 @code {
     private async Task OnEnrichAliasNamesChanged(bool value)
     {
-        await SettingsStore.SetEnrichSparkplugAliasNamesAsync(value);
+        await UiSettings.SetEnrichSparkplugAliasNamesAsync(value);
     }
 
     private async Task OnAutoRequestRebirthChanged(bool value)
     {
-        await SettingsStore.SetAutoRequestSparkplugRebirthAsync(value);
+        await UiSettings.SetAutoRequestSparkplugRebirthAsync(value);
     }
 }

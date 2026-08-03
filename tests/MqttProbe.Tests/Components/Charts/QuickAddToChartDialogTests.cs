@@ -27,7 +27,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
         _mockChartStore.GetCharts(_testConnectionId).Returns([]);
         _mockChartStore.AddChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
         _mockChartStore.UpdateChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
-        Services.AddSingleton(_mockChartStore);
+        Services.AddSettingsSubstitute(_mockChartStore);
         Services.AddSingleton(mockSessionState);
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
 

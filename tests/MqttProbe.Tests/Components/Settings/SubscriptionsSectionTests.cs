@@ -17,11 +17,13 @@ public class SubscriptionsSectionTests : BunitTestContext
     public void Setup()
     {
         _mockStore = Substitute.For<ISettingsStore>();
-        _mockStore.Config.Returns(new AppConfiguration
+        var cfg = new AppConfiguration
         {
             Ui = new UiPreferences { AutoResubscribe = true }
-        });
-        Services.AddSingleton(_mockStore);
+        };
+        _mockStore.Config.Returns(cfg);
+        _mockStore.Ui.Returns(cfg.Ui);
+        Services.AddSettingsSubstitute(_mockStore);
         EnsureMudProviders();
     }
 

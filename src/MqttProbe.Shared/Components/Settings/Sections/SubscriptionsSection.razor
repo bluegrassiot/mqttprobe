@@ -1,8 +1,8 @@
 @namespace MqttProbe.Components.Settings
 @using MqttProbe.Services.Configuration
-@inject ISettingsStore SettingsStore
+@inject IUiSettings UiSettings
 
-<MudSwitch T="bool" Value="@SettingsStore.Config.Ui.AutoResubscribe"
+<MudSwitch T="bool" Value="@UiSettings.Ui.AutoResubscribe"
            ValueChanged="@OnAutoResubscribeChanged"
            Color="Color.Primary"
            Label="Auto-resubscribe on connect" />
@@ -13,6 +13,6 @@
 @code {
     private async Task OnAutoResubscribeChanged(bool value)
     {
-        await SettingsStore.SetAutoResubscribeAsync(value);
+        await UiSettings.SetAutoResubscribeAsync(value);
     }
 }

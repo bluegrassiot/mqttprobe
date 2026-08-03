@@ -8,7 +8,8 @@
 @implements IAsyncDisposable
 @inject IMessageStoreManager MessageStoreManagerService
 @inject IMqttManagedClient ManagedMqttClient
-@inject ISettingsStore SettingsStore
+@inject IConnectionSettings ConnectionSettings
+@inject IUiSettings UiSettings
 @inject ISubscriptionManager SubscriptionManager
 @inject ILogger<ConnectionDialog> Logger
 @inject ISessionState SessionState
@@ -22,7 +23,6 @@
 @inject ICertificateFilePicker FilePicker
 @inject ICertificateInputCapability InputCapability
 @inject ISnackbar Snackbar
-
 <MudDialog>
     <DialogContent>
         <div class="connection-dialog-content">
@@ -37,7 +37,7 @@
                            Dense="true"
                            Variant="Variant.Outlined"
                            Style="flex:1">
-                    @foreach (var connection in SettingsStore.Config.Connections)
+                    @foreach (var connection in ConnectionSettings.Connections)
                     {
                         <MudSelectItem T="Connection?" Value="@((Connection?)connection)">@connection.Name</MudSelectItem>
                     }
@@ -290,11 +290,11 @@
                         <MudStack Spacing="2" Class="mt-2">
                             <div>
                                 <MudSwitch T="bool"
-                                           Value="@SettingsStore.Config.Ui.AutoResubscribe"
+                                           Value="@UiSettings.Ui.AutoResubscribe"
                                            ValueChanged="@OnAutoResubscribeChanged"
                                            Color="Color.Primary"
                                            Label="Auto-resubscribe on connect" />
-                                @if (SettingsStore.Config.Ui.AutoResubscribe)
+                                @if (UiSettings.Ui.AutoResubscribe)
                                 {
                                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
                                         Saved topics below are subscribed when this connection connects.
@@ -302,7 +302,7 @@
                                 }
                             </div>
 
-                            @if (!SettingsStore.Config.Ui.AutoResubscribe)
+                            @if (!UiSettings.Ui.AutoResubscribe)
                             {
                                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
                                     On-connect subscriptions are not applied until Auto-resubscribe is enabled. Turn it on above, or enable it in Settings.
@@ -310,7 +310,7 @@
                             }
 
                             <SubscriptionEditor Items="@_selectedConnection.SubscribedTopics"
-                                                Disabled="@(!SettingsStore.Config.Ui.AutoResubscribe)"
+                                                Disabled="@(!UiSettings.Ui.AutoResubscribe)"
                                                 EmptyText="No on-connect subscriptions yet"
                                                 EmptyHint="Add a topic above."
                                                 OnAdd="HandleOnConnectEditorAdd"
@@ -468,7 +468,7 @@
 
     private void UpdateCanSave()
     {
-        var matchesSaved = SettingsStore.Config.Connections.Any(conn => conn.Equals(_selectedConnection));
+        var matchesSaved = ConnectionSettings.Connections.Any(conn => conn.Equals(_selectedConnection));
         _canSave = (!matchesSaved || HasPendingCertificateChange()) && _isFormValid;
     }
 
@@ -670,7 +670,7 @@
 
         try
         {
-            await SettingsStore.AddConnectionAsync(connection);
+            await ConnectionSettings.AddConnectionAsync(connection);
         }
         catch (Exception ex)
         {
@@ -708,7 +708,7 @@
         _certificateRemoved = false;
 
         Logger.LogInformation("Connection saved: {Name} ({Host}:{Port})", connection.Name, connection.Host, connection.Port);
-        _savedConnectionForSelector = SettingsStore.Config.Connections.FirstOrDefault(c => c.Id == connection.Id) ?? connection;
+        _savedConnectionForSelector = ConnectionSettings.Connections.FirstOrDefault(c => c.Id == connection.Id) ?? connection;
         _selectedConnection = _savedConnectionForSelector.Clone();
         _canDelete = true;
         UpdateActionStates();
@@ -763,7 +763,7 @@
     private async Task Delete()
     {
         Logger.LogInformation("Connection deleted: {Name} ({Host}:{Port})", _selectedConnection.Name, _selectedConnection.Host, _selectedConnection.Port);
-        await SettingsStore.RemoveConnectionAsync(_selectedConnection);
+        await ConnectionSettings.RemoveConnectionAsync(_selectedConnection);
         Add();
     }
 
@@ -920,12 +920,12 @@
 
     private async Task OnAutoResubscribeChanged(bool value)
     {
-        await SettingsStore.SetAutoResubscribeAsync(value);
+        await UiSettings.SetAutoResubscribeAsync(value);
     }
 
     private async Task HandleOnConnectEditorAdd((string Topic, MqttQualityOfServiceLevel Qos) request)
     {
-        if (!SettingsStore.Config.Ui.AutoResubscribe)
+        if (!UiSettings.Ui.AutoResubscribe)
         {
             Snackbar.Add("Enable Auto-resubscribe on connect to manage these topics.", Severity.Info);
             return;
@@ -957,13 +957,13 @@
             QualityOfServiceLevel = request.Qos
         });
 
-        await SettingsStore.AddConnectionAsync(_selectedConnection);
+        await ConnectionSettings.AddConnectionAsync(_selectedConnection);
         Snackbar.Add($"Saved subscription {topic}", Severity.Success);
     }
 
     private async Task HandleOnConnectEditorRemove(IReadOnlyList<string> topics)
     {
-        if (!SettingsStore.Config.Ui.AutoResubscribe)
+        if (!UiSettings.Ui.AutoResubscribe)
         {
             Snackbar.Add("Enable Auto-resubscribe on connect to manage these topics.", Severity.Info);
             return;
@@ -971,19 +971,19 @@
 
         var set = topics.ToHashSet(StringComparer.Ordinal);
         _selectedConnection.SubscribedTopics.RemoveAll(s => set.Contains(s.Topic));
-        await SettingsStore.AddConnectionAsync(_selectedConnection);
+        await ConnectionSettings.AddConnectionAsync(_selectedConnection);
     }
 
     private async Task HandleOnConnectEditorClearAll()
     {
-        if (!SettingsStore.Config.Ui.AutoResubscribe)
+        if (!UiSettings.Ui.AutoResubscribe)
         {
             Snackbar.Add("Enable Auto-resubscribe on connect to manage these topics.", Severity.Info);
             return;
         }
 
         _selectedConnection.SubscribedTopics.Clear();
-        await SettingsStore.AddConnectionAsync(_selectedConnection);
+        await ConnectionSettings.AddConnectionAsync(_selectedConnection);
 }
 
     private void RemoveCertificate()

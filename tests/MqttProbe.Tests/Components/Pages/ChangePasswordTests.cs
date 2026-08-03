@@ -17,14 +17,16 @@ public class ChangePasswordTests : BunitTestContext
     public void SetUp()
     {
         _mockCfg = Substitute.For<ISettingsStore>();
-        _mockCfg.Config.Returns(new AppConfiguration
+        var cfg = new AppConfiguration
         {
             Auth = new Auth { Username = "admin", PasswordHash = "hash" }
-        });
+        };
+        _mockCfg.Config.Returns(cfg);
+        _mockCfg.Auth.Returns(cfg.Auth);
 
         _mockAuth = Substitute.For<IUserAuthService>();
 
-        Services.AddSingleton(_mockCfg);
+        Services.AddSettingsSubstitute(_mockCfg);
         Services.AddSingleton(_mockAuth);
 
         AuthorizationContext.SetAuthorized("admin").SetRoles(AppRoles.Admin);

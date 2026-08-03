@@ -7,7 +7,8 @@
 @inject IMqttManagedClient MqttClient
 @inject IConnectionSessionLifecycle SessionLifecycle
 @inject IMessageStoreManager MessageStoreManager
-@inject ISettingsStore SettingsStore
+@inject IUiSettings UiSettings
+@inject IChartSettings ChartSettings
 @inject ISessionState SessionState
 @inject ISubscriptionManager SubscriptionManager
 @inject IEmulationService EmulationService
@@ -121,7 +122,7 @@
         <div class="tab-panel-content">
             @if (CanShowWorkspaceContent("charts"))
             {
-                @if (!SettingsStore.GetCharts(SessionState.SelectedConnection.Id).Any() && !SettingsStore.IsHintDismissed("charts"))
+                @if (!ChartSettings.GetCharts(SessionState.SelectedConnection.Id).Any() && !UiSettings.IsHintDismissed("charts"))
                 {
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
                               ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("charts"))">
@@ -143,7 +144,7 @@
         <div class="tab-panel-content">
             @if (CanShowWorkspaceContent("subscriptions"))
             {
-                @if (!SubscriptionManager.Subscriptions.Any() && !SettingsStore.IsHintDismissed("subscriptions"))
+                @if (!SubscriptionManager.Subscriptions.Any() && !UiSettings.IsHintDismissed("subscriptions"))
                 {
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
                               ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("subscriptions"))">
@@ -165,7 +166,7 @@
         <div class="tab-panel-content">
             @if (CanShowWorkspaceContent("publish"))
             {
-                @if (!SettingsStore.IsHintDismissed("publish"))
+                @if (!UiSettings.IsHintDismissed("publish"))
                 {
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
                               ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("publish"))">
@@ -196,7 +197,7 @@
         <div class="tab-panel-content">
             @if (CanShowWorkspaceContent("emulation"))
             {
-                @if (EmulationService.Nodes.Count == 0 && !SettingsStore.IsHintDismissed("emulation"))
+                @if (EmulationService.Nodes.Count == 0 && !UiSettings.IsHintDismissed("emulation"))
                 {
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
                               ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("emulation"))">
@@ -238,7 +239,7 @@
         MessageStoreManager.MessageStores.Count > 0 ? $"Browser ({MessageStoreManager.MessageStores.Count})" : "Browser";
 
     private string ChartsTabLabel =>
-        SettingsStore.GetCharts(SessionState.SelectedConnection.Id).Count > 0 ? $"Charts ({SettingsStore.GetCharts(SessionState.SelectedConnection.Id).Count})" : "Charts";
+        ChartSettings.GetCharts(SessionState.SelectedConnection.Id).Count > 0 ? $"Charts ({ChartSettings.GetCharts(SessionState.SelectedConnection.Id).Count})" : "Charts";
 
     private string SubscriptionsTabLabel =>
         SubscriptionManager.Subscriptions.Count > 0 ? $"Subscriptions ({SubscriptionManager.Subscriptions.Count})" : "Subscriptions";
@@ -363,7 +364,7 @@
 
     private async Task DismissHint(string hintId)
     {
-        await SettingsStore.DismissHintAsync(hintId);
+        await UiSettings.DismissHintAsync(hintId);
         StateHasChanged();
     }
 

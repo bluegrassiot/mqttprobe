@@ -29,16 +29,19 @@ public class SettingsTests : BunitTestContext
     public void Setup()
     {
         _mockStore = Substitute.For<ISettingsStore>();
-        _mockStore.Config.Returns(new AppConfiguration
+        var cfg = new AppConfiguration
         {
             Ui = new UiPreferences { Theme = "dark", FontAccessible = false, AutoResubscribe = true },
             Performance = new PerformanceSettings { MaxStoredMessages = 10_000, MaxMessagesPerSecond = 50_000 }
-        });
+        };
+        _mockStore.Config.Returns(cfg);
+        _mockStore.Ui.Returns(cfg.Ui);
+        _mockStore.Performance.Returns(cfg.Performance);
         _themes = new Themes();
         _mockAppInfo = Substitute.For<IAppInfoService>();
         _mockAppInfo.RequiresAuthentication.Returns(true);
         _mockUpdateService = Substitute.For<IUpdateService>();
-        Services.AddSingleton(_mockStore);
+        Services.AddSettingsSubstitute(_mockStore);
         Services.AddSingleton<IThemes>(_themes);
         Services.AddSingleton(_mockAppInfo);
         Services.AddSingleton(_mockUpdateService);

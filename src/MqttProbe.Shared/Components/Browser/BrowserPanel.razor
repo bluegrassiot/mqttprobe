@@ -1,6 +1,6 @@
 @using MqttProbe.Services.Configuration
 @inject IMessageStoreManager MessageStoreManager
-@inject ISettingsStore SettingsStore
+@inject IUiSettings UiSettings
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject ILogger<BrowserPanel> Logger
@@ -28,7 +28,7 @@
     </HeaderActions>
 </TabPanelHeader>
 <div class="tab-panel-content">
-    @if (!MessageStoreManager.MessageStores.Any() && !SettingsStore.IsHintDismissed("browser"))
+    @if (!MessageStoreManager.MessageStores.Any() && !UiSettings.IsHintDismissed("browser"))
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-2"
                   ShowCloseIcon="true" CloseIconClicked="@DismissHint">
@@ -143,7 +143,7 @@
 
     private async Task DismissHint()
     {
-        await SettingsStore.DismissHintAsync("browser");
+        await UiSettings.DismissHintAsync("browser");
         StateHasChanged();
     }
 

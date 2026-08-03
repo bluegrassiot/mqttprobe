@@ -51,6 +51,8 @@ public class ConnectionDialogTests : BunitTestContext
         _mockInputCapability.UsesInputFileComponent.Returns(false);
 
         _mockConfigMgr.Config.Returns(new AppConfiguration());
+        _mockConfigMgr.Connections.Returns(new List<Connection>());
+        _mockConfigMgr.Ui.Returns(new UiPreferences());
         _mockMsgStore.Start().Returns(Task.CompletedTask);
         _mockOptionsBuilder.Build(Arg.Any<Connection>()).Returns(
             new MqttManagedClientOptions
@@ -68,7 +70,7 @@ public class ConnectionDialogTests : BunitTestContext
             .Do(x => _failedHandler = x.Arg<Func<MqttConnectingFailedEventArgs, Task>>());
 
         Services.AddSingleton(_mockClient);
-        Services.AddSingleton(_mockConfigMgr);
+        Services.AddSettingsSubstitute(_mockConfigMgr);
         Services.AddSingleton(_mockMsgStore);
         Services.AddSingleton(_mockSubMgr);
         Services.AddSingleton(_mockSessionState);
@@ -93,7 +95,10 @@ public class ConnectionDialogTests : BunitTestContext
 
     private async Task OpenDialog(AppConfiguration? config = null)
     {
-        _mockConfigMgr.Config.Returns(config ?? new AppConfiguration());
+        var cfg = config ?? new AppConfiguration();
+        _mockConfigMgr.Config.Returns(cfg);
+        _mockConfigMgr.Connections.Returns(cfg.Connections);
+        _mockConfigMgr.Ui.Returns(cfg.Ui);
         var dialogService = Services.GetRequiredService<IDialogService>();
         await _dialogProvider.InvokeAsync(async () =>
             await dialogService.ShowAsync<ConnectionDialog>("Connection Setup"));

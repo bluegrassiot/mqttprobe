@@ -1,6 +1,6 @@
 @using MqttProbe.Services.Configuration
 @using MqttProbe.Services.Mqtt
-@inject ISettingsStore SettingsStore
+@inject IChartSettings ChartSettings
 @inject ISessionState SessionState
 @inject IChartDataService ChartDataService
 @inject IDialogService DialogService
@@ -18,7 +18,7 @@
 </TabPanelHeader>
 
 @{
-    var charts = SettingsStore.GetCharts(SessionState.SelectedConnection.Id);
+    var charts = ChartSettings.GetCharts(SessionState.SelectedConnection.Id);
 }
 
 <div class="tab-panel-scroll">
@@ -60,7 +60,7 @@
     {
         await ChartDataService.StartAsync();
         ChartDataService.SetConnection(SessionState.SelectedConnection.Id);
-        SettingsStore.ChartsChanged += OnConfigurationsChanged;
+        ChartSettings.ChartsChanged += OnConfigurationsChanged;
         SessionState.SelectedConnectionChanged += OnSelectedConnectionChanged;
     }
 
@@ -84,7 +84,7 @@
         var result = await dialog.Result;
         if (result is { Canceled: false, Data: ChartConfiguration created })
         {
-                await SettingsStore.AddChartAsync(SessionState.SelectedConnection.Id, created);
+                await ChartSettings.AddChartAsync(SessionState.SelectedConnection.Id, created);
             UxMetrics?.RecordChartFunnel("charts-tab", createdNewChart: true);
             Snackbar.Add($"Chart created: {created.Name}", Severity.Success);
         }
@@ -101,7 +101,7 @@
         var result = await dialog.Result;
         if (result is { Canceled: false, Data: ChartConfiguration updated })
         {
-                await SettingsStore.UpdateChartAsync(SessionState.SelectedConnection.Id, updated);
+                await ChartSettings.UpdateChartAsync(SessionState.SelectedConnection.Id, updated);
             Snackbar.Add($"Chart updated: {updated.Name}", Severity.Success);
         }
     }
@@ -115,14 +115,14 @@
             options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
         if (confirmed == true)
         {
-                await SettingsStore.RemoveChartAsync(SessionState.SelectedConnection.Id, config.Id);
+                await ChartSettings.RemoveChartAsync(SessionState.SelectedConnection.Id, config.Id);
             StateHasChanged();
         }
     }
 
     public ValueTask DisposeAsync()
     {
-        SettingsStore.ChartsChanged -= OnConfigurationsChanged;
+        ChartSettings.ChartsChanged -= OnConfigurationsChanged;
         SessionState.SelectedConnectionChanged -= OnSelectedConnectionChanged;
         return ValueTask.CompletedTask;
     }

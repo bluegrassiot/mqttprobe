@@ -34,7 +34,7 @@ public class ChartsComponentTests : BunitTestContext
         _mockChartDataService.StartAsync().Returns(Task.CompletedTask);
         _mockChartDataService.GetPoints(Arg.Any<Guid>()).Returns([]);
 
-        Services.AddSingleton(_mockChartStore);
+        Services.AddSettingsSubstitute(_mockChartStore);
         Services.AddSingleton(_mockChartDataService);
         Services.AddSingleton(_mockSessionState);
         Services.AddSingleton(Substitute.For<IUxMetricsService>());

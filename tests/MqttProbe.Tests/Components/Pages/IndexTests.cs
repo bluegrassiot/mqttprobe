@@ -29,7 +29,6 @@ namespace MqttProbe.Shared.Tests.Components.Pages;
 public class IndexTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
-    private ISettingsStore _mockChartStore = null!;
     private ISubscriptionManager _mockSubManager = null!;
     private IEmulationService _mockEmulation = null!;
     private List<EmulatorNodeConfig> _emulatorNodes = null!;
@@ -41,7 +40,6 @@ public class IndexTests : BunitTestContext
     public void SetupMocks()
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
-        _mockChartStore = Substitute.For<ISettingsStore>();
         _mockSubManager = Substitute.For<ISubscriptionManager>();
         _mockEmulation = Substitute.For<IEmulationService>();
         _mockTopology = Substitute.For<ISparkplugTopologyService>();
@@ -52,7 +50,6 @@ public class IndexTests : BunitTestContext
         mockSessionState.SelectedConnection.Returns(new Connection());
 
         _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>());
-        _mockChartStore.GetCharts(Arg.Any<Guid>()).Returns([]);
         _mockSubManager.Subscriptions.Returns(Array.Empty<SubscribedTopic>());
         _emulatorNodes = [];
         _mockEmulation.Nodes.Returns(_ => _emulatorNodes);
@@ -60,11 +57,10 @@ public class IndexTests : BunitTestContext
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup>());
 
         Services.AddSingleton(_mockMsgStore);
-        Services.AddSingleton(_mockChartStore);
         Services.AddSingleton(_mockSubManager);
         Services.AddSingleton(_mockEmulation);
         Services.AddSingleton(_mockTopology);
-        Services.AddSingleton(_mockConfig);
+        Services.AddSettingsSubstitute(_mockConfig);
         Services.AddSingleton(mockSessionState);
         Services.AddSingleton<IThemes>(new Themes());
 
@@ -460,8 +456,10 @@ public class NotFoundPageTests : BunitTestContext
         Services.AddSingleton(Substitute.For<IConnectionSessionLifecycle>());
 
         var mockConfig = Substitute.For<ISettingsStore>();
-        mockConfig.Config.Returns(new AppConfiguration());
-        Services.AddSingleton(mockConfig);
+        var cfg = new AppConfiguration();
+        mockConfig.Config.Returns(cfg);
+        mockConfig.Ui.Returns(cfg.Ui);
+        Services.AddSettingsSubstitute(mockConfig);
         Services.AddSingleton(Substitute.For<IJSRuntime>());
         var mockMetrics = Substitute.For<IUxMetricsService>();
         mockMetrics.GetSnapshot().Returns(new UxMetricsSnapshot(

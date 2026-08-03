@@ -16,12 +16,12 @@ public class LoginModel : PageModel
 {
     public const string RateLimitPolicyName = "login";
 
-    private readonly ISettingsStore _settingsStore;
+    private readonly IAuthSettings _authSettings;
     private readonly IUserAuthService _userAuthService;
 
-    public LoginModel(ISettingsStore settingsStore, IUserAuthService userAuthService)
+    public LoginModel(IAuthSettings authSettings, IUserAuthService userAuthService)
     {
-        _settingsStore = settingsStore;
+        _authSettings = authSettings;
         _userAuthService = userAuthService;
     }
 
@@ -33,7 +33,7 @@ public class LoginModel : PageModel
 
     public IActionResult OnGet(string? returnUrl = null)
     {
-        if (string.IsNullOrEmpty(_settingsStore.Config.Auth.PasswordHash))
+        if (string.IsNullOrEmpty(_authSettings.Auth.PasswordHash))
             return RedirectToPage("/Setup");
 
         ReturnUrl = returnUrl ?? "/";

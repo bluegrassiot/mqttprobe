@@ -20,19 +20,21 @@ public class SubscriptionManager : ISubscriptionManager
     private readonly IMqttManagedClient _managedMqttClient;
     private readonly ILogger<SubscriptionManager> _logger;
     private readonly ISnackbar _snackbar;
-    private readonly ISettingsStore _settingsStore;
+    private readonly IConnectionSettings _connectionSettings;
+    private readonly IUiSettings _uiSettings;
     private readonly ISessionState _sessionState;
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private readonly Lock _topicsSync = new();
     private readonly Dictionary<string, MqttQualityOfServiceLevel> _topics = new(StringComparer.Ordinal);
 
     public SubscriptionManager(IMqttManagedClient managedMqttClient, ILogger<SubscriptionManager> logger,
-        ISnackbar snackbar, ISettingsStore settingsStore, ISessionState sessionState)
+        ISnackbar snackbar, IConnectionSettings connectionSettings, IUiSettings uiSettings, ISessionState sessionState)
     {
         _managedMqttClient = managedMqttClient;
         _logger = logger;
         _snackbar = snackbar;
-        _settingsStore = settingsStore;
+        _connectionSettings = connectionSettings;
+        _uiSettings = uiSettings;
         _sessionState = sessionState;
         _managedMqttClient.ConnectedAsync += OnConnected;
         _managedMqttClient.SynchronizingSubscriptionsFailedAsync += OnSyncFailed;
@@ -153,7 +155,7 @@ public class SubscriptionManager : ISubscriptionManager
         await _operationLock.WaitAsync();
         try
         {
-            if (_settingsStore.Config.Ui.AutoResubscribe)
+            if (_uiSettings.Ui.AutoResubscribe)
             {
                 var connection = _sessionState.SelectedConnection;
                 lock (_topicsSync)
@@ -209,7 +211,7 @@ public class SubscriptionManager : ISubscriptionManager
                     .ToList();
             }
             connection.SubscribedTopics = snapshot;
-            await _settingsStore.AddConnectionAsync(connection);
+            await _connectionSettings.AddConnectionAsync(connection);
         }
         catch (Exception ex)
         {

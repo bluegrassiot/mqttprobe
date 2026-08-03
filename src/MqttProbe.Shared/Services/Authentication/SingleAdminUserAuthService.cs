@@ -3,26 +3,26 @@ using MqttProbe.Services.Security;
 
 namespace MqttProbe.Services.Authentication;
 
-public class SingleAdminUserAuthService(ISettingsStore settingsStore) : IUserAuthService
+public class SingleAdminUserAuthService(IAuthSettings authSettings) : IUserAuthService
 {
     public bool SupportsMultipleUsers => false;
 
     public Task<bool> ValidateCredentialsAsync(string username, string password)
-        => Task.FromResult(settingsStore.VerifyCredentials(username, password));
+        => Task.FromResult(authSettings.VerifyCredentials(username, password));
 
     public async Task<AuthServiceResult> ChangePasswordAsync(
         string username, string currentPassword, string newPassword)
     {
-        if (!settingsStore.VerifyCredentials(username, currentPassword))
+        if (!authSettings.VerifyCredentials(username, currentPassword))
             return new AuthServiceResult(false, "Current password is incorrect.");
 
-        await settingsStore.SetPasswordAsync(username, newPassword);
+        await authSettings.SetPasswordAsync(username, newPassword);
         return new AuthServiceResult(true);
     }
 
     public Task<IReadOnlyList<UserSummary>> GetUsersAsync()
     {
-        var auth = settingsStore.Config.Auth;
+        var auth = authSettings.Auth;
         IReadOnlyList<UserSummary> users = string.IsNullOrEmpty(auth.Username)
             ? []
             : [new UserSummary(auth.Username, auth.Username, AppRoles.Admin)];
@@ -31,10 +31,10 @@ public class SingleAdminUserAuthService(ISettingsStore settingsStore) : IUserAut
 
     public async Task<AuthServiceResult> CreateUserAsync(string username, string password, string role)
     {
-        if (!string.IsNullOrEmpty(settingsStore.Config.Auth.PasswordHash))
+        if (!string.IsNullOrEmpty(authSettings.Auth.PasswordHash))
             return new AuthServiceResult(false, "Community edition supports one user.");
 
-        await settingsStore.SetPasswordAsync(username, password);
+        await authSettings.SetPasswordAsync(username, password);
         return new AuthServiceResult(true);
     }
 

@@ -23,10 +23,12 @@ public class SingleAdminUserAuthServiceTests
     public void SetUp()
     {
         _mockConfig = Substitute.For<ISettingsStore>();
-        _mockConfig.Config.Returns(new AppConfiguration
+        var config = new AppConfiguration
         {
             Auth = new Auth { Username = "admin", PasswordHash = PasswordHasher.Hash("correct") }
-        });
+        };
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
         _service = new SingleAdminUserAuthService(_mockConfig);
     }
 
@@ -92,10 +94,12 @@ public class SingleAdminUserAuthServiceTests
     [Test]
     public async Task GetUsersAsync_NoUsernameConfigured_ReturnsEmptyList()
     {
-        _mockConfig.Config.Returns(new AppConfiguration
+        var config = new AppConfiguration
         {
             Auth = new Auth { Username = "", PasswordHash = "" }
-        });
+        };
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
 
         var users = await _service.GetUsersAsync();
 
@@ -105,10 +109,12 @@ public class SingleAdminUserAuthServiceTests
     [Test]
     public async Task CreateUserAsync_NoExistingHash_SetsPasswordAndSucceeds()
     {
-        _mockConfig.Config.Returns(new AppConfiguration
+        var config = new AppConfiguration
         {
             Auth = new Auth { Username = "", PasswordHash = "" }
-        });
+        };
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
         _mockConfig.SetPasswordAsync("admin", "pass").Returns(Task.CompletedTask);
 
         var result = await _service.CreateUserAsync("admin", "pass", AppRoles.Admin);
@@ -120,10 +126,12 @@ public class SingleAdminUserAuthServiceTests
     [Test]
     public async Task CreateUserAsync_WhenPasswordPersistenceFails_DoesNotReturnSuccess()
     {
-        _mockConfig.Config.Returns(new AppConfiguration
+        var config = new AppConfiguration
         {
             Auth = new Auth { Username = "", PasswordHash = "" }
-        });
+        };
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
         _mockConfig.SetPasswordAsync("admin", "pass")
             .Returns<Task>(_ => throw new IOException("persistence failed"));
 

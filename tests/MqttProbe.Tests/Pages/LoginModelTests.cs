@@ -31,7 +31,9 @@ public class LoginModelTests
     public void Setup()
     {
         _mockConfig = Substitute.For<ISettingsStore>();
-        _mockConfig.Config.Returns(new AppConfiguration());
+        var config = new AppConfiguration();
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
         _mockAuth = Substitute.For<IUserAuthService>();
     }
 
@@ -47,7 +49,9 @@ public class LoginModelTests
     [Test]
     public void OnGet_NoPasswordHash_RedirectsToSetup()
     {
-        _mockConfig.Config.Returns(new AppConfiguration { Auth = new Auth { PasswordHash = "" } });
+        var config = new AppConfiguration { Auth = new Auth { PasswordHash = "" } };
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
 
         var result = Create().OnGet();
 
@@ -58,7 +62,9 @@ public class LoginModelTests
     [Test]
     public void OnGet_PasswordHashSet_ReturnsPage()
     {
-        _mockConfig.Config.Returns(new AppConfiguration { Auth = new Auth { PasswordHash = "hashed" } });
+        var config = new AppConfiguration { Auth = new Auth { PasswordHash = "hashed" } };
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
 
         var result = Create().OnGet();
 
@@ -68,7 +74,9 @@ public class LoginModelTests
     [Test]
     public void OnGet_PasswordHashSet_SetsReturnUrl()
     {
-        _mockConfig.Config.Returns(new AppConfiguration { Auth = new Auth { PasswordHash = "hashed" } });
+        var config = new AppConfiguration { Auth = new Auth { PasswordHash = "hashed" } };
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
         var model = Create();
 
         model.OnGet(returnUrl: "/dashboard");
@@ -79,7 +87,9 @@ public class LoginModelTests
     [Test]
     public void OnGet_PasswordHashSet_NoReturnUrl_DefaultsToRoot()
     {
-        _mockConfig.Config.Returns(new AppConfiguration { Auth = new Auth { PasswordHash = "hashed" } });
+        var config = new AppConfiguration { Auth = new Auth { PasswordHash = "hashed" } };
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
         var model = Create();
 
         model.OnGet();

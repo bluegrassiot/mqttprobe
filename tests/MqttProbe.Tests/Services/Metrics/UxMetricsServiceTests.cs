@@ -18,7 +18,9 @@ public class UxMetricsServiceTests
     {
         _logger = new CapturingLogger<UxMetricsService>();
         _mockSettings = Substitute.For<ISettingsStore>();
-        _mockSettings.Config.Returns(new AppConfiguration());
+        var config = new AppConfiguration();
+        _mockSettings.Config.Returns(config);
+        _mockSettings.Performance.Returns(config.Performance);
         _mockHealthCollector = Substitute.For<IAppHealthMetricsCollector>();
         _mockHealthCollector.GetSnapshot().Returns(new AppHealthMetricsSnapshot(
             CpuUsagePercent: 1.0, ManagedHeapMb: 2.0,
@@ -74,7 +76,7 @@ public class UxMetricsServiceTests
     [Test]
     public void GetSnapshot_ReadsMaxDisplayMessagesFromSettings()
     {
-        _mockSettings.Config.Performance.MaxDisplayMessages = 300;
+        _mockSettings.Performance.MaxDisplayMessages = 300;
         var snapshot = _service.GetSnapshot();
         snapshot.MaxDisplayMessages.Should().Be(300);
     }
@@ -82,11 +84,11 @@ public class UxMetricsServiceTests
     [Test]
     public void GetSnapshot_ReflectsSettingsChange()
     {
-        _mockSettings.Config.Performance.MaxDisplayMessages = 100;
+        _mockSettings.Performance.MaxDisplayMessages = 100;
         var s1 = _service.GetSnapshot();
         s1.MaxDisplayMessages.Should().Be(100);
 
-        _mockSettings.Config.Performance.MaxDisplayMessages = 200;
+        _mockSettings.Performance.MaxDisplayMessages = 200;
         var s2 = _service.GetSnapshot();
         s2.MaxDisplayMessages.Should().Be(200);
     }

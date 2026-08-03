@@ -656,10 +656,12 @@ public class SparkplugTopologyServiceTests
     private static ISettingsStore MakeSettingsStore(bool autoRequestRebirth)
     {
         var store = Substitute.For<ISettingsStore>();
-        store.Config.Returns(new AppConfiguration
+        var config = new AppConfiguration
         {
             Ui = new UiPreferences { AutoRequestSparkplugRebirth = autoRequestRebirth }
-        });
+        };
+        store.Config.Returns(config);
+        store.Ui.Returns(config.Ui);
         return store;
     }
 

@@ -53,7 +53,7 @@ public static class MqttProbeServiceRegistration
         services.Add(new ServiceDescriptor(typeof(ISessionState), typeof(SessionState), session));
         services.Add(new ServiceDescriptor(typeof(IEmulationService),
             sp => new EmulationService(
-                sp.GetRequiredService<ISettingsStore>(),
+                sp.GetRequiredService<IEmulatorSettings>(),
                 sp.GetRequiredService<ISparkplugNodeFactory>(),
                 sp.GetRequiredService<ISessionState>(),
                 sp.GetRequiredService<IMqttManagedClient>(),
@@ -139,7 +139,7 @@ public static class MqttProbeServiceRegistration
             sp => new SparkplugTopologyService(
                 sp.GetRequiredService<IMqttManagedClient>(),
                 sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
-                sp.GetRequiredService<ISettingsStore>()), session));
+                sp.GetRequiredService<IUiSettings>()), session));
         return services;
     }
 }

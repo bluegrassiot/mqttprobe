@@ -31,7 +31,7 @@ public class ChartDataServiceTests
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => _handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        _service = new ChartDataService(_mockClient, _extractor, _registry, _mockSettingsStore,
+        _service = new ChartDataService(_mockClient, _extractor, _registry, _mockSettingsStore, _mockSettingsStore,
             TestPipelineHelper.BuildBuiltInPipeline());
     }
 

@@ -12,12 +12,12 @@ namespace MqttProbe.Pages;
 [AllowAnonymous]
 public class SetupModel : PageModel
 {
-    private readonly ISettingsStore _settingsStore;
+    private readonly IAuthSettings _authSettings;
     private readonly IUserAuthService _userAuthService;
 
-    public SetupModel(ISettingsStore settingsStore, IUserAuthService userAuthService)
+    public SetupModel(IAuthSettings authSettings, IUserAuthService userAuthService)
     {
-        _settingsStore = settingsStore;
+        _authSettings = authSettings;
         _userAuthService = userAuthService;
     }
 
@@ -25,7 +25,7 @@ public class SetupModel : PageModel
 
     public IActionResult OnGet()
     {
-        if (!string.IsNullOrEmpty(_settingsStore.Config.Auth.PasswordHash))
+        if (!string.IsNullOrEmpty(_authSettings.Auth.PasswordHash))
             return RedirectToPage("/Login");
 
         return Page();
@@ -33,7 +33,7 @@ public class SetupModel : PageModel
 
     public async Task<IActionResult> OnPostAsync(string username, string password, string confirmPassword)
     {
-        if (!string.IsNullOrEmpty(_settingsStore.Config.Auth.PasswordHash))
+        if (!string.IsNullOrEmpty(_authSettings.Auth.PasswordHash))
             return RedirectToPage("/Login");
 
         if (string.IsNullOrWhiteSpace(username))

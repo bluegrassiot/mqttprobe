@@ -48,7 +48,10 @@ public class PluginPipelineDiCompositionTests
                 x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
         var mockSettings = Substitute.For<ISettingsStore>();
-        mockSettings.Config.Returns(new AppConfiguration());
+        var config = new AppConfiguration();
+        mockSettings.Config.Returns(config);
+        mockSettings.Performance.Returns(config.Performance);
+        mockSettings.Ui.Returns(config.Ui);
 
         services.AddLogging();
         services.AddSingleton(Options.Create(new PluginConfig()));

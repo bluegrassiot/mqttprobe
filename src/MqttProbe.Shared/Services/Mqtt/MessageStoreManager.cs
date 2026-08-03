@@ -40,11 +40,12 @@ public interface IMessageStoreManager : IDisposable
 
 public class MessageStoreManager : IMessageStoreManager
 {
-    public int MaxTopicNodes => _settingsStore.Config.Performance.MaxTopicNodes;
+    public int MaxTopicNodes => _performanceSettings.Performance.MaxTopicNodes;
 
     private readonly IMqttManagedClient _client;
     private readonly ILogger<MessageStoreManager> _logger;
-    private readonly ISettingsStore _settingsStore;
+    private readonly IPerformanceSettings _performanceSettings;
+    private readonly IUiSettings _uiSettings;
     private readonly IUxMetricsService _metrics;
     private readonly PayloadPipeline _pipeline;
     private readonly ISparkplugTopologyService? _topologyService;
@@ -63,20 +64,21 @@ public class MessageStoreManager : IMessageStoreManager
     private long _selectedTopicVersion;
 
     public MessageStoreManager(IMqttManagedClient client, ILogger<MessageStoreManager> logger,
-        ISettingsStore settingsStore, IUxMetricsService metrics,
+        IPerformanceSettings performanceSettings, IUiSettings uiSettings, IUxMetricsService metrics,
         PayloadPipeline pipeline, ISparkplugTopologyService? topologyService = null)
     {
         _client = client;
         _logger = logger;
-        _settingsStore = settingsStore;
+        _performanceSettings = performanceSettings;
+        _uiSettings = uiSettings;
         _metrics = metrics;
         _pipeline = pipeline;
         _topologyService = topologyService;
-        _rateLimiter = BuildRateLimiter(settingsStore.Config.Performance.MaxMessagesPerSecond);
-        settingsStore.PerformanceSettingsChanged += OnPerformanceSettingsChanged;
+        _rateLimiter = BuildRateLimiter(performanceSettings.Performance.MaxMessagesPerSecond);
+        performanceSettings.PerformanceSettingsChanged += OnPerformanceSettingsChanged;
     }
 
-    public int MaxStoredMessages => _settingsStore.Config.Performance.MaxStoredMessages;
+    public int MaxStoredMessages => _performanceSettings.Performance.MaxStoredMessages;
 
     public int TotalStoredMessages
     {
@@ -99,7 +101,7 @@ public class MessageStoreManager : IMessageStoreManager
     private void OnPerformanceSettingsChanged()
     {
         if (_disposed) return;
-        var newLimiter = BuildRateLimiter(_settingsStore.Config.Performance.MaxMessagesPerSecond);
+        var newLimiter = BuildRateLimiter(_performanceSettings.Performance.MaxMessagesPerSecond);
         FixedWindowRateLimiter oldLimiter;
         lock (_rateLimiterSync) { oldLimiter = _rateLimiter; _rateLimiter = newLimiter; }
         try { oldLimiter.Dispose(); }
@@ -122,7 +124,7 @@ public class MessageStoreManager : IMessageStoreManager
         if (disposing)
         {
             Stop().GetAwaiter().GetResult();
-            _settingsStore.PerformanceSettingsChanged -= OnPerformanceSettingsChanged;
+            _performanceSettings.PerformanceSettingsChanged -= OnPerformanceSettingsChanged;
             _rateLimiter.Dispose();
         }
         _disposed = true;
@@ -462,7 +464,7 @@ public class MessageStoreManager : IMessageStoreManager
     {
         if (result.Envelope.FormatId != "sparkplug-b"
             || result.Envelope.IsFailure
-            || !_settingsStore.Config.Ui.EnrichSparkplugAliasNames
+            || !_uiSettings.Ui.EnrichSparkplugAliasNames
             || _topologyService is null)
         {
             return null;
@@ -498,7 +500,7 @@ public class MessageStoreManager : IMessageStoreManager
         _logger.LogWarning(
             "Inbound message rate limit ({Limit}/s) exceeded; messages are being dropped. " +
             "Increase MaxMessagesPerSecond in PerformanceSettings if needed.",
-            _settingsStore.Config.Performance.MaxMessagesPerSecond);
+            _performanceSettings.Performance.MaxMessagesPerSecond);
     }
 
     private void LogNodeLimit()

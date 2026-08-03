@@ -25,7 +25,8 @@ public class ChartDataService(
     IMqttManagedClient client,
     IJsonFieldExtractor extractor,
     IChartFieldRegistry registry,
-    ISettingsStore settingsStore,
+    IChartSettings chartSettings,
+    IUiSettings uiSettings,
     PayloadPipeline pipeline,
     ISparkplugTopologyService? topologyService = null,
     ILogger<ChartDataService>? logger = null)
@@ -60,7 +61,7 @@ public class ChartDataService(
         {
             if (IsListening) return;
             client.ApplicationMessageReceivedAsync += MessageHandler;
-            settingsStore.ChartsChanged += OnChartsChanged;
+            chartSettings.ChartsChanged += OnChartsChanged;
             IsListening = true;
         }
         finally
@@ -76,7 +77,7 @@ public class ChartDataService(
         {
             if (!IsListening) return;
             client.ApplicationMessageReceivedAsync -= MessageHandler;
-            settingsStore.ChartsChanged -= OnChartsChanged;
+            chartSettings.ChartsChanged -= OnChartsChanged;
             IsListening = false;
         }
         finally
@@ -96,7 +97,7 @@ public class ChartDataService(
             IReadOnlyDictionary<ulong, string>? aliasNames = null;
             if (result.Envelope.FormatId == "sparkplug-b"
                 && !result.Envelope.IsFailure
-                && settingsStore.Config.Ui.EnrichSparkplugAliasNames
+                && uiSettings.Ui.EnrichSparkplugAliasNames
                 && topologyService is not null)
             {
                 var rawPayload = e.ApplicationMessage.GetPayloadSegment().Count > 0
@@ -151,7 +152,7 @@ public class ChartDataService(
     }
 
     private bool UpdateBuffers(string topic, IReadOnlyDictionary<string, ExtractedField> fields, DateTime timestamp) =>
-        settingsStore.GetCharts(_connectionId).Any(config => UpdateBuffersForConfiguration(topic, fields, timestamp, config));
+        chartSettings.GetCharts(_connectionId).Any(config => UpdateBuffersForConfiguration(topic, fields, timestamp, config));
 
     private bool UpdateBuffersForConfiguration(
         string topic,
@@ -192,7 +193,7 @@ public class ChartDataService(
         if (disposing)
         {
             client.ApplicationMessageReceivedAsync -= MessageHandler;
-            settingsStore.ChartsChanged -= OnChartsChanged;
+            chartSettings.ChartsChanged -= OnChartsChanged;
             IsListening = false;
             _gate.Dispose();
         }

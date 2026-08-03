@@ -33,6 +33,7 @@ public class SubscriptionManagerTests
 
         var config = new AppConfiguration { Ui = new UiPreferences { AutoResubscribe = true } };
         _mockSettingsStore.Config.Returns(config);
+        _mockSettingsStore.Ui.Returns(config.Ui);
         _mockSessionState.SelectedConnection.Returns(new Connection { Name = "Test", Host = "localhost" });
 
         _connectedHandler = null;
@@ -44,7 +45,7 @@ public class SubscriptionManagerTests
             .When(x => x.SynchronizingSubscriptionsFailedAsync += Arg.Any<Func<MqttManagedProcessFailedEventArgs, Task>>())
             .Do(x => _syncFailedHandler = x.Arg<Func<MqttManagedProcessFailedEventArgs, Task>>());
 
-        _manager = new SubscriptionManager(_mockClient, _mockLogger, _mockSnackbar, _mockSettingsStore, _mockSessionState);
+        _manager = new SubscriptionManager(_mockClient, _mockLogger, _mockSnackbar, _mockSettingsStore, _mockSettingsStore, _mockSessionState);
     }
 
     [TearDown]
@@ -402,6 +403,7 @@ public class SubscriptionManagerTests
     {
         var config = new AppConfiguration { Ui = new UiPreferences { AutoResubscribe = false } };
         _mockSettingsStore.Config.Returns(config);
+        _mockSettingsStore.Ui.Returns(config.Ui);
 
         var connection = new Connection
         {

@@ -30,8 +30,11 @@ public class MessageStoreManagerMessageHandlerTests
         _mockClient = Substitute.For<IMqttManagedClient>();
         _mockLogger = Substitute.For<ILogger<MessageStoreManager>>();
         var mockSettings = Substitute.For<ISettingsStore>();
-        mockSettings.Config.Returns(new AppConfiguration());
-        _manager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings,
+        var config = new AppConfiguration();
+        mockSettings.Config.Returns(config);
+        mockSettings.Performance.Returns(config.Performance);
+        mockSettings.Ui.Returns(config.Ui);
+        _manager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, mockSettings,
             Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
 
         _capturedHandler = null;
@@ -233,18 +236,21 @@ public class MessageStoreManagerMessageHandlerTests
     {
         var rateLimitedLogger = Substitute.For<ILogger<MessageStoreManager>>();
         var rateLimitedClient = Substitute.For<IMqttManagedClient>();
-        var mockSettings = Substitute.For<ISettingsStore>();
-        mockSettings.Config.Returns(new AppConfiguration
+        var config = new AppConfiguration
         {
             Performance = new PerformanceSettings { MaxMessagesPerSecond = 1, MaxStoredMessages = 10_000 }
-        });
+        };
+        var mockSettings = Substitute.For<ISettingsStore>();
+        mockSettings.Config.Returns(config);
+        mockSettings.Performance.Returns(config.Performance);
+        mockSettings.Ui.Returns(config.Ui);
 
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         rateLimitedClient
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings,
+        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings, mockSettings,
             Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
         await manager.Start();
 
@@ -264,9 +270,11 @@ public class MessageStoreManagerMessageHandlerTests
         };
         var mockSettings = Substitute.For<ISettingsStore>();
         mockSettings.Config.Returns(config);
+        mockSettings.Performance.Returns(config.Performance);
+        mockSettings.Ui.Returns(config.Ui);
 
         using var manager = new MessageStoreManager(Substitute.For<IMqttManagedClient>(),
-            Substitute.For<ILogger<MessageStoreManager>>(), mockSettings,
+            Substitute.For<ILogger<MessageStoreManager>>(), mockSettings, mockSettings,
             Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
 
         config.Performance.MaxStoredMessages = 25;
@@ -285,9 +293,11 @@ public class MessageStoreManagerMessageHandlerTests
 
         var settings = Substitute.For<ISettingsStore>();
         settings.Config.Returns(config);
+        settings.Performance.Returns(config.Performance);
+        settings.Ui.Returns(config.Ui);
 
         var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
-            settings, Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
+            settings, settings, Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
         manager.Start().GetAwaiter().GetResult();
         return (manager, handler!, settings);
     }
@@ -469,13 +479,15 @@ public class MessageStoreManagerMessageHandlerTests
         };
         var mockSettings = Substitute.For<ISettingsStore>();
         mockSettings.Config.Returns(config);
+        mockSettings.Performance.Returns(config.Performance);
+        mockSettings.Ui.Returns(config.Ui);
 
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         rateLimitedClient
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings,
+        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockSettings, mockSettings,
             Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
         await manager.Start();
 

@@ -24,7 +24,7 @@ public class ChartDataServiceMessageHandlerTests
         _registry = new ChartFieldRegistry();
         _mockSettingsStore = Substitute.For<ISettingsStore>();
         _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns([]);
-        _service = new ChartDataService(_mockClient, new JsonFieldExtractor(), _registry, _mockSettingsStore,
+        _service = new ChartDataService(_mockClient, new JsonFieldExtractor(), _registry, _mockSettingsStore, _mockSettingsStore,
             TestPipelineHelper.BuildBuiltInPipeline());
 
         _handler = null;
@@ -246,6 +246,7 @@ public class ChartDataServiceMessageHandlerTests
             client,
             new JsonFieldExtractor(),
             registry,
+            configStore,
             configStore,
             TestPipelineHelper.BuildBuiltInPipeline(),
             logger: logger);

@@ -29,19 +29,19 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
     private readonly IMqttManagedClient _client;
     private readonly ILogger<SparkplugTopologyService> _logger;
     private readonly TimeProvider _timeProvider;
-    private readonly ISettingsStore _settingsStore;
+    private readonly IUiSettings _uiSettings;
     private readonly ConcurrentDictionary<string, SpbGroup> _groups = new(StringComparer.Ordinal);
 
     public IReadOnlyDictionary<string, SpbGroup> Groups => _groups;
     public event Action? TopologyChanged;
 
     public SparkplugTopologyService(IMqttManagedClient client, ILogger<SparkplugTopologyService> logger,
-        ISettingsStore settingsStore, TimeProvider? timeProvider = null)
+        IUiSettings uiSettings, TimeProvider? timeProvider = null)
     {
         _client = client;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
-        _settingsStore = settingsStore;
+        _uiSettings = uiSettings;
     }
 
     public bool RemoveNode(string groupId, string nodeId)
@@ -319,7 +319,7 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
     private async Task RequestNodeRebirthIfNeededAsync(string groupId, string nodeId)
     {
         // Only the automatic path is gated; RequestNodeRebirthAsync stays available to the user.
-        if (!_settingsStore.Config.Ui.AutoRequestSparkplugRebirth)
+        if (!_uiSettings.Ui.AutoRequestSparkplugRebirth)
             return;
 
         if (!_groups.TryGetValue(groupId, out var group))

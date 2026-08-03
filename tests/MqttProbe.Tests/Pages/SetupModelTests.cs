@@ -30,7 +30,9 @@ public class SetupModelTests
     public void Setup()
     {
         _mockConfig = Substitute.For<ISettingsStore>();
-        _mockConfig.Config.Returns(new AppConfiguration());
+        var config = new AppConfiguration();
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
         _mockAuth = Substitute.For<IUserAuthService>();
     }
 
@@ -46,7 +48,9 @@ public class SetupModelTests
     [Test]
     public void OnGet_NoPasswordHash_ReturnsPage()
     {
-        _mockConfig.Config.Returns(new AppConfiguration { Auth = new Auth { PasswordHash = "" } });
+        var config = new AppConfiguration { Auth = new Auth { PasswordHash = "" } };
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
 
         var result = Create().OnGet();
 
@@ -56,7 +60,9 @@ public class SetupModelTests
     [Test]
     public void OnGet_PasswordAlreadyConfigured_RedirectsToLogin()
     {
-        _mockConfig.Config.Returns(new AppConfiguration { Auth = new Auth { PasswordHash = "hashed" } });
+        var config = new AppConfiguration { Auth = new Auth { PasswordHash = "hashed" } };
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
 
         var result = Create().OnGet();
 
@@ -67,7 +73,9 @@ public class SetupModelTests
     [Test]
     public async Task OnPost_AlreadySetUp_RedirectsToLogin()
     {
-        _mockConfig.Config.Returns(new AppConfiguration { Auth = new Auth { PasswordHash = "already-set" } });
+        var config = new AppConfiguration { Auth = new Auth { PasswordHash = "already-set" } };
+        _mockConfig.Config.Returns(config);
+        _mockConfig.Auth.Returns(config.Auth);
 
         var result = await Create().OnPostAsync("admin", "pass", "pass");
 

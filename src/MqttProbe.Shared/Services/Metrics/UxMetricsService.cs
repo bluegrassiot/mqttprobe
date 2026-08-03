@@ -54,7 +54,7 @@ public sealed class UxMetricsService : IUxMetricsService
     public const int RateWindowSeconds = 60;
 
     private readonly ILogger<UxMetricsService> _logger;
-    private readonly ISettingsStore _settingsStore;
+    private readonly IPerformanceSettings _performanceSettings;
     private readonly Func<long> _tickCount64Ms;
     private readonly IAppHealthMetricsCollector _healthCollector;
     private int _displayedCount;
@@ -91,20 +91,20 @@ public sealed class UxMetricsService : IUxMetricsService
     private readonly int[] _rateBuckets = new int[RateWindowSeconds];
     private readonly long[] _rateBucketSeconds = new long[RateWindowSeconds];
 
-    public UxMetricsService(ILogger<UxMetricsService> logger, ISettingsStore settingsStore,
+    public UxMetricsService(ILogger<UxMetricsService> logger, IPerformanceSettings performanceSettings,
         IAppHealthMetricsCollector healthCollector)
-        : this(logger, settingsStore, healthCollector, static () => Environment.TickCount64)
+        : this(logger, performanceSettings, healthCollector, static () => Environment.TickCount64)
     {
     }
 
     internal UxMetricsService(
         ILogger<UxMetricsService> logger,
-        ISettingsStore settingsStore,
+        IPerformanceSettings performanceSettings,
         IAppHealthMetricsCollector healthCollector,
         Func<long> tickCount64Ms)
     {
         _logger = logger;
-        _settingsStore = settingsStore;
+        _performanceSettings = performanceSettings;
         _healthCollector = healthCollector;
         _tickCount64Ms = tickCount64Ms;
         Array.Fill(_rateBucketSeconds, -1);
@@ -262,7 +262,7 @@ public sealed class UxMetricsService : IUxMetricsService
             MessageRateHistory: history,
             MessagesProcessedByFormat: new Dictionary<string, long>(_messagesProcessedByFormat, StringComparer.Ordinal),
             ChartFunnelBySource: new Dictionary<string, long>(_chartFunnelBySource, StringComparer.Ordinal),
-            MaxDisplayMessages: _settingsStore.Config.Performance.MaxDisplayMessages,
+            MaxDisplayMessages: _performanceSettings.Performance.MaxDisplayMessages,
             CurrentDisplayedMessageCount: Volatile.Read(ref _displayedCount),
             AppHealth: health,
             EmulatorPublishersOnline: _emulatorPublishersOnline,

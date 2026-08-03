@@ -35,7 +35,7 @@ public interface IEmulationService : IDisposable
 
 public class EmulationService : IEmulationService
 {
-    private readonly ISettingsStore _settingsStore;
+    private readonly IEmulatorSettings _emulatorSettings;
     private readonly ISparkplugNodeFactory _nodeFactory;
     private readonly ISessionState _sessionState;
     private readonly IMqttManagedClient _managedMqttClient;
@@ -54,7 +54,7 @@ public class EmulationService : IEmulationService
     private bool _disposed;
     private Guid _connectionId;
 
-    public EmulationService(ISettingsStore settingsStore,
+    public EmulationService(IEmulatorSettings emulatorSettings,
         ISparkplugNodeFactory nodeFactory,
         ISessionState sessionState,
         IMqttManagedClient managedMqttClient,
@@ -65,7 +65,7 @@ public class EmulationService : IEmulationService
         ILogger<EmulationService> logger,
         IAppHealthMetricsCollector healthCollector)
     {
-        _settingsStore = settingsStore;
+        _emulatorSettings = emulatorSettings;
         _nodeFactory = nodeFactory;
         _sessionState = sessionState;
         _managedMqttClient = managedMqttClient;
@@ -75,15 +75,15 @@ public class EmulationService : IEmulationService
         _pipeline = pipeline;
         _logger = logger;
         _healthMetrics = new NodeHealthMetricsProvider(healthCollector);
-        _settingsStore.EmulatorsChanged += OnEmulatorsChanged;
+        _emulatorSettings.EmulatorsChanged += OnEmulatorsChanged;
         _managedMqttClient.DisconnectedAsync += OnMainClientDisconnected;
     }
 
     public event Action? StateChanged;
 
-    public IReadOnlyList<EmulatorNodeConfig> Nodes => _settingsStore.GetEmulatorNodes(_connectionId);
+    public IReadOnlyList<EmulatorNodeConfig> Nodes => _emulatorSettings.GetEmulatorNodes(_connectionId);
 
-    public int PublishIntervalMs => _settingsStore.GetEmulatorPublishIntervalMs(_connectionId);
+    public int PublishIntervalMs => _emulatorSettings.GetEmulatorPublishIntervalMs(_connectionId);
 
     public bool IsRunning => _cts is { IsCancellationRequested: false };
 
@@ -105,41 +105,41 @@ public class EmulationService : IEmulationService
     public async Task AddNodeAsync(EmulatorNodeConfig node)
     {
         ThrowIfRunning();
-        await _settingsStore.AddEmulatorNodeAsync(_connectionId, node);
+        await _emulatorSettings.AddEmulatorNodeAsync(_connectionId, node);
     }
 
     public async Task UpdateNodeAsync(EmulatorNodeConfig node)
     {
         ThrowIfRunning();
-        await _settingsStore.UpdateEmulatorNodeAsync(_connectionId, node);
+        await _emulatorSettings.UpdateEmulatorNodeAsync(_connectionId, node);
     }
 
     public async Task RemoveNodeAsync(Guid nodeId)
     {
         ThrowIfRunning();
-        await _settingsStore.RemoveEmulatorNodeAsync(_connectionId, nodeId);
+        await _emulatorSettings.RemoveEmulatorNodeAsync(_connectionId, nodeId);
     }
 
     public async Task RemoveAllNodesAsync()
     {
         ThrowIfRunning();
-        await _settingsStore.RemoveAllEmulatorNodesAsync(_connectionId);
+        await _emulatorSettings.RemoveAllEmulatorNodesAsync(_connectionId);
     }
 
     public async Task<IReadOnlyList<EmulatorNodeConfig>> DuplicateNodeAsync(Guid nodeId, int copies)
     {
         ThrowIfRunning();
-        var source = _settingsStore.GetEmulatorNodes(_connectionId).FirstOrDefault(n => n.Id == nodeId)
+        var source = _emulatorSettings.GetEmulatorNodes(_connectionId).FirstOrDefault(n => n.Id == nodeId)
             ?? throw new ArgumentException($"No emulator node with id {nodeId}.", nameof(nodeId));
 
-        var names = GenerateCopyNames(source.NodeId, source.GroupId, _settingsStore.GetEmulatorNodes(_connectionId), copies);
+        var names = GenerateCopyNames(source.NodeId, source.GroupId, _emulatorSettings.GetEmulatorNodes(_connectionId), copies);
         var created = new List<EmulatorNodeConfig>(copies);
         foreach (var name in names)
         {
             var clone = CloneWithFreshIds(source);
             clone.NodeId = name;
             created.Add(clone);
-            await _settingsStore.AddEmulatorNodeAsync(_connectionId, clone);
+            await _emulatorSettings.AddEmulatorNodeAsync(_connectionId, clone);
         }
 
         return created;
@@ -148,15 +148,15 @@ public class EmulationService : IEmulationService
     public async Task SetPublishIntervalAsync(int intervalMs)
     {
         ThrowIfRunning();
-        await _settingsStore.SetEmulatorPublishIntervalAsync(_connectionId, intervalMs);
+        await _emulatorSettings.SetEmulatorPublishIntervalAsync(_connectionId, intervalMs);
     }
 
     public async Task StartAsync()
     {
         if (IsRunning) return;
 
-        var snapshot = CloneNodes(_settingsStore.GetEmulatorNodes(_connectionId));
-        var intervalMs = _settingsStore.GetEmulatorPublishIntervalMs(_connectionId);
+        var snapshot = CloneNodes(_emulatorSettings.GetEmulatorNodes(_connectionId));
+        var intervalMs = _emulatorSettings.GetEmulatorPublishIntervalMs(_connectionId);
         var connection = _sessionState.SelectedConnection;
         var sparkplugCount = snapshot.Count(n => n.Type == EmulatorNodeType.SparkplugB);
         var initialKnownMetrics = _healthMetrics.BuildSnapshot(sparkplugCount, 0);
@@ -369,7 +369,7 @@ public class EmulationService : IEmulationService
         if (_disposed) return;
         if (disposing)
         {
-            _settingsStore.EmulatorsChanged -= OnEmulatorsChanged;
+            _emulatorSettings.EmulatorsChanged -= OnEmulatorsChanged;
             _managedMqttClient.DisconnectedAsync -= OnMainClientDisconnected;
             _cts?.Cancel();
             if (_publishLoop != null)

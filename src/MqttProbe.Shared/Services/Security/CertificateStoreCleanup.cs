@@ -17,15 +17,6 @@ public sealed class CertificateStoreCleanup(
     // and CI runs on ubuntu-latest.
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
-    // FakeTimeProvider's default clock starts at a fixed instant (year 2000), decades before
-    // any real file's creation time. Anchoring to the real clock at construction means "now"
-    // is real time plus however far the injected clock has since been advanced, so ageing
-    // compares correctly against real File.GetCreationTime timestamps in both prod and tests.
-    private readonly TimeSpan _clockOffset =
-        TimeProvider.System.GetLocalNow().DateTime - (timeProvider ?? TimeProvider.System).GetLocalNow().DateTime;
-
-    private DateTime Now => _timeProvider.GetLocalNow().DateTime + _clockOffset;
-
     // Stage order is load-bearing: staging temps go before their retry markers, and both
     // before the orphan sweep, which would otherwise see half-written assets as orphans.
     public async Task RunAsync(
@@ -126,7 +117,7 @@ public sealed class CertificateStoreCleanup(
             try
             {
                 var creationTime = File.GetCreationTime(qFile);
-                if (creationTime < Now.AddHours(-1))
+                if (creationTime < _timeProvider.GetLocalNow().DateTime.AddHours(-1))
                 {
                     File.Delete(qFile);
                     var qAssetId = Path.GetFileNameWithoutExtension(qFile)["cert-".Length..];

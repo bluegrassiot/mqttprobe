@@ -21,7 +21,9 @@ public class CertificateStoreCleanupTests
         Directory.CreateDirectory(_certDir);
         _certStore = new FakeAssetStore(_certDir);
         _envelopeKeys = new FakeEnvelopeKeyStore();
-        _clock = new FakeTimeProvider();
+        // Started at the real clock, not FakeTimeProvider's 2000-01-01 default: ageing compares
+        // the injected clock against real File.GetCreationTime timestamps.
+        _clock = new FakeTimeProvider(DateTimeOffset.Now);
         _sut = new CertificateStoreCleanup(
             _certStore, _envelopeKeys, NullLogger<CertificateStoreCleanup>.Instance, _clock);
     }

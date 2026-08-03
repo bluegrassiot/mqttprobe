@@ -136,7 +136,14 @@ var app = builder.Build();
 
 var secretStorage = app.Services.GetRequiredService<ISecretStorage>();
 var settingsStore = app.Services.GetRequiredService<ISettingsStore>();
-await settingsStore.LoadAsync(secretStorage, app.Services.GetService<ICertificateAssetStore>(), app.Services.GetService<ICertificateEnvelopeKeyStore>());
+var configLoaded = await settingsStore.LoadAsync(
+    secretStorage, app.Services.GetService<ICertificateAssetStore>());
+
+var certCleanup = new CertificateStoreCleanup(
+    app.Services.GetRequiredService<ICertificateAssetStore>(),
+    app.Services.GetRequiredService<ICertificateEnvelopeKeyStore>(),
+    app.Services.GetRequiredService<ILogger<CertificateStoreCleanup>>());
+await certCleanup.RunAsync(settingsStore.Config.Connections, configLoaded);
 
 if (!app.Environment.IsDevelopment())
 {

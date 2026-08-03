@@ -72,7 +72,12 @@ public partial class App
         try
         {
             await MainThread.InvokeOnMainThreadAsync(() => window.Page = CreateLoadingPage());
-            await _settingsStore.LoadAsync(_secretStorage, _certStore, _envelopeKeyStore);
+            var configLoaded = await _settingsStore.LoadAsync(_secretStorage, _certStore);
+
+            var certCleanup = new CertificateStoreCleanup(
+                _certStore, _envelopeKeyStore,
+                _serviceProvider.GetService<ILogger<CertificateStoreCleanup>>());
+            await certCleanup.RunAsync(_settingsStore.Config.Connections, configLoaded);
 
             var root = await ResolveInitialPageAsync();
             await MainThread.InvokeOnMainThreadAsync(() => window.Page = root);

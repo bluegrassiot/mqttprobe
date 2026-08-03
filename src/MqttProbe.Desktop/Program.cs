@@ -165,7 +165,16 @@ internal static class Program
 
             var secretStorage = app.Services.GetRequiredService<ISecretStorage>();
             var resolvedSettingsStore = app.Services.GetRequiredService<ISettingsStore>();
-            resolvedSettingsStore.LoadAsync(secretStorage, app.Services.GetService<ICertificateAssetStore>(), app.Services.GetService<ICertificateEnvelopeKeyStore>()).GetAwaiter().GetResult();
+            var configLoaded = resolvedSettingsStore.LoadAsync(
+                secretStorage, app.Services.GetService<ICertificateAssetStore>())
+                .GetAwaiter().GetResult();
+
+            var certCleanup = new CertificateStoreCleanup(
+                app.Services.GetRequiredService<ICertificateAssetStore>(),
+                app.Services.GetRequiredService<ICertificateEnvelopeKeyStore>(),
+                app.Services.GetRequiredService<ILogger<CertificateStoreCleanup>>());
+            certCleanup.RunAsync(resolvedSettingsStore.Config.Connections, configLoaded)
+                .GetAwaiter().GetResult();
         }
         catch (SecretStorageException ex)
         {

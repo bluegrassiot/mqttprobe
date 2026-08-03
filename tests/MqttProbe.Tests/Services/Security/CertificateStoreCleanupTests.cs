@@ -5,6 +5,20 @@ using MqttProbe.Services.Security;
 
 namespace MqttProbe.Shared.Tests.Services.Security;
 
+// Three branches are deliberately uncovered here. Do not try to force any of them:
+//   1. QuarantineStagingFileAsync's fallback (the .cleanup-retry marker + LogCritical path,
+//      used when a .bin.tmp cannot even be deleted or renamed) needs a file the process
+//      genuinely cannot delete. A test that holds a FileStream open and expects File.Delete
+//      to fail would be flaky rather than portable — it fails on Windows but succeeds on Linux.
+//   2. The false branch of the File.Exists(correspondingTmp) guard in
+//      DeleteCleanupRetryMarkersAsync cannot be reached through RunAsync. Stage 1 always
+//      deletes a .bin.tmp together with its .cleanup-retry marker, so a marker with a
+//      surviving temp means stage 1 already failed — the quarantine path above. Keep the
+//      guard; it is correct defensive code.
+//   3. The .tmp/.quarantine/.cleanup-retry suffix guard in SweepUnverifiedBlobsAsync.
+//      Reaching it needs a staging temp that survived stage 1, i.e. the quarantine path
+//      above. The guard exists because Windows matches "cert-x.bin.tmp" against the
+//      "cert-*.bin" glob via legacy 8.3 short names.
 [TestFixture]
 public class CertificateStoreCleanupTests
 {
@@ -215,31 +229,17 @@ public class CertificateStoreCleanupTests
         var ownerId = Guid.NewGuid();
         var assetId = Guid.NewGuid().ToString("D");
         var path = Path.Combine(_certDir, $"cert-{assetId}.bin");
-        await File.WriteAllBytesAsync(path, MakeBlob(ownerId));
+        // Unknown owner in the blob header: the only reason this file can survive is the
+        // verified-asset early-continue. A known owner would also survive via the
+        // preserve-and-LogCritical branch, making the test pass whether or not the
+        // early-continue guard exists.
+        await File.WriteAllBytesAsync(path, MakeBlob(Guid.NewGuid()));
         _certStore.Assets.Add((ownerId, assetId));
         var connection = new Connection { Id = ownerId, ClientCertificateAssetId = assetId };
 
         await _sut.RunAsync([connection], configLoadedSuccessfully: true);
 
         File.Exists(path).Should().BeTrue();
-    }
-
-    // The suffix guard exists because Windows matches "cert-x.bin.tmp" against the
-    // "cert-*.bin" glob via legacy 8.3 short names. Asserting on a .quarantine file would
-    // be vacuous — that glob never returns it on any platform.
-    [Test]
-    public async Task RunAsync_UnverifiedBlobSweepSkipsStagingTempRatherThanTreatingItAsABlob()
-    {
-        var assetId = Guid.NewGuid().ToString("D");
-        var tmp = Path.Combine(_certDir, $"cert-{assetId}.bin.tmp");
-        await File.WriteAllBytesAsync(tmp, MakeBlob(Guid.NewGuid()));
-
-        await _sut.RunAsync([], configLoadedSuccessfully: true);
-
-        // Deleted by stage 1 as a staging temp, not by the blob sweep, and with no
-        // "failed to process unverified blob" noise on the way through.
-        File.Exists(tmp).Should().BeFalse();
-        _envelopeKeys.Removed.Should().Contain($"cert-env-{assetId}");
     }
 
     // --- missing directory ---

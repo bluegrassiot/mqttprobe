@@ -91,4 +91,10 @@ public class AppVersionResolverTests
     {
         AppVersionResolver.Resolve(() => "1.2.3.0+abc").Should().Be("1.2.3");
     }
+
+    [Test]
+    public void Resolve_TrimsLeadingAndTrailingWhitespace()
+    {
+        AppVersionResolver.Resolve(() => "  1.2.3+build  ").Should().Be("1.2.3");
+    }
 }

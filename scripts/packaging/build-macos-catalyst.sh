@@ -75,7 +75,9 @@ fi
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Walk up to repo root (MqttProbe.slnx).
 while [[ ! -f MqttProbe.slnx ]]; do
+    _prev="$PWD"
     cd .. || die "Could not find repo root (MqttProbe.slnx)"
+    [[ "$PWD" != "$_prev" ]] || die "Could not find repo root (MqttProbe.slnx)"
 done
 
 # Read the bundle id from the project rather than hardcoding it: it has been renamed once

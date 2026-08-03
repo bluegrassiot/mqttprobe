@@ -26,7 +26,7 @@ public static partial class AppVersionResolver
             if (string.IsNullOrWhiteSpace(value))
                 continue;
 
-            return Normalize(TrimAfterPlus(value));
+            return Normalize(TrimAfterPlus(value.Trim()));
         }
 
         return "unknown";

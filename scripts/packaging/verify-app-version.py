@@ -254,21 +254,26 @@ def verify_web(version: str, also_negative: bool, keep_output: bool = False) -> 
             results.append(("FAIL", "web: MqttProbe.Web.dll not found after publish"))
             return results
 
-        # Web AppInfoService: ProductVersion (via FileVersionInfo), then InformationalVersion
+        # Web AppInfoService: assembly InformationalVersion first, then process ProductVersion
         info = read_assembly_versions(dll)
         pv = info.get("ProductVersion", "")
         iv = info.get("InformationalVersion", "")
-        matched = False
         kept = str(out.relative_to(ROOT)) if keep_output else None
-        if versions_match(pv, version):
-            results.append(("PASS", f"web: ProductVersion={pv}", kept))
-            matched = True
-        if versions_match(iv, version):
-            results.append(("PASS", f"web: InformationalVersion={iv}", kept))
-            matched = True
-        if not matched:
-            results.append(("FAIL",
-                f"web: expected {version}, got ProductVersion={pv} InformationalVersion={iv}"))
+        # First-non-empty matches AppInfoService: IV preferred over PV
+        if iv:
+            if versions_match(iv, version):
+                results.append(("PASS", f"web: InformationalVersion={iv}", kept))
+            else:
+                results.append(("FAIL",
+                    f"web: expected {version}, got InformationalVersion={iv} (ProductVersion={pv})"))
+        elif pv:
+            if versions_match(pv, version):
+                results.append(("PASS", f"web: ProductVersion={pv}", kept))
+            else:
+                results.append(("FAIL",
+                    f"web: expected {version}, got ProductVersion={pv}"))
+        else:
+            results.append(("FAIL", f"web: expected {version}, got no version"))
 
         if also_negative:
             neg_out = (out.parent / f"{out.name}-unstamped") if keep_output else out / "unstamped"
@@ -387,13 +392,21 @@ def verify_docker(version: str, explicit: bool, keep_output: bool = False) -> li
                     shutil.copy2(dll_path, keep_dir / "MqttProbe.Web.dll")
                     kept = str(keep_dir.relative_to(ROOT))
 
-                # Web AppInfoService: ProductVersion then InformationalVersion
+                # Docker runs under dotnet host; ProductVersion is the host's, not the DLL's.
+                # Require InformationalVersion — no ProductVersion fallback.
                 info = read_assembly_versions(dll_path)
+                iv = info.get("InformationalVersion", "")
                 pv = info.get("ProductVersion", "")
-                if versions_match(pv, version):
-                    results.append(("PASS", f"docker: ProductVersion={pv}", kept))
+                if iv:
+                    if versions_match(iv, version):
+                        results.append(("PASS", f"docker: InformationalVersion={iv}", kept))
+                    else:
+                        results.append(("FAIL",
+                            f"docker: expected {version}, got InformationalVersion={iv} (ProductVersion={pv})"))
                 else:
-                    results.append(("FAIL", f"docker: expected {version}, got ProductVersion={pv}"))
+                    results.append(("FAIL",
+                        f"docker: expected {version}, InformationalVersion missing or empty "
+                        f"(cannot use ProductVersion={pv!r} because docker runs under dotnet host)"))
         finally:
             subprocess.run(["docker", "rm", container_id], capture_output=True)
     finally:
@@ -442,10 +455,9 @@ def verify_maui_windows(version: str, explicit: bool, keep_output: bool = False)
         pv = info.get("ProductVersion", "")
         iv = info.get("InformationalVersion", "")
         kept = str(out.relative_to(ROOT)) if keep_output else None
-        if versions_match(pv, version):
-            results.append(("PASS", f"maui-windows: ProductVersion={pv}", kept))
-        if versions_match(iv, version):
-            results.append(("PASS", f"maui-windows: InformationalVersion={iv}", kept))
+        # Identity Version is checked below as the primary success path.
+        # Assembly metadata (PV then IV) is collected here for diagnostics only.
+        _asm_diag = f"ProductVersion={pv}, InformationalVersion={iv}"
 
         # Search for stamped Package.appxmanifest in both publish output and obj/
         identity_found = False
@@ -458,7 +470,7 @@ def verify_maui_windows(version: str, explicit: bool, keep_output: bool = False)
             for mp in obj_dir.rglob("Package.appxmanifest"):
                 manifests_to_check.append(("obj", mp))
 
-        # Prefer manifest whose Version matches expected (not 1.0.0.0)
+        # Primary: Identity Version on Package.appxmanifest matches expected
         for _source, mp in manifests_to_check:
             manifest_text = mp.read_text(encoding="utf-8")
             m = re.search(r'Identity[^>]*Version="([^"]*)"', manifest_text)
@@ -483,9 +495,23 @@ def verify_maui_windows(version: str, explicit: bool, keep_output: bool = False)
                 f"maui-windows: Identity Version mismatch, expected {version} "
                 f"(4-part: {version}.0), got {actual_versions}"))
         elif not identity_found:
-            results.append(("FAIL",
-                "maui-windows: no Package.appxmanifest with Identity found "
-                "(searched publish output and src/MqttProbe.Maui/obj/)"))
+            # No Identity: fall back to exe PV then IV (MAUI AppInfoService order)
+            if pv:
+                if versions_match(pv, version):
+                    results.append(("PASS", f"maui-windows: ProductVersion={pv} (no Identity)", kept))
+                else:
+                    results.append(("FAIL",
+                        f"maui-windows: expected {version}, got ProductVersion={pv} "
+                        f"(InformationalVersion={iv})"))
+            elif iv:
+                if versions_match(iv, version):
+                    results.append(("PASS", f"maui-windows: InformationalVersion={iv} (no Identity)", kept))
+                else:
+                    results.append(("FAIL",
+                        f"maui-windows: expected {version}, got InformationalVersion={iv}"))
+            else:
+                results.append(("FAIL",
+                    f"maui-windows: expected {version}, no Identity Version and no assembly version found"))
 
     return results
 
@@ -619,20 +645,26 @@ def main() -> int:
     if version == "0.0.0":
         print("ERROR: --version must not be 0.0.0 (placeholder)")
         return 1
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        print(f"ERROR: --version must be X.Y.Z (got '{version}')")
+        return 1
 
     if "all" in args.targets:
         targets = list(ALL_TARGETS)
+        all_requested = True
     elif args.targets:
         targets = list(dict.fromkeys(args.targets))
+        all_requested = False
     else:
         targets = list(DEFAULT_TARGETS)
+        all_requested = False
 
     print(f"\n=== Verify App Version: {version} ===\n")
 
     failed = 0
     for target in targets:
         print(f"  {target}...", end="", flush=True)
-        explicit = target in (args.targets or [])
+        explicit = all_requested or target in (args.targets or [])
 
         if target == "web":
             results = verify_web(version, args.also_negative, args.keep_output)

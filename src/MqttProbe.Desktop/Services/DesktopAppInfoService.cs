@@ -9,5 +9,6 @@ public class DesktopAppInfoService : IAppInfoService
     public bool IsNative => true;
 
     public string GetVersion() =>
-        Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
+        AppVersionResolver.Resolve(
+            () => Assembly.GetExecutingAssembly().GetName().Version?.ToString());
 }

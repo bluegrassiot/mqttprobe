@@ -30,6 +30,7 @@ RUN dotnet restore "src/MqttProbe.Web/MqttProbe.Web.csproj"
 COPY src/MqttProbe.Web/ src/MqttProbe.Web/
 COPY src/MqttProbe.Shared/ src/MqttProbe.Shared/
 COPY external/SparkplugNet/ external/SparkplugNet/
+ARG VERSION=0.0.0
 WORKDIR "/src/src/MqttProbe.Web"
 # DisableGitVersionTask: the SparkplugNet submodule uses GitVersion.MsBuild, but the
 # Docker build context has no .git (.dockerignore excludes it). A global property is
@@ -38,7 +39,8 @@ RUN dotnet publish "MqttProbe.Web.csproj" -c Release -o /app/publish \
     /p:UseAppHost=false \
     /p:DebugType=none \
     /p:DebugSymbols=false \
-    /p:DisableGitVersionTask=true
+    /p:DisableGitVersionTask=true \
+    /p:Version=$VERSION
 
 FROM base AS final
 RUN addgroup -S appgroup && adduser -S -D -H -u 1000 -G appgroup appuser \

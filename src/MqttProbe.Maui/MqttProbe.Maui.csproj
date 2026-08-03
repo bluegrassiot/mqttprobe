@@ -42,7 +42,7 @@
 
         <!-- Versions -->
         <ApplicationDisplayVersion>0.0.0</ApplicationDisplayVersion>
-        <ApplicationVersion>0</ApplicationVersion>
+        <ApplicationVersion>1</ApplicationVersion>
 
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
@@ -60,6 +60,40 @@
 		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
 		<DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
 	</PropertyGroup>
+
+	<!-- Stamp the intermediate Package.appxmanifest Identity Version from ApplicationDisplayVersion
+	     so AppInfo.Current.VersionString reflects the release version, not the hardcoded default.
+	     Runs after MAUI Resizetizer generates the intermediate copy, before assembly attributes are
+	     extracted. Does NOT modify the source file in Platforms/Windows/. -->
+	<UsingTask TaskName="StampAppxVersion" TaskFactory="RoslynCodeTaskFactory"
+	           AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+		<ParameterGroup>
+			<FilePath Required="true" ParameterType="System.String" />
+			<NewVersion Required="true" ParameterType="System.String" />
+		</ParameterGroup>
+		<Task>
+			<Code Type="Fragment" Language="cs">
+<![CDATA[
+var content = System.IO.File.ReadAllText(FilePath);
+content = System.Text.RegularExpressions.Regex.Replace(
+    content, @"(<Identity[^>]*?)Version=""[^""]*""", "$1Version=\"" + NewVersion + "\"");
+System.IO.File.WriteAllText(FilePath, content);
+]]>
+			</Code>
+		</Task>
+	</UsingTask>
+	<!-- Compute 4-part version for Appx Identity: append .0 when version has 3 parts -->
+	<PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' And '$(ApplicationDisplayVersion)' != '0.0.0'">
+		<_AppxManifestVersion Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(ApplicationDisplayVersion)', '^\d+\.\d+\.\d+\.\d+$'))">$(ApplicationDisplayVersion)</_AppxManifestVersion>
+		<_AppxManifestVersion Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(ApplicationDisplayVersion)', '^\d+\.\d+\.\d+\.\d+$'))">$(ApplicationDisplayVersion).0</_AppxManifestVersion>
+	</PropertyGroup>
+	<Target Name="StampAppxManifestVersion"
+	        AfterTargets="MauiGeneratePackageAppxManifest"
+	        BeforeTargets="_MauiGetAssemblyAttributesFromAppxManifest"
+	        Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' And '$(ApplicationDisplayVersion)' != '0.0.0'">
+		<StampAppxVersion FilePath="$(_MauiIntermediateManifest)Package.appxmanifest"
+		                  NewVersion="$(_AppxManifestVersion)" />
+	</Target>
 
 	<!--ANDROID SECTION-->
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net10.0-android|AnyCPU'">

@@ -61,4 +61,40 @@ public class AppVersionResolverTests
     {
         AppVersionResolver.Resolve().Should().Be("unknown");
     }
+
+    [Test]
+    public void Resolve_StripsTrailingZeroFourthPart()
+    {
+        AppVersionResolver.Resolve(() => "1.2.3.0").Should().Be("1.2.3");
+    }
+
+    [Test]
+    public void Resolve_KeepsThreePartVersion()
+    {
+        AppVersionResolver.Resolve(() => "1.2.3").Should().Be("1.2.3");
+    }
+
+    [Test]
+    public void Resolve_KeepsThreePartVersionEndingInZero()
+    {
+        AppVersionResolver.Resolve(() => "1.0.0").Should().Be("1.0.0");
+    }
+
+    [Test]
+    public void Resolve_KeepsNonZeroFourthPart()
+    {
+        AppVersionResolver.Resolve(() => "1.2.3.1").Should().Be("1.2.3.1");
+    }
+
+    [Test]
+    public void Resolve_StripsTrailingZeroAfterPlusTrim()
+    {
+        AppVersionResolver.Resolve(() => "1.2.3.0+abc").Should().Be("1.2.3");
+    }
+
+    [Test]
+    public void Resolve_TrimsLeadingAndTrailingWhitespace()
+    {
+        AppVersionResolver.Resolve(() => "  1.2.3+build  ").Should().Be("1.2.3");
+    }
 }

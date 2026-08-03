@@ -143,6 +143,28 @@ any_format_relevant() {
     return 1
 }
 
+# Returns 0 if path should trigger file-length check.
+is_file_length_relevant_path() {
+    local p=$1
+    p=${p//\\//}
+    case "$p" in
+        src/*.cs|src/*.razor) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# stdin: one path per line. Returns 0 if any path is file-length-relevant.
+any_file_length_relevant() {
+    local p
+    while IFS= read -r p || [[ -n "$p" ]]; do
+        [[ -z "$p" ]] && continue
+        if is_file_length_relevant_path "$p"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Classify push paths from stdin. Sets globals:
 #   NEED_NOMAUI_BUILD NEED_UNIT_TESTS NEED_MAUI_BUILD NEED_DESKTOP_BUILD
 #   CLASSIFY_DOCS_ONLY (1/0)

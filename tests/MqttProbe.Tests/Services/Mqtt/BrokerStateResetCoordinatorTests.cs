@@ -36,7 +36,6 @@ public class BrokerStateResetCoordinatorTests
     public void TearDown()
     {
         _mockMsgStore.Dispose();
-        _mockTopology.Dispose();
         _mockSubMgr.Dispose();
         _mockChart.Dispose();
         _mockEmulation.Dispose();

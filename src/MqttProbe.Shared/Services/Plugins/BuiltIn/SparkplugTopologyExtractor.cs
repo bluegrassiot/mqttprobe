@@ -173,7 +173,8 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
             {
                 Name = metric.Name,
                 DataType = dataType,
-                Value = value
+                Value = value,
+                Alias = metric.Alias != 0 ? metric.Alias : null
             });
         }
 
@@ -203,7 +204,8 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
             {
                 Name = name,
                 DataType = dataType,
-                Value = value
+                Value = value,
+                Alias = metric.Alias != 0 ? metric.Alias : null
             });
         }
 

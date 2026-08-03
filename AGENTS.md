@@ -3,8 +3,8 @@
 ## Formatting
 
 - `.editorconfig` is the source of truth for C# formatting.
-- Check formatting with `python scripts/format-check.py`.
-- Auto-fix formatting with `python scripts/format-check.py --fix`.
+- Check formatting with `python scripts/ci/format-check.py`.
+- Auto-fix formatting with `python scripts/ci/format-check.py --fix`.
 
 ## Comments
 
@@ -23,5 +23,5 @@
 
 - Run tests with `dotnet test tests/MqttProbe.Tests`.
 - Build with `dotnet build MqttProbe.slnx`.
-- For code changes, check coverage with `python scripts/coverage.py`.
+- For code changes, check coverage with `python scripts/ci/coverage.py`.
 - Treat 75% coverage as a hard minimum for new code.

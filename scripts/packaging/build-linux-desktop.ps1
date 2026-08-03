@@ -5,7 +5,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$RepoRoot = Split-Path $PSScriptRoot -Parent
+function Get-RepoRoot {
+    $dir = $PSScriptRoot
+    while ($dir) {
+        if (Test-Path -LiteralPath (Join-Path $dir 'MqttProbe.slnx')) { return $dir }
+        $parent = Split-Path $dir -Parent
+        if ($parent -eq $dir) { break }
+        $dir = $parent
+    }
+    throw 'Could not find repo root (MqttProbe.slnx)'
+}
+$RepoRoot = Get-RepoRoot
 Set-Location $RepoRoot
 
 $outputDir = "publish/desktop-$Rid"

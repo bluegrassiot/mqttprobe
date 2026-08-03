@@ -1,10 +1,3 @@
-using MqttProbe.Services.Chart;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Metrics;
-using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Platform;
-using MqttProbe.Services.Security;
-using MqttProbe.Services.Sparkplug;
 using MqttProbe.Web.Services;
 
 namespace MqttProbe.Shared.Tests.Services.Platform;
@@ -40,11 +33,21 @@ public class AppInfoServiceTests
     }
 
     [Test]
-    public void GetVersion_WhenProcessVersionLookupThrows_FallsBackToAssemblyVersion()
+    public void GetVersion_WhenAssemblyVersionLookupThrows_FallsBackToProcessVersion()
     {
         var service = new AppInfoService(
-            () => throw new InvalidOperationException("process metadata unavailable"),
+            () => throw new InvalidOperationException("assembly metadata unavailable"),
             () => "1.2.3+build");
+
+        service.GetVersion().Should().Be("1.2.3");
+    }
+
+    [Test]
+    public void GetVersion_WhenBothProvidersReturnValues_PrefersAssemblyInformationalVersion()
+    {
+        var service = new AppInfoService(
+            () => "1.2.3+build",
+            () => "9.9.9");
 
         service.GetVersion().Should().Be("1.2.3");
     }
@@ -53,8 +56,8 @@ public class AppInfoServiceTests
     public void GetVersion_WhenAllVersionLookupsThrow_ReturnsUnknown()
     {
         var service = new AppInfoService(
-            () => throw new InvalidOperationException("process metadata unavailable"),
-            () => throw new InvalidOperationException("assembly metadata unavailable"));
+            () => throw new InvalidOperationException("assembly metadata unavailable"),
+            () => throw new InvalidOperationException("process metadata unavailable"));
 
         service.GetVersion().Should().Be("unknown");
     }

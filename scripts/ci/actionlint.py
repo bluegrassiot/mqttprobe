@@ -11,8 +11,8 @@ Running from Python (not a shell) also sidesteps Git Bash's MSYS path mangling o
 the Docker volume/workdir arguments on Windows.
 
 Usage:
-  ./scripts/actionlint.py            # lint all workflows
-  ./scripts/actionlint.py -color     # any extra args pass through to actionlint
+  ./scripts/ci/actionlint.py            # lint all workflows
+  ./scripts/ci/actionlint.py -color     # any extra args pass through to actionlint
 """
 
 import shutil
@@ -20,7 +20,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+
+def find_repo_root() -> Path:
+    here = Path(__file__).resolve().parent
+    for d in [here, *here.parents]:
+        if (d / "MqttProbe.slnx").is_file():
+            return d
+    raise SystemExit("Could not find repo root (MqttProbe.slnx)")
+
+
+ROOT = find_repo_root()
 
 # Pinned for reproducible results across machines/CI. Bump deliberately.
 DOCKER_IMAGE = "rhysd/actionlint:1.7.7"

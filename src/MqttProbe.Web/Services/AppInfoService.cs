@@ -6,20 +6,20 @@ namespace MqttProbe.Web.Services;
 
 public class AppInfoService : IAppInfoService
 {
-    private readonly Func<string?> _processProductVersionProvider;
     private readonly Func<string?> _assemblyInformationalVersionProvider;
+    private readonly Func<string?> _processProductVersionProvider;
 
     public AppInfoService()
-        : this(GetProcessProductVersion, GetAssemblyInformationalVersion)
+        : this(GetAssemblyInformationalVersion, GetProcessProductVersion)
     {
     }
 
     public AppInfoService(
-        Func<string?> processProductVersionProvider,
-        Func<string?> assemblyInformationalVersionProvider)
+        Func<string?> assemblyInformationalVersionProvider,
+        Func<string?> processProductVersionProvider)
     {
-        _processProductVersionProvider = processProductVersionProvider;
         _assemblyInformationalVersionProvider = assemblyInformationalVersionProvider;
+        _processProductVersionProvider = processProductVersionProvider;
     }
 
     public bool RequiresAuthentication => true;
@@ -27,8 +27,8 @@ public class AppInfoService : IAppInfoService
 
     public string GetVersion() =>
         AppVersionResolver.Resolve(
-            _processProductVersionProvider,
-            _assemblyInformationalVersionProvider);
+            _assemblyInformationalVersionProvider,
+            _processProductVersionProvider);
 
     private static string? GetProcessProductVersion()
     {

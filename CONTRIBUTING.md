@@ -34,14 +34,14 @@ git config core.hooksPath .githooks
 
 | Hook | What it runs |
 |------|----------------|
-| `pre-commit` | Security scan (`devskim`, ~3s) on any staged change; workflow lint (`python scripts/actionlint.py`, ~1s) when staged files include `.github/workflows/*.yml`; format check (`python scripts/format-check.py`) when staged files include C#/Razor/project/editorconfig |
+| `pre-commit` | Security scan (`devskim`, ~3s) on any staged change; workflow lint (`python scripts/ci/actionlint.py`, ~1s) when staged files include `.github/workflows/*.yml`; format check (`python scripts/ci/format-check.py`) when staged files include C#/Razor/project/editorconfig |
 | `pre-push` | Path-aware build (usually `MqttProbe.NoMaui.slnf`) and unit tests when code changes |
 
 Both hooks print per-step and total timing. Docs-only changes (markdown under `docs/`, `*.md`, license files) skip the heavy steps automatically — but not the security scan, since a pasted token in a README is exactly what it looks for.
 
-The security scan blocks the commit on a devskim finding at `warning` or above; notes are reported by `scripts/inspect.py` but do not block. If a finding is a false positive, put a `DevSkim: ignore DS######` comment on the flagged line using that file's comment syntax. It needs the local tools, so run `dotnet tool restore` after cloning.
+The security scan blocks the commit on a devskim finding at `warning` or above; notes are reported by `scripts/ci/inspect.py` but do not block. If a finding is a false positive, put a `DevSkim: ignore DS######` comment on the flagged line using that file's comment syntax. It needs the local tools, so run `dotnet tool restore` after cloning.
 
-The workflow lint prefers a locally installed `actionlint` and otherwise runs the pinned Docker image, so it needs one of the two — with neither, the step skips rather than blocking. Install the binary if you would rather not depend on Docker; `scripts/actionlint.py` picks it up automatically.
+The workflow lint prefers a locally installed `actionlint` and otherwise runs the pinned Docker image, so it needs one of the two — with neither, the step skips rather than blocking. Install the binary if you would rather not depend on Docker; `scripts/ci/actionlint.py` picks it up automatically.
 
 To skip intentionally:
 
@@ -66,7 +66,7 @@ CI still runs full checks on pull requests. Prefer fixing failures over skipping
 - Run `dotnet test tests/MqttProbe.Tests` before opening a PR.
 - Add or update tests for behavior changes and bug fixes.
 - Keep test coverage at or above 75%.
-- Use `python scripts/coverage.py --open` to inspect coverage when needed.
+- Use `python scripts/ci/coverage.py --open` to inspect coverage when needed.
 
 ### CI Checks
 
@@ -74,8 +74,8 @@ Before submitting changes, make sure the same checks used by CI pass locally:
 
 - `dotnet build MqttProbe.slnx`
 - `dotnet test tests/MqttProbe.Tests`
-- `python scripts/format-check.py`
-- `python scripts/inspect.py --tool devskim --fail-on warning`
+- `python scripts/ci/format-check.py`
+- `python scripts/ci/inspect.py --tool devskim --fail-on warning`
 
 Local hooks cover a faster subset; still run the commands above before a PR if you skipped hooks.
 

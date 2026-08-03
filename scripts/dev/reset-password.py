@@ -53,9 +53,17 @@ def clear_credentials(config_path: str):
     print("The application will prompt you to set up a new admin account on the next run.")
 
 if __name__ == "__main__":
-    # Default path relative to the repository root (one level up from the scripts directory)
+    # Walk up from script directory until repo root (MqttProbe.slnx) is found.
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    repo_root = os.path.dirname(script_dir)
+    repo_root = script_dir
+    while True:
+        if os.path.isfile(os.path.join(repo_root, "MqttProbe.slnx")):
+            break
+        parent = os.path.dirname(repo_root)
+        if parent == repo_root:
+            print("Error: Could not find repo root (MqttProbe.slnx)", file=sys.stderr)
+            sys.exit(1)
+        repo_root = parent
     default_config_path = os.path.join(repo_root, "src", "MqttProbe.Web", "config", "appsettings.json")
     
     # Allow overriding via command line argument

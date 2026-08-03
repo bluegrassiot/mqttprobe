@@ -4,12 +4,12 @@
 # pack path for diagnosis.  Run this ON the Mac.
 #
 # Usage:
-#   ./scripts/velopack-macos-pack.sh
-#   ./scripts/velopack-macos-pack.sh --version 0.0.1
-#   ./scripts/velopack-macos-pack.sh --sign
-#   ./scripts/velopack-macos-pack.sh --sign --notarize
-#   ./scripts/velopack-macos-pack.sh --skip-publish   # pack existing Release .app only
-#   ./scripts/velopack-macos-pack.sh --no-inst        # vpk --noInst (skip .pkg; useful if productbuild hangs)
+#   ./scripts/packaging/velopack-macos-pack.sh
+#   ./scripts/packaging/velopack-macos-pack.sh --version 0.0.1
+#   ./scripts/packaging/velopack-macos-pack.sh --sign
+#   ./scripts/packaging/velopack-macos-pack.sh --sign --notarize
+#   ./scripts/packaging/velopack-macos-pack.sh --skip-publish   # pack existing Release .app only
+#   ./scripts/packaging/velopack-macos-pack.sh --no-inst        # vpk --noInst (skip .pkg; useful if productbuild hangs)
 
 set -euo pipefail
 
@@ -71,7 +71,13 @@ if [[ -n "$_xcode_ver" && "$_xcode_ver" != "26.6" ]]; then
     info "xcodebuild version is $_xcode_ver (CI pins 26.6); mismatched Xcode may cause build failures"
 fi
 
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Walk up to repo root (MqttProbe.slnx).
+while [[ ! -f MqttProbe.slnx ]]; do
+    _prev="$PWD"
+    cd .. || die "Could not find repo root (MqttProbe.slnx)"
+    [[ "$PWD" != "$_prev" ]] || die "Could not find repo root (MqttProbe.slnx)"
+done
 
 # --- notarize requires sign ---------------------------------------------------
 
@@ -179,7 +185,7 @@ cat <<EOF
 
   If vpk hangs after "Creating installer '.pkg'", productbuild may be stuck
   waiting for a GUI keychain prompt.  Try:
-      ./scripts/velopack-macos-pack.sh --skip-publish --no-inst
+      ./scripts/packaging/velopack-macos-pack.sh --skip-publish --no-inst
   or watch the process tree with:
       ps aux | grep -E 'productbuild|productsign|pkgbuild'
 

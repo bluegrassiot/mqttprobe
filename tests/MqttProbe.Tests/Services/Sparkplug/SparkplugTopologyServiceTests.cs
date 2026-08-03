@@ -3,8 +3,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using MQTTnet;
 using MQTTnet.Protocol;
+using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Sparkplug;
+using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Plugins.BuiltIn;
 using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Sparkplug;
 using Org.Eclipse.Tahu.Protobuf;
@@ -17,38 +20,46 @@ public class SparkplugTopologyServiceTests
     private IMqttManagedClient _mockClient = null!;
     private ILogger<SparkplugTopologyService> _mockLogger = null!;
     private SparkplugTopologyService _service = null!;
-    private Func<MqttApplicationMessageReceivedEventArgs, Task>? _handler;
+    private SparkplugTopologyExtractor _extractor = null!;
+    private ISettingsStore _settingsStore = null!;
 
     [SetUp]
     public void Setup()
     {
         _mockClient = Substitute.For<IMqttManagedClient>();
         _mockLogger = Substitute.For<ILogger<SparkplugTopologyService>>();
-
-        _handler = null;
-        _mockClient
-            .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
-            .Do(x => _handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
-
-        _service = new SparkplugTopologyService(_mockClient, _mockLogger);
+        _extractor = new SparkplugTopologyExtractor();
+        // Auto-rebirth ships off; the tests below describe the enabled behaviour unless they say otherwise.
+        _settingsStore = MakeSettingsStore(autoRequestRebirth: true);
+        _service = new SparkplugTopologyService(_mockClient, _mockLogger, _settingsStore);
     }
 
     [TearDown]
     public void TearDown()
     {
-        _service.Dispose();
         _mockClient.Dispose();
     }
 
-    private static MqttApplicationMessageReceivedEventArgs MakeArgs(string topic, byte[] payload)
+    // Mirrors the live path: decoded envelope -> topology extractor -> service.
+    private Task Fire(string topic, byte[] payload)
     {
-        var appMsg = new MqttApplicationMessageBuilder()
-            .WithTopic(topic).WithPayload(payload).Build();
-        var packet = new MQTTnet.Packets.MqttPublishPacket { Topic = topic };
-        return new MqttApplicationMessageReceivedEventArgs("test-client", appMsg, packet, null);
-    }
+        Payload? parsed;
+        try
+        {
+            parsed = Payload.Parser.ParseFrom(payload);
+        }
+        catch
+        {
+            parsed = null;
+        }
 
-    private Task Fire(string topic, byte[] payload) => _handler!(MakeArgs(topic, payload));
+        var envelope = parsed is null
+            ? DecodedPayloadEnvelope.CreateFailure("sparkplug-b", topic, payload, "parse failed")
+            : DecodedPayloadEnvelope.CreateSuccess(
+                "sparkplug-b", topic, payload, parsed.ToString(), typedPayload: parsed);
+
+        return _service.ApplyTopologyEventsAsync(_extractor.Extract(envelope));
+    }
 
     private static byte[] SpbPayload(params (string Name, ulong Alias, uint Datatype, double DoubleValue)[] metrics)
     {
@@ -395,19 +406,6 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void Dispose_UnregistersMessageHandler()
-    {
-        var unsubscribed = false;
-        _mockClient
-            .When(x => x.ApplicationMessageReceivedAsync -= Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
-            .Do(_ => unsubscribed = true);
-
-        _service.Dispose();
-
-        unsubscribed.Should().BeTrue("Dispose must unregister the ApplicationMessageReceivedAsync handler");
-    }
-
-    [Test]
     public async Task RemoveNode_ExistingNode_RemovesAndRaisesEvent()
     {
         await Fire("spBv1.0/factory/NBIRTH/edge-01", SpbPayload());
@@ -585,8 +583,7 @@ public class SparkplugTopologyServiceTests
     public async Task NDATA_WithoutBirth_AfterCooldownExpires_RequestsRebirthAgain()
     {
         var fakeClock = new FakeTimeProvider();
-        _service.Dispose();
-        _service = new SparkplugTopologyService(_mockClient, _mockLogger, fakeClock);
+        _service = new SparkplugTopologyService(_mockClient, _mockLogger, _settingsStore, fakeClock);
         // _service field updated so TearDown disposes the correct instance
 
         // First NDATA without birth — triggers rebirth
@@ -603,6 +600,67 @@ public class SparkplugTopologyServiceTests
         await _mockClient.Received(2).EnqueueAsync(
             Arg.Is<MqttApplicationMessage>(m =>
                 m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+    }
+
+    [Test]
+    public async Task NDATA_WithoutBirth_AutoRebirthDisabled_DoesNotRequestRebirth()
+    {
+        UseSettingsStore(autoRequestRebirth: false);
+
+        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
+
+        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+    }
+
+    [Test]
+    public async Task DDATA_WithoutBirth_AutoRebirthDisabled_DoesNotRequestRebirth()
+    {
+        UseSettingsStore(autoRequestRebirth: false);
+
+        await Fire("spBv1.0/factory/DDATA/edge-01/dev-1", SpbPayload(("Temp", 0, 10, 22.0)));
+
+        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+    }
+
+    [Test]
+    public async Task NDATA_WithoutBirth_AutoRebirthEnabled_RequestsRebirth()
+    {
+        UseSettingsStore(autoRequestRebirth: true);
+
+        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
+
+        await _mockClient.Received(1).EnqueueAsync(
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+    }
+
+    [Test]
+    public async Task ManualRebirth_AutoRebirthDisabled_StillPublishes()
+    {
+        UseSettingsStore(autoRequestRebirth: false);
+        await Fire("spBv1.0/factory/NBIRTH/edge-01", SpbPayload(("Temp", 0, 10, 20.0)));
+
+        await _service.RequestNodeRebirthAsync("factory", "edge-01");
+
+        await _mockClient.Received(1).EnqueueAsync(
+            Arg.Is<MqttApplicationMessage>(m =>
+                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
+    }
+
+    private void UseSettingsStore(bool autoRequestRebirth)
+    {
+        _service = new SparkplugTopologyService(
+            _mockClient, _mockLogger, MakeSettingsStore(autoRequestRebirth));
+    }
+
+    private static ISettingsStore MakeSettingsStore(bool autoRequestRebirth)
+    {
+        var store = Substitute.For<ISettingsStore>();
+        store.Config.Returns(new AppConfiguration
+        {
+            Ui = new UiPreferences { AutoRequestSparkplugRebirth = autoRequestRebirth }
+        });
+        return store;
     }
 
     [Test]
@@ -771,9 +829,9 @@ public class SparkplugTopologyServiceTests
         new() { Name = name, DataType = dataType, Value = value };
 
     [Test]
-    public void ApplyTopologyEvents_NodeBirth_CreatesOnlineNodeWithMetrics()
+    public async Task ApplyTopologyEvents_NodeBirth_CreatesOnlineNodeWithMetrics()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -794,9 +852,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_NodeBirth_ClearsOldMetrics()
+    public async Task ApplyTopologyEvents_NodeBirth_ClearsOldMetrics()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -808,7 +866,7 @@ public class SparkplugTopologyServiceTests
             }
         ]);
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -826,9 +884,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_NodeDeath_MarksNodeOffline()
+    public async Task ApplyTopologyEvents_NodeDeath_MarksNodeOffline()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -840,7 +898,7 @@ public class SparkplugTopologyServiceTests
             }
         ]);
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeDeathEvent
             {
@@ -855,9 +913,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_NodeDeath_PropagatesOfflineToAllDevices()
+    public async Task ApplyTopologyEvents_NodeDeath_PropagatesOfflineToAllDevices()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -878,7 +936,7 @@ public class SparkplugTopologyServiceTests
             }
         ]);
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeDeathEvent
             {
@@ -893,9 +951,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_NodeData_UpdatesExistingMetric()
+    public async Task ApplyTopologyEvents_NodeData_UpdatesExistingMetric()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -907,7 +965,7 @@ public class SparkplugTopologyServiceTests
             }
         ]);
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeDataEvent
             {
@@ -925,9 +983,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_NodeData_AddsNewMetric()
+    public async Task ApplyTopologyEvents_NodeData_AddsNewMetric()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -939,7 +997,7 @@ public class SparkplugTopologyServiceTests
             }
         ]);
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeDataEvent
             {
@@ -957,9 +1015,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_DeviceBirth_CreatesOnlineDeviceWithMetrics()
+    public async Task ApplyTopologyEvents_DeviceBirth_CreatesOnlineDeviceWithMetrics()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -971,7 +1029,7 @@ public class SparkplugTopologyServiceTests
             }
         ]);
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new DeviceBirthEvent
             {
@@ -991,9 +1049,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_DeviceDeath_MarksDeviceOffline()
+    public async Task ApplyTopologyEvents_DeviceDeath_MarksDeviceOffline()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -1014,7 +1072,7 @@ public class SparkplugTopologyServiceTests
             }
         ]);
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new DeviceDeathEvent
             {
@@ -1030,9 +1088,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_DeviceData_UpdatesDeviceMetric()
+    public async Task ApplyTopologyEvents_DeviceData_UpdatesDeviceMetric()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -1053,7 +1111,7 @@ public class SparkplugTopologyServiceTests
             }
         ]);
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new DeviceDataEvent
             {
@@ -1072,9 +1130,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_DeviceData_AddsNewDeviceMetric()
+    public async Task ApplyTopologyEvents_DeviceData_AddsNewDeviceMetric()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -1095,7 +1153,7 @@ public class SparkplugTopologyServiceTests
             }
         ]);
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new DeviceDataEvent
             {
@@ -1114,9 +1172,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_MultipleEventsInSingleCall_ProcessesAll()
+    public async Task ApplyTopologyEvents_MultipleEventsInSingleCall_ProcessesAll()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -1142,20 +1200,20 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_EmptyEvents_DoesNotThrow()
+    public async Task ApplyTopologyEvents_EmptyEvents_DoesNotThrow()
     {
-        var act = () => _service.ApplyTopologyEvents([]);
+        var act = () => _service.ApplyTopologyEventsAsync([]);
 
-        act.Should().NotThrow();
+        await act.Should().NotThrowAsync();
     }
 
     [Test]
-    public void ApplyTopologyEvents_NodeBirth_RaisesTopologyChanged()
+    public async Task ApplyTopologyEvents_NodeBirth_RaisesTopologyChanged()
     {
         var raised = false;
         _service.TopologyChanged += () => raised = true;
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -1171,9 +1229,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_NodeDeath_RaisesTopologyChanged()
+    public async Task ApplyTopologyEvents_NodeDeath_RaisesTopologyChanged()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -1188,7 +1246,7 @@ public class SparkplugTopologyServiceTests
         var raised = false;
         _service.TopologyChanged += () => raised = true;
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeDeathEvent
             {
@@ -1203,9 +1261,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_NodeData_RaisesTopologyChanged()
+    public async Task ApplyTopologyEvents_NodeData_RaisesTopologyChanged()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -1220,7 +1278,7 @@ public class SparkplugTopologyServiceTests
         var raised = false;
         _service.TopologyChanged += () => raised = true;
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeDataEvent
             {
@@ -1236,12 +1294,12 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_DeviceBirth_RaisesTopologyChanged()
+    public async Task ApplyTopologyEvents_DeviceBirth_RaisesTopologyChanged()
     {
         var raised = false;
         _service.TopologyChanged += () => raised = true;
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new DeviceBirthEvent
             {
@@ -1258,9 +1316,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_DeviceDeath_RaisesTopologyChanged()
+    public async Task ApplyTopologyEvents_DeviceDeath_RaisesTopologyChanged()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new DeviceBirthEvent
             {
@@ -1276,7 +1334,7 @@ public class SparkplugTopologyServiceTests
         var raised = false;
         _service.TopologyChanged += () => raised = true;
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new DeviceDeathEvent
             {
@@ -1292,9 +1350,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_DeviceData_RaisesTopologyChanged()
+    public async Task ApplyTopologyEvents_DeviceData_RaisesTopologyChanged()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new DeviceBirthEvent
             {
@@ -1310,7 +1368,7 @@ public class SparkplugTopologyServiceTests
         var raised = false;
         _service.TopologyChanged += () => raised = true;
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new DeviceDataEvent
             {
@@ -1327,12 +1385,12 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_FullLifecycle_MatchesProtobufPath()
+    public async Task ApplyTopologyEvents_FullLifecycle_MatchesProtobufPath()
     {
         // Simulate: NBIRTH → DBIRTH → NDATA → DDATA → DDEATH → NDEATH
         // via ApplyTopologyEvents, then verify state matches expected
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
             {
@@ -1348,7 +1406,7 @@ public class SparkplugTopologyServiceTests
         node.Status.Should().Be(SpbNodeStatus.Online);
         node.Metrics.Should().HaveCount(2);
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new DeviceBirthEvent
             {
@@ -1365,7 +1423,7 @@ public class SparkplugTopologyServiceTests
         device.Status.Should().Be(SpbNodeStatus.Online);
         device.Metrics.Should().HaveCount(1);
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeDataEvent
             {
@@ -1390,7 +1448,7 @@ public class SparkplugTopologyServiceTests
         node.Metrics.Should().Contain(m => m.Name == "Pressure" && m.Value == "1013.0000");
         device.Metrics.Single().Value.Should().Be("230.0000");
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new DeviceDeathEvent
             {
@@ -1404,7 +1462,7 @@ public class SparkplugTopologyServiceTests
 
         device.Status.Should().Be(SpbNodeStatus.Offline);
 
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new NodeDeathEvent
             {
@@ -1421,9 +1479,9 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public void ApplyTopologyEvents_DeviceBirth_WithoutPriorNodeBirth_CreatesNodeImplicitly()
+    public async Task ApplyTopologyEvents_DeviceBirth_WithoutPriorNodeBirth_CreatesNodeImplicitly()
     {
-        _service.ApplyTopologyEvents(
+        await _service.ApplyTopologyEventsAsync(
         [
             new DeviceBirthEvent
             {
@@ -1440,5 +1498,29 @@ public class SparkplugTopologyServiceTests
         _service.Groups["g"].Nodes.Should().ContainKey("n");
         _service.Groups["g"].Nodes["n"].Devices.Should().ContainKey("d1");
         _service.Groups["g"].Nodes["n"].Devices["d1"].Status.Should().Be(SpbNodeStatus.Online);
+    }
+
+    [Test]
+    public async Task NBIRTH_WithAliasedMetrics_EnablesAliasNameResolutionForLaterData()
+    {
+        await Fire("spBv1.0/factory/NBIRTH/edge-01", SpbPayload(("Temperature", 7, 10, 23.5)));
+
+        var resolved = SparkplugAliasResolver.Resolve(
+            "spBv1.0/factory/NDATA/edge-01", SpbPayload((string.Empty, 7, 10, 24.0)), _service.Groups);
+
+        resolved.Should().NotBeNull();
+        resolved![7].Should().Be("Temperature");
+    }
+
+    [Test]
+    public async Task DBIRTH_WithAliasedMetrics_EnablesAliasNameResolutionForLaterDeviceData()
+    {
+        await Fire("spBv1.0/factory/DBIRTH/edge-01/sensor-A", SpbPayload(("Flow Rate", 42, 10, 1.0)));
+
+        var resolved = SparkplugAliasResolver.Resolve(
+            "spBv1.0/factory/DDATA/edge-01/sensor-A", SpbPayload((string.Empty, 42, 10, 2.0)), _service.Groups);
+
+        resolved.Should().NotBeNull();
+        resolved![42].Should().Be("Flow Rate");
     }
 }

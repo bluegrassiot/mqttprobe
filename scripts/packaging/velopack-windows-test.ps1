@@ -2,7 +2,17 @@ param(
     [string]$Version = "1.0.0"
 )
 
-Set-Location (Split-Path $PSScriptRoot -Parent)
+function Get-RepoRoot {
+    $dir = $PSScriptRoot
+    while ($dir) {
+        if (Test-Path -LiteralPath (Join-Path $dir 'MqttProbe.slnx')) { return $dir }
+        $parent = Split-Path $dir -Parent
+        if ($parent -eq $dir) { break }
+        $dir = $parent
+    }
+    throw 'Could not find repo root (MqttProbe.slnx)'
+}
+Set-Location (Get-RepoRoot)
 
 $publishDir = "publish/windows-local"
 $outputDir  = "publish/velopack-local"

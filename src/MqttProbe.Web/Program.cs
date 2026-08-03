@@ -144,7 +144,7 @@ var certCleanup = new CertificateStoreCleanup(
     app.Services.GetRequiredService<ICertificateAssetStore>(),
     app.Services.GetRequiredService<ICertificateEnvelopeKeyStore>(),
     app.Services.GetRequiredService<ILogger<CertificateStoreCleanup>>());
-await certCleanup.RunAsync(settingsStore.Config.Connections, configLoaded);
+await certCleanup.RunAsync(settingsStore.Connections, configLoaded);
 
 if (!app.Environment.IsDevelopment())
 {

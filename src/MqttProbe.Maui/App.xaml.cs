@@ -75,7 +75,7 @@ public partial class App
             var certCleanup = new CertificateStoreCleanup(
                 _certStore, _envelopeKeyStore,
                 _serviceProvider.GetService<ILogger<CertificateStoreCleanup>>());
-            await certCleanup.RunAsync(_settingsStore.Config.Connections, configLoaded);
+            await certCleanup.RunAsync(_settingsStore.Connections, configLoaded);
 
             var root = await ResolveInitialPageAsync();
             await MainThread.InvokeOnMainThreadAsync(() => window.Page = root);

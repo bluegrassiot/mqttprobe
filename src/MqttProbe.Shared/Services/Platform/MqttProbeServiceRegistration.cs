@@ -80,6 +80,16 @@ public static class MqttProbeServiceRegistration
         services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
         services.AddSingleton<IAppHealthMetricsCollector, AppHealthMetricsCollector>();
         services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
+
+        // Facets of the same ISettingsStore singleton, so a consumer can depend on the slice
+        // it actually uses. Resolved lazily rather than captured, so a test that registers a
+        // substitute ISettingsStore after this call still wins for every facet.
+        services.AddSingleton<IConnectionSettings>(sp => sp.GetRequiredService<ISettingsStore>());
+        services.AddSingleton<IChartSettings>(sp => sp.GetRequiredService<ISettingsStore>());
+        services.AddSingleton<IEmulatorSettings>(sp => sp.GetRequiredService<ISettingsStore>());
+        services.AddSingleton<IUiSettings>(sp => sp.GetRequiredService<ISettingsStore>());
+        services.AddSingleton<IPerformanceSettings>(sp => sp.GetRequiredService<ISettingsStore>());
+        services.AddSingleton<IAuthSettings>(sp => sp.GetRequiredService<ISettingsStore>());
         return services;
     }
 

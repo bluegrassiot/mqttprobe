@@ -172,7 +172,7 @@ internal static class Program
                 app.Services.GetRequiredService<ICertificateAssetStore>(),
                 app.Services.GetRequiredService<ICertificateEnvelopeKeyStore>(),
                 app.Services.GetRequiredService<ILogger<CertificateStoreCleanup>>());
-            certCleanup.RunAsync(resolvedSettingsStore.Config.Connections, configLoaded)
+            certCleanup.RunAsync(resolvedSettingsStore.Connections, configLoaded)
                 .GetAwaiter().GetResult();
         }
         catch (SecretStorageException ex)

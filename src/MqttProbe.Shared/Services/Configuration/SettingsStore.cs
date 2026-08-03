@@ -8,59 +8,6 @@ using MqttProbe.Services.Security;
 
 namespace MqttProbe.Services.Configuration;
 
-public interface ISettingsStore
-{
-    public AppConfiguration Config { get; }
-
-    public event Action<Guid>? ChartsChanged;
-    public event Action<Guid>? EmulatorsChanged;
-
-    public Task<bool> LoadAsync();
-    public Task SaveAsync();
-
-    // Connection ops
-    public Task AddConnectionAsync(Connection connection);
-    public Task RemoveConnectionAsync(Connection connection);
-
-    // Chart ops (per-connection)
-    public Task AddChartAsync(Guid connectionId, ChartConfiguration chart);
-    public Task UpdateChartAsync(Guid connectionId, ChartConfiguration chart);
-    public Task RemoveChartAsync(Guid connectionId, Guid chartId);
-    public IReadOnlyList<ChartConfiguration> GetCharts(Guid connectionId);
-
-    // Emulator ops (per-connection)
-    public Task AddEmulatorNodeAsync(Guid connectionId, EmulatorNodeConfig node);
-    public Task UpdateEmulatorNodeAsync(Guid connectionId, EmulatorNodeConfig node);
-    public Task RemoveEmulatorNodeAsync(Guid connectionId, Guid nodeId);
-    public Task RemoveAllEmulatorNodesAsync(Guid connectionId);
-    public Task SetEmulatorPublishIntervalAsync(Guid connectionId, int intervalMs);
-    public IReadOnlyList<EmulatorNodeConfig> GetEmulatorNodes(Guid connectionId);
-    public int GetEmulatorPublishIntervalMs(Guid connectionId);
-
-    // UI prefs
-    public Task SetThemeAsync(string theme);
-    public Task SetFontFamilyAsync(string fontFamily);
-    public Task SetFontAccessibleAsync(bool accessible);
-    public Task SetAutoResubscribeAsync(bool autoResubscribe);
-    public Task SetEnrichSparkplugAliasNamesAsync(bool enrich);
-    public Task SetAutoRequestSparkplugRebirthAsync(bool autoRequest);
-    public Task DismissHintAsync(string hintId);
-    public bool IsHintDismissed(string hintId);
-
-    public event Action? UiPreferencesChanged;
-
-    // Performance prefs
-    public event Action? PerformanceSettingsChanged;
-    public Task SetMaxStoredMessagesAsync(int value);
-    public Task SetMaxMessagesPerSecondAsync(int value);
-    public Task SetMaxDisplayMessagesAsync(int value);
-    public Task SetMaxTopicNodesAsync(int value);
-
-    // Auth
-    public bool VerifyCredentials(string username, string password);
-    public Task SetPasswordAsync(string username, string newPassword);
-}
-
 public class SettingsStore : ISettingsStore, IDisposable
 {
     private readonly string _configPath;
@@ -95,6 +42,11 @@ public class SettingsStore : ISettingsStore, IDisposable
     }
 
     public AppConfiguration Config => Volatile.Read(ref _config);
+
+    public IReadOnlyList<Connection> Connections => Config.Connections;
+    public UiPreferences Ui => Config.Ui;
+    public PerformanceSettings Performance => Config.Performance;
+    public Auth Auth => Config.Auth;
 
     public event Action<Guid>? ChartsChanged;
     public event Action<Guid>? EmulatorsChanged;

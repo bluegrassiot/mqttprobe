@@ -31,7 +31,6 @@ public class MessageStoreManagerMessageHandlerTests
         _mockLogger = Substitute.For<ILogger<MessageStoreManager>>();
         var mockSettings = Substitute.For<ISettingsStore>();
         var config = new AppConfiguration();
-        mockSettings.Config.Returns(config);
         mockSettings.Performance.Returns(config.Performance);
         mockSettings.Ui.Returns(config.Ui);
         _manager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, mockSettings,
@@ -241,7 +240,6 @@ public class MessageStoreManagerMessageHandlerTests
             Performance = new PerformanceSettings { MaxMessagesPerSecond = 1, MaxStoredMessages = 10_000 }
         };
         var mockSettings = Substitute.For<ISettingsStore>();
-        mockSettings.Config.Returns(config);
         mockSettings.Performance.Returns(config.Performance);
         mockSettings.Ui.Returns(config.Ui);
 
@@ -269,7 +267,6 @@ public class MessageStoreManagerMessageHandlerTests
             Performance = new PerformanceSettings { MaxMessagesPerSecond = 1, MaxStoredMessages = 10_000 }
         };
         var mockSettings = Substitute.For<ISettingsStore>();
-        mockSettings.Config.Returns(config);
         mockSettings.Performance.Returns(config.Performance);
         mockSettings.Ui.Returns(config.Ui);
 
@@ -292,7 +289,6 @@ public class MessageStoreManagerMessageHandlerTests
               .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
         var settings = Substitute.For<ISettingsStore>();
-        settings.Config.Returns(config);
         settings.Performance.Returns(config.Performance);
         settings.Ui.Returns(config.Ui);
 
@@ -478,7 +474,6 @@ public class MessageStoreManagerMessageHandlerTests
             Performance = new PerformanceSettings { MaxMessagesPerSecond = 1, MaxStoredMessages = 10_000 }
         };
         var mockSettings = Substitute.For<ISettingsStore>();
-        mockSettings.Config.Returns(config);
         mockSettings.Performance.Returns(config.Performance);
         mockSettings.Ui.Returns(config.Ui);
 

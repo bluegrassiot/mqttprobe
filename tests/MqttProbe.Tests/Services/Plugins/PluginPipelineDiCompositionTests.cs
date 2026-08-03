@@ -50,7 +50,6 @@ public class PluginPipelineDiCompositionTests
 
         _mockSettings = Substitute.For<ISettingsStore>();
         var config = new AppConfiguration();
-        _mockSettings.Config.Returns(config);
         _mockSettings.Performance.Returns(config.Performance);
         _mockSettings.Ui.Returns(config.Ui);
 

@@ -81,5 +81,4 @@ public interface ISettingsStore
     public AppConfiguration Config { get; }
 
     public Task<bool> LoadAsync();
-    public Task SaveAsync();
 }

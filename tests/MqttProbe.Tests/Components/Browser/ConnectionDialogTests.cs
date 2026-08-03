@@ -51,7 +51,6 @@ public class ConnectionDialogTests : BunitTestContext
         _mockInputCapability.UsesInputFileComponent.Returns(false);
 
         var cfg = new AppConfiguration();
-        _mockConfigMgr.Config.Returns(cfg);
         _mockConfigMgr.Connections.Returns(cfg.Connections);
         _mockConfigMgr.Ui.Returns(cfg.Ui);
         _mockMsgStore.Start().Returns(Task.CompletedTask);
@@ -97,7 +96,6 @@ public class ConnectionDialogTests : BunitTestContext
     private async Task OpenDialog(AppConfiguration? config = null)
     {
         var cfg = config ?? new AppConfiguration();
-        _mockConfigMgr.Config.Returns(cfg);
         _mockConfigMgr.Connections.Returns(cfg.Connections);
         _mockConfigMgr.Ui.Returns(cfg.Ui);
         var dialogService = Services.GetRequiredService<IDialogService>();

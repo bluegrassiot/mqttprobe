@@ -63,7 +63,7 @@ public class CertificateStoreCleanupTests
     }
 
     [Test]
-    public async Task RunAsync_DeletesRetryMarkerSittingBesideADeletedStagingTemp()
+    public async Task RunAsync_DeletesRetryMarkerLeftBesideAStagingTemp()
     {
         var assetId = Guid.NewGuid().ToString("D");
         await File.WriteAllTextAsync(Path.Combine(_certDir, $"cert-{assetId}.bin.tmp"), "partial");
@@ -216,11 +216,12 @@ public class CertificateStoreCleanupTests
     {
         var assetId = Guid.NewGuid().ToString("D");
         var path = Path.Combine(_certDir, $"cert-{assetId}.bin");
-        await File.WriteAllBytesAsync(path, new byte[72]);
+        await File.WriteAllBytesAsync(path, new byte[10]);
 
         await _sut.RunAsync([], configLoadedSuccessfully: true);
 
         File.Exists(path).Should().BeFalse();
+        _envelopeKeys.Removed.Should().NotContain($"cert-env-{assetId}");
     }
 
     [Test]

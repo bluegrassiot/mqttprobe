@@ -94,7 +94,9 @@ internal static class Program
 
         builder.Services.AddSingleton<ISettingsStore>(sp =>
             new SettingsStore(configPath, isMobile: false,
-                logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
+                sp.GetRequiredService<ILogger<SettingsStore>>(),
+                sp.GetService<ISecretStorage>(),
+                sp.GetService<ICertificateAssetStore>()));
 
         builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
         {
@@ -163,11 +165,8 @@ internal static class Program
             var keyProtector = app.Services.GetRequiredService<DesktopSecretKeyProtector>();
             keyProtector.InitializeAsync().GetAwaiter().GetResult();
 
-            var secretStorage = app.Services.GetRequiredService<ISecretStorage>();
             var resolvedSettingsStore = app.Services.GetRequiredService<ISettingsStore>();
-            var configLoaded = resolvedSettingsStore.LoadAsync(
-                secretStorage, app.Services.GetService<ICertificateAssetStore>())
-                .GetAwaiter().GetResult();
+            var configLoaded = resolvedSettingsStore.LoadAsync().GetAwaiter().GetResult();
 
             var certCleanup = new CertificateStoreCleanup(
                 app.Services.GetRequiredService<ICertificateAssetStore>(),

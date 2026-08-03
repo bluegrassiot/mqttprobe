@@ -133,7 +133,9 @@ public static class MauiProgram
         var isMobile = DeviceInfo.Idiom == DeviceIdiom.Phone || DeviceInfo.Idiom == DeviceIdiom.Tablet;
         builder.Services.AddSingleton<ISettingsStore>(sp =>
             new SettingsStore(configPath, isMobile,
-                logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
+                sp.GetRequiredService<ILogger<SettingsStore>>(),
+                sp.GetService<ISecretStorage>(),
+                sp.GetService<ICertificateAssetStore>()));
     }
 
     private static void AddPluginServices(MauiAppBuilder builder)

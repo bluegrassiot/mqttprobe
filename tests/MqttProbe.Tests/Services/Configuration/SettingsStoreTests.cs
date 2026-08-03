@@ -305,8 +305,8 @@ public class SettingsStoreTests
     public async Task AddConnectionAsync_RenameSaveFailure_RestoresPasswordUnderCorrectKey()
     {
         var mockSecretStorage = Substitute.For<ISecretStorage>();
-        var store = new FailingSaveSettingsStore(_configPath);
-        await store.LoadAsync(mockSecretStorage);
+        var store = new FailingSaveSettingsStore(_configPath, mockSecretStorage);
+        await store.LoadAsync();
 
         var conn = new Connection { Name = "Original", Host = "h", Port = 1883, Password = "secret" };
         await store.AddConnectionAsync(conn);
@@ -362,8 +362,8 @@ public class SettingsStoreTests
     {
         private bool _failSave;
 
-        public FailingSaveSettingsStore(string configPath)
-            : base(configPath) { }
+        public FailingSaveSettingsStore(string configPath, ISecretStorage? secretStorage = null)
+            : base(configPath, secretStorage: secretStorage) { }
 
         public void EnableSaveFailure() => _failSave = true;
         public void DisableSaveFailure() => _failSave = false;

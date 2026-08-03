@@ -7,19 +7,17 @@ namespace MqttProbe;
 public partial class App
 {
     private readonly ISettingsStore _settingsStore;
-    private readonly ISecretStorage _secretStorage;
     private readonly ILogger<App> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly ICertificateAssetStore _certStore;
     private readonly ICertificateEnvelopeKeyStore _envelopeKeyStore;
 
-    public App(ISettingsStore settingsStore, ISecretStorage secretStorage,
+    public App(ISettingsStore settingsStore,
         ILogger<App> logger, IServiceProvider serviceProvider,
         ICertificateAssetStore certStore, ICertificateEnvelopeKeyStore envelopeKeyStore)
     {
         InitializeComponent();
         _settingsStore = settingsStore;
-        _secretStorage = secretStorage;
         _logger = logger;
         _serviceProvider = serviceProvider;
         _certStore = certStore;
@@ -72,7 +70,7 @@ public partial class App
         try
         {
             await MainThread.InvokeOnMainThreadAsync(() => window.Page = CreateLoadingPage());
-            var configLoaded = await _settingsStore.LoadAsync(_secretStorage, _certStore);
+            var configLoaded = await _settingsStore.LoadAsync();
 
             var certCleanup = new CertificateStoreCleanup(
                 _certStore, _envelopeKeyStore,

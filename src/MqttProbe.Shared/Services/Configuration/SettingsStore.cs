@@ -15,8 +15,7 @@ public interface ISettingsStore
     public event Action<Guid>? ChartsChanged;
     public event Action<Guid>? EmulatorsChanged;
 
-    public Task<bool> LoadAsync(
-        ISecretStorage? secretStorage = null, ICertificateAssetStore? certStore = null);
+    public Task<bool> LoadAsync();
     public Task SaveAsync();
 
     // Connection ops
@@ -74,16 +73,25 @@ public class SettingsStore : ISettingsStore, IDisposable
     };
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly bool _isMobile;
+    private readonly ISecretStorage? _secretStorage;
+    private readonly ICertificateAssetStore? _certStore;
 
     private AppConfiguration _config = new();
-    private ISecretStorage? _secretStorage;
-    private ICertificateAssetStore? _certStore;
 
-    public SettingsStore(string configPath, bool isMobile = false, ILogger<SettingsStore>? logger = null)
+    // secretStorage and certStore trail isMobile and logger so the seven existing
+    // construction sites keep compiling.
+    public SettingsStore(
+        string configPath,
+        bool isMobile = false,
+        ILogger<SettingsStore>? logger = null,
+        ISecretStorage? secretStorage = null,
+        ICertificateAssetStore? certStore = null)
     {
         _configPath = configPath;
         _isMobile = isMobile;
         _logger = logger;
+        _secretStorage = secretStorage;
+        _certStore = certStore;
     }
 
     public AppConfiguration Config => Volatile.Read(ref _config);
@@ -93,15 +101,11 @@ public class SettingsStore : ISettingsStore, IDisposable
     public event Action? UiPreferencesChanged;
     public event Action? PerformanceSettingsChanged;
 
-    public async Task<bool> LoadAsync(
-        ISecretStorage? secretStorage = null, ICertificateAssetStore? certStore = null)
+    public async Task<bool> LoadAsync()
     {
         await _lock.WaitAsync();
         try
         {
-            _secretStorage = secretStorage;
-            _certStore = certStore;
-
             var configLoadedSuccessfully = await LoadOrCreateConfigAsync();
 
             if (_secretStorage != null)

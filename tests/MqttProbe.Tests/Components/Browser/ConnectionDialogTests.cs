@@ -50,9 +50,10 @@ public class ConnectionDialogTests : BunitTestContext
         _mockInputCapability = Substitute.For<ICertificateInputCapability>();
         _mockInputCapability.UsesInputFileComponent.Returns(false);
 
-        _mockConfigMgr.Config.Returns(new AppConfiguration());
-        _mockConfigMgr.Connections.Returns(new List<Connection>());
-        _mockConfigMgr.Ui.Returns(new UiPreferences());
+        var cfg = new AppConfiguration();
+        _mockConfigMgr.Config.Returns(cfg);
+        _mockConfigMgr.Connections.Returns(cfg.Connections);
+        _mockConfigMgr.Ui.Returns(cfg.Ui);
         _mockMsgStore.Start().Returns(Task.CompletedTask);
         _mockOptionsBuilder.Build(Arg.Any<Connection>()).Returns(
             new MqttManagedClientOptions
@@ -540,7 +541,6 @@ public class ConnectionDialogTests : BunitTestContext
     {
         var conn = new Connection { Name = "Test", Host = "localhost", Port = 1883 };
         var cfg = new AppConfiguration { Connections = [conn] };
-        _mockConfigMgr.Config.Returns(cfg);
         _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
 
         await OpenDialog(cfg);
@@ -559,7 +559,6 @@ public class ConnectionDialogTests : BunitTestContext
     {
         var conn = new Connection { Name = "Test", Host = "localhost", Port = 1883 };
         var cfg = new AppConfiguration { Connections = [conn] };
-        _mockConfigMgr.Config.Returns(cfg);
         _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         await OpenDialog(cfg);
         await SelectConnection(cfg.Connections[0]);
@@ -780,7 +779,6 @@ public class ConnectionDialogTests : BunitTestContext
     {
         var conn = new Connection { Name = "ToDelete", Host = "localhost", Port = 1883 };
         var cfg = new AppConfiguration { Connections = [conn] };
-        _mockConfigMgr.Config.Returns(cfg);
         _mockConfigMgr.RemoveConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
 
         await OpenDialog(cfg);

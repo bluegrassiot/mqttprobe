@@ -457,7 +457,6 @@ public class NotFoundPageTests : BunitTestContext
 
         var mockConfig = Substitute.For<ISettingsStore>();
         var cfg = new AppConfiguration();
-        mockConfig.Config.Returns(cfg);
         mockConfig.Ui.Returns(cfg.Ui);
         Services.AddSettingsSubstitute(mockConfig);
         Services.AddSingleton(Substitute.For<IJSRuntime>());

@@ -21,7 +21,6 @@ public class SparkplugSectionTests : BunitTestContext
         {
             Ui = new UiPreferences { EnrichSparkplugAliasNames = true }
         };
-        _mockStore.Config.Returns(cfg);
         _mockStore.Ui.Returns(cfg.Ui);
         Services.AddSettingsSubstitute(_mockStore);
         EnsureMudProviders();

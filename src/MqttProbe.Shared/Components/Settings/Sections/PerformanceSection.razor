@@ -1,9 +1,9 @@
 @namespace MqttProbe.Components.Settings
 @using MqttProbe.Services.Configuration
-@inject IPerformanceSettings PerformanceSettings
+@inject IPerformanceSettings PerfSettings
 
 <MudNumericField T="int" Label="Max stored messages"
-                 Value="@PerformanceSettings.Performance.MaxStoredMessages"
+                 Value="@PerfSettings.Performance.MaxStoredMessages"
                  ValueChanged="@OnMaxStoredMessagesChanged"
                  Min="100" Max="100000" Step="1000"
                  Variant="Variant.Outlined" />
@@ -12,7 +12,7 @@
 </MudText>
 
 <MudNumericField T="int" Label="Max messages per second"
-                 Value="@PerformanceSettings.Performance.MaxMessagesPerSecond"
+                 Value="@PerfSettings.Performance.MaxMessagesPerSecond"
                  ValueChanged="@OnMaxMessagesPerSecondChanged"
                  Min="100" Max="1000000" Step="1000"
                  Variant="Variant.Outlined" Class="mt-3" />
@@ -21,7 +21,7 @@
 </MudText>
 
 <MudNumericField T="int" Label="Max displayed messages"
-                 Value="@PerformanceSettings.Performance.MaxDisplayMessages"
+                 Value="@PerfSettings.Performance.MaxDisplayMessages"
                  ValueChanged="@OnMaxDisplayMessagesChanged"
                  Min="10" Max="10000" Step="100"
                  Variant="Variant.Outlined" Class="mt-3" />
@@ -30,7 +30,7 @@
 </MudText>
 
 <MudNumericField T="int" Label="Max topic nodes"
-                 Value="@PerformanceSettings.Performance.MaxTopicNodes"
+                 Value="@PerfSettings.Performance.MaxTopicNodes"
                  ValueChanged="@OnMaxTopicNodesChanged"
                  Min="100" Max="100000" Step="1000"
                  Variant="Variant.Outlined" Class="mt-3" />
@@ -41,21 +41,21 @@
 @code {
     private async Task OnMaxStoredMessagesChanged(int value)
     {
-        await PerformanceSettings.SetMaxStoredMessagesAsync(value);
+        await PerfSettings.SetMaxStoredMessagesAsync(value);
     }
 
     private async Task OnMaxMessagesPerSecondChanged(int value)
     {
-        await PerformanceSettings.SetMaxMessagesPerSecondAsync(value);
+        await PerfSettings.SetMaxMessagesPerSecondAsync(value);
     }
 
     private async Task OnMaxDisplayMessagesChanged(int value)
     {
-        await PerformanceSettings.SetMaxDisplayMessagesAsync(value);
+        await PerfSettings.SetMaxDisplayMessagesAsync(value);
     }
 
     private async Task OnMaxTopicNodesChanged(int value)
     {
-        await PerformanceSettings.SetMaxTopicNodesAsync(value);
+        await PerfSettings.SetMaxTopicNodesAsync(value);
     }
 }

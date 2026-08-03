@@ -23,7 +23,6 @@ public class AppearanceSectionTests : BunitTestContext
         {
             Ui = new UiPreferences { Theme = "dark", FontAccessible = false }
         };
-        _mockStore.Config.Returns(cfg);
         _mockStore.Ui.Returns(cfg.Ui);
         _themes = new Themes();
         Services.AddSettingsSubstitute(_mockStore);

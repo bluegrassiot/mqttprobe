@@ -25,7 +25,6 @@ public class PerformanceSectionTests : BunitTestContext
                 MaxMessagesPerSecond = 50_000
             }
         };
-        _mockStore.Config.Returns(cfg);
         _mockStore.Performance.Returns(cfg.Performance);
         Services.AddSettingsSubstitute(_mockStore);
         EnsureMudProviders();

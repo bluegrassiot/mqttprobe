@@ -34,7 +34,6 @@ public class SettingsTests : BunitTestContext
             Ui = new UiPreferences { Theme = "dark", FontAccessible = false, AutoResubscribe = true },
             Performance = new PerformanceSettings { MaxStoredMessages = 10_000, MaxMessagesPerSecond = 50_000 }
         };
-        _mockStore.Config.Returns(cfg);
         _mockStore.Ui.Returns(cfg.Ui);
         _mockStore.Performance.Returns(cfg.Performance);
         _themes = new Themes();

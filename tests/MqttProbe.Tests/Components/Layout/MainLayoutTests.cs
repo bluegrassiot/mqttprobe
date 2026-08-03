@@ -37,7 +37,6 @@ public class MainLayoutTests : BunitTestContext
         _mockSessionState = Substitute.For<ISessionState>();
         _mockConfig = Substitute.For<ISettingsStore>();
         var cfg = new AppConfiguration();
-        _mockConfig.Config.Returns(cfg);
         _mockConfig.Ui.Returns(cfg.Ui);
         _mockJs = Substitute.For<IJSRuntime>();
         _mockUpdateService = Substitute.For<IUpdateService>();
@@ -250,7 +249,6 @@ public class MainLayoutTests : BunitTestContext
         {
             Ui = new UiPreferences { Theme = "dark", FontAccessible = false }
         };
-        _mockConfig.Config.Returns(cfg);
         _mockConfig.Ui.Returns(cfg.Ui);
 
         var cut = RenderLayout();

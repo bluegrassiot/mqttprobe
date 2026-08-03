@@ -21,7 +21,6 @@ public class ChangePasswordTests : BunitTestContext
         {
             Auth = new Auth { Username = "admin", PasswordHash = "hash" }
         };
-        _mockCfg.Config.Returns(cfg);
         _mockCfg.Auth.Returns(cfg.Auth);
 
         _mockAuth = Substitute.For<IUserAuthService>();

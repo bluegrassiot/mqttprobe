@@ -34,7 +34,6 @@ public class PayloadBrowserTests : BunitTestContext
 
         _mockSettingsStore = Substitute.For<ISettingsStore>();
         var cfg = new AppConfiguration();
-        _mockSettingsStore.Config.Returns(cfg);
         _mockSettingsStore.Performance.Returns(cfg.Performance);
         Services.AddSettingsSubstitute(_mockSettingsStore);
 
@@ -87,7 +86,6 @@ public class PayloadBrowserTests : BunitTestContext
         {
             Performance = new PerformanceSettings { MaxDisplayMessages = 3 }
         };
-        _mockSettingsStore.Config.Returns(customCfg);
         _mockSettingsStore.Performance.Returns(customCfg.Performance);
         var messages = Enumerable.Range(0, 3)
             .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })

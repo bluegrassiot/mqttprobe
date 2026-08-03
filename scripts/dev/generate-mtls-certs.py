@@ -5,9 +5,9 @@ Generate lab CA, server, and client certificates for mTLS Mosquitto testing.
 Requires openssl on PATH. No third-party Python packages.
 
 Usage:
-  python scripts/generate-mtls-certs.py
-  python scripts/generate-mtls-certs.py --force
-  python scripts/generate-mtls-certs.py --out deploy/mtls/certs --pfx-password changeme --days 365
+  python scripts/dev/generate-mtls-certs.py
+  python scripts/dev/generate-mtls-certs.py --force
+  python scripts/dev/generate-mtls-certs.py --out deploy/mtls/certs --pfx-password changeme --days 365
 """
 
 from __future__ import annotations
@@ -21,7 +21,16 @@ import tempfile
 from pathlib import Path
 from typing import NoReturn
 
-ROOT = Path(__file__).resolve().parent.parent
+
+def find_repo_root() -> Path:
+    here = Path(__file__).resolve().parent
+    for d in [here, *here.parents]:
+        if (d / "MqttProbe.slnx").is_file():
+            return d
+    raise SystemExit("Could not find repo root (MqttProbe.slnx)")
+
+
+ROOT = find_repo_root()
 DEFAULT_OUT = ROOT / "deploy" / "mtls" / "certs"
 
 EXPECTED = (

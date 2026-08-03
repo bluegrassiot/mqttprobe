@@ -7,8 +7,8 @@ merges the results, and generates an HTML report via ReportGenerator.
 E2E tests are excluded from coverage (Playwright tests exercise the app externally).
 
 Usage:
-  ./scripts/coverage.py
-  ./scripts/coverage.py --open --threshold 75
+  ./scripts/ci/coverage.py
+  ./scripts/ci/coverage.py --open --threshold 75
 """
 
 import argparse
@@ -19,7 +19,16 @@ import sys
 import webbrowser
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+
+def find_repo_root() -> Path:
+    here = Path(__file__).resolve().parent
+    for d in [here, *here.parents]:
+        if (d / "MqttProbe.slnx").is_file():
+            return d
+    raise SystemExit("Could not find repo root (MqttProbe.slnx)")
+
+
+ROOT = find_repo_root()
 RESULTS_DIR = ROOT / "TestResults"
 REPORT_DIR = RESULTS_DIR / "CoverageReport"
 SETTINGS = ROOT / "tests" / "coverlet.runsettings"

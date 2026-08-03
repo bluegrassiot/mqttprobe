@@ -19,8 +19,8 @@ ENDOFLINE locally. CI normalizes line endings before checking and is
 unaffected.
 
 Usage:
-  ./scripts/format-check.py          # check — exits 1 on violations
-  ./scripts/format-check.py --fix    # auto-fix all violations
+  ./scripts/ci/format-check.py          # check — exits 1 on violations
+  ./scripts/ci/format-check.py --fix    # auto-fix all violations
 """
 
 import re
@@ -28,7 +28,16 @@ import sys
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+
+def find_repo_root() -> Path:
+    here = Path(__file__).resolve().parent
+    for d in [here, *here.parents]:
+        if (d / "MqttProbe.slnx").is_file():
+            return d
+    raise SystemExit("Could not find repo root (MqttProbe.slnx)")
+
+
+ROOT = find_repo_root()
 FIX = "--fix" in sys.argv
 
 # `dotnet format` with no subcommand also runs `analyzers`, which surfaces every
@@ -112,7 +121,7 @@ for target, needs_workload in TARGETS:
 print()
 if failed > 0:
     print(f"=== {failed} target(s) have formatting violations ===")
-    print("Run: ./scripts/format-check.py --fix")
+    print("Run: ./scripts/ci/format-check.py --fix")
     sys.exit(1)
 else:
     print("=== All projects formatted correctly ===")

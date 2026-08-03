@@ -54,18 +54,26 @@
   <Folder Name="/samples/protobuf/chirpstack/integration/">
     <File Path="samples/protobuf/chirpstack/integration/integration.proto" />
   </Folder>
-  <Folder Name="/scripts/">
-    <File Path="scripts/actionlint.py" />
-    <File Path="scripts/build-linux-desktop.ps1" />
-    <File Path="scripts/coverage.py" />
-    <File Path="scripts/format-check.py" />
-    <File Path="scripts/generate-mtls-certs.py" />
-    <File Path="scripts/inspect.py" />
-    <File Path="scripts/manage-windows-config.ps1" />
-    <File Path="scripts/pack-plugin.py" />
-    <File Path="scripts/reset-password.py" />
-    <File Path="scripts/velopack-windows-test.ps1" />
-    <File Path="scripts/verify-app-version.py" />
+  <Folder Name="/scripts/" />
+  <Folder Name="/scripts/ci/">
+    <File Path="scripts/ci/actionlint.py" />
+    <File Path="scripts/ci/check-file-length.py" />
+    <File Path="scripts/ci/coverage.py" />
+    <File Path="scripts/ci/format-check.py" />
+    <File Path="scripts/ci/inspect.py" />
+  </Folder>
+  <Folder Name="/scripts/dev/">
+    <File Path="scripts/dev/generate-mtls-certs.py" />
+    <File Path="scripts/dev/manage-windows-config.ps1" />
+    <File Path="scripts/dev/reset-password.py" />
+  </Folder>
+  <Folder Name="/scripts/packaging/">
+    <File Path="scripts/packaging/build-linux-desktop.ps1" />
+    <File Path="scripts/packaging/build-macos-catalyst.sh" />
+    <File Path="scripts/packaging/pack-plugin.py" />
+    <File Path="scripts/packaging/velopack-macos-pack.sh" />
+    <File Path="scripts/packaging/velopack-windows-test.ps1" />
+    <File Path="scripts/packaging/verify-app-version.py" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/MqttProbe.Desktop/MqttProbe.Desktop.csproj" />

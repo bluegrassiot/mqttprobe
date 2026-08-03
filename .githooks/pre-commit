@@ -28,7 +28,7 @@ pass "Classify staged files"
 # Runs for every staged change, docs included: devskim scans all file types, and a
 # pasted token in a README is exactly what it is for. Whole-tree scan, ~3s.
 step "Security scan"
-if ! SCAN_OUT=$(python "$ROOT/scripts/inspect.py" --tool devskim --fail-on warning \
+if ! SCAN_OUT=$(python "$ROOT/scripts/ci/inspect.py" --tool devskim --fail-on warning \
         -o "$ROOT/artifacts/inspect-precommit.md" 2>&1); then
     fail "Security scan"
     printf '%s\n' "$SCAN_OUT"
@@ -41,12 +41,12 @@ pass "Security scan"
 step "Workflow lint"
 if ! printf '%s\n' "$STAGED" | any_workflow_relevant; then
     skip_msg "no staged workflow files"
-# scripts/actionlint.py picks a local binary over its Docker fallback. Neither is a
+# scripts/ci/actionlint.py picks a local binary over its Docker fallback. Neither is a
 # dotnet tool we restore, so skip rather than block a contributor who has neither.
 elif ! command -v actionlint >/dev/null 2>&1 && ! command -v docker >/dev/null 2>&1; then
-    skip_msg "no actionlint or docker (see scripts/actionlint.py)"
+    skip_msg "no actionlint or docker (see scripts/ci/actionlint.py)"
 else
-    if ! LINT_OUT=$(python "$ROOT/scripts/actionlint.py" 2>&1); then
+    if ! LINT_OUT=$(python "$ROOT/scripts/ci/actionlint.py" 2>&1); then
         fail "Workflow lint"
         printf '%s\n' "$LINT_OUT"
         printf "\nIf Docker is not running, start it or use: SKIP_PRE_COMMIT=1 git commit ...\n"
@@ -60,13 +60,25 @@ step "Format"
 if ! printf '%s\n' "$STAGED" | any_format_relevant; then
     skip_msg "no format-relevant staged files"
 else
-    if ! python "$ROOT/scripts/format-check.py"; then
+    if ! python "$ROOT/scripts/ci/format-check.py"; then
         fail "Format"
-        printf "\nFormatting violations found - run: python scripts/format-check.py --fix\n"
+        printf "\nFormatting violations found - run: python scripts/ci/format-check.py --fix\n"
         print_total
         exit 1
     fi
     pass "Format"
+fi
+
+step "File length"
+if ! printf '%s\n' "$STAGED" | any_file_length_relevant; then
+    skip_msg "no file-length-relevant staged files"
+else
+    if ! python "$ROOT/scripts/ci/check-file-length.py" --staged; then
+        fail "File length"
+        print_total
+        exit 1
+    fi
+    pass "File length"
 fi
 
 printf "\n${GREEN}pre-commit checks passed.${RESET}\n"

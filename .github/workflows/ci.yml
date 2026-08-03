@@ -49,13 +49,13 @@ jobs:
       # Same gate as .githooks/pre-commit. Keep --fail-on matching there so a commit
       # that passes locally cannot fail here. ~5s, so it runs before the slow steps.
       - name: Security scan
-        run: python3 scripts/inspect.py --tool devskim --fail-on warning
+        run: python3 scripts/ci/inspect.py --tool devskim --fail-on warning
 
       # Same script the contributor guide tells you to run. Inlining the dotnet
       # format invocation here is what let CI drift from local: it missed the
       # external/** exclude and reformatted the vendored SparkplugNet fork.
       - name: Format check
-        run: python3 scripts/format-check.py
+        run: python3 scripts/ci/format-check.py
 
       - name: Unit tests
         run: |

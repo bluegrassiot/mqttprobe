@@ -16,7 +16,7 @@ Build a package and install it from **Settings → Plugins → Install plugin**.
 on a hardened host where you have no filesystem access.
 
 ```powershell
-python scripts/pack-plugin.py samples/CustomDemoPlugin --dll samples/CustomDemoPlugin/bin/Release/net10.0/CustomDemoPlugin.dll
+python scripts/packaging/pack-plugin.py samples/CustomDemoPlugin --dll samples/CustomDemoPlugin/bin/Release/net10.0/CustomDemoPlugin.dll
 ```
 
 `--dll` renames the assembly to `sample-csv.dll` to match the `id` in

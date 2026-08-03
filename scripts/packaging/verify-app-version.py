@@ -11,14 +11,14 @@ Use --keep-output to persist them under publish/verify-app-version/ so you
 can inspect or launch the built artifacts after the script finishes.
 
 Usage:
-  python scripts/verify-app-version.py --version 1.0.4
-  python scripts/verify-app-version.py --version 1.0.4 --target web --target desktop
-  python scripts/verify-app-version.py --version 1.0.4 --target docker
-  python scripts/verify-app-version.py --version 1.0.4 --target maui-windows
-  python scripts/verify-app-version.py --version 1.0.4 --target android
-  python scripts/verify-app-version.py --version 1.0.4 --target all
-  python scripts/verify-app-version.py --version 1.0.4 --also-negative
-  python scripts/verify-app-version.py --version 1.0.4 --target maui-windows --keep-output
+  python scripts/packaging/verify-app-version.py --version 1.0.4
+  python scripts/packaging/verify-app-version.py --version 1.0.4 --target web --target desktop
+  python scripts/packaging/verify-app-version.py --version 1.0.4 --target docker
+  python scripts/packaging/verify-app-version.py --version 1.0.4 --target maui-windows
+  python scripts/packaging/verify-app-version.py --version 1.0.4 --target android
+  python scripts/packaging/verify-app-version.py --version 1.0.4 --target all
+  python scripts/packaging/verify-app-version.py --version 1.0.4 --also-negative
+  python scripts/packaging/verify-app-version.py --version 1.0.4 --target maui-windows --keep-output
 
 With --keep-output, publish outputs are kept under:
   publish/verify-app-version/{version}/{target}/
@@ -37,7 +37,16 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+
+def find_repo_root() -> Path:
+    here = Path(__file__).resolve().parent
+    for d in [here, *here.parents]:
+        if (d / "MqttProbe.slnx").is_file():
+            return d
+    raise SystemExit("Could not find repo root (MqttProbe.slnx)")
+
+
+ROOT = find_repo_root()
 
 ALL_TARGETS = ["web", "desktop", "docker", "maui-windows", "android"]
 DEFAULT_TARGETS = ["web", "desktop"]

@@ -1,6 +1,6 @@
 # Full stack for client certificate (mTLS) lab testing.
 # Prerequisites:
-#   python scripts/generate-mtls-certs.py
+#   python scripts/dev/generate-mtls-certs.py
 # Then:
 #   docker compose -f docker-compose.mtls.yml up -d
 #

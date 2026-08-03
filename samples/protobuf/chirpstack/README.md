@@ -58,7 +58,7 @@ host:
 Build a package and install it from **Settings → Plugins → Install plugin**:
 
 ```bash
-python scripts/pack-plugin.py samples/protobuf/chirpstack
+python scripts/packaging/pack-plugin.py samples/protobuf/chirpstack
 ```
 
 Schema packages activate as soon as you press **Apply now** — no restart needed. Messages already

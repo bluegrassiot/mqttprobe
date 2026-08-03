@@ -5,11 +5,11 @@
 #
 #
 # Usage:
-#   ./scripts/build-macos-catalyst.sh
-#   ./scripts/build-macos-catalyst.sh --sign              # real identity; needed for Keychain
-#   ./scripts/build-macos-catalyst.sh --reset             # clear stored certs first
-#   ./scripts/build-macos-catalyst.sh -c Release --clean
-#   ./scripts/build-macos-catalyst.sh --no-launch
+#   ./scripts/packaging/build-macos-catalyst.sh
+#   ./scripts/packaging/build-macos-catalyst.sh --sign              # real identity; needed for Keychain
+#   ./scripts/packaging/build-macos-catalyst.sh --reset             # clear stored certs first
+#   ./scripts/packaging/build-macos-catalyst.sh -c Release --clean
+#   ./scripts/packaging/build-macos-catalyst.sh --no-launch
 #
 # --sign is required for anything touching SecureStorage/Keychain: an ad-hoc signature
 # carries no team, so the sandbox denies Keychain access with errSecMissingEntitlement.
@@ -72,7 +72,11 @@ if ! dotnet workload list 2>/dev/null | grep -qE 'maui-maccatalyst|maui\b'; then
     dotnet workload install maui-maccatalyst"
 fi
 
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Walk up to repo root (MqttProbe.slnx).
+while [[ ! -f MqttProbe.slnx ]]; do
+    cd .. || die "Could not find repo root (MqttProbe.slnx)"
+done
 
 # Read the bundle id from the project rather than hardcoding it: it has been renamed once
 # already, and a stale copy here would silently point the container check at nothing.
@@ -337,7 +341,7 @@ fi
 cat <<EOF
 
   Need test certificates and an mTLS broker?
-      python scripts/generate-mtls-certs.py
+      python scripts/dev/generate-mtls-certs.py
       docker compose -f docker-compose.mtls.yml up -d
 
 EOF

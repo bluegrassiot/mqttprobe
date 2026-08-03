@@ -19,7 +19,6 @@ public class UxMetricsServiceTests
         _logger = new CapturingLogger<UxMetricsService>();
         _mockSettings = Substitute.For<ISettingsStore>();
         var config = new AppConfiguration();
-        _mockSettings.Config.Returns(config);
         _mockSettings.Performance.Returns(config.Performance);
         _mockHealthCollector = Substitute.For<IAppHealthMetricsCollector>();
         _mockHealthCollector.GetSnapshot().Returns(new AppHealthMetricsSnapshot(

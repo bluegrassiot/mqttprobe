@@ -31,6 +31,7 @@ public class PluginPipelineDiCompositionTests
 {
     private ServiceProvider _serviceProvider = null!;
     private IMqttManagedClient _mockClient = null!;
+    private ISettingsStore _mockSettings = null!;
     private Func<MqttApplicationMessageReceivedEventArgs, Task>? _capturedHandler;
 
     [SetUp]
@@ -47,11 +48,11 @@ public class PluginPipelineDiCompositionTests
             .Do(x => _capturedHandler =
                 x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        var mockSettings = Substitute.For<ISettingsStore>();
+        _mockSettings = Substitute.For<ISettingsStore>();
         var config = new AppConfiguration();
-        mockSettings.Config.Returns(config);
-        mockSettings.Performance.Returns(config.Performance);
-        mockSettings.Ui.Returns(config.Ui);
+        _mockSettings.Config.Returns(config);
+        _mockSettings.Performance.Returns(config.Performance);
+        _mockSettings.Ui.Returns(config.Ui);
 
         services.AddLogging();
         services.AddSingleton(Options.Create(new PluginConfig()));
@@ -72,7 +73,7 @@ public class PluginPipelineDiCompositionTests
         // this fixture drives the pipeline through a captured message handler rather than a
         // live broker, and asserts against an in-memory config.
         services.AddSingleton(_mockClient);
-        services.AddSingleton(mockSettings);
+        services.AddSingleton(_mockSettings);
         services.AddSingleton(Substitute.For<IUxMetricsService>());
 
         _serviceProvider = services.BuildServiceProvider(validateScopes: true);
@@ -130,6 +131,20 @@ public class PluginPipelineDiCompositionTests
         var topology = _serviceProvider.GetRequiredService<ISparkplugTopologyService>();
         topology.Should().NotBeNull();
         topology.Should().BeOfType<SparkplugTopologyService>();
+    }
+
+    [Test]
+    public void ResolveFromDi_AllSixSettingsFacets_ResolveToTheSubstituteRegisteredLast()
+    {
+        // AddMqttProbeCore registers each facet as a lazy forwarder to ISettingsStore. Proves
+        // a substitute registered after AddMqttProbeCore still wins for every facet, not just
+        // ISettingsStore itself — the composite trick this whole task depends on.
+        _serviceProvider.GetRequiredService<IConnectionSettings>().Should().BeSameAs(_mockSettings);
+        _serviceProvider.GetRequiredService<IChartSettings>().Should().BeSameAs(_mockSettings);
+        _serviceProvider.GetRequiredService<IEmulatorSettings>().Should().BeSameAs(_mockSettings);
+        _serviceProvider.GetRequiredService<IUiSettings>().Should().BeSameAs(_mockSettings);
+        _serviceProvider.GetRequiredService<IPerformanceSettings>().Should().BeSameAs(_mockSettings);
+        _serviceProvider.GetRequiredService<IAuthSettings>().Should().BeSameAs(_mockSettings);
     }
 
     [Test]

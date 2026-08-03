@@ -32,7 +32,6 @@ public class SubscriptionManagerTests
         _mockSessionState = Substitute.For<ISessionState>();
 
         var config = new AppConfiguration { Ui = new UiPreferences { AutoResubscribe = true } };
-        _mockSettingsStore.Config.Returns(config);
         _mockSettingsStore.Ui.Returns(config.Ui);
         _mockSessionState.SelectedConnection.Returns(new Connection { Name = "Test", Host = "localhost" });
 
@@ -402,7 +401,6 @@ public class SubscriptionManagerTests
     public async Task OnConnected_WithoutAutoResubscribe_DoesNotLoadSavedTopics()
     {
         var config = new AppConfiguration { Ui = new UiPreferences { AutoResubscribe = false } };
-        _mockSettingsStore.Config.Returns(config);
         _mockSettingsStore.Ui.Returns(config.Ui);
 
         var connection = new Connection

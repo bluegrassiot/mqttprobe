@@ -25,8 +25,8 @@ public class MessageStoreManagerTests
         _mockLogger = Substitute.For<ILogger<MessageStoreManager>>();
         var mockSettings = Substitute.For<ISettingsStore>();
         var config = new AppConfiguration();
-        mockSettings.Config.Returns(config);
         mockSettings.Performance.Returns(config.Performance);
+        mockSettings.Ui.Returns(config.Ui);
         _messageStoreManager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, mockSettings,
             Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
     }

@@ -660,7 +660,6 @@ public class SparkplugTopologyServiceTests
         {
             Ui = new UiPreferences { AutoRequestSparkplugRebirth = autoRequestRebirth }
         };
-        store.Config.Returns(config);
         store.Ui.Returns(config.Ui);
         return store;
     }

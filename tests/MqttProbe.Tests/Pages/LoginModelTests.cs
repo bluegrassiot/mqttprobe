@@ -32,7 +32,6 @@ public class LoginModelTests
     {
         _mockConfig = Substitute.For<ISettingsStore>();
         var config = new AppConfiguration();
-        _mockConfig.Config.Returns(config);
         _mockConfig.Auth.Returns(config.Auth);
         _mockAuth = Substitute.For<IUserAuthService>();
     }
@@ -50,7 +49,6 @@ public class LoginModelTests
     public void OnGet_NoPasswordHash_RedirectsToSetup()
     {
         var config = new AppConfiguration { Auth = new Auth { PasswordHash = "" } };
-        _mockConfig.Config.Returns(config);
         _mockConfig.Auth.Returns(config.Auth);
 
         var result = Create().OnGet();
@@ -63,7 +61,6 @@ public class LoginModelTests
     public void OnGet_PasswordHashSet_ReturnsPage()
     {
         var config = new AppConfiguration { Auth = new Auth { PasswordHash = "hashed" } };
-        _mockConfig.Config.Returns(config);
         _mockConfig.Auth.Returns(config.Auth);
 
         var result = Create().OnGet();
@@ -75,7 +72,6 @@ public class LoginModelTests
     public void OnGet_PasswordHashSet_SetsReturnUrl()
     {
         var config = new AppConfiguration { Auth = new Auth { PasswordHash = "hashed" } };
-        _mockConfig.Config.Returns(config);
         _mockConfig.Auth.Returns(config.Auth);
         var model = Create();
 
@@ -88,7 +84,6 @@ public class LoginModelTests
     public void OnGet_PasswordHashSet_NoReturnUrl_DefaultsToRoot()
     {
         var config = new AppConfiguration { Auth = new Auth { PasswordHash = "hashed" } };
-        _mockConfig.Config.Returns(config);
         _mockConfig.Auth.Returns(config.Auth);
         var model = Create();
 

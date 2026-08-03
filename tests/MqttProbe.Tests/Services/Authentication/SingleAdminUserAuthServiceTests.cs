@@ -27,7 +27,6 @@ public class SingleAdminUserAuthServiceTests
         {
             Auth = new Auth { Username = "admin", PasswordHash = PasswordHasher.Hash("correct") }
         };
-        _mockConfig.Config.Returns(config);
         _mockConfig.Auth.Returns(config.Auth);
         _service = new SingleAdminUserAuthService(_mockConfig);
     }
@@ -98,7 +97,6 @@ public class SingleAdminUserAuthServiceTests
         {
             Auth = new Auth { Username = "", PasswordHash = "" }
         };
-        _mockConfig.Config.Returns(config);
         _mockConfig.Auth.Returns(config.Auth);
 
         var users = await _service.GetUsersAsync();
@@ -113,7 +111,6 @@ public class SingleAdminUserAuthServiceTests
         {
             Auth = new Auth { Username = "", PasswordHash = "" }
         };
-        _mockConfig.Config.Returns(config);
         _mockConfig.Auth.Returns(config.Auth);
         _mockConfig.SetPasswordAsync("admin", "pass").Returns(Task.CompletedTask);
 
@@ -130,7 +127,6 @@ public class SingleAdminUserAuthServiceTests
         {
             Auth = new Auth { Username = "", PasswordHash = "" }
         };
-        _mockConfig.Config.Returns(config);
         _mockConfig.Auth.Returns(config.Auth);
         _mockConfig.SetPasswordAsync("admin", "pass")
             .Returns<Task>(_ => throw new IOException("persistence failed"));

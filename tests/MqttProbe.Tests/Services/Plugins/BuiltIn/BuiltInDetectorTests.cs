@@ -248,9 +248,41 @@ public class BuiltInDetectorTests
     public void Base64_ValidPayload_ReturnsBase64()
     {
         var registry = BuildRegistry();
-        var detector = registry.FindDetector(MakeArgs("sensor/data", "dGVzdA=="));
+        // "hello world" => 16 chars base64, meets MinLength
+        var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes("hello world"));
+        var detector = registry.FindDetector(MakeArgs("sensor/data", b64));
         detector.Should().NotBeNull();
         detector!.FormatId.Should().Be("base64");
+    }
+
+    [TestCase("test")]
+    [TestCase("null")]
+    [TestCase("true")]
+    [TestCase("data")]
+    public void Base64_ShortToken_ReturnsPlainText(string payload)
+    {
+        var registry = BuildRegistry();
+        var detector = registry.FindDetector(MakeArgs("sensor/data", payload));
+        detector.Should().NotBeNull();
+        detector!.FormatId.Should().Be("plaintext");
+    }
+
+    [Test]
+    public void Base64_InvalidLengthNotMultipleOfFour_ReturnsPlainText()
+    {
+        var registry = BuildRegistry();
+        var detector = registry.FindDetector(MakeArgs("sensor/data", "aGVsbG8gd29ybGQ")); // 15 chars, no padding
+        detector.Should().NotBeNull();
+        detector!.FormatId.Should().Be("plaintext");
+    }
+
+    [Test]
+    public void Base64_InvalidAlphabet_ReturnsPlainText()
+    {
+        var registry = BuildRegistry();
+        var detector = registry.FindDetector(MakeArgs("sensor/data", "aGVsbG8gd29ybGQ!")); // '!' not in base64
+        detector.Should().NotBeNull();
+        detector!.FormatId.Should().Be("plaintext");
     }
 
     // --- PlainText ---

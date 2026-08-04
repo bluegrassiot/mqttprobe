@@ -166,13 +166,13 @@ public class ReadPathIntegrationTests
     [Test]
     public void Base64_ValidPayload_ReturnsSuccessEnvelope()
     {
-        const string b64 = "dGVzdA==";
+        const string b64 = "aGVsbG8gd29ybGQ=";
         var result = _pipeline.ProcessInbound(MakeArgs("sensor/data", b64));
 
         result.Envelope.IsFailure.Should().BeFalse();
         result.Envelope.FormatId.Should().Be("base64");
-        // dGVzdA== decodes to "test"
-        result.Envelope.DisplayText.Should().Be("test");
+        // aGVsbG8gd29ybGQ= decodes to "hello world"
+        result.Envelope.DisplayText.Should().Be("hello world");
         result.TopologyEvents.Should().BeEmpty();
     }
 

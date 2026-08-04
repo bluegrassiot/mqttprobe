@@ -150,9 +150,9 @@ public class PluginPipelineDiCompositionTests
         services.AddMqttProbeSettings(Path.Combine(Path.GetTempPath(), $"c_{Guid.NewGuid()}.json"));
         using var provider = services.BuildServiceProvider();
 
-        // These are the services that consume a settings facet. If AddMqttProbeCore is ever
-        // called without AddMqttProbeSettings, this is where it fails — at container build,
-        // not at first facet resolution deep in a running host.
+        // These GetRequiredService calls are the assertion: this fixture composes its own
+        // ServiceCollection, so a failure here verifies the AddMqttProbeCore/AddMqttProbeSettings
+        // pairing, not that any particular host is wired correctly.
         provider.GetRequiredService<IEmulationService>().Should().NotBeNull();
         provider.GetRequiredService<IMessageStoreManager>().Should().NotBeNull();
     }

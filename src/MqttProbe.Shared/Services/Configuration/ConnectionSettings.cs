@@ -28,7 +28,10 @@ internal sealed class ConnectionSettings(
                 configMutated = true;
 
                 if (oldSecretKey is not null && oldSecretKey != ConnectionSecrets.KeyFor(connection))
+                {
                     await secrets.RemoveAsync(oldSecretKey);
+                    secretsMutated = true;
+                }
 
                 await secrets.SetAsync(connection);
                 secretsMutated = true;

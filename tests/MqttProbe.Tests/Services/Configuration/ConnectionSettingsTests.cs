@@ -113,6 +113,39 @@ public class ConnectionSettingsTests
         await storage.Received().SetAsync(oldKey, "secret");
     }
 
+    // The document must NOT fail here: the throw comes from secret storage, not the save.
+    // This covers the path where the old secret was already removed (oldKey != newKey) before
+    // the new secret write fails, which must still mark secretsMutated so the rollback runs.
+    [Test]
+    public async Task AddConnectionAsync_RenameSecretSetFailure_RestoresPasswordUnderOldKey()
+    {
+        var storage = Substitute.For<ISecretStorage>();
+        var document = new FailingDocument(new AppConfiguration());
+        var connections = new ConnectionSettings(document, new ConnectionSecrets(storage, null), null);
+
+        var conn = new Connection { Name = "Original", Host = "h", Port = 1883, Password = "secret" };
+        await connections.AddConnectionAsync(conn);
+        document.Config.Connections.Should().Contain(c => c.Name == "Original");
+
+        var oldKey = ConnectionSecrets.KeyFor(conn);
+        var renamed = conn.Clone();
+        renamed.Name = "Renamed";
+        var newKey = ConnectionSecrets.KeyFor(renamed);
+        storage.GetAsync(oldKey).Returns("secret");
+        storage.SetAsync(newKey, "secret")
+            .Returns(_ => Task.FromException(new InvalidOperationException("keychain locked")));
+
+        storage.ClearReceivedCalls();
+
+        var act = () => connections.AddConnectionAsync(renamed);
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        document.Config.Connections.Should().Contain(c => c.Name == "Original");
+        document.Config.Connections.Should().NotContain(c => c.Name == "Renamed");
+        await storage.Received().RemoveAsync(oldKey);
+        await storage.Received().SetAsync(oldKey, "secret");
+    }
+
     [Test]
     public async Task RemoveConnectionAsync_SaveFailure_RollsBackAllMutations()
     {

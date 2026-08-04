@@ -29,6 +29,7 @@ internal sealed class SettingsDocument(string path) : ISettingsDocument, IDispos
     };
 
     private AppConfiguration _config = new();
+    private bool _disposed;
 
     public string Path => path;
 
@@ -100,5 +101,13 @@ internal sealed class SettingsDocument(string path) : ISettingsDocument, IDispos
             File.SetUnixFileMode(filePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
-    public void Dispose() => _lock.Dispose();
+    // Captured for disposal twice by DI: once via the singleton descriptor, once via the
+    // ISettingsDocument forwarding factory in AddMqttProbeSettings. CaptureDisposable does not
+    // deduplicate, so this guard must make Dispose idempotent by construction.
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _lock.Dispose();
+    }
 }

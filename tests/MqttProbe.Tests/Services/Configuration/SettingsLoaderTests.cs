@@ -1,5 +1,7 @@
+using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Security;
 
 namespace MqttProbe.Shared.Tests.Services.Configuration;
 
@@ -121,5 +123,27 @@ public class SettingsLoaderTests
         _document.Config.Performance.MaxStoredMessages.Should().Be(10_000);
         _document.Config.Performance.MaxMessagesPerSecond.Should().Be(50_000);
         _document.Config.Performance.MaxTopicNodes.Should().Be(10_000);
+    }
+
+    // The loop body in LoadSecretsAsync (connection.Password = stored) is what restores saved
+    // broker passwords at startup on every host; every other test here wires a no-op
+    // ConnectionSecrets, so this is the only coverage of that assignment actually running.
+    [Test]
+    public async Task LoadAsync_WhenSecretStorageHasAStoredPassword_PopulatesConnectionPassword()
+    {
+        var connection = new Connection { Name = "Stored", Host = "h", Port = 1883 };
+        _document.Config = new AppConfiguration { Connections = [connection] };
+        await _document.SaveAsync();
+
+        var key = ConnectionSecrets.KeyFor(connection);
+        var storage = Substitute.For<ISecretStorage>();
+        storage.GetAsync(key).Returns("s3cr3t");
+
+        using var document2 = new SettingsDocument(_configPath);
+        var loader = new SettingsLoader(document2, new ConnectionSecrets(storage, null), false, null);
+
+        await loader.LoadAsync();
+
+        document2.Config.Connections.Should().ContainSingle(c => c.Name == "Stored" && c.Password == "s3cr3t");
     }
 }

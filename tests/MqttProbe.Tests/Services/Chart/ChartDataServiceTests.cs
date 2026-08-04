@@ -1,5 +1,6 @@
 using MQTTnet;
 using MqttProbe.Models.Chart;
+using MqttProbe.Models.Configuration;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Mqtt;
@@ -13,7 +14,8 @@ public class ChartDataServiceTests
     private IMqttManagedClient _mockClient = null!;
     private IJsonFieldExtractor _extractor = null!;
     private IChartFieldRegistry _registry = null!;
-    private ISettingsStore _mockSettingsStore = null!;
+    private IChartSettings _mockSettingsStore = null!;
+    private IUiSettings _mockUiSettings = null!;
     private ChartDataService _service = null!;
     private Func<MqttApplicationMessageReceivedEventArgs, Task>? _handler;
 
@@ -23,15 +25,18 @@ public class ChartDataServiceTests
         _mockClient = Substitute.For<IMqttManagedClient>();
         _extractor = new JsonFieldExtractor();
         _registry = new ChartFieldRegistry();
-        _mockSettingsStore = Substitute.For<ISettingsStore>();
+        var config = new AppConfiguration();
+        _mockSettingsStore = Substitute.For<IChartSettings>();
         _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns([]);
+        _mockUiSettings = Substitute.For<IUiSettings>();
+        _mockUiSettings.Ui.Returns(config.Ui);
 
         _handler = null;
         _mockClient
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => _handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        _service = new ChartDataService(_mockClient, _extractor, _registry, _mockSettingsStore, _mockSettingsStore,
+        _service = new ChartDataService(_mockClient, _extractor, _registry, _mockSettingsStore, _mockUiSettings,
             TestPipelineHelper.BuildBuiltInPipeline());
     }
 

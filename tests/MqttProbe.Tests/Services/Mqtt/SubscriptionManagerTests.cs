@@ -15,7 +15,8 @@ public class SubscriptionManagerTests
     private IMqttManagedClient _mockClient = null!;
     private ILogger<SubscriptionManager> _mockLogger = null!;
     private ISnackbar _mockSnackbar = null!;
-    private ISettingsStore _mockSettingsStore = null!;
+    private IConnectionSettings _mockConnectionSettings = null!;
+    private IUiSettings _mockUiSettings = null!;
     private ISessionState _mockSessionState = null!;
     private SubscriptionManager _manager = null!;
 
@@ -28,11 +29,12 @@ public class SubscriptionManagerTests
         _mockClient = Substitute.For<IMqttManagedClient>();
         _mockLogger = Substitute.For<ILogger<SubscriptionManager>>();
         _mockSnackbar = Substitute.For<ISnackbar>();
-        _mockSettingsStore = Substitute.For<ISettingsStore>();
+        _mockConnectionSettings = Substitute.For<IConnectionSettings>();
+        _mockUiSettings = Substitute.For<IUiSettings>();
         _mockSessionState = Substitute.For<ISessionState>();
 
         var config = new AppConfiguration { Ui = new UiPreferences { AutoResubscribe = true } };
-        _mockSettingsStore.Ui.Returns(config.Ui);
+        _mockUiSettings.Ui.Returns(config.Ui);
         _mockSessionState.SelectedConnection.Returns(new Connection { Name = "Test", Host = "localhost" });
 
         _connectedHandler = null;
@@ -44,7 +46,7 @@ public class SubscriptionManagerTests
             .When(x => x.SynchronizingSubscriptionsFailedAsync += Arg.Any<Func<MqttManagedProcessFailedEventArgs, Task>>())
             .Do(x => _syncFailedHandler = x.Arg<Func<MqttManagedProcessFailedEventArgs, Task>>());
 
-        _manager = new SubscriptionManager(_mockClient, _mockLogger, _mockSnackbar, _mockSettingsStore, _mockSettingsStore, _mockSessionState);
+        _manager = new SubscriptionManager(_mockClient, _mockLogger, _mockSnackbar, _mockConnectionSettings, _mockUiSettings, _mockSessionState);
     }
 
     [TearDown]
@@ -172,7 +174,7 @@ public class SubscriptionManagerTests
     {
         await _manager.Add("test/topic", MqttQualityOfServiceLevel.ExactlyOnce);
 
-        await _mockSettingsStore.Received(1).AddConnectionAsync(
+        await _mockConnectionSettings.Received(1).AddConnectionAsync(
             Arg.Is<Connection>(c =>
                 c!.SubscribedTopics.Any(s =>
                     s.Topic == "test/topic" &&
@@ -360,7 +362,7 @@ public class SubscriptionManagerTests
     {
         await _manager.Add("test/topic");
 
-        await _mockSettingsStore.Received(1).AddConnectionAsync(
+        await _mockConnectionSettings.Received(1).AddConnectionAsync(
             Arg.Is<Connection>(c => c!.SubscribedTopics!.Any(s => s.Topic == "test/topic")));
     }
 
@@ -369,11 +371,11 @@ public class SubscriptionManagerTests
     {
         await _manager.Add("a/b");
         await _manager.Add("c/d");
-        _mockSettingsStore.ClearReceivedCalls();
+        _mockConnectionSettings.ClearReceivedCalls();
 
         await _manager.Remove(["a/b"]);
 
-        await _mockSettingsStore.Received(1).AddConnectionAsync(
+        await _mockConnectionSettings.Received(1).AddConnectionAsync(
             Arg.Is<Connection>(c => c!.SubscribedTopics!.Any(s => s.Topic == "c/d") && !c.SubscribedTopics.Any(s => s.Topic == "a/b")));
     }
 
@@ -401,7 +403,7 @@ public class SubscriptionManagerTests
     public async Task OnConnected_WithoutAutoResubscribe_DoesNotLoadSavedTopics()
     {
         var config = new AppConfiguration { Ui = new UiPreferences { AutoResubscribe = false } };
-        _mockSettingsStore.Ui.Returns(config.Ui);
+        _mockUiSettings.Ui.Returns(config.Ui);
 
         var connection = new Connection
         {
@@ -445,7 +447,7 @@ public class SubscriptionManagerTests
     {
         await _manager.Add("a/b");
         await _manager.Add("c/d");
-        _mockSettingsStore.ClearReceivedCalls();
+        _mockConnectionSettings.ClearReceivedCalls();
 
         _manager.ClearActiveSubscriptions();
 
@@ -464,11 +466,11 @@ public class SubscriptionManagerTests
     public async Task ClearActiveSubscriptions_DoesNotPersistToConnection()
     {
         await _manager.Add("a/b");
-        _mockSettingsStore.ClearReceivedCalls();
+        _mockConnectionSettings.ClearReceivedCalls();
 
         _manager.ClearActiveSubscriptions();
 
-        await _mockSettingsStore.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+        await _mockConnectionSettings.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
     }
 
     [Test]

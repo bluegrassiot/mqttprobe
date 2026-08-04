@@ -23,11 +23,12 @@ public class MessageStoreManagerTests
     {
         _mockClient = Substitute.For<IMqttManagedClient>();
         _mockLogger = Substitute.For<ILogger<MessageStoreManager>>();
-        var mockSettings = Substitute.For<ISettingsStore>();
         var config = new AppConfiguration();
-        mockSettings.Performance.Returns(config.Performance);
-        mockSettings.Ui.Returns(config.Ui);
-        _messageStoreManager = new MessageStoreManager(_mockClient, _mockLogger, mockSettings, mockSettings,
+        var mockPerformance = Substitute.For<IPerformanceSettings>();
+        mockPerformance.Performance.Returns(config.Performance);
+        var mockUi = Substitute.For<IUiSettings>();
+        mockUi.Ui.Returns(config.Ui);
+        _messageStoreManager = new MessageStoreManager(_mockClient, _mockLogger, mockPerformance, mockUi,
             Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
     }
 

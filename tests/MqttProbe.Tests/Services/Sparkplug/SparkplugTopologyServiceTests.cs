@@ -21,7 +21,7 @@ public class SparkplugTopologyServiceTests
     private ILogger<SparkplugTopologyService> _mockLogger = null!;
     private SparkplugTopologyService _service = null!;
     private SparkplugTopologyExtractor _extractor = null!;
-    private ISettingsStore _settingsStore = null!;
+    private IUiSettings _settingsStore = null!;
 
     [SetUp]
     public void Setup()
@@ -653,9 +653,9 @@ public class SparkplugTopologyServiceTests
             _mockClient, _mockLogger, MakeSettingsStore(autoRequestRebirth));
     }
 
-    private static ISettingsStore MakeSettingsStore(bool autoRequestRebirth)
+    private static IUiSettings MakeSettingsStore(bool autoRequestRebirth)
     {
-        var store = Substitute.For<ISettingsStore>();
+        var store = Substitute.For<IUiSettings>();
         var config = new AppConfiguration
         {
             Ui = new UiPreferences { AutoRequestSparkplugRebirth = autoRequestRebirth }

@@ -9,7 +9,7 @@ namespace MqttProbe.Shared.Tests.Services.Metrics;
 public class UxMetricsServiceTests
 {
     private CapturingLogger<UxMetricsService> _logger = null!;
-    private ISettingsStore _mockSettings = null!;
+    private IPerformanceSettings _mockSettings = null!;
     private IAppHealthMetricsCollector _mockHealthCollector = null!;
     private UxMetricsService _service = null!;
 
@@ -17,7 +17,7 @@ public class UxMetricsServiceTests
     public void Setup()
     {
         _logger = new CapturingLogger<UxMetricsService>();
-        _mockSettings = Substitute.For<ISettingsStore>();
+        _mockSettings = Substitute.For<IPerformanceSettings>();
         var config = new AppConfiguration();
         _mockSettings.Performance.Returns(config.Performance);
         _mockHealthCollector = Substitute.For<IAppHealthMetricsCollector>();

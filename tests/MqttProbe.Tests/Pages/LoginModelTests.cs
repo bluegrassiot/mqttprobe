@@ -24,13 +24,13 @@ namespace MqttProbe.Shared.Tests.Pages;
 [TestFixture]
 public class LoginModelTests
 {
-    private ISettingsStore _mockConfig = null!;
+    private IAuthSettings _mockConfig = null!;
     private IUserAuthService _mockAuth = null!;
 
     [SetUp]
     public void Setup()
     {
-        _mockConfig = Substitute.For<ISettingsStore>();
+        _mockConfig = Substitute.For<IAuthSettings>();
         var config = new AppConfiguration();
         _mockConfig.Auth.Returns(config.Auth);
         _mockAuth = Substitute.For<IUserAuthService>();

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MqttProbe.Models.Chart;
+using MqttProbe.Models.Configuration;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Mqtt;
@@ -13,7 +14,8 @@ public class ChartDataServiceMessageHandlerTests
 {
     private IMqttManagedClient _mockClient = null!;
     private ChartFieldRegistry _registry = null!;
-    private ISettingsStore _mockSettingsStore = null!;
+    private IChartSettings _mockSettingsStore = null!;
+    private IUiSettings _mockUiSettings = null!;
     private ChartDataService _service = null!;
     private Func<MqttApplicationMessageReceivedEventArgs, Task>? _handler;
 
@@ -22,9 +24,12 @@ public class ChartDataServiceMessageHandlerTests
     {
         _mockClient = Substitute.For<IMqttManagedClient>();
         _registry = new ChartFieldRegistry();
-        _mockSettingsStore = Substitute.For<ISettingsStore>();
+        var config = new AppConfiguration();
+        _mockSettingsStore = Substitute.For<IChartSettings>();
         _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns([]);
-        _service = new ChartDataService(_mockClient, new JsonFieldExtractor(), _registry, _mockSettingsStore, _mockSettingsStore,
+        _mockUiSettings = Substitute.For<IUiSettings>();
+        _mockUiSettings.Ui.Returns(config.Ui);
+        _service = new ChartDataService(_mockClient, new JsonFieldExtractor(), _registry, _mockSettingsStore, _mockUiSettings,
             TestPipelineHelper.BuildBuiltInPipeline());
 
         _handler = null;
@@ -234,8 +239,10 @@ public class ChartDataServiceMessageHandlerTests
         var registry = Substitute.For<IChartFieldRegistry>();
         registry.When(x => x.Update(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, ExtractedField>>()))
             .Do(_ => throw new InvalidOperationException("registry failed"));
-        var configStore = Substitute.For<ISettingsStore>();
+        var configStore = Substitute.For<IChartSettings>();
         configStore.GetCharts(Arg.Any<Guid>()).Returns([]);
+        var uiSettings = Substitute.For<IUiSettings>();
+        uiSettings.Ui.Returns(new AppConfiguration().Ui);
         var logger = new CapturingLogger<ChartDataService>();
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         client
@@ -247,7 +254,7 @@ public class ChartDataServiceMessageHandlerTests
             new JsonFieldExtractor(),
             registry,
             configStore,
-            configStore,
+            uiSettings,
             TestPipelineHelper.BuildBuiltInPipeline(),
             logger: logger);
         await service.StartAsync();

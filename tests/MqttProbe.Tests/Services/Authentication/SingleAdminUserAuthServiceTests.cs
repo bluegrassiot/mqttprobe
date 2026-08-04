@@ -16,13 +16,13 @@ namespace MqttProbe.Shared.Tests.Services.Authentication;
 [TestFixture]
 public class SingleAdminUserAuthServiceTests
 {
-    private ISettingsStore _mockConfig = null!;
+    private IAuthSettings _mockConfig = null!;
     private SingleAdminUserAuthService _service = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _mockConfig = Substitute.For<ISettingsStore>();
+        _mockConfig = Substitute.For<IAuthSettings>();
         var config = new AppConfiguration
         {
             Auth = new Auth { Username = "admin", PasswordHash = PasswordHasher.Hash("correct") }

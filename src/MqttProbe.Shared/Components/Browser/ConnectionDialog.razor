@@ -27,32 +27,14 @@
     <DialogContent>
         <div class="connection-dialog-content">
 
-            <div class="connection-dialog-header">
-                <MudText Typo="Typo.body2" Color="Color.Secondary" Style="flex-shrink:0">Connection:</MudText>
-                <MudSelect T="Connection?"
-                           Value="@_savedConnectionForSelector"
-                           ValueChanged="@(async (Connection? v) => { if (v is not null) await ConnectionChanged(v); })"
-                           Placeholder="Select a saved connection..."
-                           ToStringFunc="@(c => c?.Name ?? string.Empty)"
-                           Dense="true"
-                           Variant="Variant.Outlined"
-                           Style="flex:1">
-                    @foreach (var connection in ConnectionSettings.Connections)
-                    {
-                        <MudSelectItem T="Connection?" Value="@((Connection?)connection)">@connection.Name</MudSelectItem>
-                    }
-                </MudSelect>
-                <div class="connection-dialog-actions">
-                    <MudIconButton Icon="@LucideIcons.Plus" Color="Color.Inherit" Size="Size.Medium"
-                                   title="New connection" OnClick="@Add" />
-                    <MudIconButton Icon="@LucideIcons.Save" Color="Color.Inherit" Size="Size.Medium"
-                                   title="Save connection" Disabled="@(!_canSave)"
-                                   OnClick="@(async () => await Save(closeDialog: false))" />
-                    <MudIconButton Icon="@LucideIcons.Trash2" Color="Color.Error" Size="Size.Medium"
-                                   title="Delete connection" Disabled="@(!_canDelete)"
-                                   OnClick="@(async () => await Delete())" />
-                </div>
-            </div>
+            <ConnectionDialogHeader Connections="@ConnectionSettings.Connections"
+                                    Selected="@_savedConnectionForSelector"
+                                    SelectedChanged="ConnectionChanged"
+                                    CanSave="@_canSave"
+                                    CanDelete="@_canDelete"
+                                    OnAdd="Add"
+                                    OnSave="@(async () => await Save(closeDialog: false))"
+                                    OnDelete="@(async () => await Delete())" />
 
             <MudForm Model="@_selectedConnection" @ref="@_form"
                      Validation="@_connectionValidator.ValidateValue" ValidationDelay="0"

@@ -1,0 +1,14 @@
+<MudGrid Spacing="2" Class="mt-2">
+    <MudItem xs="12" sm="6">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.Name"
+                      For="@(() => Connection.Name)" Immediate="true" Label="Name" />
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.ClientId"
+                      For="@(() => Connection.ClientId)" Immediate="true" Label="Client ID" />
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired] public Connection Connection { get; set; } = null!;
+}

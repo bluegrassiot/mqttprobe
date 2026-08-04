@@ -1180,4 +1180,83 @@ public class ConnectionDialogTests : BunitTestContext
 
         await _mockUi.Received(1).SetAutoResubscribeAsync(false);
     }
+
+    [Test]
+    public async Task CertState_PreservedAcrossTlsToggle_KeepsStagedSaveEnabled()
+    {
+        var conn = new Connection { Name = "TLS Conn", Host = "localhost", Port = 8883, UseTls = true };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        // Stage a certificate via the test hook
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        await _dialogProvider.InvokeAsync(() =>
+            dialog.SetStagedCertificate([1, 2, 3], null, null, ""));
+
+        _dialogProvider.Find("button[title='Save connection']")
+            .GetAttribute("disabled").Should().BeNull("staging a certificate should enable Save");
+
+        // Toggle TLS off — cert UI should hide but staged state must survive
+        ActivateTab("Transport");
+        var tlsCheckbox = _dialogProvider.FindComponents<MudCheckBox<bool>>().First();
+        await _dialogProvider.InvokeAsync(() => tlsCheckbox.Instance.ValueChanged.InvokeAsync(false));
+        _dialogProvider.Render();
+
+        // The cert section's inner markup (PFX toggle) should be hidden via Visible=false
+        _dialogProvider.Markup.Should().NotContain("PFX/P12",
+            "cert input controls should be hidden when TLS is off");
+
+        _dialogProvider.Find("button[title='Save connection']")
+            .GetAttribute("disabled").Should().BeNull("staged cert state must survive TLS toggle");
+
+        // Toggle TLS back on — cert UI reappears, state intact
+        await _dialogProvider.InvokeAsync(() => tlsCheckbox.Instance.ValueChanged.InvokeAsync(true));
+        _dialogProvider.Render();
+
+        _dialogProvider.Markup.Should().Contain("PFX/P12",
+            "cert controls should reappear when TLS is back on");
+        _dialogProvider.Markup.Should().Contain("PFX file loaded",
+            "staged cert bytes must survive TLS off/on cycle");
+    }
+
+    [Test]
+    public async Task RemoveCert_ThenSave_DoesNotShowCertificateLoaded()
+    {
+        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        var cert = TestCertFactory.CreateRsaCert();
+        _mockCertStore.LoadAsync(Arg.Any<Guid>(), "old-asset")
+            .Returns(new ClientCertificateBundle(cert));
+
+        var conn = new Connection
+        {
+            Name = "CertConn",
+            Host = "tls.local",
+            Port = 8883,
+            UseTls = true,
+            ClientCertificateAssetId = "old-asset"
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        // Verify cert is loaded
+        _dialogProvider.Markup.Should().Contain("Certificate loaded");
+
+        // Remove the certificate
+        _dialogProvider.Find("button[title='Remove certificate']").Click();
+        _dialogProvider.Markup.Should().NotContain("Certificate loaded");
+        _dialogProvider.Markup.Should().Contain("PFX/P12", "import controls should show after remove");
+
+        // Dirty the name so Save is enabled, then save
+        DirtyNameField("CertConn Edited");
+        _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled").Should().BeNull();
+
+        _dialogProvider.Find("button[title='Save connection']").Click();
+        await _mockConfigMgr.Received(1).AddConnectionAsync(Arg.Any<Connection>());
+
+        // After save, "Certificate loaded" must NOT reappear
+        _dialogProvider.Markup.Should().NotContain("Certificate loaded",
+            "removed cert must not reappear after save");
+    }
 }

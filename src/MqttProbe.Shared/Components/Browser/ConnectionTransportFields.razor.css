@@ -1,0 +1,4 @@
+.security-warning-group {
+    border-left: 3px solid var(--mud-palette-warning);
+    padding-left: 12px;
+}

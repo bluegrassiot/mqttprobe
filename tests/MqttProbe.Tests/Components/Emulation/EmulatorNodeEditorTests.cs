@@ -230,8 +230,10 @@ public class EmulatorNodeEditorTests : BunitTestContext
         var filePath = Path.Combine(Path.GetTempPath(), $"alias_persist_test_{Guid.NewGuid()}.json");
         try
         {
-            var store = new SettingsStore(filePath);
-            await store.LoadAsync();
+            using var document = new SettingsDocument(filePath);
+            await new SettingsLoader(document, new ConnectionSecrets(null, null), false, null)
+                .LoadAsync();
+            var store = new EmulatorSettings(document);
             var connectionId = Guid.NewGuid();
 
             var config = new EmulatorNodeConfig
@@ -243,8 +245,10 @@ public class EmulatorNodeEditorTests : BunitTestContext
             await store.AddEmulatorNodeAsync(connectionId, config);
 
             // Reload from disk
-            var store2 = new SettingsStore(filePath);
-            await store2.LoadAsync();
+            using var document2 = new SettingsDocument(filePath);
+            await new SettingsLoader(document2, new ConnectionSecrets(null, null), false, null)
+                .LoadAsync();
+            var store2 = new EmulatorSettings(document2);
             var nodes = store2.GetEmulatorNodes(connectionId);
 
             nodes.Should().ContainSingle();

@@ -38,7 +38,8 @@ public class EmulationServiceTests
     ];
 
     private string _filePath = null!;
-    private ISettingsStore _settingsStore = null!;
+    private SettingsDocument _document = null!;
+    private IEmulatorSettings _emulatorSettings = null!;
     private ISparkplugNodeFactory _mockNodeFactory = null!;
     private IMqttManagedClient _mockMqttClient = null!;
     private ISessionState _mockSessionState = null!;
@@ -54,14 +55,15 @@ public class EmulationServiceTests
     public async Task Setup()
     {
         _filePath = Path.Combine(Path.GetTempPath(), $"emulation_service_test_{Guid.NewGuid()}.json");
-        var settingsStore = new SettingsStore(_filePath);
-        _settingsStore = settingsStore;
-        await settingsStore.LoadAsync();
+        _document = new SettingsDocument(_filePath);
+        _emulatorSettings = new EmulatorSettings(_document);
+        await new SettingsLoader(_document, new ConnectionSecrets(null, null), false, null)
+            .LoadAsync();
 
         _mockSessionState = Substitute.For<ISessionState>();
         _mockSessionState.SelectedConnection.Returns(new Connection());
 
-        await settingsStore.SetEmulatorPublishIntervalAsync(_mockSessionState.SelectedConnection.Id, 120_000);
+        await _emulatorSettings.SetEmulatorPublishIntervalAsync(_mockSessionState.SelectedConnection.Id, 120_000);
         _mockNodeFactory = Substitute.For<ISparkplugNodeFactory>();
         _mockMqttClient = Substitute.For<IMqttManagedClient>();
         _mockMqttClient.EnqueueAsync(Arg.Any<MqttApplicationMessage>()).Returns(Task.CompletedTask);
@@ -84,7 +86,7 @@ public class EmulationServiceTests
         _pipeline = TestPipelineHelper.BuildBuiltInPipeline();
 
         _service = new EmulationService(
-            settingsStore,
+            _emulatorSettings,
             _mockNodeFactory,
             _mockSessionState,
             _mockMqttClient,
@@ -104,6 +106,7 @@ public class EmulationServiceTests
         _service.Dispose();
         _mockMqttClient.Dispose();
         _mockHealthCollector.Dispose();
+        _document.Dispose();
         if (File.Exists(_filePath)) File.Delete(_filePath);
     }
 
@@ -147,7 +150,7 @@ public class EmulationServiceTests
 
         _service.Nodes.Should().HaveCount(1);
         _service.Nodes[0].NodeId.Should().Be("Press-01");
-        _settingsStore.GetEmulatorNodes(_mockSessionState.SelectedConnection.Id).Should().HaveCount(1);
+        _emulatorSettings.GetEmulatorNodes(_mockSessionState.SelectedConnection.Id).Should().HaveCount(1);
     }
 
     [Test]
@@ -156,7 +159,7 @@ public class EmulationServiceTests
         await _service.SetPublishIntervalAsync(750);
 
         _service.PublishIntervalMs.Should().Be(750);
-        _settingsStore.GetEmulatorPublishIntervalMs(_mockSessionState.SelectedConnection.Id).Should().Be(750);
+        _emulatorSettings.GetEmulatorPublishIntervalMs(_mockSessionState.SelectedConnection.Id).Should().Be(750);
     }
 
     [Test]
@@ -587,7 +590,7 @@ public class EmulationServiceTests
         var fired = false;
         _service.StateChanged += () => fired = true;
 
-        await _settingsStore.AddEmulatorNodeAsync(_mockSessionState.SelectedConnection.Id, new EmulatorNodeConfig());
+        await _emulatorSettings.AddEmulatorNodeAsync(_mockSessionState.SelectedConnection.Id, new EmulatorNodeConfig());
 
         fired.Should().BeTrue();
     }
@@ -661,7 +664,7 @@ public class EmulationServiceTests
     public async Task ResetForConnectionAsync_SwitchesConnectionId()
     {
         var newConnId = Guid.NewGuid();
-        await _settingsStore.AddEmulatorNodeAsync(newConnId, new EmulatorNodeConfig { NodeId = "NewNode" });
+        await _emulatorSettings.AddEmulatorNodeAsync(newConnId, new EmulatorNodeConfig { NodeId = "NewNode" });
 
         await _service.ResetForConnectionAsync(newConnId);
 
@@ -673,7 +676,7 @@ public class EmulationServiceTests
     public async Task ResetForConnectionAsync_WhenNotRunning_SwitchesConnectionIdWithoutError()
     {
         var newConnId = Guid.NewGuid();
-        await _settingsStore.AddEmulatorNodeAsync(newConnId, new EmulatorNodeConfig { NodeId = "Node" });
+        await _emulatorSettings.AddEmulatorNodeAsync(newConnId, new EmulatorNodeConfig { NodeId = "Node" });
 
         await _service.ResetForConnectionAsync(newConnId);
 
@@ -688,7 +691,7 @@ public class EmulationServiceTests
         await _service.StartAsync();
 
         var newConnId = Guid.NewGuid();
-        await _settingsStore.AddEmulatorNodeAsync(newConnId, new EmulatorNodeConfig { NodeId = "X" });
+        await _emulatorSettings.AddEmulatorNodeAsync(newConnId, new EmulatorNodeConfig { NodeId = "X" });
         await _service.ResetForConnectionAsync(newConnId);
 
         _service.IsRunning.Should().BeFalse();
@@ -715,7 +718,7 @@ public class EmulationServiceTests
 
         await _service.ResetForConnectionAsync(newConnId);
 
-        _settingsStore.GetEmulatorNodes(oldConnId).Should().HaveCount(1);
+        _emulatorSettings.GetEmulatorNodes(oldConnId).Should().HaveCount(1);
     }
 
     [Test]

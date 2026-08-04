@@ -11,7 +11,7 @@ public class SettingsStore : ISettingsStore, IDisposable
 {
     private readonly ILogger<SettingsStore>? _logger;
     private readonly bool _isMobile;
-    private readonly ISecretStorage? _secretStorage;
+    private readonly ConnectionSecrets _secrets;
     private readonly ICertificateAssetStore? _certStore;
 
     private readonly SettingsDocument _document;
@@ -30,7 +30,7 @@ public class SettingsStore : ISettingsStore, IDisposable
     {
         _isMobile = isMobile;
         _logger = logger;
-        _secretStorage = secretStorage;
+        _secrets = new ConnectionSecrets(secretStorage, logger);
         _certStore = certStore;
 
         _document = new SettingsDocument(configPath);
@@ -50,8 +50,7 @@ public class SettingsStore : ISettingsStore, IDisposable
         {
             configLoadedSuccessfully = await LoadOrCreateConfigAsync().ConfigureAwait(false);
 
-            if (_secretStorage != null)
-                await LoadSecretsAsync().ConfigureAwait(false);
+            await LoadSecretsAsync().ConfigureAwait(false);
         }).ConfigureAwait(false);
 
         return configLoadedSuccessfully;
@@ -115,20 +114,11 @@ public class SettingsStore : ISettingsStore, IDisposable
                 (oldSecretKey, previousPassword) = await UpsertConnectionAsync(connection);
                 configMutated = true;
 
-                if (_secretStorage != null)
-                {
-                    if (oldSecretKey is not null && oldSecretKey != SecretKey(connection))
-                    {
-                        await _secretStorage.RemoveAsync(oldSecretKey);
-                        secretsMutated = true;
-                    }
+                if (oldSecretKey is not null && oldSecretKey != ConnectionSecrets.KeyFor(connection))
+                    await _secrets.RemoveAsync(oldSecretKey);
 
-                    if (string.IsNullOrEmpty(connection.Password))
-                        await _secretStorage.RemoveAsync(SecretKey(connection));
-                    else
-                        await _secretStorage.SetAsync(SecretKey(connection), connection.Password);
-                    secretsMutated = true;
-                }
+                await _secrets.SetAsync(connection);
+                secretsMutated = true;
 
                 await SaveCoreAsync();
             }
@@ -139,10 +129,10 @@ public class SettingsStore : ISettingsStore, IDisposable
                     RestoreConnectionSnapshot(snapshot);
                 }
 
-                if (secretsMutated && _secretStorage != null)
+                if (secretsMutated)
                 {
-                    await RestoreSecretsAfterFailureAsync(
-                        _secretStorage, connection, oldSecretKey, previousPassword);
+                    await _secrets.RestoreAfterUpsertFailureAsync(
+                        connection, oldSecretKey, previousPassword);
                 }
                 throw;
             }
@@ -163,10 +153,8 @@ public class SettingsStore : ISettingsStore, IDisposable
         }
 
         var existing = config.Connections[existingIdx];
-        var oldSecretKey = SecretKey(existing);
-        var previousPassword = _secretStorage != null
-            ? await _secretStorage.GetAsync(oldSecretKey)
-            : null;
+        var oldSecretKey = ConnectionSecrets.KeyFor(existing);
+        var previousPassword = await _secrets.GetAsync(oldSecretKey);
         config.Connections[existingIdx] = connection.Clone();
         return (oldSecretKey, previousPassword);
     }
@@ -193,34 +181,6 @@ public class SettingsStore : ISettingsStore, IDisposable
         config.EmulatorsByConnection = snapshot.Emulators;
     }
 
-    // Each step is guarded separately: failing to remove the new secret must not stop the
-    // attempt to put the old one back.
-    private async Task RestoreSecretsAfterFailureAsync(
-        ISecretStorage secretStorage, Connection connection, string? oldSecretKey, string? previousPassword)
-    {
-        try
-        {
-            await secretStorage.RemoveAsync(SecretKey(connection));
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Failed to remove new secret key {Key} during rollback",
-                SecretKey(connection));
-        }
-        try
-        {
-            if (previousPassword is not null && oldSecretKey is not null)
-                await secretStorage.SetAsync(oldSecretKey, previousPassword);
-            else if (oldSecretKey is not null)
-                await secretStorage.RemoveAsync(oldSecretKey);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Failed to restore old secret key {Key} during rollback",
-                oldSecretKey);
-        }
-    }
-
     public async Task RemoveConnectionAsync(Connection connection)
     {
         Connection? removed = null;
@@ -240,11 +200,8 @@ public class SettingsStore : ISettingsStore, IDisposable
                     config.Connections.RemoveAt(existing);
                     config.ChartsByConnection.Remove(removed.Id);
                     config.EmulatorsByConnection.Remove(removed.Id);
-                    if (_secretStorage != null)
-                    {
-                        removedSecretValue = await _secretStorage.GetAsync(SecretKey(removed));
-                        await _secretStorage.RemoveAsync(SecretKey(removed));
-                    }
+                    removedSecretValue = await _secrets.GetAsync(removed);
+                    await _secrets.RemoveAsync(ConnectionSecrets.KeyFor(removed));
                 }
 
                 await SaveCoreAsync();
@@ -253,20 +210,8 @@ public class SettingsStore : ISettingsStore, IDisposable
             {
                 RestoreConnectionSnapshot(snapshot);
 
-                if (_secretStorage != null && removed is not null)
-                {
-                    try
-                    {
-                        if (removedSecretValue is not null)
-                            await _secretStorage.SetAsync(SecretKey(removed), removedSecretValue);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger?.LogWarning(ex,
-                            "Failed to restore secret for removed connection {Name} during rollback",
-                            removed.Name);
-                    }
-                }
+                if (removed is not null)
+                    await _secrets.RestoreAfterRemoveFailureAsync(removed, removedSecretValue);
                 throw;
             }
         });
@@ -280,21 +225,13 @@ public class SettingsStore : ISettingsStore, IDisposable
 
     private async Task LoadSecretsAsync()
     {
-        if (_secretStorage == null) return;
+        if (!_secrets.IsEnabled) return;
         foreach (var connection in _document.Config.Connections)
         {
-            var stored = await _secretStorage.GetAsync(SecretKey(connection)).ConfigureAwait(false);
+            var stored = await _secrets.GetAsync(connection).ConfigureAwait(false);
             if (stored != null)
                 connection.Password = stored;
         }
-    }
-
-    private static string SecretKey(Connection c)
-    {
-        var nameBytes = System.Text.Encoding.UTF8.GetBytes(c.Name);
-        var hash = System.Security.Cryptography.SHA256.HashData(nameBytes);
-        var hashHex = Convert.ToHexString(hash)[..16];
-        return $"mqtt_{hashHex}";
     }
 
     public event Action<Guid>? ChartsChanged

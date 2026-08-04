@@ -1,5 +1,4 @@
 @using Microsoft.Extensions.Logging
-@using Microsoft.AspNetCore.Components.Forms
 @using MQTTnet
 @using MQTTnet.Protocol
 @using MudBlazor.Utilities
@@ -10,7 +9,6 @@
 @inject IMqttManagedClient ManagedMqttClient
 @inject IConnectionSettings ConnectionSettings
 @inject IUiSettings UiSettings
-@inject ISubscriptionManager SubscriptionManager
 @inject ILogger<ConnectionDialog> Logger
 @inject ISessionState SessionState
 @inject IMqttOptionsBuilder MqttOptionsBuilder
@@ -26,7 +24,7 @@
         <div class="connection-dialog-content">
             <ConnectionDialogHeader Connections="@ConnectionSettings.Connections"
                                     Selected="@_savedConnectionForSelector"
-                                    SelectedChanged="ConnectionChanged"
+                                    SelectedChanged="ConnectionChanged!"
                                     CanSave="@_canSave"
                                     CanDelete="@_canDelete"
                                     OnAdd="Add"
@@ -138,7 +136,7 @@
         UxMetrics?.RecordConnectFailure();
         Logger.LogError(args.Exception,
             "Connecting to broker {Host}:{Port} failed. ResultCode={ResultCode}",
-            _selectedConnection?.Host, _selectedConnection?.Port,
+            _selectedConnection.Host, _selectedConnection?.Port,
             args.ConnectResult?.ResultCode);
         await InvokeAsync(StateHasChanged);
     }
@@ -382,7 +380,7 @@
             Snackbar.Add("Enable Auto-resubscribe on connect to manage these topics.", Severity.Info);
             return;
         }
-        var topic = request.Topic?.Trim() ?? string.Empty;
+        var topic = request.Topic.Trim();
         if (string.IsNullOrWhiteSpace(topic) || topic.Contains('\0') || topic.Length > 65_535)
         {
             Snackbar.Add("Invalid topic", Severity.Warning);

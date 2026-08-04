@@ -5,26 +5,14 @@ using Microsoft.AspNetCore.DataProtection.XmlEncryption;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Options;
-using MqttProbe.Components.Layout;
 using MqttProbe.Models.Plugins;
-using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Emulation;
-using MqttProbe.Services.Metrics;
-using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Plugins;
-using MqttProbe.Services.Plugins.Loading;
 using MqttProbe.Services.Plugins.Packaging;
-using MqttProbe.Services.Plugins.Pipeline;
-using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
-using MqttProbe.Services.Sparkplug;
 using MqttProbe.Web;
 using MqttProbe.Web.Services;
-using MudBlazor;
-using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -87,7 +75,7 @@ else
         var kek = Convert.FromBase64String(kekBase64);
         var decryptor = new AesKeyDecryptor(kek);
         dpBuilder.Services.AddSingleton<IXmlEncryptor>(new AesKeyEncryptor(kek));
-        dpBuilder.Services.AddSingleton<AesKeyDecryptor>(decryptor);
+        dpBuilder.Services.AddSingleton(decryptor);
     }
 }
 builder.Services.AddSingleton<ISecretStorage>(sp =>

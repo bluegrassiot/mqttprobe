@@ -1,30 +1,19 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using MqttProbe.Components.Layout;
 using MqttProbe.Desktop.Interop;
 using MqttProbe.Desktop.Services;
 using MqttProbe.Desktop.Services.Security;
 using MqttProbe.Models.Plugins;
 using MqttProbe.Services;
-using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Emulation;
-using MqttProbe.Services.Metrics;
-using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Plugins;
-using MqttProbe.Services.Plugins.Loading;
 using MqttProbe.Services.Plugins.Packaging;
-using MqttProbe.Services.Plugins.Pipeline;
-using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
-using MqttProbe.Services.Sparkplug;
-using MudBlazor;
-using MudBlazor.Services;
 using Photino.Blazor;
 using Velopack;
 
@@ -50,7 +39,7 @@ internal static class Program
         builder.Services.AddMqttProbeCore(HostSessionModel.SingleSession);
         ConfigureServices(builder);
 
-        builder.RootComponents.Add<MqttProbe.Desktop.Main>("app");
+        builder.RootComponents.Add<Main>("app");
 
         var app = builder.Build();
 
@@ -120,7 +109,7 @@ internal static class Program
 
     private static void AddSecretStorage(PhotinoBlazorAppBuilder builder, string secretsDir)
     {
-        builder.Services.AddSingleton(sp =>
+        builder.Services.AddSingleton(_ =>
         {
             ISecretKeyProtector os;
             if (OperatingSystem.IsWindows())
@@ -210,6 +199,7 @@ internal static class Program
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int MessageBoxW(IntPtr hWnd, string lpText, string lpCaption, uint uType);
 
+    [SuppressMessage("ReSharper", "InconsistentNaming")]
     private static void ShowWindowsError(string message)
     {
         const uint MB_OK = 0x00000000;

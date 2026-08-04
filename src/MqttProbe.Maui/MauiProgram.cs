@@ -1,27 +1,17 @@
+// System.Globalization is used only inside the #if IOS block below; it reads as unused
+// on every other target framework.
 using System.Globalization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using MqttProbe.Components.Layout;
 using MqttProbe.Maui.Services;
 using MqttProbe.Models.Plugins;
 using MqttProbe.Services;
-using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Emulation;
-using MqttProbe.Services.Metrics;
-using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Plugins;
-using MqttProbe.Services.Plugins.Loading;
 using MqttProbe.Services.Plugins.Packaging;
-using MqttProbe.Services.Plugins.Pipeline;
-using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
-using MqttProbe.Services.Sparkplug;
-using MudBlazor;
-using MudBlazor.Services;
 
 namespace MqttProbe;
 
@@ -66,7 +56,7 @@ public static class MauiProgram
     {
         builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
 #if WINDOWS
-        builder.Services.AddSingleton<IUpdateService, MqttProbe.WinUI.VelopackUpdateService>();
+        builder.Services.AddSingleton<IUpdateService, WinUI.VelopackUpdateService>();
 #elif MACCATALYST
         builder.Services.AddSingleton<IUpdateService, MacVelopackUpdateService>();
 #else
@@ -119,12 +109,6 @@ public static class MauiProgram
     private static void AddConfiguration(MauiAppBuilder builder)
     {
         var configDir = Path.Combine(FileSystem.Current.AppDataDirectory, "config");
-#if WINDOWS
-        var legacyConfigDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "User Name", "com.bluegrassiot.mqttprobe", "Data", "config");
-        ConfigMigrator.MigrateIfNeeded(legacyConfigDir, configDir);
-#endif
         var configPath = Path.Combine(configDir, "appsettings.json");
 
         Directory.CreateDirectory(configDir);

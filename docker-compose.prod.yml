@@ -10,8 +10,9 @@ services:
       dockerfile: Dockerfile
     ports:
       # Plain-HTTP access for the Docker host itself. Browsers on other
-      # machines must go through the caddy proxy below — the Secure auth
-      # cookie is only accepted over HTTPS (localhost is exempt).
+      # machines should go through the caddy proxy below: this port serves
+      # them fine once AllowedHosts covers the name, but carries the login
+      # and session cookie unencrypted.
       - "8080:8080"
     volumes:
       # Persists credentials, Data Protection keys, configurations, and encrypted MQTT broker passwords.

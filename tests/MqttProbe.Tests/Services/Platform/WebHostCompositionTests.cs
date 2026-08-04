@@ -39,7 +39,7 @@ public class WebHostCompositionTests
     {
         // Build() throws AggregateException if any descriptor cannot be constructed, which is
         // exactly how the dropped registrations surfaced at runtime.
-        var act = () => _factory.Services.GetRequiredService<ISettingsStore>();
+        var act = () => _factory.Services.GetRequiredService<ISettingsLoader>();
         act.Should().NotThrow();
     }
 

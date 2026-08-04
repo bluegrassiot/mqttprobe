@@ -7,6 +7,7 @@ using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Plugins;
 using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Configuration;
+using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
@@ -15,6 +16,7 @@ using MqttProbe.Services.Plugins.Loading;
 using MqttProbe.Services.Plugins.Packaging;
 using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Plugins.Registry;
+using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 using MqttProbe.Web.Services;
 using Org.Eclipse.Tahu.Protobuf;
@@ -29,7 +31,6 @@ public class PluginPipelineDiCompositionTests
 {
     private ServiceProvider _serviceProvider = null!;
     private IMqttManagedClient _mockClient = null!;
-    private ISettingsStore _mockSettings = null!;
     private Func<MqttApplicationMessageReceivedEventArgs, Task>? _capturedHandler;
 
     [SetUp]
@@ -46,10 +47,11 @@ public class PluginPipelineDiCompositionTests
             .Do(x => _capturedHandler =
                 x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        _mockSettings = Substitute.For<ISettingsStore>();
         var config = new AppConfiguration();
-        _mockSettings.Performance.Returns(config.Performance);
-        _mockSettings.Ui.Returns(config.Ui);
+        var mockPerformance = Substitute.For<IPerformanceSettings>();
+        mockPerformance.Performance.Returns(config.Performance);
+        var mockUi = Substitute.For<IUiSettings>();
+        mockUi.Ui.Returns(config.Ui);
 
         services.AddLogging();
         services.AddSingleton(Options.Create(new PluginConfig()));
@@ -70,7 +72,10 @@ public class PluginPipelineDiCompositionTests
         // this fixture drives the pipeline through a captured message handler rather than a
         // live broker, and asserts against an in-memory config.
         services.AddSingleton(_mockClient);
-        services.AddSingleton(_mockSettings);
+        services.AddSingleton(mockPerformance);
+        services.AddSingleton(mockUi);
+        services.AddSingleton(Substitute.For<IConnectionSettings>());
+        services.AddSingleton(Substitute.For<IEmulatorSettings>());
         services.AddSingleton(Substitute.For<IUxMetricsService>());
 
         _serviceProvider = services.BuildServiceProvider(validateScopes: true);
@@ -131,17 +136,38 @@ public class PluginPipelineDiCompositionTests
     }
 
     [Test]
-    public void ResolveFromDi_AllSixSettingsFacets_ResolveToTheSubstituteRegisteredLast()
+    public void CoreAndSettingsTogether_ResolveEveryConsumerOfASettingsFacet()
     {
-        // AddMqttProbeCore registers each facet as a lazy forwarder to ISettingsStore. Proves
-        // a substitute registered after AddMqttProbeCore still wins for every facet, not just
-        // ISettingsStore itself — the composite trick this whole task depends on.
-        _serviceProvider.GetRequiredService<IConnectionSettings>().Should().BeSameAs(_mockSettings);
-        _serviceProvider.GetRequiredService<IChartSettings>().Should().BeSameAs(_mockSettings);
-        _serviceProvider.GetRequiredService<IEmulatorSettings>().Should().BeSameAs(_mockSettings);
-        _serviceProvider.GetRequiredService<IUiSettings>().Should().BeSameAs(_mockSettings);
-        _serviceProvider.GetRequiredService<IPerformanceSettings>().Should().BeSameAs(_mockSettings);
-        _serviceProvider.GetRequiredService<IAuthSettings>().Should().BeSameAs(_mockSettings);
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(Substitute.For<ICertificateAssetStore>());
+        services.AddSingleton(Substitute.For<ICertificateEnvelopeKeyStore>());
+        // PayloadPipeline is sealed, so it can't be substituted: EmulationService and
+        // MessageStoreManager both require a real one, which only AddMqttProbePlugins provides.
+        services.AddSingleton(Options.Create(new PluginConfig()));
+        services.AddMqttProbeCore(HostSessionModel.SingleSession);
+        services.AddMqttProbePlugins();
+        services.AddMqttProbeSettings(Path.Combine(Path.GetTempPath(), $"c_{Guid.NewGuid()}.json"));
+        using var provider = services.BuildServiceProvider();
+
+        // These are the services that consume a settings facet. If AddMqttProbeCore is ever
+        // called without AddMqttProbeSettings, this is where it fails — at container build,
+        // not at first facet resolution deep in a running host.
+        provider.GetRequiredService<IEmulationService>().Should().NotBeNull();
+        provider.GetRequiredService<IMessageStoreManager>().Should().NotBeNull();
+    }
+
+    [Test]
+    public void AddMqttProbeSettings_SharesOneInstanceAcrossEachFacetsInterfaces()
+    {
+        var services = new ServiceCollection();
+        services.AddMqttProbeSettings(Path.Combine(Path.GetTempPath(), $"c_{Guid.NewGuid()}.json"));
+        using var provider = services.BuildServiceProvider();
+
+        var ui = provider.GetRequiredService<IUiSettings>();
+        provider.GetRequiredService<IPerformanceSettings>().Should().BeSameAs(ui);
+        provider.GetRequiredService<IAuthSettings>().Should().BeSameAs(ui,
+            "PreferenceSettings owns two change events; a second instance drops subscribers");
     }
 
     [Test]

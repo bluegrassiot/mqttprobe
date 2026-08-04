@@ -84,12 +84,7 @@ builder.Services.AddSingleton<ISecretStorage>(sp =>
         Path.Combine(configDir, "secrets.dat")));
 
 builder.Services.AddMqttProbeCore(HostSessionModel.PerCircuit);
-builder.Services.AddSingleton<ISettingsStore>(sp =>
-    new SettingsStore(Path.Combine(configDir, "appsettings.json"),
-        isMobile: false,
-        sp.GetRequiredService<ILogger<SettingsStore>>(),
-        sp.GetService<ISecretStorage>(),
-        sp.GetService<ICertificateAssetStore>()));
+builder.Services.AddMqttProbeSettings(Path.Combine(configDir, "appsettings.json"));
 builder.Services.AddSingleton<ICertificateEnvelopeKeyStore>(sp =>
     new WebCertificateEnvelopeKeyStore(sp.GetRequiredService<ISecretStorage>()));
 builder.Services.AddSingleton<IFileProtector, DefaultFileProtector>();
@@ -125,14 +120,14 @@ builder.Services.AddMqttProbeSparkplugTopology(HostSessionModel.PerCircuit);
 
 var app = builder.Build();
 
-var settingsStore = app.Services.GetRequiredService<ISettingsStore>();
-var configLoaded = await settingsStore.LoadAsync();
+var configLoaded = await app.Services.GetRequiredService<ISettingsLoader>().LoadAsync();
 
 var certCleanup = new CertificateStoreCleanup(
     app.Services.GetRequiredService<ICertificateAssetStore>(),
     app.Services.GetRequiredService<ICertificateEnvelopeKeyStore>(),
     app.Services.GetRequiredService<ILogger<CertificateStoreCleanup>>());
-await certCleanup.RunAsync(settingsStore.Connections, configLoaded);
+await certCleanup.RunAsync(
+    app.Services.GetRequiredService<IConnectionSettings>().Connections, configLoaded);
 
 if (!app.Environment.IsDevelopment())
 {

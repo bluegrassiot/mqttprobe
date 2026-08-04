@@ -115,11 +115,7 @@ public static class MauiProgram
         builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: false);
 
         var isMobile = DeviceInfo.Idiom == DeviceIdiom.Phone || DeviceInfo.Idiom == DeviceIdiom.Tablet;
-        builder.Services.AddSingleton<ISettingsStore>(sp =>
-            new SettingsStore(configPath, isMobile,
-                sp.GetRequiredService<ILogger<SettingsStore>>(),
-                sp.GetService<ISecretStorage>(),
-                sp.GetService<ICertificateAssetStore>()));
+        builder.Services.AddMqttProbeSettings(configPath, isMobile);
     }
 
     private static void AddPluginServices(MauiAppBuilder builder)

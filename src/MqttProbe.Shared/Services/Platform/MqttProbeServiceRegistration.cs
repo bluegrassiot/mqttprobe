@@ -81,15 +81,42 @@ public static class MqttProbeServiceRegistration
         services.AddSingleton<IAppHealthMetricsCollector, AppHealthMetricsCollector>();
         services.AddSingleton<ISparkplugNodeFactory, SparkplugNodeFactory>();
 
-        // Facets of the same ISettingsStore singleton, so a consumer can depend on the slice
-        // it actually uses. Resolved lazily rather than captured, so a test that registers a
-        // substitute ISettingsStore after this call still wins for every facet.
-        services.AddSingleton<IConnectionSettings>(sp => sp.GetRequiredService<ISettingsStore>());
-        services.AddSingleton<IChartSettings>(sp => sp.GetRequiredService<ISettingsStore>());
-        services.AddSingleton<IEmulatorSettings>(sp => sp.GetRequiredService<ISettingsStore>());
-        services.AddSingleton<IUiSettings>(sp => sp.GetRequiredService<ISettingsStore>());
-        services.AddSingleton<IPerformanceSettings>(sp => sp.GetRequiredService<ISettingsStore>());
-        services.AddSingleton<IAuthSettings>(sp => sp.GetRequiredService<ISettingsStore>());
+        return services;
+    }
+
+    // One instance per facet, shared through every interface it implements: the facets own
+    // change events, so a second instance would silently drop subscribers.
+    public static IServiceCollection AddMqttProbeSettings(
+        this IServiceCollection services, string configPath, bool isMobile = false)
+    {
+        services.AddSingleton(_ => new SettingsDocument(configPath));
+        services.AddSingleton<ISettingsDocument>(sp => sp.GetRequiredService<SettingsDocument>());
+
+        // Optional in some hosts, matching the previous SettingsStore constructor.
+        services.AddSingleton(sp => new ConnectionSecrets(
+            sp.GetService<ISecretStorage>(), sp.GetService<ILogger<ConnectionSecrets>>()));
+
+        services.AddSingleton<ISettingsLoader>(sp => new SettingsLoader(
+            sp.GetRequiredService<SettingsDocument>(),
+            sp.GetRequiredService<ConnectionSecrets>(),
+            isMobile,
+            sp.GetService<ILogger<SettingsLoader>>()));
+
+        services.AddSingleton<IConnectionSettings>(sp => new ConnectionSettings(
+            sp.GetRequiredService<ISettingsDocument>(),
+            sp.GetRequiredService<ConnectionSecrets>(),
+            sp.GetService<ICertificateAssetStore>()));
+
+        services.AddSingleton<IChartSettings>(sp =>
+            new ChartSettings(sp.GetRequiredService<ISettingsDocument>()));
+        services.AddSingleton<IEmulatorSettings>(sp =>
+            new EmulatorSettings(sp.GetRequiredService<ISettingsDocument>()));
+
+        services.AddSingleton(sp => new PreferenceSettings(sp.GetRequiredService<ISettingsDocument>()));
+        services.AddSingleton<IUiSettings>(sp => sp.GetRequiredService<PreferenceSettings>());
+        services.AddSingleton<IPerformanceSettings>(sp => sp.GetRequiredService<PreferenceSettings>());
+        services.AddSingleton<IAuthSettings>(sp => sp.GetRequiredService<PreferenceSettings>());
+
         return services;
     }
 

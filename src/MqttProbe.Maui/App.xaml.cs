@@ -6,18 +6,20 @@ namespace MqttProbe;
 
 public partial class App
 {
-    private readonly ISettingsStore _settingsStore;
+    private readonly ISettingsLoader _settingsLoader;
+    private readonly IConnectionSettings _connectionSettings;
     private readonly ILogger<App> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly ICertificateAssetStore _certStore;
     private readonly ICertificateEnvelopeKeyStore _envelopeKeyStore;
 
-    public App(ISettingsStore settingsStore,
+    public App(ISettingsLoader settingsLoader, IConnectionSettings connectionSettings,
         ILogger<App> logger, IServiceProvider serviceProvider,
         ICertificateAssetStore certStore, ICertificateEnvelopeKeyStore envelopeKeyStore)
     {
         InitializeComponent();
-        _settingsStore = settingsStore;
+        _settingsLoader = settingsLoader;
+        _connectionSettings = connectionSettings;
         _logger = logger;
         _serviceProvider = serviceProvider;
         _certStore = certStore;
@@ -70,12 +72,12 @@ public partial class App
         try
         {
             await MainThread.InvokeOnMainThreadAsync(() => window.Page = CreateLoadingPage());
-            var configLoaded = await _settingsStore.LoadAsync();
+            var configLoaded = await _settingsLoader.LoadAsync();
 
             var certCleanup = new CertificateStoreCleanup(
                 _certStore, _envelopeKeyStore,
                 _serviceProvider.GetService<ILogger<CertificateStoreCleanup>>());
-            await certCleanup.RunAsync(_settingsStore.Connections, configLoaded);
+            await certCleanup.RunAsync(_connectionSettings.Connections, configLoaded);
 
             var root = await ResolveInitialPageAsync();
             await MainThread.InvokeOnMainThreadAsync(() => window.Page = root);

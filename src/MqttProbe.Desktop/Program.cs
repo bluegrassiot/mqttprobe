@@ -81,11 +81,7 @@ internal static class Program
             .Build();
         builder.Services.AddSingleton<IConfiguration>(configuration);
 
-        builder.Services.AddSingleton<ISettingsStore>(sp =>
-            new SettingsStore(configPath, isMobile: false,
-                sp.GetRequiredService<ILogger<SettingsStore>>(),
-                sp.GetService<ISecretStorage>(),
-                sp.GetService<ICertificateAssetStore>()));
+        builder.Services.AddMqttProbeSettings(configPath);
 
         builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
         {
@@ -154,14 +150,15 @@ internal static class Program
             var keyProtector = app.Services.GetRequiredService<DesktopSecretKeyProtector>();
             keyProtector.InitializeAsync().GetAwaiter().GetResult();
 
-            var resolvedSettingsStore = app.Services.GetRequiredService<ISettingsStore>();
-            var configLoaded = resolvedSettingsStore.LoadAsync().GetAwaiter().GetResult();
+            var configLoaded = app.Services.GetRequiredService<ISettingsLoader>()
+                .LoadAsync().GetAwaiter().GetResult();
 
             var certCleanup = new CertificateStoreCleanup(
                 app.Services.GetRequiredService<ICertificateAssetStore>(),
                 app.Services.GetRequiredService<ICertificateEnvelopeKeyStore>(),
                 app.Services.GetRequiredService<ILogger<CertificateStoreCleanup>>());
-            certCleanup.RunAsync(resolvedSettingsStore.Connections, configLoaded)
+            certCleanup.RunAsync(
+                    app.Services.GetRequiredService<IConnectionSettings>().Connections, configLoaded)
                 .GetAwaiter().GetResult();
         }
         catch (SecretStorageException ex)

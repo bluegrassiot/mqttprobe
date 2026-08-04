@@ -7,7 +7,7 @@ using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Security;
 using MqttProbe.Tests.Services.Security.TestHelpers;
 
-namespace MqttProbe.Tests.Services.Security;
+namespace MqttProbe.Shared.Tests.Services.Security;
 
 [TestFixture]
 public class CertificateAssetStoreTests
@@ -76,7 +76,7 @@ public class CertificateAssetStoreTests
 
         var envelopeJson = await _envelopeStore.GetAsync($"cert-env-{assetId}");
         envelopeJson.Should().NotBeNull();
-        var envelope = JsonSerializer.Deserialize<JsonElement>(envelopeJson!);
+        var envelope = JsonSerializer.Deserialize<JsonElement>(envelopeJson);
         var storedPassword = envelope.GetProperty("p").GetString();
         storedPassword.Should().Be(password);
     }
@@ -94,7 +94,7 @@ public class CertificateAssetStoreTests
         var bundle = await _store.LoadAsync(ownerId, assetId);
 
         bundle.Should().NotBeNull();
-        bundle!.Certificate.HasPrivateKey.Should().BeTrue();
+        bundle.Certificate.HasPrivateKey.Should().BeTrue();
         bundle.Certificate.Dispose();
     }
 
@@ -123,7 +123,7 @@ public class CertificateAssetStoreTests
 
         var envelopeJson = await _envelopeStore.GetAsync($"cert-env-{assetId}");
         envelopeJson.Should().NotBeNull();
-        var envelope = JsonSerializer.Deserialize<JsonElement>(envelopeJson!);
+        var envelope = JsonSerializer.Deserialize<JsonElement>(envelopeJson);
         var encKey = Convert.FromBase64String(envelope.GetProperty("k").GetString()!);
 
         var aad = Encoding.UTF8.GetBytes($"{assetId}|{headerAssetId}|{headerOwner}|{headerVersion}");
@@ -285,7 +285,43 @@ public class CertificateAssetStoreTests
         var bundle = await _store.LoadAsync(ownerId, assetId);
 
         bundle.Should().NotBeNull();
-        bundle!.Certificate.HasPrivateKey.Should().BeTrue();
+        bundle.Certificate.HasPrivateKey.Should().BeTrue();
+        bundle.Certificate.Dispose();
+    }
+
+    [Test]
+    public async Task LoadAsync_StoredNonCurrentVersion_UsesStoredVersionInAad()
+    {
+        var (pfxBytes, password) = TestCertFactory.CreatePfx();
+        var ownerId = Guid.NewGuid();
+        var assetId = await _store.ImportAsync(ownerId,
+            new CertificateImportRequest(CertificateInputMode.Pfx, pfxBytes, null, password));
+
+        var path = Path.Combine(_store.CertificatesDirectory, $"cert-{assetId}.bin");
+        var blob = await File.ReadAllBytesAsync(path);
+        CertificateAssetBlobCodec.TryParseHeader(blob, out var header).Should().BeTrue();
+        CertificateAssetBlobCodec.TrySplit(blob, out var parts).Should().BeTrue();
+
+        var envelopeJson = await _envelopeStore.GetAsync(CertificateAssetBlobCodec.EnvelopeKey(assetId));
+        var envelope = JsonSerializer.Deserialize<JsonElement>(envelopeJson!);
+        var encryptionKey = Convert.FromBase64String(envelope.GetProperty("k").GetString()!);
+        var originalAad = CertificateAssetBlobCodec.BuildAad(
+            assetId, header.AssetId, header.Owner, header.Version);
+        CertificateAssetBlobCodec.TryDecrypt(encryptionKey, parts, originalAad, out var decrypted)
+            .Should().BeTrue();
+
+        const byte storedVersion = 99;
+        var storedHeader = CertificateAssetBlobCodec.BuildHeader(assetId, ownerId);
+        storedHeader[CertificateAssetBlobCodec.VersionOffset] = storedVersion;
+        var storedAad = CertificateAssetBlobCodec.BuildAad(
+            assetId, header.AssetId, header.Owner, storedVersion);
+        var storedParts = CertificateAssetBlobCodec.Encrypt(encryptionKey, decrypted, storedAad);
+        await File.WriteAllBytesAsync(path, CertificateAssetBlobCodec.Assemble(storedHeader, storedParts));
+
+        var bundle = await _store.LoadAsync(ownerId, assetId);
+
+        bundle.Should().NotBeNull();
+        bundle.Certificate.HasPrivateKey.Should().BeTrue();
         bundle.Certificate.Dispose();
     }
 
@@ -487,7 +523,7 @@ public class CertificateAssetStoreTests
         var bundle = await freshStore.LoadAsync(ownerId, assetId);
 
         bundle.Should().NotBeNull();
-        bundle!.Certificate.HasPrivateKey.Should().BeTrue();
+        bundle.Certificate.HasPrivateKey.Should().BeTrue();
         bundle.Certificate.Dispose();
     }
 

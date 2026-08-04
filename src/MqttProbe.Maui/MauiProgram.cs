@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging;
 using MqttProbe.Maui.Services;
 using MqttProbe.Models.Plugins;
 using MqttProbe.Services;
-using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Plugins;
 using MqttProbe.Services.Plugins.Packaging;

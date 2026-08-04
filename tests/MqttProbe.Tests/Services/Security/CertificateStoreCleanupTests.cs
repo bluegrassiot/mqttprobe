@@ -256,15 +256,10 @@ public class CertificateStoreCleanupTests
         _certStore.ListAssetsCallCount.Should().Be(0);
     }
 
-    // A blob laid out the way SweepUnverifiedBlobsAsync reads it: 36 bytes of anything,
-    // then the owner id as 36 ASCII bytes, then at least one more byte to clear the
-    // 73-byte minimum length check.
+    // Ordinary test blobs use the production header layout; the short-blob test above
+    // deliberately remains a manually constructed malformed blob.
     private static byte[] MakeBlob(Guid ownerId)
-    {
-        var blob = new byte[128];
-        System.Text.Encoding.ASCII.GetBytes(ownerId.ToString("D")).CopyTo(blob, 36);
-        return blob;
-    }
+        => CertificateAssetBlobCodec.BuildHeader(Guid.NewGuid().ToString("D"), ownerId);
 
     private sealed class FakeAssetStore(string certificatesDirectory) : ICertificateAssetStore
     {

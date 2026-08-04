@@ -174,9 +174,8 @@ public sealed class CertificateStoreCleanup(
             try
             {
                 var blob = await File.ReadAllBytesAsync(binFile).ConfigureAwait(false);
-                if (blob.Length < 73) { File.Delete(binFile); continue; }
-                var headerOwner = System.Text.Encoding.ASCII.GetString(blob, 36, 36);
-                if (Guid.TryParse(headerOwner, out var parsedOwner) && knownOwnerIds.Contains(parsedOwner))
+                if (!CertificateAssetBlobCodec.HasMinimumHeaderLength(blob)) { File.Delete(binFile); continue; }
+                if (CertificateAssetBlobCodec.TryReadOwner(blob, out var parsedOwner) && knownOwnerIds.Contains(parsedOwner))
                 {
                     logger?.LogCritical(
                         "Certificate blob {Path} has known owner {OwnerId} but failed AEAD verification. " + // DevSkim: ignore DS187371

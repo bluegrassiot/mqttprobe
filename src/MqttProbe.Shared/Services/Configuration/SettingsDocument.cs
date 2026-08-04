@@ -41,7 +41,7 @@ internal sealed class SettingsDocument(string path) : ISettingsDocument, IDispos
     }
 
     // ConfigureAwait(false) on the I/O and lock primitives here, and throughout the
-    // SettingsStore.LoadAsync chain: Desktop startup blocks on LoadAsync with
+    // SettingsLoader.LoadAsync chain: Desktop startup blocks on LoadAsync with
     // GetAwaiter().GetResult(), so a captured context deadlocks against the blocking thread.
     // The facet mutators below are never blocked on and are deliberately left capturing.
     public async Task<AppConfiguration?> ReadAsync() =>

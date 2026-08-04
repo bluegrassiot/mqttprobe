@@ -4,8 +4,8 @@ using MqttProbe.Models.Mqtt;
 namespace MqttProbe.Services.Security;
 
 // Filesystem hygiene for the certificate directory, run once at startup after the config
-// is loaded. Lives outside SettingsStore because it is not a settings concern; it needs the
-// connection list only to decide which assets are still referenced.
+// is loaded. Kept separate from settings loading because it is not a settings concern; it
+// needs the connection list only to decide which assets are still referenced.
 public sealed class CertificateStoreCleanup(
     ICertificateAssetStore certStore,
     ICertificateEnvelopeKeyStore envelopeKeyStore,

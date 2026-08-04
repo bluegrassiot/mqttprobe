@@ -259,7 +259,7 @@ dotnet_diagnostic.S2139.severity = suggestion
 # MA0004: a missing ConfigureAwait only actually deadlocks on a chain that is
 # blocked on synchronously via GetAwaiter().GetResult(). Three exist, and all
 # three carry ConfigureAwait(false) throughout: EmulationService.RunPublishLoop
-# (blocked by Dispose), SettingsStore.LoadAsync and CertificateStoreCleanup.RunAsync
+# (blocked by Dispose), SettingsLoader.LoadAsync and CertificateStoreCleanup.RunAsync
 # (both blocked by Desktop startup in Program.InitializeStorage). Add a fourth
 # blocking call site and you must configure its chain too.
 #

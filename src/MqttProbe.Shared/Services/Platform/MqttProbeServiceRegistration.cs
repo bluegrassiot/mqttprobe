@@ -92,7 +92,8 @@ public static class MqttProbeServiceRegistration
         services.AddSingleton(_ => new SettingsDocument(configPath));
         services.AddSingleton<ISettingsDocument>(sp => sp.GetRequiredService<SettingsDocument>());
 
-        // Optional in some hosts, matching the previous SettingsStore constructor.
+        // GetService, not GetRequiredService: not every host registers ISecretStorage or
+        // ICertificateAssetStore, and ConnectionSecrets treats either as optional.
         services.AddSingleton(sp => new ConnectionSecrets(
             sp.GetService<ISecretStorage>(), sp.GetService<ILogger<ConnectionSecrets>>()));
 

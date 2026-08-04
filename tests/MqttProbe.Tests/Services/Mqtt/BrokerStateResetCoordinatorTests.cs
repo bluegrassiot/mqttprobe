@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Chart;
+using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Sparkplug;
@@ -322,22 +323,20 @@ public class BrokerStateResetCoordinatorTests
     [Test]
     public async Task ResetIfBrokerChangedAsync_DoesNotModifySavedConnectionProfiles()
     {
-        // The coordinator only calls runtime clear methods on services.
-        // It never calls ISettingsStore.AddConnectionAsync or
-        // ISettingsStore.RemoveConnectionAsync. Saved profiles are untouched.
-        // This test documents that invariant by verifying the coordinator
-        // has no dependency on ISettingsStore at all.
+        // The coordinator resets live session state only; it never adds or removes saved
+        // connection profiles. Taking no IConnectionSettings dependency is what proves it.
         var conn = MakeConnection();
         await _coordinator.ResetIfBrokerChangedAsync(conn);
 
-        // If the coordinator had an ISettingsStore dependency, this test
+        // If the coordinator had an IConnectionSettings dependency, this test
         // would need to mock it and verify no calls. Since it doesn't,
-        // the absence of ISettingsStore in the constructor proves saved
+        // the absence of IConnectionSettings in the constructor proves saved
         // data is preserved by design.
         typeof(BrokerStateResetCoordinator)
             .GetConstructors()
-            .SelectMany(c => c.GetParameters())
-            .Should().NotContain(p => p.ParameterType.Name.Contains("SettingsStore"));
+            .Single()
+            .GetParameters()
+            .Should().NotContain(p => p.ParameterType == typeof(IConnectionSettings));
     }
 
     // --- Emulation reset tests ---

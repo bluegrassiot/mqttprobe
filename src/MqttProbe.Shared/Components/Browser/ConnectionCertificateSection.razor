@@ -3,6 +3,8 @@
 @inject ICertificateFilePicker FilePicker
 @inject ICertificateInputCapability InputCapability
 @inject ICertificateAssetStore CertStore
+@if (Visible)
+{
 <div class="client-cert-section pa-3 mt-2">
     <MudText Typo="Typo.subtitle2" Class="mb-2">Client Certificate</MudText>
 
@@ -113,10 +115,12 @@
         <MudAlert Severity="Severity.Error" Class="mt-2" Dense="true">@_certError</MudAlert>
     }
 </div>
+}
 
 @code {
     [Parameter, EditorRequired] public Connection Connection { get; set; } = null!;
     [Parameter] public EventCallback OnStateChanged { get; set; }
+    [Parameter] public bool Visible { get; set; } = true;
 
     private CertificateInputMode _certInputMode = CertificateInputMode.Pfx;
     private byte[]? _pfxFileBytes;
@@ -149,8 +153,6 @@
         _certError = error;
     }
 
-    public string? StagedAssetId { get; private set; }
-
     public string? PreviousAssetId => _previousAssetId;
 
     public void ResetForConnection(string? previousAssetId, bool unavailable = false, string? error = null)
@@ -165,17 +167,14 @@
         _certificateUnavailable = unavailable;
     }
 
-    public void ClearStagedAfterPersist(string? newPreviousAssetId, bool removed)
+    public void ClearStagedAfterPersist(string? newPreviousAssetId)
     {
         _pfxFileBytes = null;
         _pemCertFileBytes = null;
         _pemKeyFileBytes = null;
         _certPassword = "";
         _certificateRemoved = false;
-        if (removed)
-            _previousAssetId = null;
-        else if (newPreviousAssetId is not null)
-            _previousAssetId = newPreviousAssetId;
+        _previousAssetId = newPreviousAssetId;
     }
 
     public void ClearStagedFiles()
@@ -206,7 +205,6 @@
             var stagedId = await CertStore.ImportAsync(connectionId, request);
             if (existingStagedAssetIdToSupersede is not null && existingStagedAssetIdToSupersede != stagedId)
                 try { await CertStore.DeleteAsync(connectionId, existingStagedAssetIdToSupersede); } catch { /* superseded staged asset; the startup orphan sweep collects it */ }
-            StagedAssetId = stagedId;
             return stagedId;
         }
         catch (CertificateImportException ex)

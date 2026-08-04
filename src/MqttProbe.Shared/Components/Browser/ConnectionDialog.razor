@@ -50,12 +50,10 @@
                     </MudTabPanel>
                     <MudTabPanel Text="Transport">
                         <ConnectionTransportFields Connection="_selectedConnection" />
-                        @if (_selectedConnection.UseTls)
-                        {
-                            <ConnectionCertificateSection @ref="_certSection"
-                                                          Connection="@_selectedConnection"
-                                                          OnStateChanged="UpdateActionStates" />
-                        }
+                        <ConnectionCertificateSection @ref="_certSection"
+                                                      Connection="@_selectedConnection"
+                                                      Visible="_selectedConnection.UseTls"
+                                                      OnStateChanged="UpdateActionStates" />
                     </MudTabPanel>
                     <MudTabPanel Text="On Connect">
                         <ConnectionOnConnectTab AutoResubscribe="@UiSettings.Ui.AutoResubscribe"
@@ -217,7 +215,6 @@
             {
                 if (!await Save(closeDialog: false)) return;
                 _certSection?.ClearStagedFiles();
-                _selectedConnection.ClientCertificateAssetId = _certSection?.StagedAssetId ?? _selectedConnection.ClientCertificateAssetId;
             }
         }
         try { await SessionLifecycle.StopActiveConnectionAsync(); }
@@ -312,7 +309,7 @@
                 try { await CertStore.DeleteAsync(connection.Id, previousAssetId); } catch { /* replaced asset */ }
         }
         _stagedAssetId = null;
-        _certSection?.ClearStagedAfterPersist(connection.ClientCertificateAssetId, removed: false);
+        _certSection?.ClearStagedAfterPersist(connection.ClientCertificateAssetId);
         Logger.LogInformation("Connection saved: {Name} ({Host}:{Port})", connection.Name, connection.Host, connection.Port);
         _savedConnectionForSelector = ConnectionSettings.Connections.FirstOrDefault(c => c.Id == connection.Id) ?? connection;
         _selectedConnection = _savedConnectionForSelector.Clone();
@@ -330,7 +327,6 @@
         _activeTabIndex = 0;
         _formReportsValid = true;
         _canDelete = true;
-        await InvokeAsync(StateHasChanged);
         var previousAssetId = _selectedConnection.ClientCertificateAssetId;
         var unavailable = false;
         string? certError = null;

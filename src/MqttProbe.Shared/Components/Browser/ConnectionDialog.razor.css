@@ -44,11 +44,6 @@
     justify-content: flex-end;
 }
 
-.security-warning-group {
-    border-left: 3px solid var(--mud-palette-warning);
-    padding-left: 12px;
-}
-
 .signal-connecting-sm {
     width: 26px;
     height: 26px;

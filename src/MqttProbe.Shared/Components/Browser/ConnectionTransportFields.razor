@@ -1,0 +1,83 @@
+@using MQTTnet.Protocol
+<MudGrid Spacing="2" Class="mt-2">
+    <MudItem xs="12" sm="6">
+        <MudSelect Variant="Variant.Outlined" T="Protocol" @bind-Value="Connection.Protocol"
+                   Label="Protocol"
+                   AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft"
+                   PopoverFixed="true">
+            <MudSelectItem Value="@(Protocol.Mqtt)" />
+            <MudSelectItem Value="@(Protocol.WebSocket)" />
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudSelect Variant="Variant.Outlined" T="MqttVersion" @bind-Value="Connection.MqttVersion"
+                   Label="MQTT Version"
+                   AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft"
+                   PopoverFixed="true">
+            <MudSelectItem Value="@(MqttVersion.V311)">3.1.1</MudSelectItem>
+            <MudSelectItem Value="@(MqttVersion.V5)">5.0</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.Port"
+                      For="@(() => Connection.Port)" Immediate="true"
+                      Label="Port" />
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.ConnectTimeout"
+                      For="@(() => Connection.ConnectTimeout)" Immediate="true"
+                      Label="Connect Timeout (s)" />
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.ReconnectDelay"
+                      For="@(() => Connection.ReconnectDelay)" Immediate="true"
+                      Label="Reconnect Delay (s)" />
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.KeepAlivePeriod"
+                      For="@(() => Connection.KeepAlivePeriod)" Immediate="true"
+                      Label="Keep Alive (s)" />
+    </MudItem>
+    <MudItem xs="12">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.Host"
+                      For="@(() => Connection.Host)" Immediate="true" Label="Host" />
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.User"
+                      For="@(() => Connection.User)" Immediate="true" Label="User" />
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <PasswordField Connection="@Connection" />
+    </MudItem>
+    @if (Connection.Protocol == Protocol.WebSocket)
+    {
+        <MudItem xs="12">
+            <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.WebsocketBasePath"
+                          Immediate="true" Label="WebSocket Base Path"
+                          HelperText="Use the broker WebSocket endpoint path (for example /mqtt)." />
+        </MudItem>
+    }
+    <MudItem xs="12">
+        <MudStack Spacing="2">
+            <MudCheckBox @bind-Value="@Connection.UseTls" Color="Color.Default">
+                Use TLS
+            </MudCheckBox>
+            @if (Connection.UseTls)
+            {
+                <div class="security-warning-group">
+                    <MudCheckBox @bind-Value="@Connection.AllowUntrustedCertificate" Color="Color.Warning">
+                        <MudIcon Icon="@LucideIcons.AlertTriangle" Size="Size.Small" Class="mr-1" />
+                        Allow untrusted certificate
+                    </MudCheckBox>
+                    <MudText Typo="Typo.caption" Color="Color.Error" Class="ml-8">
+                        Insecure — dev/lab only. Do not use in production.
+                    </MudText>
+                </div>
+            }
+        </MudStack>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired] public Connection Connection { get; set; } = null!;
+}

@@ -260,36 +260,12 @@
                     </MudTabPanel>
 
                     <MudTabPanel Text="On Connect">
-                        <MudStack Spacing="2" Class="mt-2">
-                            <div>
-                                <MudSwitch T="bool"
-                                           Value="@UiSettings.Ui.AutoResubscribe"
-                                           ValueChanged="@OnAutoResubscribeChanged"
-                                           Color="Color.Primary"
-                                           Label="Auto-resubscribe on connect" />
-                                @if (UiSettings.Ui.AutoResubscribe)
-                                {
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
-                                        Saved topics below are subscribed when this connection connects.
-                                    </MudText>
-                                }
-                            </div>
-
-                            @if (!UiSettings.Ui.AutoResubscribe)
-                            {
-                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-                                    On-connect subscriptions are not applied until Auto-resubscribe is enabled. Turn it on above, or enable it in Settings.
-                                </MudAlert>
-                            }
-
-                            <SubscriptionEditor Items="@_selectedConnection.SubscribedTopics"
-                                                Disabled="@(!UiSettings.Ui.AutoResubscribe)"
-                                                EmptyText="No on-connect subscriptions yet"
-                                                EmptyHint="Add a topic above."
+                        <ConnectionOnConnectTab AutoResubscribe="@UiSettings.Ui.AutoResubscribe"
+                                                AutoResubscribeChanged="@OnAutoResubscribeChanged"
+                                                Items="@_selectedConnection.SubscribedTopics"
                                                 OnAdd="HandleOnConnectEditorAdd"
                                                 OnRemove="HandleOnConnectEditorRemove"
                                                 OnClearAll="HandleOnConnectEditorClearAll" />
-                        </MudStack>
                     </MudTabPanel>
 
                 </MudTabs>

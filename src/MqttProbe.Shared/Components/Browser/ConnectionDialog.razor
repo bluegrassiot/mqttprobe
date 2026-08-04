@@ -64,16 +64,7 @@
                          Class="connection-tabs">
 
                     <MudTabPanel Text="Identity">
-                        <MudGrid Spacing="2" Class="mt-2">
-                            <MudItem xs="12" sm="6">
-                                <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.Name"
-                                              For="@(() => _selectedConnection.Name)" Immediate="true" Label="Name" />
-                            </MudItem>
-                            <MudItem xs="12" sm="6">
-                                <MudTextField Variant="Variant.Outlined" @bind-Value="_selectedConnection.ClientId"
-                                              For="@(() => _selectedConnection.ClientId)" Immediate="true" Label="Client ID" />
-                            </MudItem>
-                        </MudGrid>
+                        <ConnectionIdentityFields Connection="@_selectedConnection" />
                     </MudTabPanel>
 
                     <MudTabPanel Text="Transport">

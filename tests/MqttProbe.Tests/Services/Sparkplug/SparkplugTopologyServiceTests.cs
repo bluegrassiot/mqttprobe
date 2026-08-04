@@ -21,7 +21,7 @@ public class SparkplugTopologyServiceTests
     private ILogger<SparkplugTopologyService> _mockLogger = null!;
     private SparkplugTopologyService _service = null!;
     private SparkplugTopologyExtractor _extractor = null!;
-    private IUiSettings _settingsStore = null!;
+    private IUiSettings _uiSettings = null!;
 
     [SetUp]
     public void Setup()
@@ -30,8 +30,8 @@ public class SparkplugTopologyServiceTests
         _mockLogger = Substitute.For<ILogger<SparkplugTopologyService>>();
         _extractor = new SparkplugTopologyExtractor();
         // Auto-rebirth ships off; the tests below describe the enabled behaviour unless they say otherwise.
-        _settingsStore = MakeSettingsStore(autoRequestRebirth: true);
-        _service = new SparkplugTopologyService(_mockClient, _mockLogger, _settingsStore);
+        _uiSettings = MakeUiSettings(autoRequestRebirth: true);
+        _service = new SparkplugTopologyService(_mockClient, _mockLogger, _uiSettings);
     }
 
     [TearDown]
@@ -583,7 +583,7 @@ public class SparkplugTopologyServiceTests
     public async Task NDATA_WithoutBirth_AfterCooldownExpires_RequestsRebirthAgain()
     {
         var fakeClock = new FakeTimeProvider();
-        _service = new SparkplugTopologyService(_mockClient, _mockLogger, _settingsStore, fakeClock);
+        _service = new SparkplugTopologyService(_mockClient, _mockLogger, _uiSettings, fakeClock);
         // _service field updated so TearDown disposes the correct instance
 
         // First NDATA without birth — triggers rebirth
@@ -605,7 +605,7 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task NDATA_WithoutBirth_AutoRebirthDisabled_DoesNotRequestRebirth()
     {
-        UseSettingsStore(autoRequestRebirth: false);
+        UseUiSettings(autoRequestRebirth: false);
 
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
 
@@ -615,7 +615,7 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task DDATA_WithoutBirth_AutoRebirthDisabled_DoesNotRequestRebirth()
     {
-        UseSettingsStore(autoRequestRebirth: false);
+        UseUiSettings(autoRequestRebirth: false);
 
         await Fire("spBv1.0/factory/DDATA/edge-01/dev-1", SpbPayload(("Temp", 0, 10, 22.0)));
 
@@ -625,7 +625,7 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task NDATA_WithoutBirth_AutoRebirthEnabled_RequestsRebirth()
     {
-        UseSettingsStore(autoRequestRebirth: true);
+        UseUiSettings(autoRequestRebirth: true);
 
         await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
 
@@ -637,7 +637,7 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task ManualRebirth_AutoRebirthDisabled_StillPublishes()
     {
-        UseSettingsStore(autoRequestRebirth: false);
+        UseUiSettings(autoRequestRebirth: false);
         await Fire("spBv1.0/factory/NBIRTH/edge-01", SpbPayload(("Temp", 0, 10, 20.0)));
 
         await _service.RequestNodeRebirthAsync("factory", "edge-01");
@@ -647,13 +647,13 @@ public class SparkplugTopologyServiceTests
                 m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
     }
 
-    private void UseSettingsStore(bool autoRequestRebirth)
+    private void UseUiSettings(bool autoRequestRebirth)
     {
         _service = new SparkplugTopologyService(
-            _mockClient, _mockLogger, MakeSettingsStore(autoRequestRebirth));
+            _mockClient, _mockLogger, MakeUiSettings(autoRequestRebirth));
     }
 
-    private static IUiSettings MakeSettingsStore(bool autoRequestRebirth)
+    private static IUiSettings MakeUiSettings(bool autoRequestRebirth)
     {
         var store = Substitute.For<IUiSettings>();
         var config = new AppConfiguration

@@ -16,7 +16,7 @@ namespace MqttProbe.Shared.Tests.Components.Browser;
 public class PayloadBrowserTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
-    private IPerformanceSettings _mockSettingsStore = null!;
+    private IPerformanceSettings _mockPerformance = null!;
     private IUxMetricsService _mockMetrics = null!;
 
     [SetUp]
@@ -32,10 +32,10 @@ public class PayloadBrowserTests : BunitTestContext
         _mockMsgStore.SelectedMessageStore.Returns(mockStore);
         Services.AddSingleton(_mockMsgStore);
 
-        _mockSettingsStore = Substitute.For<IPerformanceSettings>();
+        _mockPerformance = Substitute.For<IPerformanceSettings>();
         var cfg = new AppConfiguration();
-        _mockSettingsStore.Performance.Returns(cfg.Performance);
-        Services.AddPerformanceSettings(_mockSettingsStore);
+        _mockPerformance.Performance.Returns(cfg.Performance);
+        Services.AddPerformanceSettings(_mockPerformance);
 
         _mockMetrics = Substitute.For<IUxMetricsService>();
         Services.AddSingleton(_mockMetrics);
@@ -86,7 +86,7 @@ public class PayloadBrowserTests : BunitTestContext
         {
             Performance = new PerformanceSettings { MaxDisplayMessages = 3 }
         };
-        _mockSettingsStore.Performance.Returns(customCfg.Performance);
+        _mockPerformance.Performance.Returns(customCfg.Performance);
         var messages = Enumerable.Range(0, 3)
             .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
             .ToList();

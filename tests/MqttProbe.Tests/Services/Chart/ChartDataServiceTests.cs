@@ -14,7 +14,7 @@ public class ChartDataServiceTests
     private IMqttManagedClient _mockClient = null!;
     private IJsonFieldExtractor _extractor = null!;
     private IChartFieldRegistry _registry = null!;
-    private IChartSettings _mockSettingsStore = null!;
+    private IChartSettings _mockChartSettings = null!;
     private IUiSettings _mockUiSettings = null!;
     private ChartDataService _service = null!;
     private Func<MqttApplicationMessageReceivedEventArgs, Task>? _handler;
@@ -26,8 +26,8 @@ public class ChartDataServiceTests
         _extractor = new JsonFieldExtractor();
         _registry = new ChartFieldRegistry();
         var config = new AppConfiguration();
-        _mockSettingsStore = Substitute.For<IChartSettings>();
-        _mockSettingsStore.GetCharts(Arg.Any<Guid>()).Returns([]);
+        _mockChartSettings = Substitute.For<IChartSettings>();
+        _mockChartSettings.GetCharts(Arg.Any<Guid>()).Returns([]);
         _mockUiSettings = Substitute.For<IUiSettings>();
         _mockUiSettings.Ui.Returns(config.Ui);
 
@@ -36,7 +36,7 @@ public class ChartDataServiceTests
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => _handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        _service = new ChartDataService(_mockClient, _extractor, _registry, _mockSettingsStore, _mockUiSettings,
+        _service = new ChartDataService(_mockClient, _extractor, _registry, _mockChartSettings, _mockUiSettings,
             TestPipelineHelper.BuildBuiltInPipeline());
     }
 
@@ -137,7 +137,7 @@ public class ChartDataServiceTests
     {
         var connectionId = Guid.NewGuid();
         var seriesId = Guid.NewGuid();
-        _mockSettingsStore.GetCharts(connectionId).Returns([
+        _mockChartSettings.GetCharts(connectionId).Returns([
             new ChartConfiguration
             {
                 Series = [new ChartSeries { Id = seriesId, Topic = "test/topic", JsonPath = "value" }],
@@ -162,7 +162,7 @@ public class ChartDataServiceTests
     {
         var connectionId = Guid.NewGuid();
         var seriesId = Guid.NewGuid();
-        _mockSettingsStore.GetCharts(connectionId).Returns([
+        _mockChartSettings.GetCharts(connectionId).Returns([
             new ChartConfiguration
             {
                 Series = [new ChartSeries { Id = seriesId, Topic = "test/topic", JsonPath = "value" }],
@@ -177,7 +177,7 @@ public class ChartDataServiceTests
 
         _service.GetPoints(seriesId).Should().NotBeEmpty();
 
-        _mockSettingsStore.ChartsChanged += Raise.Event<Action<Guid>>(Guid.NewGuid());
+        _mockChartSettings.ChartsChanged += Raise.Event<Action<Guid>>(Guid.NewGuid());
 
         _service.GetPoints(seriesId).Should().NotBeEmpty();
     }
@@ -187,7 +187,7 @@ public class ChartDataServiceTests
     {
         var connectionId = Guid.NewGuid();
         var seriesId = Guid.NewGuid();
-        _mockSettingsStore.GetCharts(connectionId).Returns([
+        _mockChartSettings.GetCharts(connectionId).Returns([
             new ChartConfiguration
             {
                 Series = [new ChartSeries { Id = seriesId, Topic = "test/topic", JsonPath = "value" }],
@@ -205,7 +205,7 @@ public class ChartDataServiceTests
         var onUpdated = false;
         _service.OnDataUpdated += () => onUpdated = true;
 
-        _mockSettingsStore.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
+        _mockChartSettings.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
 
         _service.GetPoints(seriesId).Should().BeEmpty();
         onUpdated.Should().BeTrue();
@@ -223,7 +223,7 @@ public class ChartDataServiceTests
             MaxPoints = 100,
             Series = [new ChartSeries { Id = seriesId, Topic = "data/temp", JsonPath = "value" }]
         };
-        _mockSettingsStore.GetCharts(connId).Returns([config]);
+        _mockChartSettings.GetCharts(connId).Returns([config]);
 
         await _service.StartAsync();
 
@@ -271,8 +271,8 @@ public class ChartDataServiceTests
 
         _service.ClearBuffers();
 
-        _mockSettingsStore.ClearReceivedCalls();
-        _mockSettingsStore.GetCharts(connId).Returns([]);
+        _mockChartSettings.ClearReceivedCalls();
+        _mockChartSettings.GetCharts(connId).Returns([]);
 
         var msg = new MqttApplicationMessageBuilder()
             .WithTopic("data/temp")
@@ -282,7 +282,7 @@ public class ChartDataServiceTests
             new MQTTnet.Packets.MqttPublishPacket(), null);
         await _handler!(args);
 
-        _mockSettingsStore.Received(1).GetCharts(connId);
+        _mockChartSettings.Received(1).GetCharts(connId);
     }
 
     private static MqttApplicationMessageReceivedEventArgs MakeArgs(string topic, string payload)

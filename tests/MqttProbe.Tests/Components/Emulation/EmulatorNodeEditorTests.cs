@@ -233,7 +233,7 @@ public class EmulatorNodeEditorTests : BunitTestContext
             using var document = new SettingsDocument(filePath);
             await new SettingsLoader(document, new ConnectionSecrets(null, null), false, null)
                 .LoadAsync();
-            var store = new EmulatorSettings(document);
+            var emulatorSettings = new EmulatorSettings(document);
             var connectionId = Guid.NewGuid();
 
             var config = new EmulatorNodeConfig
@@ -242,14 +242,14 @@ public class EmulatorNodeEditorTests : BunitTestContext
                 NodeId = "Node-1",
                 UseMetricAliases = true
             };
-            await store.AddEmulatorNodeAsync(connectionId, config);
+            await emulatorSettings.AddEmulatorNodeAsync(connectionId, config);
 
             // Reload from disk
             using var document2 = new SettingsDocument(filePath);
             await new SettingsLoader(document2, new ConnectionSecrets(null, null), false, null)
                 .LoadAsync();
-            var store2 = new EmulatorSettings(document2);
-            var nodes = store2.GetEmulatorNodes(connectionId);
+            var reloadedEmulatorSettings = new EmulatorSettings(document2);
+            var nodes = reloadedEmulatorSettings.GetEmulatorNodes(connectionId);
 
             nodes.Should().ContainSingle();
             nodes[0].UseMetricAliases.Should().BeTrue();

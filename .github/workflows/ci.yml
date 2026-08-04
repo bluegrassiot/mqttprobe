@@ -57,6 +57,11 @@ jobs:
       - name: Format check
         run: python3 scripts/ci/format-check.py
 
+      # Also in .githooks/pre-commit, but that is skippable with --no-verify and a
+      # missed blocking call site is a deadlock, so it gates the PR as well.
+      - name: Blocking awaits
+        run: python3 scripts/ci/check-blocking-awaits.py
+
       - name: Unit tests
         run: |
           dotnet test tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj \

@@ -19,6 +19,9 @@ public sealed class CertificateStoreCleanup(
 
     // Stage order is load-bearing: staging temps go before their retry markers, and both
     // before the orphan sweep, which would otherwise see half-written assets as orphans.
+    //
+    // ConfigureAwait(false) throughout: Desktop startup blocks on RunAsync with
+    // GetAwaiter().GetResult(), so a captured context deadlocks against the blocking thread.
     public async Task RunAsync(
         IReadOnlyList<Connection> knownConnections, bool configLoadedSuccessfully)
     {
@@ -28,13 +31,13 @@ public sealed class CertificateStoreCleanup(
         // Staging cleanup ALWAYS runs regardless of config state:
 
         // 1. Delete staging files (.bin.tmp).
-        await DeleteStagingFilesAsync();
+        await DeleteStagingFilesAsync().ConfigureAwait(false);
 
         // 2. Delete cleanup-retry markers.
-        await DeleteCleanupRetryMarkersAsync();
+        await DeleteCleanupRetryMarkersAsync().ConfigureAwait(false);
 
         // 3. Delete quarantine files older than 1 hour.
-        await DeleteAgedQuarantineFilesAsync();
+        await DeleteAgedQuarantineFilesAsync().ConfigureAwait(false);
 
         // Orphan + AEAD cleanup ONLY when config loaded successfully
         if (!configLoadedSuccessfully)
@@ -46,9 +49,9 @@ public sealed class CertificateStoreCleanup(
             return;
         }
 
-        var knownPairs = await certStore.ListAssetsAsync();
-        await DeleteUnconfiguredAssetsAsync(knownConnections, knownPairs);
-        await SweepUnverifiedBlobsAsync(knownConnections, knownPairs);
+        var knownPairs = await certStore.ListAssetsAsync().ConfigureAwait(false);
+        await DeleteUnconfiguredAssetsAsync(knownConnections, knownPairs).ConfigureAwait(false);
+        await SweepUnverifiedBlobsAsync(knownConnections, knownPairs).ConfigureAwait(false);
     }
 
     private async Task DeleteStagingFilesAsync()
@@ -60,14 +63,14 @@ public sealed class CertificateStoreCleanup(
             try
             {
                 File.Delete(tmpFile);
-                try { await envelopeKeyStore.RemoveAsync($"cert-env-{tmpAssetId}"); } catch { /* best-effort; retried next startup */ }
+                try { await envelopeKeyStore.RemoveAsync($"cert-env-{tmpAssetId}").ConfigureAwait(false); } catch { /* best-effort; retried next startup */ }
                 var staleMarker = Path.Combine(certStore.CertificatesDirectory, $"cert-{tmpAssetId}.cleanup-retry");
                 if (File.Exists(staleMarker))
                     try { File.Delete(staleMarker); } catch { /* best-effort; retried next startup */ }
             }
             catch
             {
-                await QuarantineStagingFileAsync(tmpFile, tmpAssetId);
+                await QuarantineStagingFileAsync(tmpFile, tmpAssetId).ConfigureAwait(false);
             }
         }
     }
@@ -84,7 +87,7 @@ public sealed class CertificateStoreCleanup(
         {
             var retryMarker = Path.Combine(certStore.CertificatesDirectory, $"cert-{tmpAssetId}.cleanup-retry");
             if (!File.Exists(retryMarker))
-                try { await File.WriteAllTextAsync(retryMarker, $"staging cleanup failed at {DateTime.UtcNow:o}"); } catch { /* marker is only a retry hint; the LogCritical below is the real signal */ }
+                try { await File.WriteAllTextAsync(retryMarker, $"staging cleanup failed at {DateTime.UtcNow:o}").ConfigureAwait(false); } catch { /* marker is only a retry hint; the LogCritical below is the real signal */ }
             logger?.LogCritical(
                 "Could not delete or quarantine staging temp {Path}. Cleanup retry scheduled.",
                 tmpFile);
@@ -92,7 +95,7 @@ public sealed class CertificateStoreCleanup(
         else
         {
             logger?.LogWarning("Could not delete staging temp {Path}; quarantined.", tmpFile);
-            try { await envelopeKeyStore.RemoveAsync($"cert-env-{tmpAssetId}"); } catch { /* best-effort; retried next startup */ }
+            try { await envelopeKeyStore.RemoveAsync($"cert-env-{tmpAssetId}").ConfigureAwait(false); } catch { /* best-effort; retried next startup */ }
         }
     }
 
@@ -105,7 +108,7 @@ public sealed class CertificateStoreCleanup(
             if (!File.Exists(correspondingTmp))
             {
                 try { File.Delete(marker); } catch { /* best-effort; retried next startup */ }
-                try { await envelopeKeyStore.RemoveAsync($"cert-env-{markerAssetId}"); } catch { /* best-effort; retried next startup */ }
+                try { await envelopeKeyStore.RemoveAsync($"cert-env-{markerAssetId}").ConfigureAwait(false); } catch { /* best-effort; retried next startup */ }
             }
         }
     }
@@ -121,7 +124,7 @@ public sealed class CertificateStoreCleanup(
                 {
                     File.Delete(qFile);
                     var qAssetId = Path.GetFileNameWithoutExtension(qFile)["cert-".Length..];
-                    try { await envelopeKeyStore.RemoveAsync($"cert-env-{qAssetId}"); } catch { /* best-effort; retried next startup */ }
+                    try { await envelopeKeyStore.RemoveAsync($"cert-env-{qAssetId}").ConfigureAwait(false); } catch { /* best-effort; retried next startup */ }
                 }
             }
             catch (Exception ex)
@@ -143,7 +146,7 @@ public sealed class CertificateStoreCleanup(
         {
             if (!configuredPairs.Contains((ownerId, assetId)))
             {
-                try { await certStore.DeleteAsync(ownerId, assetId); } catch { /* orphan sweep is best-effort; retried next startup */ }
+                try { await certStore.DeleteAsync(ownerId, assetId).ConfigureAwait(false); } catch { /* orphan sweep is best-effort; retried next startup */ }
             }
         }
     }
@@ -170,7 +173,7 @@ public sealed class CertificateStoreCleanup(
 
             try
             {
-                var blob = await File.ReadAllBytesAsync(binFile);
+                var blob = await File.ReadAllBytesAsync(binFile).ConfigureAwait(false);
                 if (blob.Length < 73) { File.Delete(binFile); continue; }
                 var headerOwner = System.Text.Encoding.ASCII.GetString(blob, 36, 36);
                 if (Guid.TryParse(headerOwner, out var parsedOwner) && knownOwnerIds.Contains(parsedOwner))
@@ -182,7 +185,7 @@ public sealed class CertificateStoreCleanup(
                 else
                 {
                     File.Delete(binFile);
-                    try { await envelopeKeyStore.RemoveAsync($"cert-env-{fileAssetId}"); } catch { /* best-effort; retried next startup */ }
+                    try { await envelopeKeyStore.RemoveAsync($"cert-env-{fileAssetId}").ConfigureAwait(false); } catch { /* best-effort; retried next startup */ }
                 }
             }
             catch (Exception ex)

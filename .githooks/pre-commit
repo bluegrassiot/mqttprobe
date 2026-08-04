@@ -81,5 +81,19 @@ else
     pass "File length"
 fi
 
+# Scans the whole src tree rather than staged paths: a new blocking call site is
+# only unsafe in combination with the chain it blocks on, which may be untouched.
+step "Blocking awaits"
+if ! printf '%s\n' "$STAGED" | any_file_length_relevant; then
+    skip_msg "no C#/Razor staged files"
+else
+    if ! python "$ROOT/scripts/ci/check-blocking-awaits.py"; then
+        fail "Blocking awaits"
+        print_total
+        exit 1
+    fi
+    pass "Blocking awaits"
+fi
+
 printf "\n${GREEN}pre-commit checks passed.${RESET}\n"
 print_total

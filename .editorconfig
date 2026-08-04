@@ -256,10 +256,17 @@ dotnet_diagnostic.MA0011.severity = suggestion
 # exception type to satisfy the rule would change what callers catch.
 dotnet_diagnostic.S2139.severity = suggestion
 
-# MA0004: the one place a missing ConfigureAwait can actually deadlock is a
-# chain blocked on by Dispose via GetAwaiter().GetResult() — see
-# EmulationService.RunPublishLoop, which is fixed. Elsewhere in Shared the
-# awaits are never blocked on, so this is advisory rather than a build warning.
+# MA0004: a missing ConfigureAwait only actually deadlocks on a chain that is
+# blocked on synchronously via GetAwaiter().GetResult(). Three exist, and all
+# three carry ConfigureAwait(false) throughout: EmulationService.RunPublishLoop
+# (blocked by Dispose), SettingsStore.LoadAsync and CertificateStoreCleanup.RunAsync
+# (both blocked by Desktop startup in Program.InitializeStorage). Add a fourth
+# blocking call site and you must configure its chain too.
+#
+# Everything else in Shared is awaited normally, so the rule stays advisory rather
+# than a build warning. Do NOT blanket-apply it: the settings facet mutators raise
+# ChartsChanged/UiPreferencesChanged on their continuation, and moving those off the
+# captured context changes which thread subscribers run on.
 # NB the analyzer reports nothing inside .razor components; do not add
 # ConfigureAwait(false) there, it would move continuations off the renderer context.
 dotnet_diagnostic.MA0004.severity = suggestion

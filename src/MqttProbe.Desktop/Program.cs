@@ -21,10 +21,14 @@ namespace MqttProbe.Desktop;
 
 internal static class Program
 {
+    private const string WebViewUserDataFolderVariable = "WEBVIEW2_USER_DATA_FOLDER";
+
     [STAThread]
     private static void Main(string[] args)
     {
         VelopackApp.Build().Run();
+
+        ConfigureWebViewUserDataFolder();
 
         var builder = PhotinoBlazorAppBuilder.CreateDefault(args);
 
@@ -51,6 +55,28 @@ internal static class Program
         app.Run();
     }
 
+    private static string GetConfigDir() => Path.Combine(
+        Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config"),
+        "mqttprobe");
+
+    // WebView2 needs a user data folder it can create and write to. Left to Photino's default it
+    // fails to build its environment on some machines: no browser process is ever spawned, nothing
+    // is served, and the window paints black with no error on any channel. Pin it to the per-user
+    // config directory the app already owns. Windows-only; WebView2 is not used on other platforms.
+    private static void ConfigureWebViewUserDataFolder()
+    {
+        if (!OperatingSystem.IsWindows()
+            || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(WebViewUserDataFolderVariable)))
+        {
+            return;
+        }
+
+        var dataDir = Path.Combine(GetConfigDir(), "webview2");
+        Directory.CreateDirectory(dataDir);
+        Environment.SetEnvironmentVariable(WebViewUserDataFolderVariable, dataDir);
+    }
+
     private static void ConfigureServices(PhotinoBlazorAppBuilder builder)
     {
         builder.Services.AddSingleton<IAppInfoService, DesktopAppInfoService>();
@@ -59,10 +85,7 @@ internal static class Program
         builder.Services.AddCascadingAuthenticationState();
         builder.Services.AddScoped<AuthenticationStateProvider, DesktopUnauthenticatedStateProvider>();
 
-        var configDir = Path.Combine(
-            Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")
-                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config"),
-            "mqttprobe");
+        var configDir = GetConfigDir();
         Directory.CreateDirectory(configDir);
         var secretsDir = Path.Combine(configDir, "secrets");
         Directory.CreateDirectory(secretsDir);

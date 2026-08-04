@@ -21,7 +21,8 @@ namespace MqttProbe.Shared.Tests.Components.Browser;
 public class ConnectionDialogTests : BunitTestContext
 {
     private IMqttManagedClient _mockClient = null!;
-    private ISettingsStore _mockConfigMgr = null!;
+    private IConnectionSettings _mockConnections = null!;
+    private IUiSettings _mockUi = null!;
     private IMessageStoreManager _mockMsgStore = null!;
     private ISubscriptionManager _mockSubMgr = null!;
     private ISessionState _mockSessionState = null!;
@@ -39,7 +40,8 @@ public class ConnectionDialogTests : BunitTestContext
     public void SetupMocks()
     {
         _mockClient = Substitute.For<IMqttManagedClient>();
-        _mockConfigMgr = Substitute.For<ISettingsStore>();
+        _mockConnections = Substitute.For<IConnectionSettings>();
+        _mockUi = Substitute.For<IUiSettings>();
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _mockSubMgr = Substitute.For<ISubscriptionManager>();
         _mockSessionState = Substitute.For<ISessionState>();
@@ -51,8 +53,8 @@ public class ConnectionDialogTests : BunitTestContext
         _mockInputCapability.UsesInputFileComponent.Returns(false);
 
         var cfg = new AppConfiguration();
-        _mockConfigMgr.Connections.Returns(cfg.Connections);
-        _mockConfigMgr.Ui.Returns(cfg.Ui);
+        _mockConnections.Connections.Returns(cfg.Connections);
+        _mockUi.Ui.Returns(cfg.Ui);
         _mockMsgStore.Start().Returns(Task.CompletedTask);
         _mockOptionsBuilder.Build(Arg.Any<Connection>()).Returns(
             new MqttManagedClientOptions
@@ -70,7 +72,8 @@ public class ConnectionDialogTests : BunitTestContext
             .Do(x => _failedHandler = x.Arg<Func<MqttConnectingFailedEventArgs, Task>>());
 
         Services.AddSingleton(_mockClient);
-        Services.AddSettingsSubstitute(_mockConfigMgr);
+        Services.AddConnectionSettings(_mockConnections);
+        Services.AddUiSettings(_mockUi);
         Services.AddSingleton(_mockMsgStore);
         Services.AddSingleton(_mockSubMgr);
         Services.AddSingleton(_mockSessionState);
@@ -96,8 +99,8 @@ public class ConnectionDialogTests : BunitTestContext
     private async Task OpenDialog(AppConfiguration? config = null)
     {
         var cfg = config ?? new AppConfiguration();
-        _mockConfigMgr.Connections.Returns(cfg.Connections);
-        _mockConfigMgr.Ui.Returns(cfg.Ui);
+        _mockConnections.Connections.Returns(cfg.Connections);
+        _mockUi.Ui.Returns(cfg.Ui);
         var dialogService = Services.GetRequiredService<IDialogService>();
         await _dialogProvider.InvokeAsync(async () =>
             await dialogService.ShowAsync<ConnectionDialog>("Connection Setup"));
@@ -330,7 +333,7 @@ public class ConnectionDialogTests : BunitTestContext
     [Test]
     public async Task OnConnectTab_Add_PersistsTopicWithDefaultQos()
     {
-        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
         var cfg = new AppConfiguration { Connections = [conn] };
         await OpenDialog(cfg);
@@ -341,7 +344,7 @@ public class ConnectionDialogTests : BunitTestContext
         editor.TopicDraft = "factory/#";
         await _dialogProvider.InvokeAsync(() => editor.AddForTests());
 
-        await _mockConfigMgr.Received().AddConnectionAsync(
+        await _mockConnections.Received().AddConnectionAsync(
             Arg.Is<Connection>(c =>
                 c!.SubscribedTopics.Any(s =>
                     s.Topic == "factory/#" &&
@@ -351,7 +354,7 @@ public class ConnectionDialogTests : BunitTestContext
     [Test]
     public async Task OnConnectTab_AddDuplicate_DoesNotPersistSecondEntry()
     {
-        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         var conn = new Connection
         {
             Name = "TestConn",
@@ -369,13 +372,13 @@ public class ConnectionDialogTests : BunitTestContext
         await _dialogProvider.InvokeAsync(() => editor.AddForTests());
 
         conn.SubscribedTopics.Count(s => s.Topic == "dup/#").Should().Be(1);
-        await _mockConfigMgr.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+        await _mockConnections.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
     }
 
     [Test]
     public async Task OnConnectTab_Remove_PersistsWithoutTopic()
     {
-        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         var conn = new Connection
         {
             Name = "TestConn",
@@ -400,7 +403,7 @@ public class ConnectionDialogTests : BunitTestContext
         checkboxes[2].Change(true);
         _dialogProvider.Find("button[title='Remove']").Click();
 
-        await _mockConfigMgr.Received().AddConnectionAsync(
+        await _mockConnections.Received().AddConnectionAsync(
             Arg.Is<Connection>(c =>
                 c!.SubscribedTopics.All(s => s.Topic != "drop/#") &&
                 c.SubscribedTopics.Any(s => s.Topic == "keep/#")));
@@ -539,7 +542,7 @@ public class ConnectionDialogTests : BunitTestContext
     {
         var conn = new Connection { Name = "Test", Host = "localhost", Port = 1883 };
         var cfg = new AppConfiguration { Connections = [conn] };
-        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
 
         await OpenDialog(cfg);
 
@@ -549,7 +552,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled").Should().BeNull();
         _dialogProvider.Find("button[title='Save connection']").Click();
 
-        await _mockConfigMgr.Received(1).AddConnectionAsync(Arg.Any<Connection>());
+        await _mockConnections.Received(1).AddConnectionAsync(Arg.Any<Connection>());
     }
 
     [Test]
@@ -557,14 +560,14 @@ public class ConnectionDialogTests : BunitTestContext
     {
         var conn = new Connection { Name = "Test", Host = "localhost", Port = 1883 };
         var cfg = new AppConfiguration { Connections = [conn] };
-        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         await OpenDialog(cfg);
         await SelectConnection(cfg.Connections[0]);
         DirtyNameField("Test Updated");
 
         _dialogProvider.Find("button[title='Save connection']").Click();
 
-        await _mockConfigMgr.Received(1).AddConnectionAsync(Arg.Any<Connection>());
+        await _mockConnections.Received(1).AddConnectionAsync(Arg.Any<Connection>());
         _dialogProvider.FindAll(".mud-dialog").Should().NotBeEmpty("saving should keep the dialog open");
     }
 
@@ -777,14 +780,14 @@ public class ConnectionDialogTests : BunitTestContext
     {
         var conn = new Connection { Name = "ToDelete", Host = "localhost", Port = 1883 };
         var cfg = new AppConfiguration { Connections = [conn] };
-        _mockConfigMgr.RemoveConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockConnections.RemoveConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
 
         await OpenDialog(cfg);
 
         await SelectConnection(cfg.Connections[0]);
         _dialogProvider.Find("button[title='Delete connection']").Click();
 
-        await _mockConfigMgr.Received(1).RemoveConnectionAsync(Arg.Any<Connection>());
+        await _mockConnections.Received(1).RemoveConnectionAsync(Arg.Any<Connection>());
     }
 
     [Test]
@@ -1112,7 +1115,7 @@ public class ConnectionDialogTests : BunitTestContext
     [Test]
     public async Task OnConnectTab_AutoResubscribeOff_AddDoesNotPersistOrAlert()
     {
-        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         await OpenDialog(new AppConfiguration
         {
             Ui = new UiPreferences { AutoResubscribe = false },
@@ -1126,7 +1129,7 @@ public class ConnectionDialogTests : BunitTestContext
         editor.TopicDraft = "factory/#";
         await _dialogProvider.InvokeAsync(() => editor.AddForTests());
 
-        await _mockConfigMgr.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+        await _mockConnections.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
         editor.TopicDraft.Should().Be("factory/#",
             "the draft topic should remain unchanged when add is blocked");
     }
@@ -1134,7 +1137,7 @@ public class ConnectionDialogTests : BunitTestContext
     [Test]
     public async Task OnConnectTab_AutoResubscribeOff_RemoveDoesNotPersist()
     {
-        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         var conn = new Connection
         {
             Name = "TestConn",
@@ -1155,14 +1158,14 @@ public class ConnectionDialogTests : BunitTestContext
         editor.Find("input[type='checkbox']").Change(true);
         _dialogProvider.Find("button[title='Remove']").Click();
 
-        await _mockConfigMgr.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+        await _mockConnections.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
         conn.SubscribedTopics.Should().ContainSingle(s => s.Topic == "keep/#");
     }
 
     [Test]
     public async Task OnConnectTab_AutoResubscribeSwitch_Toggle_CallsSetter()
     {
-        _mockConfigMgr.SetAutoResubscribeAsync(Arg.Any<bool>()).Returns(Task.CompletedTask);
+        _mockUi.SetAutoResubscribeAsync(Arg.Any<bool>()).Returns(Task.CompletedTask);
         await OpenDialog(new AppConfiguration
         {
             Ui = new UiPreferences { AutoResubscribe = true },
@@ -1175,6 +1178,6 @@ public class ConnectionDialogTests : BunitTestContext
             .Single(s => s.Instance.Label == "Auto-resubscribe on connect");
         await _dialogProvider.InvokeAsync(() => sw.Instance.ValueChanged.InvokeAsync(false));
 
-        await _mockConfigMgr.Received(1).SetAutoResubscribeAsync(false);
+        await _mockUi.Received(1).SetAutoResubscribeAsync(false);
     }
 }

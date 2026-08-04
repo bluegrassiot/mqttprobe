@@ -10,13 +10,13 @@ namespace MqttProbe.Shared.Tests.Components.Pages;
 [TestFixture]
 public class ChangePasswordTests : BunitTestContext
 {
-    private ISettingsStore _mockCfg = null!;
+    private IAuthSettings _mockCfg = null!;
     private IUserAuthService _mockAuth = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _mockCfg = Substitute.For<ISettingsStore>();
+        _mockCfg = Substitute.For<IAuthSettings>();
         var cfg = new AppConfiguration
         {
             Auth = new Auth { Username = "admin", PasswordHash = "hash" }
@@ -25,7 +25,7 @@ public class ChangePasswordTests : BunitTestContext
 
         _mockAuth = Substitute.For<IUserAuthService>();
 
-        Services.AddSettingsSubstitute(_mockCfg);
+        Services.AddAuthSettings(_mockCfg);
         Services.AddSingleton(_mockAuth);
 
         AuthorizationContext.SetAuthorized("admin").SetRoles(AppRoles.Admin);

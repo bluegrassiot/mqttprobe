@@ -3,21 +3,30 @@ using MqttProbe.Services.Configuration;
 
 namespace MqttProbe.Shared.Tests.TestHelpers;
 
-// bUnit fixtures register one ISettingsStore substitute; components inject narrow facets.
-// AddSingleton(store) alone type-infers to ISettingsStore only, so the facets must be
-// registered explicitly against the same instance.
+// bUnit fixtures register only the facets their component injects. Facets that share a
+// production instance (PreferenceSettings backs all three preference interfaces) may be
+// registered from separate substitutes here, but they must project from one AppConfiguration
+// or assertions pass for the wrong reason.
 public static class SettingsSubstituteRegistration
 {
-    public static IServiceCollection AddSettingsSubstitute(
-        this IServiceCollection services, ISettingsStore store)
-    {
-        services.AddSingleton(store);
-        services.AddSingleton<IConnectionSettings>(store);
-        services.AddSingleton<IChartSettings>(store);
-        services.AddSingleton<IEmulatorSettings>(store);
-        services.AddSingleton<IUiSettings>(store);
-        services.AddSingleton<IPerformanceSettings>(store);
-        services.AddSingleton<IAuthSettings>(store);
-        return services;
-    }
+    public static IServiceCollection AddUiSettings(this IServiceCollection services, IUiSettings ui) =>
+        services.AddSingleton(ui);
+
+    public static IServiceCollection AddPerformanceSettings(
+        this IServiceCollection services, IPerformanceSettings performance) =>
+        services.AddSingleton(performance);
+
+    public static IServiceCollection AddAuthSettings(
+        this IServiceCollection services, IAuthSettings auth) => services.AddSingleton(auth);
+
+    public static IServiceCollection AddChartSettings(
+        this IServiceCollection services, IChartSettings charts) => services.AddSingleton(charts);
+
+    public static IServiceCollection AddEmulatorSettings(
+        this IServiceCollection services, IEmulatorSettings emulators) =>
+        services.AddSingleton(emulators);
+
+    public static IServiceCollection AddConnectionSettings(
+        this IServiceCollection services, IConnectionSettings connections) =>
+        services.AddSingleton(connections);
 }

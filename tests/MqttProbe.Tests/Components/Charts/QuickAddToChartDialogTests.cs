@@ -13,7 +13,7 @@ namespace MqttProbe.Shared.Tests.Components.Charts;
 [TestFixture]
 public class QuickAddToChartDialogTests : BunitTestContext
 {
-    private ISettingsStore _mockChartStore = null!;
+    private IChartSettings _mockChartStore = null!;
     private IRenderedComponent<MudDialogProvider> _dialogProvider = null!;
     private static readonly Guid _testConnectionId = Guid.NewGuid();
 
@@ -23,11 +23,11 @@ public class QuickAddToChartDialogTests : BunitTestContext
         var mockSessionState = Substitute.For<ISessionState>();
         mockSessionState.SelectedConnection.Returns(new Connection { Id = _testConnectionId });
 
-        _mockChartStore = Substitute.For<ISettingsStore>();
+        _mockChartStore = Substitute.For<IChartSettings>();
         _mockChartStore.GetCharts(_testConnectionId).Returns([]);
         _mockChartStore.AddChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
         _mockChartStore.UpdateChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
-        Services.AddSettingsSubstitute(_mockChartStore);
+        Services.AddChartSettings(_mockChartStore);
         Services.AddSingleton(mockSessionState);
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
 

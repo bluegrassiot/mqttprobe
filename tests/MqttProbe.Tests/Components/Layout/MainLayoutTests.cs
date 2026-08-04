@@ -22,7 +22,7 @@ public class MainLayoutTests : BunitTestContext
     private IDialogService _mockDialogService = null!;
     private IAppInfoService _mockAppInfo = null!;
     private ISessionState _mockSessionState = null!;
-    private ISettingsStore _mockConfig = null!;
+    private IUiSettings _mockConfig = null!;
     private IJSRuntime _mockJs = null!;
     private IUpdateService _mockUpdateService = null!;
     private IConnectionSessionLifecycle _mockLifecycle = null!;
@@ -35,7 +35,7 @@ public class MainLayoutTests : BunitTestContext
         _mockDialogService = Substitute.For<IDialogService>();
         _mockAppInfo = Substitute.For<IAppInfoService>();
         _mockSessionState = Substitute.For<ISessionState>();
-        _mockConfig = Substitute.For<ISettingsStore>();
+        _mockConfig = Substitute.For<IUiSettings>();
         var cfg = new AppConfiguration();
         _mockConfig.Ui.Returns(cfg.Ui);
         _mockJs = Substitute.For<IJSRuntime>();
@@ -57,7 +57,7 @@ public class MainLayoutTests : BunitTestContext
         Services.AddSingleton(_mockDialogService);
         Services.AddSingleton(_mockAppInfo);
         Services.AddSingleton(_mockSessionState);
-        Services.AddSettingsSubstitute(_mockConfig);
+        Services.AddUiSettings(_mockConfig);
         Services.AddSingleton(_mockJs);
         Services.AddSingleton(_mockUpdateService);
         _mockLifecycle = Substitute.For<IConnectionSessionLifecycle>();

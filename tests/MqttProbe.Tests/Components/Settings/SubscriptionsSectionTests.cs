@@ -11,18 +11,18 @@ namespace MqttProbe.Shared.Tests.Components.Settings;
 [TestFixture]
 public class SubscriptionsSectionTests : BunitTestContext
 {
-    private ISettingsStore _mockStore = null!;
+    private IUiSettings _mockStore = null!;
 
     [SetUp]
     public void Setup()
     {
-        _mockStore = Substitute.For<ISettingsStore>();
+        _mockStore = Substitute.For<IUiSettings>();
         var cfg = new AppConfiguration
         {
             Ui = new UiPreferences { AutoResubscribe = true }
         };
         _mockStore.Ui.Returns(cfg.Ui);
-        Services.AddSettingsSubstitute(_mockStore);
+        Services.AddUiSettings(_mockStore);
         EnsureMudProviders();
     }
 

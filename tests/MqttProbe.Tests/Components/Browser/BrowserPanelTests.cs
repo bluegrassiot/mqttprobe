@@ -12,7 +12,7 @@ namespace MqttProbe.Shared.Tests.Components.Browser;
 public class BrowserPanelTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
-    private ISettingsStore _mockConfig = null!;
+    private IUiSettings _mockConfig = null!;
     private IDialogService _mockDialogService = null!;
     private ISnackbar _mockSnackbar = null!;
 
@@ -24,14 +24,14 @@ public class BrowserPanelTests : BunitTestContext
         _mockMsgStore.GetMessagesForSelectedTopic()
             .Returns(Task.FromResult<IEnumerable<MqttMessage>>(Array.Empty<MqttMessage>()));
 
-        _mockConfig = Substitute.For<ISettingsStore>();
+        _mockConfig = Substitute.For<IUiSettings>();
         _mockConfig.IsHintDismissed(Arg.Any<string>()).Returns(false);
 
         _mockDialogService = Substitute.For<IDialogService>();
         _mockSnackbar = Substitute.For<ISnackbar>();
 
         Services.AddSingleton(_mockMsgStore);
-        Services.AddSettingsSubstitute(_mockConfig);
+        Services.AddUiSettings(_mockConfig);
         Services.AddSingleton(_mockDialogService);
         Services.AddSingleton(_mockSnackbar);
 

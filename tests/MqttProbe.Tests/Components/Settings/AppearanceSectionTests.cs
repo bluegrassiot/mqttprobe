@@ -12,20 +12,20 @@ namespace MqttProbe.Shared.Tests.Components.Settings;
 [TestFixture]
 public class AppearanceSectionTests : BunitTestContext
 {
-    private ISettingsStore _mockStore = null!;
+    private IUiSettings _mockStore = null!;
     private Themes _themes = null!;
 
     [SetUp]
     public void Setup()
     {
-        _mockStore = Substitute.For<ISettingsStore>();
+        _mockStore = Substitute.For<IUiSettings>();
         var cfg = new AppConfiguration
         {
             Ui = new UiPreferences { Theme = "dark", FontAccessible = false }
         };
         _mockStore.Ui.Returns(cfg.Ui);
         _themes = new Themes();
-        Services.AddSettingsSubstitute(_mockStore);
+        Services.AddUiSettings(_mockStore);
         Services.AddSingleton<IThemes>(_themes);
         EnsureMudProviders();
     }

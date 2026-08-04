@@ -11,12 +11,12 @@ namespace MqttProbe.Shared.Tests.Components.Settings;
 [TestFixture]
 public class PerformanceSectionTests : BunitTestContext
 {
-    private ISettingsStore _mockStore = null!;
+    private IPerformanceSettings _mockStore = null!;
 
     [SetUp]
     public void Setup()
     {
-        _mockStore = Substitute.For<ISettingsStore>();
+        _mockStore = Substitute.For<IPerformanceSettings>();
         var cfg = new AppConfiguration
         {
             Performance = new PerformanceSettings
@@ -26,7 +26,7 @@ public class PerformanceSectionTests : BunitTestContext
             }
         };
         _mockStore.Performance.Returns(cfg.Performance);
-        Services.AddSettingsSubstitute(_mockStore);
+        Services.AddPerformanceSettings(_mockStore);
         EnsureMudProviders();
     }
 

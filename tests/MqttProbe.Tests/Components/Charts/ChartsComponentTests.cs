@@ -13,7 +13,7 @@ namespace MqttProbe.Shared.Tests.Components.Charts;
 [TestFixture]
 public class ChartsComponentTests : BunitTestContext
 {
-    private ISettingsStore _mockChartStore = null!;
+    private IChartSettings _mockChartStore = null!;
     private IChartDataService _mockChartDataService = null!;
     private ISessionState _mockSessionState = null!;
     private static readonly Guid _testConnectionId = Guid.NewGuid();
@@ -24,7 +24,7 @@ public class ChartsComponentTests : BunitTestContext
         _mockSessionState = Substitute.For<ISessionState>();
         _mockSessionState.SelectedConnection.Returns(new Connection { Id = _testConnectionId });
 
-        _mockChartStore = Substitute.For<ISettingsStore>();
+        _mockChartStore = Substitute.For<IChartSettings>();
         _mockChartStore.GetCharts(_testConnectionId).Returns([]);
         _mockChartStore.AddChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
         _mockChartStore.UpdateChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>()).Returns(Task.CompletedTask);
@@ -34,7 +34,7 @@ public class ChartsComponentTests : BunitTestContext
         _mockChartDataService.StartAsync().Returns(Task.CompletedTask);
         _mockChartDataService.GetPoints(Arg.Any<Guid>()).Returns([]);
 
-        Services.AddSettingsSubstitute(_mockChartStore);
+        Services.AddChartSettings(_mockChartStore);
         Services.AddSingleton(_mockChartDataService);
         Services.AddSingleton(_mockSessionState);
         Services.AddSingleton(Substitute.For<IUxMetricsService>());

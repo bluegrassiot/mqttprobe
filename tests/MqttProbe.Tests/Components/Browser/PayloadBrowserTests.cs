@@ -16,7 +16,7 @@ namespace MqttProbe.Shared.Tests.Components.Browser;
 public class PayloadBrowserTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
-    private ISettingsStore _mockSettingsStore = null!;
+    private IPerformanceSettings _mockSettingsStore = null!;
     private IUxMetricsService _mockMetrics = null!;
 
     [SetUp]
@@ -32,10 +32,10 @@ public class PayloadBrowserTests : BunitTestContext
         _mockMsgStore.SelectedMessageStore.Returns(mockStore);
         Services.AddSingleton(_mockMsgStore);
 
-        _mockSettingsStore = Substitute.For<ISettingsStore>();
+        _mockSettingsStore = Substitute.For<IPerformanceSettings>();
         var cfg = new AppConfiguration();
         _mockSettingsStore.Performance.Returns(cfg.Performance);
-        Services.AddSettingsSubstitute(_mockSettingsStore);
+        Services.AddPerformanceSettings(_mockSettingsStore);
 
         _mockMetrics = Substitute.For<IUxMetricsService>();
         Services.AddSingleton(_mockMetrics);

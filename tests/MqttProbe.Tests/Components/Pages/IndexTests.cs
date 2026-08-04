@@ -33,7 +33,8 @@ public class IndexTests : BunitTestContext
     private IEmulationService _mockEmulation = null!;
     private List<EmulatorNodeConfig> _emulatorNodes = null!;
     private ISparkplugTopologyService _mockTopology = null!;
-    private ISettingsStore _mockConfig = null!;
+    private IUiSettings _mockUi = null!;
+    private IChartSettings _mockCharts = null!;
     private IConnectionSessionLifecycle _mockLifecycle = null!;
 
     [SetUp]
@@ -43,8 +44,11 @@ public class IndexTests : BunitTestContext
         _mockSubManager = Substitute.For<ISubscriptionManager>();
         _mockEmulation = Substitute.For<IEmulationService>();
         _mockTopology = Substitute.For<ISparkplugTopologyService>();
-        _mockConfig = Substitute.For<ISettingsStore>();
-        _mockConfig.IsHintDismissed(Arg.Any<string>()).Returns(false);
+        var cfg = new AppConfiguration();
+        _mockUi = Substitute.For<IUiSettings>();
+        _mockUi.Ui.Returns(cfg.Ui);
+        _mockUi.IsHintDismissed(Arg.Any<string>()).Returns(false);
+        _mockCharts = Substitute.For<IChartSettings>();
 
         var mockSessionState = Substitute.For<ISessionState>();
         mockSessionState.SelectedConnection.Returns(new Connection());
@@ -60,7 +64,8 @@ public class IndexTests : BunitTestContext
         Services.AddSingleton(_mockSubManager);
         Services.AddSingleton(_mockEmulation);
         Services.AddSingleton(_mockTopology);
-        Services.AddSettingsSubstitute(_mockConfig);
+        Services.AddUiSettings(_mockUi);
+        Services.AddChartSettings(_mockCharts);
         Services.AddSingleton(mockSessionState);
         Services.AddSingleton<IThemes>(new Themes());
 
@@ -455,10 +460,13 @@ public class NotFoundPageTests : BunitTestContext
         Services.AddSingleton(Substitute.For<IDialogService>());
         Services.AddSingleton(Substitute.For<IConnectionSessionLifecycle>());
 
-        var mockConfig = Substitute.For<ISettingsStore>();
+        // NotFoundPage renders via MainLayout, which injects only IUiSettings — the brief's
+        // draft claimed this container also needed IChartSettings, but NotFoundPage never
+        // renders Index or Charts, so that facet is unused here.
+        var mockConfig = Substitute.For<IUiSettings>();
         var cfg = new AppConfiguration();
         mockConfig.Ui.Returns(cfg.Ui);
-        Services.AddSettingsSubstitute(mockConfig);
+        Services.AddUiSettings(mockConfig);
         Services.AddSingleton(Substitute.For<IJSRuntime>());
         var mockMetrics = Substitute.For<IUxMetricsService>();
         mockMetrics.GetSnapshot().Returns(new UxMetricsSnapshot(

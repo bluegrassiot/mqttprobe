@@ -20,7 +20,8 @@ namespace MqttProbe.Shared.Tests.Components.Pages;
 [TestFixture]
 public class SettingsTests : BunitTestContext
 {
-    private ISettingsStore _mockStore = null!;
+    private IUiSettings _mockUi = null!;
+    private IPerformanceSettings _mockPerformance = null!;
     private Themes _themes = null!;
     private IAppInfoService _mockAppInfo = null!;
     private IUpdateService _mockUpdateService = null!;
@@ -28,19 +29,21 @@ public class SettingsTests : BunitTestContext
     [SetUp]
     public void Setup()
     {
-        _mockStore = Substitute.For<ISettingsStore>();
         var cfg = new AppConfiguration
         {
             Ui = new UiPreferences { Theme = "dark", FontAccessible = false, AutoResubscribe = true },
             Performance = new PerformanceSettings { MaxStoredMessages = 10_000, MaxMessagesPerSecond = 50_000 }
         };
-        _mockStore.Ui.Returns(cfg.Ui);
-        _mockStore.Performance.Returns(cfg.Performance);
+        _mockUi = Substitute.For<IUiSettings>();
+        _mockUi.Ui.Returns(cfg.Ui);
+        _mockPerformance = Substitute.For<IPerformanceSettings>();
+        _mockPerformance.Performance.Returns(cfg.Performance);
         _themes = new Themes();
         _mockAppInfo = Substitute.For<IAppInfoService>();
         _mockAppInfo.RequiresAuthentication.Returns(true);
         _mockUpdateService = Substitute.For<IUpdateService>();
-        Services.AddSettingsSubstitute(_mockStore);
+        Services.AddUiSettings(_mockUi);
+        Services.AddPerformanceSettings(_mockPerformance);
         Services.AddSingleton<IThemes>(_themes);
         Services.AddSingleton(_mockAppInfo);
         Services.AddSingleton(_mockUpdateService);

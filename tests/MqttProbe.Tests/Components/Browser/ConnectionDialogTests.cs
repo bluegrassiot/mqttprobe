@@ -1227,8 +1227,11 @@ public class ConnectionDialogTests : BunitTestContext
 
         var conn = new Connection
         {
-            Name = "CertConn", Host = "tls.local", Port = 8883,
-            UseTls = true, ClientCertificateAssetId = "old-asset"
+            Name = "CertConn",
+            Host = "tls.local",
+            Port = 8883,
+            UseTls = true,
+            ClientCertificateAssetId = "old-asset"
         };
         var cfg = new AppConfiguration { Connections = [conn] };
         await OpenDialog(cfg);

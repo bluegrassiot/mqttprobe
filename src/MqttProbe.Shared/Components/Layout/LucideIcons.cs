@@ -1,13 +1,8 @@
 namespace MqttProbe.Components.Layout;
 
-/// <summary>
-/// Lucide icon SVG strings compatible with MudBlazor's icon system.
-/// Icons are formatted as stroke-based SVG elements (fill="none", stroke="currentColor").
-/// See https://lucide.dev for the icon set.
-/// Note: Blazor.Lucide NuGet package provides &lt;LucideIcon&gt; components; these string
-/// constants are used for MudBlazor icon parameters (Icon, StartIcon, AdornmentIcon, etc.)
-/// which require raw SVG string data.
-/// </summary>
+// Lucide icon SVG strings (https://lucide.dev), stroke-based (fill="none", stroke="currentColor").
+// The Blazor.Lucide package provides <LucideIcon> components, but MudBlazor icon parameters
+// (Icon, StartIcon, AdornmentIcon) require raw SVG string data, hence these constants.
 public static class LucideIcons
 {
     private const string S = "stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' fill='none'";

@@ -28,10 +28,7 @@ public class MetricsStatsChipTests : BunitTestContext
         Services.AddSingleton(_mockMsgStore);
     }
 
-    /// <summary>
-    /// Finds the .mud-expand-panel whose .mud-expand-panel-text matches <paramref name="title"/>.
-    /// Throws if not found or if multiple panels match.
-    /// </summary>
+    // Throws if no panel matches, or if more than one does.
     private static IElement FindPanelByTitle(IRenderedComponent<MudPopoverProvider> provider, string title)
     {
         return provider.FindAll(".mud-expand-panel")

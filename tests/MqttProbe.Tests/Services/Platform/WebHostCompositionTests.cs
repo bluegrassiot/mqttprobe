@@ -14,19 +14,15 @@ using MqttProbe.Services.Sparkplug;
 
 namespace MqttProbe.Tests.Services.Platform;
 
-/// <summary>
-/// Boots the real MqttProbe.Web host rather than a hand-rebuilt service collection.
-///
-/// This exists because a service collection assembled inside a test is a copy of the host
-/// wiring, and a copy drifts: four Web-only registrations (IAppInfoService, IClipboardService,
-/// IUpdateService, IUserAuthService) were once dropped from Program.cs while every unit test
-/// still passed, because no test ever built the container Program.cs actually builds. The
-/// failure only appeared when the app was launched.
-///
-/// Program.cs runs builder.Build(), which validates the whole descriptor set, so simply
-/// starting the host is the assertion. The resolutions below then cover the services a
-/// container validation cannot reach on its own -- those behind factory lambdas.
-/// </summary>
+// Boots the real MqttProbe.Web host rather than a hand-rebuilt service collection. A service
+// collection assembled inside a test is a copy of the host wiring, and a copy drifts: four
+// Web-only registrations (IAppInfoService, IClipboardService, IUpdateService, IUserAuthService)
+// were once dropped from Program.cs while every unit test still passed, because no test ever
+// built the container Program.cs actually builds. The failure only appeared on launch.
+//
+// Program.cs runs builder.Build(), which validates the whole descriptor set, so simply starting
+// the host is the assertion. The resolutions below cover the services a container validation
+// cannot reach on its own -- those behind factory lambdas.
 [TestFixture]
 public class WebHostCompositionTests
 {

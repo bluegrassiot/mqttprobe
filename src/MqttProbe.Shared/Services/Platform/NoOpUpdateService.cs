@@ -1,6 +1,6 @@
 namespace MqttProbe.Services.Platform;
 
-/// <summary>Registered on heads without self-update (Web, Desktop, Android, portable runs).</summary>
+// Registered on heads without self-update (Web, Desktop, Android, portable runs).
 public sealed class NoOpUpdateService : IUpdateService
 {
     public bool IsSupported => false;

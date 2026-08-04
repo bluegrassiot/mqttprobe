@@ -21,11 +21,9 @@ using Org.Eclipse.Tahu.Protobuf;
 
 namespace MqttProbe.Tests.Services.Plugins;
 
-/// <summary>
-/// Proves the DI-composed object graph used by both Web and MAUI hosts builds correctly
-/// and routes messages end-to-end through the pipeline into both message storage and
-/// Sparkplug topology state.
-/// </summary>
+// Proves the DI-composed object graph used by both Web and MAUI hosts builds correctly
+// and routes messages end-to-end through the pipeline into both message storage and
+// Sparkplug topology state.
 [TestFixture]
 public class PluginPipelineDiCompositionTests
 {

@@ -31,14 +31,11 @@ public interface ISparkplugNodeFactory
         IReadOnlyList<string>? deviceIds, Func<string, IReadOnlyList<Metric>>? getDeviceBirthMetrics);
 }
 
-/// <summary>
-/// A KnownMetricStorage subclass that also tracks metrics by alias, allowing
-/// alias-only metrics in NDATA/DDATA to survive FilterMetrics.
-/// SparkplugNet's AddVersionBMetric stores name+alias metrics only in knownMetricsByName,
-/// leaving knownMetricsByAlias empty. ShouldVersionBMetricBeAdded then rejects alias-only
-/// data metrics because the alias lookup fails. This subclass overrides FilterMetrics to
-/// accept alias-only data metrics whose alias+datatype match a birth-registered metric.
-/// </summary>
+// Tracks metrics by alias so alias-only NDATA/DDATA metrics survive FilterMetrics.
+// SparkplugNet's AddVersionBMetric stores name+alias metrics only in knownMetricsByName,
+// leaving knownMetricsByAlias empty. ShouldVersionBMetricBeAdded then rejects alias-only
+// data metrics because the alias lookup fails. FilterMetrics is overridden here to accept
+// alias-only data metrics whose alias+datatype match a birth-registered metric.
 internal sealed class AliasAwareKnownMetricStorage : SparkplugBase<Metric>.KnownMetricStorage
 {
     private readonly ConcurrentDictionary<ulong, DataType> _knownAliases = new();

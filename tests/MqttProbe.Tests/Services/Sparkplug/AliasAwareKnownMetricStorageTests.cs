@@ -4,10 +4,8 @@ using SparkplugNet.VersionB.Data;
 
 namespace MqttProbe.Shared.Tests.Services.Sparkplug;
 
-/// <summary>
-/// Regression tests for the alias-aware KnownMetricStorage.
-/// These exercise real SparkplugNet FilterMetrics behaviour — not mocked ISparkplugNode.
-/// </summary>
+// Regression tests for the alias-aware KnownMetricStorage. These exercise real SparkplugNet
+// FilterMetrics behaviour, not a mocked ISparkplugNode.
 [TestFixture]
 public class AliasAwareKnownMetricStorageTests
 {

@@ -4,12 +4,10 @@ using MQTTnet.Packets;
 
 namespace MqttProbe.Services.Mqtt;
 
-/// <summary>
-/// Project-owned managed MQTT client implemented on the MQTTnet 5 <see cref="IMqttClient"/>.
-/// Provides the subset of MQTTnet-4 ManagedClient behavior mqttprobe relies on:
-/// auto-reconnect with a fixed delay, subscription restore after reconnect, and a
-/// bounded publish queue that accepts messages while disconnected and drains on connect.
-/// </summary>
+// Project-owned managed MQTT client on the MQTTnet 5 IMqttClient. Provides the subset of
+// MQTTnet-4 ManagedClient behavior mqttprobe relies on: auto-reconnect with a fixed delay,
+// subscription restore after reconnect, and a bounded publish queue that accepts messages
+// while disconnected and drains on connect.
 public sealed class MqttManagedClient : IMqttManagedClient
 {
     private const int MaxPendingMessages = 1000;
@@ -198,12 +196,10 @@ public sealed class MqttManagedClient : IMqttManagedClient
         }
     }
 
-    /// <summary>
-    /// Invokes each subscriber in turn, isolating faults. Subscribers are observers: one that
-    /// throws must not starve the rest of the multicast list, and must never take reconnect
-    /// down with it. MQTTnet swallows exceptions thrown out of its own event handlers, so an
-    /// escaping fault here disappears silently and the client stops retrying forever.
-    /// </summary>
+    // Subscribers are observers: one that throws must not starve the rest of the multicast
+    // list, and must never take reconnect down with it. MQTTnet swallows exceptions thrown
+    // out of its own event handlers, so an escaping fault here disappears silently and the
+    // client stops retrying forever.
     private async Task RaiseAsync<TArgs>(Func<TArgs, Task>? handler, TArgs args, string eventName)
     {
         if (handler is null)

@@ -8,11 +8,9 @@ using NUnit.Framework;
 
 namespace MqttProbe.TestInfrastructure.Fixtures;
 
-/// <summary>
-/// Shared Testcontainers Mosquitto fixture with mTLS.
-/// Generates CA-signed server and client certs with a shared validity window.
-/// Starts a Mosquitto container requiring client certificates on port 8883.
-/// </summary>
+// Shared Testcontainers Mosquitto fixture with mTLS. Generates CA-signed server and client
+// certs with a shared validity window, then starts a Mosquitto container requiring client
+// certificates on port 8883.
 public sealed class MtlsBrokerFixture : IAsyncDisposable
 {
     // Immutable image digest — do not replace with a floating tag.

@@ -34,7 +34,7 @@
 @code {
     [Parameter] public bool AutoResubscribe { get; set; }
     [Parameter] public EventCallback<bool> AutoResubscribeChanged { get; set; }
-    [Parameter, EditorRequired] public IReadOnlyList<SubscribedTopic> Items { get; set; } = [];
+    [Parameter, EditorRequired] public List<SubscribedTopic> Items { get; set; } = [];
     [Parameter] public EventCallback<(string Topic, MqttQualityOfServiceLevel Qos)> OnAdd { get; set; }
     [Parameter] public EventCallback<IReadOnlyList<string>> OnRemove { get; set; }
     [Parameter] public EventCallback OnClearAll { get; set; }

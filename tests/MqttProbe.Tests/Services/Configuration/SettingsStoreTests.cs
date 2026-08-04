@@ -1,3 +1,5 @@
+using MqttProbe.Models.Chart;
+using MqttProbe.Models.Emulation;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Security;
@@ -94,6 +96,48 @@ public class SettingsStoreTests
         await _store.DismissHintAsync("any-hint");
 
         fired.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task SetPasswordAsync_RoundTripsThroughVerifyCredentials()
+    {
+        await _store.SetPasswordAsync("admin", "correct-horse");
+
+        _store.VerifyCredentials("admin", "correct-horse").Should().BeTrue();
+        _store.VerifyCredentials("admin", "wrong").Should().BeFalse();
+        _store.VerifyCredentials("someone-else", "correct-horse").Should().BeFalse();
+
+        using var reloaded = new SettingsStore(_configPath);
+        await reloaded.LoadAsync();
+        reloaded.VerifyCredentials("admin", "correct-horse").Should().BeTrue();
+    }
+
+    // Chart and emulator ops live on collaborators; SettingsStore forwards their events.
+    // Without explicit add/remove accessors that forwarding compiles clean and never fires.
+    [Test]
+    public async Task AddChartAsync_RaisesChartsChangedForTheConnection()
+    {
+        var connectionId = Guid.NewGuid();
+        Guid? raisedFor = null;
+        _store.ChartsChanged += id => raisedFor = id;
+
+        await _store.AddChartAsync(connectionId, new ChartConfiguration { Name = "c" });
+
+        raisedFor.Should().Be(connectionId);
+        _store.GetCharts(connectionId).Should().ContainSingle(c => c.Name == "c");
+    }
+
+    [Test]
+    public async Task AddEmulatorNodeAsync_RaisesEmulatorsChangedForTheConnection()
+    {
+        var connectionId = Guid.NewGuid();
+        Guid? raisedFor = null;
+        _store.EmulatorsChanged += id => raisedFor = id;
+
+        await _store.AddEmulatorNodeAsync(connectionId, new EmulatorNodeConfig { NodeId = "n" });
+
+        raisedFor.Should().Be(connectionId);
+        _store.GetEmulatorNodes(connectionId).Should().ContainSingle(n => n.NodeId == "n");
     }
 
     [Test]
@@ -269,6 +313,25 @@ public class SettingsStoreTests
         _store.Config.Connections.Should().BeEmpty("an existing config is never reseeded");
     }
 
+    // The pre-multi-connection "charts"/"emulators" keys were deleted from AppConfiguration.
+    // Deserialization must keep skipping unknown keys: a parse failure here is swallowed by
+    // LoadOrCreateConfigAsync, which would silently reset an existing user's whole config.
+    [Test]
+    public async Task LoadAsync_WhenFileHasLegacyTopLevelKeys_StillLoadsTheRest()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """
+            {"connections":[{"name":"Kept","host":"h","port":1883}],
+             "charts":[{"name":"old-chart"}],
+             "emulators":{"publishIntervalMs":250,"nodes":[]}}
+            """);
+
+        var loaded = await _store.LoadAsync();
+
+        loaded.Should().BeTrue("an unknown key must not fail the parse");
+        _store.Connections.Should().ContainSingle(c => c.Name == "Kept");
+    }
+
     [Test]
     public async Task AddConnectionAsync_SameIdDifferentName_ReplacesNotDuplicates()
     {
@@ -354,10 +417,8 @@ public class SettingsStoreTests
         store.Config.Connections.Should().Contain(c => c.Name == "ToDelete");
     }
 
-    /// <summary>
-    /// Test subclass that forces SaveCoreAsync to fail, enabling deterministic
-    /// rollback testing without relying on ISecretStorage side effects.
-    /// </summary>
+    // Forces SaveCoreAsync to fail, making rollback deterministic without relying on
+    // ISecretStorage side effects.
     private class FailingSaveSettingsStore : SettingsStore
     {
         private bool _failSave;

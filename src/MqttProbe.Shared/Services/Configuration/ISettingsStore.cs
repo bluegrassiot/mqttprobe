@@ -78,7 +78,5 @@ public interface ISettingsStore
     : IConnectionSettings, IChartSettings, IEmulatorSettings,
       IUiSettings, IPerformanceSettings, IAuthSettings
 {
-    public AppConfiguration Config { get; }
-
     public Task<bool> LoadAsync();
 }

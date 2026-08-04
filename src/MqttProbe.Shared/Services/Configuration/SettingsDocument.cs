@@ -3,13 +3,19 @@ using MqttProbe.Models.Configuration;
 
 namespace MqttProbe.Services.Configuration;
 
-// Excludes IDisposable deliberately: SettingsStore owns the document's lifetime,
+// Excludes IDisposable deliberately: the composition root owns the document's lifetime,
 // the collaborators only borrow it.
 internal interface ISettingsDocument
 {
     public AppConfiguration Config { get; }
 
     public Task MutateAndSaveAsync(Action<AppConfiguration> mutate);
+
+    // SemaphoreSlim is not reentrant: never call this from inside the action.
+    public Task ExclusiveAsync(Func<Task> action);
+
+    // The caller must already hold the lock via ExclusiveAsync.
+    public Task SaveAsync();
 }
 
 internal sealed class SettingsDocument(string path) : ISettingsDocument, IDisposable
@@ -69,11 +75,10 @@ internal sealed class SettingsDocument(string path) : ISettingsDocument, IDispos
             _lock.Release();
         }
 
-        await ExclusiveAsync(WriteAsync);
+        await ExclusiveAsync(SaveAsync);
     }
 
-    // The caller must already hold the lock.
-    public async Task WriteAsync()
+    public async Task SaveAsync()
     {
         var sanitised = new AppConfiguration
         {

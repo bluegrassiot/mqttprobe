@@ -72,11 +72,15 @@ public interface IAuthSettings
     public Task SetPasswordAsync(string username, string newPassword);
 }
 
+public interface ISettingsLoader
+{
+    public Task<bool> LoadAsync();
+}
+
 // Kept as a composite so hosts have one thing to register and so existing
 // Substitute.For<ISettingsStore>() fixtures still satisfy the narrow interfaces.
 public interface ISettingsStore
     : IConnectionSettings, IChartSettings, IEmulatorSettings,
-      IUiSettings, IPerformanceSettings, IAuthSettings
+      IUiSettings, IPerformanceSettings, IAuthSettings, ISettingsLoader
 {
-    public Task<bool> LoadAsync();
 }

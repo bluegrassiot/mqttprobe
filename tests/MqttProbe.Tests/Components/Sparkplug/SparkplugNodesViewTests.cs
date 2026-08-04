@@ -375,7 +375,7 @@ public class SparkplugNodesViewHelperTests
     [TestCase(SpbNodeStatus.Unknown, "var(--mud-palette-text-secondary)")]
     public void StatusColor_ReturnsExpectedColor(SpbNodeStatus status, string expected)
     {
-        SparkplugNodesView.StatusColor(status).Should().Be(expected);
+        SparkplugNodeDisplay.StatusColor(status).Should().Be(expected);
     }
 
     [TestCase(SpbNodeStatus.Online, "ONLINE")]
@@ -383,7 +383,7 @@ public class SparkplugNodesViewHelperTests
     [TestCase(SpbNodeStatus.Unknown, "UNKNOWN")]
     public void StatusLabel_ReturnsExpectedLabel(SpbNodeStatus status, string expected)
     {
-        SparkplugNodesView.StatusLabel(status).Should().Be(expected);
+        SparkplugNodeDisplay.StatusLabel(status).Should().Be(expected);
     }
 
     [TestCase("double", true)]
@@ -398,6 +398,6 @@ public class SparkplugNodesViewHelperTests
     [TestCase("bytes", false)]
     public void IsNumericType_ReturnsExpectedResult(string dataType, bool expected)
     {
-        SparkplugNodesView.IsNumericType(dataType).Should().Be(expected);
+        SparkplugNodeDisplay.IsNumericType(dataType).Should().Be(expected);
     }
 }

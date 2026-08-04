@@ -1,0 +1,79 @@
+@namespace MqttProbe.Components.Sparkplug
+@using MqttProbe.Models.Sparkplug
+
+@if (!Groups.Any())
+{
+    @if (string.IsNullOrWhiteSpace(FilterText) && SelectedGroupId == null)
+    {
+        <div class="d-flex flex-column align-center pa-6">
+            <MudIcon Icon="@LucideIcons.Network" Size="Size.Large" Color="Color.Secondary"/>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                No Sparkplug B nodes observed
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Subscribe to spBv1.0/# to begin receiving node traffic
+            </MudText>
+        </div>
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-3">
+            No nodes match "@FilterText"
+        </MudText>
+    }
+}
+else
+{
+    @foreach (var grp in Groups)
+    {
+        <div class="spb-group-header">@grp.Key.ToUpperInvariant()</div>
+        @foreach (var node in grp.OrderBy(n => n.NodeId, NaturalStringComparer.Instance))
+        {
+            <div @key="@($"{node.GroupId}/{node.NodeId}")" class="spb-node-row @(SelectedNode == node ? "spb-node-row--selected" : "")"
+                 @onclick="() => OnSelect.InvokeAsync(node)">
+                <div class="d-flex align-center justify-space-between">
+                    <div class="d-flex align-center gap-1">
+                        <span class="spb-status-dot" style="background:@SparkplugNodeDisplay.NodeStatusColor(node)"></span>
+                        <span class="spb-node-id">@node.NodeId</span>
+                        <span class="spb-status-label spb-status-label--node" style="color:@SparkplugNodeDisplay.NodeStatusColor(node)">
+                            @SparkplugNodeDisplay.NodeStatusLabel(node)
+                        </span>
+                    </div>
+                    @if (node.Status == SpbNodeStatus.Offline)
+                    {
+                        <span @onclick:stopPropagation="true">
+                            <MudIconButton Icon="@LucideIcons.Trash2"
+                                           Color="Color.Error"
+                                           Size="Size.Small"
+                                           title="Remove node from view"
+                                           OnClick="@(() => OnRemove.InvokeAsync(node))" />
+                        </span>
+                    }
+                </div>
+                <div class="spb-node-secondary">
+                    @SparkplugNodeDisplay.NodeSecondaryText(node)
+                </div>
+            </div>
+        }
+    }
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<IGrouping<string, SpbNode>> Groups { get; set; } = [];
+
+    [Parameter]
+    public SpbNode? SelectedNode { get; set; }
+
+    [Parameter]
+    public string? FilterText { get; set; }
+
+    [Parameter]
+    public string? SelectedGroupId { get; set; }
+
+    [Parameter]
+    public EventCallback<SpbNode> OnSelect { get; set; }
+
+    [Parameter]
+    public EventCallback<SpbNode> OnRemove { get; set; }
+}

@@ -33,7 +33,9 @@
     padding: 16px;
 }
 
-.spb-group-header {
+/* Node/detail rows (rendered by child components → ::deep) */
+
+::deep .spb-group-header {
     padding: 6px 12px 4px;
     font-size: 11px;
     font-weight: 600;
@@ -44,7 +46,7 @@
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
-.spb-node-row {
+::deep .spb-node-row {
     display: flex;
     flex-direction: column;
     padding: 10px 12px;
@@ -54,13 +56,13 @@
     box-shadow: inset 3px 0 0 transparent;
 }
 
-.spb-node-row:hover { background: var(--mud-palette-action-default-hover); }
-.spb-node-row--selected {
+::deep .spb-node-row:hover { background: var(--mud-palette-action-default-hover); }
+::deep .spb-node-row--selected {
     background: var(--mud-palette-action-default-hover);
     box-shadow: inset 3px 0 0 var(--mud-palette-primary);
 }
 
-.spb-status-dot {
+::deep .spb-status-dot {
     display: inline-block;
     width: 8px;
     height: 8px;
@@ -70,7 +72,7 @@
     vertical-align: middle;
 }
 
-.spb-device-row {
+::deep .spb-device-row {
     display: flex;
     align-items: center;
     padding: 8px 16px;
@@ -78,16 +80,16 @@
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
-.spb-device-row:hover { background: var(--mud-palette-action-default-hover); }
-.spb-device-row--expanded { background: var(--mud-palette-action-default-hover); }
+::deep .spb-device-row:hover { background: var(--mud-palette-action-default-hover); }
+::deep .spb-device-row--expanded { background: var(--mud-palette-action-default-hover); }
 
-.spb-device-metrics {
+::deep .spb-device-metrics {
     padding: 8px 8px 8px 32px;
     background: var(--mud-palette-background-grey);
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
-.spb-detail-panel {
+::deep .spb-detail-panel {
     background: transparent;
     padding: 0;
 }
@@ -240,14 +242,14 @@
 
 /* ── Node list ───────────────────────────────────────────────────────────── */
 
-.spb-node-id {
+::deep .spb-node-id {
     font-size: 14px;
     font-weight: 500;
     color: var(--mud-palette-text-primary);
     overflow-wrap: anywhere;
 }
 
-.spb-node-secondary {
+::deep .spb-node-secondary {
     font-size: 12px;
     color: var(--mud-palette-text-secondary);
     margin-top: 2px;
@@ -256,13 +258,13 @@
 
 /* ── Status label (color kept inline — driven by StatusColor()) ──────────── */
 
-.spb-status-label           { font-size: 12px; font-weight: 500; }
-.spb-status-label--node     { margin-left: 4px; }
-.spb-status-label--device   { margin-left: 8px; }
+::deep .spb-status-label           { font-size: 12px; font-weight: 500; }
+::deep .spb-status-label--node     { margin-left: 4px; }
+::deep .spb-status-label--device   { margin-left: 8px; }
 
 /* ── Detail panel ────────────────────────────────────────────────────────── */
 
-.spb-empty-detail {
+::deep .spb-empty-detail {
     height: 100%;
     color: var(--mud-palette-text-secondary);
 }
@@ -281,14 +283,14 @@
     height: 20px;
 }
 
-.spb-timestamps {
+::deep .spb-timestamps {
     font-size: 12px;
     color: var(--mud-palette-text-secondary);
 }
 
-.spb-relative-time { margin-left: 4px; }
+::deep .spb-relative-time { margin-left: 4px; }
 
-.spb-subsection-header {
+::deep .spb-subsection-header {
     font-size: 14px;
     font-weight: 600;
     color: var(--mud-palette-text-primary);
@@ -324,7 +326,7 @@
 
 /* ── Device list ─────────────────────────────────────────────────────────── */
 
-.spb-device-id {
+::deep .spb-device-id {
     font-size: 13px;
     font-weight: 500;
     color: var(--mud-palette-text-primary);
@@ -332,7 +334,7 @@
     overflow-wrap: anywhere;
 }
 
-.spb-device-secondary {
+::deep .spb-device-secondary {
     font-size: 12px;
     color: var(--mud-palette-text-secondary);
     margin-left: auto;

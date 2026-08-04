@@ -171,6 +171,10 @@
 
     private void FormChanged(FormFieldChangedEventArgs args) => UpdateActionStates();
 
+    // MudForm starts out valid and IsValidChanged only fires on transitions, so a fresh
+    // dialog filled with valid input never receives the event. Validity is therefore
+    // derived from the model on every field change; the form's own report still vetoes
+    // value-conversion errors (e.g. non-numeric Port input) the model never sees.
     private void UpdateActionStates()
     {
         _isFormValid = _formReportsValid && _connectionValidator.Validate(_selectedConnection).IsValid;
@@ -184,6 +188,10 @@
         _canSave = (!matchesSaved || HasPendingCertificateChange()) && _isFormValid;
     }
 
+    // Certificate edits live outside the Connection model (staged cert/key files, cert
+    // password, pending removal), so Connection.Equals cannot see them. Treat any such
+    // pending change as dirty so Save enables and the connect-time "unsaved changes"
+    // prompt fires, matching how ordinary fields behave.
     private bool HasPendingCertificateChange() =>
         (_certSection?.HasPendingChange ?? false) || _stagedAssetId is not null;
 

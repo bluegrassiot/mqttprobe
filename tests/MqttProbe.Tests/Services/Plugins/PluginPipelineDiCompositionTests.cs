@@ -171,6 +171,22 @@ public class PluginPipelineDiCompositionTests
     }
 
     [Test]
+    public void AddMqttProbeSettings_ResolvesChartAndConnectionFacets()
+    {
+        // IChartSettings and IConnectionSettings aren't covered by
+        // AddMqttProbeSettings_SharesOneInstanceAcrossEachFacetsInterfaces (different backing
+        // types, not the shared PreferenceSettings instance) or by any consumer resolution
+        // elsewhere in this fixture (their only consumer, ISubscriptionManager, is scoped).
+        // Resolve them directly so a botched registration fails here, not at first use.
+        var services = new ServiceCollection();
+        services.AddMqttProbeSettings(Path.Combine(Path.GetTempPath(), $"c_{Guid.NewGuid()}.json"));
+        using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IChartSettings>().Should().NotBeNull();
+        provider.GetRequiredService<IConnectionSettings>().Should().NotBeNull();
+    }
+
+    [Test]
     public void ResolveFromDi_BuildsPluginPackagingServices()
     {
         _serviceProvider.GetRequiredService<PluginInventoryService>().Should().NotBeNull();

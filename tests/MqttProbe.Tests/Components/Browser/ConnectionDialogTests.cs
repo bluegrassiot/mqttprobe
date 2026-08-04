@@ -1223,7 +1223,7 @@ public class ConnectionDialogTests : BunitTestContext
     [Test]
     public async Task RemoveCert_ThenSave_DoesNotShowCertificateLoaded()
     {
-        _mockConfigMgr.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         var cert = TestCertFactory.CreateRsaCert();
         _mockCertStore.LoadAsync(Arg.Any<Guid>(), "old-asset")
             .Returns(new ClientCertificateBundle(cert));
@@ -1253,7 +1253,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled").Should().BeNull();
 
         _dialogProvider.Find("button[title='Save connection']").Click();
-        await _mockConfigMgr.Received(1).AddConnectionAsync(Arg.Any<Connection>());
+        await _mockConnections.Received(1).AddConnectionAsync(Arg.Any<Connection>());
 
         // After save, "Certificate loaded" must NOT reappear
         _dialogProvider.Markup.Should().NotContain("Certificate loaded",

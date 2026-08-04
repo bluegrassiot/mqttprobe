@@ -47,6 +47,27 @@
         <ProjectReference Include="..\MqttProbe.Shared\MqttProbe.Shared.csproj" />
     </ItemGroup>
 
+    <!-- Photino serves the UI from a PhysicalFileProvider rooted at the output wwwroot and
+         never reads the static web assets manifests, so RCL assets (_content/**), the scoped
+         CSS bundle and _framework/blazor.webview.js have to exist on disk. The SDK only
+         materializes those on publish, so a built-and-run app got a 404 for every one of them
+         and rendered an empty window. Mirror the publish layout into the build output; the
+         MAUI BlazorWebView SDK solves the same problem the same way in
+         ConvertStaticWebAssetsToMauiAssets. -->
+    <Target Name="CopyStaticWebAssetsToPhotinoRoot"
+            AfterTargets="Build"
+            DependsOnTargets="StaticWebAssetsPrepareForRun">
+        <ComputeStaticWebAssetsTargetPaths Assets="@(StaticWebAsset)" PathPrefix="wwwroot">
+            <Output TaskParameter="AssetsWithTargetPath" ItemName="_PhotinoStaticWebAsset" />
+        </ComputeStaticWebAssetsTargetPaths>
+
+        <Copy SourceFiles="@(_PhotinoStaticWebAsset)"
+              DestinationFiles="@(_PhotinoStaticWebAsset->'$(OutDir)%(TargetPath)')"
+              SkipUnchangedFiles="true">
+            <Output TaskParameter="DestinationFiles" ItemName="FileWrites" />
+        </Copy>
+    </Target>
+
     <ItemGroup>
         <InternalsVisibleTo Include="MqttProbe.Shared.Tests" />
     </ItemGroup>

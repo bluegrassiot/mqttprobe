@@ -19,11 +19,8 @@ DEFAULT_LIMIT = 500
 
 # Ceilings freeze current size: may stay over DEFAULT_LIMIT but cannot grow.
 GRANDFATHER = {
-    "src/MqttProbe.Shared/Components/Browser/ConnectionDialog.razor": 1002,
-    "src/MqttProbe.Shared/Services/Security/CertificateAssetStore.cs": 700,
     "src/MqttProbe.Shared/Services/Plugins/Packaging/PluginPackageInstaller.cs": 643,
     "src/MqttProbe.Shared/Services/Plugins/Registry/PluginRegistry.cs": 535,
-    "src/MqttProbe.Shared/Components/Sparkplug/SparkplugNodesView.razor": 535,
     "src/MqttProbe.Shared/Services/Emulation/NodeRunners.cs": 528,
     "src/MqttProbe.Shared/Services/Mqtt/MessageStoreManager.cs": 512,
 }

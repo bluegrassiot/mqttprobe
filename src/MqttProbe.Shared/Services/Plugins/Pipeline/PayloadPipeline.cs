@@ -22,48 +22,63 @@ public sealed class PayloadPipeline
 
     public PipelineDecodeResult ProcessInbound(MqttApplicationMessageReceivedEventArgs e)
     {
+        var registry = _registry;
         var diagnostics = new List<string>();
         var topic = e.ApplicationMessage.Topic;
         var segment = e.ApplicationMessage.GetPayloadSegment();
         var rawPayload = segment.Array is null ? [] : segment.ToArray();
 
-        var detector = _registry.FindDetector(e);
+        var candidates = registry.FindMatchingDetectors(e).ToList();
 
-        if (detector is null)
+        if (candidates.Count == 0)
         {
             diagnostics.Add("No detector matched for incoming message.");
             return PipelineDecodeResult.Failure("unknown", topic, rawPayload, diagnostics);
         }
 
-        var formatId = detector.FormatId;
-        var decoder = _registry.FindDecoder(formatId);
+        DecodedPayloadEnvelope? firstFailure = null;
 
-        if (decoder is null)
+        // S3267 false positive: loop has early returns and state tracking, not reducible to LINQ.
+#pragma warning disable S3267
+        foreach (var detector in candidates)
+#pragma warning restore S3267
         {
-            diagnostics.Add($"No decoder found for format '{formatId}'.");
-            return PipelineDecodeResult.Failure(formatId, topic, rawPayload, diagnostics);
+            var formatId = detector.FormatId;
+            var decoder = registry.FindDecoder(formatId);
+
+            if (decoder is null)
+            {
+                diagnostics.Add($"No decoder found for format '{formatId}'.");
+                continue;
+            }
+
+            if (!TryDecode(decoder, e, formatId, diagnostics, out var envelope, out var throwMessage))
+            {
+                firstFailure ??= DecodedPayloadEnvelope.CreateFailure(formatId, topic, rawPayload, throwMessage!);
+                continue;
+            }
+
+            if (envelope.IsFailure)
+            {
+                firstFailure ??= envelope;
+                diagnostics.Add($"Decoder for '{formatId}' returned failure: {envelope.FailureReason}");
+                continue;
+            }
+
+            var extractor = registry.FindTopologyExtractor(formatId);
+            var topologyEvents = extractor is null
+                ? []
+                : ExtractTopologyEvents(extractor, envelope, formatId, diagnostics);
+
+            return BuildDecodeResult(envelope, topologyEvents, diagnostics);
         }
 
-        if (!TryDecode(decoder, e, formatId, diagnostics, out var envelope))
+        if (firstFailure is not null)
         {
-            return PipelineDecodeResult.Failure(formatId, topic, rawPayload, diagnostics);
+            return BuildDecodeResult(firstFailure, [], diagnostics);
         }
 
-        if (envelope.IsFailure)
-        {
-            return BuildDecodeResult(envelope, [], diagnostics);
-        }
-
-        var extractor = _registry.FindTopologyExtractor(formatId);
-
-        if (extractor is null)
-        {
-            return BuildDecodeResult(envelope, [], diagnostics);
-        }
-
-        var topologyEvents = ExtractTopologyEvents(extractor, envelope, formatId, diagnostics);
-
-        return BuildDecodeResult(envelope, topologyEvents, diagnostics);
+        return PipelineDecodeResult.Failure(candidates[0].FormatId, topic, rawPayload, diagnostics);
     }
 
     private bool TryDecode(
@@ -71,11 +86,13 @@ public sealed class PayloadPipeline
         MqttApplicationMessageReceivedEventArgs e,
         string formatId,
         List<string> diagnostics,
-        out DecodedPayloadEnvelope envelope)
+        out DecodedPayloadEnvelope envelope,
+        out string? throwMessage)
     {
         try
         {
             envelope = decoder.Decode(e);
+            throwMessage = null;
             return true;
         }
         catch (Exception ex)
@@ -83,6 +100,7 @@ public sealed class PayloadPipeline
             _logger.LogWarning(ex, "Decoder for format '{FormatId}' threw an exception.", formatId);
             diagnostics.Add($"Decoder threw: {ex.Message}");
             envelope = default!;
+            throwMessage = ex.Message;
             return false;
         }
     }

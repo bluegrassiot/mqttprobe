@@ -8,7 +8,7 @@ using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Plugins.Registry;
 using Org.Eclipse.Tahu.Protobuf;
 
-namespace MqttProbe.Tests.Services.Plugins.Integration;
+namespace MqttProbe.Shared.Tests.Services.Plugins.Integration;
 
 [TestFixture]
 public class ReadPathIntegrationTests
@@ -105,17 +105,17 @@ public class ReadPathIntegrationTests
         birthEvent.Metrics[0].Name.Should().Be("Temperature");
     }
 
-    // --- Sparkplug B: invalid protobuf ---
+    // --- Sparkplug B: invalid protobuf falls back to plaintext ---
 
     [Test]
-    public void Sparkplug_InvalidProtobuf_ReturnsFailureEnvelope_NoTopologyEvents()
+    public void Sparkplug_InvalidProtobuf_FallsBackToPlainText_NoTopologyEvents()
     {
         var result = _pipeline.ProcessInbound(
             MakeArgs("spBv1.0/group/NDATA/eon1", "not protobuf"));
 
-        result.Envelope.IsFailure.Should().BeTrue();
-        result.Envelope.FormatId.Should().Be("sparkplug-b");
-        result.Envelope.FailureReason.Should().Contain("parse failed");
+        result.Envelope.IsFailure.Should().BeFalse();
+        result.Envelope.FormatId.Should().Be("plaintext");
+        result.Envelope.DisplayText.Should().Be("not protobuf");
         result.TopologyEvents.Should().BeEmpty();
     }
 

@@ -34,13 +34,12 @@ public sealed class PluginRegistry
 
     public IPayloadDetector? FindDetector(MqttApplicationMessageReceivedEventArgs e) =>
         Detectors.FirstOrDefault(detector => detector.CanDetect(e));
-
+    public IEnumerable<IPayloadDetector> FindMatchingDetectors(MqttApplicationMessageReceivedEventArgs e) =>
+        Detectors.Where(detector => detector.CanDetect(e));
     public IPayloadDecoder? FindDecoder(string formatId) =>
         Decoders.TryGetValue(formatId, out var decoder) ? decoder : null;
-
     public IPayloadEncoder? FindEncoder(string formatId) =>
         Encoders.TryGetValue(formatId, out var encoder) ? encoder : null;
-
     public ITopologyExtractor? FindTopologyExtractor(string formatId) =>
         TopologyExtractors.TryGetValue(formatId, out var extractor) ? extractor : null;
 }
@@ -327,7 +326,7 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
 
             var winner = ResolveGroupConflict(
                 formatId, group, disabled, overrideMap, capability,
-                e => getPluginId(e));
+                getPluginId);
 
             if (winner.HasValue)
             {
@@ -358,7 +357,7 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
         }
 
         // overridePluginId comes from hand-written config; matched the same way as DisabledPluginIds.
-        var hadRegistered = allEntries.Any(e =>
+        var hadRegistered = allEntries.Exists(e =>
             getFormatId(e) == formatId
             && string.Equals(getPluginId(e), overridePluginId, StringComparison.OrdinalIgnoreCase));
 

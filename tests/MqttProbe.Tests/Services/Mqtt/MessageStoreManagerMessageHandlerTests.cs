@@ -1,17 +1,11 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
-using MqttProbe.Models.Chart;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
-using MqttProbe.Models.Sparkplug;
-using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Platform;
-using MqttProbe.Services.Security;
-using MqttProbe.Services.Sparkplug;
 using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Shared.Tests.Services.Mqtt;
@@ -75,7 +69,7 @@ public class MessageStoreManagerMessageHandlerTests
         _manager.MessageStores.Should().ContainKey("sensors");
         var msgs = _manager.MessageStores["sensors"].Messages;
         msgs.Should().NotBeNull();
-        msgs!.Should().Contain(m => m.Payload == "42 degrees");
+        msgs.Should().Contain(m => m.Payload == "42 degrees");
     }
 
     [Test]
@@ -90,7 +84,7 @@ public class MessageStoreManagerMessageHandlerTests
     [Test]
     public async Task MessageReceived_EmptyPayload_StoresEmptyString_DoesNotThrow()
     {
-        var act = async () => await Fire("empty/topic", "");
+        var act = async () => await Fire("empty/topic");
         await act.Should().NotThrowAsync();
 
         _manager.MessageStores.Should().ContainKey("empty");
@@ -178,12 +172,12 @@ public class MessageStoreManagerMessageHandlerTests
     [Test]
     public async Task MessageReceived_SparkplugTopic_WithEmptyPayload_DoesNotThrow()
     {
-        var act = async () => await Fire("spBv1.0/group/NBIRTH/eon1", "");
+        var act = async () => await Fire("spBv1.0/group/NBIRTH/eon1");
         await act.Should().NotThrowAsync();
     }
 
     [Test]
-    public async Task MessageReceived_SparkplugTopic_WithPlainJsonPayload_StoresPayload()
+    public async Task MessageReceived_SparkplugTopic_WithPlainJsonPayload_StoresAsJson()
     {
         const string json = """{"timestamp":123,"metrics":[]}""";
 
@@ -192,7 +186,7 @@ public class MessageStoreManagerMessageHandlerTests
         var msgs = _manager.MessageStores["spBv1.0"].SubTopics!["group"]
             .SubTopics!["DDATA"].SubTopics!["eon1"].Messages;
         msgs.Should().NotBeNull();
-        msgs!.Should().Contain(m => m.Payload != null && m.Payload.Contains("Sparkplug protobuf parse failed"));
+        msgs.Should().ContainSingle(m => m.Payload == json && m.FormatId == "json");
     }
 
     [Test]
@@ -372,7 +366,7 @@ public class MessageStoreManagerMessageHandlerTests
         manager.TotalStoredMessages.Should().Be(4);
         manager.MessageStores["hot"].Messages!.Count.Should().Be(4);
         manager.MessageStores["hot"].Messages!.Select(m => m.Payload)
-            .Should().BeEquivalentTo(["msg-6", "msg-7", "msg-8", "msg-9"]);
+            .Should().BeEquivalentTo("msg-6", "msg-7", "msg-8", "msg-9");
     }
 
     [Test]
@@ -453,7 +447,7 @@ public class MessageStoreManagerMessageHandlerTests
     [Test]
     public async Task MessageReceived_EmptyPayload_SetsFormatIdToEmpty()
     {
-        await Fire("fmt/empty", "");
+        await Fire("fmt/empty");
 
         _manager.MessageStores["fmt"].SubTopics!["empty"].Messages!
             .Should().ContainSingle(m => m.FormatId == "empty");

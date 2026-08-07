@@ -130,6 +130,62 @@ public class PluginRegistryTests
         result.Should().BeNull();
     }
 
+    // --- FindMatchingDetectors ---
+
+    [Test]
+    public void FindMatchingDetectors_ReturnsAllMatchingInRegistryOrder()
+    {
+        var builder = new PluginRegistryBuilder();
+        var high = MakeDetector("high", 200, canDetect: true);
+        var mid = MakeDetector("mid", 100, canDetect: true);
+        var low = MakeDetector("low", 50, canDetect: true);
+
+        builder.RegisterDetector(low);
+        builder.RegisterDetector(mid);
+        builder.RegisterDetector(high);
+
+        var registry = builder.Build();
+        var result = registry.FindMatchingDetectors(MakeArgs("t", "v")).ToList();
+
+        result.Should().HaveCount(3);
+        result[0].Should().BeSameAs(high);
+        result[1].Should().BeSameAs(mid);
+        result[2].Should().BeSameAs(low);
+    }
+
+    [Test]
+    public void FindMatchingDetectors_OmitsNonMatchingDetectors()
+    {
+        var builder = new PluginRegistryBuilder();
+        var matchHigh = MakeDetector("high", 200, canDetect: true);
+        var noMatch = MakeDetector("mid", 100, canDetect: false);
+        var matchLow = MakeDetector("low", 50, canDetect: true);
+
+        builder.RegisterDetector(noMatch);
+        builder.RegisterDetector(matchLow);
+        builder.RegisterDetector(matchHigh);
+
+        var registry = builder.Build();
+        var result = registry.FindMatchingDetectors(MakeArgs("t", "v")).ToList();
+
+        result.Should().HaveCount(2);
+        result[0].Should().BeSameAs(matchHigh);
+        result[1].Should().BeSameAs(matchLow);
+    }
+
+    [Test]
+    public void FindMatchingDetectors_ReturnsEmptyWhenNoneMatch()
+    {
+        var builder = new PluginRegistryBuilder();
+        builder.RegisterDetector(MakeDetector("a", 100, canDetect: false));
+        builder.RegisterDetector(MakeDetector("b", 50, canDetect: false));
+
+        var registry = builder.Build();
+        var result = registry.FindMatchingDetectors(MakeArgs("t", "v")).ToList();
+
+        result.Should().BeEmpty();
+    }
+
     // --- Decoders ---
 
     [Test]

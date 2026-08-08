@@ -46,11 +46,20 @@ public interface IUiSettings
     public Task SetFontFamilyAsync(string fontFamily);
     public Task SetFontAccessibleAsync(bool accessible);
     public Task SetAutoResubscribeAsync(bool autoResubscribe);
-    public Task SetEnrichSparkplugAliasNamesAsync(bool enrich);
-    public Task SetAutoRequestSparkplugRebirthAsync(bool autoRequest);
-    public Task SetAllowNodeRebootAsync(bool allow);
     public Task DismissHintAsync(string hintId);
     public bool IsHintDismissed(string hintId);
+}
+
+public interface ISparkplugSettings
+{
+    public event Action? SparkplugSettingsChanged;
+
+    public SparkplugSettings Sparkplug { get; }
+
+    public Task SetAutoRequestRebirthAsync(bool autoRequest);
+    public Task SetRebirthCooldownSecondsAsync(int seconds);
+    public Task SetEnrichAliasNamesAsync(bool enrich);
+    public Task SetAllowNodeRebootAsync(bool allow);
 }
 
 public interface IPerformanceSettings

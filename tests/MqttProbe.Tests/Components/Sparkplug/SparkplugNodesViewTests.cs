@@ -14,7 +14,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     private const string RemoveOfflineNodesSelector = "button[aria-label='Remove all offline nodes']";
     private ISparkplugTopologyService _mockTopology = null!;
     private ISparkplugCommandService _mockCommandService = null!;
-    private IUiSettings _mockUiSettings = null!;
+    private ISparkplugSettings _mockSparkplugSettings = null!;
     private AppConfiguration _cfg = null!;
     private IDialogService _mockDialogService = null!;
     private ISnackbar _mockSnackbar = null!;
@@ -27,10 +27,10 @@ public class SparkplugNodesViewTests : BunitTestContext
         Services.AddSingleton(_mockTopology);
         _mockCommandService = Substitute.For<ISparkplugCommandService>();
         Services.AddSingleton(_mockCommandService);
-        _mockUiSettings = Substitute.For<IUiSettings>();
         _cfg = new AppConfiguration();
-        _mockUiSettings.Ui.Returns(_cfg.Ui);
-        Services.AddUiSettings(_mockUiSettings);
+        _mockSparkplugSettings = Substitute.For<ISparkplugSettings>();
+        _mockSparkplugSettings.Sparkplug.Returns(_cfg.Sparkplug ?? new SparkplugSettings());
+        Services.AddSparkplugSettings(_mockSparkplugSettings);
         _mockDialogService = Substitute.For<IDialogService>();
         Services.AddSingleton(_mockDialogService);
         _mockSnackbar = Substitute.For<ISnackbar>();
@@ -395,7 +395,8 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void Detail_RebootButton_DisabledWhenAllowNodeRebootIsFalse()
     {
-        _cfg.Ui.AllowNodeReboot = false;
+        _cfg.Sparkplug = new SparkplugSettings { AllowNodeReboot = false };
+        _mockSparkplugSettings.Sparkplug.Returns(_cfg.Sparkplug);
 
         var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
@@ -412,7 +413,8 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void Detail_RebootButton_EnabledWhenAllowNodeRebootIsTrue()
     {
-        _cfg.Ui.AllowNodeReboot = true;
+        _cfg.Sparkplug = new SparkplugSettings { AllowNodeReboot = true };
+        _mockSparkplugSettings.Sparkplug.Returns(_cfg.Sparkplug);
 
         var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
@@ -563,7 +565,8 @@ public class SparkplugNodesViewTests : BunitTestContext
         _mockCommandService.RequestNodeRebootAsync("factory", "edge-01")
             .Returns(SparkplugCommandResult.Published);
 
-        _cfg.Ui.AllowNodeReboot = true;
+        _cfg.Sparkplug = new SparkplugSettings { AllowNodeReboot = true };
+        _mockSparkplugSettings.Sparkplug.Returns(_cfg.Sparkplug);
         var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
         group.Nodes["edge-01"] = node;
@@ -590,7 +593,8 @@ public class SparkplugNodesViewTests : BunitTestContext
                 Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
             .Returns(dialogRef);
 
-        _cfg.Ui.AllowNodeReboot = true;
+        _cfg.Sparkplug = new SparkplugSettings { AllowNodeReboot = true };
+        _mockSparkplugSettings.Sparkplug.Returns(_cfg.Sparkplug);
         var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
         group.Nodes["edge-01"] = node;
@@ -614,7 +618,8 @@ public class SparkplugNodesViewTests : BunitTestContext
                 Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
             .Returns(dialogRef);
 
-        _cfg.Ui.AllowNodeReboot = true;
+        _cfg.Sparkplug = new SparkplugSettings { AllowNodeReboot = true };
+        _mockSparkplugSettings.Sparkplug.Returns(_cfg.Sparkplug);
         var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
         group.Nodes["edge-01"] = node;
@@ -638,7 +643,8 @@ public class SparkplugNodesViewTests : BunitTestContext
                 Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
             .Returns(dialogRef);
 
-        _cfg.Ui.AllowNodeReboot = true;
+        _cfg.Sparkplug = new SparkplugSettings { AllowNodeReboot = true };
+        _mockSparkplugSettings.Sparkplug.Returns(_cfg.Sparkplug);
         var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
         group.Nodes["edge-01"] = node;

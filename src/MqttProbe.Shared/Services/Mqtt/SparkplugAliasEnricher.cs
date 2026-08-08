@@ -6,7 +6,7 @@ using MqttProbe.Services.Sparkplug;
 
 namespace MqttProbe.Services.Mqtt;
 
-internal sealed class SparkplugAliasEnricher(IUiSettings uiSettings, ISparkplugTopologyService? topologyService)
+internal sealed class SparkplugAliasEnricher(ISparkplugSettings sparkplugSettings, ISparkplugTopologyService? topologyService)
 {
     // Resolves against live topology state, so callers must apply the decode's topology
     // events before calling this or births in the same message resolve to nothing.
@@ -15,7 +15,7 @@ internal sealed class SparkplugAliasEnricher(IUiSettings uiSettings, ISparkplugT
     {
         if (result.Envelope.FormatId != "sparkplug-b"
             || result.Envelope.IsFailure
-            || !uiSettings.Ui.EnrichSparkplugAliasNames
+            || !sparkplugSettings.Sparkplug.EnrichAliasNames
             || topologyService is null)
         {
             return null;

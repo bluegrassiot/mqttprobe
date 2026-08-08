@@ -3,7 +3,7 @@
 @using MqttProbe.Services.Configuration
 @inject ISparkplugTopologyService TopologyService
 @inject ISparkplugCommandService CommandService
-@inject IUiSettings UiSettings
+@inject ISparkplugSettings SparkplugSettings
 @inject ILogger<SparkplugNodesView> Logger
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -75,7 +75,7 @@
     <div class="spb-split__detail">
         <SparkplugNodeDetail Node="@_selectedNode"
                              ExpandedDevice="@_selectedDevice"
-                             AllowNodeReboot="@UiSettings.Ui.AllowNodeReboot"
+                             AllowNodeReboot="@SparkplugSettings.Sparkplug.AllowNodeReboot"
                              OnBack="@ClearSelection"
                              OnToggleDevice="@ToggleDevice"
                              OnRequestRebirth="@RequestRebirthAsync"

@@ -3,21 +3,27 @@
 @inject IUiSettings UiSettings
 @inject IThemes Themes
 
-<MudSelect T="string" Label="Theme"
-           Value="@UiSettings.Ui.Theme"
-           ValueChanged="@OnThemeSelectionChanged"
-           Variant="Variant.Outlined">
-    <MudSelectItem Value="@("light")">Light</MudSelectItem>
-    <MudSelectItem Value="@("dark")">Dark</MudSelectItem>
-</MudSelect>
+<div class="settings-field">
+    <MudSelect T="string" Label="Theme"
+               Value="@UiSettings.Ui.Theme"
+               ValueChanged="@OnThemeSelectionChanged"
+               Variant="Variant.Outlined"
+                Class="settings-field-medium">
+        <MudSelectItem Value="@("light")">Light</MudSelectItem>
+        <MudSelectItem Value="@("dark")">Dark</MudSelectItem>
+    </MudSelect>
+</div>
 
-<MudSelect T="string" Label="Font"
-           Value="@(UiSettings.Ui.FontAccessible ? "open-dyslexic" : "inter")"
-           ValueChanged="@OnFontSelectionChanged"
-           Variant="Variant.Outlined" Class="mt-3">
-    <MudSelectItem Value="@("inter")">Inter</MudSelectItem>
-    <MudSelectItem Value="@("open-dyslexic")">OpenDyslexic</MudSelectItem>
-</MudSelect>
+<div class="settings-field">
+    <MudSelect T="string" Label="Font"
+               Value="@(UiSettings.Ui.FontAccessible ? "open-dyslexic" : "inter")"
+               ValueChanged="@OnFontSelectionChanged"
+               Variant="Variant.Outlined"
+               Class="settings-field-medium">
+        <MudSelectItem Value="@("inter")">Inter</MudSelectItem>
+        <MudSelectItem Value="@("open-dyslexic")">OpenDyslexic</MudSelectItem>
+    </MudSelect>
+</div>
 
 @code {
     private void OnThemeSelectionChanged(string value)

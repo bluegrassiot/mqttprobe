@@ -26,8 +26,8 @@ public class ChartDataService(
     IJsonFieldExtractor extractor,
     IChartFieldRegistry registry,
     IChartSettings chartSettings,
-    IUiSettings uiSettings,
     PayloadPipeline pipeline,
+    ISparkplugSettings sparkplugSettings,
     ISparkplugTopologyService? topologyService = null,
     ILogger<ChartDataService>? logger = null)
     : IChartDataService
@@ -97,7 +97,7 @@ public class ChartDataService(
             IReadOnlyDictionary<ulong, string>? aliasNames = null;
             if (result.Envelope.FormatId == "sparkplug-b"
                 && !result.Envelope.IsFailure
-                && uiSettings.Ui.EnrichSparkplugAliasNames
+                && sparkplugSettings.Sparkplug.EnrichAliasNames
                 && topologyService is not null)
             {
                 var rawPayload = e.ApplicationMessage.GetPayloadSegment().Count > 0

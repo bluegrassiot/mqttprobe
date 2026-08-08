@@ -4,14 +4,16 @@ using MqttProbe.Services.Security;
 namespace MqttProbe.Services.Configuration;
 
 internal sealed class PreferenceSettings(ISettingsDocument document)
-    : IUiSettings, IPerformanceSettings, IAuthSettings
+    : IUiSettings, IPerformanceSettings, IAuthSettings, ISparkplugSettings
 {
     public event Action? UiPreferencesChanged;
     public event Action? PerformanceSettingsChanged;
+    public event Action? SparkplugSettingsChanged;
 
     public UiPreferences Ui => document.Config.Ui;
     public PerformanceSettings Performance => document.Config.Performance;
     public Auth Auth => document.Config.Auth;
+    public SparkplugSettings Sparkplug => document.Config.Sparkplug ??= new SparkplugSettings();
 
     public Task SetThemeAsync(string theme) =>
         SetUiAsync(ui => ui.Theme = theme);
@@ -25,21 +27,24 @@ internal sealed class PreferenceSettings(ISettingsDocument document)
     public Task SetAutoResubscribeAsync(bool autoResubscribe) =>
         SetUiAsync(ui => ui.AutoResubscribe = autoResubscribe);
 
-    public Task SetEnrichSparkplugAliasNamesAsync(bool enrich) =>
-        SetUiAsync(ui => ui.EnrichSparkplugAliasNames = enrich);
-
-    public Task SetAutoRequestSparkplugRebirthAsync(bool autoRequest) =>
-        SetUiAsync(ui => ui.AutoRequestSparkplugRebirth = autoRequest);
-
-    public Task SetAllowNodeRebootAsync(bool allow) =>
-        SetUiAsync(ui => ui.AllowNodeReboot = allow);
-
     public Task DismissHintAsync(string hintId) =>
         IsHintDismissed(hintId)
             ? Task.CompletedTask
             : SetUiAsync(ui => ui.DismissedHints.Add(hintId));
 
     public bool IsHintDismissed(string hintId) => Ui.DismissedHints.Contains(hintId);
+
+    public Task SetAutoRequestRebirthAsync(bool autoRequest) =>
+        SetSparkplugAsync(s => s.AutoRequestRebirth = autoRequest);
+
+    public Task SetRebirthCooldownSecondsAsync(int seconds) =>
+        SetSparkplugAsync(s => s.RebirthCooldownSeconds = Math.Clamp(seconds, 5, 600));
+
+    public Task SetEnrichAliasNamesAsync(bool enrich) =>
+        SetSparkplugAsync(s => s.EnrichAliasNames = enrich);
+
+    public Task SetAllowNodeRebootAsync(bool allow) =>
+        SetSparkplugAsync(s => s.AllowNodeReboot = allow);
 
     public Task SetMaxStoredMessagesAsync(int value) =>
         SetPerformanceAsync(p => p.MaxStoredMessages = value);
@@ -85,5 +90,15 @@ internal sealed class PreferenceSettings(ISettingsDocument document)
     {
         await document.MutateAndSaveAsync(config => mutate(config.Performance));
         PerformanceSettingsChanged?.Invoke();
+    }
+
+    private async Task SetSparkplugAsync(Action<SparkplugSettings> mutate)
+    {
+        await document.MutateAndSaveAsync(config =>
+        {
+            config.Sparkplug ??= new SparkplugSettings();
+            mutate(config.Sparkplug);
+        });
+        SparkplugSettingsChanged?.Invoke();
     }
 }

@@ -22,15 +22,20 @@ public class PerformanceSettings
     public int MaxTopicNodes { get; set; } = 10_000;
 }
 
+public class SparkplugSettings
+{
+    public bool AutoRequestRebirth { get; set; }
+    public int RebirthCooldownSeconds { get; set; } = 30;
+    public bool EnrichAliasNames { get; set; } = true;
+    public bool AllowNodeReboot { get; set; }
+}
+
 public class UiPreferences
 {
     public bool FontAccessible { get; set; } = true;
     public string Theme { get; set; } = "dark";
     public string FontFamily { get; set; } = "OpenDyslexic";
     public bool AutoResubscribe { get; set; } = true;
-    public bool EnrichSparkplugAliasNames { get; set; } = true;
-    public bool AutoRequestSparkplugRebirth { get; set; }
-    public bool AllowNodeReboot { get; set; }
 
     public List<string> DismissedHints { get; set; } = [];
 }
@@ -41,6 +46,7 @@ public class AppConfiguration
     public Auth Auth { get; set; } = new();
     public PerformanceSettings Performance { get; set; } = new();
     public UiPreferences Ui { get; set; } = new();
+    public SparkplugSettings? Sparkplug { get; set; }
 
     public Dictionary<Guid, List<ChartConfiguration>> ChartsByConnection { get; set; } = [];
 

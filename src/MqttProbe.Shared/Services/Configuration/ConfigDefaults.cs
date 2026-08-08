@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
 
@@ -7,15 +8,38 @@ internal static class ConfigDefaults
 {
     // Guards against explicit nulls in the config file; the model's own initializers only
     // cover properties the JSON omits entirely.
-    public static void Normalize(AppConfiguration config)
+    public static void Normalize(AppConfiguration config, string? legacyJson = null)
     {
-        config.Connections ??= [];
-        config.Auth ??= new Auth();
-        config.Performance ??= new PerformanceSettings();
-        config.Ui ??= new UiPreferences();
-        config.Ui.DismissedHints ??= [];
-        config.ChartsByConnection ??= [];
-        config.EmulatorsByConnection ??= [];
+        // Sparkplug settings: migrate from legacy ui keys when section is absent.
+        if (config.Sparkplug is null)
+        {
+            config.Sparkplug = new SparkplugSettings();
+
+            if (legacyJson is not null)
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(legacyJson);
+                    if (doc.RootElement.TryGetProperty("ui", out var ui)
+                        && ui.ValueKind == JsonValueKind.Object)
+                    {
+                        if (ui.TryGetProperty("autoRequestSparkplugRebirth", out var arr))
+                            config.Sparkplug.AutoRequestRebirth = arr.GetBoolean();
+                        if (ui.TryGetProperty("enrichSparkplugAliasNames", out var ea))
+                            config.Sparkplug.EnrichAliasNames = ea.GetBoolean();
+                        if (ui.TryGetProperty("allowNodeReboot", out var ar))
+                            config.Sparkplug.AllowNodeReboot = ar.GetBoolean();
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Malformed JSON: keep defaults.
+                }
+            }
+        }
+
+        config.Sparkplug.RebirthCooldownSeconds =
+            Math.Clamp(config.Sparkplug.RebirthCooldownSeconds, 5, 600);
     }
 
     // Seeded on first run so a user without their own broker can try the app immediately.

@@ -6,7 +6,6 @@ using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Sparkplug;
 using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Shared.Tests.Services.Mqtt;
@@ -26,10 +25,10 @@ public class MessageStoreManagerTests
         var config = new AppConfiguration();
         var mockPerformance = Substitute.For<IPerformanceSettings>();
         mockPerformance.Performance.Returns(config.Performance);
-        var mockUi = Substitute.For<IUiSettings>();
-        mockUi.Ui.Returns(config.Ui);
-        _messageStoreManager = new MessageStoreManager(_mockClient, _mockLogger, mockPerformance, mockUi,
-            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
+        var mockSparkplug = Substitute.For<ISparkplugSettings>();
+        mockSparkplug.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
+        _messageStoreManager = new MessageStoreManager(_mockClient, _mockLogger, mockPerformance,
+            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline(), mockSparkplug);
     }
 
     [TearDown]

@@ -117,6 +117,7 @@ public static class MqttProbeServiceRegistration
         services.AddSingleton<IUiSettings>(sp => sp.GetRequiredService<PreferenceSettings>());
         services.AddSingleton<IPerformanceSettings>(sp => sp.GetRequiredService<PreferenceSettings>());
         services.AddSingleton<IAuthSettings>(sp => sp.GetRequiredService<PreferenceSettings>());
+        services.AddSingleton<ISparkplugSettings>(sp => sp.GetRequiredService<PreferenceSettings>());
 
         return services;
     }
@@ -169,7 +170,7 @@ public static class MqttProbeServiceRegistration
             sp => new SparkplugCommandService(
                 sp.GetRequiredService<IMqttManagedClient>(),
                 sp.GetRequiredService<ILogger<SparkplugCommandService>>(),
-                sp.GetRequiredService<IUiSettings>(),
+                sp.GetRequiredService<ISparkplugSettings>(),
                 sp.GetRequiredService<ISparkplugTopologyService>()), session));
         return services;
     }

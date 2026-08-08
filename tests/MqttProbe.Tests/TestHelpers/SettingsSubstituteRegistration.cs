@@ -12,6 +12,10 @@ public static class SettingsSubstituteRegistration
     public static IServiceCollection AddUiSettings(this IServiceCollection services, IUiSettings ui) =>
         services.AddSingleton(ui);
 
+    public static IServiceCollection AddSparkplugSettings(
+        this IServiceCollection services, ISparkplugSettings sparkplug) =>
+        services.AddSingleton(sparkplug);
+
     public static IServiceCollection AddPerformanceSettings(
         this IServiceCollection services, IPerformanceSettings performance) =>
         services.AddSingleton(performance);

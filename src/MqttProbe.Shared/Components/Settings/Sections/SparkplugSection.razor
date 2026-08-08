@@ -1,46 +1,65 @@
 @namespace MqttProbe.Components.Settings
 @using MqttProbe.Services.Configuration
-@inject IUiSettings UiSettings
+@inject ISparkplugSettings SparkplugSettings
 
-<MudSwitch T="bool" Value="@UiSettings.Ui.EnrichSparkplugAliasNames"
-           ValueChanged="@OnEnrichAliasNamesChanged"
-           Color="Color.Primary"
-           Label="Enrich Sparkplug alias names" />
-<MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
-    When enabled, alias-only Sparkplug metrics are annotated with resolved names from the topology.
-</MudText>
+<div class="settings-field">
+    <MudSwitch T="bool" Value="@SparkplugSettings.Sparkplug.EnrichAliasNames"
+               ValueChanged="@OnEnrichAliasNamesChanged"
+               Color="Color.Primary"
+               Label="Enrich Sparkplug alias names" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Names alias-only metrics using Sparkplug topology.
+    </MudText>
+</div>
 
-<MudSwitch T="bool" Value="@UiSettings.Ui.AutoRequestSparkplugRebirth"
-           ValueChanged="@OnAutoRequestRebirthChanged"
-           Color="Color.Primary"
-           Class="mt-3"
-           Label="Automatically request rebirth" />
-<MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
-    Asks nodes with no known birth to re-announce. Manual Rebirth still works when off.
-</MudText>
+<div class="settings-field settings-field-group">
+    <MudSwitch T="bool" Value="@SparkplugSettings.Sparkplug.AutoRequestRebirth"
+               ValueChanged="@OnAutoRequestRebirthChanged"
+               Color="Color.Primary"
+               Label="Automatically request rebirth" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Asks nodes with no known birth to re-announce. Manual rebirth still works when off.
+    </MudText>
 
-<MudSwitch T="bool" Value="@UiSettings.Ui.AllowNodeReboot"
-           ValueChanged="@OnAllowNodeRebootChanged"
-           Color="Color.Primary"
-           Class="mt-3"
-           Label="Allow node reboot" />
-<MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
-    Lets you send Node Control/Reboot from the Sparkplug nodes view. Off by default. Rebirth commands stay available.
-</MudText>
+    <MudNumericField T="int" Label="Rebirth cooldown (seconds)"
+                     Value="@SparkplugSettings.Sparkplug.RebirthCooldownSeconds"
+                     ValueChanged="@OnRebirthCooldownChanged"
+                     Min="5" Max="600" Step="5"
+                     Variant="Variant.Outlined"
+                     Class="settings-field-narrow" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Minimum seconds between automatic rebirths for the same node. Manual not affected.
+    </MudText>
+</div>
+
+<div class="settings-field">
+    <MudSwitch T="bool" Value="@SparkplugSettings.Sparkplug.AllowNodeReboot"
+               ValueChanged="@OnAllowNodeRebootChanged"
+               Color="Color.Primary"
+               Label="Allow node reboot" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Enables reboot from the nodes view. Rebirth stays available.
+    </MudText>
+</div>
 
 @code {
     private async Task OnEnrichAliasNamesChanged(bool value)
     {
-        await UiSettings.SetEnrichSparkplugAliasNamesAsync(value);
+        await SparkplugSettings.SetEnrichAliasNamesAsync(value);
     }
 
     private async Task OnAutoRequestRebirthChanged(bool value)
     {
-        await UiSettings.SetAutoRequestSparkplugRebirthAsync(value);
+        await SparkplugSettings.SetAutoRequestRebirthAsync(value);
+    }
+
+    private async Task OnRebirthCooldownChanged(int value)
+    {
+        await SparkplugSettings.SetRebirthCooldownSecondsAsync(value);
     }
 
     private async Task OnAllowNodeRebootChanged(bool value)
     {
-        await UiSettings.SetAllowNodeRebootAsync(value);
+        await SparkplugSettings.SetAllowNodeRebootAsync(value);
     }
 }

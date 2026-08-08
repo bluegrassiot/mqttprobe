@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MqttProbe.Models.Chart;
-using MqttProbe.Models.Configuration;
 using MqttProbe.Services.Chart;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Mqtt;
@@ -15,7 +14,6 @@ public class ChartDataServiceMessageHandlerTests
     private IMqttManagedClient _mockClient = null!;
     private ChartFieldRegistry _registry = null!;
     private IChartSettings _mockChartSettings = null!;
-    private IUiSettings _mockUiSettings = null!;
     private ChartDataService _service = null!;
     private Func<MqttApplicationMessageReceivedEventArgs, Task>? _handler;
 
@@ -24,13 +22,10 @@ public class ChartDataServiceMessageHandlerTests
     {
         _mockClient = Substitute.For<IMqttManagedClient>();
         _registry = new ChartFieldRegistry();
-        var config = new AppConfiguration();
         _mockChartSettings = Substitute.For<IChartSettings>();
         _mockChartSettings.GetCharts(Arg.Any<Guid>()).Returns([]);
-        _mockUiSettings = Substitute.For<IUiSettings>();
-        _mockUiSettings.Ui.Returns(config.Ui);
-        _service = new ChartDataService(_mockClient, new JsonFieldExtractor(), _registry, _mockChartSettings, _mockUiSettings,
-            TestPipelineHelper.BuildBuiltInPipeline());
+        _service = new ChartDataService(_mockClient, new JsonFieldExtractor(), _registry, _mockChartSettings,
+            TestPipelineHelper.BuildBuiltInPipeline(), Substitute.For<ISparkplugSettings>());
 
         _handler = null;
         _mockClient
@@ -241,8 +236,6 @@ public class ChartDataServiceMessageHandlerTests
             .Do(_ => throw new InvalidOperationException("registry failed"));
         var configStore = Substitute.For<IChartSettings>();
         configStore.GetCharts(Arg.Any<Guid>()).Returns([]);
-        var uiSettings = Substitute.For<IUiSettings>();
-        uiSettings.Ui.Returns(new AppConfiguration().Ui);
         var logger = new CapturingLogger<ChartDataService>();
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         client
@@ -254,8 +247,8 @@ public class ChartDataServiceMessageHandlerTests
             new JsonFieldExtractor(),
             registry,
             configStore,
-            uiSettings,
             TestPipelineHelper.BuildBuiltInPipeline(),
+            Substitute.For<ISparkplugSettings>(),
             logger: logger);
         await service.StartAsync();
 

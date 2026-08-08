@@ -1,3 +1,4 @@
+using MqttProbe.Models.Configuration;
 using MqttProbe.Services.Configuration;
 
 namespace MqttProbe.Shared.Tests.Services.Configuration;
@@ -15,6 +16,7 @@ public class PreferenceSettingsTests
         _configPath = Path.Combine(Path.GetTempPath(), $"mqttprobe_settings_{Guid.NewGuid()}.json");
         if (File.Exists(_configPath)) File.Delete(_configPath);
         _document = new SettingsDocument(_configPath);
+        _document.Config.Sparkplug ??= new SparkplugSettings();
         _preferences = new PreferenceSettings(_document);
     }
 
@@ -70,27 +72,29 @@ public class PreferenceSettingsTests
     }
 
     [Test]
-    public async Task SetAutoRequestSparkplugRebirthAsync_PersistsAndRaisesUiPreferencesChanged()
+    public async Task SetAutoRequestRebirthAsync_PersistsAndRaisesSparkplugSettingsChanged()
     {
         var fired = false;
-        _preferences.UiPreferencesChanged += () => fired = true;
-        _document.Config.Ui.AutoRequestSparkplugRebirth.Should().BeFalse("auto-rebirth ships off");
+        _preferences.SparkplugSettingsChanged += () => fired = true;
+        _document.Config.Sparkplug.Should().NotBeNull();
+        _document.Config.Sparkplug!.AutoRequestRebirth.Should().BeFalse("auto-rebirth ships off");
 
-        await _preferences.SetAutoRequestSparkplugRebirthAsync(true);
+        await _preferences.SetAutoRequestRebirthAsync(true);
 
         fired.Should().BeTrue();
 
         using var reloaded = new SettingsDocument(_configPath);
         await new SettingsLoader(reloaded, new ConnectionSecrets(null, null), false, null).LoadAsync();
-        reloaded.Config.Ui.AutoRequestSparkplugRebirth.Should().BeTrue();
+        reloaded.Config.Sparkplug!.AutoRequestRebirth.Should().BeTrue();
     }
 
     [Test]
-    public async Task SetAllowNodeRebootAsync_PersistsAndRaisesUiPreferencesChanged()
+    public async Task SetAllowNodeRebootAsync_PersistsAndRaisesSparkplugSettingsChanged()
     {
         var fired = false;
-        _preferences.UiPreferencesChanged += () => fired = true;
-        _document.Config.Ui.AllowNodeReboot.Should().BeFalse("allow-node-reboot ships off");
+        _preferences.SparkplugSettingsChanged += () => fired = true;
+        _document.Config.Sparkplug.Should().NotBeNull();
+        _document.Config.Sparkplug!.AllowNodeReboot.Should().BeFalse("allow-node-reboot ships off");
 
         await _preferences.SetAllowNodeRebootAsync(true);
 
@@ -98,7 +102,76 @@ public class PreferenceSettingsTests
 
         using var reloaded = new SettingsDocument(_configPath);
         await new SettingsLoader(reloaded, new ConnectionSecrets(null, null), false, null).LoadAsync();
-        reloaded.Config.Ui.AllowNodeReboot.Should().BeTrue();
+        reloaded.Config.Sparkplug!.AllowNodeReboot.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task SetEnrichAliasNamesAsync_PersistsAndRaisesSparkplugSettingsChanged()
+    {
+        var fired = false;
+        _preferences.SparkplugSettingsChanged += () => fired = true;
+        _document.Config.Sparkplug!.EnrichAliasNames.Should().BeTrue("enrich ships on");
+
+        await _preferences.SetEnrichAliasNamesAsync(false);
+
+        fired.Should().BeTrue();
+
+        using var reloaded = new SettingsDocument(_configPath);
+        await new SettingsLoader(reloaded, new ConnectionSecrets(null, null), false, null).LoadAsync();
+        reloaded.Config.Sparkplug!.EnrichAliasNames.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task SetRebirthCooldownSecondsAsync_PersistsInRangedValue()
+    {
+        await _preferences.SetRebirthCooldownSecondsAsync(60);
+
+        _document.Config.Sparkplug!.RebirthCooldownSeconds.Should().Be(60);
+
+        using var reloaded = new SettingsDocument(_configPath);
+        await new SettingsLoader(reloaded, new ConnectionSecrets(null, null), false, null).LoadAsync();
+        reloaded.Config.Sparkplug!.RebirthCooldownSeconds.Should().Be(60);
+    }
+
+    [Test]
+    public async Task SetRebirthCooldownSecondsAsync_ClampsBelowMinimum()
+    {
+        await _preferences.SetRebirthCooldownSecondsAsync(1);
+
+        _document.Config.Sparkplug!.RebirthCooldownSeconds.Should().Be(5);
+    }
+
+    [Test]
+    public async Task SetRebirthCooldownSecondsAsync_ClampsAboveMaximum()
+    {
+        await _preferences.SetRebirthCooldownSecondsAsync(999);
+
+        _document.Config.Sparkplug!.RebirthCooldownSeconds.Should().Be(600);
+    }
+
+    [Test]
+    public async Task SetRebirthCooldownSecondsAsync_RaisesSparkplugSettingsChanged()
+    {
+        var fired = false;
+        _preferences.SparkplugSettingsChanged += () => fired = true;
+
+        await _preferences.SetRebirthCooldownSecondsAsync(60);
+
+        fired.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task SparkplugSetters_DoNotRaiseUiPreferencesChanged()
+    {
+        var fired = false;
+        _preferences.UiPreferencesChanged += () => fired = true;
+
+        await _preferences.SetAutoRequestRebirthAsync(true);
+        await _preferences.SetAllowNodeRebootAsync(true);
+        await _preferences.SetEnrichAliasNamesAsync(false);
+        await _preferences.SetRebirthCooldownSecondsAsync(60);
+
+        fired.Should().BeFalse("sparkplug setters must not raise the UI event");
     }
 
     [Test]

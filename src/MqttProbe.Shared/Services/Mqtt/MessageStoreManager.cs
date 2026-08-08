@@ -27,8 +27,9 @@ public class MessageStoreManager : IMessageStoreManager
     private int _disposed;
 
     public MessageStoreManager(IMqttManagedClient client, ILogger<MessageStoreManager> logger,
-        IPerformanceSettings performanceSettings, IUiSettings uiSettings, IUxMetricsService metrics,
-        PayloadPipeline pipeline, ISparkplugTopologyService? topologyService = null,
+        IPerformanceSettings performanceSettings, IUxMetricsService metrics,
+        PayloadPipeline pipeline, ISparkplugSettings sparkplugSettings,
+        ISparkplugTopologyService? topologyService = null,
         ISparkplugCommandService? commandService = null)
     {
         _client = client;
@@ -40,7 +41,7 @@ public class MessageStoreManager : IMessageStoreManager
         _commandService = commandService;
         _store = new TopicTreeStore(performanceSettings, logger);
         _rateLimiter = new InboundRateLimiter(performanceSettings, metrics, logger);
-        _aliasEnricher = new SparkplugAliasEnricher(uiSettings, topologyService);
+        _aliasEnricher = new SparkplugAliasEnricher(sparkplugSettings, topologyService);
         performanceSettings.PerformanceSettingsChanged += OnPerformanceSettingsChanged;
     }
 

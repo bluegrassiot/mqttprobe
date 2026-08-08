@@ -86,6 +86,7 @@ internal sealed class SettingsDocument(string path) : ISettingsDocument, IDispos
             Auth = _config.Auth,
             Performance = _config.Performance,
             Ui = _config.Ui,
+            Sparkplug = _config.Sparkplug,
             Connections = _config.Connections.Select(c => c.CloneWithoutPassword()).ToList(),
             ChartsByConnection = _config.ChartsByConnection,
             EmulatorsByConnection = _config.EmulatorsByConnection

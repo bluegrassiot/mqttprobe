@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using MqttProbe.Models.Configuration;
 
@@ -9,6 +10,12 @@ internal sealed class SettingsLoader(
     bool isMobile,
     ILogger? logger) : ISettingsLoader
 {
+    private static readonly JsonSerializerOptions _migrationOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+    };
+
     public async Task<bool> LoadAsync()
     {
         var configLoadedSuccessfully = false;
@@ -29,7 +36,7 @@ internal sealed class SettingsLoader(
     {
         if (!document.Exists)
         {
-            var seeded = new AppConfiguration { Connections = ConfigDefaults.SeedConnections() };
+            var seeded = new AppConfiguration { Connections = ConfigDefaults.SeedConnections(), Sparkplug = new SparkplugSettings() };
             if (isMobile)
             {
                 seeded.Performance.MaxStoredMessages = 1_000;
@@ -45,14 +52,20 @@ internal sealed class SettingsLoader(
         var configLoadedSuccessfully = false;
         try
         {
-            document.Config = await document.ReadAsync().ConfigureAwait(false) ?? new AppConfiguration();
+            var json = await File.ReadAllTextAsync(document.Path).ConfigureAwait(false);
+            document.Config = JsonSerializer.Deserialize<AppConfiguration>(json, _migrationOptions)
+                ?? new AppConfiguration();
             configLoadedSuccessfully = true;
-            ConfigDefaults.Normalize(document.Config);
+
+            // Pass raw JSON for migration only when sparkplug section was absent.
+            var legacyJson = document.Config.Sparkplug is null ? json : null;
+            ConfigDefaults.Normalize(document.Config, legacyJson);
         }
         catch (Exception ex)
         {
             logger?.LogWarning(ex, "Failed to load config from {Path}; using defaults.", document.Path);
             document.Config = new AppConfiguration();
+            ConfigDefaults.Normalize(document.Config);
         }
 
         return configLoadedSuccessfully;

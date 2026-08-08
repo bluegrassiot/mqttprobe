@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Configuration;
@@ -145,5 +146,121 @@ public class SettingsLoaderTests
         await loader.LoadAsync();
 
         document2.Config.Connections.Should().ContainSingle(c => c.Name == "Stored" && c.Password == "s3cr3t");
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenLegacyUiSparkplugKeys_MigratesToSparkplugSection()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """
+            {"connections":[],"ui":{
+                "autoRequestSparkplugRebirth":true,
+                "enrichSparkplugAliasNames":false,
+                "allowNodeReboot":true
+            }}
+            """);
+
+        await _loader.LoadAsync();
+
+        _document.Config.Sparkplug.Should().NotBeNull();
+        _document.Config.Sparkplug!.AutoRequestRebirth.Should().BeTrue();
+        _document.Config.Sparkplug.EnrichAliasNames.Should().BeFalse();
+        _document.Config.Sparkplug.AllowNodeReboot.Should().BeTrue();
+        _document.Config.Sparkplug.RebirthCooldownSeconds.Should().Be(30);
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenSparkplugSectionPresent_UsesSparkplugValues()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """
+            {"connections":[],"sparkplug":{
+                "autoRequestRebirth":true,
+                "rebirthCooldownSeconds":45,
+                "enrichAliasNames":false,
+                "allowNodeReboot":true
+            }}
+            """);
+
+        await _loader.LoadAsync();
+
+        _document.Config.Sparkplug!.AutoRequestRebirth.Should().BeTrue();
+        _document.Config.Sparkplug.RebirthCooldownSeconds.Should().Be(45);
+        _document.Config.Sparkplug.EnrichAliasNames.Should().BeFalse();
+        _document.Config.Sparkplug.AllowNodeReboot.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenSparkplugSectionMissing_DefaultsCooldownTo30()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """{"connections":[],"ui":{}}""");
+
+        await _loader.LoadAsync();
+
+        _document.Config.Sparkplug!.RebirthCooldownSeconds.Should().Be(30);
+    }
+
+    [Test]
+    public async Task LoadAsync_ClampsCooldownOutOfRange()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """{"connections":[],"sparkplug":{"rebirthCooldownSeconds":1}}""");
+
+        await _loader.LoadAsync();
+
+        _document.Config.Sparkplug!.RebirthCooldownSeconds.Should().Be(5);
+    }
+
+    [Test]
+    public async Task LoadAsync_ClampsCooldownAboveMaximum()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """{"connections":[],"sparkplug":{"rebirthCooldownSeconds":9999}}""");
+
+        await _loader.LoadAsync();
+
+        _document.Config.Sparkplug!.RebirthCooldownSeconds.Should().Be(600);
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenUiNull_DoesNotWipeConfig()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """{"connections":[{"name":"Kept","host":"h","port":1883}],"ui":null}""");
+
+        var loaded = await _loader.LoadAsync();
+
+        loaded.Should().BeTrue();
+        _document.Config.Connections.Should().ContainSingle(c => c.Name == "Kept");
+        _document.Config.Sparkplug.Should().NotBeNull();
+        _document.Config.Sparkplug!.RebirthCooldownSeconds.Should().Be(30);
+    }
+
+    [Test]
+    public async Task SaveAsync_AfterMigration_WritesSparkplugSectionAndStripsLegacyKeysFromUi()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """
+            {"connections":[],"ui":{
+                "autoRequestSparkplugRebirth":true,
+                "enrichSparkplugAliasNames":true,
+                "allowNodeReboot":true,
+                "dismissedHints":[]
+            }}
+            """);
+
+        await _loader.LoadAsync();
+        await _document.ExclusiveAsync(_document.SaveAsync);
+
+        var savedJson = await File.ReadAllTextAsync(_configPath);
+        savedJson.Should().Contain("\"sparkplug\"");
+
+        // Legacy keys must not appear in the ui section
+        using var doc = JsonDocument.Parse(savedJson);
+        var ui = doc.RootElement.GetProperty("ui");
+        ui.TryGetProperty("autoRequestSparkplugRebirth", out _).Should().BeFalse();
+        ui.TryGetProperty("enrichSparkplugAliasNames", out _).Should().BeFalse();
+        ui.TryGetProperty("allowNodeReboot", out _).Should().BeFalse();
     }
 }

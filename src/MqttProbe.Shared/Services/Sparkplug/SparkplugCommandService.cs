@@ -28,11 +28,10 @@ public interface ISparkplugCommandService
 public sealed class SparkplugCommandService(
     IMqttManagedClient client,
     ILogger<SparkplugCommandService> logger,
-    IUiSettings uiSettings,
+    ISparkplugSettings sparkplugSettings,
     ISparkplugTopologyService topologyService,
     TimeProvider? timeProvider = null) : ISparkplugCommandService
 {
-    private static readonly TimeSpan _rebirthCooldown = TimeSpan.FromSeconds(30);
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     public async Task<SparkplugCommandResult> RequestNodeRebirthAsync(string groupId, string nodeId)
@@ -64,7 +63,7 @@ public sealed class SparkplugCommandService(
 
     public async Task<SparkplugCommandResult> RequestNodeRebootAsync(string groupId, string nodeId)
     {
-        if (!uiSettings.Ui.AllowNodeReboot)
+        if (!sparkplugSettings.Sparkplug.AllowNodeReboot)
             return SparkplugCommandResult.NotAllowed;
 
         if (!topologyService.Groups.TryGetValue(groupId, out var group))
@@ -77,7 +76,7 @@ public sealed class SparkplugCommandService(
 
     public async Task RequestNodeRebirthIfNeededAsync(string groupId, string nodeId)
     {
-        if (!uiSettings.Ui.AutoRequestSparkplugRebirth)
+        if (!sparkplugSettings.Sparkplug.AutoRequestRebirth)
             return;
 
         if (!topologyService.Groups.TryGetValue(groupId, out var group))
@@ -85,13 +84,15 @@ public sealed class SparkplugCommandService(
         if (!group.Nodes.TryGetValue(nodeId, out var node))
             return;
 
+        var cooldown = TimeSpan.FromSeconds(sparkplugSettings.Sparkplug.RebirthCooldownSeconds);
+
         lock (node.SyncRoot)
         {
             if (node.Status == SpbNodeStatus.Online)
                 return;
 
             var now = _timeProvider.GetUtcNow().UtcDateTime;
-            if (node.LastRebirthRequestAt != null && now - node.LastRebirthRequestAt < _rebirthCooldown)
+            if (node.LastRebirthRequestAt != null && now - node.LastRebirthRequestAt < cooldown)
                 return;
 
             node.LastRebirthRequestAt = now;

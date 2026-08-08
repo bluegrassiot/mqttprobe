@@ -49,6 +49,8 @@ public class PluginPipelineDiCompositionTests
         mockPerformance.Performance.Returns(config.Performance);
         var mockUi = Substitute.For<IUiSettings>();
         mockUi.Ui.Returns(config.Ui);
+        var mockSparkplug = Substitute.For<ISparkplugSettings>();
+        mockSparkplug.Sparkplug.Returns(config.Sparkplug ?? new SparkplugSettings());
 
         services.AddLogging();
         services.AddSingleton(Options.Create(new PluginConfig()));
@@ -71,6 +73,7 @@ public class PluginPipelineDiCompositionTests
         services.AddSingleton(_mockClient);
         services.AddSingleton(mockPerformance);
         services.AddSingleton(mockUi);
+        services.AddSingleton(mockSparkplug);
         services.AddSingleton(Substitute.For<IConnectionSettings>());
         services.AddSingleton(Substitute.For<IEmulatorSettings>());
         services.AddSingleton(Substitute.For<IUxMetricsService>());
@@ -169,6 +172,8 @@ public class PluginPipelineDiCompositionTests
         provider.GetRequiredService<IPerformanceSettings>().Should().BeSameAs(ui);
         provider.GetRequiredService<IAuthSettings>().Should().BeSameAs(ui,
             "PreferenceSettings owns two change events; a second instance drops subscribers");
+        provider.GetRequiredService<ISparkplugSettings>().Should().BeSameAs(ui,
+            "PreferenceSettings backs all facets including ISparkplugSettings");
     }
 
     [Test]

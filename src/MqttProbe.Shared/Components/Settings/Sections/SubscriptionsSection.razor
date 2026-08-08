@@ -2,13 +2,15 @@
 @using MqttProbe.Services.Configuration
 @inject IUiSettings UiSettings
 
-<MudSwitch T="bool" Value="@UiSettings.Ui.AutoResubscribe"
-           ValueChanged="@OnAutoResubscribeChanged"
-           Color="Color.Primary"
-           Label="Auto-resubscribe on connect" />
-<MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
-    When enabled, saved subscriptions are automatically re-subscribed when connecting to a broker.
-</MudText>
+<div class="settings-field">
+    <MudSwitch T="bool" Value="@UiSettings.Ui.AutoResubscribe"
+               ValueChanged="@OnAutoResubscribeChanged"
+               Color="Color.Primary"
+               Label="Auto-resubscribe on connect" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        When enabled, saved subscriptions are automatically re-subscribed when connecting to a broker.
+    </MudText>
+</div>
 
 @code {
     private async Task OnAutoResubscribeChanged(bool value)

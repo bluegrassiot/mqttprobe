@@ -31,10 +31,10 @@ public class MessageStoreManagerMessageHandlerTests
         var config = new AppConfiguration();
         var mockPerformance = Substitute.For<IPerformanceSettings>();
         mockPerformance.Performance.Returns(config.Performance);
-        var mockUi = Substitute.For<IUiSettings>();
-        mockUi.Ui.Returns(config.Ui);
-        _manager = new MessageStoreManager(_mockClient, _mockLogger, mockPerformance, mockUi,
-            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
+        var mockSparkplug = Substitute.For<ISparkplugSettings>();
+        mockSparkplug.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
+        _manager = new MessageStoreManager(_mockClient, _mockLogger, mockPerformance,
+            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline(), mockSparkplug);
 
         _capturedHandler = null;
         _mockClient.When(x =>
@@ -241,16 +241,16 @@ public class MessageStoreManagerMessageHandlerTests
         };
         var mockPerformance = Substitute.For<IPerformanceSettings>();
         mockPerformance.Performance.Returns(config.Performance);
-        var mockUi = Substitute.For<IUiSettings>();
-        mockUi.Ui.Returns(config.Ui);
+        var mockSparkplug = Substitute.For<ISparkplugSettings>();
+        mockSparkplug.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
 
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         rateLimitedClient
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockPerformance, mockUi,
-            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
+        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockPerformance,
+            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline(), mockSparkplug);
         await manager.Start();
 
         await handler!(MakeArgs("rl", "first"));
@@ -269,12 +269,12 @@ public class MessageStoreManagerMessageHandlerTests
         };
         var mockPerformance = Substitute.For<IPerformanceSettings>();
         mockPerformance.Performance.Returns(config.Performance);
-        var mockUi = Substitute.For<IUiSettings>();
-        mockUi.Ui.Returns(config.Ui);
+        var mockSparkplug2 = Substitute.For<ISparkplugSettings>();
+        mockSparkplug2.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
 
         using var manager = new MessageStoreManager(Substitute.For<IMqttManagedClient>(),
-            Substitute.For<ILogger<MessageStoreManager>>(), mockPerformance, mockUi,
-            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
+            Substitute.For<ILogger<MessageStoreManager>>(), mockPerformance,
+            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline(), mockSparkplug2);
 
         config.Performance.MaxStoredMessages = 25;
 
@@ -292,11 +292,11 @@ public class MessageStoreManagerMessageHandlerTests
 
         var performanceSettings = Substitute.For<IPerformanceSettings>();
         performanceSettings.Performance.Returns(config.Performance);
-        var uiSettings = Substitute.For<IUiSettings>();
-        uiSettings.Ui.Returns(config.Ui);
+        var sparkplugSettings = Substitute.For<ISparkplugSettings>();
+        sparkplugSettings.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
 
         var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
-            performanceSettings, uiSettings, Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
+            performanceSettings, Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline(), sparkplugSettings);
         manager.Start().GetAwaiter().GetResult();
         return (manager, handler!, performanceSettings);
     }
@@ -514,16 +514,16 @@ public class MessageStoreManagerMessageHandlerTests
         };
         var mockPerformance = Substitute.For<IPerformanceSettings>();
         mockPerformance.Performance.Returns(config.Performance);
-        var mockUi = Substitute.For<IUiSettings>();
-        mockUi.Ui.Returns(config.Ui);
+        var mockSparkplug = Substitute.For<ISparkplugSettings>();
+        mockSparkplug.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
 
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         rateLimitedClient
             .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
-        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockPerformance, mockUi,
-            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline());
+        using var manager = new MessageStoreManager(rateLimitedClient, rateLimitedLogger, mockPerformance,
+            Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline(), mockSparkplug);
         await manager.Start();
 
         await handler!(MakeArgs("before", "x"));
@@ -575,11 +575,11 @@ public class MessageStoreManagerMessageHandlerTests
         var config = new AppConfiguration();
         var performanceSettings = Substitute.For<IPerformanceSettings>();
         performanceSettings.Performance.Returns(config.Performance);
-        var uiSettings = Substitute.For<IUiSettings>();
-        uiSettings.Ui.Returns(config.Ui);
+        var sparkplugSettings = Substitute.For<ISparkplugSettings>();
+        sparkplugSettings.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
 
         var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
-            performanceSettings, uiSettings, metrics, TestPipelineHelper.BuildBuiltInPipeline(), topology, commandService);
+            performanceSettings, metrics, TestPipelineHelper.BuildBuiltInPipeline(), sparkplugSettings, topology, commandService);
         manager.Start().GetAwaiter().GetResult();
         return (manager, handler!);
     }

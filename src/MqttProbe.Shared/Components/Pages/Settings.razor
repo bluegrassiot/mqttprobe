@@ -40,7 +40,7 @@
 
 @code {
     private sealed record SettingsSection(
-        string Slug,
+        string? Slug,
         string Title,
         string Icon,
         Func<bool> IsVisible,
@@ -55,7 +55,7 @@
     private readonly RenderFragment _about = @<AboutSection />;
 
     private IReadOnlyList<SettingsSection> _sections = null!;
-    private string _activeSlug = string.Empty;
+    private string? _activeSlug = string.Empty;
     private bool _suppressUrlUpdate;
 
     protected override void OnInitialized()
@@ -92,7 +92,7 @@
     private bool IsActive(SettingsSection section) =>
         string.Equals(section.Slug, ActiveSection.Slug, StringComparison.OrdinalIgnoreCase);
 
-    private void SelectSection(string slug)
+    private void SelectSection(string? slug)
     {
         _activeSlug = slug;
         _activeSlug = ActiveSection.Slug;
@@ -103,7 +103,7 @@
         finally { _suppressUrlUpdate = false; }
     }
 
-    private string ResolveSlugFromUrl()
+    private string? ResolveSlugFromUrl()
     {
         var uri = new Uri(NavigationManager.Uri);
         var query = uri.Query.TrimStart('?');

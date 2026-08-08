@@ -3,6 +3,7 @@ using Microsoft.Extensions.Time.Testing;
 using MQTTnet;
 using MQTTnet.Protocol;
 using MqttProbe.Models.Configuration;
+using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Plugins.Contracts;
@@ -15,7 +16,7 @@ public class SparkplugCommandServiceTests
 {
     private IMqttManagedClient _mockClient = null!;
     private ILogger<SparkplugCommandService> _mockLogger = null!;
-    private IUiSettings _uiSettings = null!;
+    private ISparkplugSettings _sparkplugSettings = null!;
     private SparkplugTopologyService _topology = null!;
     private SparkplugCommandService _service = null!;
     private FakeTimeProvider _fakeClock = null!;
@@ -25,10 +26,10 @@ public class SparkplugCommandServiceTests
     {
         _mockClient = Substitute.For<IMqttManagedClient>();
         _mockLogger = Substitute.For<ILogger<SparkplugCommandService>>();
-        _uiSettings = MakeUiSettings(autoRequestRebirth: false, allowNodeReboot: false);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: false, allowNodeReboot: false);
         _topology = new SparkplugTopologyService();
         _fakeClock = new FakeTimeProvider();
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
     }
 
     [TearDown]
@@ -37,18 +38,17 @@ public class SparkplugCommandServiceTests
         _mockClient.Dispose();
     }
 
-    private static IUiSettings MakeUiSettings(bool autoRequestRebirth, bool allowNodeReboot)
+    private static ISparkplugSettings MakeSparkplugSettings(
+        bool autoRequestRebirth, bool allowNodeReboot, int rebirthCooldownSeconds = 30)
     {
-        var store = Substitute.For<IUiSettings>();
-        var config = new AppConfiguration
+        var store = Substitute.For<ISparkplugSettings>();
+        var sparkplug = new SparkplugSettings
         {
-            Ui = new UiPreferences
-            {
-                AutoRequestSparkplugRebirth = autoRequestRebirth,
-                AllowNodeReboot = allowNodeReboot
-            }
+            AutoRequestRebirth = autoRequestRebirth,
+            AllowNodeReboot = allowNodeReboot,
+            RebirthCooldownSeconds = rebirthCooldownSeconds
         };
-        store.Ui.Returns(config.Ui);
+        store.Sparkplug.Returns(sparkplug);
         return store;
     }
 
@@ -171,8 +171,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeRebirth_ManualWorksWhenAutoDisabled()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: false, allowNodeReboot: false);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: false, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeBirth();
 
         var result = await _service.RequestNodeRebirthAsync("g", "n");
@@ -254,8 +254,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeReboot_WhenAllowed_PublishesNcmdTopic()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: false, allowNodeReboot: true);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: false, allowNodeReboot: true);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeBirth();
 
         var result = await _service.RequestNodeRebootAsync("g", "n");
@@ -270,8 +270,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeReboot_WhenAllowed_PayloadContainsNodeControlReboot()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: false, allowNodeReboot: true);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: false, allowNodeReboot: true);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeBirth();
 
         await _service.RequestNodeRebootAsync("g", "n");
@@ -295,8 +295,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeReboot_NonExistentNode_ReturnsTargetNotFound()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: false, allowNodeReboot: true);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: false, allowNodeReboot: true);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
 
         var result = await _service.RequestNodeRebootAsync("g", "missing");
 
@@ -308,8 +308,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeRebirthIfNeeded_AutoOn_NodeNotOnline_PublishesRebirth()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: true, allowNodeReboot: false);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeData(); // creates node with Unknown status
 
         await _service.RequestNodeRebirthIfNeededAsync("g", "n");
@@ -321,8 +321,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeRebirthIfNeeded_AutoOff_DoesNotPublish()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: false, allowNodeReboot: false);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: false, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeData();
 
         await _service.RequestNodeRebirthIfNeededAsync("g", "n");
@@ -333,8 +333,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeRebirthIfNeeded_NodeOnline_DoesNotPublish()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: true, allowNodeReboot: false);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeBirth(); // status = Online
 
         await _service.RequestNodeRebirthIfNeededAsync("g", "n");
@@ -345,8 +345,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeRebirthIfNeeded_CooldownNotExpired_DoesNotPublishAgain()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: true, allowNodeReboot: false);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeData();
 
         await _service.RequestNodeRebirthIfNeededAsync("g", "n");
@@ -360,8 +360,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeRebirthIfNeeded_CooldownExpired_PublishesAgain()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: true, allowNodeReboot: false);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeData();
 
         await _service.RequestNodeRebirthIfNeededAsync("g", "n");
@@ -377,8 +377,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeRebirthIfNeeded_SetsLastRebirthRequestAt()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: true, allowNodeReboot: false);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeData();
 
         await _service.RequestNodeRebirthIfNeededAsync("g", "n");
@@ -390,8 +390,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeRebirthIfNeeded_NonExistentNode_DoesNotThrow()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: true, allowNodeReboot: false);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
 
         var act = () => _service.RequestNodeRebirthIfNeededAsync("g", "missing");
 
@@ -401,8 +401,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeRebirthIfNeeded_PublishFails_DoesNotThrow()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: true, allowNodeReboot: false);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeData();
         _mockClient.EnqueueAsync(Arg.Any<MqttApplicationMessage>())
             .Returns(Task.FromException(new InvalidOperationException("connection lost")));
@@ -415,8 +415,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeRebirthIfNeeded_ConcurrentCalls_OnlyOnePublish()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: true, allowNodeReboot: false);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeData();
 
         var tasks = Enumerable.Range(0, 10)
@@ -431,8 +431,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeRebirthIfNeeded_SetsLastRebirthRequestAtBeforePublish()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: true, allowNodeReboot: false);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeData();
 
         await _service.RequestNodeRebirthIfNeededAsync("g", "n");
@@ -444,8 +444,8 @@ public class SparkplugCommandServiceTests
     [Test]
     public async Task RequestNodeRebirthIfNeeded_OnlyPublishesNodeControlRebirth()
     {
-        _uiSettings = MakeUiSettings(autoRequestRebirth: true, allowNodeReboot: false);
-        _service = new SparkplugCommandService(_mockClient, _mockLogger, _uiSettings, _topology, _fakeClock);
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
         await SeedNodeData();
 
         await _service.RequestNodeRebirthIfNeededAsync("g", "n");
@@ -459,6 +459,89 @@ public class SparkplugCommandServiceTests
             Arg.Is<MqttApplicationMessage>(m => m!.Topic.Contains("/DCMD/")));
         await _mockClient.DidNotReceive().EnqueueAsync(
             Arg.Is<MqttApplicationMessage>(m => VerifyMetricPayload(m!, "Node Control/Reboot")));
+    }
+
+    [Test]
+    public async Task RequestNodeRebirthIfNeeded_ConfiguredCooldown60s_StillBlockedAt31s()
+    {
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false, rebirthCooldownSeconds: 60);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
+        await SeedNodeData();
+
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n");
+        await _mockClient.Received(1).EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+
+        _fakeClock.Advance(TimeSpan.FromSeconds(31));
+
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n");
+        await _mockClient.Received(1).EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+    }
+
+    [Test]
+    public async Task RequestNodeRebirthIfNeeded_ConfiguredCooldown60s_PublishesAfter61s()
+    {
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false, rebirthCooldownSeconds: 60);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
+        await SeedNodeData();
+
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n");
+        await _mockClient.Received(1).EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+
+        _fakeClock.Advance(TimeSpan.FromSeconds(61));
+
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n");
+        await _mockClient.Received(2).EnqueueAsync(
+            Arg.Is<MqttApplicationMessage>(m => m!.Topic == "spBv1.0/g/NCMD/n"));
+    }
+
+    [Test]
+    public async Task RequestNodeRebirthIfNeeded_CooldownReadLive_MutateBetweenCalls()
+    {
+        var sparkplug = new SparkplugSettings
+        {
+            AutoRequestRebirth = true,
+            AllowNodeReboot = false,
+            RebirthCooldownSeconds = 30
+        };
+        var store = Substitute.For<ISparkplugSettings>();
+        store.Sparkplug.Returns(sparkplug);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, store, _topology, _fakeClock);
+        await SeedNodeData();
+
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n");
+        await _mockClient.Received(1).EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+
+        // Mutate cooldown to 10 seconds
+        sparkplug.RebirthCooldownSeconds = 10;
+
+        _fakeClock.Advance(TimeSpan.FromSeconds(11));
+
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n");
+        await _mockClient.Received(2).EnqueueAsync(
+            Arg.Is<MqttApplicationMessage>(m => m!.Topic == "spBv1.0/g/NCMD/n"));
+    }
+
+    [Test]
+    public async Task RequestNodeRebirth_ManualBypassesCooldown()
+    {
+        await SeedNodeBirth();
+
+        // Force node offline and set a recent rebirth request timestamp
+        var node = _topology.Groups["g"].Nodes["n"];
+        node.Status = SpbNodeStatus.Offline;
+        node.LastRebirthRequestAt = _fakeClock.GetUtcNow().UtcDateTime;
+
+        // Auto rebirth is blocked by active cooldown
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n");
+        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+
+        // Manual rebirth bypasses cooldown and publishes
+        var result = await _service.RequestNodeRebirthAsync("g", "n");
+        result.Should().Be(SparkplugCommandResult.Published);
+        await _mockClient.Received(1).EnqueueAsync(
+            Arg.Is<MqttApplicationMessage>(m => m!.Topic == "spBv1.0/g/NCMD/n"));
     }
 
     // --- Helpers ---

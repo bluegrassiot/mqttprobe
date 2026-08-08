@@ -5,16 +5,10 @@ using MqttProbe.Services.Plugins.Registry;
 
 namespace MqttProbe.Services.Plugins.Pipeline;
 
-public sealed class PayloadPipeline
+public sealed class PayloadPipeline(PluginRegistry registry, ILogger<PayloadPipeline> logger)
 {
-    private volatile PluginRegistry _registry;
-    private readonly ILogger<PayloadPipeline> _logger;
-
-    public PayloadPipeline(PluginRegistry registry, ILogger<PayloadPipeline> logger)
-    {
-        _registry = registry;
-        _logger = logger;
-    }
+    private volatile PluginRegistry _registry = registry;
+    private readonly ILogger<PayloadPipeline> _logger = logger;
 
     public PluginRegistry Registry => _registry;
 
@@ -22,13 +16,13 @@ public sealed class PayloadPipeline
 
     public PipelineDecodeResult ProcessInbound(MqttApplicationMessageReceivedEventArgs e)
     {
-        var registry = _registry;
+        var activeRegistry = _registry;
         var diagnostics = new List<string>();
         var topic = e.ApplicationMessage.Topic;
         var segment = e.ApplicationMessage.GetPayloadSegment();
         var rawPayload = segment.Array is null ? [] : segment.ToArray();
 
-        var candidates = registry.FindMatchingDetectors(e).ToList();
+        var candidates = activeRegistry.FindMatchingDetectors(e).ToList();
 
         if (candidates.Count == 0)
         {
@@ -44,7 +38,7 @@ public sealed class PayloadPipeline
 #pragma warning restore S3267
         {
             var formatId = detector.FormatId;
-            var decoder = registry.FindDecoder(formatId);
+            var decoder = activeRegistry.FindDecoder(formatId);
 
             if (decoder is null)
             {
@@ -65,7 +59,7 @@ public sealed class PayloadPipeline
                 continue;
             }
 
-            var extractor = registry.FindTopologyExtractor(formatId);
+            var extractor = activeRegistry.FindTopologyExtractor(formatId);
             var topologyEvents = extractor is null
                 ? []
                 : ExtractTopologyEvents(extractor, envelope, formatId, diagnostics);

@@ -4,7 +4,7 @@ using MQTTnet;
 using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Plugins.Protobuf;
 
-namespace MqttProbe.Tests.Services.Plugins.Protobuf;
+namespace MqttProbe.Shared.Tests.Services.Plugins.Protobuf;
 
 [TestFixture]
 public class ProtobufPayloadDecoderTests

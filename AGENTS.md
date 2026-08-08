@@ -6,6 +6,11 @@
 - Check formatting with `python scripts/ci/format-check.py`.
 - Auto-fix formatting with `python scripts/ci/format-check.py --fix`.
 
+## C#
+
+- Prefer primary constructors when dependencies are only captured; keep explicit constructors when setup or accessibility constraints require them.
+- Do not add `!` immediately after FluentAssertions `Should().NotBeNull()`; retain it where compiler flow analysis cannot prove non-null.
+
 ## Comments
 
 - Prefer few comments.

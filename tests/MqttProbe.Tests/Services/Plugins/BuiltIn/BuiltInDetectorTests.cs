@@ -1,10 +1,9 @@
 using System.Text;
 using MQTTnet;
 using MqttProbe.Services.Plugins.BuiltIn;
-using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Plugins.Registry;
 
-namespace MqttProbe.Tests.Services.Plugins.BuiltIn;
+namespace MqttProbe.Shared.Tests.Services.Plugins.BuiltIn;
 
 [TestFixture]
 public class BuiltInDetectorTests
@@ -94,7 +93,7 @@ public class BuiltInDetectorTests
         var registry = BuildRegistry();
         var detector = registry.FindDetector(MakeArgsNoPayload("sensor/temp"));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("empty");
+        detector.FormatId.Should().Be("empty");
     }
 
     // --- Sparkplug ---
@@ -106,7 +105,7 @@ public class BuiltInDetectorTests
         var bytes = new byte[] { 0xFF, 0xFE };
         var detector = registry.FindDetector(MakeArgs("spBv1.0/group/NDATA/eon1", bytes));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("sparkplug-b");
+        detector.FormatId.Should().Be("sparkplug-b");
     }
 
     [Test]
@@ -116,7 +115,7 @@ public class BuiltInDetectorTests
         var bytes = new byte[] { 0xFF, 0xFE };
         var detector = registry.FindDetector(MakeArgs("spBv1.0", bytes));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("sparkplug-b");
+        detector.FormatId.Should().Be("sparkplug-b");
     }
 
     [Test]
@@ -125,7 +124,7 @@ public class BuiltInDetectorTests
         var registry = BuildRegistry();
         var detector = registry.FindDetector(MakeArgs("spBv1.0/group/NDATA/eon1", "42.5"));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("sparkplug-b");
+        detector.FormatId.Should().Be("sparkplug-b");
     }
 
     [Test]
@@ -134,7 +133,7 @@ public class BuiltInDetectorTests
         var registry = BuildRegistry();
         var detector = registry.FindDetector(MakeArgsNoPayload("spBv1.0/group/NBIRTH/eon1"));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("empty");
+        detector.FormatId.Should().Be("empty");
     }
 
     [Test]
@@ -144,7 +143,7 @@ public class BuiltInDetectorTests
         var bytes = new byte[] { 0xFF, 0xFE };
         var detector = registry.FindDetector(MakeArgs("spBV1.0/group/NDATA/eon1", bytes));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("binary");
+        detector.FormatId.Should().Be("binary");
     }
 
     [Test]
@@ -154,7 +153,7 @@ public class BuiltInDetectorTests
         var bytes = new byte[] { 0x80 };
         var detector = registry.FindDetector(MakeArgs("spBv1.0/group/NDATA/eon1", bytes));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("sparkplug-b");
+        detector.FormatId.Should().Be("sparkplug-b");
     }
 
     // --- Binary ---
@@ -166,7 +165,7 @@ public class BuiltInDetectorTests
         var bytes = new byte[] { 0xFF, 0xFE };
         var detector = registry.FindDetector(MakeArgs("sensor/data", bytes));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("binary");
+        detector.FormatId.Should().Be("binary");
     }
 
     // --- MessagePack ---
@@ -178,7 +177,7 @@ public class BuiltInDetectorTests
         var bytes = new byte[] { 0x80 };
         var detector = registry.FindDetector(MakeArgs("sensor/data", bytes));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("messagepack");
+        detector.FormatId.Should().Be("messagepack");
     }
 
     [Test]
@@ -188,7 +187,7 @@ public class BuiltInDetectorTests
         var bytes = new byte[] { 0x90 };
         var detector = registry.FindDetector(MakeArgs("sensor/data", bytes));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("messagepack");
+        detector.FormatId.Should().Be("messagepack");
     }
 
     // --- JSON ---
@@ -199,7 +198,7 @@ public class BuiltInDetectorTests
         var registry = BuildRegistry();
         var detector = registry.FindDetector(MakeArgs("sensor/data", """{"temp":21.5}"""));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("json");
+        detector.FormatId.Should().Be("json");
     }
 
     [Test]
@@ -208,7 +207,7 @@ public class BuiltInDetectorTests
         var registry = BuildRegistry();
         var detector = registry.FindDetector(MakeArgs("sensor/data", "[1,2,3]"));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("json");
+        detector.FormatId.Should().Be("json");
     }
 
     // --- XML ---
@@ -219,7 +218,7 @@ public class BuiltInDetectorTests
         var registry = BuildRegistry();
         var detector = registry.FindDetector(MakeArgs("sensor/data", "<root>value</root>"));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("xml");
+        detector.FormatId.Should().Be("xml");
     }
 
     // --- Hex ---
@@ -230,7 +229,7 @@ public class BuiltInDetectorTests
         var registry = BuildRegistry();
         var detector = registry.FindDetector(MakeArgs("sensor/data", "deadbeef"));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("hex");
+        detector.FormatId.Should().Be("hex");
     }
 
     [Test]
@@ -239,7 +238,7 @@ public class BuiltInDetectorTests
         var registry = BuildRegistry();
         var detector = registry.FindDetector(MakeArgs("sensor/data", "DEADBEEF"));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("hex");
+        detector.FormatId.Should().Be("hex");
     }
 
     // --- Base64 ---
@@ -252,7 +251,7 @@ public class BuiltInDetectorTests
         var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes("hello world"));
         var detector = registry.FindDetector(MakeArgs("sensor/data", b64));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("base64");
+        detector.FormatId.Should().Be("base64");
     }
 
     [TestCase("test")]
@@ -264,7 +263,7 @@ public class BuiltInDetectorTests
         var registry = BuildRegistry();
         var detector = registry.FindDetector(MakeArgs("sensor/data", payload));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("plaintext");
+        detector.FormatId.Should().Be("plaintext");
     }
 
     [Test]
@@ -273,7 +272,7 @@ public class BuiltInDetectorTests
         var registry = BuildRegistry();
         var detector = registry.FindDetector(MakeArgs("sensor/data", "aGVsbG8gd29ybGQ")); // 15 chars, no padding
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("plaintext");
+        detector.FormatId.Should().Be("plaintext");
     }
 
     [Test]
@@ -282,7 +281,7 @@ public class BuiltInDetectorTests
         var registry = BuildRegistry();
         var detector = registry.FindDetector(MakeArgs("sensor/data", "aGVsbG8gd29ybGQ!")); // '!' not in base64
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("plaintext");
+        detector.FormatId.Should().Be("plaintext");
     }
 
     // --- PlainText ---
@@ -293,7 +292,7 @@ public class BuiltInDetectorTests
         var registry = BuildRegistry();
         var detector = registry.FindDetector(MakeArgs("sensor/data", "42.5"));
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("plaintext");
+        detector.FormatId.Should().Be("plaintext");
     }
 
     // --- No match ---

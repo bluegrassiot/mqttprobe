@@ -1,7 +1,7 @@
 using MqttProbe.Services.Plugins.Packaging;
 using MqttProbe.Services.Plugins.Protobuf;
 
-namespace MqttProbe.Tests.Services.Plugins.Packaging;
+namespace MqttProbe.Shared.Tests.Services.Plugins.Packaging;
 
 [TestFixture]
 public class PluginPendingOperationsTests

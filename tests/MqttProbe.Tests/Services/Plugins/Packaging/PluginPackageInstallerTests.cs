@@ -1,14 +1,13 @@
 using System.IO.Compression;
-using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Plugins.Packaging;
 using MqttProbe.Services.Plugins.Protobuf;
-using NSubstitute;
+using static MqttProbe.Shared.Tests.Services.Plugins.Packaging.PluginPackageTestData;
 
-namespace MqttProbe.Tests.Services.Plugins.Packaging;
+namespace MqttProbe.Shared.Tests.Services.Plugins.Packaging;
 
 [TestFixture]
 public class PluginPackageInstallerTests
@@ -47,128 +46,10 @@ public class PluginPackageInstallerTests
             NullLoggerFactory.Instance);
     }
 
-    private const string DemoProto = """
-        syntax = "proto3";
-        package demo;
-        message Reading { int32 id = 1; string label = 2; }
-        """;
-
-    private static string PluginManifestJson(string id, string version) =>
-        $$"""
-        {
-          "id": "{{id}}",
-          "name": "Demo Schemas",
-          "version": "{{version}}",
-          "kind": "protobuf-schemas"
-        }
-        """;
-
-    private static string SchemaManifestJson(string messageType) =>
-        $$"""
-        {
-          "schemas": [
-            {
-              "files": [ "demo.proto" ],
-              "topicPattern": "demo/+/reading",
-              "messageType": "{{messageType}}"
-            }
-          ]
-        }
-        """;
-
-    private static MemoryStream SchemaPackage(
-        string id = "demo",
-        string version = "1.0.0",
-        string messageType = "demo.Reading",
-        int paddingBytes = 0)
-    {
-        var buffer = new MemoryStream();
-
-        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            Write(zip, PluginManifestValidator.FileName, PluginManifestJson(id, version));
-            Write(zip, ProtobufSchemaFolderLoader.ManifestFileName, SchemaManifestJson(messageType));
-
-            // Random (not repetitive) padding so it survives Deflate and actually
-            // pushes the archive's on-disk size past a low MaxCompressedBytes cap.
-            var proto = paddingBytes > 0
-                ? DemoProto + "\n// " + Convert.ToBase64String(RandomNumberGenerator.GetBytes(paddingBytes))
-                : DemoProto;
-
-            Write(zip, "demo.proto", proto);
-        }
-
-        buffer.Position = 0;
-        return buffer;
-    }
-
     private static void Write(ZipArchive zip, string name, string content)
     {
         using var writer = new StreamWriter(zip.CreateEntry(name).Open(), Encoding.UTF8);
         writer.Write(content);
-    }
-
-    private static void WriteSchemaFilesToDisk(string root, string id = "demo", string version = "1.0.0")
-    {
-        Directory.CreateDirectory(root);
-        File.WriteAllText(Path.Combine(root, PluginManifestValidator.FileName), PluginManifestJson(id, version));
-        File.WriteAllText(
-            Path.Combine(root, ProtobufSchemaFolderLoader.ManifestFileName), SchemaManifestJson("demo.Reading"));
-        File.WriteAllText(Path.Combine(root, "demo.proto"), DemoProto);
-    }
-
-    // Builds a valid schema package plus one extra entry ("padding.txt") whose
-    // central-directory uncompressed-size field is patched to a tiny lie after
-    // the fact, while the real compressed data (and its true expansion) is left
-    // untouched - the same "declared tiny, actual huge" shape a real zip bomb
-    // uses to slip past length-based validation that only trusts the header.
-    private static MemoryStream SchemaPackageWithFalsifiedPaddingLength(int realPaddingBytes)
-    {
-        var buffer = new MemoryStream();
-
-        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            Write(zip, PluginManifestValidator.FileName, PluginManifestJson("demo", "1.0.0"));
-            Write(zip, ProtobufSchemaFolderLoader.ManifestFileName, SchemaManifestJson("demo.Reading"));
-            Write(zip, "demo.proto", DemoProto);
-
-            var entry = zip.CreateEntry("padding.txt", CompressionLevel.NoCompression);
-            using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
-            writer.Write(Convert.ToBase64String(RandomNumberGenerator.GetBytes(realPaddingBytes)));
-        }
-
-        var bytes = buffer.ToArray();
-        PatchCentralDirectoryUncompressedSize(bytes, "padding.txt", declaredSize: 1);
-
-        return new MemoryStream(bytes);
-    }
-
-    private static void PatchCentralDirectoryUncompressedSize(byte[] zipBytes, string entryName, uint declaredSize)
-    {
-        var nameBytes = Encoding.UTF8.GetBytes(entryName);
-        var signature = new byte[] { 0x50, 0x4B, 0x01, 0x02 };
-
-        for (var i = 0; i + 46 <= zipBytes.Length; i++)
-        {
-            if (zipBytes[i] != signature[0] || zipBytes[i + 1] != signature[1]
-                || zipBytes[i + 2] != signature[2] || zipBytes[i + 3] != signature[3])
-            {
-                continue;
-            }
-
-            var nameLength = BitConverter.ToUInt16(zipBytes, i + 28);
-
-            if (nameLength != nameBytes.Length
-                || !zipBytes.AsSpan(i + 46, nameLength).SequenceEqual(nameBytes))
-            {
-                continue;
-            }
-
-            BitConverter.GetBytes(declaredSize).CopyTo(zipBytes, i + 24);
-            return;
-        }
-
-        throw new InvalidOperationException($"Central directory entry for '{entryName}' not found.");
     }
 
     [Test]

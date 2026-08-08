@@ -3,13 +3,11 @@ using MqttProbe.Services.Plugins.Contracts;
 
 namespace MqttProbe.Services.Plugins.Protobuf;
 
-public sealed class ProtobufPayloadDetector : IPayloadDetector
+public sealed class ProtobufPayloadDetector(ProtobufSchemaRegistry registry) : IPayloadDetector
 {
     private const string SparkplugPrefix = "spBv1.0";
 
-    private readonly ProtobufSchemaRegistry _registry;
-
-    public ProtobufPayloadDetector(ProtobufSchemaRegistry registry) => _registry = registry;
+    private readonly ProtobufSchemaRegistry _registry = registry;
 
     public string FormatId => "protobuf";
 

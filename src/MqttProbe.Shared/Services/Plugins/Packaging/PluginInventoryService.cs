@@ -5,19 +5,12 @@ using MqttProbe.Services.Plugins.Registry;
 
 namespace MqttProbe.Services.Plugins.Packaging;
 
-public sealed class PluginInventoryService
+public sealed class PluginInventoryService(
+    PluginConfig config, PayloadPipeline pipeline, PluginInstallSession session)
 {
-    private readonly PluginConfig _config;
-    private readonly PayloadPipeline _pipeline;
-    private readonly PluginInstallSession _session;
-
-    public PluginInventoryService(
-        PluginConfig config, PayloadPipeline pipeline, PluginInstallSession session)
-    {
-        _config = config;
-        _pipeline = pipeline;
-        _session = session;
-    }
+    private readonly PluginConfig _config = config;
+    private readonly PayloadPipeline _pipeline = pipeline;
+    private readonly PluginInstallSession _session = session;
 
     public IReadOnlyList<InstalledPlugin> GetInstalled()
     {

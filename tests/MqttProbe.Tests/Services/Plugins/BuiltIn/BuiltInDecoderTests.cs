@@ -2,11 +2,10 @@ using System.Text;
 using Google.Protobuf;
 using MQTTnet;
 using MqttProbe.Services.Plugins.BuiltIn;
-using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Plugins.Registry;
 using Org.Eclipse.Tahu.Protobuf;
 
-namespace MqttProbe.Tests.Services.Plugins.BuiltIn;
+namespace MqttProbe.Shared.Tests.Services.Plugins.BuiltIn;
 
 [TestFixture]
 public class BuiltInDecoderTests
@@ -344,7 +343,7 @@ public class BuiltInDecoderTests
     public void SparkplugDecoder_InvalidProtobuf_DoesNotThrow()
     {
         var decoder = new SparkplugPayloadDecoder();
-        var act = () => decoder.Decode(MakeArgs("spBv1.0/group/NDATA/eon1", "\x01\x02\x03invalid"));
+        var act = () => decoder.Decode(MakeArgs("spBv1.0/group/NDATA/eon1", "\x01\x02\x03" + "invalid"));
         act.Should().NotThrow();
     }
 
@@ -382,7 +381,7 @@ public class BuiltInDecoderTests
     public void SparkplugDecoder_InvalidProtobufBytes_ReturnsFailureEnvelope()
     {
         var decoder = new SparkplugPayloadDecoder();
-        var result = decoder.Decode(MakeArgs("spBv1.0/group/NDATA/eon1", "\x01\x02\x03invalid"));
+        var result = decoder.Decode(MakeArgs("spBv1.0/group/NDATA/eon1", "\x01\x02\x03" + "invalid"));
         result.IsFailure.Should().BeTrue();
         result.FailureReason.Should().Contain("parse failed");
         result.DisplayText.Should().Contain("Decode failed");
@@ -483,10 +482,10 @@ public class BuiltInDecoderTests
         var args = MakeArgsBytes("sensor/raw", utf8);
         var detector = registry.FindDetector(args);
         detector.Should().NotBeNull();
-        detector!.FormatId.Should().Be("plaintext");
+        detector.FormatId.Should().Be("plaintext");
         var decoder = registry.FindDecoder(detector.FormatId);
         decoder.Should().NotBeNull();
-        decoder!.Decode(args).DisplayText.Should().Be("hello");
+        decoder.Decode(args).DisplayText.Should().Be("hello");
     }
 
     [Test]
@@ -573,7 +572,7 @@ public class BuiltInDecoderTests
         // valid message with unknown fields. Verify the decoder does not throw
         // regardless of parse success/failure, matching old decoder behavior.
         var decoder = new SparkplugPayloadDecoder();
-        var act = () => decoder.Decode(MakeArgs("spBv1.0/group/NDATA/eon1", "\x01\x02\x03invalid"));
+        var act = () => decoder.Decode(MakeArgs("spBv1.0/group/NDATA/eon1", "\x01\x02\x03" + "invalid"));
         act.Should().NotThrow();
     }
 

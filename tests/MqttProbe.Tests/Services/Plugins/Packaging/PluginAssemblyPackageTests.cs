@@ -1,5 +1,4 @@
 using System.IO.Compression;
-using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
@@ -10,9 +9,8 @@ using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Platform;
 using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Plugins.Packaging;
-using NSubstitute;
 
-namespace MqttProbe.Tests.Services.Plugins.Packaging;
+namespace MqttProbe.Shared.Tests.Services.Plugins.Packaging;
 
 [TestFixture]
 public class PluginAssemblyPackageTests
@@ -68,30 +66,10 @@ public class PluginAssemblyPackageTests
             config, appInfo, new PluginInstallSession(), new PluginArchiveLimits(), NullLoggerFactory.Instance);
     }
 
-    // The test assembly itself is a real, loadable .NET assembly, which makes it a
-    // convenient stand-in for a plugin DLL without a build-time fixture project.
-    private static MemoryStream AssemblyPackage(string id, string dllSourcePath, string version = "1.0.0")
-    {
-        var buffer = new MemoryStream();
-
-        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            using (var writer = new StreamWriter(zip.CreateEntry(PluginManifestValidator.FileName).Open(), Encoding.UTF8))
-            {
-                writer.Write(
-                    $$"""
-                    { "id": "{{id}}", "name": "Demo Binary", "version": "{{version}}", "kind": "assembly" }
-                    """);
-            }
-
-            zip.CreateEntryFromFile(dllSourcePath, id + ".dll");
-        }
-
-        buffer.Position = 0;
-        return buffer;
-    }
-
     private static string ContractAssemblyPath() => typeof(IMqttProbePlugin).Assembly.Location;
+
+    private static MemoryStream AssemblyPackage(string id, string dllSourcePath, string version = "1.0.0") =>
+        PluginPackageTestData.AssemblyPackage(id, dllSourcePath, version);
 
     [Test]
     public async Task Rejects_An_Assembly_Package_When_Binary_Packages_Are_Disabled()
@@ -171,7 +149,7 @@ public class PluginAssemblyPackageTests
     // that can never resolve on any machine or CI runner - reproducing, deterministically,
     // the "dependency not found" failure real reflection over an uploaded assembly hit
     // during Task 4, without depending on any real third-party package being absent.
-    private static string BuildAssemblyWithUnresolvableDependency(string outputPath)
+    private static void BuildAssemblyWithUnresolvableDependency(string outputPath)
     {
         var metadata = new MetadataBuilder();
 
@@ -232,7 +210,6 @@ public class PluginAssemblyPackageTests
             peBlob.WriteContentTo(file);
         }
 
-        return outputPath;
     }
 
     [Test]
@@ -352,7 +329,7 @@ public class PluginAssemblyPackageTests
         }
 
         var installer = CreateInstaller(allowBinary: true);
-        await installer.InstallAsync(AssemblyPackage("demoplugin", FixtureAssemblyPath, "1.0.0"), CancellationToken.None);
+        await installer.InstallAsync(AssemblyPackage("demoplugin", FixtureAssemblyPath), CancellationToken.None);
         await installer.InstallAsync(AssemblyPackage("demoplugin", FixtureAssemblyPath, "2.0.0"), CancellationToken.None);
         var thirdOutcome = await installer.InstallAsync(
             AssemblyPackage("demoplugin", FixtureAssemblyPath, "3.0.0"), CancellationToken.None);
@@ -383,7 +360,7 @@ public class PluginAssemblyPackageTests
         }
 
         var installer = CreateInstaller(allowBinary: true);
-        await installer.InstallAsync(AssemblyPackage("demoplugin", FixtureAssemblyPath, "1.0.0"), CancellationToken.None);
+        await installer.InstallAsync(AssemblyPackage("demoplugin", FixtureAssemblyPath), CancellationToken.None);
 
         var removeOutcome = await installer.RemoveAsync("demoplugin", CancellationToken.None);
         removeOutcome.Succeeded.Should().BeTrue(removeOutcome.Error);
@@ -410,7 +387,7 @@ public class PluginAssemblyPackageTests
         }
 
         var installer = CreateInstaller(allowBinary: true);
-        await installer.InstallAsync(AssemblyPackage("demoplugin", FixtureAssemblyPath, "1.0.0"), CancellationToken.None);
+        await installer.InstallAsync(AssemblyPackage("demoplugin", FixtureAssemblyPath), CancellationToken.None);
         await installer.InstallAsync(AssemblyPackage("demoplugin", FixtureAssemblyPath, "2.0.0"), CancellationToken.None);
 
         var removeOutcome = await installer.RemoveAsync("demoplugin", CancellationToken.None);

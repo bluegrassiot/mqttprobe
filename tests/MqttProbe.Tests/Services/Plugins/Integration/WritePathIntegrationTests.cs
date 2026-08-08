@@ -8,7 +8,7 @@ using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Plugins.Pipeline;
 using MqttProbe.Services.Plugins.Registry;
 
-namespace MqttProbe.Tests.Services.Plugins.Integration;
+namespace MqttProbe.Shared.Tests.Services.Plugins.Integration;
 
 [TestFixture]
 public class WritePathIntegrationTests

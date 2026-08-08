@@ -1,17 +1,14 @@
 using Google.Protobuf;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MQTTnet;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Plugins;
-using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Platform;
-using MqttProbe.Services.Plugins;
 using MqttProbe.Services.Plugins.Loading;
 using MqttProbe.Services.Plugins.Packaging;
 using MqttProbe.Services.Plugins.Pipeline;
@@ -21,7 +18,7 @@ using MqttProbe.Services.Sparkplug;
 using MqttProbe.Web.Services;
 using Org.Eclipse.Tahu.Protobuf;
 
-namespace MqttProbe.Tests.Services.Plugins;
+namespace MqttProbe.Shared.Tests.Services.Plugins;
 
 // Proves the DI-composed object graph used by both Web and MAUI hosts builds correctly
 // and routes messages end-to-end through the pipeline into both message storage and
@@ -190,7 +187,10 @@ public class PluginPipelineDiCompositionTests
     public void ResolveFromDi_BuildsPluginPackagingServices()
     {
         _serviceProvider.GetRequiredService<PluginInventoryService>().Should().NotBeNull();
-        _serviceProvider.GetRequiredService<PluginPackageInstaller>().Should().NotBeNull();
+        var firstInstaller = _serviceProvider.GetRequiredService<PluginPackageInstaller>();
+        var secondInstaller = _serviceProvider.GetRequiredService<PluginPackageInstaller>();
+
+        firstInstaller.Should().BeSameAs(secondInstaller);
         _serviceProvider.GetRequiredService<PluginReloadService>().Should().NotBeNull();
     }
 
@@ -254,6 +254,6 @@ public class PluginPipelineDiCompositionTests
         topology.Groups.Should().ContainKey("factory");
         topology.Groups["factory"].Nodes.Should().ContainKey("edge-01");
         topology.Groups["factory"].Nodes["edge-01"].Status
-            .Should().Be(Models.Sparkplug.SpbNodeStatus.Online);
+            .Should().Be(MqttProbe.Models.Sparkplug.SpbNodeStatus.Online);
     }
 }

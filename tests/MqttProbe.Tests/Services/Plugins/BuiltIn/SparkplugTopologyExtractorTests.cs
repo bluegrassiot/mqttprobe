@@ -3,7 +3,7 @@ using MqttProbe.Services.Plugins.BuiltIn;
 using MqttProbe.Services.Plugins.Contracts;
 using Org.Eclipse.Tahu.Protobuf;
 
-namespace MqttProbe.Tests.Services.Plugins.BuiltIn;
+namespace MqttProbe.Shared.Tests.Services.Plugins.BuiltIn;
 
 [TestFixture]
 public class SparkplugTopologyExtractorTests

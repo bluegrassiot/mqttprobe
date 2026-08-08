@@ -4,7 +4,7 @@ using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Plugins;
 using MqttProbe.Services.Plugins.Protobuf;
 
-namespace MqttProbe.Tests.Services.Plugins;
+namespace MqttProbe.Shared.Tests.Services.Plugins;
 
 [TestFixture]
 public class MqttProbePluginStartupTests

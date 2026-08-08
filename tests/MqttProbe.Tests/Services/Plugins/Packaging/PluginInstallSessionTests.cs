@@ -1,6 +1,6 @@
 using MqttProbe.Services.Plugins.Packaging;
 
-namespace MqttProbe.Tests.Services.Plugins.Packaging;
+namespace MqttProbe.Shared.Tests.Services.Plugins.Packaging;
 
 [TestFixture]
 public class PluginInstallSessionTests

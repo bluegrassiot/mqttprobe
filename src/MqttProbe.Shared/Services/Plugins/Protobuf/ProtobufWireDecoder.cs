@@ -6,13 +6,11 @@ using FieldDescriptorProto = ProtoReflection::Google.Protobuf.Reflection.FieldDe
 
 namespace MqttProbe.Services.Plugins.Protobuf;
 
-public sealed class ProtobufWireDecoder
+public sealed class ProtobufWireDecoder(ProtobufSchemaRegistry registry)
 {
     private const int MaxDepth = 100;
 
-    private readonly ProtobufSchemaRegistry _registry;
-
-    public ProtobufWireDecoder(ProtobufSchemaRegistry registry) => _registry = registry;
+    private readonly ProtobufSchemaRegistry _registry = registry;
 
     public IReadOnlyDictionary<string, object?> Decode(ReadOnlySpan<byte> payload, DescriptorProto message) =>
         Decode(payload, message, 0);

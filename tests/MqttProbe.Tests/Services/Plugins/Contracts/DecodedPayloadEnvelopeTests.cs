@@ -1,7 +1,7 @@
 using System.Text;
 using MqttProbe.Services.Plugins.Contracts;
 
-namespace MqttProbe.Tests.Services.Plugins.Contracts;
+namespace MqttProbe.Shared.Tests.Services.Plugins.Contracts;
 
 [TestFixture]
 public class DecodedPayloadEnvelopeTests

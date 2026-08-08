@@ -1,7 +1,7 @@
 using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Plugins.Packaging;
 
-namespace MqttProbe.Tests.Services.Plugins.Packaging;
+namespace MqttProbe.Shared.Tests.Services.Plugins.Packaging;
 
 [TestFixture]
 public class PluginManifestValidatorTests
@@ -97,7 +97,7 @@ public class PluginManifestValidatorTests
             """);
 
         manifest.Should().NotBeNull();
-        manifest!.Id.Should().Be("demo");
+        manifest.Id.Should().Be("demo");
         manifest.Kind.Should().Be(PluginPackageKinds.Assembly);
     }
 

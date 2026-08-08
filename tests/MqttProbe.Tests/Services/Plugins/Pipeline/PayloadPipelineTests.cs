@@ -21,9 +21,6 @@ public class PayloadPipelineTests
         return new MqttApplicationMessageReceivedEventArgs("test-client", appMsg, packet, null);
     }
 
-    private static MqttApplicationMessageReceivedEventArgs MakeArgs(string topic, string payload)
-        => MakeArgs(topic, Encoding.UTF8.GetBytes(payload));
-
     private static IPayloadDetector MakeDetector(string formatId, bool canDetect)
     {
         var detector = Substitute.For<IPayloadDetector>();

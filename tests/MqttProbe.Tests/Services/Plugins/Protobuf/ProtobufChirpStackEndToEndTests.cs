@@ -7,9 +7,8 @@ using MqttProbe.Services.Platform;
 using MqttProbe.Services.Plugins;
 using MqttProbe.Services.Plugins.Packaging;
 using MqttProbe.Services.Plugins.Protobuf;
-using NSubstitute;
 
-namespace MqttProbe.Tests.Services.Plugins.Protobuf;
+namespace MqttProbe.Shared.Tests.Services.Plugins.Protobuf;
 
 [TestFixture]
 public class ProtobufChirpStackEndToEndTests
@@ -20,7 +19,7 @@ public class ProtobufChirpStackEndToEndTests
         while (dir is not null && !Directory.Exists(Path.Combine(dir.FullName, "samples", "protobuf")))
             dir = dir.Parent;
         dir.Should().NotBeNull("repo root with samples/protobuf must be found");
-        return Path.Combine(dir!.FullName, "samples", "protobuf");
+        return Path.Combine(dir.FullName, "samples", "protobuf");
     }
 
     private static string ChirpStackSampleDir() =>
@@ -108,7 +107,7 @@ public class ProtobufChirpStackEndToEndTests
         var config = new PluginConfig { PluginFolders = { StageAsDroppedInPluginFolder() } };
 
         var registry = MqttProbePluginStartup.BuildPluginRegistry(
-            config, Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+            config, NullLoggerFactory.Instance);
 
         registry.FindDecoder("protobuf").Should().NotBeNull();
         registry.FindDetector(MakeArgs("application/1/device/0102030405060708/event/up", SamplePayload()))

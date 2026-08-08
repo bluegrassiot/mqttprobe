@@ -2,7 +2,7 @@ using Google.Protobuf;
 using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Plugins.Protobuf;
 
-namespace MqttProbe.Tests.Services.Plugins.Protobuf;
+namespace MqttProbe.Shared.Tests.Services.Plugins.Protobuf;
 
 [TestFixture]
 public class ProtobufWireDecoderTests
@@ -32,8 +32,9 @@ public class ProtobufWireDecoderTests
         }
         """;
 
-    private static ProtobufSchemaRegistry BuildRegistry(out string dir)
+    private static ProtobufSchemaRegistry BuildRegistry()
     {
+        string dir;
         dir = Path.Combine(Path.GetTempPath(), "mqttprobe-proto-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "demo.proto"), Proto);
@@ -89,7 +90,7 @@ public class ProtobufWireDecoderTests
     [Test]
     public void Decodes_All_Scalar_And_Nested_Fields()
     {
-        var registry = BuildRegistry(out _);
+        var registry = BuildRegistry();
         registry.TryResolveMessage("demo.Outer", out var outer).Should().BeTrue();
 
         var decoder = new ProtobufWireDecoder(registry);
@@ -108,7 +109,7 @@ public class ProtobufWireDecoderTests
     [Test]
     public void Unknown_Field_Is_Preserved()
     {
-        var registry = BuildRegistry(out _);
+        var registry = BuildRegistry();
         registry.TryResolveMessage("demo.Inner", out var inner).Should().BeTrue();
 
         using var ms = new MemoryStream();
@@ -126,7 +127,7 @@ public class ProtobufWireDecoderTests
     [Test]
     public void WireType_Mismatch_Does_Not_Corrupt_Following_Fields()
     {
-        var registry = BuildRegistry(out _);
+        var registry = BuildRegistry();
         registry.TryResolveMessage("demo.Drift", out var drift).Should().BeTrue();
 
         using var ms = new MemoryStream();
@@ -155,7 +156,7 @@ public class ProtobufWireDecoderTests
     [Test]
     public void Excessive_Nesting_Throws_InvalidDataException()
     {
-        var registry = BuildRegistry(out _);
+        var registry = BuildRegistry();
         registry.TryResolveMessage("demo.Node", out var node).Should().BeTrue();
 
         using var leaf = new MemoryStream();
@@ -184,7 +185,7 @@ public class ProtobufWireDecoderTests
     [Test]
     public void Duplicate_Singular_Scalar_Keeps_Last_Value_As_Scalar()
     {
-        var registry = BuildRegistry(out _);
+        var registry = BuildRegistry();
         registry.TryResolveMessage("demo.Drift", out var drift).Should().BeTrue();
 
         using var ms = new MemoryStream();
@@ -205,7 +206,7 @@ public class ProtobufWireDecoderTests
     [Test]
     public void Repeated_Unknown_Field_Preserves_All_Occurrences()
     {
-        var registry = BuildRegistry(out _);
+        var registry = BuildRegistry();
         registry.TryResolveMessage("demo.Inner", out var inner).Should().BeTrue();
 
         var tags = new[] { "tag1", "tag2", "tag3" };
@@ -231,7 +232,7 @@ public class ProtobufWireDecoderTests
     [Test]
     public void Oversized_Length_Prefix_Throws_InvalidDataException()
     {
-        var registry = BuildRegistry(out _);
+        var registry = BuildRegistry();
         registry.TryResolveMessage("demo.Drift", out var drift).Should().BeTrue();
 
         byte[] payload = [0x72, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F];

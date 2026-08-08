@@ -1,7 +1,7 @@
 using MqttProbe.Models.Plugins;
 using MqttProbe.Services.Plugins.Protobuf;
 
-namespace MqttProbe.Tests.Services.Plugins.Protobuf;
+namespace MqttProbe.Shared.Tests.Services.Plugins.Protobuf;
 
 [TestFixture]
 public class ProtobufSchemaRegistryTests
@@ -119,7 +119,7 @@ public class ProtobufSchemaRegistryTests
         registry.HasAnySchemas.Should().BeTrue();
         registry.Diagnostics.Should().NotContain(d => d.Contains("ERROR"));
         registry.TryResolveByTopic("sensors/abc/data", out var msg).Should().BeTrue();
-        msg!.Name.Should().Be("Outer");
+        msg.Name.Should().Be("Outer");
         registry.TryResolveByTopic("sensors/abc/other", out _).Should().BeFalse();
     }
 

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Services.Emulation;
@@ -6,7 +5,7 @@ using MqttProbe.Services.Plugins.BuiltIn;
 using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Plugins.Registry;
 
-namespace MqttProbe.Tests.Services.Plugins.BuiltIn;
+namespace MqttProbe.Shared.Tests.Services.Plugins.BuiltIn;
 
 [TestFixture]
 public class BuiltInEncoderTests
@@ -161,18 +160,17 @@ public class BuiltInEncoderTests
     public void JsonEncoder_NoTimestamp_UsesUtcNow()
     {
         var metrics = new Dictionary<string, object> { ["x"] = 1.0 };
-        var request = MakeRequest("sensor/data", metrics, null);
+        var request = MakeRequest("sensor/data", metrics);
 
         var encoder = new JsonPayloadEncoder();
         var before = DateTime.UtcNow;
         var bytes = encoder.Encode(request);
-        var after = DateTime.UtcNow;
 
         var actual = Encoding.UTF8.GetString(bytes);
         actual.Should().Contain("\"timestamp\":");
 
         // Verify the timestamp is within the expected range.
-        var expected = GenericPayloadFormatter.FormatDeviceJson(
+        GenericPayloadFormatter.FormatDeviceJson(
             before, [(new EmulatorMetricConfig { Name = "x", ValueType = MetricValueType.Double }, 1.0)]);
         // Both contain a timestamp; just verify structure matches.
         actual.Should().Contain("\"metrics\":{\"x\":1}");

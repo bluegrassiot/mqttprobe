@@ -564,7 +564,8 @@ public class MessageStoreManagerMessageHandlerTests
     }
 
     private static (MessageStoreManager Manager, Func<MqttApplicationMessageReceivedEventArgs, Task> Fire)
-        BuildManagerWithTopology(IUxMetricsService metrics, ISparkplugTopologyService topology)
+        BuildManagerWithTopology(IUxMetricsService metrics, ISparkplugTopologyService topology,
+            ISparkplugCommandService? commandService = null)
     {
         var client = Substitute.For<IMqttManagedClient>();
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
@@ -578,7 +579,7 @@ public class MessageStoreManagerMessageHandlerTests
         uiSettings.Ui.Returns(config.Ui);
 
         var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
-            performanceSettings, uiSettings, metrics, TestPipelineHelper.BuildBuiltInPipeline(), topology);
+            performanceSettings, uiSettings, metrics, TestPipelineHelper.BuildBuiltInPipeline(), topology, commandService);
         manager.Start().GetAwaiter().GetResult();
         return (manager, handler!);
     }
@@ -619,5 +620,45 @@ public class MessageStoreManagerMessageHandlerTests
             topology.ApplyTopologyEventsAsync(Arg.Any<IReadOnlyList<TopologyEvent>>());
             _ = topology.Groups;
         });
+    }
+
+    [Test]
+    public async Task MessageHandler_NDataEvents_CallsCommandServiceAutoRebirth()
+    {
+        var metrics = Substitute.For<IUxMetricsService>();
+        var topology = Substitute.For<ISparkplugTopologyService>();
+        topology.Groups.Returns(new Dictionary<string, SpbGroup>());
+        var commandService = Substitute.For<ISparkplugCommandService>();
+
+        var built = BuildManagerWithTopology(metrics, topology, commandService);
+        using var manager = built.Manager;
+
+        await built.Fire(MakeBinaryArgs("spBv1.0/g/NDATA/n1", SparkplugPayload()));
+
+        await commandService.Received(1).RequestNodeRebirthIfNeededAsync("g", "n1");
+    }
+
+    [Test]
+    public async Task MessageHandler_DeviceDataEvents_CallsCommandServiceAutoRebirth()
+    {
+        var metrics = Substitute.For<IUxMetricsService>();
+        var topology = Substitute.For<ISparkplugTopologyService>();
+        topology.Groups.Returns(new Dictionary<string, SpbGroup>());
+        var commandService = Substitute.For<ISparkplugCommandService>();
+
+        var built = BuildManagerWithTopology(metrics, topology, commandService);
+        using var manager = built.Manager;
+
+        // Device data topic
+        var payload = new Payload { Timestamp = 1 };
+        payload.Metrics.Add(new Payload.Types.Metric
+        {
+            Name = "temperature",
+            Datatype = 3,
+            IntValue = 42
+        });
+        await built.Fire(MakeBinaryArgs("spBv1.0/g/DDATA/n1/d1", payload.ToByteArray()));
+
+        await commandService.Received(1).RequestNodeRebirthIfNeededAsync("g", "n1");
     }
 }

@@ -19,6 +19,7 @@ public class MessageStoreManager : IMessageStoreManager
     private readonly IUxMetricsService _metrics;
     private readonly PayloadPipeline _pipeline;
     private readonly ISparkplugTopologyService? _topologyService;
+    private readonly ISparkplugCommandService? _commandService;
     private readonly TopicTreeStore _store;
     private readonly InboundRateLimiter _rateLimiter;
     private readonly SparkplugAliasEnricher _aliasEnricher;
@@ -27,7 +28,8 @@ public class MessageStoreManager : IMessageStoreManager
 
     public MessageStoreManager(IMqttManagedClient client, ILogger<MessageStoreManager> logger,
         IPerformanceSettings performanceSettings, IUiSettings uiSettings, IUxMetricsService metrics,
-        PayloadPipeline pipeline, ISparkplugTopologyService? topologyService = null)
+        PayloadPipeline pipeline, ISparkplugTopologyService? topologyService = null,
+        ISparkplugCommandService? commandService = null)
     {
         _client = client;
         _logger = logger;
@@ -35,6 +37,7 @@ public class MessageStoreManager : IMessageStoreManager
         _metrics = metrics;
         _pipeline = pipeline;
         _topologyService = topologyService;
+        _commandService = commandService;
         _store = new TopicTreeStore(performanceSettings, logger);
         _rateLimiter = new InboundRateLimiter(performanceSettings, metrics, logger);
         _aliasEnricher = new SparkplugAliasEnricher(uiSettings, topologyService);
@@ -155,6 +158,17 @@ public class MessageStoreManager : IMessageStoreManager
 
             if (_topologyService is not null && result.TopologyEvents.Count > 0)
                 await _topologyService.ApplyTopologyEventsAsync(result.TopologyEvents);
+
+            if (_commandService is not null)
+            {
+                foreach (var evt in result.TopologyEvents)
+                {
+                    if (evt is NodeDataEvent nde)
+                        await _commandService.RequestNodeRebirthIfNeededAsync(nde.GroupId, nde.NodeId);
+                    else if (evt is DeviceDataEvent dde)
+                        await _commandService.RequestNodeRebirthIfNeededAsync(dde.GroupId, dde.NodeId);
+                }
+            }
 
             var aliasNames = _aliasEnricher.Resolve(topic, arg, result);
 

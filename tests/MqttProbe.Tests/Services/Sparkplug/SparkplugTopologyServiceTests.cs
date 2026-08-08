@@ -1,12 +1,5 @@
 using Google.Protobuf;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Time.Testing;
-using MQTTnet;
-using MQTTnet.Protocol;
-using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Sparkplug;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Plugins.BuiltIn;
 using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Sparkplug;
@@ -17,27 +10,14 @@ namespace MqttProbe.Shared.Tests.Services.Sparkplug;
 [TestFixture]
 public class SparkplugTopologyServiceTests
 {
-    private IMqttManagedClient _mockClient = null!;
-    private ILogger<SparkplugTopologyService> _mockLogger = null!;
     private SparkplugTopologyService _service = null!;
     private SparkplugTopologyExtractor _extractor = null!;
-    private IUiSettings _uiSettings = null!;
 
     [SetUp]
     public void Setup()
     {
-        _mockClient = Substitute.For<IMqttManagedClient>();
-        _mockLogger = Substitute.For<ILogger<SparkplugTopologyService>>();
         _extractor = new SparkplugTopologyExtractor();
-        // Auto-rebirth ships off; the tests below describe the enabled behaviour unless they say otherwise.
-        _uiSettings = MakeUiSettings(autoRequestRebirth: true);
-        _service = new SparkplugTopologyService(_mockClient, _mockLogger, _uiSettings);
-    }
-
-    [TearDown]
-    public void TearDown()
-    {
-        _mockClient.Dispose();
+        _service = new SparkplugTopologyService();
     }
 
     // Mirrors the live path: decoded envelope -> topology extractor -> service.
@@ -416,7 +396,6 @@ public class SparkplugTopologyServiceTests
         var result = _service.RemoveNode("factory", "edge-01");
 
         result.Should().BeTrue();
-        // group still exists because edge-02 remains; without the second seed, _service.Groups["factory"] would throw after the removal
         _service.Groups["factory"].Nodes.Should().NotContainKey("edge-01");
         _service.Groups["factory"].Nodes.Should().ContainKey("edge-02");
         raised.Should().Be(1);
@@ -437,7 +416,7 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public async Task RemoveNode_NonExistentGroup_ReturnsFalseAndDoesNotRaise()
+    public void RemoveNode_NonExistentGroup_ReturnsFalseAndDoesNotRaise()
     {
         var raised = 0;
         _service.TopologyChanged += () => raised++;
@@ -464,7 +443,7 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
-    public async Task RemoveOfflineNodes_EmptyTopology_ReturnsZero()
+    public void RemoveOfflineNodes_EmptyTopology_ReturnsZero()
     {
         var result = _service.RemoveOfflineNodes();
 
@@ -545,221 +524,6 @@ public class SparkplugTopologyServiceTests
         var node = _service.Groups["factory"].Nodes["edge-01"];
         node.Status.Should().Be(SpbNodeStatus.Online);
         node.Metrics.Should().ContainSingle().Which.Name.Should().Be("Y");
-    }
-
-    [Test]
-    public async Task NDATA_WithoutPriorBirth_RequestsRebirth()
-    {
-        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
-
-        await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<MqttApplicationMessage>(m =>
-                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
-    }
-
-    [Test]
-    public async Task NDATA_AfterBirth_DoesNotRequestRebirth()
-    {
-        await Fire("spBv1.0/factory/NBIRTH/edge-01", SpbPayload(("Temp", 0, 10, 20.0)));
-        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 25.0)));
-
-        await _mockClient.DidNotReceive().EnqueueAsync(
-            Arg.Any<MqttApplicationMessage>());
-    }
-
-    [Test]
-    public async Task NDATA_WithoutBirth_RateLimitsRebirthRequests()
-    {
-        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 20.0)));
-        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 21.0)));
-        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
-
-        await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<MqttApplicationMessage>(m =>
-                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
-    }
-
-    [Test]
-    public async Task NDATA_WithoutBirth_AfterCooldownExpires_RequestsRebirthAgain()
-    {
-        var fakeClock = new FakeTimeProvider();
-        _service = new SparkplugTopologyService(_mockClient, _mockLogger, _uiSettings, fakeClock);
-        // _service field updated so TearDown disposes the correct instance
-
-        // First NDATA without birth — triggers rebirth
-        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
-        await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<MqttApplicationMessage>(m =>
-                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
-
-        // Advance past the 30-second cooldown
-        fakeClock.Advance(TimeSpan.FromSeconds(31));
-
-        // Second NDATA without birth — should trigger another rebirth
-        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 23.0)));
-        await _mockClient.Received(2).EnqueueAsync(
-            Arg.Is<MqttApplicationMessage>(m =>
-                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
-    }
-
-    [Test]
-    public async Task NDATA_WithoutBirth_AutoRebirthDisabled_DoesNotRequestRebirth()
-    {
-        UseUiSettings(autoRequestRebirth: false);
-
-        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
-
-        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
-    }
-
-    [Test]
-    public async Task DDATA_WithoutBirth_AutoRebirthDisabled_DoesNotRequestRebirth()
-    {
-        UseUiSettings(autoRequestRebirth: false);
-
-        await Fire("spBv1.0/factory/DDATA/edge-01/dev-1", SpbPayload(("Temp", 0, 10, 22.0)));
-
-        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
-    }
-
-    [Test]
-    public async Task NDATA_WithoutBirth_AutoRebirthEnabled_RequestsRebirth()
-    {
-        UseUiSettings(autoRequestRebirth: true);
-
-        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
-
-        await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<MqttApplicationMessage>(m =>
-                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
-    }
-
-    [Test]
-    public async Task ManualRebirth_AutoRebirthDisabled_StillPublishes()
-    {
-        UseUiSettings(autoRequestRebirth: false);
-        await Fire("spBv1.0/factory/NBIRTH/edge-01", SpbPayload(("Temp", 0, 10, 20.0)));
-
-        await _service.RequestNodeRebirthAsync("factory", "edge-01");
-
-        await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<MqttApplicationMessage>(m =>
-                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
-    }
-
-    private void UseUiSettings(bool autoRequestRebirth)
-    {
-        _service = new SparkplugTopologyService(
-            _mockClient, _mockLogger, MakeUiSettings(autoRequestRebirth));
-    }
-
-    private static IUiSettings MakeUiSettings(bool autoRequestRebirth)
-    {
-        var store = Substitute.For<IUiSettings>();
-        var config = new AppConfiguration
-        {
-            Ui = new UiPreferences { AutoRequestSparkplugRebirth = autoRequestRebirth }
-        };
-        store.Ui.Returns(config.Ui);
-        return store;
-    }
-
-    [Test]
-    public async Task NDATA_WithoutBirth_ConcurrentRequests_OnlyOneRebirthPublished()
-    {
-        var tasks = Enumerable.Range(0, 10).Select(_ =>
-            Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0))));
-
-        await Task.WhenAll(tasks);
-
-        await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<MqttApplicationMessage>(m =>
-                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
-    }
-
-    [Test]
-    public async Task NDATA_WithoutBirth_EnqueueAsyncThrows_DoesNotPropagateException()
-    {
-        _mockClient.EnqueueAsync(Arg.Any<MqttApplicationMessage>())
-            .Returns(Task.FromException(new InvalidOperationException("connection lost")));
-
-        var act = () => Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
-
-        await act.Should().NotThrowAsync();
-        // LogWarning is an extension method; verify via the Log interface method
-        await _mockClient.Received(1).EnqueueAsync(Arg.Any<MqttApplicationMessage>());
-    }
-
-    [Test]
-    public async Task NDATA_WithoutBirth_SetsLastRebirthRequestAt()
-    {
-        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
-
-        var node = _service.Groups["factory"].Nodes["edge-01"];
-        node.LastRebirthRequestAt.Should().NotBeNull();
-        node.LastRebirthRequestAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(2));
-    }
-
-    [Test]
-    public async Task DDATA_WithoutNodeBirth_RequestsRebirth()
-    {
-        await Fire("spBv1.0/factory/DDATA/edge-01/sensor-A", SpbPayload(("Voltage", 0, 10, 220.0)));
-
-        await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<MqttApplicationMessage>(m =>
-                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
-    }
-
-    [Test]
-    public async Task RequestNodeRebirthAsync_PublishesRebirthCommand()
-    {
-        await Fire("spBv1.0/factory/NBIRTH/edge-01", SpbPayload(("Temp", 0, 10, 20.0)));
-
-        await _service.RequestNodeRebirthAsync("factory", "edge-01");
-
-        await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<MqttApplicationMessage>(m =>
-                m!.Topic == "spBv1.0/factory/NCMD/edge-01"));
-    }
-
-    [Test]
-    public async Task RequestNodeRebirthAsync_NonExistentNode_DoesNotPublish()
-    {
-        await _service.RequestNodeRebirthAsync("missing", "edge-01");
-
-        await _mockClient.DidNotReceive().EnqueueAsync(
-            Arg.Any<MqttApplicationMessage>());
-    }
-
-    [Test]
-    public async Task RebirthPayload_ContainsNodeControlRebirthMetric()
-    {
-        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
-
-        await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<MqttApplicationMessage>(m =>
-                m!.Topic == "spBv1.0/factory/NCMD/edge-01"
-                && VerifyRebirthPayload(m!.GetPayloadSegment())));
-    }
-
-    private static bool VerifyRebirthPayload(ReadOnlyMemory<byte> payloadBytes)
-    {
-        var payload = Payload.Parser.ParseFrom(payloadBytes.ToArray());
-        return payload.Metrics.Count == 1
-            && payload.Metrics[0].Name == "Node Control/Rebirth"
-            && payload.Metrics[0].Datatype == 11
-            && payload.Metrics[0].BooleanValue;
-    }
-
-    [Test]
-    public async Task NDATA_WithoutBirth_PublishesRebirthCommandWithQoS1()
-    {
-        await Fire("spBv1.0/factory/NDATA/edge-01", SpbPayload(("Temp", 0, 10, 22.0)));
-
-        await _mockClient.Received(1).EnqueueAsync(
-            Arg.Is<MqttApplicationMessage>(m =>
-                m!.Topic == "spBv1.0/factory/NCMD/edge-01"
-                && m!.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce));
     }
 
     [Test]
@@ -1388,9 +1152,6 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task ApplyTopologyEvents_FullLifecycle_MatchesProtobufPath()
     {
-        // Simulate: NBIRTH → DBIRTH → NDATA → DDATA → DDEATH → NDEATH
-        // via ApplyTopologyEvents, then verify state matches expected
-
         await _service.ApplyTopologyEventsAsync(
         [
             new NodeBirthEvent
@@ -1475,7 +1236,6 @@ public class SparkplugTopologyServiceTests
         ]);
 
         node.Status.Should().Be(SpbNodeStatus.Offline);
-        // NDEATH also propagates offline to devices
         device.Status.Should().Be(SpbNodeStatus.Offline);
     }
 
@@ -1510,7 +1270,7 @@ public class SparkplugTopologyServiceTests
             "spBv1.0/factory/NDATA/edge-01", SpbPayload((string.Empty, 7, 10, 24.0)), _service.Groups);
 
         resolved.Should().NotBeNull();
-        resolved![7].Should().Be("Temperature");
+        resolved[7].Should().Be("Temperature");
     }
 
     [Test]
@@ -1522,6 +1282,6 @@ public class SparkplugTopologyServiceTests
             "spBv1.0/factory/DDATA/edge-01/sensor-A", SpbPayload((string.Empty, 42, 10, 2.0)), _service.Groups);
 
         resolved.Should().NotBeNull();
-        resolved![42].Should().Be("Flow Rate");
+        resolved[42].Should().Be("Flow Rate");
     }
 }

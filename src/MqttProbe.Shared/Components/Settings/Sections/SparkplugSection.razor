@@ -19,6 +19,15 @@
     Asks nodes with no known birth to re-announce. Manual Rebirth still works when off.
 </MudText>
 
+<MudSwitch T="bool" Value="@UiSettings.Ui.AllowNodeReboot"
+           ValueChanged="@OnAllowNodeRebootChanged"
+           Color="Color.Primary"
+           Class="mt-3"
+           Label="Allow node reboot" />
+<MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+    Lets you send Node Control/Reboot from the Sparkplug nodes view. Off by default. Rebirth commands stay available.
+</MudText>
+
 @code {
     private async Task OnEnrichAliasNamesChanged(bool value)
     {
@@ -28,5 +37,10 @@
     private async Task OnAutoRequestRebirthChanged(bool value)
     {
         await UiSettings.SetAutoRequestSparkplugRebirthAsync(value);
+    }
+
+    private async Task OnAllowNodeRebootChanged(bool value)
+    {
+        await UiSettings.SetAllowNodeRebootAsync(value);
     }
 }

@@ -164,10 +164,13 @@ public static class MqttProbeServiceRegistration
             : ServiceLifetime.Singleton;
 
         services.Add(new ServiceDescriptor(typeof(ISparkplugTopologyService),
-            sp => new SparkplugTopologyService(
+            _ => new SparkplugTopologyService(), session));
+        services.Add(new ServiceDescriptor(typeof(ISparkplugCommandService),
+            sp => new SparkplugCommandService(
                 sp.GetRequiredService<IMqttManagedClient>(),
-                sp.GetRequiredService<ILogger<SparkplugTopologyService>>(),
-                sp.GetRequiredService<IUiSettings>()), session));
+                sp.GetRequiredService<ILogger<SparkplugCommandService>>(),
+                sp.GetRequiredService<IUiSettings>(),
+                sp.GetRequiredService<ISparkplugTopologyService>()), session));
         return services;
     }
 }

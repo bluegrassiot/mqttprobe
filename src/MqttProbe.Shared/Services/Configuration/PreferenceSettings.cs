@@ -31,6 +31,9 @@ internal sealed class PreferenceSettings(ISettingsDocument document)
     public Task SetAutoRequestSparkplugRebirthAsync(bool autoRequest) =>
         SetUiAsync(ui => ui.AutoRequestSparkplugRebirth = autoRequest);
 
+    public Task SetAllowNodeRebootAsync(bool allow) =>
+        SetUiAsync(ui => ui.AllowNodeReboot = allow);
+
     public Task DismissHintAsync(string hintId) =>
         IsHintDismissed(hintId)
             ? Task.CompletedTask

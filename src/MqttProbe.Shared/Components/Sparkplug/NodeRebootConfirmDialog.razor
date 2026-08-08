@@ -1,0 +1,40 @@
+@namespace MqttProbe.Components.Sparkplug
+
+<MudDialog>
+    <DialogContent>
+        <MudText Class="mb-2">
+            Reboot node <strong>@GroupId/@NodeId</strong>?
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            The edge node will restart. This command is only available when
+            Allow node reboot is enabled in Settings, Sparkplug.
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Type <strong>REBOOT</strong> to confirm.
+        </MudText>
+        <MudTextField @bind-Value="_confirmationText"
+                      Placeholder="REBOOT"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      Immediate="true" />
+    </DialogContent>
+    <DialogActions>
+        <AppTertiaryButton title="Cancel reboot" OnClick="@(() => MudDialog.Cancel())">Cancel</AppTertiaryButton>
+        <AppPrimaryButton title="Confirm reboot"
+                          Disabled="@(!IsConfirmed)"
+                          OnClick="@(() => MudDialog.Close(DialogResult.Ok(true)))">
+            Reboot node
+        </AppPrimaryButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string GroupId { get; set; } = string.Empty;
+    [Parameter] public string NodeId { get; set; } = string.Empty;
+
+    private string _confirmationText = string.Empty;
+
+    private bool IsConfirmed => string.Equals(_confirmationText, "REBOOT", StringComparison.Ordinal);
+}

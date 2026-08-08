@@ -86,6 +86,22 @@ public class PreferenceSettingsTests
     }
 
     [Test]
+    public async Task SetAllowNodeRebootAsync_PersistsAndRaisesUiPreferencesChanged()
+    {
+        var fired = false;
+        _preferences.UiPreferencesChanged += () => fired = true;
+        _document.Config.Ui.AllowNodeReboot.Should().BeFalse("allow-node-reboot ships off");
+
+        await _preferences.SetAllowNodeRebootAsync(true);
+
+        fired.Should().BeTrue();
+
+        using var reloaded = new SettingsDocument(_configPath);
+        await new SettingsLoader(reloaded, new ConnectionSecrets(null, null), false, null).LoadAsync();
+        reloaded.Config.Ui.AllowNodeReboot.Should().BeTrue();
+    }
+
+    [Test]
     public async Task DismissHintAsync_RaisesUiPreferencesChanged()
     {
         var fired = false;

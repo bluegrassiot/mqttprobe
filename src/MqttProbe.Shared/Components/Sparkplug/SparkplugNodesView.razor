@@ -1,6 +1,9 @@
 @using Microsoft.Extensions.Logging
 @using MqttProbe.Models.Sparkplug
+@using MqttProbe.Services.Configuration
 @inject ISparkplugTopologyService TopologyService
+@inject ISparkplugCommandService CommandService
+@inject IUiSettings UiSettings
 @inject ILogger<SparkplugNodesView> Logger
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -72,9 +75,12 @@
     <div class="spb-split__detail">
         <SparkplugNodeDetail Node="@_selectedNode"
                              ExpandedDevice="@_selectedDevice"
+                             AllowNodeReboot="@UiSettings.Ui.AllowNodeReboot"
                              OnBack="@ClearSelection"
                              OnToggleDevice="@ToggleDevice"
-                             OnRequestRebirth="@RequestRebirthAsync" />
+                             OnRequestRebirth="@RequestRebirthAsync"
+                             OnRequestReboot="@RequestRebootAsync"
+                             OnRequestDeviceRebirth="@RequestDeviceRebirthAsync" />
     </div>
 </div>
 
@@ -209,8 +215,64 @@
 
     private async Task RequestRebirthAsync(SpbNode node)
     {
-        await TopologyService.RequestNodeRebirthAsync(node.GroupId, node.NodeId);
-        Snackbar.Add($"Rebirth requested for {node.GroupId}/{node.NodeId}.", Severity.Info);
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Request node rebirth",
+            $"Request rebirth for node {node.GroupId}/{node.NodeId}? The edge node will re-announce its birth certificate and metrics.",
+            yesText: "Request rebirth", cancelText: "Cancel",
+            options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        if (confirmed != true) return;
+
+        var result = await CommandService.RequestNodeRebirthAsync(node.GroupId, node.NodeId);
+        if (result == SparkplugCommandResult.Published)
+            Snackbar.Add($"Rebirth requested for {node.GroupId}/{node.NodeId}.", Severity.Info);
+        else
+            Snackbar.Add($"Rebirth request failed for {node.GroupId}/{node.NodeId}: {result}.", Severity.Warning);
+    }
+
+    private async Task RequestDeviceRebirthAsync(SpbDevice device)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Request device rebirth",
+            $"Request rebirth for device {device.GroupId}/{device.NodeId}/{device.DeviceId}? The device will re-announce itself.",
+            yesText: "Request rebirth", cancelText: "Cancel",
+            options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        if (confirmed != true) return;
+
+        var result = await CommandService.RequestDeviceRebirthAsync(device.GroupId, device.NodeId, device.DeviceId);
+        if (result == SparkplugCommandResult.Published)
+            Snackbar.Add($"Rebirth requested for {device.GroupId}/{device.NodeId}/{device.DeviceId}.", Severity.Info);
+        else
+            Snackbar.Add($"Rebirth request failed for {device.GroupId}/{device.NodeId}/{device.DeviceId}: {result}.", Severity.Warning);
+    }
+
+    private async Task RequestRebootAsync(SpbNode node)
+    {
+        var parameters = new DialogParameters<NodeRebootConfirmDialog>
+        {
+            { x => x.GroupId, node.GroupId },
+            { x => x.NodeId, node.NodeId }
+        };
+        var dialog = await DialogService.ShowAsync<NodeRebootConfirmDialog>(
+            "Confirm node reboot", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is not { Canceled: false, Data: true }) return;
+
+        var cmdResult = await CommandService.RequestNodeRebootAsync(node.GroupId, node.NodeId);
+        switch (cmdResult)
+        {
+            case SparkplugCommandResult.Published:
+                Snackbar.Add($"Reboot requested for {node.GroupId}/{node.NodeId}.", Severity.Info);
+                break;
+            case SparkplugCommandResult.NotAllowed:
+                Snackbar.Add("Node reboot is not allowed. Enable it in Settings, Sparkplug.", Severity.Warning);
+                break;
+            default:
+                Snackbar.Add($"Reboot request failed for {node.GroupId}/{node.NodeId}: {cmdResult}.", Severity.Warning);
+                break;
+        }
     }
 
     internal void SetGroupFilterForTest(string? value) => _selectedGroupId = value;

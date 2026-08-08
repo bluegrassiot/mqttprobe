@@ -30,6 +30,7 @@ public class UiPreferences
     public bool AutoResubscribe { get; set; } = true;
     public bool EnrichSparkplugAliasNames { get; set; } = true;
     public bool AutoRequestSparkplugRebirth { get; set; }
+    public bool AllowNodeReboot { get; set; }
 
     public List<string> DismissedHints { get; set; } = [];
 }

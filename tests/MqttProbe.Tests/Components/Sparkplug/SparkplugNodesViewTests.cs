@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Sparkplug;
+using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Sparkplug;
 using MqttProbe.Shared.Tests.TestHelpers;
 using MudBlazor;
@@ -11,6 +13,9 @@ public class SparkplugNodesViewTests : BunitTestContext
 {
     private const string RemoveOfflineNodesSelector = "button[aria-label='Remove all offline nodes']";
     private ISparkplugTopologyService _mockTopology = null!;
+    private ISparkplugCommandService _mockCommandService = null!;
+    private IUiSettings _mockUiSettings = null!;
+    private AppConfiguration _cfg = null!;
     private IDialogService _mockDialogService = null!;
     private ISnackbar _mockSnackbar = null!;
 
@@ -20,6 +25,12 @@ public class SparkplugNodesViewTests : BunitTestContext
         _mockTopology = Substitute.For<ISparkplugTopologyService>();
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup>());
         Services.AddSingleton(_mockTopology);
+        _mockCommandService = Substitute.For<ISparkplugCommandService>();
+        Services.AddSingleton(_mockCommandService);
+        _mockUiSettings = Substitute.For<IUiSettings>();
+        _cfg = new AppConfiguration();
+        _mockUiSettings.Ui.Returns(_cfg.Ui);
+        Services.AddUiSettings(_mockUiSettings);
         _mockDialogService = Substitute.For<IDialogService>();
         Services.AddSingleton(_mockDialogService);
         _mockSnackbar = Substitute.For<ISnackbar>();
@@ -38,7 +49,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void Renders_Header_With_Title_And_RemoveOffline_In_HeaderActions()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var offline = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Offline };
         group.Nodes["edge-01"] = offline;
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
@@ -54,7 +65,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void Renders_NodeList_WhenNodesExist()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
         group.Nodes["edge-01"] = node;
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
@@ -68,7 +79,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void TopologyChanged_TriggersRerender()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
         group.Nodes["edge-01"] = node;
 
@@ -83,7 +94,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void NodeRemoval_PreservesSelectedNodeState()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var nodeA = new SpbNode { NodeId = "edge-A", GroupId = "factory", Status = SpbNodeStatus.Online };
         var nodeB = new SpbNode { NodeId = "edge-B", GroupId = "factory", Status = SpbNodeStatus.Online };
         group.Nodes["edge-A"] = nodeA;
@@ -106,7 +117,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void DetailOpenModifier_TogglesWithNodeSelection()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
         group.Nodes["edge-01"] = node;
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
@@ -135,7 +146,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void TrashButton_OnlyRenderedForOfflineNodes()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var online = new SpbNode { NodeId = "edge-A", GroupId = "factory", Status = SpbNodeStatus.Online };
         var offline = new SpbNode { NodeId = "edge-B", GroupId = "factory", Status = SpbNodeStatus.Offline };
         group.Nodes["edge-A"] = online;
@@ -150,7 +161,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public async Task TrashButton_Click_CallsRemoveNodeAndShowsInfoSnackbar()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var offline = new SpbNode { NodeId = "edge-B", GroupId = "factory", Status = SpbNodeStatus.Offline };
         group.Nodes["edge-B"] = offline;
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
@@ -167,7 +178,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public async Task TrashButton_Click_WhenServiceReturnsFalse_ShowsWarningSnackbar()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var offline = new SpbNode { NodeId = "edge-B", GroupId = "factory", Status = SpbNodeStatus.Offline };
         group.Nodes["edge-B"] = offline;
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
@@ -183,7 +194,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void RemoveOfflineButton_DisabledWhenNoOfflineNodes()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var online = new SpbNode { NodeId = "edge-A", GroupId = "factory", Status = SpbNodeStatus.Online };
         group.Nodes["edge-A"] = online;
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
@@ -198,7 +209,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void RemoveOfflineButton_EnabledWhenOfflineNodesExist()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var offline = new SpbNode { NodeId = "edge-B", GroupId = "factory", Status = SpbNodeStatus.Offline };
         group.Nodes["edge-B"] = offline;
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
@@ -218,7 +229,7 @@ public class SparkplugNodesViewTests : BunitTestContext
             .Returns(Task.FromResult<bool?>(true));
         _mockTopology.RemoveOfflineNodes().Returns(3);
 
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var offline = new SpbNode { NodeId = "edge-B", GroupId = "factory", Status = SpbNodeStatus.Offline };
         group.Nodes["edge-B"] = offline;
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
@@ -243,7 +254,7 @@ public class SparkplugNodesViewTests : BunitTestContext
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
             .Returns(Task.FromResult<bool?>(false));
 
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var offline = new SpbNode { NodeId = "edge-B", GroupId = "factory", Status = SpbNodeStatus.Offline };
         group.Nodes["edge-B"] = offline;
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
@@ -263,7 +274,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void OnTopologyChanged_WhenSelectedNodeIsRemoved_DetailPaneClears()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var selected = new SpbNode { NodeId = "edge-A", GroupId = "factory", Status = SpbNodeStatus.Online };
         group.Nodes["edge-A"] = selected;
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
@@ -281,9 +292,9 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void OnTopologyChanged_WhenGroupIsPruned_GroupFilterResetsToAll()
     {
-        var groupA = new SpbGroup { };
+        var groupA = new SpbGroup();
         groupA.Nodes["edge-A"] = new SpbNode { NodeId = "edge-A", GroupId = "alpha", Status = SpbNodeStatus.Online };
-        var groupB = new SpbGroup { };
+        var groupB = new SpbGroup();
         groupB.Nodes["edge-B"] = new SpbNode { NodeId = "edge-B", GroupId = "beta", Status = SpbNodeStatus.Online };
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup>
         {
@@ -305,7 +316,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void NodeMetricTable_RendersAliasColumnHeader()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
         node.Metrics = [new SpbMetricSnapshot("Temp", "double", "20.0000", DateTime.UtcNow, 42UL)];
         group.Nodes["edge-01"] = node;
@@ -320,7 +331,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void NodeMetricTable_DisplaysAliasValueWhenPresent()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
         node.Metrics = [new SpbMetricSnapshot("Temp", "double", "20.0000", DateTime.UtcNow, 42UL)];
         group.Nodes["edge-01"] = node;
@@ -335,7 +346,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void NodeMetricTable_DisplaysEmDashWhenAliasNull()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
         node.Metrics = [new SpbMetricSnapshot("Temp", "double", "20.0000", DateTime.UtcNow)];
         group.Nodes["edge-01"] = node;
@@ -350,7 +361,7 @@ public class SparkplugNodesViewTests : BunitTestContext
     [Test]
     public void DeviceMetricTable_RendersAliasColumnAndValue()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
         var device = new SpbDevice { DeviceId = "sensor-A", NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
         device.Metrics = [new SpbMetricSnapshot("Voltage", "double", "220.0000", DateTime.UtcNow, 7UL)];
@@ -364,6 +375,282 @@ public class SparkplugNodesViewTests : BunitTestContext
 
         cut.Markup.Should().Contain(">Alias<");
         cut.Markup.Should().Contain("7");
+    }
+
+    [Test]
+    public void Detail_ActionsRow_AlwaysShowsRebirthAndRebootButtons()
+    {
+        var group = new SpbGroup();
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+
+        cut.FindAll("button").Should().Contain(b => b.TextContent.Contains("Request rebirth"));
+        cut.FindAll("button").Should().Contain(b => b.TextContent.Contains("Reboot node"));
+    }
+
+    [Test]
+    public void Detail_RebootButton_DisabledWhenAllowNodeRebootIsFalse()
+    {
+        _cfg.Ui.AllowNodeReboot = false;
+
+        var group = new SpbGroup();
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+
+        var rebootBtn = cut.FindAll("button").First(b => b.TextContent.Contains("Reboot node"));
+        rebootBtn.HasAttribute("disabled").Should().BeTrue();
+    }
+
+    [Test]
+    public void Detail_RebootButton_EnabledWhenAllowNodeRebootIsTrue()
+    {
+        _cfg.Ui.AllowNodeReboot = true;
+
+        var group = new SpbGroup();
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+
+        var rebootBtn = cut.FindAll("button").First(b => b.TextContent.Contains("Reboot node"));
+        rebootBtn.HasAttribute("disabled").Should().BeFalse();
+    }
+
+    [Test]
+    public async Task RebirthButton_Click_ShowsConfirmMessageBox()
+    {
+        _mockDialogService.ShowMessageBoxAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
+            .Returns(Task.FromResult<bool?>(false));
+
+        var group = new SpbGroup();
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+        var rebirthBtn = cut.FindAll("button").First(b => b.TextContent.Contains("Request rebirth"));
+
+        await cut.InvokeAsync(() => rebirthBtn.Click());
+
+        await _mockDialogService.Received(1).ShowMessageBoxAsync(
+            "Request node rebirth", Arg.Is<string>(s => s!.Contains("factory/edge-01")),
+            "Request rebirth", Arg.Any<string?>(), "Cancel", Arg.Any<DialogOptions>());
+    }
+
+    [Test]
+    public async Task RebirthButton_Click_Confirm_CallsCommandService()
+    {
+        _mockDialogService.ShowMessageBoxAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
+            .Returns(Task.FromResult<bool?>(true));
+        _mockCommandService.RequestNodeRebirthAsync("factory", "edge-01")
+            .Returns(SparkplugCommandResult.Published);
+
+        var group = new SpbGroup();
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+        var rebirthBtn = cut.FindAll("button").First(b => b.TextContent.Contains("Request rebirth"));
+
+        await cut.InvokeAsync(() => rebirthBtn.Click());
+
+        await _mockCommandService.Received(1).RequestNodeRebirthAsync("factory", "edge-01");
+        _mockSnackbar.Received(1).Add("Rebirth requested for factory/edge-01.", Severity.Info, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public async Task RebirthButton_Click_Cancel_DoesNotCallCommandService()
+    {
+        _mockDialogService.ShowMessageBoxAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
+            .Returns(Task.FromResult<bool?>(false));
+
+        var group = new SpbGroup();
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+        var rebirthBtn = cut.FindAll("button").First(b => b.TextContent.Contains("Request rebirth"));
+
+        await cut.InvokeAsync(() => rebirthBtn.Click());
+
+        await _mockCommandService.DidNotReceive().RequestNodeRebirthAsync(Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Test]
+    public async Task DeviceRebirth_Confirm_CallsCommandService()
+    {
+        _mockDialogService.ShowMessageBoxAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
+            .Returns(Task.FromResult<bool?>(true));
+        _mockCommandService.RequestDeviceRebirthAsync("factory", "edge-01", "sensor-A")
+            .Returns(SparkplugCommandResult.Published);
+
+        var group = new SpbGroup();
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        var device = new SpbDevice { DeviceId = "sensor-A", NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        node.Devices["sensor-A"] = device;
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+        cut.FindAll(".spb-device-row").First(r => r.TextContent.Contains("sensor-A")).Click();
+        var deviceRebirthBtn = cut.FindAll("button").First(b => b.TextContent.Contains("Rebirth"));
+
+        await cut.InvokeAsync(() => deviceRebirthBtn.Click());
+
+        await _mockCommandService.Received(1).RequestDeviceRebirthAsync("factory", "edge-01", "sensor-A");
+        _mockSnackbar.Received(1).Add(
+            "Rebirth requested for factory/edge-01/sensor-A.",
+            Severity.Info, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public async Task DeviceRebirth_Cancel_DoesNotCallCommandService()
+    {
+        _mockDialogService.ShowMessageBoxAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
+            .Returns(Task.FromResult<bool?>(false));
+
+        var group = new SpbGroup();
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        var device = new SpbDevice { DeviceId = "sensor-A", NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        node.Devices["sensor-A"] = device;
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+        cut.FindAll(".spb-device-row").First(r => r.TextContent.Contains("sensor-A")).Click();
+        var deviceRebirthBtn = cut.FindAll("button").First(b => b.TextContent.Contains("Rebirth"));
+
+        await cut.InvokeAsync(() => deviceRebirthBtn.Click());
+
+        await _mockCommandService.DidNotReceive().RequestDeviceRebirthAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Test]
+    public async Task Reboot_ConfirmWithOkTrue_CallsCommandService()
+    {
+        var dialogRef = Substitute.For<IDialogReference>();
+        dialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Ok(true)));
+        _mockDialogService.ShowAsync<NodeRebootConfirmDialog>(
+                Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
+            .Returns(dialogRef);
+        _mockCommandService.RequestNodeRebootAsync("factory", "edge-01")
+            .Returns(SparkplugCommandResult.Published);
+
+        _cfg.Ui.AllowNodeReboot = true;
+        var group = new SpbGroup();
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+        var rebootBtn = cut.FindAll("button").First(b => b.TextContent.Contains("Reboot node"));
+
+        await cut.InvokeAsync(() => rebootBtn.Click());
+
+        await _mockCommandService.Received(1).RequestNodeRebootAsync("factory", "edge-01");
+        _mockSnackbar.Received(1).Add(
+            "Reboot requested for factory/edge-01.",
+            Severity.Info, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public async Task Reboot_CancelledDialog_DoesNotCallCommandService()
+    {
+        var dialogRef = Substitute.For<IDialogReference>();
+        dialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Cancel()));
+        _mockDialogService.ShowAsync<NodeRebootConfirmDialog>(
+                Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
+            .Returns(dialogRef);
+
+        _cfg.Ui.AllowNodeReboot = true;
+        var group = new SpbGroup();
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+        var rebootBtn = cut.FindAll("button").First(b => b.TextContent.Contains("Reboot node"));
+
+        await cut.InvokeAsync(() => rebootBtn.Click());
+
+        await _mockCommandService.DidNotReceive().RequestNodeRebootAsync(Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Test]
+    public async Task Reboot_NullDialogResult_DoesNotCallCommandService()
+    {
+        var dialogRef = Substitute.For<IDialogReference>();
+        dialogRef.Result.Returns(Task.FromResult<DialogResult?>(null));
+        _mockDialogService.ShowAsync<NodeRebootConfirmDialog>(
+                Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
+            .Returns(dialogRef);
+
+        _cfg.Ui.AllowNodeReboot = true;
+        var group = new SpbGroup();
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+        var rebootBtn = cut.FindAll("button").First(b => b.TextContent.Contains("Reboot node"));
+
+        await cut.InvokeAsync(() => rebootBtn.Click());
+
+        await _mockCommandService.DidNotReceive().RequestNodeRebootAsync(Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Test]
+    public async Task Reboot_OkNonTrueData_DoesNotCallCommandService()
+    {
+        var dialogRef = Substitute.For<IDialogReference>();
+        dialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Ok(false)));
+        _mockDialogService.ShowAsync<NodeRebootConfirmDialog>(
+                Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
+            .Returns(dialogRef);
+
+        _cfg.Ui.AllowNodeReboot = true;
+        var group = new SpbGroup();
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        group.Nodes["edge-01"] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["factory"] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
+        var rebootBtn = cut.FindAll("button").First(b => b.TextContent.Contains("Reboot node"));
+
+        await cut.InvokeAsync(() => rebootBtn.Click());
+
+        await _mockCommandService.DidNotReceive().RequestNodeRebootAsync(Arg.Any<string>(), Arg.Any<string>());
     }
 }
 

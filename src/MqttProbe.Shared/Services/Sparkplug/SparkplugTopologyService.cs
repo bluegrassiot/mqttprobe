@@ -1,13 +1,6 @@
 using System.Collections.Concurrent;
-using Google.Protobuf;
-using Microsoft.Extensions.Logging;
-using MQTTnet;
-using MQTTnet.Protocol;
 using MqttProbe.Models.Sparkplug;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Mqtt;
 using MqttProbe.Services.Plugins.Contracts;
-using Org.Eclipse.Tahu.Protobuf;
 
 namespace MqttProbe.Services.Sparkplug;
 
@@ -19,30 +12,14 @@ public interface ISparkplugTopologyService
     public int RemoveOfflineNodes();
     public void ClearAll();
     public Task ApplyTopologyEventsAsync(IReadOnlyList<TopologyEvent> events);
-    public Task RequestNodeRebirthAsync(string groupId, string nodeId);
 }
 
 public sealed class SparkplugTopologyService : ISparkplugTopologyService
 {
-    private static readonly TimeSpan _rebirthCooldown = TimeSpan.FromSeconds(30);
-
-    private readonly IMqttManagedClient _client;
-    private readonly ILogger<SparkplugTopologyService> _logger;
-    private readonly TimeProvider _timeProvider;
-    private readonly IUiSettings _uiSettings;
     private readonly ConcurrentDictionary<string, SpbGroup> _groups = new(StringComparer.Ordinal);
 
     public IReadOnlyDictionary<string, SpbGroup> Groups => _groups;
     public event Action? TopologyChanged;
-
-    public SparkplugTopologyService(IMqttManagedClient client, ILogger<SparkplugTopologyService> logger,
-        IUiSettings uiSettings, TimeProvider? timeProvider = null)
-    {
-        _client = client;
-        _logger = logger;
-        _timeProvider = timeProvider ?? TimeProvider.System;
-        _uiSettings = uiSettings;
-    }
 
     public bool RemoveNode(string groupId, string nodeId)
     {
@@ -159,7 +136,7 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         TopologyChanged?.Invoke();
     }
 
-    public async Task ApplyTopologyEventsAsync(IReadOnlyList<TopologyEvent> events)
+    public Task ApplyTopologyEventsAsync(IReadOnlyList<TopologyEvent> events)
     {
         foreach (var evt in events)
         {
@@ -173,7 +150,6 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
                     break;
                 case NodeDataEvent e:
                     ApplyNodeData(e.GroupId, e.NodeId, ConvertMetricSnapshots(e.Metrics));
-                    await RequestNodeRebirthIfNeededAsync(e.GroupId, e.NodeId);
                     break;
                 case DeviceBirthEvent e:
                     ApplyDeviceBirth(e.GroupId, e.NodeId, e.DeviceId, ConvertMetricSnapshots(e.Metrics));
@@ -183,10 +159,11 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
                     break;
                 case DeviceDataEvent e:
                     ApplyDeviceData(e.GroupId, e.NodeId, e.DeviceId, ConvertMetricSnapshots(e.Metrics));
-                    await RequestNodeRebirthIfNeededAsync(e.GroupId, e.NodeId);
                     break;
             }
         }
+
+        return Task.CompletedTask;
     }
 
     private static SpbMetricSnapshot[] ConvertMetricSnapshots(IReadOnlyList<MetricSnapshot> metrics)
@@ -216,7 +193,6 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         TopologyChanged?.Invoke();
     }
 
-    // SparkplugAliasResolver reads this to name alias-only metrics in later DATA payloads.
     private static void PopulateAliasMap(Dictionary<ulong, string> aliasMap, SpbMetricSnapshot[] metrics)
     {
         foreach (var metric in metrics)
@@ -299,78 +275,5 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         }
 
         TopologyChanged?.Invoke();
-    }
-
-    public async Task RequestNodeRebirthAsync(string groupId, string nodeId)
-    {
-        if (!_groups.TryGetValue(groupId, out var group))
-            return;
-        if (!group.Nodes.TryGetValue(nodeId, out var node))
-            return;
-
-        lock (node.SyncRoot)
-        {
-            node.LastRebirthRequestAt = _timeProvider.GetUtcNow().UtcDateTime;
-        }
-
-        await PublishRebirthCommandAsync(groupId, nodeId);
-    }
-
-    private async Task RequestNodeRebirthIfNeededAsync(string groupId, string nodeId)
-    {
-        // Only the automatic path is gated; RequestNodeRebirthAsync stays available to the user.
-        if (!_uiSettings.Ui.AutoRequestSparkplugRebirth)
-            return;
-
-        if (!_groups.TryGetValue(groupId, out var group))
-            return;
-        if (!group.Nodes.TryGetValue(nodeId, out var node))
-            return;
-
-        lock (node.SyncRoot)
-        {
-            if (node.Status == SpbNodeStatus.Online)
-                return;
-
-            var now = _timeProvider.GetUtcNow().UtcDateTime;
-            if (node.LastRebirthRequestAt != null && now - node.LastRebirthRequestAt < _rebirthCooldown)
-                return;
-
-            node.LastRebirthRequestAt = now;
-        }
-
-        await PublishRebirthCommandAsync(groupId, nodeId);
-    }
-
-    private async Task PublishRebirthCommandAsync(string groupId, string nodeId)
-    {
-        var payload = new Payload
-        {
-            Timestamp = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        };
-        payload.Metrics.Add(new Payload.Types.Metric
-        {
-            Name = "Node Control/Rebirth",
-            Datatype = 11,
-            BooleanValue = true
-        });
-
-        var topic = $"spBv1.0/{groupId}/NCMD/{nodeId}";
-        var message = new MqttApplicationMessageBuilder()
-            .WithTopic(topic)
-            .WithPayload(payload.ToByteArray())
-            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
-            .Build();
-
-        try
-        {
-            await _client.EnqueueAsync(message);
-            if (_logger.IsEnabled(LogLevel.Information))
-                _logger.LogInformation("Requested rebirth for node {GroupId}/{NodeId}", groupId, nodeId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to request rebirth for node {GroupId}/{NodeId}", groupId, nodeId);
-        }
     }
 }

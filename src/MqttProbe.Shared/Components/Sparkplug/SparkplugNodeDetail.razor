@@ -30,15 +30,24 @@ else
             <span class="spb-status-label" style="color:@SparkplugNodeDisplay.NodeStatusColor(Node)">
                 @SparkplugNodeDisplay.NodeStatusLabel(Node)
             </span>
-            @if (SparkplugNodeDisplay.IsStale(Node))
-            {
-                <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+        </div>
+
+        <div class="d-flex align-center flex-wrap gap-2 mb-3">
+            <MudButton Variant="Variant.Outlined"
+                       Size="Size.Small" Class="app-btn-min"
+                       StartIcon="@LucideIcons.RefreshCw"
+                       OnClick="@(() => OnRequestRebirth.InvokeAsync(Node))">
+                Request rebirth
+            </MudButton>
+            <span title="@(AllowNodeReboot ? null : "Enable Allow node reboot in Settings, Sparkplug")">
+                <MudButton Variant="Variant.Outlined"
                            Size="Size.Small" Class="app-btn-min"
-                           StartIcon="@LucideIcons.RefreshCw"
-                           OnClick="@(() => OnRequestRebirth.InvokeAsync(Node))">
-                    Request Rebirth
+                           StartIcon="@LucideIcons.Power"
+                           Disabled="@(!AllowNodeReboot)"
+                           OnClick="@(() => OnRequestReboot.InvokeAsync(Node))">
+                    Reboot node
                 </MudButton>
-            }
+            </span>
         </div>
 
         <div class="spb-timestamps d-flex flex-wrap gap-3 mb-3">
@@ -122,6 +131,14 @@ else
                     <span class="spb-device-secondary">
                         @SparkplugNodeDisplay.DeviceSecondaryText(device)
                     </span>
+                    <span @onclick:stopPropagation="true" class="ms-auto">
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small" Class="app-btn-min"
+                                   StartIcon="@LucideIcons.RefreshCw"
+                                   OnClick="@(() => OnRequestDeviceRebirth.InvokeAsync(device))">
+                            Rebirth
+                        </MudButton>
+                    </span>
                 </div>
 
                 @if (ExpandedDevice == device)
@@ -152,6 +169,9 @@ else
     public SpbDevice? ExpandedDevice { get; set; }
 
     [Parameter]
+    public bool AllowNodeReboot { get; set; }
+
+    [Parameter]
     public EventCallback OnBack { get; set; }
 
     [Parameter]
@@ -159,4 +179,10 @@ else
 
     [Parameter]
     public EventCallback<SpbNode> OnRequestRebirth { get; set; }
+
+    [Parameter]
+    public EventCallback<SpbNode> OnRequestReboot { get; set; }
+
+    [Parameter]
+    public EventCallback<SpbDevice> OnRequestDeviceRebirth { get; set; }
 }

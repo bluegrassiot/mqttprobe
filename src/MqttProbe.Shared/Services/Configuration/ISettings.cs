@@ -48,6 +48,7 @@ public interface IUiSettings
     public Task SetAutoResubscribeAsync(bool autoResubscribe);
     public Task SetEnrichSparkplugAliasNamesAsync(bool enrich);
     public Task SetAutoRequestSparkplugRebirthAsync(bool autoRequest);
+    public Task SetAllowNodeRebootAsync(bool allow);
     public Task DismissHintAsync(string hintId);
     public bool IsHintDismissed(string hintId);
 }

@@ -12,7 +12,7 @@ using MqttProbe.Services.Plugins.Registry;
 using MqttProbe.Services.Security;
 using MqttProbe.Services.Sparkplug;
 
-namespace MqttProbe.Tests.Services.Platform;
+namespace MqttProbe.Shared.Tests.Services.Platform;
 
 // Boots the real MqttProbe.Web host rather than a hand-rebuilt service collection. A service
 // collection assembled inside a test is a copy of the host wiring, and a copy drifts: four
@@ -67,6 +67,7 @@ public class WebHostCompositionTests
     [TestCase(typeof(IMqttManagedClient))]
     [TestCase(typeof(IMessageStoreManager))]
     [TestCase(typeof(ISparkplugTopologyService))]
+    [TestCase(typeof(ISparkplugCommandService))]
     [TestCase(typeof(IUxMetricsService))]
     [TestCase(typeof(IChartDataService))]
     public void WebHost_ResolvesFactoryRegisteredService(Type serviceType)

@@ -1,5 +1,3 @@
-using Bunit;
-using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Components.Settings;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Services.Configuration;
@@ -50,6 +48,19 @@ public class SparkplugSectionTests : BunitTestContext
         await cut.InvokeAsync(() => toggle.Instance.ValueChanged.InvokeAsync(false));
 
         await _mockStore.Received(1).SetAutoRequestSparkplugRebirthAsync(false);
+    }
+
+    [Test]
+    public async Task AllowNodeReboot_Toggle_CallsSetter()
+    {
+        _mockStore.SetAllowNodeRebootAsync(Arg.Any<bool>()).Returns(Task.CompletedTask);
+        var cut = Render<SparkplugSection>();
+
+        var toggle = cut.FindComponents<MudSwitch<bool>>()
+            .First(s => s.Instance.Label == "Allow node reboot");
+        await cut.InvokeAsync(() => toggle.Instance.ValueChanged.InvokeAsync(true));
+
+        await _mockStore.Received(1).SetAllowNodeRebootAsync(true);
     }
 
     [Test]

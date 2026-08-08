@@ -130,6 +130,10 @@ public class PluginPipelineDiCompositionTests
         var topology = _serviceProvider.GetRequiredService<ISparkplugTopologyService>();
         topology.Should().NotBeNull();
         topology.Should().BeOfType<SparkplugTopologyService>();
+
+        var commandService = _serviceProvider.GetRequiredService<ISparkplugCommandService>();
+        commandService.Should().NotBeNull();
+        commandService.Should().BeOfType<SparkplugCommandService>();
     }
 
     [Test]

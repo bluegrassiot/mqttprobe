@@ -1,6 +1,5 @@
 using System.Text;
 using MqttProbe.Models.Emulation;
-using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Plugins.BuiltIn;
 using MqttProbe.Services.Plugins.Contracts;
 using MqttProbe.Services.Plugins.Registry;

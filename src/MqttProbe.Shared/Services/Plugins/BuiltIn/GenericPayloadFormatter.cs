@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using MqttProbe.Models.Emulation;
 
-namespace MqttProbe.Services.Emulation;
+namespace MqttProbe.Services.Plugins.BuiltIn;
 
 public static class GenericPayloadFormatter
 {

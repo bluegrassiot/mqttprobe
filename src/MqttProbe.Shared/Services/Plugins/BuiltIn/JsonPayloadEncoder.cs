@@ -3,7 +3,7 @@ using System.Text;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Services.Plugins.Contracts;
 
-namespace MqttProbe.Services.Emulation;
+namespace MqttProbe.Services.Plugins.BuiltIn;
 
 public sealed class JsonPayloadEncoder : IPayloadEncoder
 {
@@ -35,10 +35,10 @@ public sealed class JsonPayloadEncoder : IPayloadEncoder
         raw switch
         {
             bool b => (MetricValueType.Boolean, b ? 1.0 : 0.0),
-            long l => (MetricValueType.Int64, (double)l),
-            int i => (MetricValueType.Int64, (double)i),
+            long l => (MetricValueType.Int64, l),
+            int i => (MetricValueType.Int64, i),
             double d => (MetricValueType.Double, d),
-            float f => (MetricValueType.Double, (double)f),
+            float f => (MetricValueType.Double, f),
             // Invariant, not current culture: a string like "1.5" parses to 15 under a
             // comma-decimal locale, silently corrupting the outbound payload.
             _ => (MetricValueType.Double, Convert.ToDouble(raw, CultureInfo.InvariantCulture))

@@ -1,8 +1,8 @@
 using System.Text.Json;
 using MqttProbe.Models.Emulation;
-using MqttProbe.Services.Emulation;
+using MqttProbe.Services.Plugins.BuiltIn;
 
-namespace MqttProbe.Shared.Tests.Services.Emulation;
+namespace MqttProbe.Shared.Tests.Services.Plugins.BuiltIn;
 
 [TestFixture]
 public class GenericPayloadFormatterTests

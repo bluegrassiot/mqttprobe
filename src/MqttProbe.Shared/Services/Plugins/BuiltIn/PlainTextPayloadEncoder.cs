@@ -2,7 +2,7 @@ using System.Text;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Services.Plugins.Contracts;
 
-namespace MqttProbe.Services.Emulation;
+namespace MqttProbe.Services.Plugins.BuiltIn;
 
 public sealed class PlainTextPayloadEncoder : IPayloadEncoder
 {

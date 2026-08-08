@@ -1,4 +1,3 @@
-using MqttProbe.Services.Emulation;
 using MqttProbe.Services.Plugins.Contracts;
 
 namespace MqttProbe.Services.Plugins.BuiltIn;

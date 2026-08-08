@@ -1,6 +1,9 @@
+using System.Security.Authentication;
 using MqttProbe.Models.Emulation;
 using MqttProbe.Models.Mqtt;
 using MqttProbe.Services.Emulation;
+using MqttProbe.Services.Security;
+using MqttProbe.Tests.Services.Security.TestHelpers;
 
 namespace MqttProbe.Shared.Tests.Services.Emulation;
 
@@ -28,9 +31,9 @@ public class SparkplugNodeOptionsBuilderTests
     };
 
     [Test]
-    public void BuildNodeOptions_ClientId_IsNodeIdPlusSixHexSuffix()
+    public void Build_ClientId_IsNodeIdPlusSixHexSuffix()
     {
-        var options = SparkplugNodeRunner.BuildNodeOptions(TcpConnection(), Node("Press-01"));
+        var options = SparkplugNodeOptionsBuilder.Build(TcpConnection(), Node());
 
         options.ClientId.Should().StartWith("Press-01-");
         options.ClientId.Length.Should().Be("Press-01-".Length + 6);
@@ -38,53 +41,145 @@ public class SparkplugNodeOptionsBuilderTests
     }
 
     [Test]
-    public void BuildNodeOptions_EdgeNodeIdentifier_RemainsBareNodeId()
+    public void Build_EdgeNodeIdentifier_RemainsBareNodeId()
     {
-        var options = SparkplugNodeRunner.BuildNodeOptions(TcpConnection(), Node("Press-01"));
+        var options = SparkplugNodeOptionsBuilder.Build(TcpConnection(), Node());
 
         options.EdgeNodeIdentifier.Should().Be("Press-01");
         options.GroupIdentifier.Should().Be("Plant");
     }
 
     [Test]
-    public void BuildNodeOptions_TwoCalls_ProduceDifferentClientIds()
+    public void Build_TwoCalls_ProduceDifferentClientIds()
     {
         var conn = TcpConnection();
-        var node = Node("Press-01");
+        var node = Node();
 
-        var id1 = SparkplugNodeRunner.BuildNodeOptions(conn, node).ClientId;
-        var id2 = SparkplugNodeRunner.BuildNodeOptions(conn, node).ClientId;
+        var id1 = SparkplugNodeOptionsBuilder.Build(conn, node).ClientId;
+        var id2 = SparkplugNodeOptionsBuilder.Build(conn, node).ClientId;
 
         id1.Should().NotBe(id2);
     }
 
     [Test]
-    public void BuildNodeOptions_DefaultReconnectDelay_Uses5Seconds()
+    public void Build_DefaultReconnectDelay_Uses5Seconds()
     {
-        var options = SparkplugNodeRunner.BuildNodeOptions(TcpConnection(), Node());
+        var options = SparkplugNodeOptionsBuilder.Build(TcpConnection(), Node());
 
         options.ReconnectInterval.Should().Be(TimeSpan.FromSeconds(5));
     }
 
     [Test]
-    public void BuildNodeOptions_CustomReconnectDelay_UsesConfiguredValue()
+    public void Build_CustomReconnectDelay_UsesConfiguredValue()
     {
         var conn = TcpConnection();
         conn.ReconnectDelay = 12;
 
-        var options = SparkplugNodeRunner.BuildNodeOptions(conn, Node());
+        var options = SparkplugNodeOptionsBuilder.Build(conn, Node());
 
         options.ReconnectInterval.Should().Be(TimeSpan.FromSeconds(12));
     }
 
     [Test]
-    public void BuildNodeOptions_ZeroReconnectDelay_FallsBackTo5Seconds()
+    public void Build_ZeroReconnectDelay_FallsBackTo5Seconds()
     {
         var conn = TcpConnection();
         conn.ReconnectDelay = 0;
 
-        var options = SparkplugNodeRunner.BuildNodeOptions(conn, Node());
+        var options = SparkplugNodeOptionsBuilder.Build(conn, Node());
 
         options.ReconnectInterval.Should().Be(TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public void Build_WebSocket_UsesWsSchemeAndBasePath()
+    {
+        var conn = TcpConnection();
+        conn.Protocol = Protocol.WebSocket;
+        conn.WebsocketBasePath = "mqtt";
+
+        var options = SparkplugNodeOptionsBuilder.Build(conn, Node());
+
+        options.BrokerAddress.Should().Be("ws://broker.local:1883/mqtt");
+        options.MqttWebSocketOptions.Should().NotBeNull();
+        options.MqttWebSocketOptions!.Uri.Should().Be("ws://broker.local:1883/mqtt");
+    }
+
+    [Test]
+    public void Build_WebSocketOverTls_UsesWssSchemeAndTrimsBasePath()
+    {
+        var conn = TcpConnection();
+        conn.Protocol = Protocol.WebSocket;
+        conn.UseTls = true;
+        conn.WebsocketBasePath = "  /custom/path  ";
+
+        var options = SparkplugNodeOptionsBuilder.Build(conn, Node());
+
+        options.BrokerAddress.Should().Be("wss://broker.local:1883/custom/path");
+    }
+
+    [Test]
+    public void Build_WebSocketWithoutBasePath_UsesRootPath()
+    {
+        var conn = TcpConnection();
+        conn.Protocol = Protocol.WebSocket;
+        conn.WebsocketBasePath = string.Empty;
+
+        var options = SparkplugNodeOptionsBuilder.Build(conn, Node());
+
+        options.BrokerAddress.Should().Be("ws://broker.local:1883/");
+    }
+
+    [Test]
+    public void Build_TlsEnabled_PinsTls12AndTls13()
+    {
+        var conn = TcpConnection();
+        conn.UseTls = true;
+
+        var options = SparkplugNodeOptionsBuilder.Build(conn, Node());
+
+        options.MqttTlsOptions.Should().NotBeNull();
+        options.MqttTlsOptions!.SslProtocol.Should().Be(
+            SslProtocols.Tls12 | SslProtocols.Tls13); // DevSkim: ignore DS440020,DS112836,DS440001
+    }
+
+    [Test]
+    public void Build_AllowUntrustedCertificate_SetsValidationHandler()
+    {
+        var conn = TcpConnection();
+        conn.UseTls = true;
+        conn.AllowUntrustedCertificate = true;
+
+        var options = SparkplugNodeOptionsBuilder.Build(conn, Node());
+
+        options.MqttTlsOptions.Should().NotBeNull();
+        options.MqttTlsOptions!.AllowUntrustedCertificates.Should().BeTrue();
+        options.MqttTlsOptions.CertificateValidationHandler.Should().NotBeNull();
+    }
+
+    [Test]
+    public void Build_WithClientCertificate_AddsItToTlsOptions()
+    {
+        var conn = TcpConnection();
+        conn.UseTls = true;
+        using var resource = new CertificateSessionResource();
+        resource.Set(TestCertFactory.CreateRsaCert());
+
+        var options = SparkplugNodeOptionsBuilder.Build(conn, Node(), resource);
+
+        var clientCerts = options.MqttTlsOptions?.ClientCertificatesProvider?.GetCertificates();
+        clientCerts.Should().NotBeNull();
+        clientCerts.Count.Should().Be(1);
+    }
+
+    [Test]
+    public void Build_TlsDisabled_LeavesClientCertificatesUnset()
+    {
+        using var resource = new CertificateSessionResource();
+        resource.Set(TestCertFactory.CreateRsaCert());
+
+        var options = SparkplugNodeOptionsBuilder.Build(TcpConnection(), Node(), resource);
+
+        options.MqttTlsOptions?.ClientCertificatesProvider.Should().BeNull();
     }
 }

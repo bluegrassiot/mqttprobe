@@ -19,8 +19,6 @@ DEFAULT_LIMIT = 500
 
 # Ceilings freeze current size: may stay over DEFAULT_LIMIT but cannot grow.
 GRANDFATHER = {
-    "src/MqttProbe.Shared/Services/Plugins/Packaging/PluginPackageInstaller.cs": 643,
-    "src/MqttProbe.Shared/Services/Mqtt/MessageStoreManager.cs": 512,
 }
 
 SKIP_BASENAMES = {"SparkplugBProtobuf.cs"}

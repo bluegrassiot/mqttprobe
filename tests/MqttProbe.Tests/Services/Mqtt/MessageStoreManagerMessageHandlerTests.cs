@@ -1,12 +1,17 @@
 using System.Collections.Concurrent;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MqttProbe.Models.Configuration;
 using MqttProbe.Models.Mqtt;
+using MqttProbe.Models.Sparkplug;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Metrics;
 using MqttProbe.Services.Mqtt;
+using MqttProbe.Services.Plugins.Contracts;
+using MqttProbe.Services.Sparkplug;
 using MqttProbe.Tests.Utilities;
+using Org.Eclipse.Tahu.Protobuf;
 
 namespace MqttProbe.Shared.Tests.Services.Mqtt;
 
@@ -388,6 +393,42 @@ public class MessageStoreManagerMessageHandlerTests
     }
 
     [Test]
+    public async Task MessageHandler_InvokedAfterDispose_DropsQuietly()
+    {
+        var config = new AppConfiguration
+        {
+            Performance = new PerformanceSettings { MaxStoredMessages = 10, MaxMessagesPerSecond = 50_000 }
+        };
+        var built = BuildManager(config);
+        var manager = built.Manager;
+        var fire = built.Fire;
+
+        manager.Dispose();
+
+        var act = async () => await fire(MakeArgs("after-dispose", "x"));
+
+        await act.Should().NotThrowAsync(
+            "a message already in flight can reach the handler after disposal, and the "
+            + "MQTT client's handler must not see ObjectDisposedException");
+        manager.MessageStores.Should().NotContainKey("after-dispose");
+    }
+
+    [Test]
+    public void Dispose_CalledTwice_TearsDownOnce()
+    {
+        var config = new AppConfiguration();
+        var built = BuildManager(config);
+        var manager = built.Manager;
+        var settings = built.Settings;
+
+        manager.Dispose();
+        var act = manager.Dispose;
+
+        act.Should().NotThrow();
+        settings.Received(1).PerformanceSettingsChanged -= Arg.Any<Action>();
+    }
+
+    [Test]
     public async Task ClearAllMessages_ResetsGlobalCount_SoNewMessagesStore()
     {
         var config = new AppConfiguration
@@ -497,5 +538,86 @@ public class MessageStoreManagerMessageHandlerTests
         await handler!(MakeArgs("after", "2"));
         await handler!(MakeArgs("after", "3"));
         manager.MessageStores["after"].Messages!.Count.Should().Be(3);
+    }
+
+    private static byte[] SparkplugPayload()
+    {
+        var payload = new Payload { Timestamp = 1 };
+        payload.Metrics.Add(new Payload.Types.Metric
+        {
+            Name = "temperature",
+            Alias = 7,
+            Datatype = 3,
+            IntValue = 42
+        });
+        return payload.ToByteArray();
+    }
+
+    private static MqttApplicationMessageReceivedEventArgs MakeBinaryArgs(string topic, byte[] payload)
+    {
+        var appMsg = new MqttApplicationMessageBuilder()
+            .WithTopic(topic)
+            .WithPayload(payload)
+            .Build();
+        var publishPacket = new MQTTnet.Packets.MqttPublishPacket { Topic = topic };
+        return new MqttApplicationMessageReceivedEventArgs("test-client", appMsg, publishPacket, null);
+    }
+
+    private static (MessageStoreManager Manager, Func<MqttApplicationMessageReceivedEventArgs, Task> Fire)
+        BuildManagerWithTopology(IUxMetricsService metrics, ISparkplugTopologyService topology)
+    {
+        var client = Substitute.For<IMqttManagedClient>();
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+              .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        var config = new AppConfiguration();
+        var performanceSettings = Substitute.For<IPerformanceSettings>();
+        performanceSettings.Performance.Returns(config.Performance);
+        var uiSettings = Substitute.For<IUiSettings>();
+        uiSettings.Ui.Returns(config.Ui);
+
+        var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
+            performanceSettings, uiSettings, metrics, TestPipelineHelper.BuildBuiltInPipeline(), topology);
+        manager.Start().GetAwaiter().GetResult();
+        return (manager, handler!);
+    }
+
+    [Test]
+    public async Task MessageHandler_TopologyApplyThrows_StillRecordsProcessedFormat()
+    {
+        var metrics = Substitute.For<IUxMetricsService>();
+        var topology = Substitute.For<ISparkplugTopologyService>();
+        topology.ApplyTopologyEventsAsync(Arg.Any<IReadOnlyList<TopologyEvent>>())
+            .Returns(_ => throw new InvalidOperationException("topology fault"));
+
+        var built = BuildManagerWithTopology(metrics, topology);
+        using var manager = built.Manager;
+        MqttMessage? received = null;
+        manager.MessageReceived += msg => { received = msg; return Task.CompletedTask; };
+
+        await built.Fire(MakeBinaryArgs("spBv1.0/g/NBIRTH/n1", SparkplugPayload()));
+
+        await topology.Received(1).ApplyTopologyEventsAsync(Arg.Any<IReadOnlyList<TopologyEvent>>());
+        metrics.Received(1).RecordMessageProcessed("sparkplug-b");
+        received.Should().BeNull("the message is only constructed after topology events are applied");
+    }
+
+    [Test]
+    public async Task MessageHandler_AliasEnrichment_ReadsTopologyOnlyAfterEventsApplied()
+    {
+        var topology = Substitute.For<ISparkplugTopologyService>();
+        topology.Groups.Returns(new Dictionary<string, SpbGroup>());
+
+        var built = BuildManagerWithTopology(Substitute.For<IUxMetricsService>(), topology);
+        using var manager = built.Manager;
+
+        await built.Fire(MakeBinaryArgs("spBv1.0/g/NBIRTH/n1", SparkplugPayload()));
+
+        Received.InOrder(() =>
+        {
+            topology.ApplyTopologyEventsAsync(Arg.Any<IReadOnlyList<TopologyEvent>>());
+            _ = topology.Groups;
+        });
     }
 }

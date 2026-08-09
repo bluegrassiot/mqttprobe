@@ -5,12 +5,13 @@ using Microsoft.AspNetCore.DataProtection.XmlEncryption;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
-using MqttProbe.Models.Plugins;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Platform;
-using MqttProbe.Services.Plugins;
-using MqttProbe.Services.Plugins.Packaging;
-using MqttProbe.Services.Security;
+using MqttProbe.Core.Models.Plugins;
+using MqttProbe.Core.Services.Configuration;
+using MqttProbe.Core.Services.Platform;
+using MqttProbe.Core.Services.Plugins;
+using MqttProbe.Core.Services.Plugins.Packaging;
+using MqttProbe.Core.Services.Security;
+using MqttProbe.UI.Services.Platform;
 using MqttProbe.Web;
 using MqttProbe.Web.Services;
 
@@ -20,7 +21,7 @@ StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configurat
 
 builder.Services.AddRazorPages();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
-builder.Services.AddMqttProbeMud();
+builder.Services.AddMqttProbeUi();
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -104,8 +105,6 @@ builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
 builder.Services.AddSingleton<IUpdateService, NoOpUpdateService>();
 builder.Services.AddSingleton<IUserAuthService, SingleAdminUserAuthService>();
 
-builder.Services.AddMqttProbeCharts();
-
 builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));
 builder.Services.PostConfigure<PluginConfig>(cfg =>
 {
@@ -155,7 +154,7 @@ app.MapGet("/health", () => Results.Text("OK", "text/plain")).AllowAnonymous();
 app.MapRazorPages().RequireAuthorization();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
-    .AddAdditionalAssemblies(typeof(MqttProbe.Components.Pages.Index).Assembly)
+    .AddAdditionalAssemblies(typeof(MqttProbe.UI.Components.Pages.Index).Assembly)
     .RequireAuthorization();
 
 await app.RunAsync();

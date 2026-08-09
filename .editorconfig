@@ -272,7 +272,7 @@ dotnet_diagnostic.S2139.severity = suggestion
 dotnet_diagnostic.MA0004.severity = suggestion
 
 # ── ConfigureAwait ───────────────────────────────────────────────────────────
-# MA0004 stays on in MqttProbe.Shared: it is library code consumed by MAUI,
+# MA0004 stays on in MqttProbe.Core: it is library code consumed by MAUI,
 # which has a synchronisation context. The app projects own their own context,
 # so ConfigureAwait(false) there is noise at best and wrong at worst.
 [src/MqttProbe.{Web,Desktop,Maui}/**.{cs,razor}]
@@ -286,5 +286,5 @@ dotnet_diagnostic.MA0004.severity = none
 # mutable bag of settings. IList<T> on a { get; set; } DTO hides nothing and
 # risks the on-disk config format for no runtime benefit. The rule already
 # exempts XML-serialised properties; it simply predates JSON DTOs.
-[src/MqttProbe.Shared/Models/**.cs]
+[src/MqttProbe.Core/Models/**.cs]
 dotnet_diagnostic.MA0016.severity = none

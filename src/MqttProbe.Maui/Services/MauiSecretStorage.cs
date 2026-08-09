@@ -1,6 +1,6 @@
-using MqttProbe.Services.Security;
+using MqttProbe.Core.Services.Security;
 
-namespace MqttProbe.Services;
+namespace MqttProbe.Maui.Services;
 
 public class MauiSecretStorage : ISecretStorage
 {

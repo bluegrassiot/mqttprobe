@@ -4,16 +4,17 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using MqttProbe.Core.Models.Plugins;
+using MqttProbe.Core.Services;
+using MqttProbe.Core.Services.Configuration;
+using MqttProbe.Core.Services.Platform;
+using MqttProbe.Core.Services.Plugins;
+using MqttProbe.Core.Services.Plugins.Packaging;
+using MqttProbe.Core.Services.Security;
 using MqttProbe.Desktop.Interop;
 using MqttProbe.Desktop.Services;
 using MqttProbe.Desktop.Services.Security;
-using MqttProbe.Models.Plugins;
-using MqttProbe.Services;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Platform;
-using MqttProbe.Services.Plugins;
-using MqttProbe.Services.Plugins.Packaging;
-using MqttProbe.Services.Security;
+using MqttProbe.UI.Services.Platform;
 using Photino.Blazor;
 using Velopack;
 
@@ -32,7 +33,7 @@ internal static class Program
 
         var builder = PhotinoBlazorAppBuilder.CreateDefault(args);
 
-        builder.Services.AddMqttProbeMud();
+        builder.Services.AddMqttProbeUi();
 
         builder.Services.AddLogging(logging =>
         {
@@ -119,7 +120,6 @@ internal static class Program
         builder.Services.AddSingleton<ICertificateInputCapability, DesktopCertificateInputCapability>();
 
         builder.Services.AddScoped<IClipboardService, DesktopClipboardService>();
-        builder.Services.AddMqttProbeCharts();
 
         AddPluginServices(builder, configuration, configDir);
 

@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>MqttProbe.Core</RootNamespace>
+        <!-- MA0016 fires on model types that use concrete collection types (List, ObservableCollection).
+             These predate the move to Core and are not in scope for this change. -->
+        <NoWarn>$(NoWarn);MA0016</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="FluentValidation" />
+        <PackageReference Include="Google.Protobuf" />
+        <PackageReference Include="Meziantou.Analyzer">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="MessagePack" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="Microsoft.Extensions.Options" />
+        <!-- Aliased: Google.Protobuf and protobuf-net.Reflection collide -->
+        <PackageReference Include="protobuf-net.Reflection" Aliases="ProtoReflection" />
+        <PackageReference Include="MQTTnet" />
+        <PackageReference Include="SonarAnalyzer.CSharp">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="System.Reflection.MetadataLoadContext" />
+        <PackageReference Include="System.Threading.RateLimiting" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\MqttProbe.PluginContracts\MqttProbe.PluginContracts.csproj" />
+        <ProjectReference Include="..\..\external\SparkplugNet\src\SparkplugNet\SparkplugNet.csproj" />
+    </ItemGroup>
+
+</Project>

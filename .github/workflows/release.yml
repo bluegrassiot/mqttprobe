@@ -41,7 +41,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
+          key: nuget-${{ hashFiles('src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
       - name: Extract version
@@ -256,7 +256,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
+          key: nuget-${{ hashFiles('src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
       - name: Install MAUI Android workload

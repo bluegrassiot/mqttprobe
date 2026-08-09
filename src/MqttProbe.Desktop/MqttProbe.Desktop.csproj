@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+<Project Sdk="Microsoft.NET.Sdk.Razor">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -44,7 +44,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\MqttProbe.Shared\MqttProbe.Shared.csproj" />
+        <ProjectReference Include="..\MqttProbe.Core\MqttProbe.Core.csproj" />
+        <ProjectReference Include="..\MqttProbe.UI\MqttProbe.UI.csproj" />
     </ItemGroup>
 
     <!-- Photino serves the UI from a PhysicalFileProvider rooted at the output wwwroot and
@@ -69,7 +70,7 @@
     </Target>
 
     <ItemGroup>
-        <InternalsVisibleTo Include="MqttProbe.Shared.Tests" />
+        <InternalsVisibleTo Include="MqttProbe.UI.Tests" />
     </ItemGroup>
 
 </Project>

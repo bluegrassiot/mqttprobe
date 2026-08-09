@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Security;
+using MqttProbe.Core.Services.Configuration;
+using MqttProbe.Core.Services.Security;
 
 namespace MqttProbe;
 

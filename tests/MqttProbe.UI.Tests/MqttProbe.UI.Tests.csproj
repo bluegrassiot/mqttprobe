@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <IsPackable>false</IsPackable>
+
+        <!-- Library-code analyzers (CA/Sonar/Meziantou) have no signal on test
+             code — they flagged ~2.6k naming and style issues across tests/.
+             NUnit.Analyzers is kept; it catches real test bugs. -->
+        <AnalysisMode>None</AnalysisMode>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AngleSharp" />
+        <PackageReference Include="AwesomeAssertions" />
+        <PackageReference Include="bunit" />
+        <PackageReference Include="coverlet.collector">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="JunitXml.TestLogger" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" />
+        <!-- Boots the real Web host in WebHostCompositionTests. Program.cs already carried
+             the `public partial class Program` marker this needs; nothing used it until a
+             missing DI registration shipped and only surfaced at app startup. -->
+        <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+        <PackageReference Include="MudBlazor" />
+        <PackageReference Include="NSubstitute" />
+        <PackageReference Include="NUnit" />
+        <PackageReference Include="NUnit.Analyzers">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="NUnit3TestAdapter" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\src\MqttProbe.Core\MqttProbe.Core.csproj" />
+      <ProjectReference Include="..\..\src\MqttProbe.Desktop\MqttProbe.Desktop.csproj" />
+      <ProjectReference Include="..\..\src\MqttProbe.UI\MqttProbe.UI.csproj" />
+      <ProjectReference Include="..\..\src\MqttProbe.Web\MqttProbe.Web.csproj" />
+      <ProjectReference Include="..\MqttProbe.TestInfrastructure\MqttProbe.TestInfrastructure.csproj" />
+  </ItemGroup>
+</Project>

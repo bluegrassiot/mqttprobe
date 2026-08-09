@@ -8,10 +8,10 @@
         <RootNamespace>MqttProbe.Web</RootNamespace>
         <Version>0.0.0</Version>
 
-        <!-- See MqttProbe.Shared.csproj: this is the single-file host itself. -->
+        <!-- See MqttProbe.UI.csproj: this is the single-file host itself. -->
         <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
 
-        <!-- See MqttProbe.Shared.csproj: Razor emits component code outside a #nullable
+        <!-- See MqttProbe.UI.csproj: Razor emits component code outside a #nullable
              context, so the ! operators in markup are flagged as pointless when they
              are not. Not suppressible via .editorconfig for generated documents. -->
         <NoWarn>$(NoWarn);S8970</NoWarn>
@@ -23,7 +23,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\MqttProbe.Shared\MqttProbe.Shared.csproj" />
+      <ProjectReference Include="..\MqttProbe.Core\MqttProbe.Core.csproj" />
+      <ProjectReference Include="..\MqttProbe.UI\MqttProbe.UI.csproj" />
     </ItemGroup>
 
     <ItemGroup>

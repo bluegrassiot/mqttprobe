@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
+using MqttProbe.Core.Services.Security;
 using MqttProbe.Desktop.Services.Security;
-using MqttProbe.Services.Security;
 
-namespace MqttProbe.Services;
+namespace MqttProbe.Desktop.Services;
 
 public sealed class DesktopSecretStorage : ISecretStorage
 {

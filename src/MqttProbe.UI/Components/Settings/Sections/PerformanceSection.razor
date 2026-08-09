@@ -1,0 +1,73 @@
+@namespace MqttProbe.UI.Components.Settings
+@using MqttProbe.Core.Services.Configuration
+@inject IPerformanceSettings PerfSettings
+
+<div class="settings-field">
+    <MudNumericField T="int" Label="Max stored messages"
+                     Value="@PerfSettings.Performance.MaxStoredMessages"
+                     ValueChanged="@OnMaxStoredMessagesChanged"
+                     Min="100" Max="100000" Step="1000"
+                     Variant="Variant.Outlined"
+                     Class="settings-field-narrow" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Maximum messages retained in memory per topic. Higher values use more memory.
+    </MudText>
+</div>
+
+<div class="settings-field">
+    <MudNumericField T="int" Label="Max messages per second"
+                     Value="@PerfSettings.Performance.MaxMessagesPerSecond"
+                     ValueChanged="@OnMaxMessagesPerSecondChanged"
+                     Min="100" Max="1000000" Step="1000"
+                     Variant="Variant.Outlined"
+                     Class="settings-field-narrow" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Rate limit for inbound messages. Messages exceeding this limit are dropped.
+    </MudText>
+</div>
+
+<div class="settings-field">
+    <MudNumericField T="int" Label="Max displayed messages"
+                     Value="@PerfSettings.Performance.MaxDisplayMessages"
+                     ValueChanged="@OnMaxDisplayMessagesChanged"
+                     Min="10" Max="10000" Step="100"
+                     Variant="Variant.Outlined"
+                     Class="settings-field-narrow" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Maximum messages shown in the payload browser. Higher values may slow rendering.
+    </MudText>
+</div>
+
+<div class="settings-field">
+    <MudNumericField T="int" Label="Max topic nodes"
+                     Value="@PerfSettings.Performance.MaxTopicNodes"
+                     ValueChanged="@OnMaxTopicNodesChanged"
+                     Min="100" Max="100000" Step="1000"
+                     Variant="Variant.Outlined"
+                     Class="settings-field-narrow" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Maximum topic tree nodes (prevents runaway topic cardinality).
+    </MudText>
+</div>
+
+@code {
+    private async Task OnMaxStoredMessagesChanged(int value)
+    {
+        await PerfSettings.SetMaxStoredMessagesAsync(value);
+    }
+
+    private async Task OnMaxMessagesPerSecondChanged(int value)
+    {
+        await PerfSettings.SetMaxMessagesPerSecondAsync(value);
+    }
+
+    private async Task OnMaxDisplayMessagesChanged(int value)
+    {
+        await PerfSettings.SetMaxDisplayMessagesAsync(value);
+    }
+
+    private async Task OnMaxTopicNodesChanged(int value)
+    {
+        await PerfSettings.SetMaxTopicNodesAsync(value);
+    }
+}

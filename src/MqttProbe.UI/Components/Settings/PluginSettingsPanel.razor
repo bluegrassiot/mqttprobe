@@ -1,0 +1,265 @@
+@namespace MqttProbe.UI.Components.Plugins
+@using Microsoft.AspNetCore.Components.Forms
+@using MqttProbe.Core.Services.Plugins.Packaging
+@inject PluginInventoryService Inventory
+@inject PluginPackageInstaller Installer
+@inject PluginReloadService Reloader
+@inject PluginInstallSession Session
+@inject IPluginPackagePicker Picker
+@inject IPluginInputCapability InputCapability
+@inject IDialogService DialogService
+
+<div class="d-flex align-center justify-end mb-3">
+    @if (_writableFolder is not null)
+    {
+        @if (InputCapability.UsesInputFileComponent)
+        {
+            <MudFileUpload T="IBrowserFile" Accept=".zip" FilesChanged="OnFileSelected"
+                           @ref="_upload">
+                <CustomContent>
+                    <AppSecondaryButton data-testid="install-plugin-button"
+                                        StartIcon="@LucideIcons.Upload"
+                                        Disabled="@_busy"
+                                        OnClick="@(() => context.OpenFilePickerAsync())">
+                        Install plugin
+                    </AppSecondaryButton>
+                </CustomContent>
+            </MudFileUpload>
+        }
+        else
+        {
+            <AppSecondaryButton data-testid="install-plugin-button"
+                                StartIcon="@LucideIcons.Upload"
+                                Disabled="@_busy"
+                                OnClick="PickAndInstallAsync">
+                Install plugin
+            </AppSecondaryButton>
+        }
+    }
+</div>
+
+@if (_writableFolder is null)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+        No writable plugin folder is configured on this host, so plugins cannot be installed here.
+    </MudAlert>
+}
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3"
+              ShowCloseIcon="true" CloseIconClicked="@(() => _error = null)">
+        @_error
+    </MudAlert>
+}
+
+@if (Session.CanApplyWithoutRestart)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+        <div class="d-flex align-center justify-space-between gap-4 flex-wrap">
+            <span>Schema changes are ready. Messages already stored keep their previous decoding.</span>
+            <AppPrimaryButton data-testid="apply-plugins-button"
+                              Size="Size.Small"
+                              Disabled="@_busy"
+                              OnClick="ApplyAsync">
+                Apply now
+            </AppPrimaryButton>
+        </div>
+    </MudAlert>
+}
+
+@if (Session.RequiresRestart)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+        Restart MQTTProbe to finish applying the pending plugin changes.
+    </MudAlert>
+}
+
+<MudTable Items="_plugins" Dense="true" Hover="true" Elevation="0" T="InstalledPlugin">
+    <HeaderContent>
+        <MudTh>Name</MudTh>
+        <MudTh>Id</MudTh>
+        <MudTh>Version</MudTh>
+        <MudTh>Kind</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Manifest.Name</MudTd>
+        <MudTd DataLabel="Id">@context.Manifest.Id</MudTd>
+        <MudTd DataLabel="Version">@context.Manifest.Version</MudTd>
+        <MudTd DataLabel="Kind">@context.Manifest.Kind</MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@StatusColour(context.Status)">
+                @StatusLabel(context.Status)
+            </MudChip>
+            @if (context.StatusDetail is not null)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                    @context.StatusDetail
+                </MudText>
+            }
+        </MudTd>
+        <MudTd>
+            <AppSecondaryButton Size="Size.Small"
+                                Disabled="@_busy"
+                                OnClick="@(() => RemoveAsync(context))">
+                Remove
+            </AppSecondaryButton>
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@if (_plugins.Count == 0)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+        No plugins installed.
+    </MudText>
+}
+
+@code {
+    private IReadOnlyList<InstalledPlugin> _plugins = [];
+    private string? _writableFolder;
+    private string? _error;
+    private bool _busy;
+    private MudFileUpload<IBrowserFile>? _upload;
+
+    protected override void OnInitialized() => Refresh();
+
+    private void Refresh()
+    {
+        _writableFolder = Installer.WritablePluginFolder;
+        _plugins = Inventory.GetInstalled();
+    }
+
+    private static Color StatusColour(PluginStatus status) => status switch
+    {
+        PluginStatus.Active => Color.Success,
+        PluginStatus.Failed => Color.Error,
+        PluginStatus.Disabled => Color.Default,
+        _ => Color.Warning
+    };
+
+    private static string StatusLabel(PluginStatus status) => status switch
+    {
+        PluginStatus.PendingActivation => "Pending activation",
+        PluginStatus.PendingRestart => "Pending restart",
+        _ => status.ToString()
+    };
+
+    private async Task OnFileSelected(IBrowserFile? file)
+    {
+        if (file is null)
+        {
+            return;
+        }
+
+        // S5693 (suppressed project-wide via NoWarn in MqttProbe.UI.csproj —
+        // like CS8669/S8970 there, it is reported against the Razor @code block and
+        // neither #pragma nor a .editorconfig entry can scope it to this file):
+        // 32 MiB is a deliberate limit, not a missing one — it matches
+        // PluginArchiveLimits.MaxCompressedBytes (PluginArchiveLimits.cs), the cap
+        // already enforced when the archive is opened for install.
+        await using (var stream = file.OpenReadStream(maxAllowedSize: 33_554_432))
+        {
+            await InstallAsync(stream);
+        }
+
+        // Resetting the input also lets the same filename be re-selected after a failed
+        // install; otherwise FilesChanged never fires for it again.
+        if (_upload is not null)
+        {
+            await _upload.ClearAsync();
+        }
+    }
+
+    private async Task PickAndInstallAsync()
+    {
+        var bytes = await Picker.PickPackageAsync("Select a plugin package", [".zip"], 33_554_432);
+
+        if (bytes is null)
+        {
+            return;
+        }
+
+        await InstallAsync(new MemoryStream(bytes));
+    }
+
+    private async Task InstallAsync(Stream stream)
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            var outcome = await Installer.InstallAsync(stream, CancellationToken.None);
+            _error = outcome.Succeeded ? null : outcome.Error;
+        }
+        finally
+        {
+            _busy = false;
+            Refresh();
+        }
+    }
+
+    private async Task RemoveAsync(InstalledPlugin plugin)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Remove plugin",
+            $"Remove {plugin.Manifest.Name} {plugin.Manifest.Version}?",
+            yesText: "Remove",
+            cancelText: "Cancel",
+            options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            var outcome = await Installer.RemoveAsync(
+                plugin.Manifest.Id,
+                plugin.InstallPath,
+                isLoaded: plugin.Status == PluginStatus.Active,
+                CancellationToken.None);
+            _error = outcome.Succeeded ? null : outcome.Error;
+
+            // A schema removal deletes the folder outright, so the confirmed action is only
+            // half-done until the registry stops serving it. Assembly removals genuinely
+            // cannot complete before a restart.
+            if (outcome.Succeeded && !outcome.RequiresRestart)
+            {
+                var reload = Reloader.Reload();
+                _error = reload.Succeeded ? null : reload.Error;
+            }
+        }
+        finally
+        {
+            _busy = false;
+            Refresh();
+        }
+    }
+
+    private Task ApplyAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            var outcome = Reloader.Reload();
+            _error = outcome.Succeeded ? null : outcome.Error;
+        }
+        finally
+        {
+            _busy = false;
+            Refresh();
+        }
+
+        return Task.CompletedTask;
+    }
+}

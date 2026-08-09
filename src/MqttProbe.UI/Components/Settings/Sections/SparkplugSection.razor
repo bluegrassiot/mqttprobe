@@ -1,0 +1,65 @@
+@namespace MqttProbe.UI.Components.Settings
+@using MqttProbe.Core.Services.Configuration
+@inject ISparkplugSettings SparkplugSettings
+
+<div class="settings-field">
+    <MudSwitch T="bool" Value="@SparkplugSettings.Sparkplug.EnrichAliasNames"
+               ValueChanged="@OnEnrichAliasNamesChanged"
+               Color="Color.Primary"
+               Label="Enrich Sparkplug alias names" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Names alias-only metrics using Sparkplug topology.
+    </MudText>
+</div>
+
+<div class="settings-field settings-field-group">
+    <MudSwitch T="bool" Value="@SparkplugSettings.Sparkplug.AutoRequestRebirth"
+               ValueChanged="@OnAutoRequestRebirthChanged"
+               Color="Color.Primary"
+               Label="Automatically request rebirth" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Asks nodes with no known birth to re-announce. Manual rebirth still works when off.
+    </MudText>
+
+    <MudNumericField T="int" Label="Rebirth cooldown (seconds)"
+                     Value="@SparkplugSettings.Sparkplug.RebirthCooldownSeconds"
+                     ValueChanged="@OnRebirthCooldownChanged"
+                     Min="5" Max="600" Step="5"
+                     Variant="Variant.Outlined"
+                     Class="settings-field-narrow" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Minimum seconds between automatic rebirths for the same node. Manual not affected.
+    </MudText>
+</div>
+
+<div class="settings-field">
+    <MudSwitch T="bool" Value="@SparkplugSettings.Sparkplug.AllowNodeReboot"
+               ValueChanged="@OnAllowNodeRebootChanged"
+               Color="Color.Primary"
+               Label="Allow node reboot" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Enables reboot from the nodes view. Rebirth stays available.
+    </MudText>
+</div>
+
+@code {
+    private async Task OnEnrichAliasNamesChanged(bool value)
+    {
+        await SparkplugSettings.SetEnrichAliasNamesAsync(value);
+    }
+
+    private async Task OnAutoRequestRebirthChanged(bool value)
+    {
+        await SparkplugSettings.SetAutoRequestRebirthAsync(value);
+    }
+
+    private async Task OnRebirthCooldownChanged(int value)
+    {
+        await SparkplugSettings.SetRebirthCooldownSecondsAsync(value);
+    }
+
+    private async Task OnAllowNodeRebootChanged(bool value)
+    {
+        await SparkplugSettings.SetAllowNodeRebootAsync(value);
+    }
+}

@@ -40,7 +40,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
+          key: nuget-${{ hashFiles('src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
       - name: Restore tools
@@ -64,9 +64,14 @@ jobs:
 
       - name: Unit tests
         run: |
-          dotnet test tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj \
+          dotnet test tests/MqttProbe.Core.Tests/MqttProbe.Core.Tests.csproj \
             --logger:trx \
-            --results-directory ./TestResults/unit \
+            --results-directory ./TestResults/core \
+            --settings tests/coverlet.runsettings \
+            --collect:"XPlat Code Coverage"
+          dotnet test tests/MqttProbe.UI.Tests/MqttProbe.UI.Tests.csproj \
+            --logger:trx \
+            --results-directory ./TestResults/ui \
             --settings tests/coverlet.runsettings \
             --collect:"XPlat Code Coverage"
 
@@ -79,7 +84,7 @@ jobs:
             "-reports:$reports" `
             "-targetdir:./TestResults/CoverageReport" `
             "-reporttypes:Html;TextSummary" `
-            "-assemblyfilters:+MqttProbe.Shared;+MqttProbe.Web" `
+            "-assemblyfilters:+MqttProbe.Core;+MqttProbe.UI;+MqttProbe.Web" `
             "-filefilters:-*SparkplugBProtobuf*"
           $summary = Get-Content ./TestResults/CoverageReport/Summary.txt -ErrorAction SilentlyContinue
           $summary
@@ -113,7 +118,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
+          key: nuget-${{ hashFiles('src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
       - name: Integration tests
@@ -150,7 +155,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
+          key: nuget-${{ hashFiles('src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
       - name: Publish
@@ -290,7 +295,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
+          key: nuget-${{ hashFiles('src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
       - name: Install MAUI Android workload
@@ -338,7 +343,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.Shared/MqttProbe.Shared.csproj', 'global.json') }}
+          key: nuget-${{ hashFiles('src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
       - name: Install WebKitGTK

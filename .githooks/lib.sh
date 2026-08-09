@@ -190,7 +190,7 @@ classify_push_paths() {
         fi
 
         case "$p" in
-            src/MqttProbe.Shared/*|src/MqttProbe.Web/*|tests/MqttProbe.Tests/*|tests/MqttProbe.TestInfrastructure/*)
+            src/MqttProbe.Core/*|src/MqttProbe.UI/*|src/MqttProbe.PluginContracts/*|src/MqttProbe.Web/*|tests/MqttProbe.Core.Tests/*|tests/MqttProbe.UI.Tests/*|tests/MqttProbe.TestInfrastructure/*)
                 has_shared=1
                 ;;
             tests/MqttProbe.IntegrationTests/*)
@@ -235,7 +235,7 @@ classify_push_paths() {
         NEED_DESKTOP_BUILD=1
     fi
 
-    # Unit tests for shared/web/unit, infra, scripts/CI, or unknown non-docs.
+    # Unit tests for core/UI/web/unit, infra, scripts/CI, or unknown non-docs.
     if [[ $has_shared -eq 1 || $has_infra -eq 1 || $has_scripts -eq 1 || $has_other -eq 1 ]]; then
         NEED_UNIT_TESTS=1
         NEED_NOMAUI_BUILD=1

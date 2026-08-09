@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Logging;
-using MqttProbe.Services.Platform;
+using MqttProbe.Core.Services.Platform;
 using Velopack;
 using Velopack.Sources;
 

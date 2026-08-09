@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Unicode;
 using MQTTnet;
-using MqttProbe.Services.Plugins.Contracts;
+using MqttProbe.PluginContracts;
 
 namespace CustomDemoPlugin;
 

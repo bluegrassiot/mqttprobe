@@ -22,13 +22,18 @@ COPY ["external/Directory.Packages.props", "external/"]
 COPY ["external/Directory.Build.props", "external/"]
 COPY ["external/Directory.Build.targets", "external/"]
 # Project files first so `restore` is cached independently of source changes.
-# Paths mirror the repo layout so the Web -> Shared -> SparkplugNet ProjectReferences resolve.
+# Paths mirror the repo layout so the Web -> UI -> Core -> PluginContracts -> SparkplugNet
+# ProjectReferences resolve.
 COPY ["src/MqttProbe.Web/MqttProbe.Web.csproj", "src/MqttProbe.Web/"]
-COPY ["src/MqttProbe.Shared/MqttProbe.Shared.csproj", "src/MqttProbe.Shared/"]
+COPY ["src/MqttProbe.UI/MqttProbe.UI.csproj", "src/MqttProbe.UI/"]
+COPY ["src/MqttProbe.Core/MqttProbe.Core.csproj", "src/MqttProbe.Core/"]
+COPY ["src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj", "src/MqttProbe.PluginContracts/"]
 COPY ["external/SparkplugNet/src/SparkplugNet/SparkplugNet.csproj", "external/SparkplugNet/src/SparkplugNet/"]
 RUN dotnet restore "src/MqttProbe.Web/MqttProbe.Web.csproj"
 COPY src/MqttProbe.Web/ src/MqttProbe.Web/
-COPY src/MqttProbe.Shared/ src/MqttProbe.Shared/
+COPY src/MqttProbe.UI/ src/MqttProbe.UI/
+COPY src/MqttProbe.Core/ src/MqttProbe.Core/
+COPY src/MqttProbe.PluginContracts/ src/MqttProbe.PluginContracts/
 COPY external/SparkplugNet/ external/SparkplugNet/
 ARG VERSION=0.0.0
 WORKDIR "/src/src/MqttProbe.Web"

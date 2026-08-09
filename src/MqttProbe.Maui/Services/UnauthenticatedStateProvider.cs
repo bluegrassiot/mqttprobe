@@ -1,8 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
-using MqttProbe.Services.Security;
+using MqttProbe.Core.Services.Security;
 
-namespace MqttProbe.Services;
+namespace MqttProbe.Maui.Services;
 
 public class UnauthenticatedStateProvider : AuthenticationStateProvider
 {

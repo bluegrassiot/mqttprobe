@@ -42,11 +42,11 @@ REVIEWED = {
         "call. DesktopSecretKeyProtector.InitializeAsync does not and does not need to: "
         "it is Desktop-only and unreachable from a context-bearing host.",
     ),
-    "src/MqttProbe.Shared/Services/Emulation/EmulationService.cs": (
+    "src/MqttProbe.Core/Services/Emulation/EmulationService.cs": (
         1,
         "Dispose blocks on _publishLoop, which carries ConfigureAwait(false) throughout.",
     ),
-    "src/MqttProbe.Shared/Services/Mqtt/MessageStoreManager.cs": (
+    "src/MqttProbe.Core/Services/Mqtt/MessageStoreManager.cs": (
         1,
         "Dispose blocks on Stop(), which returns Task.CompletedTask and never awaits.",
     ),

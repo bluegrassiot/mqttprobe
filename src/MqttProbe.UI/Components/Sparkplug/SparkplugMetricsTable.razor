@@ -1,0 +1,46 @@
+@namespace MqttProbe.UI.Components.Sparkplug
+@using MqttProbe.Core.Models.Sparkplug
+
+<MudTable Items="@Items"
+          Dense="true" Hover="true" Elevation="0"
+          Breakpoint="Breakpoint.None" Class="@Class" RowClass="spb-metric-row">
+    <ColGroup>
+        <col style="width: 30%;" />
+        <col style="width: 15%;" />
+        <col style="width: 15%;" />
+        <col style="width: 25%;" />
+        <col style="width: 15%;" />
+    </ColGroup>
+    <HeaderContent>
+        <MudTh>
+            <MudTableSortLabel SortBy="new Func<SpbMetricSnapshot, object>(m => m.Name)">
+                Name
+            </MudTableSortLabel>
+        </MudTh>
+        <MudTh>Type</MudTh>
+        <MudTh Class="spb-th-right">Alias</MudTh>
+        <MudTh Class="spb-th-right">Value</MudTh>
+        <MudTh>Updated</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd Class="spb-td-name">@context.Name</MudTd>
+        <MudTd Class="spb-td-type">@context.DataType</MudTd>
+        <MudTd Class="spb-td-alias spb-th-right">
+            @(context.Alias.HasValue ? context.Alias.Value.ToString() : "\u2014")
+        </MudTd>
+        <MudTd Class="spb-td-value" Style="@($"color:{SparkplugNodeDisplay.ValueColor(context)}")">
+            @context.Value
+        </MudTd>
+        <MudTd Class="spb-td-updated">
+            @context.LastUpdated.ToLocalTime().ToString("HH:mm:ss")
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    [Parameter, EditorRequired]
+    public IEnumerable<SpbMetricSnapshot> Items { get; set; } = [];
+
+    [Parameter]
+    public string? Class { get; set; }
+}

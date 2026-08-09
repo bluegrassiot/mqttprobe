@@ -2,11 +2,14 @@
   "solution": {
     "path": "MqttProbe.slnx",
     "projects": [
-      "src\\MqttProbe.Shared\\MqttProbe.Shared.csproj",
+      "src\\MqttProbe.Core\\MqttProbe.Core.csproj",
+      "src\\MqttProbe.PluginContracts\\MqttProbe.PluginContracts.csproj",
+      "src\\MqttProbe.UI\\MqttProbe.UI.csproj",
       "src\\MqttProbe.Web\\MqttProbe.Web.csproj",
+      "tests\\MqttProbe.Core.Tests\\MqttProbe.Core.Tests.csproj",
       "tests\\MqttProbe.TestInfrastructure\\MqttProbe.TestInfrastructure.csproj",
       "tests\\MqttProbe.IntegrationTests\\MqttProbe.IntegrationTests.csproj",
-      "tests\\MqttProbe.Tests\\MqttProbe.Shared.Tests.csproj"
+      "tests\\MqttProbe.UI.Tests\\MqttProbe.UI.Tests.csproj"
     ]
   }
 }

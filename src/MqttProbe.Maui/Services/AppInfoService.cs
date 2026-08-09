@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Reflection;
 using Microsoft.Maui.ApplicationModel;
-using MqttProbe.Services.Platform;
+using MqttProbe.Core.Services.Platform;
 
-namespace MqttProbe.Services;
+namespace MqttProbe.Maui.Services;
 
 public class AppInfoService : IAppInfoService
 {

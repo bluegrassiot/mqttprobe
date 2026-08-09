@@ -9,7 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\MqttProbe.Shared\MqttProbe.Shared.csproj" />
+        <ProjectReference Include="..\..\src\MqttProbe.PluginContracts\MqttProbe.PluginContracts.csproj" />
     </ItemGroup>
 
 </Project>

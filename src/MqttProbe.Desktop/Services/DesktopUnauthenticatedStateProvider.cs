@@ -1,8 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
-using MqttProbe.Services.Security;
+using MqttProbe.Core.Services.Security;
 
-namespace MqttProbe.Services;
+namespace MqttProbe.Desktop.Services;
 
 public class DesktopUnauthenticatedStateProvider : AuthenticationStateProvider
 {

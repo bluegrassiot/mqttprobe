@@ -4,13 +4,14 @@ using System.Globalization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using MqttProbe.Core.Models.Plugins;
+using MqttProbe.Core.Services;
+using MqttProbe.Core.Services.Platform;
+using MqttProbe.Core.Services.Plugins;
+using MqttProbe.Core.Services.Plugins.Packaging;
+using MqttProbe.Core.Services.Security;
 using MqttProbe.Maui.Services;
-using MqttProbe.Models.Plugins;
-using MqttProbe.Services;
-using MqttProbe.Services.Platform;
-using MqttProbe.Services.Plugins;
-using MqttProbe.Services.Plugins.Packaging;
-using MqttProbe.Services.Security;
+using MqttProbe.UI.Services.Platform;
 
 namespace MqttProbe;
 
@@ -29,7 +30,7 @@ public static class MauiProgram
             .UseMauiApp<App>()
             .ConfigureFonts(fonts => { fonts.AddFont("Inter-Variable.ttf", "Inter"); });
 
-        builder.Services.AddMqttProbeMud();
+        builder.Services.AddMqttProbeUi();
         builder.Services.AddMauiBlazorWebView();
 
 #if DEBUG
@@ -43,7 +44,6 @@ public static class MauiProgram
         AddConfiguration(builder);
 
         builder.Services.AddScoped<IClipboardService, MauiClipboardService>();
-        builder.Services.AddMqttProbeCharts();
 
         AddPluginServices(builder);
         builder.Services.AddMqttProbeSparkplugTopology(HostSessionModel.SingleSession);

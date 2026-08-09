@@ -5,9 +5,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.RateLimiting;
-using MqttProbe.Models.Configuration;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Security;
+using MqttProbe.Core.Models.Configuration;
+using MqttProbe.Core.Services.Configuration;
+using MqttProbe.Core.Services.Security;
 
 namespace MqttProbe.Pages;
 

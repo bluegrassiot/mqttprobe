@@ -1,0 +1,96 @@
+@using Microsoft.JSInterop
+@using MqttProbe.Core.Models.Configuration
+@using MqttProbe.Core.Services.Configuration
+@inherits LayoutComponentBase
+@implements IAsyncDisposable
+@inject IUiSettings UiSettings
+@inject IAppInfoService AppInfoService
+@inject IJSRuntime JsRuntime
+@inject IThemes Themes
+
+<CascadingValue Value="Themes.IsDarkMode" Name="IsDarkMode">
+<MudThemeProvider Theme="@Themes.CurrentTheme" IsDarkMode="@Themes.IsDarkMode"/>
+<MudPopoverProvider/>
+<MudSnackbarProvider/>
+<MudDialogProvider CloseButton="true"
+                   NoHeader="false"
+                   FullWidth="true"
+                   MaxWidth="MaxWidth.Large"/>
+
+<MudLayout>
+    <AppShellBar />
+
+    <MudMainContent Class="pt-0">
+        <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="@($"app-shell-container{(AppInfoService.IsNative ? " app-shell-container--native" : string.Empty)}")">
+            <div class="@($"app-shell{(AppInfoService.IsNative ? " app-shell--native" : string.Empty)}")">
+            <div class="app-shell-body">
+                <SecretProtectionBanner />
+                @Body
+            </div>
+            </div>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+</CascadingValue>
+
+<UpdateStartupCheck />
+
+@code {
+    private bool _hasRendered;
+
+    protected override void OnInitialized()
+    {
+        Themes.ModeChanged += OnModeChanged;
+        Themes.FontModeChanged += OnFontModeChanged;
+        UiSettings.UiPreferencesChanged += OnUiPreferencesChangedFromStore;
+
+        Themes.SetFontProfile(UiSettings.Ui.FontProfile);
+
+        var savedTheme = UiSettings.Ui.Theme;
+        Themes.SetTheme(!string.Equals(savedTheme, "light", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void OnModeChanged()
+    {
+        _ = UiSettings.SetThemeAsync(Themes.IsDarkMode ? "dark" : "light");
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnFontModeChanged()
+    {
+        _ = UiSettings.SetFontProfileAsync(Themes.FontProfile);
+        if (_hasRendered)
+            _ = SetBodyFontClass();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnUiPreferencesChangedFromStore()
+    {
+        var cfg = UiSettings.Ui;
+        Themes.SetFontProfile(cfg.FontProfile);
+        Themes.SetTheme(!string.Equals(cfg.Theme, "light", StringComparison.OrdinalIgnoreCase));
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SetBodyFontClass() =>
+        await JsRuntime.InvokeVoidAsync(
+            "eval",
+            $"document.body.classList.toggle('font-accessible', {FontProfiles.IsAccessible(Themes.FontProfile).ToString().ToLowerInvariant()});");
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _hasRendered = true;
+            await SetBodyFontClass();
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Themes.ModeChanged -= OnModeChanged;
+        Themes.FontModeChanged -= OnFontModeChanged;
+        UiSettings.UiPreferencesChanged -= OnUiPreferencesChangedFromStore;
+        return ValueTask.CompletedTask;
+    }
+}

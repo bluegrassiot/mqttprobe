@@ -1,4 +1,4 @@
-using MqttProbe.Services.Plugins.Contracts;
+using MqttProbe.PluginContracts;
 
 namespace CustomDemoPlugin;
 

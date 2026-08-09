@@ -93,9 +93,15 @@ if [[ "$NEED_UNIT_TESTS" -eq 1 ]]; then
             exit 1
         fi
     fi
-    if ! dotnet test "$ROOT/tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj" \
+    if ! dotnet test "$ROOT/tests/MqttProbe.Core.Tests/MqttProbe.Core.Tests.csproj" \
             --no-build -nologo; then
-        fail "Tests (unit)"
+        fail "Tests (Core unit)"
+        print_total
+        exit 1
+    fi
+    if ! dotnet test "$ROOT/tests/MqttProbe.UI.Tests/MqttProbe.UI.Tests.csproj" \
+            --no-build -nologo; then
+        fail "Tests (UI unit)"
         print_total
         exit 1
     fi

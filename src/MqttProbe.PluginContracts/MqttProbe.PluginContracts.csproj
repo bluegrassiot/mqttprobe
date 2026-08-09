@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>MqttProbe.PluginContracts</RootNamespace>
+
+        <!-- PluginContracts ships as a NuGet package for third-party plugin authors.
+             IsPackable overrides the Directory.Build.props default of false. -->
+        <IsPackable>true</IsPackable>
+        <PackageId>BluegrassIoT.MqttProbe.PluginContracts</PackageId>
+        <Version>1.0.0</Version>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MQTTnet" />
+    </ItemGroup>
+
+</Project>

@@ -1,4 +1,4 @@
-using MqttProbe.Services.Plugins.Packaging;
+using MqttProbe.Core.Services.Plugins.Packaging;
 
 namespace MqttProbe.Web.Services;
 

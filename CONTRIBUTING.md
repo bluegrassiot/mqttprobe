@@ -18,7 +18,7 @@ Bug fixes and small improvements are welcome. For larger changes, open an issue 
 
 1. Install [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 2. Clone the repo with submodules: `git clone --recurse-submodules https://github.com/bluegrassiot/mqttprobe`. If you already cloned without that flag, run `git submodule update --init --recursive`.
-3. Run tests: `dotnet test tests/MqttProbe.Tests`
+3. Run tests: `dotnet test`
 
 ### Architecture and Development
 
@@ -63,7 +63,7 @@ CI still runs full checks on pull requests. Prefer fixing failures over skipping
 
 ### Tests and Coverage
 
-- Run `dotnet test tests/MqttProbe.Tests` before opening a PR.
+- Run `dotnet test` before opening a PR.
 - Add or update tests for behavior changes and bug fixes.
 - Keep test coverage at or above 75%.
 - Use `python scripts/ci/coverage.py --open` to inspect coverage when needed.
@@ -73,7 +73,8 @@ CI still runs full checks on pull requests. Prefer fixing failures over skipping
 Before submitting changes, make sure the same checks used by CI pass locally:
 
 - `dotnet build MqttProbe.slnx`
-- `dotnet test tests/MqttProbe.Tests`
+- `dotnet test tests/MqttProbe.Core.Tests`
+- `dotnet test tests/MqttProbe.UI.Tests`
 - `python scripts/ci/format-check.py`
 - `python scripts/ci/inspect.py --tool devskim --fail-on warning`
 

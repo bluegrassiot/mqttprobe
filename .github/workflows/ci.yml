@@ -40,7 +40,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
+          key: nuget-${{ hashFiles('Directory.Packages.props', 'src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj', 'src/MqttProbe.Core/MqttProbe.Core.csproj', 'src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
       - name: Restore tools
@@ -118,7 +118,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
+          key: nuget-${{ hashFiles('Directory.Packages.props', 'src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj', 'src/MqttProbe.Core/MqttProbe.Core.csproj', 'src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
       - name: Integration tests
@@ -155,7 +155,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
+          key: nuget-${{ hashFiles('Directory.Packages.props', 'src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj', 'src/MqttProbe.Core/MqttProbe.Core.csproj', 'src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
       - name: Publish
@@ -295,7 +295,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
+          key: nuget-${{ hashFiles('Directory.Packages.props', 'src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj', 'src/MqttProbe.Core/MqttProbe.Core.csproj', 'src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
       - name: Install MAUI Android workload
@@ -343,7 +343,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: nuget-${{ hashFiles('src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
+          key: nuget-${{ hashFiles('Directory.Packages.props', 'src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj', 'src/MqttProbe.Core/MqttProbe.Core.csproj', 'src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
       - name: Install WebKitGTK

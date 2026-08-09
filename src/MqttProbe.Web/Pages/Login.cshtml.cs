@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.RateLimiting;
+using MqttProbe.Models.Configuration;
 using MqttProbe.Services.Configuration;
 using MqttProbe.Services.Security;
 
@@ -18,12 +19,17 @@ public class LoginModel : PageModel
 
     private readonly IAuthSettings _authSettings;
     private readonly IUserAuthService _userAuthService;
+    private readonly IUiSettings _uiSettings;
 
-    public LoginModel(IAuthSettings authSettings, IUserAuthService userAuthService)
+    public LoginModel(IAuthSettings authSettings, IUserAuthService userAuthService, IUiSettings uiSettings)
     {
         _authSettings = authSettings;
         _userAuthService = userAuthService;
+        _uiSettings = uiSettings;
     }
+
+    public bool IsAccessibleFontProfile =>
+        FontProfiles.IsAccessible(_uiSettings.Ui.FontProfile);
 
     [BindProperty]
     public bool RememberMe { get; set; }

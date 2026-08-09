@@ -263,4 +263,127 @@ public class SettingsLoaderTests
         ui.TryGetProperty("enrichSparkplugAliasNames", out _).Should().BeFalse();
         ui.TryGetProperty("allowNodeReboot", out _).Should().BeFalse();
     }
+
+    [Test]
+    public async Task LoadAsync_WhenLegacyFontAccessibleTrue_MigratesToAccessibleProfile()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """
+            {"connections":[],"ui":{"fontAccessible":true}}
+            """);
+
+        await _loader.LoadAsync();
+
+        _document.Config.Ui.FontProfile.Should().Be(FontProfiles.Accessible);
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenLegacyFontAccessibleFalse_MigratesToStandardProfile()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """
+            {"connections":[],"ui":{"fontAccessible":false}}
+            """);
+
+        await _loader.LoadAsync();
+
+        _document.Config.Ui.FontProfile.Should().Be(FontProfiles.Standard);
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenFontProfileAbsent_DefaultsToStandard()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """{"connections":[],"ui":{}}""");
+
+        await _loader.LoadAsync();
+
+        _document.Config.Ui.FontProfile.Should().Be(FontProfiles.Standard);
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenFontProfilePresent_UsesProfile()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """{"connections":[],"ui":{"fontProfile":"accessible"}}""");
+
+        await _loader.LoadAsync();
+
+        _document.Config.Ui.FontProfile.Should().Be(FontProfiles.Accessible);
+    }
+
+    [Test]
+    public async Task SaveAsync_AfterFontMigration_WritesFontProfileAndStripsLegacyFontKeys()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """
+            {"connections":[],"ui":{"fontAccessible":true,"theme":"dark"}}
+            """);
+
+        await _loader.LoadAsync();
+        await _document.ExclusiveAsync(_document.SaveAsync);
+
+        var savedJson = await File.ReadAllTextAsync(_configPath);
+
+        using var doc = JsonDocument.Parse(savedJson);
+        var ui = doc.RootElement.GetProperty("ui");
+        ui.GetProperty("fontProfile").GetString().Should().Be(FontProfiles.Accessible);
+        ui.TryGetProperty("fontAccessible", out _).Should().BeFalse();
+        ui.TryGetProperty("fontFamily", out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenSparkplugAndLegacyFontInSameFile_StillMigratesFont()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """
+            {"connections":[],"sparkplug":{"autoRequestRebirth":true},"ui":{"fontAccessible":true}}
+            """);
+
+        await _loader.LoadAsync();
+
+        _document.Config.Sparkplug!.AutoRequestRebirth.Should().BeTrue();
+        _document.Config.Ui.FontProfile.Should().Be(FontProfiles.Accessible);
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenFontProfileAndLegacyFontAccessible_ProfileWins()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """
+            {"connections":[],"ui":{"fontProfile":"standard","fontAccessible":true}}
+            """);
+
+        await _loader.LoadAsync();
+
+        _document.Config.Ui.FontProfile.Should().Be(FontProfiles.Standard);
+    }
+
+    [Test]
+    public async Task SaveAsync_AfterFontMigration_StripsLegacyFontFamily()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """
+            {"connections":[],"ui":{"fontAccessible":true,"fontFamily":"OpenDyslexic","theme":"dark"}}
+            """);
+
+        await _loader.LoadAsync();
+        await _document.ExclusiveAsync(_document.SaveAsync);
+
+        var savedJson = await File.ReadAllTextAsync(_configPath);
+
+        using var doc = JsonDocument.Parse(savedJson);
+        var ui = doc.RootElement.GetProperty("ui");
+        ui.GetProperty("fontProfile").GetString().Should().Be(FontProfiles.Accessible);
+        ui.TryGetProperty("fontAccessible", out _).Should().BeFalse();
+        ui.TryGetProperty("fontFamily", out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenFileDoesNotExist_SeededFontProfileIsStandard()
+    {
+        await _loader.LoadAsync();
+
+        _document.Config.Ui.FontProfile.Should().Be(FontProfiles.Standard);
+    }
 }

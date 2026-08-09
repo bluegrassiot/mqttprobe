@@ -18,11 +18,8 @@ internal sealed class PreferenceSettings(ISettingsDocument document)
     public Task SetThemeAsync(string theme) =>
         SetUiAsync(ui => ui.Theme = theme);
 
-    public Task SetFontFamilyAsync(string fontFamily) =>
-        SetUiAsync(ui => ui.FontFamily = fontFamily);
-
-    public Task SetFontAccessibleAsync(bool accessible) =>
-        SetUiAsync(ui => ui.FontAccessible = accessible);
+    public Task SetFontProfileAsync(string fontProfile) =>
+        SetUiAsync(ui => ui.FontProfile = FontProfiles.Normalize(fontProfile));
 
     public Task SetAutoResubscribeAsync(bool autoResubscribe) =>
         SetUiAsync(ui => ui.AutoResubscribe = autoResubscribe);

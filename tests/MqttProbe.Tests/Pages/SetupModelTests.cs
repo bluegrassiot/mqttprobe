@@ -25,6 +25,7 @@ public class SetupModelTests
 {
     private IAuthSettings _mockConfig = null!;
     private IUserAuthService _mockAuth = null!;
+    private IUiSettings _mockUiSettings = null!;
 
     [SetUp]
     public void Setup()
@@ -33,9 +34,11 @@ public class SetupModelTests
         var config = new AppConfiguration();
         _mockConfig.Auth.Returns(config.Auth);
         _mockAuth = Substitute.For<IUserAuthService>();
+        _mockUiSettings = Substitute.For<IUiSettings>();
+        _mockUiSettings.Ui.Returns(new UiPreferences());
     }
 
-    private SetupModel Create() => new(_mockConfig, _mockAuth);
+    private SetupModel Create() => new(_mockConfig, _mockAuth, _mockUiSettings);
 
     private static PageContext PageContextWithAuth(IAuthenticationService authService)
     {
@@ -198,5 +201,21 @@ public class SetupModelTests
 
         result.Should().BeOfType<PageResult>();
         model.ErrorMessage.Should().Contain("Community edition");
+    }
+
+    [Test]
+    public void IsAccessibleFontProfile_WhenStandard_ReturnsFalse()
+    {
+        _mockUiSettings.Ui.Returns(new UiPreferences { FontProfile = FontProfiles.Standard });
+
+        Create().IsAccessibleFontProfile.Should().BeFalse();
+    }
+
+    [Test]
+    public void IsAccessibleFontProfile_WhenAccessible_ReturnsTrue()
+    {
+        _mockUiSettings.Ui.Returns(new UiPreferences { FontProfile = FontProfiles.Accessible });
+
+        Create().IsAccessibleFontProfile.Should().BeTrue();
     }
 }

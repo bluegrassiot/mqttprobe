@@ -57,9 +57,8 @@ internal sealed class SettingsLoader(
                 ?? new AppConfiguration();
             configLoadedSuccessfully = true;
 
-            // Pass raw JSON for migration only when sparkplug section was absent.
-            var legacyJson = document.Config.Sparkplug is null ? json : null;
-            ConfigDefaults.Normalize(document.Config, legacyJson);
+            // Pass raw JSON for font profile migration (always) and sparkplug migration (when absent).
+            ConfigDefaults.Normalize(document.Config, json);
         }
         catch (Exception ex)
         {

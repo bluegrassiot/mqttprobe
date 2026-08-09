@@ -30,11 +30,22 @@ public class SparkplugSettings
     public bool AllowNodeReboot { get; set; }
 }
 
+public static class FontProfiles
+{
+    public const string Standard = "standard";
+    public const string Accessible = "accessible";
+
+    public static string Normalize(string? value) =>
+        string.Equals(value, Accessible, StringComparison.OrdinalIgnoreCase) ? Accessible : Standard;
+
+    public static bool IsAccessible(string? value) =>
+        string.Equals(Normalize(value), Accessible, StringComparison.OrdinalIgnoreCase);
+}
+
 public class UiPreferences
 {
-    public bool FontAccessible { get; set; } = true;
+    public string FontProfile { get; set; } = FontProfiles.Standard;
     public string Theme { get; set; } = "dark";
-    public string FontFamily { get; set; } = "OpenDyslexic";
     public bool AutoResubscribe { get; set; } = true;
 
     public List<string> DismissedHints { get; set; } = [];

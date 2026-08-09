@@ -12,7 +12,7 @@
     <link href="/_content/MqttProbe.Shared/css/fonts.css" rel="stylesheet" />
     <link href="/_content/MqttProbe.Shared/css/auth-layout.css" rel="stylesheet" />
 </head>
-<body>
+<body class="@(Model.IsAccessibleFontProfile ? "font-accessible" : null)">
 <div class="auth-card">
     <h1><img src="/favicon.svg" height="34" alt="" aria-hidden="true" /><span class="brand-mqtt">MQTT</span><span class="brand-probe">Probe</span></h1>
     <p class="subtitle">Sign in to start probing...</p>

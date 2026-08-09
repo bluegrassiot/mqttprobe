@@ -1,4 +1,5 @@
 @namespace MqttProbe.Components.Settings
+@using MqttProbe.Models.Configuration
 @using MqttProbe.Services.Configuration
 @inject IUiSettings UiSettings
 @inject IThemes Themes
@@ -15,13 +16,14 @@
 </div>
 
 <div class="settings-field">
-    <MudSelect T="string" Label="Font"
-               Value="@(UiSettings.Ui.FontAccessible ? "open-dyslexic" : "inter")"
-               ValueChanged="@OnFontSelectionChanged"
+    <MudSelect T="string" Label="Font profile"
+               Value="@UiSettings.Ui.FontProfile"
+               ValueChanged="@OnFontProfileChanged"
                Variant="Variant.Outlined"
+               HelperText="Accessible uses OpenDyslexic for easier reading"
                Class="settings-field-medium">
-        <MudSelectItem Value="@("inter")">Inter</MudSelectItem>
-        <MudSelectItem Value="@("open-dyslexic")">OpenDyslexic</MudSelectItem>
+        <MudSelectItem Value="@(FontProfiles.Standard)">Standard</MudSelectItem>
+        <MudSelectItem Value="@(FontProfiles.Accessible)">Accessible</MudSelectItem>
     </MudSelect>
 </div>
 
@@ -31,8 +33,8 @@
         Themes.SetTheme(value == "dark");
     }
 
-    private void OnFontSelectionChanged(string value)
+    private void OnFontProfileChanged(string value)
     {
-        Themes.SetFontAccessible(value == "open-dyslexic");
+        Themes.SetFontProfile(value);
     }
 }

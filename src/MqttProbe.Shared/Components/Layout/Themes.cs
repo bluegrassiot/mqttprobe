@@ -1,3 +1,4 @@
+using MqttProbe.Models.Configuration;
 using MudBlazor;
 
 namespace MqttProbe.Components.Layout;
@@ -6,10 +7,10 @@ public interface IThemes
 {
     public MudTheme CurrentTheme { get; }
     public bool IsDarkMode { get; }
-    public bool IsFontAccessible { get; }
+    public string FontProfile { get; }
     public string DarkLightModeButtonIcon { get; }
     public void SetTheme(bool isDark);
-    public void SetFontAccessible(bool accessible);
+    public void SetFontProfile(string profile);
     public void ToggleMode();
     public event Action? ModeChanged;
     public event Action? FontModeChanged;
@@ -128,7 +129,7 @@ public class Themes : IThemes
             PaletteLight = _lightPalette,
             PaletteDark = _darkPalette,
             LayoutProperties = new LayoutProperties { DefaultBorderRadius = "8px" },
-            Typography = BuildTypography(FontOpenDyslexic, FontOpenDyslexic)
+            Typography = BuildTypography(FontInter, FontDisplay)
         };
     }
 
@@ -154,16 +155,17 @@ public class Themes : IThemes
             }
         };
 
-    private bool _isFontAccessible;
+    private string _fontProfile = FontProfiles.Standard;
 
-    public bool IsFontAccessible
+    public string FontProfile
     {
-        get => _isFontAccessible;
-        set
+        get => _fontProfile;
+        private set
         {
-            if (_isFontAccessible == value) return;
-            _isFontAccessible = value;
-            CurrentTheme.Typography = value
+            var normalized = FontProfiles.Normalize(value);
+            if (_fontProfile == normalized) return;
+            _fontProfile = normalized;
+            CurrentTheme.Typography = FontProfiles.IsAccessible(normalized)
                 ? BuildTypography(FontOpenDyslexic, FontOpenDyslexic)
                 : BuildTypography(FontInter, FontDisplay);
             FontModeChanged?.Invoke();
@@ -191,5 +193,5 @@ public class Themes : IThemes
 
     public void ToggleMode() => SetTheme(!IsDarkMode);
 
-    public void SetFontAccessible(bool accessible) => IsFontAccessible = accessible;
+    public void SetFontProfile(string profile) => FontProfile = profile;
 }

@@ -43,8 +43,7 @@ public interface IUiSettings
     public UiPreferences Ui { get; }
 
     public Task SetThemeAsync(string theme);
-    public Task SetFontFamilyAsync(string fontFamily);
-    public Task SetFontAccessibleAsync(bool accessible);
+    public Task SetFontProfileAsync(string fontProfile);
     public Task SetAutoResubscribeAsync(bool autoResubscribe);
     public Task DismissHintAsync(string hintId);
     public bool IsHintDismissed(string hintId);

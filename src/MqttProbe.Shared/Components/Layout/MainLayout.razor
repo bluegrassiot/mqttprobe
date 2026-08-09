@@ -1,4 +1,5 @@
 @using Microsoft.JSInterop
+@using MqttProbe.Models.Configuration
 @using MqttProbe.Services.Configuration
 @inherits LayoutComponentBase
 @implements IAsyncDisposable
@@ -43,7 +44,7 @@
         Themes.FontModeChanged += OnFontModeChanged;
         UiSettings.UiPreferencesChanged += OnUiPreferencesChangedFromStore;
 
-        Themes.SetFontAccessible(UiSettings.Ui.FontAccessible);
+        Themes.SetFontProfile(UiSettings.Ui.FontProfile);
 
         var savedTheme = UiSettings.Ui.Theme;
         Themes.SetTheme(!string.Equals(savedTheme, "light", StringComparison.OrdinalIgnoreCase));
@@ -57,7 +58,7 @@
 
     private void OnFontModeChanged()
     {
-        _ = UiSettings.SetFontAccessibleAsync(Themes.IsFontAccessible);
+        _ = UiSettings.SetFontProfileAsync(Themes.FontProfile);
         if (_hasRendered)
             _ = SetBodyFontClass();
         InvokeAsync(StateHasChanged);
@@ -66,7 +67,7 @@
     private void OnUiPreferencesChangedFromStore()
     {
         var cfg = UiSettings.Ui;
-        Themes.SetFontAccessible(cfg.FontAccessible);
+        Themes.SetFontProfile(cfg.FontProfile);
         Themes.SetTheme(!string.Equals(cfg.Theme, "light", StringComparison.OrdinalIgnoreCase));
         InvokeAsync(StateHasChanged);
     }
@@ -74,7 +75,7 @@
     private async Task SetBodyFontClass() =>
         await JsRuntime.InvokeVoidAsync(
             "eval",
-            $"document.body.classList.toggle('font-accessible', {Themes.IsFontAccessible.ToString().ToLowerInvariant()});");
+            $"document.body.classList.toggle('font-accessible', {FontProfiles.IsAccessible(Themes.FontProfile).ToString().ToLowerInvariant()});");
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

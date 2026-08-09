@@ -10,7 +10,47 @@ internal static class ConfigDefaults
     // cover properties the JSON omits entirely.
     public static void Normalize(AppConfiguration config, string? legacyJson = null)
     {
-        // Sparkplug settings: migrate from legacy ui keys when section is absent.
+        MigrateFontProfile(config, legacyJson);
+        MigrateSparkplug(config, legacyJson);
+    }
+
+    private static void MigrateFontProfile(AppConfiguration config, string? legacyJson)
+    {
+        if (config.Ui is null) return;
+
+        if (legacyJson is not null)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(legacyJson);
+                if (doc.RootElement.TryGetProperty("ui", out var ui)
+                    && ui.ValueKind == JsonValueKind.Object)
+                {
+                    if (ui.TryGetProperty("fontProfile", out var fp)
+                        && fp.ValueKind == JsonValueKind.String)
+                    {
+                        config.Ui.FontProfile = FontProfiles.Normalize(fp.GetString());
+                    }
+                    else if (ui.TryGetProperty("fontAccessible", out var fa)
+                             && (fa.ValueKind == JsonValueKind.True || fa.ValueKind == JsonValueKind.False))
+                    {
+                        config.Ui.FontProfile = fa.GetBoolean()
+                            ? FontProfiles.Accessible
+                            : FontProfiles.Standard;
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Malformed JSON: keep defaults.
+            }
+        }
+
+        config.Ui.FontProfile = FontProfiles.Normalize(config.Ui.FontProfile);
+    }
+
+    private static void MigrateSparkplug(AppConfiguration config, string? legacyJson)
+    {
         if (config.Sparkplug is null)
         {
             config.Sparkplug = new SparkplugSettings();

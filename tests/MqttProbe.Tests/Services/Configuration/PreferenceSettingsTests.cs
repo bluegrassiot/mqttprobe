@@ -39,25 +39,34 @@ public class PreferenceSettingsTests
     }
 
     [Test]
-    public async Task SetFontAccessibleAsync_RaisesUiPreferencesChanged()
+    public async Task SetFontProfileAsync_RaisesUiPreferencesChanged()
     {
         var fired = false;
         _preferences.UiPreferencesChanged += () => fired = true;
 
-        await _preferences.SetFontAccessibleAsync(true);
+        await _preferences.SetFontProfileAsync(FontProfiles.Accessible);
 
         fired.Should().BeTrue();
     }
 
     [Test]
-    public async Task SetFontFamilyAsync_RaisesUiPreferencesChanged()
+    public async Task SetFontProfileAsync_NormalizesUnknownToStandard()
     {
-        var fired = false;
-        _preferences.UiPreferencesChanged += () => fired = true;
+        await _preferences.SetFontProfileAsync("garbage");
 
-        await _preferences.SetFontFamilyAsync("Roboto");
+        _document.Config.Ui.FontProfile.Should().Be(FontProfiles.Standard);
+    }
 
-        fired.Should().BeTrue();
+    [Test]
+    public async Task SetFontProfileAsync_PersistsValue()
+    {
+        await _preferences.SetFontProfileAsync(FontProfiles.Accessible);
+
+        _document.Config.Ui.FontProfile.Should().Be(FontProfiles.Accessible);
+
+        using var reloaded = new SettingsDocument(_configPath);
+        await new SettingsLoader(reloaded, new ConnectionSecrets(null, null), false, null).LoadAsync();
+        reloaded.Config.Ui.FontProfile.Should().Be(FontProfiles.Accessible);
     }
 
     [Test]

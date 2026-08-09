@@ -1,4 +1,5 @@
 using MqttProbe.Components.Layout;
+using MqttProbe.Models.Configuration;
 
 namespace MqttProbe.Shared.Tests.Components.Layout;
 
@@ -132,27 +133,68 @@ public class ThemesTests
     }
 
     [Test]
-    public void SetFontAccessible_True_EnablesAccessibleFont()
+    public void FontProfile_DefaultsToStandard()
     {
         var themes = new Themes();
 
-        themes.SetFontAccessible(true);
-
-        themes.IsFontAccessible.Should().BeTrue();
+        themes.FontProfile.Should().Be(FontProfiles.Standard);
     }
 
     [Test]
-    public void SetFontAccessible_FiresFontModeChangedOnlyOnChange()
+    public void DefaultTypography_UsesInterFont()
     {
         var themes = new Themes();
-        themes.SetFontAccessible(false); // normalize
+
+        themes.CurrentTheme.Typography.Default.FontFamily.Should().Contain("Inter");
+    }
+
+    [Test]
+    public void SetFontProfile_Accessible_UsesOpenDyslexicTypography()
+    {
+        var themes = new Themes();
+
+        themes.SetFontProfile(FontProfiles.Accessible);
+
+        themes.FontProfile.Should().Be(FontProfiles.Accessible);
+        themes.CurrentTheme.Typography.Default.FontFamily.Should().Contain("OpenDyslexic");
+        themes.CurrentTheme.Typography.H1.FontFamily.Should().Contain("OpenDyslexic");
+        themes.CurrentTheme.Typography.H6.FontFamily.Should().Contain("OpenDyslexic");
+    }
+
+    [Test]
+    public void SetFontProfile_Standard_UsesInterAndChakraPetch()
+    {
+        var themes = new Themes();
+        themes.SetFontProfile(FontProfiles.Accessible);
+
+        themes.SetFontProfile(FontProfiles.Standard);
+
+        themes.FontProfile.Should().Be(FontProfiles.Standard);
+        themes.CurrentTheme.Typography.Default.FontFamily.Should().Contain("Inter");
+        themes.CurrentTheme.Typography.H1.FontFamily.Should().Contain("Chakra Petch");
+    }
+
+    [Test]
+    public void SetFontProfile_FiresFontModeChangedOnlyOnChange()
+    {
+        var themes = new Themes();
+        themes.SetFontProfile(FontProfiles.Standard); // normalize
         var count = 0;
         themes.FontModeChanged += () => count++;
 
-        themes.SetFontAccessible(false); // no-op
-        themes.SetFontAccessible(true);  // fires
-        themes.SetFontAccessible(true);  // no-op
+        themes.SetFontProfile(FontProfiles.Standard); // no-op
+        themes.SetFontProfile(FontProfiles.Accessible); // fires
+        themes.SetFontProfile(FontProfiles.Accessible); // no-op
 
         count.Should().Be(1);
+    }
+
+    [Test]
+    public void SetFontProfile_InvalidValue_NormalizesToStandard()
+    {
+        var themes = new Themes();
+        themes.SetFontProfile("garbage");
+
+        themes.FontProfile.Should().Be(FontProfiles.Standard);
     }
 }

@@ -26,6 +26,7 @@ public class LoginModelTests
 {
     private IAuthSettings _mockConfig = null!;
     private IUserAuthService _mockAuth = null!;
+    private IUiSettings _mockUiSettings = null!;
 
     [SetUp]
     public void Setup()
@@ -34,9 +35,11 @@ public class LoginModelTests
         var config = new AppConfiguration();
         _mockConfig.Auth.Returns(config.Auth);
         _mockAuth = Substitute.For<IUserAuthService>();
+        _mockUiSettings = Substitute.For<IUiSettings>();
+        _mockUiSettings.Ui.Returns(new UiPreferences());
     }
 
-    private LoginModel Create() => new(_mockConfig, _mockAuth);
+    private LoginModel Create() => new(_mockConfig, _mockAuth, _mockUiSettings);
 
     private static PageContext PageContextWithAuth(IAuthenticationService authService)
     {
@@ -197,5 +200,21 @@ public class LoginModelTests
         await model.OnPostAsync("user", "wrong", null);
 
         model.ReturnUrl.Should().Be("/");
+    }
+
+    [Test]
+    public void IsAccessibleFontProfile_WhenStandard_ReturnsFalse()
+    {
+        _mockUiSettings.Ui.Returns(new UiPreferences { FontProfile = FontProfiles.Standard });
+
+        Create().IsAccessibleFontProfile.Should().BeFalse();
+    }
+
+    [Test]
+    public void IsAccessibleFontProfile_WhenAccessible_ReturnsTrue()
+    {
+        _mockUiSettings.Ui.Returns(new UiPreferences { FontProfile = FontProfiles.Accessible });
+
+        Create().IsAccessibleFontProfile.Should().BeTrue();
     }
 }

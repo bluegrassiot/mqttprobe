@@ -31,7 +31,7 @@ public class SettingsTests : BunitTestContext
     {
         var cfg = new AppConfiguration
         {
-            Ui = new UiPreferences { Theme = "dark", FontAccessible = false, AutoResubscribe = true },
+            Ui = new UiPreferences { Theme = "dark", FontProfile = FontProfiles.Standard, AutoResubscribe = true },
             Performance = new PerformanceSettings { MaxStoredMessages = 10_000, MaxMessagesPerSecond = 50_000 }
         };
         _mockUi = Substitute.For<IUiSettings>();

@@ -58,7 +58,6 @@ public class MainLayoutTests : BunitTestContext
         Services.AddSingleton(_mockAppInfo);
         Services.AddSingleton(_mockSessionState);
         Services.AddUiSettings(_mockConfig);
-        Services.AddSingleton(_mockJs);
         Services.AddSingleton(_mockUpdateService);
         _mockLifecycle = Substitute.For<IConnectionSessionLifecycle>();
         _mockLifecycle.StopActiveConnectionAsync().Returns(Task.CompletedTask);
@@ -247,18 +246,18 @@ public class MainLayoutTests : BunitTestContext
         Services.AddSingleton<IThemes>(themes);
         var cfg = new AppConfiguration
         {
-            Ui = new UiPreferences { Theme = "dark", FontAccessible = false }
+            Ui = new UiPreferences { Theme = "dark", FontProfile = FontProfiles.Standard }
         };
         _mockConfig.Ui.Returns(cfg.Ui);
 
         var cut = RenderLayout();
 
         cfg.Ui.Theme = "light";
-        cfg.Ui.FontAccessible = true;
+        cfg.Ui.FontProfile = FontProfiles.Accessible;
         _mockConfig.UiPreferencesChanged += Raise.Event<Action>();
 
         themes.IsDarkMode.Should().BeFalse();
-        themes.IsFontAccessible.Should().BeTrue();
+        themes.FontProfile.Should().Be(FontProfiles.Accessible);
     }
 
     [Test]
@@ -271,6 +270,64 @@ public class MainLayoutTests : BunitTestContext
 
         var logout = cut.FindAll("button").First(b => b.TextContent.Contains("Logout"));
         logout.ClassList.Should().NotContain("mud-button-color-error");
+    }
+
+    [Test]
+    public async Task OnAfterRenderAsync_FirstRender_AccessibleProfile_InvokesJsToggleTrue()
+    {
+        var cfg = new AppConfiguration
+        {
+            Ui = new UiPreferences { FontProfile = FontProfiles.Accessible }
+        };
+        _mockConfig.Ui.Returns(cfg.Ui);
+
+        JSInterop.SetupVoid("eval", _ => true);
+
+        RenderLayout();
+        await Task.Delay(50);
+
+        var invocation = JSInterop.VerifyInvoke("eval");
+        invocation.Arguments[0]!.ToString()!.Should().Contain("classList.toggle('font-accessible', true)");
+    }
+
+    [Test]
+    public async Task OnAfterRenderAsync_FirstRender_StandardProfile_InvokesJsToggleFalse()
+    {
+        var cfg = new AppConfiguration
+        {
+            Ui = new UiPreferences { FontProfile = FontProfiles.Standard }
+        };
+        _mockConfig.Ui.Returns(cfg.Ui);
+
+        JSInterop.SetupVoid("eval", _ => true);
+
+        RenderLayout();
+        await Task.Delay(50);
+
+        var invocation = JSInterop.VerifyInvoke("eval");
+        invocation.Arguments[0]!.ToString()!.Should().Contain("classList.toggle('font-accessible', false)");
+    }
+
+    [Test]
+    public async Task FontModeChanged_AfterRender_CallsSetFontProfileAsync()
+    {
+        var themes = new Themes();
+        Services.AddSingleton<IThemes>(themes);
+        var cfg = new AppConfiguration
+        {
+            Ui = new UiPreferences { FontProfile = FontProfiles.Standard }
+        };
+        _mockConfig.Ui.Returns(cfg.Ui);
+        var capturedProfile = (string?)null;
+        _mockConfig.SetFontProfileAsync(Arg.Do<string>(p => capturedProfile = p))
+            .Returns(Task.CompletedTask);
+
+        RenderLayout();
+        await Task.Delay(50);
+
+        themes.SetFontProfile(FontProfiles.Accessible);
+
+        capturedProfile.Should().Be(FontProfiles.Accessible);
     }
 
 }

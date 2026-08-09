@@ -1,12 +1,16 @@
-/* Standard font roles (brand default).
+/* Standard font profile (brand default).
    MudBlazor typography is set separately in Components/Layout/Themes.cs. */
 :root {
-    --font-ui: 'OpenDyslexic', system-ui, sans-serif;
-    --font-mono: 'OpenDyslexic Mono', monospace;
-    --font-display: 'OpenDyslexic', sans-serif;
+    --font-ui: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-display: 'Chakra Petch', sans-serif;
 }
 
-/* Accessible font overrides — class applied by the font-mode toggle */
+html, body {
+    font-family: var(--font-ui);
+}
+
+/* Accessible font profile — class applied by the font profile */
 .font-accessible {
     --font-ui: 'OpenDyslexic', system-ui, sans-serif;
     --font-mono: 'OpenDyslexic Mono', monospace;

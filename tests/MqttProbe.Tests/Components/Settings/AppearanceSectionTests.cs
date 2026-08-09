@@ -21,7 +21,7 @@ public class AppearanceSectionTests : BunitTestContext
         _mockStore = Substitute.For<IUiSettings>();
         var cfg = new AppConfiguration
         {
-            Ui = new UiPreferences { Theme = "dark", FontAccessible = false }
+            Ui = new UiPreferences { Theme = "dark", FontProfile = FontProfiles.Standard }
         };
         _mockStore.Ui.Returns(cfg.Ui);
         _themes = new Themes();
@@ -48,10 +48,10 @@ public class AppearanceSectionTests : BunitTestContext
         var cut = Render<AppearanceSection>();
 
         var fontSelect = cut.FindComponents<MudSelect<string>>()
-            .First(s => s.Instance.Label == "Font");
-        cut.InvokeAsync(() => fontSelect.Instance.ValueChanged.InvokeAsync("open-dyslexic"));
+            .First(s => s.Instance.Label == "Font profile");
+        cut.InvokeAsync(() => fontSelect.Instance.ValueChanged.InvokeAsync(FontProfiles.Accessible));
 
-        _themes.IsFontAccessible.Should().BeTrue();
+        _themes.FontProfile.Should().Be(FontProfiles.Accessible);
     }
 
     [Test]

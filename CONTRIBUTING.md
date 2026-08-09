@@ -63,22 +63,22 @@ CI still runs full checks on pull requests. Prefer fixing failures over skipping
 
 ### Tests and Coverage
 
-- Run `dotnet test` before opening a PR.
+- Run `dotnet test` before opening a PR (or the unit/integration project commands under CI Checks).
 - Add or update tests for behavior changes and bug fixes.
-- Keep test coverage at or above 75%.
-- Use `python scripts/ci/coverage.py --open` to inspect coverage when needed.
+- Prefer unit/UI tests for pure logic. For **real MQTT broker boundary** changes (TLS/mTLS, live connect/subscribe/publish, Sparkplug on the wire, broker-only auth), also add or extend `tests/MqttProbe.IntegrationTests`, reusing `MtlsBrokerFixture` in `tests/MqttProbe.TestInfrastructure`. Write those tests even if you lack Docker locally; CI runs them, and without Docker they skip rather than fail.
+- Keep unit test coverage at or above 80% (`python scripts/ci/coverage.py --open`). Integration tests are excluded from that gate on purpose.
 
 ### CI Checks
 
 Before submitting changes, make sure the same checks used by CI pass locally:
 
 - `dotnet build MqttProbe.slnx`
-- `dotnet test tests/MqttProbe.Core.Tests`
-- `dotnet test tests/MqttProbe.UI.Tests`
+- Unit: `dotnet test tests/MqttProbe.Core.Tests` and `dotnet test tests/MqttProbe.UI.Tests`
+- Integration (needs Docker; CI always runs these): `dotnet test tests/MqttProbe.IntegrationTests`
 - `python scripts/ci/format-check.py`
 - `python scripts/ci/inspect.py --tool devskim --fail-on warning`
 
-Local hooks cover a faster subset; still run the commands above before a PR if you skipped hooks.
+Local hooks cover a faster subset (unit tests only, no integration). Still run the commands above before a PR if you skipped hooks. Without Docker, integration tests skip rather than fail.
 
 ### Commit Messages
 

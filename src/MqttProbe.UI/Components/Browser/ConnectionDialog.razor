@@ -136,7 +136,7 @@
         UxMetrics?.RecordConnectFailure();
         Logger.LogError(args.Exception,
             "Connecting to broker {Host}:{Port} failed. ResultCode={ResultCode}",
-            _selectedConnection.Host, _selectedConnection?.Port,
+            _selectedConnection.Host, _selectedConnection.Port,
             args.ConnectResult?.ResultCode);
         await InvokeAsync(StateHasChanged);
     }
@@ -264,6 +264,9 @@
                 SessionState.ActiveCertificateResource = _activeCertResource;
                 _activeCertResource = null;
             }
+            // Start capture before StartAsync so handlers are listening when retained messages arrive.
+            await MessageStoreManagerService.Start();
+            await ChartDataService.StartAsync();
             await ManagedMqttClient.StartAsync(builtOptions);
         }
         catch (Exception ex)

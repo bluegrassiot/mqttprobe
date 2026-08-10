@@ -10,7 +10,6 @@ using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.TestInfrastructure.Security;
-using MqttProbe.UI.Components.Browser;
 using MqttProbe.UI.Tests.TestHelpers;
 // TestHelpers moved to Core.Tests
 using MudBlazor;
@@ -33,6 +32,7 @@ public class ConnectionDialogTests : BunitTestContext
     private ICertificateAssetStore _mockCertStore = null!;
     private ICertificateFilePicker _mockFilePicker = null!;
     private ICertificateInputCapability _mockInputCapability = null!;
+    private IChartDataService _mockChart = null!;
 
     private Func<MqttClientConnectedEventArgs, Task>? _connectedHandler;
     private Func<MqttConnectingFailedEventArgs, Task>? _failedHandler;
@@ -52,6 +52,8 @@ public class ConnectionDialogTests : BunitTestContext
         _mockFilePicker = Substitute.For<ICertificateFilePicker>();
         _mockInputCapability = Substitute.For<ICertificateInputCapability>();
         _mockInputCapability.UsesInputFileComponent.Returns(false);
+        _mockChart = Substitute.For<IChartDataService>();
+        _mockChart.StartAsync().Returns(Task.CompletedTask);
 
         var cfg = new AppConfiguration();
         _mockConnections.Connections.Returns(cfg.Connections);
@@ -81,7 +83,7 @@ public class ConnectionDialogTests : BunitTestContext
         Services.AddSingleton(_mockOptionsBuilder);
         Services.AddSingleton(_mockCoordinator);
         Services.AddSingleton(Substitute.For<ILogger<ConnectionDialog>>());
-        Services.AddSingleton(Substitute.For<IChartDataService>());
+        Services.AddSingleton(_mockChart);
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
         Services.AddSingleton(Substitute.For<IConnectionSessionLifecycle>());
         Services.AddSingleton(_mockCertStore);
@@ -466,6 +468,37 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
+    public async Task Connect_StartsMessageStoreAndChart_BeforeCallingStartAsync()
+    {
+        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
+        var cfg = new AppConfiguration
+        {
+            Connections =
+            [
+                new Connection
+                {
+                    Name = "TestConn",
+                    Host = "localhost",
+                    Port = 1883,
+                    SubscribedTopics = [new SubscribedTopic { Topic = "saved/topic" }]
+                }
+            ]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        await _mockClient.Received(1).StartAsync(Arg.Any<MqttManagedClientOptions>());
+        Received.InOrder(() =>
+        {
+            _mockMsgStore.Start();
+            _mockChart.StartAsync();
+            _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>());
+        });
+    }
+
+    [Test]
     public async Task ConnectingFailed_DoesNotCallSubscriptionManagerAdd()
     {
         _mockSubMgr.Add(Arg.Any<string>()).Returns(Task.CompletedTask);
@@ -698,9 +731,6 @@ public class ConnectionDialogTests : BunitTestContext
         ActivateTab("Transport");
         SetTextField("Host", "localhost");
     }
-
-    private AngleSharp.Dom.IElement FindMessageBoxButton(string text) =>
-        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains(text));
 
     [Test]
     public async Task Connect_WithUnsavedChanges_ShowsSaveBeforeConnectPrompt()
@@ -1012,7 +1042,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Markup.Should().Contain("Select PFX/P12 file");
 
         // Click PEM toggle item
-        var pemItem = _dialogProvider.Find(".mud-toggle-item");
+        _dialogProvider.Find(".mud-toggle-item");
         // The first toggle item is PFX (default), the second is PEM
         var toggleItems = _dialogProvider.FindAll(".mud-toggle-item");
         var pemToggle = toggleItems.First(i => i.TextContent.Trim() == "PEM");

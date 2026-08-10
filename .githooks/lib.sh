@@ -143,6 +143,32 @@ any_format_relevant() {
     return 1
 }
 
+# Returns 0 if path should trigger comment check (C#/Razor under src/ or tests/).
+is_comment_check_relevant_path() {
+    local p=$1
+    p=${p//\\//}
+    case "$p" in
+        src/*|tests/*)
+            case "$p" in
+                *.cs|*.razor) return 0 ;;
+            esac
+            ;;
+    esac
+    return 1
+}
+
+# stdin: one path per line. Returns 0 if any path triggers comment check.
+any_comment_check_relevant() {
+    local p
+    while IFS= read -r p || [[ -n "$p" ]]; do
+        [[ -z "$p" ]] && continue
+        if is_comment_check_relevant_path "$p"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Returns 0 if path should trigger file-length check.
 is_file_length_relevant_path() {
     local p=$1

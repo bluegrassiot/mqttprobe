@@ -62,6 +62,10 @@ jobs:
       - name: Blocking awaits
         run: python3 scripts/ci/check-blocking-awaits.py
 
+      # Enforces AGENTS.md ban on routine XML doc comments.
+      - name: Comments
+        run: python3 scripts/ci/check-comments.py
+
       - name: Unit tests
         run: |
           dotnet test tests/MqttProbe.Core.Tests/MqttProbe.Core.Tests.csproj \

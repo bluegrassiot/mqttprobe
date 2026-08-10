@@ -13,6 +13,7 @@
     <File Path="Dockerfile" />
   </Folder>
   <Folder Name="/docs/">
+    <File Path="AGENTS.md" />
     <File Path="CONTRIBUTING.md" />
     <File Path="LICENSE" />
     <File Path="NOTICES" />

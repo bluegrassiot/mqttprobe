@@ -36,13 +36,6 @@ public static class MqttProbeServiceRegistration
         return services;
     }
 
-    /// <summary>
-    /// Registers all UI-layer services: MudBlazor, chart theming, and user notifications.
-    /// Call order relative to <see cref="MqttProbeCoreServiceRegistration.AddMqttProbeCore"/>
-    /// does not matter (both only register into the service collection). Hosts that also need
-    /// domain services must separately call AddMqttProbeCore, AddMqttProbeSettings,
-    /// AddMqttProbePlugins, and AddMqttProbeSparkplugTopology.
-    /// </summary>
     public static IServiceCollection AddMqttProbeUi(this IServiceCollection services)
     {
         services.AddMqttProbeMud();

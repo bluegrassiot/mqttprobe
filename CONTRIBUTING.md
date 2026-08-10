@@ -34,7 +34,7 @@ git config core.hooksPath .githooks
 
 | Hook | What it runs |
 |------|----------------|
-| `pre-commit` | Security scan (`devskim`, ~3s) on any staged change; workflow lint (`python scripts/ci/actionlint.py`, ~1s) when staged files include `.github/workflows/*.yml`; format check (`python scripts/ci/format-check.py`) when staged files include C#/Razor/project/editorconfig |
+| `pre-commit` | Security scan (`devskim`, ~3s) on any staged change; workflow lint (`python scripts/ci/actionlint.py`, ~1s) when staged files include `.github/workflows/*.yml`; format check (`python scripts/ci/format-check.py`) when staged files include C#/Razor/project/editorconfig; comment check (`python scripts/ci/check-comments.py`) when staged files include C#/Razor under `src/` or `tests/` |
 | `pre-push` | Path-aware build (usually `MqttProbe.NoMaui.slnf`) and unit tests when code changes |
 
 Both hooks print per-step and total timing. Docs-only changes (markdown under `docs/`, `*.md`, license files) skip the heavy steps automatically — but not the security scan, since a pasted token in a README is exactly what it looks for.
@@ -77,6 +77,7 @@ Before submitting changes, make sure the same checks used by CI pass locally:
 - Integration (needs Docker; CI always runs these): `dotnet test tests/MqttProbe.IntegrationTests`
 - `python scripts/ci/format-check.py`
 - `python scripts/ci/inspect.py --tool devskim --fail-on warning`
+- `python scripts/ci/check-comments.py`
 
 Local hooks cover a faster subset (unit tests only, no integration). Still run the commands above before a PR if you skipped hooks. Without Docker, integration tests skip rather than fail.
 

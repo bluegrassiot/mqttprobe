@@ -31,6 +31,7 @@
 - Build with `dotnet build MqttProbe.slnx`.
 - For code changes, check coverage with `python scripts/ci/coverage.py` (unit projects only; integration is excluded from coverage).
 - Treat 80% coverage as a hard minimum for new code.
+- Check for routine XML docs with `python scripts/ci/check-comments.py`.
 
 ## When to add integration tests
 

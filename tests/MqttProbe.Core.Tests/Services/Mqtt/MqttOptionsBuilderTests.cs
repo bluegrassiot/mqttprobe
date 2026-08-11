@@ -1,17 +1,9 @@
 using System.Net;
 using MQTTnet;
 using MQTTnet.Formatter;
-using MqttProbe.Core.Models.Chart;
-using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Mqtt;
-using MqttProbe.Core.Models.Sparkplug;
-using MqttProbe.Core.Services.Chart;
-using MqttProbe.Core.Services.Configuration;
-using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
-using MqttProbe.Core.Services.Platform;
 using MqttProbe.Core.Services.Security;
-using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.TestInfrastructure.Security;
 
 namespace MqttProbe.Core.Tests.Services.Mqtt;
@@ -53,7 +45,7 @@ public class MqttOptionsBuilderTests
         var conn = TcpConnection();
         conn.ClientId = "my-client-id";
         var options = _builder.Build(conn);
-        ((MqttClientOptions)options.ClientOptions).ClientId.Should().StartWith("my-client-id-");
+        options.ClientOptions.ClientId.Should().StartWith("my-client-id-");
     }
 
     [Test]
@@ -61,8 +53,8 @@ public class MqttOptionsBuilderTests
     {
         var conn = TcpConnection();
         conn.ClientId = "shared-id";
-        var id1 = ((MqttClientOptions)_builder.Build(conn).ClientOptions).ClientId;
-        var id2 = ((MqttClientOptions)new MqttOptionsBuilder(_mockCertStore).Build(conn).ClientOptions).ClientId;
+        var id1 = _builder.Build(conn).ClientOptions.ClientId;
+        var id2 = new MqttOptionsBuilder(_mockCertStore).Build(conn).ClientOptions.ClientId;
         id1.Should().NotBe(id2);
     }
 
@@ -71,8 +63,8 @@ public class MqttOptionsBuilderTests
     {
         var conn = TcpConnection();
         conn.ClientId = "shared-id";
-        var id1 = ((MqttClientOptions)_builder.Build(conn).ClientOptions).ClientId;
-        var id2 = ((MqttClientOptions)_builder.Build(conn).ClientOptions).ClientId;
+        var id1 = _builder.Build(conn).ClientOptions.ClientId;
+        var id2 = _builder.Build(conn).ClientOptions.ClientId;
         id1.Should().Be(id2);
     }
 
@@ -83,7 +75,7 @@ public class MqttOptionsBuilderTests
         conn.User = "admin";
         conn.Password = "secret";
         var options = _builder.Build(conn);
-        ((MqttClientOptions)options.ClientOptions).Credentials.Should().NotBeNull();
+        options.ClientOptions.Credentials.Should().NotBeNull();
     }
 
     [Test]
@@ -93,7 +85,7 @@ public class MqttOptionsBuilderTests
         conn.User = null;
         conn.Password = null;
         var options = _builder.Build(conn);
-        ((MqttClientOptions)options.ClientOptions).Credentials.Should().BeNull();
+        options.ClientOptions.Credentials.Should().BeNull();
     }
 
     [Test]
@@ -131,7 +123,7 @@ public class MqttOptionsBuilderTests
             UseTls = false
         };
         var options = _builder.Build(conn);
-        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        var ws = (MqttClientWebSocketOptions)options.ClientOptions.ChannelOptions!;
         ws.Uri.Should().StartWith("ws://");
     }
 
@@ -149,7 +141,7 @@ public class MqttOptionsBuilderTests
             UseTls = true
         };
         var options = _builder.Build(conn);
-        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        var ws = (MqttClientWebSocketOptions)options.ClientOptions.ChannelOptions!;
         ws.Uri.Should().StartWith("wss://");
     }
 
@@ -167,7 +159,7 @@ public class MqttOptionsBuilderTests
             UseTls = false
         };
         var options = _builder.Build(conn);
-        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        var ws = (MqttClientWebSocketOptions)options.ClientOptions.ChannelOptions!;
         ws.Uri.Should().Be("ws://broker.local:8080/mqtt");
     }
 
@@ -185,7 +177,7 @@ public class MqttOptionsBuilderTests
             UseTls = false
         };
         var options = _builder.Build(conn);
-        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        var ws = (MqttClientWebSocketOptions)options.ClientOptions.ChannelOptions!;
         ws.Uri.Should().Be("ws://broker.local:8080/mqtt");
     }
 
@@ -203,7 +195,7 @@ public class MqttOptionsBuilderTests
             UseTls = false
         };
         var options = _builder.Build(conn);
-        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        var ws = (MqttClientWebSocketOptions)options.ClientOptions.ChannelOptions!;
         ws.Uri.Should().Be("ws://broker.local:8080/");
     }
 
@@ -221,7 +213,7 @@ public class MqttOptionsBuilderTests
             UseTls = false
         };
         var options = _builder.Build(conn);
-        var ws = (MqttClientWebSocketOptions)((MqttClientOptions)options.ClientOptions).ChannelOptions!;
+        var ws = (MqttClientWebSocketOptions)options.ClientOptions.ChannelOptions!;
         ws.Uri.Should().Be("ws://broker.local:8080/");
     }
 
@@ -254,7 +246,7 @@ public class MqttOptionsBuilderTests
     public void Build_DefaultKeepAlivePeriod_Uses15Seconds()
     {
         var options = _builder.Build(TcpConnection());
-        ((MqttClientOptions)options.ClientOptions).KeepAlivePeriod.Should().Be(TimeSpan.FromSeconds(15));
+        options.ClientOptions.KeepAlivePeriod.Should().Be(TimeSpan.FromSeconds(15));
     }
 
     [Test]
@@ -263,7 +255,7 @@ public class MqttOptionsBuilderTests
         var conn = TcpConnection();
         conn.KeepAlivePeriod = 30;
         var options = _builder.Build(conn);
-        ((MqttClientOptions)options.ClientOptions).KeepAlivePeriod.Should().Be(TimeSpan.FromSeconds(30));
+        options.ClientOptions.KeepAlivePeriod.Should().Be(TimeSpan.FromSeconds(30));
     }
 
     [Test]
@@ -272,14 +264,14 @@ public class MqttOptionsBuilderTests
         var conn = TcpConnection();
         conn.KeepAlivePeriod = 0;
         var options = _builder.Build(conn);
-        ((MqttClientOptions)options.ClientOptions).KeepAlivePeriod.Should().Be(TimeSpan.FromSeconds(15));
+        options.ClientOptions.KeepAlivePeriod.Should().Be(TimeSpan.FromSeconds(15));
     }
 
     [Test]
     public void Build_DefaultConnectTimeout_Uses15Seconds()
     {
         var options = _builder.Build(TcpConnection());
-        ((MqttClientOptions)options.ClientOptions).Timeout.Should().Be(TimeSpan.FromSeconds(15));
+        options.ClientOptions.Timeout.Should().Be(TimeSpan.FromSeconds(15));
     }
 
     [Test]
@@ -288,7 +280,7 @@ public class MqttOptionsBuilderTests
         var conn = TcpConnection();
         conn.ConnectTimeout = 30;
         var options = _builder.Build(conn);
-        ((MqttClientOptions)options.ClientOptions).Timeout.Should().Be(TimeSpan.FromSeconds(30));
+        options.ClientOptions.Timeout.Should().Be(TimeSpan.FromSeconds(30));
     }
 
     [Test]
@@ -297,7 +289,7 @@ public class MqttOptionsBuilderTests
         var conn = TcpConnection();
         conn.ConnectTimeout = 0;
         var options = _builder.Build(conn);
-        ((MqttClientOptions)options.ClientOptions).Timeout.Should().Be(TimeSpan.FromSeconds(15));
+        options.ClientOptions.Timeout.Should().Be(TimeSpan.FromSeconds(15));
     }
 
     [Test]
@@ -313,7 +305,7 @@ public class MqttOptionsBuilderTests
         var conn = TcpConnection();
         conn.MqttVersion = MqttVersion.V311;
         var options = _builder.Build(conn);
-        ((MqttClientOptions)options.ClientOptions).ProtocolVersion.Should().Be(MqttProtocolVersion.V311);
+        options.ClientOptions.ProtocolVersion.Should().Be(MqttProtocolVersion.V311);
     }
 
     [Test]
@@ -322,7 +314,7 @@ public class MqttOptionsBuilderTests
         var conn = TcpConnection();
         conn.MqttVersion = MqttVersion.V5;
         var options = _builder.Build(conn);
-        ((MqttClientOptions)options.ClientOptions).ProtocolVersion.Should().Be(MqttProtocolVersion.V500);
+        options.ClientOptions.ProtocolVersion.Should().Be(MqttProtocolVersion.V500);
     }
 
     [Test]
@@ -336,7 +328,7 @@ public class MqttOptionsBuilderTests
             .Returns(new ClientCertificateBundle(cert));
 
         var resource = new CertificateSessionResource();
-        var options = await _builder.BuildAsync(conn, resource);
+        await _builder.BuildAsync(conn, resource);
 
         resource.Certificate.Should().NotBeNull();
         resource.Certificate!.HasPrivateKey.Should().BeTrue();
@@ -358,7 +350,7 @@ public class MqttOptionsBuilderTests
         var tcp = TcpOpts(options);
         var clientCerts = tcp.TlsOptions.ClientCertificatesProvider?.GetCertificates();
         clientCerts.Should().NotBeNull();
-        clientCerts!.Count.Should().BeGreaterThan(0);
+        clientCerts.Count.Should().BeGreaterThan(0);
     }
 
     [Test]
@@ -380,7 +372,107 @@ public class MqttOptionsBuilderTests
         var conn = TcpConnection();
         conn.UseTls = true;
         var resource = new CertificateSessionResource();
-        var options = await _builder.BuildAsync(conn, resource);
+        await _builder.BuildAsync(conn, resource);
         resource.Certificate.Should().BeNull();
+    }
+
+    [Test]
+    public void Build_CleanStartTrue_SetsCleanSessionTrue()
+    {
+        var conn = TcpConnection();
+        conn.CleanStart = true;
+        var options = _builder.Build(conn);
+
+        options.ClientOptions.CleanSession.Should().BeTrue();
+    }
+
+    [Test]
+    public void Build_CleanStartFalse_SetsCleanSessionFalse()
+    {
+        var conn = TcpConnection();
+        conn.CleanStart = false;
+        var options = _builder.Build(conn);
+
+        options.ClientOptions.CleanSession.Should().BeFalse();
+    }
+
+    [Test]
+    public void Build_CleanStartTrue_ClientIdHasSuffix()
+    {
+        var conn = TcpConnection();
+        conn.ClientId = "test-client";
+        conn.CleanStart = true;
+        var options = _builder.Build(conn);
+
+        options.ClientOptions.ClientId.Should().StartWith("test-client-");
+    }
+
+    [Test]
+    public void Build_CleanStartFalse_ClientIdHasNoSuffix()
+    {
+        var conn = TcpConnection();
+        conn.ClientId = "test-client";
+        conn.CleanStart = false;
+        var options = _builder.Build(conn);
+
+        options.ClientOptions.ClientId.Should().Be("test-client");
+    }
+
+    [Test]
+    public void Build_V5CleanStartFalse_SetsSessionExpiryInterval()
+    {
+        var conn = TcpConnection();
+        conn.MqttVersion = MqttVersion.V5;
+        conn.CleanStart = false;
+        conn.SessionExpiryIntervalSeconds = 7200;
+        var options = _builder.Build(conn);
+
+        options.ClientOptions.SessionExpiryInterval.Should().Be(7200u);
+    }
+
+    [Test]
+    public void Build_V5CleanStartTrue_DoesNotSetSessionExpiryInterval()
+    {
+        var conn = TcpConnection();
+        conn.MqttVersion = MqttVersion.V5;
+        conn.CleanStart = true;
+        conn.SessionExpiryIntervalSeconds = 7200;
+        var options = _builder.Build(conn);
+
+        options.ClientOptions.SessionExpiryInterval.Should().Be(0u);
+    }
+
+    [Test]
+    public void Build_V311CleanStartFalse_CleanSessionFalseNoSessionExpiry()
+    {
+        var conn = TcpConnection();
+        conn.MqttVersion = MqttVersion.V311;
+        conn.CleanStart = false;
+        var options = _builder.Build(conn);
+
+        options.ClientOptions.CleanSession.Should().BeFalse();
+        options.ClientOptions.SessionExpiryInterval.Should().Be(0u);
+    }
+
+    [Test]
+    public void Build_V5CleanStartTrue_UsesWithCleanStart()
+    {
+        var conn = TcpConnection();
+        conn.MqttVersion = MqttVersion.V5;
+        conn.CleanStart = true;
+        var options = _builder.Build(conn);
+
+        options.ClientOptions.CleanSession.Should().BeTrue();
+    }
+
+    [Test]
+    public void Build_DefaultCleanStart_ClientIdHasSuffix()
+    {
+        var conn = TcpConnection();
+        conn.ClientId = "test-client";
+        // CleanStart defaults to true
+        var options = _builder.Build(conn);
+
+        options.ClientOptions.ClientId.Should().StartWith("test-client-");
     }
 }

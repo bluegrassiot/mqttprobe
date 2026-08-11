@@ -179,6 +179,8 @@
         _isFormValid = _formReportsValid && _connectionValidator.Validate(_selectedConnection).IsValid;
         _canConnect = _isFormValid;
         UpdateCanSave();
+        // Identity labels (e.g. Clean start vs Clean session) depend on Transport fields.
+        StateHasChanged();
     }
 
     private void UpdateCanSave()

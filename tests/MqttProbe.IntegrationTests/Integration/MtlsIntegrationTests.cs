@@ -10,7 +10,6 @@ using MqttProbe.Core.Services.Security;
 using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.PluginContracts;
 using MqttProbe.TestInfrastructure.Fixtures;
-using SparkplugNet.VersionB;
 using SparkplugNet.VersionB.Data;
 
 namespace MqttProbe.IntegrationTests.Integration;
@@ -245,5 +244,60 @@ public class MtlsIntegrationTests
 
         await runner.StopAsync();
         await verifier.DisconnectAsync();
+    }
+
+    [Test]
+    public async Task SessionResume_CleanStartFalse_SessionPresentOnReconnect()
+    {
+        var certStore = new CertificateAssetStore(
+            new InMemoryEnvelopeKeyStore(),
+            Path.GetTempPath(),
+            Substitute.For<ILogger<CertificateAssetStore>>());
+
+        var connection = new Connection
+        {
+            Name = "SessionTest",
+            Host = "127.0.0.1",
+            Port = _broker!.Port,
+            UseTls = true,
+            AllowUntrustedCertificate = true,
+            ClientId = "session-resume-test",
+            MqttVersion = MqttVersion.V311,
+            CleanStart = false,
+            SessionExpiryIntervalSeconds = 3600
+        };
+
+        var connAssetId = await certStore.ImportAsync(connection.Id,
+            new CertificateImportRequest(
+                CertificateInputMode.Pfx,
+                _broker.ClientPfxBytes, null, _broker.ClientPfxPassword));
+        connection.ClientCertificateAssetId = connAssetId;
+
+        // MqttOptionsBuilder with CleanStart=false uses the configured ClientId as-is (no suffix).
+        var builder = new MqttOptionsBuilder(certStore);
+
+        // First connection: fresh session.
+        var resource1 = new CertificateSessionResource();
+        var options1 = await builder.BuildAsync(connection, resource1);
+        using var client = new MqttClientFactory().CreateMqttClient();
+        var result1 = await client.ConnectAsync(options1.ClientOptions);
+        result1.IsSessionPresent.Should().BeFalse("first connect should be a fresh session");
+
+        await client.DisconnectAsync();
+        resource1.Dispose();
+
+        // Brief pause for the broker to process the disconnect.
+        await Task.Delay(200);
+
+        // Second connection: resume session.
+        var resource2 = new CertificateSessionResource();
+        var options2 = await builder.BuildAsync(connection, resource2);
+        using var client2 = new MqttClientFactory().CreateMqttClient();
+        var result2 = await client2.ConnectAsync(options2.ClientOptions);
+        result2.IsSessionPresent.Should().BeTrue(
+            "reconnecting with same ClientId and CleanStart=false should resume the session");
+
+        await client2.DisconnectAsync();
+        resource2.Dispose();
     }
 }

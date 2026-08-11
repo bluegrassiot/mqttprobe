@@ -21,6 +21,8 @@ public sealed class Connection : IEquatable<Connection>
     public int ConnectTimeout { get; set; } = 15;
     public int ReconnectDelay { get; set; } = 5;
     public int KeepAlivePeriod { get; set; } = 15;
+    public bool CleanStart { get; set; } = true;
+    public uint SessionExpiryIntervalSeconds { get; set; } = 3600;
     [System.Text.Json.Serialization.JsonConverter(typeof(SubscribedTopicsJsonConverter))]
     public List<SubscribedTopic> SubscribedTopics { get; set; } = [];
 
@@ -65,7 +67,9 @@ public sealed class Connection : IEquatable<Connection>
                ReconnectDelay == other.ReconnectDelay &&
                KeepAlivePeriod == other.KeepAlivePeriod &&
                WebsocketBasePath == other.WebsocketBasePath &&
-               ClientCertificateAssetId == other.ClientCertificateAssetId;
+               ClientCertificateAssetId == other.ClientCertificateAssetId &&
+               CleanStart == other.CleanStart &&
+               SessionExpiryIntervalSeconds == other.SessionExpiryIntervalSeconds;
     }
 
     public override bool Equals(object? obj) => Equals(obj as Connection);
@@ -88,6 +92,8 @@ public sealed class Connection : IEquatable<Connection>
         hash.Add(KeepAlivePeriod);
         hash.Add(WebsocketBasePath, StringComparer.Ordinal);
         hash.Add(ClientCertificateAssetId, StringComparer.Ordinal);
+        hash.Add(CleanStart);
+        hash.Add(SessionExpiryIntervalSeconds);
         return hash.ToHashCode();
     }
 }

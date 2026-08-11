@@ -25,6 +25,10 @@ public class ConnectionValidator : AbstractValidator<Connection>
         RuleFor(x => x.KeepAlivePeriod)
             .InclusiveBetween(1, 120)
             .WithMessage("Keep alive must be between 1 and 120 seconds.");
+        RuleFor(x => x.SessionExpiryIntervalSeconds)
+            .InclusiveBetween(0u, 4_294_967_295u)
+            .When(x => x.MqttVersion == MqttVersion.V5 && !x.CleanStart)
+            .WithMessage("Session expiry interval must be between 0 and 4294967295.");
     }
 
     public Func<object, string, Task<IEnumerable<string>>> ValidateValue => async (model, propertyName) =>

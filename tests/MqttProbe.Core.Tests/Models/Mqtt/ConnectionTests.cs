@@ -1,7 +1,4 @@
-using MqttProbe.Core.Models.Chart;
-using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Mqtt;
-using MqttProbe.Core.Models.Sparkplug;
 
 namespace MqttProbe.Core.Tests.Models.Mqtt;
 
@@ -208,6 +205,76 @@ public class ConnectionTests
     }
 
     [Test]
+    public void Constructor_DefaultCleanStartIsTrue()
+    {
+        var conn = new Connection();
+
+        conn.CleanStart.Should().BeTrue();
+    }
+
+    [Test]
+    public void Constructor_DefaultSessionExpiryIntervalSecondsIs3600()
+    {
+        var conn = new Connection();
+
+        conn.SessionExpiryIntervalSeconds.Should().Be(3600u);
+    }
+
+    [Test]
+    public void Equals_ReturnsFalseWhenCleanStartDiffers()
+    {
+        var a = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", CleanStart = true };
+        var b = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", CleanStart = false };
+
+        a.Equals(b).Should().BeFalse();
+    }
+
+    [Test]
+    public void GetHashCode_DiffersWhenCleanStartDiffers()
+    {
+        var a = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", CleanStart = true };
+        var b = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", CleanStart = false };
+
+        a.GetHashCode().Should().NotBe(b.GetHashCode());
+    }
+
+    [Test]
+    public void Equals_ReturnsFalseWhenSessionExpiryIntervalSecondsDiffers()
+    {
+        var a = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", SessionExpiryIntervalSeconds = 3600 };
+        var b = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", SessionExpiryIntervalSeconds = 7200 };
+
+        a.Equals(b).Should().BeFalse();
+    }
+
+    [Test]
+    public void GetHashCode_DiffersWhenSessionExpiryIntervalSecondsDiffers()
+    {
+        var a = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", SessionExpiryIntervalSeconds = 3600 };
+        var b = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", SessionExpiryIntervalSeconds = 7200 };
+
+        a.GetHashCode().Should().NotBe(b.GetHashCode());
+    }
+
+    [Test]
+    public void Clone_PreservesCleanStart()
+    {
+        var conn = new Connection { CleanStart = false };
+        var clone = conn.Clone();
+
+        clone.CleanStart.Should().BeFalse();
+    }
+
+    [Test]
+    public void Clone_PreservesSessionExpiryIntervalSeconds()
+    {
+        var conn = new Connection { SessionExpiryIntervalSeconds = 7200 };
+        var clone = conn.Clone();
+
+        clone.SessionExpiryIntervalSeconds.Should().Be(7200u);
+    }
+
+    [Test]
     public void Equals_ReturnsFalseWhenReconnectDelayDiffers()
     {
         var a = new Connection { Name = "Test", Host = "broker.local", ClientId = "same-id", ReconnectDelay = 5 };
@@ -244,5 +311,53 @@ public class ConnectionTests
         clone.ReconnectDelay.Should().Be(8);
         clone.KeepAlivePeriod.Should().Be(25);
         clone.Password.Should().BeNull();
+    }
+
+    [Test]
+    public void JsonDeserialize_MissingCleanStart_DefaultsToTrue()
+    {
+        var json = """
+            {
+                "name": "Legacy",
+                "host": "broker.local",
+                "port": 1883,
+                "clientId": "legacy-client"
+            }
+            """;
+
+        var conn = System.Text.Json.JsonSerializer.Deserialize<Connection>(json,
+            new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+            });
+
+        conn.Should().NotBeNull();
+        conn.CleanStart.Should().BeTrue();
+        conn.SessionExpiryIntervalSeconds.Should().Be(3600u);
+    }
+
+    [Test]
+    public void JsonRoundTrip_PreservesCleanStartAndSessionExpiry()
+    {
+        var original = new Connection
+        {
+            Name = "Persisted",
+            Host = "broker.local",
+            ClientId = "persist-client",
+            CleanStart = false,
+            SessionExpiryIntervalSeconds = 7200
+        };
+
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(original, options);
+        var deserialized = System.Text.Json.JsonSerializer.Deserialize<Connection>(json, options);
+
+        deserialized.Should().NotBeNull();
+        deserialized.CleanStart.Should().BeFalse();
+        deserialized.SessionExpiryIntervalSeconds.Should().Be(7200u);
     }
 }

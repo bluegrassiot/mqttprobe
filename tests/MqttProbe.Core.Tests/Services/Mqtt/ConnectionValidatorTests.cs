@@ -1,14 +1,5 @@
-using MqttProbe.Core.Models.Chart;
-using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Mqtt;
-using MqttProbe.Core.Models.Sparkplug;
-using MqttProbe.Core.Services.Chart;
-using MqttProbe.Core.Services.Configuration;
-using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
-using MqttProbe.Core.Services.Platform;
-using MqttProbe.Core.Services.Security;
-using MqttProbe.Core.Services.Sparkplug;
 
 namespace MqttProbe.Core.Tests.Services.Mqtt;
 
@@ -232,6 +223,58 @@ public class ConnectionValidatorTests
     {
         var conn = ValidConnection();
         conn.KeepAlivePeriod = period;
+
+        var result = await _validator.ValidateAsync(conn);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Validate_V5CleanStartFalse_SessionExpiry0IsValid()
+    {
+        var conn = ValidConnection();
+        conn.MqttVersion = MqttVersion.V5;
+        conn.CleanStart = false;
+        conn.SessionExpiryIntervalSeconds = 0;
+
+        var result = await _validator.ValidateAsync(conn);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Validate_V5CleanStartFalse_SessionExpiryMaxIsValid()
+    {
+        var conn = ValidConnection();
+        conn.MqttVersion = MqttVersion.V5;
+        conn.CleanStart = false;
+        conn.SessionExpiryIntervalSeconds = 4_294_967_295;
+
+        var result = await _validator.ValidateAsync(conn);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Validate_V5CleanStartTrue_SessionExpiryNotValidated()
+    {
+        var conn = ValidConnection();
+        conn.MqttVersion = MqttVersion.V5;
+        conn.CleanStart = true;
+        conn.SessionExpiryIntervalSeconds = 3600;
+
+        var result = await _validator.ValidateAsync(conn);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Validate_V311CleanStartFalse_SessionExpiryNotValidated()
+    {
+        var conn = ValidConnection();
+        conn.MqttVersion = MqttVersion.V311;
+        conn.CleanStart = false;
+        conn.SessionExpiryIntervalSeconds = 3600;
 
         var result = await _validator.ValidateAsync(conn);
 

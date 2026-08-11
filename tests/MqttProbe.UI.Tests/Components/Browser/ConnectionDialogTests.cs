@@ -1434,7 +1434,8 @@ public class ConnectionDialogTests : BunitTestContext
 
         // Toggle TLS off — cert UI should hide but staged state must survive
         ActivateTab("Transport");
-        var tlsCheckbox = _dialogProvider.FindComponents<MudCheckBox<bool>>().First();
+        var tlsCheckbox = _dialogProvider.FindComponents<MudCheckBox<bool>>()
+            .First(c => c.Markup.Contains("Use TLS"));
         await _dialogProvider.InvokeAsync(() => tlsCheckbox.Instance.ValueChanged.InvokeAsync(false));
         _dialogProvider.Render();
 
@@ -1454,6 +1455,122 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Markup.Should().Contain("PFX file loaded",
             "staged cert bytes must survive TLS off/on cycle");
     }
+
+    [Test]
+    public async Task IdentityTab_ShowsCleanSessionLabel_ByDefault()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        // Default MqttVersion is V311, so label should be "Clean session"
+        _dialogProvider.Markup.Should().Contain("Clean session");
+        _dialogProvider.Markup.Should().NotContain("Clean start");
+    }
+
+    [Test]
+    public async Task IdentityTab_ShowsCleanStartLabel_AfterSwitchingToMqtt5()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        ActivateTab("Transport");
+        var mqttSelect = _dialogProvider.FindComponents<MudSelect<MqttVersion>>()
+            .Single(s => s.Instance.Label == "MQTT Version");
+        await _dialogProvider.InvokeAsync(() =>
+            mqttSelect.Instance.ValueChanged.InvokeAsync(MqttVersion.V5));
+        _dialogProvider.Render();
+
+        // Identity tab (still rendered via KeepPanelsAlive) should now show "Clean start"
+        _dialogProvider.Markup.Should().Contain("Clean start");
+        _dialogProvider.Markup.Should().NotContain("Clean session");
+    }
+
+    [Test]
+    public async Task CleanStartCheckbox_DefaultsToChecked()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        var cb = FindCleanStartCheckbox();
+        cb.Markup.Should().Contain("mud-checkbox-true",
+            "CleanStart defaults to true, so the checkbox should render as checked");
+    }
+
+    [Test]
+    public async Task CleanStartUnchecked_Mqtt5_SessionExpiryFieldVisible()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        // Switch to MQTT 5
+        ActivateTab("Transport");
+        var mqttSelect = _dialogProvider.FindComponents<MudSelect<MqttVersion>>()
+            .Single(s => s.Instance.Label == "MQTT Version");
+        await _dialogProvider.InvokeAsync(() =>
+            mqttSelect.Instance.ValueChanged.InvokeAsync(MqttVersion.V5));
+        _dialogProvider.Render();
+
+        // Uncheck CleanStart
+        var cb = FindCleanStartCheckbox();
+        await _dialogProvider.InvokeAsync(() =>
+            cb.Instance.ValueChanged.InvokeAsync(false));
+        _dialogProvider.Render();
+
+        _dialogProvider.Markup.Should().Contain("Session expiry interval",
+            "MQTT 5 with CleanStart off should show session expiry interval field");
+    }
+
+    [Test]
+    public async Task CleanStartUnchecked_Mqtt311_SessionExpiryFieldHidden()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        // Default is V311 — uncheck CleanStart
+        var cb = FindCleanStartCheckbox();
+        await _dialogProvider.InvokeAsync(() =>
+            cb.Instance.ValueChanged.InvokeAsync(false));
+        _dialogProvider.Render();
+
+        _dialogProvider.Markup.Should().NotContain("Session expiry interval",
+            "MQTT 3.1.1 with CleanStart off should NOT show session expiry interval field");
+    }
+
+    [Test]
+    public async Task CleanStartRechecked_HidesExpiry_RetainsModelValue()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        // Switch to MQTT 5 and uncheck CleanStart
+        ActivateTab("Transport");
+        var mqttSelect = _dialogProvider.FindComponents<MudSelect<MqttVersion>>()
+            .Single(s => s.Instance.Label == "MQTT Version");
+        await _dialogProvider.InvokeAsync(() =>
+            mqttSelect.Instance.ValueChanged.InvokeAsync(MqttVersion.V5));
+        _dialogProvider.Render();
+
+        var cb = FindCleanStartCheckbox();
+        await _dialogProvider.InvokeAsync(() =>
+            cb.Instance.ValueChanged.InvokeAsync(false));
+        _dialogProvider.Render();
+
+        _dialogProvider.Markup.Should().Contain("Session expiry interval");
+
+        // Re-check CleanStart
+        await _dialogProvider.InvokeAsync(() =>
+            cb.Instance.ValueChanged.InvokeAsync(true));
+        _dialogProvider.Render();
+
+        _dialogProvider.Markup.Should().NotContain("Session expiry interval",
+            "session expiry field should hide when CleanStart is re-checked");
+
+        // Model value should be retained
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var connField = typeof(ConnectionDialog)
+            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var conn = (Connection)connField.GetValue(dialog)!;
+        conn.SessionExpiryIntervalSeconds.Should().Be(3600u,
+            "the default session expiry value should be retained on the model even after re-checking CleanStart");
+    }
+
+    private IRenderedComponent<MudCheckBox<bool>> FindCleanStartCheckbox() =>
+        _dialogProvider.FindComponents<MudCheckBox<bool>>()
+            .First(c => c.Markup.Contains("Clean session") || c.Markup.Contains("Clean start"));
 
     [Test]
     public async Task RemoveCert_ThenSave_DoesNotShowCertificateLoaded()

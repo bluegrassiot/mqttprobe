@@ -11,6 +11,7 @@
 @inject IUiSettings UiSettings
 @inject ILogger<ConnectionDialog> Logger
 @inject ISessionState SessionState
+@inject ISubscriptionManager SubscriptionManager
 @inject IMqttOptionsBuilder MqttOptionsBuilder
 @inject IChartDataService ChartDataService
 @inject IBrokerStateResetCoordinator BrokerResetCoordinator
@@ -376,6 +377,21 @@
     private async Task OnAutoResubscribeChanged(bool value) =>
         await UiSettings.SetAutoResubscribeAsync(value);
 
+    private bool ShouldApplyLiveSubscriptions() =>
+        ManagedMqttClient.IsConnected &&
+        _selectedConnection.Id == SessionState.SelectedConnection.Id;
+
+    private void SyncSessionStateSelectedTopics()
+    {
+        var active = SessionState.SelectedConnection;
+        if (_selectedConnection.Id == active.Id)
+        {
+            active.SubscribedTopics = _selectedConnection.SubscribedTopics
+                .Select(t => new SubscribedTopic { Topic = t.Topic, QualityOfServiceLevel = t.QualityOfServiceLevel })
+                .ToList();
+        }
+    }
+
     private async Task HandleOnConnectEditorAdd((string Topic, MqttQualityOfServiceLevel Qos) request)
     {
         if (!UiSettings.Ui.AutoResubscribe)
@@ -399,9 +415,29 @@
             Snackbar.Add($"Subscription limit ({MaxOnConnectSubscriptions}) reached", Severity.Warning);
             return;
         }
+
+        var isLive = ShouldApplyLiveSubscriptions();
+        var alreadyLive = isLive && SubscriptionManager.Subscriptions.Any(s => string.Equals(s.Topic, topic, StringComparison.Ordinal));
+
         _selectedConnection.SubscribedTopics.Add(new SubscribedTopic { Topic = topic, QualityOfServiceLevel = request.Qos });
+        SyncSessionStateSelectedTopics();
         await ConnectionSettings.AddConnectionAsync(_selectedConnection);
-        Snackbar.Add($"Saved subscription {topic}", Severity.Success);
+
+        if (isLive && !alreadyLive)
+        {
+            try
+            {
+                await SubscriptionManager.Add(topic, request.Qos);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to subscribe: {ex.Message}", Severity.Error);
+            }
+        }
+        else
+        {
+            Snackbar.Add($"Saved subscription {topic}", Severity.Success);
+        }
     }
 
     private async Task HandleOnConnectEditorRemove(IReadOnlyList<string> topics)
@@ -413,7 +449,20 @@
         }
         var set = topics.ToHashSet(StringComparer.Ordinal);
         _selectedConnection.SubscribedTopics.RemoveAll(s => set.Contains(s.Topic));
+        SyncSessionStateSelectedTopics();
         await ConnectionSettings.AddConnectionAsync(_selectedConnection);
+
+        if (ShouldApplyLiveSubscriptions())
+        {
+            try
+            {
+                await SubscriptionManager.Remove(topics);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to unsubscribe: {ex.Message}", Severity.Error);
+            }
+        }
     }
 
     private async Task HandleOnConnectEditorClearAll()
@@ -423,7 +472,24 @@
             Snackbar.Add("Enable Auto-resubscribe on connect to manage these topics.", Severity.Info);
             return;
         }
+        var topicsToRemove = _selectedConnection.SubscribedTopics
+            .Select(st => st.Topic)
+            .ToList();
+
         _selectedConnection.SubscribedTopics.Clear();
+        SyncSessionStateSelectedTopics();
         await ConnectionSettings.AddConnectionAsync(_selectedConnection);
+
+        if (ShouldApplyLiveSubscriptions() && topicsToRemove.Count > 0)
+        {
+            try
+            {
+                await SubscriptionManager.Remove(topicsToRemove);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to unsubscribe: {ex.Message}", Severity.Error);
+            }
+        }
     }
 }

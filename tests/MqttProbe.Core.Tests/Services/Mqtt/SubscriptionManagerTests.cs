@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MQTTnet.Protocol;
-using MqttProbe.Core;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Configuration;
@@ -36,6 +35,7 @@ public class SubscriptionManagerTests
         var config = new AppConfiguration { Ui = new UiPreferences { AutoResubscribe = true } };
         _mockUiSettings.Ui.Returns(config.Ui);
         _mockSessionState.SelectedConnection.Returns(new Connection { Name = "Test", Host = "localhost" });
+        _mockConnectionSettings.Connections.Returns(new List<Connection>());
 
         _connectedHandler = null;
         _syncFailedHandler = null;
@@ -239,8 +239,8 @@ public class SubscriptionManagerTests
 
         await _mockClient.Received(1).SubscribeAsync(
             Arg.Is<IEnumerable<MQTTnet.Packets.MqttTopicFilter>>(filters =>
-                filters!.Any(f => f.Topic == "a/b" && f.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtMostOnce) &&
-                filters!.Any(f => f.Topic == "c/d" && f.QualityOfServiceLevel == MqttQualityOfServiceLevel.ExactlyOnce)));
+                filters.Any(f => f.Topic == "a/b" && f.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtMostOnce) &&
+                filters.Any(f => f.Topic == "c/d" && f.QualityOfServiceLevel == MqttQualityOfServiceLevel.ExactlyOnce)));
     }
 
     [Test]
@@ -361,7 +361,7 @@ public class SubscriptionManagerTests
         await _manager.Add("test/topic");
 
         await _mockConnectionSettings.Received(1).AddConnectionAsync(
-            Arg.Is<Connection>(c => c!.SubscribedTopics!.Any(s => s.Topic == "test/topic")));
+            Arg.Is<Connection>(c => c!.SubscribedTopics.Any(s => s.Topic == "test/topic")));
     }
 
     [Test]
@@ -374,7 +374,7 @@ public class SubscriptionManagerTests
         await _manager.Remove(["a/b"]);
 
         await _mockConnectionSettings.Received(1).AddConnectionAsync(
-            Arg.Is<Connection>(c => c!.SubscribedTopics!.Any(s => s.Topic == "c/d") && !c.SubscribedTopics.Any(s => s.Topic == "a/b")));
+            Arg.Is<Connection>(c => c!.SubscribedTopics.Any(s => s.Topic == "c/d") && !c.SubscribedTopics.Any(s => s.Topic == "a/b")));
     }
 
     [Test]
@@ -436,8 +436,138 @@ public class SubscriptionManagerTests
 
         await _connectedHandler!(null!);
 
-        _manager.Subscriptions.Should().Contain(s => s.Topic == "memory/topic");
+        // With reconcile-to-saved, memory-only topics are removed and saved topics are added.
+        _manager.Subscriptions.Should().NotContain(s => s.Topic == "memory/topic");
         _manager.Subscriptions.Should().Contain(s => s.Topic == "saved/topic");
+    }
+
+    [Test]
+    public async Task OnConnected_WithAutoResubscribe_UnsubscribesTopicsRemovedFromSaved()
+    {
+        await _manager.Add("keep/topic");
+        await _manager.Add("drop/topic");
+
+        var connection = new Connection
+        {
+            Name = "Test",
+            Host = "localhost",
+            SubscribedTopics = [new SubscribedTopic { Topic = "keep/topic" }]
+        };
+        _mockSessionState.SelectedConnection.Returns(connection);
+        _mockClient.ClearReceivedCalls();
+
+        await _connectedHandler!(null!);
+
+        await _mockClient.Received(1).UnsubscribeAsync(
+            Arg.Is<IEnumerable<string>>(topics => topics!.Contains("drop/topic")));
+        _manager.Subscriptions.Should().Contain(s => s.Topic == "keep/topic");
+        _manager.Subscriptions.Should().NotContain(s => s.Topic == "drop/topic");
+    }
+
+    [Test]
+    public async Task OnConnected_WithAutoResubscribe_EmptySaved_ClearsAllInMemoryTopics()
+    {
+        await _manager.Add("a/b");
+        await _manager.Add("c/d");
+
+        var connection = new Connection
+        {
+            Name = "Test",
+            Host = "localhost",
+            SubscribedTopics = []
+        };
+        _mockSessionState.SelectedConnection.Returns(connection);
+        _mockClient.ClearReceivedCalls();
+
+        await _connectedHandler!(null!);
+
+        await _mockClient.Received(1).UnsubscribeAsync(
+            Arg.Is<IEnumerable<string>>(topics =>
+                topics.Contains("a/b") && topics.Contains("c/d")));
+        _manager.Subscriptions.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task OnConnected_WithoutAutoResubscribe_DoesNotUnsubscribeMemoryTopics()
+    {
+        var config = new AppConfiguration { Ui = new UiPreferences { AutoResubscribe = false } };
+        _mockUiSettings.Ui.Returns(config.Ui);
+
+        await _manager.Add("memory/topic");
+
+        var connection = new Connection
+        {
+            Name = "Test",
+            Host = "localhost",
+            SubscribedTopics = [new SubscribedTopic { Topic = "saved/topic" }]
+        };
+        _mockSessionState.SelectedConnection.Returns(connection);
+        _mockClient.ClearReceivedCalls();
+
+        await _connectedHandler!(null!);
+
+        // Without AutoResubscribe, in-memory topics are kept and saved is not loaded.
+        await _mockClient.DidNotReceive().UnsubscribeAsync(Arg.Any<IEnumerable<string>>());
+        _manager.Subscriptions.Should().Contain(s => s.Topic == "memory/topic");
+        _manager.Subscriptions.Should().NotContain(s => s.Topic == "saved/topic");
+    }
+
+    [Test]
+    public async Task OnConnected_UnsubscribeFailure_KeepsTopicsTrackedForRetry()
+    {
+        await _manager.Add("drop/topic");
+        await _manager.Add("keep/topic");
+
+        var connection = new Connection
+        {
+            Name = "Test",
+            Host = "localhost",
+            SubscribedTopics = [new SubscribedTopic { Topic = "keep/topic" }]
+        };
+        _mockSessionState.SelectedConnection.Returns(connection);
+        _mockClient.UnsubscribeAsync(Arg.Any<IEnumerable<string>>())
+            .Returns(Task.FromException(new Exception("broker unreachable")));
+        _mockClient.ClearReceivedCalls();
+
+        await _connectedHandler!(null!);
+
+        // When unsubscribe fails, topics must remain tracked so a later
+        // reconnect can retry the unsubscribe.
+        _manager.Subscriptions.Should().Contain(s => s.Topic == "drop/topic");
+        _manager.Subscriptions.Should().Contain(s => s.Topic == "keep/topic");
+    }
+
+    [Test]
+    public async Task PersistTopicsAsync_UsesStoredConnectionFields_NotStaleSessionClone()
+    {
+        var staleId = Guid.NewGuid();
+        var staleClone = new Connection
+        {
+            Id = staleId,
+            Name = "Old Name",
+            Host = "old-host",
+            Port = 1883
+        };
+        _mockSessionState.SelectedConnection.Returns(staleClone);
+
+        var storedConn = new Connection
+        {
+            Id = staleId,
+            Name = "New Name",
+            Host = "new-host",
+            Port = 8883,
+            SubscribedTopics = [new SubscribedTopic { Topic = "existing/topic" }]
+        };
+        _mockConnectionSettings.Connections.Returns(new List<Connection> { storedConn });
+
+        await _manager.Add("extra/topic");
+
+        await _mockConnectionSettings.Received().AddConnectionAsync(
+            Arg.Is<Connection>(c =>
+                c!.Name == "New Name" &&
+                c.Host == "new-host" &&
+                c.Port == 8883 &&
+                c.SubscribedTopics.Any(s => s.Topic == "extra/topic")));
     }
 
     [Test]

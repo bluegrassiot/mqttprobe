@@ -337,6 +337,8 @@ public class ConnectionDialogTests : BunitTestContext
     public async Task OnConnectTab_Add_PersistsTopicWithDefaultQos()
     {
         _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>());
+        _mockSubMgr.Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>()).Returns(Task.CompletedTask);
         var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
         var cfg = new AppConfiguration { Connections = [conn] };
         await OpenDialog(cfg);
@@ -352,6 +354,76 @@ public class ConnectionDialogTests : BunitTestContext
                 c!.SubscribedTopics.Any(s =>
                     s.Topic == "factory/#" &&
                     s.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce)));
+    }
+
+    [Test]
+    public async Task OnConnectTab_Add_WhenNotConnected_DoesNotCallSubscriptionManager()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>());
+        _mockSubMgr.Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>()).Returns(Task.CompletedTask);
+        // Default: _mockClient.IsConnected is false
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>().Instance;
+        editor.TopicDraft = "factory/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        await _mockSubMgr.DidNotReceive().Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>());
+    }
+
+    [Test]
+    public async Task OnConnectTab_Add_WhenConnectedToActiveConnection_CallsSubscriptionManagerAdd()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>());
+        _mockSubMgr.Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>()).Returns(Task.CompletedTask);
+        _mockClient.IsConnected.Returns(true);
+        var activeId = Guid.NewGuid();
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883, Id = activeId };
+        var activeConn = new Connection { Name = "Active", Host = "localhost", Port = 1883, Id = activeId };
+        _mockSessionState.SelectedConnection.Returns(activeConn);
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>().Instance;
+        editor.TopicDraft = "factory/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        await _mockSubMgr.Received(1).Add("factory/#");
+        await _mockConnections.Received().AddConnectionAsync(
+            Arg.Is<Connection>(c =>
+                c!.SubscribedTopics.Any(s =>
+                    s.Topic == "factory/#" &&
+                    s.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce)));
+    }
+
+    [Test]
+    public async Task OnConnectTab_Add_WhenConnectedToDifferentConnection_DoesNotCallSubscriptionManager()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>());
+        _mockSubMgr.Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>()).Returns(Task.CompletedTask);
+        _mockClient.IsConnected.Returns(true);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var activeConn = new Connection { Name = "Active", Host = "localhost", Port = 1883 };
+        _mockSessionState.SelectedConnection.Returns(activeConn);
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>().Instance;
+        editor.TopicDraft = "factory/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        await _mockSubMgr.DidNotReceive().Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>());
     }
 
     [Test]
@@ -382,6 +454,8 @@ public class ConnectionDialogTests : BunitTestContext
     public async Task OnConnectTab_Remove_PersistsWithoutTopic()
     {
         _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>());
+        _mockSubMgr.Remove(Arg.Any<IReadOnlyList<string>>()).Returns(Task.CompletedTask);
         var conn = new Connection
         {
             Name = "TestConn",
@@ -413,6 +487,83 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
+    public async Task OnConnectTab_Remove_WhenConnectedToActiveConnection_CallsSubscriptionManagerRemove()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        var activeId = Guid.NewGuid();
+        var activeConn = new Connection { Name = "Active", Host = "localhost", Port = 1883, Id = activeId };
+        _mockSessionState.SelectedConnection.Returns(activeConn);
+        _mockClient.IsConnected.Returns(true);
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "keep/#" },
+            new() { Topic = "drop/#" }
+        });
+        _mockSubMgr.Remove(Arg.Any<IReadOnlyList<string>>()).Returns(Task.CompletedTask);
+        var conn = new Connection
+        {
+            Name = "TestConn",
+            Host = "localhost",
+            Port = 1883,
+            Id = activeId,
+            SubscribedTopics =
+            [
+                new() { Topic = "keep/#" },
+                new() { Topic = "drop/#" }
+            ]
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>();
+        var checkboxes = editor.FindAll("input[type='checkbox']");
+        checkboxes[2].Change(true); // select drop/#
+        _dialogProvider.Find("button[title='Remove']").Click();
+
+        await _mockSubMgr.Received(1).Remove(
+            Arg.Is<IReadOnlyList<string>>(t => t.Contains("drop/#") && t.Count == 1));
+    }
+
+    [Test]
+    public async Task OnConnectTab_Remove_WhenLiveSubscriptionsEmpty_StillCallsSubscriptionManagerRemove()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        var activeId = Guid.NewGuid();
+        var activeConn = new Connection { Name = "Active", Host = "localhost", Port = 1883, Id = activeId };
+        _mockSessionState.SelectedConnection.Returns(activeConn);
+        _mockClient.IsConnected.Returns(true);
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>());
+        _mockSubMgr.Remove(Arg.Any<IReadOnlyList<string>>()).Returns(Task.CompletedTask);
+        var conn = new Connection
+        {
+            Name = "TestConn",
+            Host = "localhost",
+            Port = 1883,
+            Id = activeId,
+            SubscribedTopics =
+            [
+                new() { Topic = "keep/#" },
+                new() { Topic = "drop/#" }
+            ]
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>();
+        var checkboxes = editor.FindAll("input[type='checkbox']");
+        checkboxes[2].Change(true); // select drop/#
+        _dialogProvider.Find("button[title='Remove']").Click();
+
+        // Remove must be called with the topic name even though it's not in the live set.
+        await _mockSubMgr.Received(1).Remove(
+            Arg.Is<IReadOnlyList<string>>(t => t.Contains("drop/#") && t.Count == 1));
+    }
+
+    [Test]
     public async Task OnConnectTab_Preset_FillsTopicDraftOnly()
     {
         var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
@@ -427,6 +578,59 @@ public class ConnectionDialogTests : BunitTestContext
         var editor = _dialogProvider.FindComponent<SubscriptionEditor>().Instance;
         editor.TopicDraft.Should().Be("spBv1.0/#");
         conn.SubscribedTopics.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task OnConnectTab_ClearAll_WhenConnectedToActiveConnection_CallsSubscriptionManagerRemove()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        var activeId = Guid.NewGuid();
+        var activeConn = new Connection { Name = "Active", Host = "localhost", Port = 1883, Id = activeId };
+        _mockSessionState.SelectedConnection.Returns(activeConn);
+        _mockClient.IsConnected.Returns(true);
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "topic/a" },
+            new() { Topic = "topic/b" }
+        });
+        _mockSubMgr.Remove(Arg.Any<IReadOnlyList<string>>()).Returns(Task.CompletedTask);
+        var conn = new Connection
+        {
+            Name = "TestConn",
+            Host = "localhost",
+            Port = 1883,
+            Id = activeId,
+            SubscribedTopics =
+            [
+                new() { Topic = "topic/a" },
+                new() { Topic = "topic/b" }
+            ]
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        // Click Clear all button — this opens a MudBlazor confirmation dialog
+        _dialogProvider.Find("button[title='Clear all']").Click();
+
+        // The SubscriptionEditor shows a MudMessageBox. Wait for it and confirm.
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-message-box").Count.Should().BeGreaterThan(0),
+            TimeSpan.FromSeconds(3));
+
+        // The MudMessageBox has a button with the confirm text
+        var messageBox = _dialogProvider.Find(".mud-message-box");
+        var buttons = messageBox.QuerySelectorAll("button");
+        var confirmButton = buttons.FirstOrDefault(b => b.TextContent.Contains("Clear all"));
+        confirmButton.Should().NotBeNull("the confirmation dialog should have a Clear all button");
+        confirmButton.Click();
+
+        await _dialogProvider.WaitForAssertionAsync(async () =>
+        {
+            await _mockSubMgr.Received(1).Remove(
+                Arg.Is<IReadOnlyList<string>>(t => t.Contains("topic/a") && t.Contains("topic/b") && t.Count == 2));
+        }, TimeSpan.FromSeconds(3));
     }
 
     [Test]

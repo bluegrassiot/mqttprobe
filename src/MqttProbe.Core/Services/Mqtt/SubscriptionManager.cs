@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MQTTnet.Protocol;
-using MqttProbe.Core;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Configuration;
 
@@ -94,7 +93,7 @@ public class SubscriptionManager : ISubscriptionManager
         if (string.IsNullOrWhiteSpace(topic) || topic.Contains('\0') || topic.Length > 65_535)
         {
             _notifier.Notify(new UserNotification(UserNotificationSeverity.Warning, "Invalid topic"));
-            _logger.LogWarning("Rejected invalid subscription topic (length={Len})", topic?.Length ?? 0);
+            _logger.LogWarning("Rejected invalid subscription topic (length={Len})", topic.Length);
             return;
         }
 
@@ -156,16 +155,7 @@ public class SubscriptionManager : ISubscriptionManager
         try
         {
             if (_uiSettings.Ui.AutoResubscribe)
-            {
-                var connection = _sessionState.SelectedConnection;
-                lock (_topicsSync)
-                {
-                    foreach (var entry in connection.SubscribedTopics.Where(entry => !_topics.ContainsKey(entry.Topic)))
-                    {
-                        _topics[entry.Topic] = entry.QualityOfServiceLevel;
-                    }
-                }
-            }
+                await ReconcileToSavedTopicsAsync();
 
             List<KeyValuePair<string, MqttQualityOfServiceLevel>> snapshot;
             lock (_topicsSync)
@@ -194,11 +184,42 @@ public class SubscriptionManager : ISubscriptionManager
         }
     }
 
+    // Reconcile in-memory topics to the saved On Connect list: unsubscribe
+    // topics removed from saved, add missing saved topics. If UnsubscribeAsync
+    // throws, _topics keeps the old keys so a later reconnect can retry.
+    private async Task ReconcileToSavedTopicsAsync()
+    {
+        var connection = _sessionState.SelectedConnection;
+        var saved = connection.SubscribedTopics;
+        var savedNames = saved.Select(s => s.Topic).ToHashSet(StringComparer.Ordinal);
+
+        List<string> toUnsubscribe;
+        List<SubscribedTopic> toAdd;
+
+        lock (_topicsSync)
+        {
+            toUnsubscribe = _topics.Keys.Where(k => !savedNames.Contains(k)).ToList();
+            toAdd = saved.Where(entry => !_topics.ContainsKey(entry.Topic)).ToList();
+        }
+
+        if (toUnsubscribe.Count > 0)
+            await _managedMqttClient.UnsubscribeAsync(toUnsubscribe);
+
+        lock (_topicsSync)
+        {
+            foreach (var key in toUnsubscribe)
+                _topics.Remove(key);
+
+            foreach (var entry in toAdd)
+                _topics[entry.Topic] = entry.QualityOfServiceLevel;
+        }
+    }
+
     private async Task PersistTopicsAsync()
     {
         try
         {
-            var connection = _sessionState.SelectedConnection;
+            var sessionConn = _sessionState.SelectedConnection;
             List<SubscribedTopic> snapshot;
             lock (_topicsSync)
             {
@@ -210,8 +231,20 @@ public class SubscriptionManager : ISubscriptionManager
                     })
                     .ToList();
             }
-            connection.SubscribedTopics = snapshot;
-            await _connectionSettings.AddConnectionAsync(connection);
+
+            // Resolve from stored connections to avoid writing stale profile fields
+            // from the connect-time session clone.
+            var stored = _connectionSettings.Connections
+                .FirstOrDefault(c => c.Id == sessionConn.Id);
+            var toSave = (stored ?? sessionConn).Clone();
+            toSave.SubscribedTopics = snapshot;
+
+            // Keep session topics in sync so auto-reconnect sees edits.
+            sessionConn.SubscribedTopics = snapshot
+                .Select(t => new SubscribedTopic { Topic = t.Topic, QualityOfServiceLevel = t.QualityOfServiceLevel })
+                .ToList();
+
+            await _connectionSettings.AddConnectionAsync(toSave);
         }
         catch (Exception ex)
         {

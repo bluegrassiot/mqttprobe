@@ -2,17 +2,18 @@ using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
-using MqttProbe.Core.Models.Chart;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Emulation;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Models.Sparkplug;
-using MqttProbe.Core.Services.Chart;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Emulation;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Platform;
+using MqttProbe.Core.Services.Plugins.BuiltIn;
+using MqttProbe.Core.Services.Plugins.Pipeline;
+using MqttProbe.Core.Services.Plugins.Registry;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.UI.Components.Emulation;
@@ -86,6 +87,14 @@ public class IndexTests : BunitTestContext
         ComponentFactories.AddStub<EmulationPanel>();
         ComponentFactories.AddStub<MqttProbe.UI.Components.Pages.Settings>();
 
+        // Register IFormatDisplayNames (MetricsStatsChip needs it)
+        var regBuilder = new PluginRegistryBuilder();
+        BuiltInPluginRegistration.RegisterBuiltIns(regBuilder);
+        var registry = regBuilder.Build();
+        var pipeline = new PayloadPipeline(registry, Substitute.For<Microsoft.Extensions.Logging.ILogger<PayloadPipeline>>());
+        Services.AddSingleton(pipeline);
+        Services.AddSingleton<IFormatDisplayNames>(new FormatDisplayNames(pipeline));
+
         AuthorizationContext.SetAuthorized("testuser").SetRoles(AppRoles.Operator);
         EnsureMudProviders();
     }
@@ -93,7 +102,7 @@ public class IndexTests : BunitTestContext
     [Test]
     public void TopologyChanged_UpdatesNodesTabLabel()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         group.Nodes["sensor-01"] = new SpbNode { NodeId = "sensor-01", GroupId = "plant1", Status = SpbNodeStatus.Online };
 
         var cut = Render<IndexPage>();
@@ -198,7 +207,7 @@ public class IndexTests : BunitTestContext
     [Test]
     public void MobileNav_ShowsNodes_WhenTopologyHasGroups()
     {
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         group.Nodes["n1"] = new SpbNode { NodeId = "n1", GroupId = "g1", Status = SpbNodeStatus.Online };
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["g1"] = group });
 
@@ -363,7 +372,7 @@ public class IndexTests : BunitTestContext
             .Should().ContainSingle()
             .Which.TextContent.Should().Contain("Charts");
 
-        var group = new SpbGroup { };
+        var group = new SpbGroup();
         group.Nodes["n1"] = new SpbNode { NodeId = "n1", GroupId = "g1", Status = SpbNodeStatus.Online };
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["g1"] = group });
         _mockTopology.TopologyChanged += Raise.Event<Action>();
@@ -492,6 +501,14 @@ public class NotFoundPageTests : BunitTestContext
         var mockUpdateService = Substitute.For<IUpdateService>();
         mockUpdateService.IsSupported.Returns(false);
         Services.AddSingleton(mockUpdateService);
+
+        // Register IFormatDisplayNames (MetricsStatsChip needs it)
+        var regBuilder = new PluginRegistryBuilder();
+        BuiltInPluginRegistration.RegisterBuiltIns(regBuilder);
+        var builtInRegistry = regBuilder.Build();
+        var pipeline = new PayloadPipeline(builtInRegistry, Substitute.For<Microsoft.Extensions.Logging.ILogger<PayloadPipeline>>());
+        Services.AddSingleton(pipeline);
+        Services.AddSingleton<IFormatDisplayNames>(new FormatDisplayNames(pipeline));
     }
 
     [Test]

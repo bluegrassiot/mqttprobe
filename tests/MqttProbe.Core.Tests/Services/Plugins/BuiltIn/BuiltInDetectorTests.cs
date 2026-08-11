@@ -54,6 +54,20 @@ public class BuiltInDetectorTests
     }
 
     [Test]
+    public void Detectors_HaveCorrectDisplayNames()
+    {
+        new EmptyPayloadDetector().DisplayName.Should().Be("Empty");
+        new SparkplugPayloadDetector().DisplayName.Should().Be("Sparkplug B");
+        new MessagePackPayloadDetector().DisplayName.Should().Be("MessagePack");
+        new BinaryPayloadDetector().DisplayName.Should().Be("Binary");
+        new JsonPayloadDetector().DisplayName.Should().Be("JSON");
+        new XmlPayloadDetector().DisplayName.Should().Be("XML");
+        new HexPayloadDetector().DisplayName.Should().Be("Hex text");
+        new Base64PayloadDetector().DisplayName.Should().Be("Base64 text");
+        new PlainTextPayloadDetector().DisplayName.Should().Be("Plain text");
+    }
+
+    [Test]
     public void Detectors_HaveCorrectPriorities()
     {
         new EmptyPayloadDetector().Priority.Should().Be(1000);

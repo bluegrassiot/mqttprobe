@@ -7,6 +7,9 @@ using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Platform;
+using MqttProbe.Core.Services.Plugins.BuiltIn;
+using MqttProbe.Core.Services.Plugins.Pipeline;
+using MqttProbe.Core.Services.Plugins.Registry;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.UI.Components.Layout;
 using MqttProbe.UI.Tests.TestHelpers;
@@ -23,7 +26,6 @@ public class MainLayoutTests : BunitTestContext
     private IAppInfoService _mockAppInfo = null!;
     private ISessionState _mockSessionState = null!;
     private IUiSettings _mockConfig = null!;
-    private IJSRuntime _mockJs = null!;
     private IUpdateService _mockUpdateService = null!;
     private IConnectionSessionLifecycle _mockLifecycle = null!;
 
@@ -38,7 +40,7 @@ public class MainLayoutTests : BunitTestContext
         _mockConfig = Substitute.For<IUiSettings>();
         var cfg = new AppConfiguration();
         _mockConfig.Ui.Returns(cfg.Ui);
-        _mockJs = Substitute.For<IJSRuntime>();
+        Substitute.For<IJSRuntime>();
         _mockUpdateService = Substitute.For<IUpdateService>();
         _mockUpdateService.IsSupported.Returns(false);
 
@@ -83,6 +85,14 @@ public class MainLayoutTests : BunitTestContext
             EmulatorPublishCycles: 0, EmulatorNodesInError: 0));
         Services.AddSingleton(mockMetrics);
         Services.AddSingleton<IThemes>(new Themes());
+
+        // Register IFormatDisplayNames (MetricsStatsChip needs it)
+        var builder = new PluginRegistryBuilder();
+        BuiltInPluginRegistration.RegisterBuiltIns(builder);
+        var registry = builder.Build();
+        var pipeline = new PayloadPipeline(registry, Substitute.For<Microsoft.Extensions.Logging.ILogger<PayloadPipeline>>());
+        Services.AddSingleton(pipeline);
+        Services.AddSingleton<IFormatDisplayNames>(new FormatDisplayNames(pipeline));
     }
 
     private IRenderedComponent<MainLayout> RenderLayout(string? bodyMarker = null)
@@ -250,7 +260,7 @@ public class MainLayoutTests : BunitTestContext
         };
         _mockConfig.Ui.Returns(cfg.Ui);
 
-        var cut = RenderLayout();
+        RenderLayout();
 
         cfg.Ui.Theme = "light";
         cfg.Ui.FontProfile = FontProfiles.Accessible;

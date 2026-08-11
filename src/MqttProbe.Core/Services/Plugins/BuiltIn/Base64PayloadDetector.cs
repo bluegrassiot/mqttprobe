@@ -12,6 +12,7 @@ public sealed class Base64PayloadDetector : IPayloadDetector
 
     public string FormatId => "base64";
     public int Priority => 300;
+    public string DisplayName => "Base64 text";
 
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {

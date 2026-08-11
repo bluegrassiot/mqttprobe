@@ -119,12 +119,19 @@ public sealed class PluginRegistryBuilder : IPluginRegistrationContext
         var encoders = SelectMap(selector, "Encoder", _encoders, disabled, overrideMap);
         var templateProviders = SelectMap(selector, "TemplateProvider", _templateProviders, disabled, overrideMap);
 
+        var displayNamesById = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var detector in detectors)
+        {
+            displayNamesById.TryAdd(detector.FormatId, detector.DisplayName);
+        }
+
         return new PluginRegistry(
             detectors,
             decoders,
             topologyExtractors,
             encoders,
             templateProviders,
+            displayNamesById.AsReadOnly(),
             _diagnostics.ToList().AsReadOnly(),
             new HashSet<string>(_loadedPackagePaths, StringComparer.OrdinalIgnoreCase));
     }

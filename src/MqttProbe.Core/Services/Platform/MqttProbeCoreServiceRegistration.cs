@@ -11,6 +11,7 @@ using MqttProbe.Core.Services.Plugins;
 using MqttProbe.Core.Services.Plugins.Loading;
 using MqttProbe.Core.Services.Plugins.Packaging;
 using MqttProbe.Core.Services.Plugins.Pipeline;
+using MqttProbe.Core.Services.Plugins.Registry;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.Core.Services.Sparkplug;
 
@@ -136,6 +137,7 @@ public static class MqttProbeCoreServiceRegistration
                 config, loggerFactory, sp.GetRequiredService<PluginAssemblyCache>());
         });
         services.AddSingleton<PayloadPipeline>();
+        services.AddSingleton<IFormatDisplayNames, FormatDisplayNames>();
         return services;
     }
 

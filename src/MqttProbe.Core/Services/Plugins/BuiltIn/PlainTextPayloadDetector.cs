@@ -8,6 +8,7 @@ public sealed class PlainTextPayloadDetector : IPayloadDetector
 {
     public string FormatId => "plaintext";
     public int Priority => 200;
+    public string DisplayName => "Plain text";
 
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {

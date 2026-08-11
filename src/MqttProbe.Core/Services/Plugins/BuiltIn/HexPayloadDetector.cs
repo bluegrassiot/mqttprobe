@@ -8,6 +8,7 @@ public sealed class HexPayloadDetector : IPayloadDetector
 {
     public string FormatId => "hex";
     public int Priority => 400;
+    public string DisplayName => "Hex text";
 
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {

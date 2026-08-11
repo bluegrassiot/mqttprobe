@@ -9,6 +9,7 @@ public sealed class MessagePackPayloadDetector : IPayloadDetector
 {
     public string FormatId => "messagepack";
     public int Priority => 800;
+    public string DisplayName => "MessagePack";
 
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {

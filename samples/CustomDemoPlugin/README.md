@@ -109,9 +109,9 @@ dotnet run --project benchmarks/MqttProbe.Benchmarks -c Release -- publish --for
 
 ## What to expect
 
-- The **Format** row in the message detail view shows `csv` (raw FormatId; host does not hardcode plugin display names).
+- The **Format** row in the message detail view shows `CSV` (the display name supplied by the plugin's detector).
 - The **Payload** section renders a JSON tree (array of objects), so you can expand individual rows and fields.
-- The metrics flyout counts messages under the `csv` format.
+- The metrics flyout counts messages under the `csv` FormatId internally and shows `CSV` as the display name.
 
 ## Without the plugin
 

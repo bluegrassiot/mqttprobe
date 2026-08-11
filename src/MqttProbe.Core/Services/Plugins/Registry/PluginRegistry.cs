@@ -10,6 +10,7 @@ public sealed class PluginRegistry
     public IReadOnlyDictionary<string, ITopologyExtractor> TopologyExtractors { get; }
     public IReadOnlyDictionary<string, IPayloadEncoder> Encoders { get; }
     public IReadOnlyDictionary<string, IPayloadTemplateProvider> TemplateProviders { get; }
+    public IReadOnlyDictionary<string, string?> FormatDisplayNamesById { get; }
     public IReadOnlyList<PluginDiagnosticEntry> Diagnostics { get; }
     public IReadOnlySet<string> LoadedPackagePaths { get; }
 
@@ -19,6 +20,7 @@ public sealed class PluginRegistry
         IReadOnlyDictionary<string, ITopologyExtractor> topologyExtractors,
         IReadOnlyDictionary<string, IPayloadEncoder> encoders,
         IReadOnlyDictionary<string, IPayloadTemplateProvider> templateProviders,
+        IReadOnlyDictionary<string, string?> formatDisplayNamesById,
         IReadOnlyList<PluginDiagnosticEntry> diagnostics,
         IReadOnlySet<string> loadedPackagePaths)
     {
@@ -27,6 +29,7 @@ public sealed class PluginRegistry
         TopologyExtractors = topologyExtractors;
         Encoders = encoders;
         TemplateProviders = templateProviders;
+        FormatDisplayNamesById = formatDisplayNamesById;
         Diagnostics = diagnostics;
         LoadedPackagePaths = loadedPackagePaths;
     }

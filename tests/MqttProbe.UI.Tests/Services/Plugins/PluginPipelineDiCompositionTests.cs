@@ -130,6 +130,10 @@ public class PluginPipelineDiCompositionTests
         var pipeline = _serviceProvider.GetRequiredService<PayloadPipeline>();
         pipeline.Should().NotBeNull();
 
+        var formatDisplayNames = _serviceProvider.GetRequiredService<IFormatDisplayNames>();
+        formatDisplayNames.Should().NotBeNull();
+        formatDisplayNames.Should().BeOfType<FormatDisplayNames>();
+
         var topology = _serviceProvider.GetRequiredService<ISparkplugTopologyService>();
         topology.Should().NotBeNull();
         topology.Should().BeOfType<SparkplugTopologyService>();
@@ -263,6 +267,6 @@ public class PluginPipelineDiCompositionTests
         topology.Groups.Should().ContainKey("factory");
         topology.Groups["factory"].Nodes.Should().ContainKey("edge-01");
         topology.Groups["factory"].Nodes["edge-01"].Status
-            .Should().Be(MqttProbe.Core.Models.Sparkplug.SpbNodeStatus.Online);
+            .Should().Be(Core.Models.Sparkplug.SpbNodeStatus.Online);
     }
 }

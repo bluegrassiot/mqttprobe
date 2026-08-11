@@ -8,6 +8,7 @@ public sealed class JsonPayloadDetector : IPayloadDetector
 {
     public string FormatId => "json";
     public int Priority => 600;
+    public string DisplayName => "JSON";
 
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {

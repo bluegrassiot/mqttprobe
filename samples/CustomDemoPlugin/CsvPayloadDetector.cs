@@ -9,6 +9,7 @@ public sealed class CsvPayloadDetector : IPayloadDetector
 {
     public string FormatId => "csv";
     public int Priority => 550;
+    public string? DisplayName => "CSV";
 
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {

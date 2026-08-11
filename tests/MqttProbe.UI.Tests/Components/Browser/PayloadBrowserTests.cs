@@ -7,6 +7,9 @@ using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Platform;
+using MqttProbe.Core.Services.Plugins.BuiltIn;
+using MqttProbe.Core.Services.Plugins.Pipeline;
+using MqttProbe.Core.Services.Plugins.Registry;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
 
@@ -42,6 +45,14 @@ public class PayloadBrowserTests : BunitTestContext
 
         Services.AddSingleton(Substitute.For<IDialogService>());
         Services.AddSingleton(Substitute.For<ISnackbar>());
+
+        // Register IFormatDisplayNames using a real pipeline with built-in detectors
+        var builder = new PluginRegistryBuilder();
+        BuiltInPluginRegistration.RegisterBuiltIns(builder);
+        var registry = builder.Build();
+        var pipeline = new PayloadPipeline(registry, Substitute.For<Microsoft.Extensions.Logging.ILogger<PayloadPipeline>>());
+        Services.AddSingleton(pipeline);
+        Services.AddSingleton<IFormatDisplayNames>(new FormatDisplayNames(pipeline));
     }
 
 
@@ -216,7 +227,7 @@ public class PayloadBrowserTests : BunitTestContext
     [Test]
     public void IsJson_WithValidJsonObjectAndArray_ReturnsTrue()
     {
-        var cut = Render<PayloadBrowser>();
+        Render<PayloadBrowser>();
 
         PayloadBrowser.IsJson("""{"key": "value", "num": 42}""").Should().BeTrue();
         PayloadBrowser.IsJson("[1, 2, 3]").Should().BeTrue();
@@ -226,7 +237,7 @@ public class PayloadBrowserTests : BunitTestContext
     [Test]
     public void IsJson_WithPlainTextAndMalformed_ReturnsFalse()
     {
-        var cut = Render<PayloadBrowser>();
+        Render<PayloadBrowser>();
 
         PayloadBrowser.IsJson("not json at all").Should().BeFalse();
         PayloadBrowser.IsJson("{unclosed").Should().BeFalse();
@@ -385,7 +396,7 @@ public class PayloadBrowserTests : BunitTestContext
     [Test]
     public void GetPayloadType_NullOrWhitespace_ReturnsEmpty()
     {
-        var cut = Render<PayloadBrowser>();
+        Render<PayloadBrowser>();
 
         PayloadBrowser.GetPayloadType(null).Should().Be(PayloadBrowser.PayloadType.Empty);
         PayloadBrowser.GetPayloadType("").Should().Be(PayloadBrowser.PayloadType.Empty);
@@ -395,7 +406,7 @@ public class PayloadBrowserTests : BunitTestContext
     [Test]
     public void GetPayloadType_ValidJson_ReturnsJson()
     {
-        var cut = Render<PayloadBrowser>();
+        Render<PayloadBrowser>();
 
         PayloadBrowser.GetPayloadType("""{"key":"value"}""").Should().Be(PayloadBrowser.PayloadType.Json);
         PayloadBrowser.GetPayloadType("[1,2,3]").Should().Be(PayloadBrowser.PayloadType.Json);
@@ -404,7 +415,7 @@ public class PayloadBrowserTests : BunitTestContext
     [Test]
     public void GetPayloadType_XmlPayload_ReturnsXml()
     {
-        var cut = Render<PayloadBrowser>();
+        Render<PayloadBrowser>();
 
         PayloadBrowser.GetPayloadType("<root><child/></root>").Should().Be(PayloadBrowser.PayloadType.Xml);
     }
@@ -412,7 +423,7 @@ public class PayloadBrowserTests : BunitTestContext
     [Test]
     public void GetPayloadType_BooleanPayload_ReturnsBoolean()
     {
-        var cut = Render<PayloadBrowser>();
+        Render<PayloadBrowser>();
 
         PayloadBrowser.GetPayloadType("true").Should().Be(PayloadBrowser.PayloadType.Boolean);
         PayloadBrowser.GetPayloadType("False").Should().Be(PayloadBrowser.PayloadType.Boolean);
@@ -422,7 +433,7 @@ public class PayloadBrowserTests : BunitTestContext
     [Test]
     public void GetPayloadType_NumericPayload_ReturnsNumber()
     {
-        var cut = Render<PayloadBrowser>();
+        Render<PayloadBrowser>();
 
         PayloadBrowser.GetPayloadType("42").Should().Be(PayloadBrowser.PayloadType.Number);
         PayloadBrowser.GetPayloadType("3.14").Should().Be(PayloadBrowser.PayloadType.Number);
@@ -433,7 +444,7 @@ public class PayloadBrowserTests : BunitTestContext
     [Test]
     public void GetPayloadType_PlainString_ReturnsText()
     {
-        var cut = Render<PayloadBrowser>();
+        Render<PayloadBrowser>();
 
         PayloadBrowser.GetPayloadType("hello world").Should().Be(PayloadBrowser.PayloadType.Text);
         PayloadBrowser.GetPayloadType("temperature:42").Should().Be(PayloadBrowser.PayloadType.Text);
@@ -450,30 +461,33 @@ public class PayloadBrowserTests : BunitTestContext
     [TestCase("hex", "Hex text")]
     [TestCase("base64", "Base64 text")]
     [TestCase("plaintext", "Plain text")]
-    public void GetFormatDisplayName_KnownFormatIds_ReturnExpectedName(string formatId, string expected)
+    public void FormatDisplayNames_KnownFormatIds_ReturnExpectedName(string formatId, string expected)
     {
-        var cut = Render<PayloadBrowser>();
+        Render<PayloadBrowser>();
+        var formatDisplayNames = Services.GetRequiredService<IFormatDisplayNames>();
 
-        PayloadBrowser.GetFormatDisplayName(formatId).Should().Be(expected);
+        formatDisplayNames.GetDisplayName(formatId).Should().Be(expected);
     }
 
     [TestCase(null)]
     [TestCase("")]
     [TestCase("   ")]
-    public void GetFormatDisplayName_NullOrWhitespace_ReturnsNull(string? formatId)
+    public void FormatDisplayNames_NullOrWhitespace_ReturnsNull(string? formatId)
     {
-        var cut = Render<PayloadBrowser>();
+        Render<PayloadBrowser>();
+        var formatDisplayNames = Services.GetRequiredService<IFormatDisplayNames>();
 
-        PayloadBrowser.GetFormatDisplayName(formatId).Should().BeNull();
+        formatDisplayNames.GetDisplayName(formatId).Should().BeNull();
     }
 
     [Test]
-    public void GetFormatDisplayName_UnknownFormatId_ReturnsRawId()
+    public void FormatDisplayNames_UnknownFormatId_ReturnsRawId()
     {
-        var cut = Render<PayloadBrowser>();
+        Render<PayloadBrowser>();
+        var formatDisplayNames = Services.GetRequiredService<IFormatDisplayNames>();
 
         // Unknown non-null ids fall through so plugin formats still render informatively.
-        PayloadBrowser.GetFormatDisplayName("custom-plugin-format").Should().Be("custom-plugin-format");
+        formatDisplayNames.GetDisplayName("custom-plugin-format").Should().Be("custom-plugin-format");
     }
 
 
@@ -578,7 +592,7 @@ public class PayloadBrowserTests : BunitTestContext
         mockDialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Cancel()));
         mockDialogService
             .ShowAsync<QuickAddToChartDialog>(Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<IDialogReference>(mockDialogRef));
+            .Returns(Task.FromResult(mockDialogRef));
 
         var cut = Render<PayloadBrowser>();
 
@@ -597,7 +611,7 @@ public class PayloadBrowserTests : BunitTestContext
         mockDialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Ok("Added to chart")));
         mockDialogService
             .ShowAsync<QuickAddToChartDialog>(Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<IDialogReference>(mockDialogRef));
+            .Returns(Task.FromResult(mockDialogRef));
 
         var cut = Render<PayloadBrowser>();
 

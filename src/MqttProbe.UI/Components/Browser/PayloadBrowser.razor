@@ -1,11 +1,13 @@
 @using System.Globalization
 @using MqttProbe.Core.Services.Configuration
 @using MqttProbe.Core.Services.Metrics
+@using MqttProbe.Core.Services.Plugins.Registry
 @inject IMessageStoreManager MessageStoreManager
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IPerformanceSettings PerfSettings
 @inject IUxMetricsService Metrics
+@inject IFormatDisplayNames FormatDisplayNames
 @using System.Text.Json
 @using System.Xml.Linq
 @implements IAsyncDisposable
@@ -72,7 +74,7 @@
                         </td>
                     </tr>
                     @{
-                        var formatName = GetFormatDisplayName(msg.FormatId);
+                        var formatName = FormatDisplayNames.GetDisplayName(msg.FormatId);
                     }
                     @if (formatName != null)
                     {
@@ -346,25 +348,6 @@ else
         if (bool.TryParse(trimmed, out _)) return PayloadType.Boolean;
         if (double.TryParse(trimmed, NumberStyles.Any, CultureInfo.InvariantCulture, out _)) return PayloadType.Number;
         return PayloadType.Text;
-    }
-
-    internal static string? GetFormatDisplayName(string? formatId)
-    {
-        if (string.IsNullOrWhiteSpace(formatId)) return null;
-        return formatId switch
-        {
-            "empty"       => "Empty",
-            "sparkplug-b" => "Sparkplug B",
-            "protobuf"    => "Protobuf",
-            "messagepack" => "MessagePack",
-            "binary"      => "Binary",
-            "json"        => "JSON",
-            "xml"         => "XML",
-            "hex"         => "Hex text",
-            "base64"      => "Base64 text",
-            "plaintext"   => "Plain text",
-            _             => formatId
-        };
     }
 
     internal static string? TryFormatXml(string value)

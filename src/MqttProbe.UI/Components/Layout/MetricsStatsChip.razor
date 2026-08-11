@@ -1,7 +1,9 @@
 @using System.Globalization
+@using MqttProbe.Core.Services.Plugins.Registry
 @inject IMqttManagedClient MqttClient
 @inject IMessageStoreManager MessageStoreManagerService
 @inject IUxMetricsService Metrics
+@inject IFormatDisplayNames FormatDisplayNames
 @implements IDisposable
 
 <MudMenu Class="ml-2" PopoverClass="metrics-flyout-popover" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter" Dense="false" OpenChanged="OnMenuOpenChanged">
@@ -69,7 +71,7 @@
                             <MudText Typo="Typo.caption" Class="metrics-subsection-title">Messages by payload format</MudText>
                             @foreach (var (format, count) in _snapshot.MessagesProcessedByFormat.OrderByDescending(kv => kv.Value))
                             {
-                                <div class="metrics-row"><span>@format</span><span>@Fmt(count)</span></div>
+                                <div class="metrics-row"><span>@(FormatDisplayNames.GetDisplayName(format) ?? format)</span><span>@Fmt(count)</span></div>
                             }
                         </div>
                     }

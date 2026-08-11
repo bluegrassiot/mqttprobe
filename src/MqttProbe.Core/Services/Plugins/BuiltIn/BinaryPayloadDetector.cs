@@ -8,6 +8,7 @@ public sealed class BinaryPayloadDetector : IPayloadDetector
 {
     public string FormatId => "binary";
     public int Priority => 700;
+    public string DisplayName => "Binary";
 
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {

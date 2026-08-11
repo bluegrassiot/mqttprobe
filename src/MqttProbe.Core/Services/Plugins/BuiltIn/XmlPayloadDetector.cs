@@ -8,6 +8,7 @@ public sealed class XmlPayloadDetector : IPayloadDetector
 {
     public string FormatId => "xml";
     public int Priority => 500;
+    public string? DisplayName => "XML";
 
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {

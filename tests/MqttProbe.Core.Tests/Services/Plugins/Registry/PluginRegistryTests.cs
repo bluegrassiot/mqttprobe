@@ -27,6 +27,17 @@ public class PluginRegistryTests
         var detector = Substitute.For<IPayloadDetector>();
         detector.FormatId.Returns(formatId);
         detector.Priority.Returns(priority);
+        detector.DisplayName.Returns((string?)null);
+        detector.CanDetect(Arg.Any<MqttApplicationMessageReceivedEventArgs>()).Returns(canDetect);
+        return detector;
+    }
+
+    private static IPayloadDetector MakeDetector(string formatId, int priority, string? displayName, bool canDetect = false)
+    {
+        var detector = Substitute.For<IPayloadDetector>();
+        detector.FormatId.Returns(formatId);
+        detector.Priority.Returns(priority);
+        detector.DisplayName.Returns(displayName);
         detector.CanDetect(Arg.Any<MqttApplicationMessageReceivedEventArgs>()).Returns(canDetect);
         return detector;
     }
@@ -1191,7 +1202,63 @@ public class PluginRegistryTests
         registry.Encoders.Should().BeAssignableTo<IReadOnlyDictionary<string, IPayloadEncoder>>();
         registry.TopologyExtractors.Should().BeAssignableTo<IReadOnlyDictionary<string, ITopologyExtractor>>();
         registry.TemplateProviders.Should().BeAssignableTo<IReadOnlyDictionary<string, IPayloadTemplateProvider>>();
+        registry.FormatDisplayNamesById.Should().BeAssignableTo<IReadOnlyDictionary<string, string?>>();
         registry.Diagnostics.Should().BeAssignableTo<IReadOnlyList<PluginDiagnosticEntry>>();
+    }
+
+    // --- FormatDisplayNamesById ---
+
+    [Test]
+    public void FormatDisplayNamesById_ContainsAllRegisteredDetectors()
+    {
+        var builder = new PluginRegistryBuilder();
+        builder.RegisterDetector(MakeDetector("json", 100, "JSON"));
+        builder.RegisterDetector(MakeDetector("xml", 90, "XML"));
+
+        var registry = builder.Build();
+
+        registry.FormatDisplayNamesById.Should().HaveCount(2);
+        registry.FormatDisplayNamesById["json"].Should().Be("JSON");
+        registry.FormatDisplayNamesById["xml"].Should().Be("XML");
+    }
+
+    [Test]
+    public void FormatDisplayNamesById_LoserDetectorDisplayNameDoesNotWin()
+    {
+        var builder = new PluginRegistryBuilder();
+
+        builder.SetCurrentPluginId(PluginRegistryBuilder.BuiltInPluginId);
+        var builtIn = MakeDetector("json", 50, "JSON BuiltIn");
+        builder.RegisterDetector(builtIn);
+
+        builder.SetCurrentPluginId("external-plugin");
+        var external = MakeDetector("json", 200, "JSON External");
+        builder.RegisterDetector(external);
+
+        var registry = builder.Build();
+
+        registry.FormatDisplayNamesById.Should().ContainSingle();
+        registry.FormatDisplayNamesById["json"].Should().Be("JSON BuiltIn");
+    }
+
+    [Test]
+    public void FormatDisplayNamesById_NullDisplayName_StoredAsNull()
+    {
+        var builder = new PluginRegistryBuilder();
+        builder.RegisterDetector(MakeDetector("custom", 100, null));
+
+        var registry = builder.Build();
+
+        registry.FormatDisplayNamesById["custom"].Should().BeNull();
+    }
+
+    [Test]
+    public void FormatDisplayNamesById_EmptyBuilder_ProducesEmptyMap()
+    {
+        var builder = new PluginRegistryBuilder();
+        var registry = builder.Build();
+
+        registry.FormatDisplayNamesById.Should().BeEmpty();
     }
 
     // --- No registrations ---
@@ -1207,6 +1274,7 @@ public class PluginRegistryTests
         registry.Encoders.Should().BeEmpty();
         registry.TopologyExtractors.Should().BeEmpty();
         registry.TemplateProviders.Should().BeEmpty();
+        registry.FormatDisplayNamesById.Should().BeEmpty();
         registry.Diagnostics.Should().BeEmpty();
     }
 }

@@ -2,6 +2,9 @@ using AngleSharp.Dom;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
+using MqttProbe.Core.Services.Plugins.BuiltIn;
+using MqttProbe.Core.Services.Plugins.Pipeline;
+using MqttProbe.Core.Services.Plugins.Registry;
 using MqttProbe.UI.Components.Layout;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
@@ -26,6 +29,14 @@ public class MetricsStatsChipTests : BunitTestContext
         Services.AddSingleton(_mockMetrics);
         Services.AddSingleton(_mockMqttClient);
         Services.AddSingleton(_mockMsgStore);
+
+        // Register IFormatDisplayNames using a real pipeline with built-in detectors
+        var builder = new PluginRegistryBuilder();
+        BuiltInPluginRegistration.RegisterBuiltIns(builder);
+        var registry = builder.Build();
+        var pipeline = new PayloadPipeline(registry, Substitute.For<Microsoft.Extensions.Logging.ILogger<PayloadPipeline>>());
+        Services.AddSingleton(pipeline);
+        Services.AddSingleton<IFormatDisplayNames>(new FormatDisplayNames(pipeline));
     }
 
     // Throws if no panel matches, or if more than one does.
@@ -195,6 +206,47 @@ public class MetricsStatsChipTests : BunitTestContext
             processing.TextContent.Should().Contain("Json");
             processing.TextContent.Should().Contain("Sparkplug B");
             processing.TextContent.Should().Contain("Messages processed");
+        });
+    }
+
+    [Test]
+    public void ProcessingPanel_ByFormat_ShowsDisplayNamesNotRawFormatIds()
+    {
+        _mockMetrics.GetSnapshot().Returns(new UxMetricsSnapshot(
+            ConnectAttempts: 0, ConnectSuccesses: 0, ConnectFailures: 0,
+            PublishSuccesses: 0, PublishFailures: 0,
+            ChartsCreated: 0, SeriesAddedToExistingCharts: 0,
+            MessagesProcessed: 100, MessagesDropped: 0,
+            AvgProcessingTimeUs: 0, MaxProcessingTimeUs: 0,
+            AvgPayloadBytes: 0, MaxPayloadBytes: 0,
+            CurrentMessagesPerSecond: 0,
+            MessageRateHistory: new int[UxMetricsService.RateWindowSeconds],
+            MessagesProcessedByFormat: new Dictionary<string, long>
+            {
+                ["json"] = 60,
+                ["sparkplug-b"] = 30,
+                ["custom"] = 10
+            },
+            ChartFunnelBySource: new Dictionary<string, long>(),
+            MaxDisplayMessages: 100, CurrentDisplayedMessageCount: 0,
+            AppHealth: new AppHealthMetricsSnapshot(
+                CpuUsagePercent: null, ManagedHeapMb: null,
+                WorkingSetMb: null, ThreadCount: null, ThreadPoolQueueLength: null,
+                GcGen2Collections: null, UptimeSeconds: null),
+            EmulatorPublishersOnline: 0,
+            EmulatorPublishCycles: 0, EmulatorNodesInError: 0));
+        var provider = Render<MudPopoverProvider>();
+        var cut = Render<MetricsStatsChip>();
+
+        cut.Find("button.mud-chip").Click();
+
+        provider.WaitForAssertion(() =>
+        {
+            var processing = FindPanelByTitle(provider, "Processing");
+            processing.TextContent.Should().Contain("JSON");
+            processing.TextContent.Should().Contain("Sparkplug B");
+            // Unknown format falls back to raw id
+            processing.TextContent.Should().Contain("custom");
         });
     }
 

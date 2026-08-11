@@ -13,6 +13,8 @@ public sealed class ProtobufPayloadDetector(ProtobufSchemaRegistry registry) : I
 
     public int Priority => 850;
 
+    public string DisplayName => "Protobuf";
+
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {
         var topic = e.ApplicationMessage.Topic;

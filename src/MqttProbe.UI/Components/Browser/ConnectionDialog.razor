@@ -379,11 +379,14 @@
 
     private bool ShouldApplyLiveSubscriptions() =>
         ManagedMqttClient.IsConnected &&
-        _selectedConnection.Id == SessionState.SelectedConnection.Id;
+        SessionState.SelectedConnection is { } active &&
+        _selectedConnection.Id == active.Id;
 
     private void SyncSessionStateSelectedTopics()
     {
         var active = SessionState.SelectedConnection;
+        if (active is null)
+            return;
         if (_selectedConnection.Id == active.Id)
         {
             active.SubscribedTopics = _selectedConnection.SubscribedTopics

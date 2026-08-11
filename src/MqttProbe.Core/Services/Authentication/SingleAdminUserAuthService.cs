@@ -36,7 +36,7 @@ public class SingleAdminUserAuthService(IAuthSettings authSettings) : IUserAuthS
     public async Task<AuthServiceResult> CreateUserAsync(string username, string password, string role)
     {
         if (!string.IsNullOrEmpty(authSettings.Auth.PasswordHash))
-            return new AuthServiceResult(false, "Community edition supports one user.");
+            return new AuthServiceResult(false, "Not supported.");
 
         var lengthError = PasswordPolicy.ValidateLength(password);
         if (lengthError is not null)
@@ -47,8 +47,8 @@ public class SingleAdminUserAuthService(IAuthSettings authSettings) : IUserAuthS
     }
 
     public Task<AuthServiceResult> DeleteUserAsync(string userId)
-        => Task.FromResult(new AuthServiceResult(false, "Not supported in community edition."));
+        => Task.FromResult(new AuthServiceResult(false, "Not supported."));
 
     public Task<AuthServiceResult> UpdateUserRoleAsync(string userId, string role)
-        => Task.FromResult(new AuthServiceResult(false, "Not supported in community edition."));
+        => Task.FromResult(new AuthServiceResult(false, "Not supported."));
 }

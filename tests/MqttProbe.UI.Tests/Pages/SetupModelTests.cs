@@ -5,17 +5,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.DependencyInjection;
-using MqttProbe.Core.Models.Chart;
 using MqttProbe.Core.Models.Configuration;
-using MqttProbe.Core.Models.Mqtt;
-using MqttProbe.Core.Models.Sparkplug;
-using MqttProbe.Core.Services.Chart;
 using MqttProbe.Core.Services.Configuration;
-using MqttProbe.Core.Services.Metrics;
-using MqttProbe.Core.Services.Mqtt;
-using MqttProbe.Core.Services.Platform;
 using MqttProbe.Core.Services.Security;
-using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.Pages;
 
 namespace MqttProbe.UI.Tests.Pages;
@@ -43,7 +35,7 @@ public class SetupModelTests
     private static PageContext PageContextWithAuth(IAuthenticationService authService)
     {
         var services = new ServiceCollection();
-        services.AddSingleton<IAuthenticationService>(authService);
+        services.AddSingleton(authService);
         return new PageContext { HttpContext = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() } };
     }
 
@@ -194,13 +186,13 @@ public class SetupModelTests
     public async Task OnPost_CreateUserFails_SetsErrorAndReturnsPage()
     {
         _mockAuth.CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
-            .Returns(new AuthServiceResult(false, "Community edition supports one user."));
+            .Returns(new AuthServiceResult(false, "Not supported."));
 
         var model = Create();
         var result = await model.OnPostAsync("admin", "secure123456", "secure123456");
 
         result.Should().BeOfType<PageResult>();
-        model.ErrorMessage.Should().Contain("Community edition");
+        model.ErrorMessage.Should().Contain("Not supported.");
     }
 
     [Test]

@@ -134,7 +134,7 @@ public class SingleAdminUserAuthServiceTests
         var result = await _service.CreateUserAsync("second", "pass", AppRoles.Admin);
 
         result.Succeeded.Should().BeFalse();
-        result.Error.Should().Contain("one user");
+        result.Error.Should().Contain("Not supported");
     }
 
     [Test]

@@ -1,4 +1,5 @@
 @page
+@using MqttProbe.Core.Services.Security
 @model MqttProbe.Pages.SetupModel
 @{
     Layout = null;
@@ -26,9 +27,9 @@
             <input type="text" id="username" name="username" value="admin" autocomplete="username" required autofocus />
         </div>
 
-        <label for="password">Password</label>
+        <label for="password">Password (at least @PasswordPolicy.MinLength characters)</label>
         <div class="field password-wrapper">
-            <input type="password" id="password" name="password" autocomplete="new-password" required />
+            <input type="password" id="password" name="password" autocomplete="new-password" required minlength="@PasswordPolicy.MinLength" />
             <button type="button" class="password-toggle" onclick="togglePassword('password', this)"
                     aria-label="Show password" aria-controls="password">
                 <svg class="icon-eye-off" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"

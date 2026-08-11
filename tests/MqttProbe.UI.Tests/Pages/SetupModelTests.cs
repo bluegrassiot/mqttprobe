@@ -136,9 +136,9 @@ public class SetupModelTests
         var model = Create();
         model.PageContext = PageContextWithAuth(authService);
 
-        await model.OnPostAsync("admin", "secure123", "secure123");
+        await model.OnPostAsync("admin", "secure123456", "secure123456");
 
-        await _mockAuth.Received(1).CreateUserAsync("admin", "secure123", AppRoles.Admin);
+        await _mockAuth.Received(1).CreateUserAsync("admin", "secure123456", AppRoles.Admin);
     }
 
     [Test]
@@ -155,7 +155,7 @@ public class SetupModelTests
         var model = Create();
         model.PageContext = PageContextWithAuth(authService);
 
-        var result = await model.OnPostAsync("admin", "secure123", "secure123");
+        var result = await model.OnPostAsync("admin", "secure123456", "secure123456");
 
         result.Should().BeOfType<LocalRedirectResult>()
             .Which.Url.Should().Be("/");
@@ -181,7 +181,7 @@ public class SetupModelTests
         var model = Create();
         model.PageContext = PageContextWithAuth(authService);
 
-        await model.OnPostAsync("admin", "secure123", "secure123");
+        await model.OnPostAsync("admin", "secure123456", "secure123456");
 
         await authService.Received(1).SignInAsync(
             Arg.Any<HttpContext>(),
@@ -197,10 +197,23 @@ public class SetupModelTests
             .Returns(new AuthServiceResult(false, "Community edition supports one user."));
 
         var model = Create();
-        var result = await model.OnPostAsync("admin", "secure123", "secure123");
+        var result = await model.OnPostAsync("admin", "secure123456", "secure123456");
 
         result.Should().BeOfType<PageResult>();
         model.ErrorMessage.Should().Contain("Community edition");
+    }
+
+    [Test]
+    public async Task OnPost_CreateUserFailsWithMinLengthError_SetsErrorAndReturnsPage()
+    {
+        _mockAuth.CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+            .Returns(new AuthServiceResult(false, "Password must be at least 12 characters."));
+
+        var model = Create();
+        var result = await model.OnPostAsync("admin", "short", "short");
+
+        result.Should().BeOfType<PageResult>();
+        model.ErrorMessage.Should().Contain("12");
     }
 
     [Test]

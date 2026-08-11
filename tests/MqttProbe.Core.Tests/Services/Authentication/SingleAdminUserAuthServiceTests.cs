@@ -64,12 +64,12 @@ public class SingleAdminUserAuthServiceTests
     public async Task ChangePasswordAsync_CorrectCurrentPassword_SavesAndSucceeds()
     {
         _mockConfig.VerifyCredentials("admin", "correct").Returns(true);
-        _mockConfig.SetPasswordAsync("admin", "newpass").Returns(Task.CompletedTask);
+        _mockConfig.SetPasswordAsync("admin", "newpassword1234").Returns(Task.CompletedTask);
 
-        var result = await _service.ChangePasswordAsync("admin", "correct", "newpass");
+        var result = await _service.ChangePasswordAsync("admin", "correct", "newpassword1234");
 
         result.Succeeded.Should().BeTrue();
-        await _mockConfig.Received(1).SetPasswordAsync("admin", "newpass");
+        await _mockConfig.Received(1).SetPasswordAsync("admin", "newpassword1234");
     }
 
     [Test]
@@ -104,12 +104,12 @@ public class SingleAdminUserAuthServiceTests
             Auth = new Auth { Username = "", PasswordHash = "" }
         };
         _mockConfig.Auth.Returns(config.Auth);
-        _mockConfig.SetPasswordAsync("admin", "pass").Returns(Task.CompletedTask);
+        _mockConfig.SetPasswordAsync("admin", "password1234").Returns(Task.CompletedTask);
 
-        var result = await _service.CreateUserAsync("admin", "pass", AppRoles.Admin);
+        var result = await _service.CreateUserAsync("admin", "password1234", AppRoles.Admin);
 
         result.Succeeded.Should().BeTrue();
-        await _mockConfig.Received(1).SetPasswordAsync("admin", "pass");
+        await _mockConfig.Received(1).SetPasswordAsync("admin", "password1234");
     }
 
     [Test]
@@ -120,10 +120,10 @@ public class SingleAdminUserAuthServiceTests
             Auth = new Auth { Username = "", PasswordHash = "" }
         };
         _mockConfig.Auth.Returns(config.Auth);
-        _mockConfig.SetPasswordAsync("admin", "pass")
+        _mockConfig.SetPasswordAsync("admin", "password1234")
             .Returns<Task>(_ => throw new IOException("persistence failed"));
 
-        var act = async () => await _service.CreateUserAsync("admin", "pass", AppRoles.Admin);
+        var act = async () => await _service.CreateUserAsync("admin", "password1234", AppRoles.Admin);
 
         await act.Should().ThrowAsync<IOException>();
     }
@@ -153,5 +153,61 @@ public class SingleAdminUserAuthServiceTests
 
         result.Succeeded.Should().BeFalse();
         result.Error.Should().Contain("Not supported");
+    }
+
+    [Test]
+    public async Task CreateUserAsync_PasswordShorterThanMin_ReturnsFailed_DoesNotSetPassword()
+    {
+        var config = new AppConfiguration
+        {
+            Auth = new Auth { Username = "", PasswordHash = "" }
+        };
+        _mockConfig.Auth.Returns(config.Auth);
+
+        var result = await _service.CreateUserAsync("admin", "short", AppRoles.Admin);
+
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Contain("12");
+        await _mockConfig.DidNotReceive().SetPasswordAsync(Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Test]
+    public async Task CreateUserAsync_PasswordExactlyMinLength_Succeeds()
+    {
+        var config = new AppConfiguration
+        {
+            Auth = new Auth { Username = "", PasswordHash = "" }
+        };
+        _mockConfig.Auth.Returns(config.Auth);
+        _mockConfig.SetPasswordAsync("admin", "abcdefghij12").Returns(Task.CompletedTask);
+
+        var result = await _service.CreateUserAsync("admin", "abcdefghij12", AppRoles.Admin);
+
+        result.Succeeded.Should().BeTrue();
+        await _mockConfig.Received(1).SetPasswordAsync("admin", "abcdefghij12");
+    }
+
+    [Test]
+    public async Task ChangePasswordAsync_NewPasswordShorterThanMin_ReturnsFailed_DoesNotSetPassword()
+    {
+        _mockConfig.VerifyCredentials("admin", "correct").Returns(true);
+
+        var result = await _service.ChangePasswordAsync("admin", "correct", "short");
+
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().Contain("12");
+        await _mockConfig.DidNotReceive().SetPasswordAsync(Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Test]
+    public async Task ChangePasswordAsync_NewPasswordExactlyMinLength_Succeeds()
+    {
+        _mockConfig.VerifyCredentials("admin", "correct").Returns(true);
+        _mockConfig.SetPasswordAsync("admin", "abcdefghij12").Returns(Task.CompletedTask);
+
+        var result = await _service.ChangePasswordAsync("admin", "correct", "abcdefghij12");
+
+        result.Succeeded.Should().BeTrue();
+        await _mockConfig.Received(1).SetPasswordAsync("admin", "abcdefghij12");
     }
 }

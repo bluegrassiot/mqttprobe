@@ -16,6 +16,10 @@ public class SingleAdminUserAuthService(IAuthSettings authSettings) : IUserAuthS
         if (!authSettings.VerifyCredentials(username, currentPassword))
             return new AuthServiceResult(false, "Current password is incorrect.");
 
+        var lengthError = PasswordPolicy.ValidateLength(newPassword);
+        if (lengthError is not null)
+            return new AuthServiceResult(false, lengthError);
+
         await authSettings.SetPasswordAsync(username, newPassword);
         return new AuthServiceResult(true);
     }
@@ -33,6 +37,10 @@ public class SingleAdminUserAuthService(IAuthSettings authSettings) : IUserAuthS
     {
         if (!string.IsNullOrEmpty(authSettings.Auth.PasswordHash))
             return new AuthServiceResult(false, "Community edition supports one user.");
+
+        var lengthError = PasswordPolicy.ValidateLength(password);
+        if (lengthError is not null)
+            return new AuthServiceResult(false, lengthError);
 
         await authSettings.SetPasswordAsync(username, password);
         return new AuthServiceResult(true);

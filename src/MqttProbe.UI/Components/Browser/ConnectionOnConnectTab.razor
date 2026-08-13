@@ -27,8 +27,7 @@
                         EmptyText="No on-connect subscriptions yet"
                         EmptyHint="Add a topic above."
                         OnAdd="@OnAdd"
-                        OnRemove="@OnRemove"
-                        OnClearAll="@OnClearAll" />
+                        OnRemove="@OnRemove" />
 </MudStack>
 
 @code {
@@ -37,5 +36,4 @@
     [Parameter, EditorRequired] public List<SubscribedTopic> Items { get; set; } = [];
     [Parameter] public EventCallback<(string Topic, MqttQualityOfServiceLevel Qos)> OnAdd { get; set; }
     [Parameter] public EventCallback<IReadOnlyList<string>> OnRemove { get; set; }
-    [Parameter] public EventCallback OnClearAll { get; set; }
 }

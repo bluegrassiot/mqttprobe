@@ -581,7 +581,7 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task OnConnectTab_ClearAll_WhenConnectedToActiveConnection_CallsSubscriptionManagerRemove()
+    public async Task OnConnectTab_SelectAllAndRemove_WhenConnectedToActiveConnection_CallsSubscriptionManagerRemove()
     {
         _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         var activeId = Guid.NewGuid();
@@ -611,26 +611,16 @@ public class ConnectionDialogTests : BunitTestContext
         await SelectConnection(conn);
         GoToOnConnectTab();
 
-        // Click Clear all button — this opens a MudBlazor confirmation dialog
-        _dialogProvider.Find("button[title='Clear all']").Click();
+        // Select all rows via the header checkbox, then click Remove
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>();
+        var checkboxes = editor.FindAll("input[type='checkbox']");
+        // [0] = header select-all, [1] = topic/a, [2] = topic/b
+        checkboxes.Should().HaveCount(3);
+        checkboxes[0].Change(true);
+        _dialogProvider.Find("button[title='Remove']").Click();
 
-        // The SubscriptionEditor shows a MudMessageBox. Wait for it and confirm.
-        await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.FindAll(".mud-message-box").Count.Should().BeGreaterThan(0),
-            TimeSpan.FromSeconds(3));
-
-        // The MudMessageBox has a button with the confirm text
-        var messageBox = _dialogProvider.Find(".mud-message-box");
-        var buttons = messageBox.QuerySelectorAll("button");
-        var confirmButton = buttons.FirstOrDefault(b => b.TextContent.Contains("Clear all"));
-        confirmButton.Should().NotBeNull("the confirmation dialog should have a Clear all button");
-        confirmButton.Click();
-
-        await _dialogProvider.WaitForAssertionAsync(async () =>
-        {
-            await _mockSubMgr.Received(1).Remove(
-                Arg.Is<IReadOnlyList<string>>(t => t.Contains("topic/a") && t.Contains("topic/b") && t.Count == 2));
-        }, TimeSpan.FromSeconds(3));
+        await _mockSubMgr.Received(1).Remove(
+            Arg.Is<IReadOnlyList<string>>(t => t.Contains("topic/a") && t.Contains("topic/b") && t.Count == 2));
     }
 
     [Test]
@@ -815,12 +805,10 @@ public class ConnectionDialogTests : BunitTestContext
         await OpenDialog(new AppConfiguration());
 
         DirtyNameField("My Broker");
-        ActivateTab("Transport");
         SetTextField("Host", "localhost");
         _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
             .Should().BeNull("a dirty, valid form should allow saving");
 
-        ActivateTab("Identity");
         DirtyNameField("");
         _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
             .Should().NotBeNull("an invalid form must not be saveable even when dirty");
@@ -865,7 +853,7 @@ public class ConnectionDialogTests : BunitTestContext
         var cfg = new AppConfiguration { Connections = [conn] };
         await OpenDialog(cfg);
         await SelectConnection(conn);
-        ActivateTab("Transport");
+        ActivateTab("Security");
 
         var pwField = _dialogProvider.FindComponents<MudTextField<string>>()
             .First(f => f.Instance.Label == "PFX Password");
@@ -896,7 +884,6 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
             .Should().NotBeNull("an unchanged saved connection is not dirty");
 
-        ActivateTab("Transport");
         SetTextField("Password", "");
 
         _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
@@ -922,7 +909,6 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
             .Should().NotBeNull("an unchanged saved connection is not dirty");
 
-        ActivateTab("Transport");
         SetTextField("Password", "");
 
         _dialogProvider.Find("button[title='Save connection']").GetAttribute("disabled")
@@ -932,7 +918,6 @@ public class ConnectionDialogTests : BunitTestContext
     private void FillNewConnection()
     {
         DirtyNameField("My Broker");
-        ActivateTab("Transport");
         SetTextField("Host", "localhost");
     }
 
@@ -983,7 +968,6 @@ public class ConnectionDialogTests : BunitTestContext
         await OpenDialog(new AppConfiguration());
 
         DirtyNameField("My Broker");
-        ActivateTab("Transport");
         SetTextField("Host", "localhost");
 
         _dialogProvider.WaitForAssertion(() =>
@@ -1001,7 +985,6 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Find("button[title='New connection']").Click();
         DirtyNameField("My Broker");
-        ActivateTab("Transport");
         SetTextField("Host", "localhost");
 
         _dialogProvider.WaitForAssertion(() =>
@@ -1026,12 +1009,12 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task Renders_ThreeTabPanels_ForIdentityTransportAndOnConnect()
+    public async Task Renders_ThreeTabPanels_ForConnectionSecurityAndOnConnect()
     {
         await OpenDialog(new AppConfiguration());
 
         var tabPanels = _dialogProvider.FindAll(".mud-tab-panel[role='tabpanel']");
-        tabPanels.Should().HaveCount(3, "Identity, Transport, and On Connect panels are always rendered");
+        tabPanels.Should().HaveCount(3, "Connection, Security, and On Connect panels are always rendered");
     }
 
     [Test]
@@ -1094,26 +1077,25 @@ public class ConnectionDialogTests : BunitTestContext
 
         var stepButtons = _dialogProvider.FindAll(".step-btn");
         stepButtons.Should().HaveCount(3);
-        stepButtons[0].TextContent.Should().Contain("Identity");
-        stepButtons[1].TextContent.Should().Contain("Transport");
+        stepButtons[0].TextContent.Should().Contain("Connection");
+        stepButtons[1].TextContent.Should().Contain("Security");
         stepButtons[2].TextContent.Should().Contain("On Connect");
     }
 
     [Test]
-    public async Task StepSelector_ClickTransport_ActivatesTransportButton()
+    public async Task StepSelector_ClickSecurity_ActivatesSecurityButton()
     {
         await OpenDialog(new AppConfiguration());
 
         var stepButtons = _dialogProvider.FindAll(".step-btn");
-        stepButtons[0].ClassName.Should().Contain("active", "Identity is default");
+        stepButtons[0].ClassName.Should().Contain("active", "Connection is default");
 
         stepButtons[1].Click();
 
         var refreshedButtons = _dialogProvider.FindAll(".step-btn");
-        refreshedButtons[1].ClassName.Should().Contain("active", "Transport was clicked");
-        refreshedButtons[0].ClassName.Should().NotContain("active", "Identity is no longer selected");
-        _dialogProvider.Markup.Should().Contain("Protocol");
-        _dialogProvider.Markup.Should().Contain("Host");
+        refreshedButtons[1].ClassName.Should().Contain("active", "Security was clicked");
+        refreshedButtons[0].ClassName.Should().NotContain("active", "Connection is no longer selected");
+        _dialogProvider.Markup.Should().Contain("Turn on Use TLS");
     }
 
     [Test]
@@ -1126,19 +1108,20 @@ public class ConnectionDialogTests : BunitTestContext
 
         var refreshedButtons = _dialogProvider.FindAll(".step-btn");
         refreshedButtons[2].ClassName.Should().Contain("active", "On Connect was clicked");
-        refreshedButtons[0].ClassName.Should().NotContain("active", "Identity is no longer selected");
+        refreshedButtons[0].ClassName.Should().NotContain("active", "Connection is no longer selected");
         _dialogProvider.Markup.Should().Contain("No on-connect subscriptions yet");
     }
 
     [Test]
-    public async Task StepSelector_IdentityIsDefaultStep()
+    public async Task StepSelector_ConnectionIsDefaultStep()
     {
         await OpenDialog(new AppConfiguration());
 
-        var identityBtn = _dialogProvider.FindAll(".step-btn")
-            .First(b => b.TextContent.Contains("Identity"));
-        identityBtn.ClassName.Should().Contain("active");
+        var connectionBtn = _dialogProvider.FindAll(".step-btn")
+            .First(b => b.TextContent.Contains("Connection"));
+        connectionBtn.ClassName.Should().Contain("active");
         _dialogProvider.Markup.Should().Contain("Name");
+        _dialogProvider.Markup.Should().Contain("Host");
     }
 
     [Test]
@@ -1297,8 +1280,6 @@ public class ConnectionDialogTests : BunitTestContext
     {
         await OpenDialog(new AppConfiguration());
 
-        ActivateTab("Transport");
-
         var protocolSelect = _dialogProvider.FindComponents<MudSelect<Protocol>>()
             .Single(s => s.Instance.Label == "Protocol");
         var mqttVersionSelect = _dialogProvider.FindComponents<MudSelect<MqttVersion>>()
@@ -1433,7 +1414,6 @@ public class ConnectionDialogTests : BunitTestContext
             .GetAttribute("disabled").Should().BeNull("staging a certificate should enable Save");
 
         // Toggle TLS off — cert UI should hide but staged state must survive
-        ActivateTab("Transport");
         var tlsCheckbox = _dialogProvider.FindComponents<MudCheckBox<bool>>()
             .First(c => c.Markup.Contains("Use TLS"));
         await _dialogProvider.InvokeAsync(() => tlsCheckbox.Instance.ValueChanged.InvokeAsync(false));
@@ -1457,7 +1437,7 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task IdentityTab_ShowsCleanSessionLabel_ByDefault()
+    public async Task ConnectionTab_ShowsCleanSessionLabel_ByDefault()
     {
         await OpenDialog(new AppConfiguration());
 
@@ -1467,18 +1447,16 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task IdentityTab_ShowsCleanStartLabel_AfterSwitchingToMqtt5()
+    public async Task ConnectionTab_ShowsCleanStartLabel_AfterSwitchingToMqtt5()
     {
         await OpenDialog(new AppConfiguration());
 
-        ActivateTab("Transport");
         var mqttSelect = _dialogProvider.FindComponents<MudSelect<MqttVersion>>()
             .Single(s => s.Instance.Label == "MQTT Version");
         await _dialogProvider.InvokeAsync(() =>
             mqttSelect.Instance.ValueChanged.InvokeAsync(MqttVersion.V5));
         _dialogProvider.Render();
 
-        // Identity tab (still rendered via KeepPanelsAlive) should now show "Clean start"
         _dialogProvider.Markup.Should().Contain("Clean start");
         _dialogProvider.Markup.Should().NotContain("Clean session");
     }
@@ -1499,7 +1477,6 @@ public class ConnectionDialogTests : BunitTestContext
         await OpenDialog(new AppConfiguration());
 
         // Switch to MQTT 5
-        ActivateTab("Transport");
         var mqttSelect = _dialogProvider.FindComponents<MudSelect<MqttVersion>>()
             .Single(s => s.Instance.Label == "MQTT Version");
         await _dialogProvider.InvokeAsync(() =>
@@ -1537,7 +1514,6 @@ public class ConnectionDialogTests : BunitTestContext
         await OpenDialog(new AppConfiguration());
 
         // Switch to MQTT 5 and uncheck CleanStart
-        ActivateTab("Transport");
         var mqttSelect = _dialogProvider.FindComponents<MudSelect<MqttVersion>>()
             .Single(s => s.Instance.Label == "MQTT Version");
         await _dialogProvider.InvokeAsync(() =>
@@ -1610,5 +1586,293 @@ public class ConnectionDialogTests : BunitTestContext
         // After save, "Certificate loaded" must NOT reappear
         _dialogProvider.Markup.Should().NotContain("Certificate loaded",
             "removed cert must not reappear after save");
+    }
+
+    [Test]
+    public async Task TabLabels_AreConnectionSecurityOnConnect()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        var tabs = _dialogProvider.FindAll(".mud-tab");
+        tabs.Should().HaveCount(3);
+        tabs[0].TextContent.Should().Contain("Connection");
+        tabs[1].TextContent.Should().Contain("Security");
+        tabs[2].TextContent.Should().Contain("On Connect");
+    }
+
+    [Test]
+    public async Task ConnectionTab_Placement_ContainsAllExpectedFields()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        // Connection tab is the default; all these fields should be in the DOM
+        _dialogProvider.Markup.Should().Contain("Host");
+        _dialogProvider.Markup.Should().Contain("Port");
+        _dialogProvider.Markup.Should().Contain("Protocol");
+        _dialogProvider.Markup.Should().Contain("MQTT Version");
+        _dialogProvider.Markup.Should().Contain("User");
+        _dialogProvider.Markup.Should().Contain("Use TLS");
+        _dialogProvider.Markup.Should().Contain("Name");
+        _dialogProvider.Markup.Should().Contain("Client ID");
+        _dialogProvider.Markup.Should().Contain("Clean session");
+    }
+
+    [Test]
+    public async Task TlsHint_ShownWhenUseTlsTrue()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TLS", Host = "tls.local", Port = 8883, UseTls = true }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Markup.Should().Contain("Certificate and trust options are on the Security tab.");
+    }
+
+    [Test]
+    public async Task SecurityTab_TlsOff_ShowsExplanationAndHidesCertControls()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "Plain", Host = "plain.local", Port = 1883, UseTls = false }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ActivateTab("Security");
+
+        _dialogProvider.Markup.Should().Contain("Turn on Use TLS on the Connection tab");
+        _dialogProvider.Markup.Should().NotContain("Allow untrusted certificate");
+        _dialogProvider.Markup.Should().NotContain("Client Certificate");
+    }
+
+    [Test]
+    public async Task SecurityTab_TlsOn_ShowsUntrustedAndClientCert()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TLS", Host = "tls.local", Port = 8883, UseTls = true }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ActivateTab("Security");
+
+        _dialogProvider.Markup.Should().Contain("Allow untrusted certificate");
+        _dialogProvider.Markup.Should().Contain("Client Certificate");
+    }
+
+    [Test]
+    public async Task AdvancedTiming_CollapsedAtDefaults()
+    {
+        await OpenDialog(new AppConfiguration());
+
+        var panel = _dialogProvider.FindComponents<MudExpansionPanel>()
+            .First(p => p.Instance.Text == "Advanced timing");
+        panel.Instance.Expanded.Should().BeFalse("fresh connection has default timing values");
+    }
+
+    [Test]
+    public async Task AdvancedTiming_ExpandedWhenNonDefault()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "Custom", Host = "localhost", Port = 1883, ConnectTimeout = 30 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        var panel = _dialogProvider.FindComponents<MudExpansionPanel>()
+            .First(p => p.Instance.Text == "Advanced timing");
+        panel.Instance.Expanded.Should().BeTrue("non-default timing should expand the panel");
+    }
+
+    [Test]
+    public async Task PortPairing_MqttMateSwap_TlsToggleOn()
+    {
+        var conn = new Connection { Name = "Test", Host = "localhost", Port = 1883, Protocol = Protocol.Mqtt, UseTls = false };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        var tlsCheckbox = _dialogProvider.FindComponents<MudCheckBox<bool>>()
+            .First(c => c.Markup.Contains("Use TLS"));
+        await _dialogProvider.InvokeAsync(() => tlsCheckbox.Instance.ValueChanged.InvokeAsync(true));
+        _dialogProvider.Render();
+
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var connField = typeof(ConnectionDialog)
+            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var updatedConn = (Connection)connField.GetValue(dialog)!;
+        updatedConn.Port.Should().Be(8883, "toggling TLS on for port 1883 should pair to 8883");
+
+        var portField = _dialogProvider.FindComponents<MudTextField<int>>()
+            .First(f => f.Instance.Label == "Port");
+        portField.Instance.GetState(x => x.Value).Should().Be(8883);
+    }
+
+    [Test]
+    public async Task PortPairing_CustomPort_NoOp()
+    {
+        var conn = new Connection { Name = "Test", Host = "localhost", Port = 8884, Protocol = Protocol.Mqtt, UseTls = false };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        var tlsCheckbox = _dialogProvider.FindComponents<MudCheckBox<bool>>()
+            .First(c => c.Markup.Contains("Use TLS"));
+        await _dialogProvider.InvokeAsync(() => tlsCheckbox.Instance.ValueChanged.InvokeAsync(true));
+        _dialogProvider.Render();
+
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var connField = typeof(ConnectionDialog)
+            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var updatedConn = (Connection)connField.GetValue(dialog)!;
+        updatedConn.Port.Should().Be(8884, "custom port should not be changed by TLS toggle");
+
+        var portField = _dialogProvider.FindComponents<MudTextField<int>>()
+            .First(f => f.Instance.Label == "Port");
+        portField.Instance.GetState(x => x.Value).Should().Be(8884);
+    }
+
+    [Test]
+    public async Task PortPairing_WebSocket_MateSwap()
+    {
+        var conn = new Connection { Name = "WS", Host = "ws.local", Port = 8083, Protocol = Protocol.WebSocket, UseTls = false };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        var tlsCheckbox = _dialogProvider.FindComponents<MudCheckBox<bool>>()
+            .First(c => c.Markup.Contains("Use TLS"));
+        await _dialogProvider.InvokeAsync(() => tlsCheckbox.Instance.ValueChanged.InvokeAsync(true));
+        _dialogProvider.Render();
+
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var connField = typeof(ConnectionDialog)
+            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var updatedConn = (Connection)connField.GetValue(dialog)!;
+        updatedConn.Port.Should().Be(8084, "toggling TLS on for WebSocket port 8083 should pair to 8084");
+
+        var portField = _dialogProvider.FindComponents<MudTextField<int>>()
+            .First(f => f.Instance.Label == "Port");
+        portField.Instance.GetState(x => x.Value).Should().Be(8084);
+    }
+
+    [Test]
+    public async Task TlsToggle_OffThenOn_RetainsUntrustedAndCertSettings()
+    {
+        var conn = new Connection
+        {
+            Name = "TLS Conn",
+            Host = "localhost",
+            Port = 8883,
+            UseTls = true,
+            AllowUntrustedCertificate = true,
+            ClientCertificateAssetId = "keep-me"
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        // Toggle TLS off
+        var tlsCheckbox = _dialogProvider.FindComponents<MudCheckBox<bool>>()
+            .First(c => c.Markup.Contains("Use TLS"));
+        await _dialogProvider.InvokeAsync(() => tlsCheckbox.Instance.ValueChanged.InvokeAsync(false));
+        _dialogProvider.Render();
+
+        // Toggle TLS back on
+        await _dialogProvider.InvokeAsync(() => tlsCheckbox.Instance.ValueChanged.InvokeAsync(true));
+        _dialogProvider.Render();
+
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var connField = typeof(ConnectionDialog)
+            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var updatedConn = (Connection)connField.GetValue(dialog)!;
+        updatedConn.AllowUntrustedCertificate.Should().BeTrue(
+            "AllowUntrustedCertificate should survive TLS off/on toggle");
+        updatedConn.ClientCertificateAssetId.Should().Be("keep-me",
+            "ClientCertificateAssetId should survive TLS off/on toggle");
+    }
+
+    [Test]
+    public async Task ProtocolChange_Mqtt1883_Plain_ToWebSocket_SetsPort8083()
+    {
+        var conn = new Connection { Name = "Test", Host = "localhost", Port = 1883, Protocol = Protocol.Mqtt, UseTls = false };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        var protocolSelect = _dialogProvider.FindComponents<MudSelect<Protocol>>()
+            .Single(s => s.Instance.Label == "Protocol");
+        await _dialogProvider.InvokeAsync(() =>
+            protocolSelect.Instance.ValueChanged.InvokeAsync(Protocol.WebSocket));
+        _dialogProvider.Render();
+
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var connField = typeof(ConnectionDialog)
+            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var updatedConn = (Connection)connField.GetValue(dialog)!;
+        updatedConn.Port.Should().Be(8083, "switching protocol from MQTT to WebSocket with port 1883 should pair to 8083");
+
+        var portField = _dialogProvider.FindComponents<MudTextField<int>>()
+            .First(f => f.Instance.Label == "Port");
+        portField.Instance.GetState(x => x.Value).Should().Be(8083);
+    }
+
+    [Test]
+    public async Task ProtocolChange_Mqtt1883_Plain_ToWebSocket_ThenTlsOn_SetsPort8084()
+    {
+        var conn = new Connection { Name = "Test", Host = "localhost", Port = 1883, Protocol = Protocol.Mqtt, UseTls = false };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        var protocolSelect = _dialogProvider.FindComponents<MudSelect<Protocol>>()
+            .Single(s => s.Instance.Label == "Protocol");
+        await _dialogProvider.InvokeAsync(() =>
+            protocolSelect.Instance.ValueChanged.InvokeAsync(Protocol.WebSocket));
+        _dialogProvider.Render();
+
+        var tlsCheckbox = _dialogProvider.FindComponents<MudCheckBox<bool>>()
+            .First(c => c.Markup.Contains("Use TLS"));
+        await _dialogProvider.InvokeAsync(() => tlsCheckbox.Instance.ValueChanged.InvokeAsync(true));
+        _dialogProvider.Render();
+
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var connField = typeof(ConnectionDialog)
+            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var updatedConn = (Connection)connField.GetValue(dialog)!;
+        updatedConn.Port.Should().Be(8084, "after protocol switch to WS (8083) then TLS on should pair to 8084");
+
+        var portField = _dialogProvider.FindComponents<MudTextField<int>>()
+            .First(f => f.Instance.Label == "Port");
+        portField.Instance.GetState(x => x.Value).Should().Be(8084);
+    }
+
+    [Test]
+    public async Task AdvancedTiming_AcrossConnectionSwitch()
+    {
+        var defaultConn = new Connection { Name = "Default", Host = "localhost", Port = 1883 };
+        var customConn = new Connection { Name = "Custom", Host = "localhost", Port = 1883, ConnectTimeout = 30 };
+        var cfg = new AppConfiguration { Connections = [defaultConn, customConn] };
+        await OpenDialog(cfg);
+
+        // Select default-timing connection → collapsed
+        await SelectConnection(defaultConn);
+        var panel = _dialogProvider.FindComponents<MudExpansionPanel>()
+            .First(p => p.Instance.Text == "Advanced timing");
+        panel.Instance.Expanded.Should().BeFalse("default timing connection should collapse panel");
+
+        // Select non-default-timing connection → expanded
+        await SelectConnection(customConn);
+        panel = _dialogProvider.FindComponents<MudExpansionPanel>()
+            .First(p => p.Instance.Text == "Advanced timing");
+        panel.Instance.Expanded.Should().BeTrue("non-default timing connection should expand panel");
+
+        // Switch back to default-timing connection → collapsed again
+        await SelectConnection(defaultConn);
+        panel = _dialogProvider.FindComponents<MudExpansionPanel>()
+            .First(p => p.Instance.Text == "Advanced timing");
+        panel.Instance.Expanded.Should().BeFalse("returning to default timing should collapse panel again");
     }
 }

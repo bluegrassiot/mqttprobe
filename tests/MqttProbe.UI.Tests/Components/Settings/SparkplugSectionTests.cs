@@ -67,7 +67,7 @@ public class SparkplugSectionTests : BunitTestContext
         var cut = Render<SparkplugSection>();
 
         var field = cut.FindComponents<MudNumericField<int>>()
-            .First(f => f.Instance.Label == "Rebirth cooldown (seconds)");
+            .First(f => f.Instance.Label == "Rebirth cooldown (s)");
         await cut.InvokeAsync(() => field.Instance.ValueChanged.InvokeAsync(45));
 
         await _mockStore.Received(1).SetRebirthCooldownSecondsAsync(45);
@@ -79,7 +79,7 @@ public class SparkplugSectionTests : BunitTestContext
         var cut = Render<SparkplugSection>();
 
         var field = cut.FindComponents<MudNumericField<int>>()
-            .First(f => f.Instance.Label == "Rebirth cooldown (seconds)");
+            .First(f => f.Instance.Label == "Rebirth cooldown (s)");
         field.Instance.Min.Should().Be(5);
         field.Instance.Max.Should().Be(600);
         field.Instance.Step.Should().Be(5);

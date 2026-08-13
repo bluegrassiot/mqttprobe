@@ -36,19 +36,19 @@
                      IsValidChanged="@FormValidationChanged" FieldChanged="@FormChanged">
                 <div class="step-selector">
                     <button class="step-btn @(_activeTabIndex == 0 ? "active" : "")"
-                            @onclick="() => _activeTabIndex = 0" type="button">Identity</button>
+                            @onclick="() => _activeTabIndex = 0" type="button">Connection</button>
                     <button class="step-btn @(_activeTabIndex == 1 ? "active" : "")"
-                            @onclick="() => _activeTabIndex = 1" type="button">Transport</button>
+                            @onclick="() => _activeTabIndex = 1" type="button">Security</button>
                     <button class="step-btn @(_activeTabIndex == 2 ? "active" : "")"
                             @onclick="() => _activeTabIndex = 2" type="button">On Connect</button>
                 </div>
                 <MudTabs @bind-ActivePanelIndex="_activeTabIndex"
                          KeepPanelsAlive="true" Elevation="0" Class="connection-tabs">
-                    <MudTabPanel Text="Identity">
-                        <ConnectionIdentityFields Connection="@_selectedConnection" />
+                    <MudTabPanel Text="Connection">
+                        <ConnectionFields Connection="@_selectedConnection" OnConnectionEdited="UpdateActionStates" />
                     </MudTabPanel>
-                    <MudTabPanel Text="Transport">
-                        <ConnectionTransportFields Connection="_selectedConnection" />
+                    <MudTabPanel Text="Security">
+                        <ConnectionSecurityFields Connection="@_selectedConnection" />
                         <ConnectionCertificateSection @ref="_certSection"
                                                       Connection="@_selectedConnection"
                                                       Visible="_selectedConnection.UseTls"
@@ -59,8 +59,7 @@
                                                 AutoResubscribeChanged="@OnAutoResubscribeChanged"
                                                 Items="@_selectedConnection.SubscribedTopics"
                                                 OnAdd="HandleOnConnectEditorAdd"
-                                                OnRemove="HandleOnConnectEditorRemove"
-                                                OnClearAll="HandleOnConnectEditorClearAll" />
+                                                OnRemove="HandleOnConnectEditorRemove" />
                     </MudTabPanel>
                 </MudTabs>
                 <div class="connection-actions-footer">
@@ -168,7 +167,10 @@
         }
     }
 
-    private void FormChanged(FormFieldChangedEventArgs args) => UpdateActionStates();
+    private void FormChanged(FormFieldChangedEventArgs args)
+    {
+        UpdateActionStates();
+    }
 
     // MudForm starts out valid and IsValidChanged only fires on transitions, so a fresh
     // dialog filled with valid input never receives the event. Validity is therefore
@@ -179,7 +181,6 @@
         _isFormValid = _formReportsValid && _connectionValidator.Validate(_selectedConnection).IsValid;
         _canConnect = _isFormValid;
         UpdateCanSave();
-        // Identity labels (e.g. Clean start vs Clean session) depend on Transport fields.
         StateHasChanged();
     }
 
@@ -462,34 +463,6 @@
             try
             {
                 await SubscriptionManager.Remove(topics);
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Failed to unsubscribe: {ex.Message}", Severity.Error);
-            }
-        }
-    }
-
-    private async Task HandleOnConnectEditorClearAll()
-    {
-        if (!UiSettings.Ui.AutoResubscribe)
-        {
-            Snackbar.Add("Enable Auto-resubscribe on connect to manage these topics.", Severity.Info);
-            return;
-        }
-        var topicsToRemove = _selectedConnection.SubscribedTopics
-            .Select(st => st.Topic)
-            .ToList();
-
-        _selectedConnection.SubscribedTopics.Clear();
-        SyncSessionStateSelectedTopics();
-        await ConnectionSettings.AddConnectionAsync(_selectedConnection);
-
-        if (ShouldApplyLiveSubscriptions() && topicsToRemove.Count > 0)
-        {
-            try
-            {
-                await SubscriptionManager.Remove(topicsToRemove);
             }
             catch (Exception ex)
             {

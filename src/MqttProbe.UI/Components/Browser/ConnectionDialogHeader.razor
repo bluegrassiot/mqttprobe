@@ -6,6 +6,7 @@
                Placeholder="Select a saved connection..."
                ToStringFunc="@(c => c?.Name ?? string.Empty)"
                Dense="true"
+               Margin="Margin.Dense"
                Variant="Variant.Outlined"
                Style="flex:1">
         @foreach (var connection in Connections)

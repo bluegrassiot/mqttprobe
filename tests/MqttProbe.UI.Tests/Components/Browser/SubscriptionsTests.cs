@@ -13,7 +13,6 @@ public class SubscriptionsTests : BunitTestContext
 {
     private ISubscriptionManager _mockSubMgr = null!;
     private ISnackbar _mockSnackbar = null!;
-    private IDialogService _mockDialog = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -24,13 +23,6 @@ public class SubscriptionsTests : BunitTestContext
 
         _mockSnackbar = Substitute.For<ISnackbar>();
         Services.AddSingleton(_mockSnackbar);
-
-        _mockDialog = Substitute.For<IDialogService>();
-        _mockDialog.ShowMessageBoxAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(true));
-        Services.AddSingleton(_mockDialog);
 
         EnsureMudProviders();
     }
@@ -151,7 +143,7 @@ public class SubscriptionsTests : BunitTestContext
     }
 
     [Test]
-    public async Task ClearAll_RemovesAllSubscriptions()
+    public async Task SelectAllAndRemove_RemovesAllSubscriptions()
     {
         AuthorizeAsOperator();
         _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
@@ -162,8 +154,10 @@ public class SubscriptionsTests : BunitTestContext
         _mockSubMgr.Remove(Arg.Any<List<string>>()).Returns(Task.CompletedTask);
         var cut = Render<Subscriptions>();
 
-        cut.Find("button[title='Clear all']").Click();
-        await cut.InvokeAsync(() => { });
+        // Select all via the header checkbox, then click Remove
+        var checkboxes = cut.FindAll("input[type='checkbox']");
+        checkboxes[0].Change(true);
+        cut.Find("button[title='Remove']").Click();
 
         await _mockSubMgr.Received(1).Remove(Arg.Is<List<string>>(l =>
             l != null && l.Count == 2 && l.Contains("a") && l.Contains("b")));

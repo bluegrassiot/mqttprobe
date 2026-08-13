@@ -23,8 +23,7 @@
                                 EmptyText="No active subscriptions"
                                 EmptyHint="Add a topic above to start receiving messages"
                                 OnAdd="HandleAdd"
-                                OnRemove="HandleRemove"
-                                OnClearAll="HandleClearAll" />
+                                OnRemove="HandleRemove" />
         </Authorized>
         <NotAuthorized>
             <SubscriptionEditor Items="@SubscriptionManager.Subscriptions"
@@ -32,8 +31,7 @@
                                 EmptyText="No active subscriptions"
                                 EmptyHint="Connect as Operator or Admin to manage subscriptions"
                                 OnAdd="HandleAdd"
-                                OnRemove="HandleRemove"
-                                OnClearAll="HandleClearAll" />
+                                OnRemove="HandleRemove" />
         </NotAuthorized>
     </AuthorizeView>
 </div>
@@ -54,12 +52,5 @@
     private async Task HandleRemove(IReadOnlyList<string> topics)
     {
         await SubscriptionManager.Remove(topics);
-    }
-
-    private async Task HandleClearAll()
-    {
-        var all = SubscriptionManager.Subscriptions.Select(s => s.Topic).ToList();
-        if (all.Count == 0) return;
-        await SubscriptionManager.Remove(all);
     }
 }

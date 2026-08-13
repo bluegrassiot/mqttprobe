@@ -21,11 +21,12 @@
         Asks nodes with no known birth to re-announce. Manual rebirth still works when off.
     </MudText>
 
-    <MudNumericField T="int" Label="Rebirth cooldown (seconds)"
+    <MudNumericField T="int" Label="Rebirth cooldown (s)"
                      Value="@SparkplugSettings.Sparkplug.RebirthCooldownSeconds"
                      ValueChanged="@OnRebirthCooldownChanged"
                      Min="5" Max="600" Step="5"
                      Variant="Variant.Outlined"
+                     Margin="Margin.Dense"
                      Class="settings-field-narrow" />
     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
         Minimum seconds between automatic rebirths for the same node. Manual not affected.

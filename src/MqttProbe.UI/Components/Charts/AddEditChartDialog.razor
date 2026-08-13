@@ -9,17 +9,18 @@
     <DialogContent>
         <MudStack Spacing="3">
             <MudTextField @bind-Value="_name" Label="Chart Name" Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
                           Immediate="true" Required="true" MaxLength="100" />
-            <MudSelect @bind-Value="_type" Label="Chart Type" Variant="Variant.Outlined">
+            <MudSelect @bind-Value="_type" Label="Chart Type" Variant="Variant.Outlined" Margin="Margin.Dense">
                 @foreach (AppChartType t in Enum.GetValues<AppChartType>())
                 {
                     <MudSelectItem Value="@t">@t</MudSelectItem>
                 }
             </MudSelect>
             <MudNumericField @bind-Value="_maxPoints" Label="Max Points Per Series"
-                             Variant="Variant.Outlined" Min="10" Max="5000" Step="100" />
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Min="10" Max="5000" Step="100" />
             <MudSelect @bind-Value="_timeWindow" Label="Time Window" Variant="Variant.Outlined"
-                       Clearable="true">
+                       Margin="Margin.Dense" Clearable="true">
                 <MudSelectItem Value="@((int?)5)">Last 5 minutes</MudSelectItem>
                 <MudSelectItem Value="@((int?)10)">Last 10 minutes</MudSelectItem>
                 <MudSelectItem Value="@((int?)30)">Last 30 minutes</MudSelectItem>

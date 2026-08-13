@@ -1,0 +1,149 @@
+<MudGrid Spacing="1" Class="mt-1">
+    <MudItem xs="12" sm="6">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.Name"
+                      For="@(() => Connection.Name)" Immediate="true" Label="Name"
+                      Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.ClientId"
+                      For="@(() => Connection.ClientId)" Immediate="true" Label="Client ID"
+                      Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" sm="8">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.Host"
+                      For="@(() => Connection.Host)" Immediate="true" Label="Host"
+                      Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.Port"
+                      For="@(() => Connection.Port)" Immediate="true" Label="Port"
+                      Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudSelect Variant="Variant.Outlined" T="Protocol" Value="Connection.Protocol" ValueChanged="OnProtocolChanged"
+                   Label="Protocol" Margin="Margin.Dense"
+                   AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft"
+                   PopoverFixed="true">
+            <MudSelectItem Value="@(Protocol.Mqtt)" />
+            <MudSelectItem Value="@(Protocol.WebSocket)" />
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudSelect Variant="Variant.Outlined" T="MqttVersion" @bind-Value="Connection.MqttVersion"
+                   Label="MQTT Version" Margin="Margin.Dense"
+                   AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft"
+                   PopoverFixed="true">
+            <MudSelectItem Value="@(MqttVersion.V311)">3.1.1</MudSelectItem>
+            <MudSelectItem Value="@(MqttVersion.V5)">5.0</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.User"
+                      For="@(() => Connection.User)" Immediate="true" Label="User"
+                      Margin="Margin.Dense" />
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <PasswordField Connection="@Connection" />
+    </MudItem>
+    @if (Connection.Protocol == Protocol.WebSocket)
+    {
+        <MudItem xs="12">
+            <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.WebsocketBasePath"
+                          Immediate="true" Label="WebSocket Base Path"
+                          HelperText="Use the broker WebSocket endpoint path (for example /mqtt)."
+                          Margin="Margin.Dense" />
+        </MudItem>
+    }
+    <MudItem xs="12" sm="6">
+        <MudCheckBox T="bool" Value="Connection.UseTls" ValueChanged="OnUseTlsChanged" Color="Color.Default"
+                     Dense="true" Class="ml-n1">
+            Use TLS
+        </MudCheckBox>
+    </MudItem>
+    <MudItem xs="12" sm="6">
+        <MudCheckBox @bind-Value="@Connection.CleanStart" Color="Color.Default" Dense="true"
+                     Class="ml-n1">
+            @(Connection.MqttVersion == MqttVersion.V5 ? "Clean start" : "Clean session")
+        </MudCheckBox>
+    </MudItem>
+    @if (Connection.UseTls)
+    {
+        <MudItem xs="12">
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-8 mt-n1">
+                Certificate and trust options are on the Security tab.
+            </MudText>
+        </MudItem>
+    }
+    @if (Connection is { CleanStart: false, MqttVersion: MqttVersion.V5 })
+    {
+        <MudItem xs="12">
+            <MudTextField Variant="Variant.Outlined"
+                          @bind-Value="Connection.SessionExpiryIntervalSeconds"
+                          For="@(() => Connection.SessionExpiryIntervalSeconds)"
+                          Immediate="true" Label="Session expiry interval (s)"
+                          HelperText="0 ends the session when the connection closes."
+                          Margin="Margin.Dense" />
+        </MudItem>
+    }
+    <MudItem xs="12">
+        <MudExpansionPanels Dense="true" Elevation="0">
+            <MudExpansionPanel Text="Advanced timing" @bind-Expanded="_advancedTimingExpanded" Dense="true">
+                <ChildContent>
+                    <MudGrid Spacing="1">
+                        <MudItem xs="12" sm="4">
+                            <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.ConnectTimeout"
+                                          For="@(() => Connection.ConnectTimeout)" Immediate="true"
+                                          Label="Connect Timeout (s)" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.ReconnectDelay"
+                                          For="@(() => Connection.ReconnectDelay)" Immediate="true"
+                                          Label="Reconnect Delay (s)" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.KeepAlivePeriod"
+                                          For="@(() => Connection.KeepAlivePeriod)" Immediate="true"
+                                          Label="Keep Alive (s)" Margin="Margin.Dense" />
+                        </MudItem>
+                    </MudGrid>
+                </ChildContent>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+    </MudItem>
+</MudGrid>
+
+@* ReSharper disable once NotAccessedField.Local *@
+@code {
+    [Parameter, EditorRequired] public Connection Connection { get; set; } = null!;
+    [Parameter] public EventCallback OnConnectionEdited { get; set; }
+
+    private bool _advancedTimingExpanded;
+    private Connection? _previousConnection;
+
+    private static bool HasDefaultTiming(Connection c) =>
+        c.ConnectTimeout == 15 && c.ReconnectDelay == 5 && c.KeepAlivePeriod == 15;
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(Connection, _previousConnection))
+        {
+            _advancedTimingExpanded = !HasDefaultTiming(Connection);
+            _previousConnection = Connection;
+        }
+    }
+
+    private async Task OnProtocolChanged(Protocol protocol)
+    {
+        Connection.Protocol = protocol;
+        Connection.Port = ConventionalPortPairing.ApplyForProtocolChange(
+            protocol, Connection.Port, Connection.UseTls);
+        await OnConnectionEdited.InvokeAsync();
+    }
+
+    private async Task OnUseTlsChanged(bool useTls)
+    {
+        Connection.UseTls = useTls;
+        Connection.Port = ConventionalPortPairing.ApplyForTlsChange(Connection.Protocol, Connection.Port, useTls);
+        await OnConnectionEdited.InvokeAsync();
+    }
+}

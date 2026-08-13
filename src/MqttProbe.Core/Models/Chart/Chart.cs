@@ -24,7 +24,6 @@ public class ChartSeries
 public class ChartConfiguration
 {
     private const int DefaultMaxPoints = 500;
-    private int _maxPoints = DefaultMaxPoints;
 
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = "New Chart";
@@ -33,16 +32,14 @@ public class ChartConfiguration
 
     public int MaxPoints
     {
-        get => _maxPoints;
-        set => _maxPoints = value > 0 ? value : DefaultMaxPoints;
-    }
-
-    private int? _timeWindowMinutes;
+        get;
+        set => field = value > 0 ? value : DefaultMaxPoints;
+    } = DefaultMaxPoints;
 
     public int? TimeWindowMinutes
     {
-        get => _timeWindowMinutes;
-        set => _timeWindowMinutes = value is > 0 ? value : null;
+        get;
+        set => field = value is > 0 ? value : null;
     }
 
     public List<ChartSeries> Series { get; set; } = [];

@@ -8,6 +8,7 @@
                      ValueChanged="@OnMaxStoredMessagesChanged"
                      Min="100" Max="100000" Step="1000"
                      Variant="Variant.Outlined"
+                     Margin="Margin.Dense"
                      Class="settings-field-narrow" />
     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
         Maximum messages retained in memory per topic. Higher values use more memory.
@@ -20,6 +21,7 @@
                      ValueChanged="@OnMaxMessagesPerSecondChanged"
                      Min="100" Max="1000000" Step="1000"
                      Variant="Variant.Outlined"
+                     Margin="Margin.Dense"
                      Class="settings-field-narrow" />
     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
         Rate limit for inbound messages. Messages exceeding this limit are dropped.
@@ -32,6 +34,7 @@
                      ValueChanged="@OnMaxDisplayMessagesChanged"
                      Min="10" Max="10000" Step="100"
                      Variant="Variant.Outlined"
+                     Margin="Margin.Dense"
                      Class="settings-field-narrow" />
     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
         Maximum messages shown in the payload browser. Higher values may slow rendering.
@@ -44,6 +47,7 @@
                      ValueChanged="@OnMaxTopicNodesChanged"
                      Min="100" Max="100000" Step="1000"
                      Variant="Variant.Outlined"
+                     Margin="Margin.Dense"
                      Class="settings-field-narrow" />
     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
         Maximum topic tree nodes (prevents runaway topic cardinality).

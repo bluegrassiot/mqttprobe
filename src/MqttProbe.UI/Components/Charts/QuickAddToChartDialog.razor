@@ -22,6 +22,7 @@
         </MudPaper>
 
         <MudTextField @bind-Value="_displayName" Label="Line Label" Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
                       Immediate="true" MaxLength="80" Class="mb-3"
                       HelperText="The name shown on the chart — defaults to the field name." />
         <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined" Class="mb-3">
@@ -69,6 +70,7 @@
         @if (_mode == ChartMode.CreateNew)
         {
             <MudTextField @bind-Value="_newChartName" Label="Chart Name" Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
                           Immediate="true" MaxLength="100" AutoFocus="true"
                           HelperText="A new line chart will be created with this field as its first series." />
         }

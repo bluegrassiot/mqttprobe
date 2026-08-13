@@ -10,14 +10,9 @@ namespace MqttProbe.UI.Tests.Components.Browser;
 [TestFixture]
 public class SubscriptionEditorTests : BunitTestContext
 {
-    private IDialogService _mockDialog = null!;
-
     [SetUp]
     public void Setup()
     {
-        _mockDialog = Substitute.For<IDialogService>();
-        Services.AddSingleton(_mockDialog);
-
         EnsureMudProviders();
     }
 
@@ -26,9 +21,6 @@ public class SubscriptionEditorTests : BunitTestContext
 
     private EventCallback<IReadOnlyList<string>> NoRemove() =>
         EventCallback.Factory.Create<IReadOnlyList<string>>(this, _ => { });
-
-    private EventCallback NoClearAll() =>
-        EventCallback.Factory.Create(this, () => { });
 
     [Test]
     public void Renders_Items_TopicAndQos()
@@ -41,8 +33,7 @@ public class SubscriptionEditorTests : BunitTestContext
         var cut = Render<SubscriptionEditor>(p => p
             .Add(x => x.Items, items)
             .Add(x => x.OnAdd, NoAdd())
-            .Add(x => x.OnRemove, NoRemove())
-            .Add(x => x.OnClearAll, NoClearAll()));
+            .Add(x => x.OnRemove, NoRemove()));
 
         cut.Markup.Should().Contain("a/#");
         cut.Markup.Should().Contain("AtMostOnce");
@@ -57,8 +48,7 @@ public class SubscriptionEditorTests : BunitTestContext
             .Add(x => x.Items, Array.Empty<SubscribedTopic>())
             .Add(x => x.OnAdd, EventCallback.Factory.Create<(string Topic, MqttQualityOfServiceLevel Qos)>(this,
                 v => captured = v))
-            .Add(x => x.OnRemove, NoRemove())
-            .Add(x => x.OnClearAll, NoClearAll()));
+            .Add(x => x.OnRemove, NoRemove()));
 
         var topicInput = cut.FindAll("input")
             .First(e => !e.HasAttribute("readonly") && e.GetAttribute("type") != "checkbox");
@@ -81,8 +71,7 @@ public class SubscriptionEditorTests : BunitTestContext
             .Add(x => x.Items, items)
             .Add(x => x.OnAdd, NoAdd())
             .Add(x => x.OnRemove, EventCallback.Factory.Create<IReadOnlyList<string>>(this,
-                v => removed = v))
-            .Add(x => x.OnClearAll, NoClearAll()));
+                v => removed = v)));
 
         cut.Find("input[type='checkbox']").Change(true);
         cut.Find("button[title='Remove']").Click();
@@ -98,57 +87,9 @@ public class SubscriptionEditorTests : BunitTestContext
             .Add(x => x.Items, Array.Empty<SubscribedTopic>())
             .Add(x => x.Disabled, true)
             .Add(x => x.OnAdd, NoAdd())
-            .Add(x => x.OnRemove, NoRemove())
-            .Add(x => x.OnClearAll, NoClearAll()));
+            .Add(x => x.OnRemove, NoRemove()));
 
         cut.Find("button[title='Add subscription']").HasAttribute("disabled").Should().BeTrue();
-    }
-
-    [Test]
-    public async Task ClearAll_WhenConfirmed_InvokesOnClearAll()
-    {
-        _mockDialog.ShowMessageBoxAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(true));
-
-        var cleared = false;
-        var items = new List<SubscribedTopic> { new() { Topic = "a" }, new() { Topic = "b" } };
-
-        var cut = Render<SubscriptionEditor>(p => p
-            .Add(x => x.Items, items)
-            .Add(x => x.OnAdd, NoAdd())
-            .Add(x => x.OnRemove, NoRemove())
-            .Add(x => x.OnClearAll, EventCallback.Factory.Create(this, () => cleared = true)));
-
-        cut.Find("button[title='Clear all']").Click();
-        await cut.InvokeAsync(() => { });
-
-        cleared.Should().BeTrue();
-    }
-
-    [Test]
-    public async Task ClearAll_WhenCancelled_DoesNotInvokeOnClearAll()
-    {
-        _mockDialog.ShowMessageBoxAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(false));
-
-        var cleared = false;
-        var items = new List<SubscribedTopic> { new() { Topic = "a" } };
-
-        var cut = Render<SubscriptionEditor>(p => p
-            .Add(x => x.Items, items)
-            .Add(x => x.OnAdd, NoAdd())
-            .Add(x => x.OnRemove, NoRemove())
-            .Add(x => x.OnClearAll, EventCallback.Factory.Create(this, () => cleared = true)));
-
-        cut.Find("button[title='Clear all']").Click();
-        await cut.InvokeAsync(() => { });
-
-        cleared.Should().BeFalse();
-        await Task.CompletedTask;
     }
 
     [Test]
@@ -160,8 +101,7 @@ public class SubscriptionEditorTests : BunitTestContext
             .Add(x => x.Items, Array.Empty<SubscribedTopic>())
             .Add(x => x.OnAdd, EventCallback.Factory.Create<(string Topic, MqttQualityOfServiceLevel Qos)>(this,
                 _ => addCalled = true))
-            .Add(x => x.OnRemove, NoRemove())
-            .Add(x => x.OnClearAll, NoClearAll()));
+            .Add(x => x.OnRemove, NoRemove()));
 
         var chip = cut.FindAll(".mud-chip, button")
             .First(e => e.TextContent.Contains("spBv1.0/#"));
@@ -179,32 +119,10 @@ public class SubscriptionEditorTests : BunitTestContext
             .Add(x => x.EmptyText, "No active subscriptions")
             .Add(x => x.EmptyHint, "Add a topic above to start receiving messages")
             .Add(x => x.OnAdd, NoAdd())
-            .Add(x => x.OnRemove, NoRemove())
-            .Add(x => x.OnClearAll, NoClearAll()));
+            .Add(x => x.OnRemove, NoRemove()));
 
         cut.Markup.Should().Contain("No active subscriptions");
         cut.Markup.Should().Contain("Add a topic above to start receiving messages");
-    }
-
-    [Test]
-    public async Task Disabled_BlocksClearAll_WithoutPromptingDialog()
-    {
-        var items = new List<SubscribedTopic> { new() { Topic = "a" } };
-
-        var cut = Render<SubscriptionEditor>(p => p
-            .Add(x => x.Items, items)
-            .Add(x => x.Disabled, true)
-            .Add(x => x.OnAdd, NoAdd())
-            .Add(x => x.OnRemove, NoRemove())
-            .Add(x => x.OnClearAll, NoClearAll()));
-
-        cut.Find("button[title='Clear all']").HasAttribute("disabled").Should().BeTrue();
-
-        await cut.InvokeAsync(() => { });
-
-        await _mockDialog.DidNotReceive().ShowMessageBoxAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>());
     }
 
     [Test]
@@ -216,8 +134,7 @@ public class SubscriptionEditorTests : BunitTestContext
             .Add(x => x.Items, Array.Empty<SubscribedTopic>())
             .Add(x => x.OnAdd, EventCallback.Factory.Create<(string Topic, MqttQualityOfServiceLevel Qos)>(this,
                 v => captured = v))
-            .Add(x => x.OnRemove, NoRemove())
-            .Add(x => x.OnClearAll, NoClearAll()));
+            .Add(x => x.OnRemove, NoRemove()));
 
         cut.Instance.TopicDraft = "  factory/#  ";
         cut.Instance.QosDraft = MqttQualityOfServiceLevel.ExactlyOnce;

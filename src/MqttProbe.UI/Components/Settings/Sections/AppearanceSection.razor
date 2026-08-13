@@ -9,7 +9,8 @@
                Value="@UiSettings.Ui.Theme"
                ValueChanged="@OnThemeSelectionChanged"
                Variant="Variant.Outlined"
-                Class="settings-field-medium">
+               Margin="Margin.Dense"
+               Class="settings-field-medium">
         <MudSelectItem Value="@("light")">Light</MudSelectItem>
         <MudSelectItem Value="@("dark")">Dark</MudSelectItem>
     </MudSelect>
@@ -20,6 +21,7 @@
                Value="@UiSettings.Ui.FontProfile"
                ValueChanged="@OnFontProfileChanged"
                Variant="Variant.Outlined"
+               Margin="Margin.Dense"
                HelperText="Accessible uses OpenDyslexic for easier reading"
                Class="settings-field-medium">
         <MudSelectItem Value="@(FontProfiles.Standard)">Standard</MudSelectItem>

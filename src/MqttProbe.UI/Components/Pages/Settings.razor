@@ -22,7 +22,8 @@
         <MudSelect T="string" Label="Settings section"
                    Value="@ActiveSection.Slug"
                    ValueChanged="@SelectSection"
-                   Variant="Variant.Outlined" Dense="true">
+                   Variant="Variant.Outlined" Dense="true"
+                   Margin="Margin.Dense">
             @foreach (var section in GetVisibleSections())
             {
                 <MudSelectItem Value="@section.Slug">@section.Title</MudSelectItem>

@@ -39,12 +39,14 @@
 
         <MudItem xs="12">
             <MudTextField T="string" Label="Topic" Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
                           @bind-Text="@_message.Topic" Lines="1"
                           Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.ChevronRight"/>
         </MudItem>
 
         <MudItem xs="12">
             <MudTextField T="string" Label="Payload" Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
                           @bind-Text="@_message.Payload" Lines="6" Sizing="InputSizing.Auto" MaxLines="20"/>
             <div class="d-flex gap-2 mt-1 flex-wrap">
                 <AppSecondaryButton Size="Size.Small"
@@ -64,7 +66,7 @@
         </MudItem>
 
         <MudItem xs="12" sm="6">
-            <MudSelect Variant="Variant.Outlined" @bind-Value="_message.QualityOfServiceLevel" Label="QoS Level">
+            <MudSelect Variant="Variant.Outlined" Margin="Margin.Dense" @bind-Value="_message.QualityOfServiceLevel" Label="QoS Level">
                 @foreach (MqttQualityOfServiceLevel item in Enum.GetValues(typeof(MqttQualityOfServiceLevel)))
                 {
                     <MudSelectItem Value="@item">@item</MudSelectItem>

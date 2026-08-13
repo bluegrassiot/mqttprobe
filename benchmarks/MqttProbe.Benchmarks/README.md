@@ -1,6 +1,6 @@
 # MqttProbe Payload Publisher
 
-Standalone MQTT payload publisher built on **MQTTnet 5.2**. No dependency on MqttProbe.Shared
+Standalone MQTT payload publisher built on **MQTTnet 5.2**. No dependency on MqttProbe.UI
 (except a compile-linked Sparkplug B protobuf source file). Publishes MQTT messages in configurable
 payload formats to a real broker. Samples are shaped to match MqttProbe's detector priority order
 so each format is correctly identified by the receiving pipeline.

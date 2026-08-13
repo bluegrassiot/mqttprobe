@@ -1,0 +1,127 @@
+.tab-panel-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.settings-layout {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 12px;
+}
+
+.settings-content {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Rail is desktop-only; the select takes over below the breakpoint. Both are
+   always rendered so no JS breakpoint listener is needed and prerender stays
+   correct. */
+.settings-nav-rail {
+    display: none;
+}
+
+/* justify-content is explicit because a <button> centres its content per the HTML
+   rendering spec — it does not fall back to flex-start the way a <div> would. */
+.settings-nav-item {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    min-height: 40px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-align: left;
+    line-height: 1.5;
+    cursor: pointer;
+    transition: color 150ms ease-out, background-color 150ms ease-out;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* The icon is a flex item sized in em, so without this a label long enough to fill
+   the rail would squeeze it narrower and stagger the labels. */
+.settings-nav-item ::deep .mud-icon-root {
+    flex-shrink: 0;
+}
+
+.settings-nav-item:hover,
+.settings-nav-item:focus-visible {
+    color: var(--mud-palette-text-primary);
+    background-color: var(--mud-palette-action-default-hover);
+    outline: none;
+}
+
+.settings-nav-item.active {
+    color: var(--mud-palette-primary);
+    font-weight: 600;
+    background-color: var(--mud-palette-action-default-hover);
+}
+
+/* ── Shared settings-form layout ────────────────────────────────
+   These rules live in the parent Settings.razor.css and use ::deep
+   so every section component inherits the same vertical rhythm,
+   divider treatment, and caption spacing. */
+
+/* Stack of setting rows inside any settings section */
+::deep .settings-field + .settings-field {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
+/* Caption: tight to its control, full block for line breaks */
+::deep .settings-caption {
+    display: block;
+    margin-top: 0.25rem;
+}
+
+/* Related sub-controls inside one field (e.g. auto rebirth + cooldown) */
+::deep .settings-field-group > * + .settings-caption {
+    margin-bottom: 1rem;
+}
+
+::deep .settings-field-group > .settings-caption:last-child {
+    margin-bottom: 0;
+}
+
+/* Narrow controls that shouldn't stretch full panel width */
+::deep .settings-field-narrow {
+    max-width: 12rem;
+}
+
+/* Selects and longer labels need a bit more room than bare numbers */
+::deep .settings-field-medium {
+    max-width: 16rem;
+}
+
+@media (min-width: 960px) {
+    .settings-layout {
+        flex-direction: row;
+        gap: 16px;
+    }
+
+    .settings-nav-select {
+        display: none;
+    }
+
+    .settings-nav-rail {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        flex: 0 0 200px;
+        width: 200px;
+        align-self: flex-start;
+        position: sticky;
+        top: 0;
+    }
+}

@@ -4,6 +4,28 @@ A sample **payload format plugin** that detects and decodes CSV (comma-separated
 
 This plugin implements `IMqttProbePlugin` with a detector and decoder. When loaded, MqttProbe recognizes CSV messages and displays them as a JSON array of objects in the Payload Browser tree view. The `FormatId` is `csv`.
 
+## Reference model
+
+Your plugin project references **only** `MqttProbe.PluginContracts` (not `MqttProbe.UI` or
+`MqttProbe.Core`). The host loads plugins into a separate `AssemblyLoadContext` that shares the
+`MqttProbe.PluginContracts` assembly so that interface types (`IMqttProbePlugin`, `IPayloadDetector`,
+etc.) have the same identity in both host and plugin. Do not ship `MqttProbe.PluginContracts.dll`
+alongside your plugin; the host provides it.
+
+MQTTnet types used by detector/decoder interfaces flow transitively from PluginContracts.
+
+## Compatibility / SemVer
+
+`MqttProbe.PluginContracts` versions independently of the app using SemVer:
+
+- **MAJOR** = breaking API change (removed/renamed interface, changed method signature). Requires plugin rebuild.
+- **MINOR** = additive API change (new interface, new method). Existing plugin DLLs keep loading.
+- **PATCH** = non-API change (docs, build infra). No plugin impact.
+
+`PluginContract.Version` (currently `1`) is the API level the host logs at startup for diagnostics. It is not tied to the app version.
+
+Old plugins built against the former `MqttProbe.Shared` assembly are not binary-compatible; rebuild against `MqttProbe.PluginContracts`.
+
 ## Build
 
 ```powershell
@@ -32,7 +54,7 @@ Two things differ from schema packages:
 
 ## Install by hand
 
-Copy **only** `CustomDemoPlugin.dll` (not `MqttProbe.Shared.dll`) into a `CustomDemoPlugin` subfolder under the host plugins directory. Create folders if needed. Restart the app after copying; plugins do not hot-reload.
+Copy **only** `CustomDemoPlugin.dll` (not `MqttProbe.PluginContracts.dll`) into a `CustomDemoPlugin` subfolder under the host plugins directory. Create folders if needed. Restart the app after copying; plugins do not hot-reload.
 
 **Web (Visual Studio debug / `dotnet run`):**
 
@@ -87,9 +109,9 @@ dotnet run --project benchmarks/MqttProbe.Benchmarks -c Release -- publish --for
 
 ## What to expect
 
-- The **Format** row in the message detail view shows `csv` (raw FormatId; host does not hardcode plugin display names).
+- The **Format** row in the message detail view shows `CSV` (the display name supplied by the plugin's detector).
 - The **Payload** section renders a JSON tree (array of objects), so you can expand individual rows and fields.
-- The metrics flyout counts messages under the `csv` format.
+- The metrics flyout counts messages under the `csv` FormatId internally and shows `CSV` as the display name.
 
 ## Without the plugin
 

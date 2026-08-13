@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Unicode;
 using MQTTnet;
-using MqttProbe.Services.Plugins.Contracts;
+using MqttProbe.PluginContracts;
 
 namespace CustomDemoPlugin;
 
@@ -9,6 +9,7 @@ public sealed class CsvPayloadDetector : IPayloadDetector
 {
     public string FormatId => "csv";
     public int Priority => 550;
+    public string? DisplayName => "CSV";
 
     public bool CanDetect(MqttApplicationMessageReceivedEventArgs e)
     {

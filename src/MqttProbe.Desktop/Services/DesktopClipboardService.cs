@@ -1,7 +1,7 @@
 using Microsoft.JSInterop;
-using MqttProbe.Services.Platform;
+using MqttProbe.Core.Services.Platform;
 
-namespace MqttProbe.Services;
+namespace MqttProbe.Desktop.Services;
 
 public class DesktopClipboardService : IClipboardService
 {

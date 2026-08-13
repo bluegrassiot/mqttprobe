@@ -18,7 +18,7 @@ Bug fixes and small improvements are welcome. For larger changes, open an issue 
 
 1. Install [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 2. Clone the repo with submodules: `git clone --recurse-submodules https://github.com/bluegrassiot/mqttprobe`. If you already cloned without that flag, run `git submodule update --init --recursive`.
-3. Run tests: `dotnet test tests/MqttProbe.Tests`
+3. Run tests: `dotnet test`
 
 ### Architecture and Development
 
@@ -34,7 +34,7 @@ git config core.hooksPath .githooks
 
 | Hook | What it runs |
 |------|----------------|
-| `pre-commit` | Security scan (`devskim`, ~3s) on any staged change; workflow lint (`python scripts/ci/actionlint.py`, ~1s) when staged files include `.github/workflows/*.yml`; format check (`python scripts/ci/format-check.py`) when staged files include C#/Razor/project/editorconfig |
+| `pre-commit` | Security scan (`devskim`, ~3s) on any staged change; workflow lint (`python scripts/ci/actionlint.py`, ~1s) when staged files include `.github/workflows/*.yml`; format check (`python scripts/ci/format-check.py`) when staged files include C#/Razor/project/editorconfig; comment check (`python scripts/ci/check-comments.py`) when staged files include C#/Razor under `src/` or `tests/` |
 | `pre-push` | Path-aware build (usually `MqttProbe.NoMaui.slnf`) and unit tests when code changes |
 
 Both hooks print per-step and total timing. Docs-only changes (markdown under `docs/`, `*.md`, license files) skip the heavy steps automatically — but not the security scan, since a pasted token in a README is exactly what it looks for.
@@ -63,21 +63,23 @@ CI still runs full checks on pull requests. Prefer fixing failures over skipping
 
 ### Tests and Coverage
 
-- Run `dotnet test tests/MqttProbe.Tests` before opening a PR.
+- Run `dotnet test` before opening a PR (or the unit/integration project commands under CI Checks).
 - Add or update tests for behavior changes and bug fixes.
-- Keep test coverage at or above 75%.
-- Use `python scripts/ci/coverage.py --open` to inspect coverage when needed.
+- Prefer unit/UI tests for pure logic. For **real MQTT broker boundary** changes (TLS/mTLS, live connect/subscribe/publish, Sparkplug on the wire, broker-only auth), also add or extend `tests/MqttProbe.IntegrationTests`, reusing `MtlsBrokerFixture` in `tests/MqttProbe.TestInfrastructure`. Write those tests even if you lack Docker locally; CI runs them, and without Docker they skip rather than fail.
+- Keep unit test coverage at or above 80% (`python scripts/ci/coverage.py --open`). Integration tests are excluded from that gate on purpose.
 
 ### CI Checks
 
 Before submitting changes, make sure the same checks used by CI pass locally:
 
 - `dotnet build MqttProbe.slnx`
-- `dotnet test tests/MqttProbe.Tests`
+- Unit: `dotnet test tests/MqttProbe.Core.Tests` and `dotnet test tests/MqttProbe.UI.Tests`
+- Integration (needs Docker; CI always runs these): `dotnet test tests/MqttProbe.IntegrationTests`
 - `python scripts/ci/format-check.py`
 - `python scripts/ci/inspect.py --tool devskim --fail-on warning`
+- `python scripts/ci/check-comments.py`
 
-Local hooks cover a faster subset; still run the commands above before a PR if you skipped hooks.
+Local hooks cover a faster subset (unit tests only, no integration). Still run the commands above before a PR if you skipped hooks. Without Docker, integration tests skip rather than fail.
 
 ### Commit Messages
 

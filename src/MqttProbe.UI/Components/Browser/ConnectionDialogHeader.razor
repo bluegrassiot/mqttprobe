@@ -1,0 +1,44 @@
+<div class="connection-dialog-header">
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Style="flex-shrink:0">Connection:</MudText>
+    <MudSelect T="Connection?"
+               Value="@Selected"
+               ValueChanged="@OnSelectedChanged"
+               Placeholder="Select a saved connection..."
+               ToStringFunc="@(c => c?.Name ?? string.Empty)"
+               Dense="true"
+               Margin="Margin.Dense"
+               Variant="Variant.Outlined"
+               Style="flex:1">
+        @foreach (var connection in Connections)
+        {
+            <MudSelectItem T="Connection?" Value="@((Connection?)connection)">@connection.Name</MudSelectItem>
+        }
+    </MudSelect>
+    <div class="connection-dialog-actions">
+        <MudIconButton Icon="@LucideIcons.Plus" Color="Color.Inherit" Size="Size.Medium"
+                       title="New connection" OnClick="@(async () => await OnAdd.InvokeAsync())" />
+        <MudIconButton Icon="@LucideIcons.Save" Color="Color.Inherit" Size="Size.Medium"
+                       title="Save connection" Disabled="@(!CanSave)"
+                       OnClick="@(async () => await OnSave.InvokeAsync())" />
+        <MudIconButton Icon="@LucideIcons.Trash2" Color="Color.Error" Size="Size.Medium"
+                       title="Delete connection" Disabled="@(!CanDelete)"
+                       OnClick="@(async () => await OnDelete.InvokeAsync())" />
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Connection> Connections { get; set; } = [];
+    [Parameter] public Connection? Selected { get; set; }
+    [Parameter] public EventCallback<Connection?> SelectedChanged { get; set; }
+    [Parameter] public bool CanSave { get; set; }
+    [Parameter] public bool CanDelete { get; set; }
+    [Parameter] public EventCallback OnAdd { get; set; }
+    [Parameter] public EventCallback OnSave { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+
+    private async Task OnSelectedChanged(Connection? value)
+    {
+        if (value is not null)
+            await SelectedChanged.InvokeAsync(value);
+    }
+}

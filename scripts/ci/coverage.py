@@ -33,7 +33,8 @@ RESULTS_DIR = ROOT / "TestResults"
 REPORT_DIR = RESULTS_DIR / "CoverageReport"
 SETTINGS = ROOT / "tests" / "coverlet.runsettings"
 
-UNIT_PROJ = ROOT / "tests/MqttProbe.Tests/MqttProbe.Shared.Tests.csproj"
+UNIT_PROJ = ROOT / "tests/MqttProbe.Core.Tests/MqttProbe.Core.Tests.csproj"
+UI_PROJ = ROOT / "tests/MqttProbe.UI.Tests/MqttProbe.UI.Tests.csproj"
 # INTEGRATION_PROJ = ROOT / "tests/MqttProbe.IntegrationTests/MqttProbe.IntegrationTests.csproj"
 
 
@@ -63,7 +64,8 @@ def main():
         shutil.rmtree(RESULTS_DIR)
     RESULTS_DIR.mkdir(parents=True)
 
-    run_tests(UNIT_PROJ, "Unit Tests", "unit")
+    run_tests(UNIT_PROJ, "Unit Tests (Core)", "core")
+    run_tests(UI_PROJ, "Unit Tests (UI)", "ui")
     # run_tests(INTEGRATION_PROJ, "Integration Tests", "integration")
 
     print("\n=== Generating Coverage Report ===", flush=True)
@@ -80,7 +82,7 @@ def main():
             f"-reports:{reports}",
             f"-targetdir:{REPORT_DIR}",
             "-reporttypes:Html;TextSummary;Badges",
-            "-assemblyfilters:+MqttProbe.Shared;+MqttProbe.Web",
+            "-assemblyfilters:+MqttProbe.Core;+MqttProbe.UI;+MqttProbe.Web",
             "-filefilters:-*SparkplugBProtobuf*;-*.g.cs;-*.Designer.cs",
         ],
     )

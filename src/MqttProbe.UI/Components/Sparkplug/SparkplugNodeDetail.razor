@@ -1,0 +1,188 @@
+@namespace MqttProbe.UI.Components.Sparkplug
+@using MqttProbe.Core.Models.Sparkplug
+
+@if (Node == null)
+{
+    <div class="d-flex flex-column align-center justify-center spb-empty-detail">
+        <MudIcon Icon="@LucideIcons.Network" Size="Size.Large"/>
+        <MudText Typo="Typo.body2" Class="mt-2">Select a node to view details</MudText>
+    </div>
+}
+else
+{
+    <MudPaper Elevation="0" Class="spb-detail-panel">
+        <MudHidden Breakpoint="Breakpoint.MdAndUp">
+            <AppTertiaryButton StartIcon="@LucideIcons.ArrowLeft"
+                               OnClick="@OnBack" Class="mb-2">
+                Back
+            </AppTertiaryButton>
+        </MudHidden>
+
+        <div class="d-flex align-center flex-wrap gap-2 mb-1">
+            <MudText Class="spb-detail-title">
+                @Node.NodeId
+            </MudText>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                     Class="spb-group-chip">
+                @Node.GroupId
+            </MudChip>
+            <span class="spb-status-dot" style="background:@SparkplugNodeDisplay.NodeStatusColor(Node)"></span>
+            <span class="spb-status-label" style="color:@SparkplugNodeDisplay.NodeStatusColor(Node)">
+                @SparkplugNodeDisplay.NodeStatusLabel(Node)
+            </span>
+        </div>
+
+        <div class="d-flex align-center flex-wrap gap-2 mb-3">
+            <MudButton Variant="Variant.Outlined"
+                       Size="Size.Small" Class="app-btn-min"
+                       StartIcon="@LucideIcons.RefreshCw"
+                       OnClick="@(() => OnRequestRebirth.InvokeAsync(Node))">
+                Request rebirth
+            </MudButton>
+            <span title="@(AllowNodeReboot ? null : "Enable Allow node reboot in Settings, Sparkplug")">
+                <MudButton Variant="Variant.Outlined"
+                           Size="Size.Small" Class="app-btn-min"
+                           StartIcon="@LucideIcons.Power"
+                           Disabled="@(!AllowNodeReboot)"
+                           OnClick="@(() => OnRequestReboot.InvokeAsync(Node))">
+                    Reboot node
+                </MudButton>
+            </span>
+        </div>
+
+        <div class="spb-timestamps d-flex flex-wrap gap-3 mb-3">
+            @if (Node.LastBirthAt != null)
+            {
+                <span>
+                    Birth:
+                    <span class="metrics-mono">
+                        @Node.LastBirthAt.Value.ToLocalTime().ToString("HH:mm:ss")
+                    </span>
+                </span>
+            }
+            @if (Node.LastDataAt != null)
+            {
+                <span>
+                    Last data:
+                    <span class="metrics-mono">
+                        @Node.LastDataAt.Value.ToLocalTime().ToString("HH:mm:ss")
+                    </span>
+                    @if (Node.Status == SpbNodeStatus.Online)
+                    {
+                        <span class="spb-relative-time">(@DisplayHelpers.GetRelativeTime(Node.LastDataAt))</span>
+                    }
+                </span>
+            }
+            @if (Node.LastDeathAt != null && Node.Status == SpbNodeStatus.Offline)
+            {
+                <span>
+                    Death:
+                    <span class="metrics-mono">
+                        @Node.LastDeathAt.Value.ToLocalTime().ToString("HH:mm:ss")
+                    </span>
+                </span>
+            }
+            @if (Node.LastRebirthRequestAt != null)
+            {
+                <span>
+                    Rebirth requested:
+                    <span class="metrics-mono">
+                        @Node.LastRebirthRequestAt.Value.ToLocalTime().ToString("HH:mm:ss")
+                    </span>
+                </span>
+            }
+        </div>
+
+        <div class="spb-subsection-header">
+            Metrics (@Node.Metrics.Count)
+        </div>
+
+        @if (Node.Metrics.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                No metrics received yet
+            </MudText>
+        }
+        else
+        {
+            <SparkplugMetricsTable Class="mb-3"
+                                   Items="@Node.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)" />
+        }
+
+        <div class="spb-subsection-header">
+            Devices (@Node.Devices.Count)
+        </div>
+
+        @if (Node.Devices.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">No devices observed</MudText>
+        }
+        else
+        {
+            @foreach (var device in Node.Devices.Values.OrderBy(d => d.DeviceId, NaturalStringComparer.Instance))
+            {
+                <div @key="device.DeviceId" class="spb-device-row @(ExpandedDevice == device ? "spb-device-row--expanded" : "")"
+                     @onclick="() => OnToggleDevice.InvokeAsync(device)">
+                    <span class="spb-status-dot" style="background:@SparkplugNodeDisplay.StatusColor(device.Status)"></span>
+                    <span class="spb-device-id">@device.DeviceId</span>
+                    <span class="spb-status-label spb-status-label--device" style="color:@SparkplugNodeDisplay.StatusColor(device.Status)">
+                        @SparkplugNodeDisplay.StatusLabel(device.Status)
+                    </span>
+                    <span class="spb-device-secondary">
+                        @SparkplugNodeDisplay.DeviceSecondaryText(device)
+                    </span>
+                    <span @onclick:stopPropagation="true" class="ms-auto">
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small" Class="app-btn-min"
+                                   StartIcon="@LucideIcons.RefreshCw"
+                                   OnClick="@(() => OnRequestDeviceRebirth.InvokeAsync(device))">
+                            Rebirth
+                        </MudButton>
+                    </span>
+                </div>
+
+                @if (ExpandedDevice == device)
+                {
+                    <div class="spb-device-metrics">
+                        @if (device.Metrics.Count == 0)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                No metrics received yet
+                            </MudText>
+                        }
+                        else
+                        {
+                            <SparkplugMetricsTable Items="@device.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)" />
+                        }
+                    </div>
+                }
+            }
+        }
+    </MudPaper>
+}
+
+@code {
+    [Parameter]
+    public SpbNode? Node { get; set; }
+
+    [Parameter]
+    public SpbDevice? ExpandedDevice { get; set; }
+
+    [Parameter]
+    public bool AllowNodeReboot { get; set; }
+
+    [Parameter]
+    public EventCallback OnBack { get; set; }
+
+    [Parameter]
+    public EventCallback<SpbDevice> OnToggleDevice { get; set; }
+
+    [Parameter]
+    public EventCallback<SpbNode> OnRequestRebirth { get; set; }
+
+    [Parameter]
+    public EventCallback<SpbNode> OnRequestReboot { get; set; }
+
+    [Parameter]
+    public EventCallback<SpbDevice> OnRequestDeviceRebirth { get; set; }
+}

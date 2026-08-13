@@ -1,7 +1,7 @@
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Security;
+using MqttProbe.Core.Services.Configuration;
+using MqttProbe.Core.Services.Security;
 
 namespace MqttProbe.Web.Services;
 
-public class SingleAdminUserAuthService(ISettingsStore settingsStore)
-    : MqttProbe.Services.Authentication.SingleAdminUserAuthService(settingsStore);
+public class SingleAdminUserAuthService(IAuthSettings authSettings)
+    : MqttProbe.Core.Services.Authentication.SingleAdminUserAuthService(authSettings);

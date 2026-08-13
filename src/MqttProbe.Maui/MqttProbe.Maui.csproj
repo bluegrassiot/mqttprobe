@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+<Project Sdk="Microsoft.NET.Sdk.Razor">
 
     <!-- Optional machine-specific overrides (iOS TFM + codesign identity) for building the
          iOS app from Windows via a paired Mac. Gitignored; absent on CI and other machines,
@@ -173,7 +173,8 @@ System.IO.File.WriteAllText(FilePath, content);
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\MqttProbe.Shared\MqttProbe.Shared.csproj" />
+      <ProjectReference Include="..\MqttProbe.Core\MqttProbe.Core.csproj" />
+      <ProjectReference Include="..\MqttProbe.UI\MqttProbe.UI.csproj" />
     </ItemGroup>
 
     <ItemGroup>

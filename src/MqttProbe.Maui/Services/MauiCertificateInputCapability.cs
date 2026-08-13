@@ -1,4 +1,4 @@
-using MqttProbe.Services.Security;
+using MqttProbe.Core.Services.Security;
 
 namespace MqttProbe.Maui.Services;
 

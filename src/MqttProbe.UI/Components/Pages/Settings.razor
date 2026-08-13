@@ -1,0 +1,139 @@
+@implements IDisposable
+@inject IAppInfoService AppInfoService
+@inject NavigationManager NavigationManager
+
+<TabPanelHeader Title="Settings" Icon="@LucideIcons.Settings"/>
+
+<div class="settings-layout">
+    <nav class="settings-nav-rail" aria-label="Settings sections">
+        @foreach (var section in GetVisibleSections())
+        {
+            <button type="button"
+                    class="@(IsActive(section) ? "settings-nav-item active" : "settings-nav-item")"
+                    aria-current="@(IsActive(section) ? "page" : null)"
+                    @onclick="() => SelectSection(section.Slug)">
+                <MudIcon Icon="@section.Icon" Size="Size.Small" aria-hidden="true" />
+                <span>@section.Title</span>
+            </button>
+        }
+    </nav>
+
+    <div class="settings-nav-select">
+        <MudSelect T="string" Label="Settings section"
+                   Value="@ActiveSection.Slug"
+                   ValueChanged="@SelectSection"
+                   Variant="Variant.Outlined" Dense="true"
+                   Margin="Margin.Dense">
+            @foreach (var section in GetVisibleSections())
+            {
+                <MudSelectItem Value="@section.Slug">@section.Title</MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+
+    <div class="settings-content tab-panel-scroll">
+        <MudPaper Elevation="0" Class="pa-4 app-chrome-panel">
+            <MudText Typo="Typo.h6" Class="mb-3">@ActiveSection.Title</MudText>
+            @ActiveSection.Content
+        </MudPaper>
+    </div>
+</div>
+
+@code {
+    private sealed record SettingsSection(
+        string? Slug,
+        string Title,
+        string Icon,
+        Func<bool> IsVisible,
+        RenderFragment Content);
+
+    private readonly RenderFragment _appearance = @<AppearanceSection />;
+    private readonly RenderFragment _subscriptions = @<SubscriptionsSection />;
+    private readonly RenderFragment _sparkplug = @<SparkplugSection />;
+    private readonly RenderFragment _performance = @<PerformanceSection />;
+    private readonly RenderFragment _plugins = @<PluginSettingsPanel />;
+    private readonly RenderFragment _account = @<AccountSection />;
+    private readonly RenderFragment _about = @<AboutSection />;
+
+    private IReadOnlyList<SettingsSection> _sections = null!;
+    private string? _activeSlug = string.Empty;
+    private bool _suppressUrlUpdate;
+
+    protected override void OnInitialized()
+    {
+        _sections = BuildSections();
+        _activeSlug = ResolveSlugFromUrl();
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private IReadOnlyList<SettingsSection> BuildSections() =>
+    [
+        new("appearance", "Appearance", LucideIcons.Sun, () => true, _appearance),
+        new("subscriptions", "Subscriptions", LucideIcons.Layers, () => true, _subscriptions),
+        new("sparkplug", "Sparkplug", LucideIcons.Radio, () => true, _sparkplug),
+        new("performance", "Performance", LucideIcons.Cpu, () => true, _performance),
+        new("plugins", "Plugins", LucideIcons.Puzzle, () => true, _plugins),
+        new("account", "Account", LucideIcons.Shield, () => AppInfoService.RequiresAuthentication, _account),
+        new("about", "About", LucideIcons.Info, () => true, _about),
+    ];
+
+    private IReadOnlyList<SettingsSection> GetVisibleSections() =>
+        _sections.Where(s => s.IsVisible()).ToList();
+
+    private SettingsSection ActiveSection
+    {
+        get
+        {
+            var visible = GetVisibleSections();
+            return visible.FirstOrDefault(s =>
+                string.Equals(s.Slug, _activeSlug, StringComparison.OrdinalIgnoreCase)) ?? visible[0];
+        }
+    }
+
+    private bool IsActive(SettingsSection section) =>
+        string.Equals(section.Slug, ActiveSection.Slug, StringComparison.OrdinalIgnoreCase);
+
+    private void SelectSection(string? slug)
+    {
+        _activeSlug = slug;
+        _activeSlug = ActiveSection.Slug;
+        if (_suppressUrlUpdate) return;
+        var newUrl = NavigationManager.GetUriWithQueryParameter("section", ActiveSection.Slug);
+        _suppressUrlUpdate = true;
+        try { NavigationManager.NavigateTo(newUrl, forceLoad: false); }
+        finally { _suppressUrlUpdate = false; }
+    }
+
+    private string? ResolveSlugFromUrl()
+    {
+        var uri = new Uri(NavigationManager.Uri);
+        var query = uri.Query.TrimStart('?');
+        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var eq = pair.IndexOf('=');
+            if (eq <= 0) continue;
+            if (!string.Equals(pair[..eq], "section", StringComparison.OrdinalIgnoreCase)) continue;
+            var value = Uri.UnescapeDataString(pair[(eq + 1)..]);
+            var match = GetVisibleSections().FirstOrDefault(s =>
+                string.Equals(s.Slug, value, StringComparison.OrdinalIgnoreCase));
+            if (match is not null) return match.Slug;
+        }
+        return GetVisibleSections()[0].Slug;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        if (_suppressUrlUpdate) return;
+        var slug = ResolveSlugFromUrl();
+        if (!string.Equals(slug, ActiveSection.Slug, StringComparison.OrdinalIgnoreCase))
+        {
+            _activeSlug = slug;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}

@@ -4,28 +4,34 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Security;
+using MqttProbe.Core.Models.Configuration;
+using MqttProbe.Core.Services.Configuration;
+using MqttProbe.Core.Services.Security;
 
 namespace MqttProbe.Pages;
 
 [AllowAnonymous]
 public class SetupModel : PageModel
 {
-    private readonly ISettingsStore _settingsStore;
+    private readonly IAuthSettings _authSettings;
     private readonly IUserAuthService _userAuthService;
+    private readonly IUiSettings _uiSettings;
 
-    public SetupModel(ISettingsStore settingsStore, IUserAuthService userAuthService)
+    public SetupModel(IAuthSettings authSettings, IUserAuthService userAuthService, IUiSettings uiSettings)
     {
-        _settingsStore = settingsStore;
+        _authSettings = authSettings;
         _userAuthService = userAuthService;
+        _uiSettings = uiSettings;
     }
+
+    public bool IsAccessibleFontProfile =>
+        FontProfiles.IsAccessible(_uiSettings.Ui.FontProfile);
 
     public string? ErrorMessage { get; private set; }
 
     public IActionResult OnGet()
     {
-        if (!string.IsNullOrEmpty(_settingsStore.Config.Auth.PasswordHash))
+        if (!string.IsNullOrEmpty(_authSettings.Auth.PasswordHash))
             return RedirectToPage("/Login");
 
         return Page();
@@ -33,7 +39,7 @@ public class SetupModel : PageModel
 
     public async Task<IActionResult> OnPostAsync(string username, string password, string confirmPassword)
     {
-        if (!string.IsNullOrEmpty(_settingsStore.Config.Auth.PasswordHash))
+        if (!string.IsNullOrEmpty(_authSettings.Auth.PasswordHash))
             return RedirectToPage("/Login");
 
         if (string.IsNullOrWhiteSpace(username))

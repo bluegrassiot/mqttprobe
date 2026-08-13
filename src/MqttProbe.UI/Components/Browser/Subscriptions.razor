@@ -1,0 +1,56 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using MQTTnet.Protocol
+@using MqttProbe.Core.Models.Mqtt
+@inject ISubscriptionManager SubscriptionManager
+@inject ISnackbar Snackbar
+
+<TabPanelHeader Title="Subscriptions" Icon="@LucideIcons.Layers">
+    <HeaderChips>
+        @if (SubscriptionManager.Subscriptions.Any())
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                     Class="subscription-count-chip">
+                @SubscriptionManager.Subscriptions.Count
+            </MudChip>
+        }
+    </HeaderChips>
+</TabPanelHeader>
+
+<div class="subs-body">
+    <AuthorizeView Roles="Admin,Operator">
+        <Authorized>
+            <SubscriptionEditor Items="@SubscriptionManager.Subscriptions"
+                                EmptyText="No active subscriptions"
+                                EmptyHint="Add a topic above to start receiving messages"
+                                OnAdd="HandleAdd"
+                                OnRemove="HandleRemove" />
+        </Authorized>
+        <NotAuthorized>
+            <SubscriptionEditor Items="@SubscriptionManager.Subscriptions"
+                                Disabled="true"
+                                EmptyText="No active subscriptions"
+                                EmptyHint="Connect as Operator or Admin to manage subscriptions"
+                                OnAdd="HandleAdd"
+                                OnRemove="HandleRemove" />
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+@code {
+    private async Task HandleAdd((string Topic, MqttQualityOfServiceLevel Qos) request)
+    {
+        try
+        {
+            await SubscriptionManager.Add(request.Topic, request.Qos);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to subscribe: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleRemove(IReadOnlyList<string> topics)
+    {
+        await SubscriptionManager.Remove(topics);
+    }
+}

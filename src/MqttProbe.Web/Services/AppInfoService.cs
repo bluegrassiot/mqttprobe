@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
-using MqttProbe.Services.Platform;
+using MqttProbe.Core.Services.Platform;
 
 namespace MqttProbe.Web.Services;
 

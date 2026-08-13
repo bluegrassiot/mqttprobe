@@ -13,7 +13,7 @@ KINDS = ("protobuf-schemas", "assembly")
 
 # Mirrors PluginArchiveValidator's allowlist, so a package this script produces cannot be
 # rejected on file type. Build output is skipped outright: sweeping bin/ would bundle the
-# host's own MqttProbe.Shared.dll alongside the plugin.
+# host's own MqttProbe.UI.dll alongside the plugin.
 SHARED_SUFFIXES = (".proto", ".json", ".md", ".txt")
 ASSEMBLY_SUFFIXES = (".dll", ".pdb")
 SKIP_DIRS = frozenset({"bin", "obj"})

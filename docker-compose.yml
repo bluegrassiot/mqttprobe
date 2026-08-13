@@ -10,6 +10,11 @@ services:
       - mqttprobe-plugins:/app/Plugins
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      # Host filtering answers "Bad Request - Invalid Hostname" (400) to any Host
+      # header not listed here, so reaching this container by LAN IP or hostname
+      # needs that name added. Set MQTTPROBE_HOST in a .env file next to this
+      # compose file, e.g. MQTTPROBE_HOST=192.168.1.50, then recreate the container.
+      - AllowedHosts=${MQTTPROBE_HOST:-localhost};localhost;127.0.0.1;[::1]
     networks:
       - mqttprobe-net
     restart: unless-stopped

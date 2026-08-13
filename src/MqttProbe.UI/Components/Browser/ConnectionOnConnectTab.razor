@@ -1,0 +1,39 @@
+@using MQTTnet.Protocol
+
+<MudStack Spacing="2" Class="mt-2">
+    <div>
+        <MudSwitch T="bool"
+                   Value="@AutoResubscribe"
+                   ValueChanged="@AutoResubscribeChanged"
+                   Color="Color.Primary"
+                   Label="Auto-resubscribe on connect" />
+        @if (AutoResubscribe)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                Saved topics below are subscribed when this connection connects.
+            </MudText>
+        }
+    </div>
+
+    @if (!AutoResubscribe)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            On-connect subscriptions are not applied until Auto-resubscribe is enabled. Turn it on above, or enable it in Settings.
+        </MudAlert>
+    }
+
+    <SubscriptionEditor Items="@Items"
+                        Disabled="@(!AutoResubscribe)"
+                        EmptyText="No on-connect subscriptions yet"
+                        EmptyHint="Add a topic above."
+                        OnAdd="@OnAdd"
+                        OnRemove="@OnRemove" />
+</MudStack>
+
+@code {
+    [Parameter] public bool AutoResubscribe { get; set; }
+    [Parameter] public EventCallback<bool> AutoResubscribeChanged { get; set; }
+    [Parameter, EditorRequired] public List<SubscribedTopic> Items { get; set; } = [];
+    [Parameter] public EventCallback<(string Topic, MqttQualityOfServiceLevel Qos)> OnAdd { get; set; }
+    [Parameter] public EventCallback<IReadOnlyList<string>> OnRemove { get; set; }
+}

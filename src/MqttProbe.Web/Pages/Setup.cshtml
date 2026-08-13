@@ -1,4 +1,5 @@
 @page
+@using MqttProbe.Core.Services.Security
 @model MqttProbe.Pages.SetupModel
 @{
     Layout = null;
@@ -9,10 +10,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MQTTProbe — Setup</title>
-    <link href="/_content/MqttProbe.Shared/css/fonts.css" rel="stylesheet" />
-    <link href="/_content/MqttProbe.Shared/css/auth-layout.css" rel="stylesheet" />
+    <link href="/_content/MqttProbe.UI/css/fonts.css" rel="stylesheet" />
+    <link href="/_content/MqttProbe.UI/css/auth-layout.css" rel="stylesheet" />
 </head>
-<body>
+<body class="@(Model.IsAccessibleFontProfile ? "font-accessible" : null)">
 <div class="auth-card">
     <h1><span class="brand-mqtt">MQTT</span><span class="brand-probe">Probe</span></h1>
     <p class="subtitle">Create your login credentials to get started.</p>
@@ -26,9 +27,9 @@
             <input type="text" id="username" name="username" value="admin" autocomplete="username" required autofocus />
         </div>
 
-        <label for="password">Password</label>
+        <label for="password">Password (at least @PasswordPolicy.MinLength characters)</label>
         <div class="field password-wrapper">
-            <input type="password" id="password" name="password" autocomplete="new-password" required />
+            <input type="password" id="password" name="password" autocomplete="new-password" required minlength="@PasswordPolicy.MinLength" />
             <button type="button" class="password-toggle" onclick="togglePassword('password', this)"
                     aria-label="Show password" aria-controls="password">
                 <svg class="icon-eye-off" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"

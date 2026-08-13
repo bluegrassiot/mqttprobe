@@ -1,27 +1,17 @@
+// System.Globalization is used only inside the #if IOS block below; it reads as unused
+// on every other target framework.
 using System.Globalization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using MqttProbe.Components.Layout;
+using MqttProbe.Core.Models.Plugins;
+using MqttProbe.Core.Services;
+using MqttProbe.Core.Services.Platform;
+using MqttProbe.Core.Services.Plugins;
+using MqttProbe.Core.Services.Plugins.Packaging;
+using MqttProbe.Core.Services.Security;
 using MqttProbe.Maui.Services;
-using MqttProbe.Models.Plugins;
-using MqttProbe.Services;
-using MqttProbe.Services.Chart;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Emulation;
-using MqttProbe.Services.Metrics;
-using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Platform;
-using MqttProbe.Services.Plugins;
-using MqttProbe.Services.Plugins.Loading;
-using MqttProbe.Services.Plugins.Packaging;
-using MqttProbe.Services.Plugins.Pipeline;
-using MqttProbe.Services.Plugins.Registry;
-using MqttProbe.Services.Security;
-using MqttProbe.Services.Sparkplug;
-using MudBlazor;
-using MudBlazor.Services;
+using MqttProbe.UI.Services.Platform;
 
 namespace MqttProbe;
 
@@ -40,7 +30,7 @@ public static class MauiProgram
             .UseMauiApp<App>()
             .ConfigureFonts(fonts => { fonts.AddFont("Inter-Variable.ttf", "Inter"); });
 
-        builder.Services.AddMqttProbeMud();
+        builder.Services.AddMqttProbeUi();
         builder.Services.AddMauiBlazorWebView();
 
 #if DEBUG
@@ -54,7 +44,6 @@ public static class MauiProgram
         AddConfiguration(builder);
 
         builder.Services.AddScoped<IClipboardService, MauiClipboardService>();
-        builder.Services.AddMqttProbeCharts();
 
         AddPluginServices(builder);
         builder.Services.AddMqttProbeSparkplugTopology(HostSessionModel.SingleSession);
@@ -66,7 +55,7 @@ public static class MauiProgram
     {
         builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
 #if WINDOWS
-        builder.Services.AddSingleton<IUpdateService, MqttProbe.WinUI.VelopackUpdateService>();
+        builder.Services.AddSingleton<IUpdateService, WinUI.VelopackUpdateService>();
 #elif MACCATALYST
         builder.Services.AddSingleton<IUpdateService, MacVelopackUpdateService>();
 #else
@@ -119,21 +108,13 @@ public static class MauiProgram
     private static void AddConfiguration(MauiAppBuilder builder)
     {
         var configDir = Path.Combine(FileSystem.Current.AppDataDirectory, "config");
-#if WINDOWS
-        var legacyConfigDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "User Name", "com.bluegrassiot.mqttprobe", "Data", "config");
-        ConfigMigrator.MigrateIfNeeded(legacyConfigDir, configDir);
-#endif
         var configPath = Path.Combine(configDir, "appsettings.json");
 
         Directory.CreateDirectory(configDir);
         builder.Configuration.AddJsonFile(configPath, optional: true, reloadOnChange: false);
 
         var isMobile = DeviceInfo.Idiom == DeviceIdiom.Phone || DeviceInfo.Idiom == DeviceIdiom.Tablet;
-        builder.Services.AddSingleton<ISettingsStore>(sp =>
-            new SettingsStore(configPath, isMobile,
-                logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
+        builder.Services.AddMqttProbeSettings(configPath, isMobile);
     }
 
     private static void AddPluginServices(MauiAppBuilder builder)

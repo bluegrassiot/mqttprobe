@@ -1,25 +1,25 @@
 using Microsoft.Extensions.Logging;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Security;
+using MqttProbe.Core.Services.Configuration;
+using MqttProbe.Core.Services.Security;
 
 namespace MqttProbe;
 
 public partial class App
 {
-    private readonly ISettingsStore _settingsStore;
-    private readonly ISecretStorage _secretStorage;
+    private readonly ISettingsLoader _settingsLoader;
+    private readonly IConnectionSettings _connectionSettings;
     private readonly ILogger<App> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly ICertificateAssetStore _certStore;
     private readonly ICertificateEnvelopeKeyStore _envelopeKeyStore;
 
-    public App(ISettingsStore settingsStore, ISecretStorage secretStorage,
+    public App(ISettingsLoader settingsLoader, IConnectionSettings connectionSettings,
         ILogger<App> logger, IServiceProvider serviceProvider,
         ICertificateAssetStore certStore, ICertificateEnvelopeKeyStore envelopeKeyStore)
     {
         InitializeComponent();
-        _settingsStore = settingsStore;
-        _secretStorage = secretStorage;
+        _settingsLoader = settingsLoader;
+        _connectionSettings = connectionSettings;
         _logger = logger;
         _serviceProvider = serviceProvider;
         _certStore = certStore;
@@ -72,7 +72,12 @@ public partial class App
         try
         {
             await MainThread.InvokeOnMainThreadAsync(() => window.Page = CreateLoadingPage());
-            await _settingsStore.LoadAsync(_secretStorage, _certStore, _envelopeKeyStore);
+            var configLoaded = await _settingsLoader.LoadAsync();
+
+            var certCleanup = new CertificateStoreCleanup(
+                _certStore, _envelopeKeyStore,
+                _serviceProvider.GetService<ILogger<CertificateStoreCleanup>>());
+            await certCleanup.RunAsync(_connectionSettings.Connections, configLoaded);
 
             var root = await ResolveInitialPageAsync();
             await MainThread.InvokeOnMainThreadAsync(() => window.Page = root);

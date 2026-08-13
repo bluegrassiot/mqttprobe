@@ -294,6 +294,7 @@ deploy/mtls/certs/**
 /.github/copilot-instructions.md
 /.claude
 /.opencode/
+/opencode.json
 /.obsidian
 /.superpowers/
 

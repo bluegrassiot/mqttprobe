@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <!-- See MqttProbe.Shared.Tests.csproj — library analyzers are noise on test code. -->
+    <!-- See MqttProbe.Core.Tests.csproj — library analyzers are noise on test code. -->
     <AnalysisMode>None</AnalysisMode>
   </PropertyGroup>
 
@@ -30,7 +30,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\MqttProbe.Shared\MqttProbe.Shared.csproj" />
+    <ProjectReference Include="..\..\src\MqttProbe.Core\MqttProbe.Core.csproj" />
+    <ProjectReference Include="..\..\src\MqttProbe.UI\MqttProbe.UI.csproj" />
     <ProjectReference Include="..\MqttProbe.TestInfrastructure\MqttProbe.TestInfrastructure.csproj" />
   </ItemGroup>
 

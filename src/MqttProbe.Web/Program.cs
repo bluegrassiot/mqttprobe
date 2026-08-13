@@ -5,26 +5,15 @@ using Microsoft.AspNetCore.DataProtection.XmlEncryption;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Options;
-using MqttProbe.Components.Layout;
-using MqttProbe.Models.Plugins;
-using MqttProbe.Services.Chart;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Emulation;
-using MqttProbe.Services.Metrics;
-using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Platform;
-using MqttProbe.Services.Plugins;
-using MqttProbe.Services.Plugins.Loading;
-using MqttProbe.Services.Plugins.Packaging;
-using MqttProbe.Services.Plugins.Pipeline;
-using MqttProbe.Services.Plugins.Registry;
-using MqttProbe.Services.Security;
-using MqttProbe.Services.Sparkplug;
+using MqttProbe.Core.Models.Plugins;
+using MqttProbe.Core.Services.Configuration;
+using MqttProbe.Core.Services.Platform;
+using MqttProbe.Core.Services.Plugins;
+using MqttProbe.Core.Services.Plugins.Packaging;
+using MqttProbe.Core.Services.Security;
+using MqttProbe.UI.Services.Platform;
 using MqttProbe.Web;
 using MqttProbe.Web.Services;
-using MudBlazor;
-using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,7 +21,7 @@ StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configurat
 
 builder.Services.AddRazorPages();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
-builder.Services.AddMqttProbeMud();
+builder.Services.AddMqttProbeUi();
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -87,7 +76,7 @@ else
         var kek = Convert.FromBase64String(kekBase64);
         var decryptor = new AesKeyDecryptor(kek);
         dpBuilder.Services.AddSingleton<IXmlEncryptor>(new AesKeyEncryptor(kek));
-        dpBuilder.Services.AddSingleton<AesKeyDecryptor>(decryptor);
+        dpBuilder.Services.AddSingleton(decryptor);
     }
 }
 builder.Services.AddSingleton<ISecretStorage>(sp =>
@@ -96,9 +85,7 @@ builder.Services.AddSingleton<ISecretStorage>(sp =>
         Path.Combine(configDir, "secrets.dat")));
 
 builder.Services.AddMqttProbeCore(HostSessionModel.PerCircuit);
-builder.Services.AddSingleton<ISettingsStore>(sp =>
-    new SettingsStore(Path.Combine(configDir, "appsettings.json"),
-        logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
+builder.Services.AddMqttProbeSettings(Path.Combine(configDir, "appsettings.json"));
 builder.Services.AddSingleton<ICertificateEnvelopeKeyStore>(sp =>
     new WebCertificateEnvelopeKeyStore(sp.GetRequiredService<ISecretStorage>()));
 builder.Services.AddSingleton<IFileProtector, DefaultFileProtector>();
@@ -118,8 +105,6 @@ builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
 builder.Services.AddSingleton<IUpdateService, NoOpUpdateService>();
 builder.Services.AddSingleton<IUserAuthService, SingleAdminUserAuthService>();
 
-builder.Services.AddMqttProbeCharts();
-
 builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));
 builder.Services.PostConfigure<PluginConfig>(cfg =>
 {
@@ -134,9 +119,14 @@ builder.Services.AddMqttProbeSparkplugTopology(HostSessionModel.PerCircuit);
 
 var app = builder.Build();
 
-var secretStorage = app.Services.GetRequiredService<ISecretStorage>();
-var settingsStore = app.Services.GetRequiredService<ISettingsStore>();
-await settingsStore.LoadAsync(secretStorage, app.Services.GetService<ICertificateAssetStore>(), app.Services.GetService<ICertificateEnvelopeKeyStore>());
+var configLoaded = await app.Services.GetRequiredService<ISettingsLoader>().LoadAsync();
+
+var certCleanup = new CertificateStoreCleanup(
+    app.Services.GetRequiredService<ICertificateAssetStore>(),
+    app.Services.GetRequiredService<ICertificateEnvelopeKeyStore>(),
+    app.Services.GetRequiredService<ILogger<CertificateStoreCleanup>>());
+await certCleanup.RunAsync(
+    app.Services.GetRequiredService<IConnectionSettings>().Connections, configLoaded);
 
 if (!app.Environment.IsDevelopment())
 {
@@ -164,7 +154,7 @@ app.MapGet("/health", () => Results.Text("OK", "text/plain")).AllowAnonymous();
 app.MapRazorPages().RequireAuthorization();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
-    .AddAdditionalAssemblies(typeof(MqttProbe.Components.Pages.Index).Assembly)
+    .AddAdditionalAssemblies(typeof(MqttProbe.UI.Components.Pages.Index).Assembly)
     .RequireAuthorization();
 
 await app.RunAsync();

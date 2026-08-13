@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using MqttProbe.Services.Security;
+using MqttProbe.Core.Services.Security;
 
 namespace MqttProbe.Desktop.Services.Security;
 

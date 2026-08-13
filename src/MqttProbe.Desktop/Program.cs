@@ -1,30 +1,20 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using MqttProbe.Components.Layout;
+using MqttProbe.Core.Models.Plugins;
+using MqttProbe.Core.Services;
+using MqttProbe.Core.Services.Configuration;
+using MqttProbe.Core.Services.Platform;
+using MqttProbe.Core.Services.Plugins;
+using MqttProbe.Core.Services.Plugins.Packaging;
+using MqttProbe.Core.Services.Security;
 using MqttProbe.Desktop.Interop;
 using MqttProbe.Desktop.Services;
 using MqttProbe.Desktop.Services.Security;
-using MqttProbe.Models.Plugins;
-using MqttProbe.Services;
-using MqttProbe.Services.Chart;
-using MqttProbe.Services.Configuration;
-using MqttProbe.Services.Emulation;
-using MqttProbe.Services.Metrics;
-using MqttProbe.Services.Mqtt;
-using MqttProbe.Services.Platform;
-using MqttProbe.Services.Plugins;
-using MqttProbe.Services.Plugins.Loading;
-using MqttProbe.Services.Plugins.Packaging;
-using MqttProbe.Services.Plugins.Pipeline;
-using MqttProbe.Services.Plugins.Registry;
-using MqttProbe.Services.Security;
-using MqttProbe.Services.Sparkplug;
-using MudBlazor;
-using MudBlazor.Services;
+using MqttProbe.UI.Services.Platform;
 using Photino.Blazor;
 using Velopack;
 
@@ -32,14 +22,18 @@ namespace MqttProbe.Desktop;
 
 internal static class Program
 {
+    private const string WebViewUserDataFolderVariable = "WEBVIEW2_USER_DATA_FOLDER";
+
     [STAThread]
     private static void Main(string[] args)
     {
         VelopackApp.Build().Run();
 
+        ConfigureWebViewUserDataFolder();
+
         var builder = PhotinoBlazorAppBuilder.CreateDefault(args);
 
-        builder.Services.AddMqttProbeMud();
+        builder.Services.AddMqttProbeUi();
 
         builder.Services.AddLogging(logging =>
         {
@@ -50,7 +44,7 @@ internal static class Program
         builder.Services.AddMqttProbeCore(HostSessionModel.SingleSession);
         ConfigureServices(builder);
 
-        builder.RootComponents.Add<MqttProbe.Desktop.Main>("app");
+        builder.RootComponents.Add<Main>("app");
 
         var app = builder.Build();
 
@@ -62,6 +56,28 @@ internal static class Program
         app.Run();
     }
 
+    private static string GetConfigDir() => Path.Combine(
+        Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config"),
+        "mqttprobe");
+
+    // WebView2 needs a user data folder it can create and write to. Left to Photino's default it
+    // fails to build its environment on some machines: no browser process is ever spawned, nothing
+    // is served, and the window paints black with no error on any channel. Pin it to the per-user
+    // config directory the app already owns. Windows-only; WebView2 is not used on other platforms.
+    private static void ConfigureWebViewUserDataFolder()
+    {
+        if (!OperatingSystem.IsWindows()
+            || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(WebViewUserDataFolderVariable)))
+        {
+            return;
+        }
+
+        var dataDir = Path.Combine(GetConfigDir(), "webview2");
+        Directory.CreateDirectory(dataDir);
+        Environment.SetEnvironmentVariable(WebViewUserDataFolderVariable, dataDir);
+    }
+
     private static void ConfigureServices(PhotinoBlazorAppBuilder builder)
     {
         builder.Services.AddSingleton<IAppInfoService, DesktopAppInfoService>();
@@ -70,10 +86,7 @@ internal static class Program
         builder.Services.AddCascadingAuthenticationState();
         builder.Services.AddScoped<AuthenticationStateProvider, DesktopUnauthenticatedStateProvider>();
 
-        var configDir = Path.Combine(
-            Environment.GetEnvironmentVariable("XDG_CONFIG_HOME")
-                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config"),
-            "mqttprobe");
+        var configDir = GetConfigDir();
         Directory.CreateDirectory(configDir);
         var secretsDir = Path.Combine(configDir, "secrets");
         Directory.CreateDirectory(secretsDir);
@@ -92,9 +105,7 @@ internal static class Program
             .Build();
         builder.Services.AddSingleton<IConfiguration>(configuration);
 
-        builder.Services.AddSingleton<ISettingsStore>(sp =>
-            new SettingsStore(configPath, isMobile: false,
-                logger: sp.GetRequiredService<ILogger<SettingsStore>>()));
+        builder.Services.AddMqttProbeSettings(configPath);
 
         builder.Services.AddSingleton<ICertificateAssetStore>(sp =>
         {
@@ -109,7 +120,6 @@ internal static class Program
         builder.Services.AddSingleton<ICertificateInputCapability, DesktopCertificateInputCapability>();
 
         builder.Services.AddScoped<IClipboardService, DesktopClipboardService>();
-        builder.Services.AddMqttProbeCharts();
 
         AddPluginServices(builder, configuration, configDir);
 
@@ -118,7 +128,7 @@ internal static class Program
 
     private static void AddSecretStorage(PhotinoBlazorAppBuilder builder, string secretsDir)
     {
-        builder.Services.AddSingleton(sp =>
+        builder.Services.AddSingleton(_ =>
         {
             ISecretKeyProtector os;
             if (OperatingSystem.IsWindows())
@@ -163,9 +173,16 @@ internal static class Program
             var keyProtector = app.Services.GetRequiredService<DesktopSecretKeyProtector>();
             keyProtector.InitializeAsync().GetAwaiter().GetResult();
 
-            var secretStorage = app.Services.GetRequiredService<ISecretStorage>();
-            var resolvedSettingsStore = app.Services.GetRequiredService<ISettingsStore>();
-            resolvedSettingsStore.LoadAsync(secretStorage, app.Services.GetService<ICertificateAssetStore>(), app.Services.GetService<ICertificateEnvelopeKeyStore>()).GetAwaiter().GetResult();
+            var configLoaded = app.Services.GetRequiredService<ISettingsLoader>()
+                .LoadAsync().GetAwaiter().GetResult();
+
+            var certCleanup = new CertificateStoreCleanup(
+                app.Services.GetRequiredService<ICertificateAssetStore>(),
+                app.Services.GetRequiredService<ICertificateEnvelopeKeyStore>(),
+                app.Services.GetRequiredService<ILogger<CertificateStoreCleanup>>());
+            certCleanup.RunAsync(
+                    app.Services.GetRequiredService<IConnectionSettings>().Connections, configLoaded)
+                .GetAwaiter().GetResult();
         }
         catch (SecretStorageException ex)
         {
@@ -202,6 +219,7 @@ internal static class Program
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int MessageBoxW(IntPtr hWnd, string lpText, string lpCaption, uint uType);
 
+    [SuppressMessage("ReSharper", "InconsistentNaming")]
     private static void ShowWindowsError(string message)
     {
         const uint MB_OK = 0x00000000;

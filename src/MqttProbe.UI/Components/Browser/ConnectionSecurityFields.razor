@@ -1,0 +1,25 @@
+@if (!Connection.UseTls)
+{
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+        Turn on Use TLS on the Connection tab to configure certificate trust and client certificates.
+    </MudText>
+}
+else
+{
+    <div class="@(Connection.AllowUntrustedCertificate ? "security-warning-group" : "") mt-2">
+        <MudCheckBox @bind-Value="@Connection.AllowUntrustedCertificate" Color="Color.Warning">
+            <MudIcon Icon="@LucideIcons.AlertTriangle" Size="Size.Small" Class="mr-1" />
+            Allow untrusted certificate
+        </MudCheckBox>
+        @if (Connection.AllowUntrustedCertificate)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Error" Class="ml-8">
+                Insecure — dev/lab only. Do not use in production.
+            </MudText>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Connection Connection { get; set; } = null!;
+}

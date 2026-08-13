@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <IsPackable>false</IsPackable>
+
+        <!-- Library-code analyzers (CA/Sonar/Meziantou) have no signal on test
+             code — they flagged ~2.6k naming and style issues across tests/.
+             NUnit.Analyzers is kept; it catches real test bugs. -->
+        <AnalysisMode>None</AnalysisMode>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AwesomeAssertions" />
+        <PackageReference Include="coverlet.collector">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="JunitXml.TestLogger" />
+        <PackageReference Include="Microsoft.Extensions.Configuration" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="NSubstitute" />
+        <PackageReference Include="NUnit" />
+        <PackageReference Include="NUnit.Analyzers">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="NUnit3TestAdapter" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\src\MqttProbe.Core\MqttProbe.Core.csproj" />
+      <ProjectReference Include="..\MqttProbe.PluginLoader.Fixtures\MqttProbe.PluginLoader.Fixtures.csproj" ReferenceOutputAssembly="false" Private="false" />
+      <ProjectReference Include="..\MqttProbe.TestInfrastructure\MqttProbe.TestInfrastructure.csproj" />
+    </ItemGroup>
+
+    <Target Name="CopyPluginFixtures" AfterTargets="Build">
+      <ItemGroup>
+        <_FixtureFiles Include="..\MqttProbe.PluginLoader.Fixtures\bin\$(Configuration)\net10.0\**\*.*" />
+      </ItemGroup>
+      <Copy SourceFiles="@(_FixtureFiles)" DestinationFolder="$(TargetDir)PluginFixtures\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    </Target>
+
+</Project>

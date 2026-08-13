@@ -1,7 +1,7 @@
 using System.Reflection;
-using MqttProbe.Services.Platform;
+using MqttProbe.Core.Services.Platform;
 
-namespace MqttProbe.Services;
+namespace MqttProbe.Desktop.Services;
 
 public class DesktopAppInfoService : IAppInfoService
 {

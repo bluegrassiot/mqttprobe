@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
-using MqttProbe.Services.Security;
+using MqttProbe.Core.Services.Security;
 
 namespace MqttProbe.Web.Services;
 

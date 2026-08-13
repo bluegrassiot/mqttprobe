@@ -1,6 +1,6 @@
-using MqttProbe.Services.Platform;
+using MqttProbe.Core.Services.Platform;
 
-namespace MqttProbe.Services;
+namespace MqttProbe.Maui.Services;
 
 public class MauiClipboardService : IClipboardService
 {

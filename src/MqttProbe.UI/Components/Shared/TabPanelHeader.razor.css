@@ -1,21 +1,22 @@
 .app-tabpanel-header {
-    padding: 24px 0;
+    padding: 8px 0;
     border-bottom: 1px solid var(--mud-palette-divider);
-    margin-bottom: 24px;
+    margin-bottom: 10px;
 }
 
 .app-tabpanel-header__row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     /* On narrow screens the actions drop to their own line instead of
        clipping past the right edge. Single-line layouts are unaffected. */
     flex-wrap: wrap;
-    row-gap: 8px;
+    row-gap: 6px;
 }
 
 .app-tabpanel-header__title {
     margin: 0;
+    line-height: 1.2;
 }
 
 .app-tabpanel-header__chips {
@@ -35,14 +36,14 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding-top: 16px;
+    padding-top: 6px;
 }
 
-/* Phones: the 24px header padding/margin costs too much vertical space. */
+/* Phones: tighten further so header chrome doesn't dominate the viewport. */
 @media (max-width: 599px) {
     .app-tabpanel-header {
-        padding: 8px 0;
-        margin-bottom: 12px;
+        padding: 6px 0;
+        margin-bottom: 8px;
     }
 
     .app-tabpanel-header__title {
@@ -50,7 +51,7 @@
     }
 
     .app-tabpanel-header__filters {
-        padding-top: 8px;
+        padding-top: 4px;
     }
 
     /* Views with wide chip sets (e.g. Nodes) opt in via this modifier: the

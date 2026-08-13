@@ -112,7 +112,7 @@ public class TabPanelHeaderTests : BunitTestContext
     }
 
     [Test]
-    public void Applies_SpecBorderAndMargin_ToRoot()
+    public void Applies_BorderAndMargin_ToRoot()
     {
         EnsureMudProviders();
 
@@ -121,13 +121,13 @@ public class TabPanelHeaderTests : BunitTestContext
 
         var root = cut.Find("div.app-tabpanel-header");
         root.ClassList.Should().Contain("app-tabpanel-header",
-            "the spec requires the root to use the app-tabpanel-header BEM class");
+            "the root must use the app-tabpanel-header BEM class");
 
         var css = ReadScopedCss();
         css.Should().Contain("border-bottom: 1px",
-            "the spec §3.1 requires a 1px slate divider below the header row");
-        css.Should().Contain("margin-bottom: 24px",
-            "the spec §3.1 requires 24px margin-bottom to separate header from body");
+            "a 1px divider must separate header from body");
+        css.Should().Contain("margin-bottom: 10px",
+            "10px margin-bottom keeps the header dense without feeling cramped");
     }
 
     private static string ReadScopedCss()

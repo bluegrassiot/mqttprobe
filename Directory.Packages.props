@@ -10,14 +10,14 @@
     <PackageVersion Include="Blazor.Lucide" Version="1.0.6" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
-    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.141" />
-    <PackageVersion Include="protobuf-net.Reflection" Version="3.2.52" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.159" />
+    <PackageVersion Include="protobuf-net.Reflection" Version="3.3.8" />
     <PackageVersion Include="MessagePack" Version="3.1.8" />
     <PackageVersion Include="MudBlazor" Version="9.8.0" />
-    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.31.0.145097" />
-    <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.10" />
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
-    <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.10" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.32.0.713" />
+    <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.11" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.11" />
+    <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.11" />
     <!-- MQTTnet 5.2.x. ManagedClient is removed (replaced by the in-house
          IMqttManagedClient wrapper). SparkplugNet is consumed via the
          external/SparkplugNet git submodule ProjectReference (same MQTTnet pin). -->
@@ -25,16 +25,16 @@
     <!-- ============================================================ -->
     <!-- ASP.NET Core / Web                                           -->
     <!-- ============================================================ -->
-    <PackageVersion Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.11" />
     <!-- ============================================================ -->
     <!-- MAUI                                                          -->
     <!-- ============================================================ -->
@@ -58,14 +58,14 @@
     <PackageVersion Include="bunit" Version="2.9.0" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="JunitXml.TestLogger" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.8.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
-    <PackageVersion Include="NSubstitute" Version="6.1.0" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.9.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="NUnit" Version="4.6.1" />
     <PackageVersion Include="NUnit.Analyzers" Version="4.14.0" />
     <PackageVersion Include="NUnit3TestAdapter" Version="6.2.0" />
     <PackageVersion Include="Microsoft.Playwright.NUnit" Version="1.60.0" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.60.0" />
-    <PackageVersion Include="Testcontainers" Version="4.13.0" />
+    <PackageVersion Include="Testcontainers" Version="4.14.0" />
   </ItemGroup>
 </Project>

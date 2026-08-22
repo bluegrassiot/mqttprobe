@@ -23,6 +23,8 @@
 - Avoid inline styles; use separate CSS files.
 - For Razor pages and components, use the companion `.razor.css` file.
 - When modifying files that already contain inline styles, extract them into the appropriate CSS file.
+- Prefer one vertical scroll owner per dialog tab or page region. Avoid nested scrollbars and horizontal scrolling for long topic values.
+- MudBlazor adds intermediate layout elements. Inspect rendered DOM and use correctly anchored `::deep` selectors before overriding tab or expansion-panel layout.
 
 ## Verification
 
@@ -32,6 +34,8 @@
 - For code changes, check coverage with `python scripts/ci/coverage.py` (unit projects only; integration is excluded from coverage).
 - Treat 80% coverage as a hard minimum for new code.
 - Check for routine XML docs with `python scripts/ci/check-comments.py`.
+- Browser-verify layout changes; bUnit does not prove dimensions, clipping, overflow, or scrollbar behavior.
+- Test layout changes with long topics, overflowing lists, expanded and collapsed panels, and a short viewport. Use DOM measurements when diagnosing constrained flex layouts.
 
 ## When to add integration tests
 

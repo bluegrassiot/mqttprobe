@@ -58,6 +58,7 @@
             <MudExpansionPanels Elevation="0" Class="mt-2">
                 <MudExpansionPanel Text="Processing" Dense="true" @bind-Expanded="_processingExpanded">
                     <div class="metrics-row"><span>Messages processed</span><span>@Fmt(_snapshot.MessagesProcessed)</span></div>
+                    <div class="metrics-row"><span>Messages excluded</span><span>@Fmt(_snapshot.MessagesExcluded)</span></div>
                     <div class="metrics-row"><span>Messages dropped</span><span>@Fmt(_snapshot.MessagesDropped)</span></div>
                     <div class="metrics-row"><span>Processing time (avg)</span><span>@FmtUs(_snapshot.AvgProcessingTimeUs)</span></div>
                     <div class="metrics-row"><span>Processing time (max)</span><span>@FmtUs(_snapshot.MaxProcessingTimeUs)</span></div>

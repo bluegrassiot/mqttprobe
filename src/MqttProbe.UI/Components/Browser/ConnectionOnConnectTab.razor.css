@@ -1,0 +1,12 @@
+/* The editor stack contributes intrinsic content rather than shrinking.
+   min-block-size:100% ensures it fills available space when taller than
+   the tab panel, while flex:0 0 auto prevents it from being squeezed
+   by the outer scroll owner. */
+.on-connect-editor-stack {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-block-size: 100%;
+    gap: 16px;
+    padding-top: 8px;
+}

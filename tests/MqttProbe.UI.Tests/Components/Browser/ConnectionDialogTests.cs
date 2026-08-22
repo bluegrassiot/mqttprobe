@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MQTTnet.Protocol;
+using MqttProbe.Core;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Chart;
@@ -25,6 +26,7 @@ public class ConnectionDialogTests : BunitTestContext
     private IUiSettings _mockUi = null!;
     private IMessageStoreManager _mockMsgStore = null!;
     private ISubscriptionManager _mockSubMgr = null!;
+    private ITopicExcludeService _mockExcludeService = null!;
     private ISessionState _mockSessionState = null!;
     private IMqttOptionsBuilder _mockOptionsBuilder = null!;
     private IBrokerStateResetCoordinator _mockCoordinator = null!;
@@ -45,6 +47,9 @@ public class ConnectionDialogTests : BunitTestContext
         _mockUi = Substitute.For<IUiSettings>();
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _mockSubMgr = Substitute.For<ISubscriptionManager>();
+        _mockExcludeService = Substitute.For<ITopicExcludeService>();
+        _mockExcludeService.TopicExcludes.Returns(Array.Empty<string>());
+        _mockExcludeService.ValidateAdd(Arg.Any<string>()).Returns(new TopicExcludeValidationResult(true));
         _mockSessionState = Substitute.For<ISessionState>();
         _mockOptionsBuilder = Substitute.For<IMqttOptionsBuilder>();
         _mockCoordinator = Substitute.For<IBrokerStateResetCoordinator>();
@@ -79,6 +84,7 @@ public class ConnectionDialogTests : BunitTestContext
         Services.AddUiSettings(_mockUi);
         Services.AddSingleton(_mockMsgStore);
         Services.AddSingleton(_mockSubMgr);
+        Services.AddSingleton(_mockExcludeService);
         Services.AddSingleton(_mockSessionState);
         Services.AddSingleton(_mockOptionsBuilder);
         Services.AddSingleton(_mockCoordinator);
@@ -1874,5 +1880,343 @@ public class ConnectionDialogTests : BunitTestContext
         panel = _dialogProvider.FindComponents<MudExpansionPanel>()
             .First(p => p.Instance.Text == "Advanced timing");
         panel.Instance.Expanded.Should().BeFalse("returning to default timing should collapse panel again");
+    }
+
+    // --- Topic exclude tests (Review finding: excludes are independent of Auto-resubscribe) ---
+
+    [Test]
+    public async Task OnConnectTab_ExcludeAdd_WorksRegardlessOfAutoResubscribe()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockExcludeService.Add(Arg.Any<string>()).Returns(Task.FromResult(new TopicExcludeOperationResult(true)));
+        // Auto-resubscribe is OFF by default
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<ExcludeEditor>().Instance;
+        editor.TopicDraft = "$SYS/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        await _mockConnections.Received().AddConnectionAsync(
+            Arg.Is<Connection>(c => c!.TopicExcludes.Contains("$SYS/#")));
+    }
+
+    [Test]
+    public async Task OnConnectTab_ExcludeRemove_WorksRegardlessOfAutoResubscribe()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockExcludeService.Remove(Arg.Any<IReadOnlyList<string>>()).Returns(Task.FromResult(new TopicExcludeOperationResult(true)));
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection
+        {
+            Name = "TestConn",
+            Host = "localhost",
+            Port = 1883,
+            TopicExcludes = ["$SYS/#", "debug/#"]
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<ExcludeEditor>();
+        var checkboxes = editor.FindAll("input[type='checkbox']");
+        // [0] = header select-all, [1] = $SYS/#, [2] = debug/#
+        checkboxes[2].Change(true);
+        _dialogProvider.Find("button[title='Remove']").Click();
+
+        await _mockConnections.Received().AddConnectionAsync(
+            Arg.Is<Connection>(c =>
+                c!.TopicExcludes.All(s => s != "debug/#") &&
+                c.TopicExcludes.Contains("$SYS/#")));
+    }
+
+    [Test]
+    public async Task OnConnectTab_ExcludeAdd_PersistsToConnection()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<ExcludeEditor>().Instance;
+        editor.TopicDraft = "$SYS/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        await _mockConnections.Received().AddConnectionAsync(
+            Arg.Is<Connection>(c =>
+                c!.TopicExcludes.Count == 1 &&
+                c.TopicExcludes[0] == "$SYS/#"));
+    }
+
+    [Test]
+    public async Task OnConnectTab_ExcludeAdd_Duplicate_ShowsSnackbarAndDoesNotPersist()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockExcludeService.ValidateAdd("$SYS/#")
+            .Returns(new TopicExcludeValidationResult(false,
+                new UserNotification(UserNotificationSeverity.Warning, "Already excluding $SYS/#")));
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection
+        {
+            Name = "TestConn",
+            Host = "localhost",
+            Port = 1883,
+            TopicExcludes = ["$SYS/#"]
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<ExcludeEditor>().Instance;
+        editor.TopicDraft = "$SYS/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        conn.TopicExcludes.Should().HaveCount(1, "duplicate should not be added");
+        await _mockConnections.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+    }
+
+    [Test]
+    public async Task OnConnectTab_ExcludeAdd_WhenConnectedToActiveConnection_CallsTopicExcludeServiceAdd()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockExcludeService.Add(Arg.Any<string>()).Returns(Task.FromResult(new TopicExcludeOperationResult(true)));
+        _mockClient.IsConnected.Returns(true);
+        var activeId = Guid.NewGuid();
+        var activeConn = new Connection { Name = "Active", Host = "localhost", Port = 1883, Id = activeId };
+        _mockSessionState.SelectedConnection.Returns(activeConn);
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883, Id = activeId };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<ExcludeEditor>().Instance;
+        editor.TopicDraft = "$SYS/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        await _mockExcludeService.Received(1).Add("$SYS/#");
+    }
+
+    [Test]
+    public async Task OnConnectTab_ExcludeAdd_WhenConnectedToDifferentConnection_DoesNotCallTopicExcludeServiceAdd()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockExcludeService.Add(Arg.Any<string>()).Returns(Task.FromResult(new TopicExcludeOperationResult(true)));
+        _mockClient.IsConnected.Returns(true);
+        var activeConn = new Connection { Name = "Active", Host = "localhost", Port = 1883 };
+        _mockSessionState.SelectedConnection.Returns(activeConn);
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<ExcludeEditor>().Instance;
+        editor.TopicDraft = "$SYS/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        await _mockExcludeService.DidNotReceive().Add(Arg.Any<string>());
+    }
+
+    [Test]
+    public async Task OnConnectTab_ExcludeRemove_WhenConnectedToActiveConnection_CallsTopicExcludeServiceRemove()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockExcludeService.Remove(Arg.Any<IReadOnlyList<string>>()).Returns(Task.FromResult(new TopicExcludeOperationResult(true)));
+        _mockClient.IsConnected.Returns(true);
+        var activeId = Guid.NewGuid();
+        var activeConn = new Connection { Name = "Active", Host = "localhost", Port = 1883, Id = activeId };
+        _mockSessionState.SelectedConnection.Returns(activeConn);
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection
+        {
+            Name = "TestConn",
+            Host = "localhost",
+            Port = 1883,
+            Id = activeId,
+            TopicExcludes = ["$SYS/#", "debug/#"]
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<ExcludeEditor>();
+        var checkboxes = editor.FindAll("input[type='checkbox']");
+        checkboxes[2].Change(true); // select debug/#
+        _dialogProvider.Find("button[title='Remove']").Click();
+
+        await _mockExcludeService.Received(1).Remove(
+            Arg.Is<IReadOnlyList<string>>(t => t.Contains("debug/#") && t.Count == 1));
+    }
+
+    [Test]
+    public async Task OnConnectTab_ExcludeRemove_WhenConnectedToDifferentConnection_DoesNotCallTopicExcludeServiceRemove()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockExcludeService.Remove(Arg.Any<IReadOnlyList<string>>()).Returns(Task.FromResult(new TopicExcludeOperationResult(true)));
+        _mockClient.IsConnected.Returns(true);
+        var activeConn = new Connection { Name = "Active", Host = "localhost", Port = 1883 };
+        _mockSessionState.SelectedConnection.Returns(activeConn);
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection
+        {
+            Name = "TestConn",
+            Host = "localhost",
+            Port = 1883,
+            TopicExcludes = ["$SYS/#"]
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<ExcludeEditor>();
+        var checkboxes = editor.FindAll("input[type='checkbox']");
+        checkboxes[1].Change(true); // select $SYS/#
+        _dialogProvider.Find("button[title='Remove']").Click();
+
+        await _mockExcludeService.DidNotReceive().Remove(Arg.Any<IReadOnlyList<string>>());
+    }
+
+    [Test]
+    public async Task OnConnectTab_ExcludeEditor_NotDisabled_WhenAutoResubscribeOff()
+    {
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var excludeEditor = _dialogProvider.FindComponent<ExcludeEditor>();
+        // Expand the MudExpansionPanel by clicking its header
+        excludeEditor.Find(".mud-expand-panel-header").Click();
+
+        excludeEditor.Find("button[title='Add exclude topic']")
+            .HasAttribute("disabled").Should().BeFalse("exclude editor should be enabled regardless of Auto-resubscribe");
+    }
+
+    [Test]
+    public async Task OnConnectTab_ExcludePreset_FillsTopicDraft()
+    {
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var excludeEditor = _dialogProvider.FindComponent<ExcludeEditor>();
+        // Expand the MudExpansionPanel by clicking its header
+        excludeEditor.Find(".mud-expand-panel-header").Click();
+
+        var editor = excludeEditor.Instance;
+        editor.TopicDraft.Should().BeNullOrEmpty();
+
+        var chip = _dialogProvider.FindAll("button, .mud-chip")
+            .First(e => e.TextContent.Contains("$SYS/#"));
+        chip.Click();
+
+        editor.TopicDraft.Should().Be("$SYS/#");
+        conn.TopicExcludes.Should().BeEmpty();
+    }
+
+    // --- Focused review tests: malformed filters, active persistence failure, feedback ---
+
+    [Test]
+    public async Task OnConnectTab_ExcludeAdd_MalformedFilter_RejectedByValidation()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockExcludeService.ValidateAdd("bad##filter")
+            .Returns(new TopicExcludeValidationResult(false,
+                new UserNotification(UserNotificationSeverity.Warning, "Invalid topic exclusion")));
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<ExcludeEditor>().Instance;
+        editor.TopicDraft = "bad##filter";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        conn.TopicExcludes.Should().BeEmpty("malformed filter must not be added");
+        await _mockConnections.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+        await _mockExcludeService.DidNotReceive().Add(Arg.Any<string>());
+    }
+
+    [Test]
+    public async Task OnConnectTab_ExcludeAdd_ActiveConnection_ServicePersistenceFailure_ShowsError()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockExcludeService.Add("$SYS/#")
+            .Returns(Task.FromResult(new TopicExcludeOperationResult(false,
+                new UserNotification(UserNotificationSeverity.Error, "Failed to save topic exclusions"))));
+        _mockClient.IsConnected.Returns(true);
+        var activeId = Guid.NewGuid();
+        var activeConn = new Connection { Name = "Active", Host = "localhost", Port = 1883, Id = activeId };
+        _mockSessionState.SelectedConnection.Returns(activeConn);
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883, Id = activeId };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<ExcludeEditor>().Instance;
+        editor.TopicDraft = "$SYS/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        // Service failure: dialog model should NOT have been updated (no profile/live split).
+        conn.TopicExcludes.Should().BeEmpty("failed service persistence must not update the dialog model");
+        await _mockExcludeService.Received(1).Add("$SYS/#");
+    }
+
+    [Test]
+    public async Task OnConnectTab_ExcludeRemove_ActiveConnection_ServiceFailure_ShowsError()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockExcludeService.Remove(Arg.Any<IReadOnlyList<string>>())
+            .Returns(Task.FromResult(new TopicExcludeOperationResult(false,
+                new UserNotification(UserNotificationSeverity.Error, "Failed to save topic exclusions"))));
+        _mockClient.IsConnected.Returns(true);
+        var activeId = Guid.NewGuid();
+        var activeConn = new Connection { Name = "Active", Host = "localhost", Port = 1883, Id = activeId };
+        _mockSessionState.SelectedConnection.Returns(activeConn);
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection
+        {
+            Name = "TestConn",
+            Host = "localhost",
+            Port = 1883,
+            Id = activeId,
+            TopicExcludes = ["$SYS/#"]
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<ExcludeEditor>();
+        var checkboxes = editor.FindAll("input[type='checkbox']");
+        checkboxes[1].Change(true);
+        _dialogProvider.Find("button[title='Remove']").Click();
+
+        // Service failure: dialog model should still contain the item.
+        conn.TopicExcludes.Should().ContainSingle().Which.Should().Be("$SYS/#");
+        await _mockExcludeService.Received(1).Remove(Arg.Any<IReadOnlyList<string>>());
     }
 }

@@ -193,7 +193,8 @@ public class MetricsStatsChipTests : BunitTestContext
                 WorkingSetMb: null, ThreadCount: null, ThreadPoolQueueLength: null,
                 GcGen2Collections: null, UptimeSeconds: null),
             EmulatorPublishersOnline: 0,
-            EmulatorPublishCycles: 0, EmulatorNodesInError: 0));
+            EmulatorPublishCycles: 0, EmulatorNodesInError: 0)
+        { MessagesExcluded = 5 });
         var provider = Render<MudPopoverProvider>();
         var cut = Render<MetricsStatsChip>();
 
@@ -206,6 +207,8 @@ public class MetricsStatsChipTests : BunitTestContext
             processing.TextContent.Should().Contain("Json");
             processing.TextContent.Should().Contain("Sparkplug B");
             processing.TextContent.Should().Contain("Messages processed");
+            processing.TextContent.Should().Contain("Messages excluded");
+            processing.TextContent.Should().Contain("5");
         });
     }
 
@@ -247,6 +250,43 @@ public class MetricsStatsChipTests : BunitTestContext
             processing.TextContent.Should().Contain("Sparkplug B");
             // Unknown format falls back to raw id
             processing.TextContent.Should().Contain("custom");
+        });
+    }
+
+    [Test]
+    public void ProcessingPanel_ShowsMessagesExcluded()
+    {
+        _mockMetrics.GetSnapshot().Returns(new UxMetricsSnapshot(
+            ConnectAttempts: 0, ConnectSuccesses: 0, ConnectFailures: 0,
+            PublishSuccesses: 0, PublishFailures: 0,
+            ChartsCreated: 0, SeriesAddedToExistingCharts: 0,
+            MessagesProcessed: 200, MessagesDropped: 10,
+            AvgProcessingTimeUs: 0, MaxProcessingTimeUs: 0,
+            AvgPayloadBytes: 0, MaxPayloadBytes: 0,
+            CurrentMessagesPerSecond: 0,
+            MessageRateHistory: new int[UxMetricsService.RateWindowSeconds],
+            MessagesProcessedByFormat: new Dictionary<string, long>(),
+            ChartFunnelBySource: new Dictionary<string, long>(),
+            MaxDisplayMessages: 100, CurrentDisplayedMessageCount: 0,
+            AppHealth: new AppHealthMetricsSnapshot(
+                CpuUsagePercent: null, ManagedHeapMb: null,
+                WorkingSetMb: null, ThreadCount: null, ThreadPoolQueueLength: null,
+                GcGen2Collections: null, UptimeSeconds: null),
+            EmulatorPublishersOnline: 0,
+            EmulatorPublishCycles: 0, EmulatorNodesInError: 0)
+        { MessagesExcluded = 42 });
+        var provider = Render<MudPopoverProvider>();
+        var cut = Render<MetricsStatsChip>();
+
+        cut.Find("button.mud-chip").Click();
+
+        provider.WaitForAssertion(() =>
+        {
+            var processing = FindPanelByTitle(provider, "Processing");
+            processing.TextContent.Should().Contain("Messages excluded");
+            processing.TextContent.Should().Contain("42");
+            processing.TextContent.Should().Contain("Messages processed");
+            processing.TextContent.Should().Contain("Messages dropped");
         });
     }
 

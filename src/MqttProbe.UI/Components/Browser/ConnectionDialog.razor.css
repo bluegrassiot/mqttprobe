@@ -15,19 +15,47 @@
 }
 
 
-/* .connection-tabs sits on MudTabs (child component) which never gets this
-   component's CSS-isolation scope attribute — rules must anchor on the scoped
-   .connection-dialog-content wrapper and use ::deep (not Vue's :deep()). */
+/* MudForm must be a flex column so the step selector, tabs, and footer
+   distribute height correctly within the fixed-height dialog. Without this,
+   .connection-tabs flex:1 has no effect because the parent form defaults to
+   display:block. */
+.connection-dialog-content ::deep .mud-form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+}
+
 .connection-dialog-content ::deep .connection-tabs {
     flex: 1;
-    min-height: 0;            /* flexbox: let the tab panel actually shrink and scroll */
+    min-height: 0;
     overflow: hidden;
+}
+
+/* MudBlazor renders a .mud-tabs-panels wrapper between MudTabs and the
+   individual tab panels. Make it a bounded flex column so the active
+   panel can fill the available space. */
+.connection-dialog-content ::deep .connection-tabs .mud-tabs-panels {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
 }
 
 .connection-dialog-content ::deep .connection-tabs .mud-tab-panel[role='tabpanel'] {
     padding: 16px;
     background: var(--mud-palette-surface);
-    overflow-y: auto;          /* internal scroll when panel content > panel height */
+}
+
+/* Active tab panel is the outer vertical scroll owner. */
+.connection-dialog-content ::deep .connection-tabs .mud-tab-panel[role='tabpanel'].mud-tab-panel-active {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
 }
 
 .connection-actions-footer {
@@ -37,6 +65,7 @@
     padding: 12px 16px;
     background: var(--mud-palette-surface);
     border-top: 1px solid var(--mud-palette-divider);
+    flex-shrink: 0;
 }
 
 .connection-actions-footer-cta {
@@ -75,10 +104,6 @@
 
 .step-btn:hover {
     color: var(--mud-palette-text-primary);
-}
-
-.on-connect-subs-table {
-    overflow-x: auto;
 }
 
 @media (max-width: 599px) {

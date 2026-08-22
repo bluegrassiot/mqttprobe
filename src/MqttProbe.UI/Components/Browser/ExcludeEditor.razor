@@ -1,0 +1,144 @@
+@inject ISnackbar Snackbar
+
+<div class="exclude-editor"
+     role="region" aria-label="Excluded topics list" tabindex="0">
+    <MudExpansionPanels Dense="true" Elevation="0">
+        <MudExpansionPanel @bind-Expanded="_expanded" Dense="true">
+            <TitleContent>
+                <div class="d-flex align-center gap-2">
+                    <MudText Typo="Typo.subtitle2">Excluded topics</MudText>
+                    @if (Items is { Count: > 0 })
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                                 Class="count-chip">
+                            @Items.Count
+                        </MudChip>
+                    }
+                </div>
+            </TitleContent>
+            <ChildContent>
+                <div class="exclude-editor-add-row">
+                    <MudTextField T="string" Class="exclude-editor-topic"
+                                  @bind-Value="_topic" Label="Topic" Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Clearable="true" Disabled="@Disabled" Immediate="true"
+                                  Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.ChevronRight"
+                                  OnKeyDown="HandleKeyDown" />
+                    <AppPrimaryButton Class="exclude-editor-add"
+                                      StartIcon="@LucideIcons.Plus" title="Add exclude topic"
+                                      Disabled="@(Disabled || _busy)" OnClick="@AddAsync">
+                        Add
+                    </AppPrimaryButton>
+                </div>
+
+                <div class="exclude-editor-presets">
+                    <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Disabled="@Disabled"
+                             OnClick="@(() => ApplyPreset("$SYS/#"))">$SYS/#</MudChip>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-2">
+                        Wildcards: <code>+</code> matches one level, <code>#</code> matches remaining levels.
+                    </MudText>
+                </div>
+
+                @if (Items is { Count: > 0 })
+                {
+                    <div class="exclude-editor-table-wrap">
+                        <MudTable T="string"
+                                  Items="@Items"
+                                  MultiSelection="true"
+                                  @bind-SelectedItems="_selected"
+                                  Hover="true"
+                                  Dense="true"
+                                  Striped="true"
+                                  Breakpoint="Breakpoint.None">
+                            <ToolBarContent>
+                                <MudSpacer />
+                                <div class="exclude-editor-actions">
+                                    <AppDestructiveButton StartIcon="@LucideIcons.Trash2" title="Remove"
+                                                          Disabled="@(Disabled || _selected is null || _selected.Count == 0)"
+                                                          OnClick="@RemoveSelectedAsync">
+                                        Remove
+                                    </AppDestructiveButton>
+                                </div>
+                            </ToolBarContent>
+                            <HeaderContent>
+                                <MudTh>Topic</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd Class="metrics-mono metrics-compact">@context</MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </div>
+                }
+            </ChildContent>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<string> Items { get; set; } = [];
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback<string> OnAdd { get; set; }
+    [Parameter] public EventCallback<IReadOnlyList<string>> OnRemove { get; set; }
+
+    private string _topic = string.Empty;
+    private HashSet<string> _selected = [];
+    private bool _busy;
+    private bool _expanded;
+    private bool _initialStateSet;
+
+    internal string TopicDraft { get => _topic; set => _topic = value; }
+    internal Task AddForTests() => AddAsync();
+    internal Task RemoveSelectedForTests() => RemoveSelectedAsync();
+
+    protected override void OnParametersSet()
+    {
+        // Initialize expansion once based on whether items exist; preserve
+        // user toggles on subsequent parameter updates.
+        if (!_initialStateSet)
+        {
+            _expanded = Items is { Count: > 0 };
+            _initialStateSet = true;
+        }
+    }
+
+    private void ApplyPreset(string topicFilter)
+    {
+        if (Disabled) return;
+        _topic = topicFilter;
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await AddAsync();
+    }
+
+    private async Task AddAsync()
+    {
+        if (Disabled || _busy || string.IsNullOrWhiteSpace(_topic))
+            return;
+        _busy = true;
+        try
+        {
+            var topic = _topic.Trim();
+            await OnAdd.InvokeAsync(topic);
+            _topic = string.Empty;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveSelectedAsync()
+    {
+        if (Disabled) return;
+        if (_selected is null || _selected.Count == 0)
+        {
+            Snackbar.Add("Select at least one topic to remove.", Severity.Info);
+            return;
+        }
+        await OnRemove.InvokeAsync(_selected.ToList());
+        _selected = [];
+    }
+}

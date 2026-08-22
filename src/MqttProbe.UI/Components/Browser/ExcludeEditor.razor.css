@@ -1,4 +1,4 @@
-.subscription-editor {
+.exclude-editor {
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
@@ -8,69 +8,68 @@
     overflow: hidden;
 }
 
-.subscription-editor:focus-visible {
+.exclude-editor:focus-visible {
     outline: 2px solid var(--mud-palette-primary);
     outline-offset: 2px;
 }
 
-.subscription-editor ::deep .mud-expand-panel-header {
+.exclude-editor ::deep .mud-expand-panel-header {
     background: var(--mud-palette-action-default-hover);
 }
 
-.subscription-editor-add-row,
-.subscription-editor-presets {
-    flex-shrink: 0;
-}
-
-.subscription-editor-add-row {
+.exclude-editor-add-row {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     margin-bottom: 8px;
+    flex-shrink: 0;
 }
 
-.subscription-editor-topic {
+.exclude-editor-topic {
     flex: 1 1 12rem;
     min-width: 10rem;
 }
 
-.subscription-editor-qos {
-    flex: 0 1 12rem;
-    min-width: 11rem;
-}
-
-.subscription-editor-add {
+.exclude-editor-add {
     flex: 0 0 auto;
 }
 
-.subscription-editor-presets {
+.exclude-editor-presets {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
     align-items: center;
+    margin-bottom: 8px;
+    flex-shrink: 0;
 }
 
-.subscription-editor-presets .mud-chip {
+.exclude-editor-presets .mud-chip {
     cursor: pointer;
 }
 
-.subscription-editor-table-wrap {
+.exclude-editor-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.exclude-editor-table-wrap {
     margin-top: 8px;
 }
 
-.subscription-editor-table-wrap ::deep .mud-table,
-.subscription-editor-table-wrap ::deep .mud-table-container {
+.exclude-editor-table-wrap ::deep .mud-table,
+.exclude-editor-table-wrap ::deep .mud-table-container {
     width: 100%;
     max-width: 100%;
     min-width: 0;
 }
 
-.subscription-editor-table-wrap ::deep .mud-table-container {
+.exclude-editor-table-wrap ::deep .mud-table-container {
     overflow: visible;
 }
 
-.subscription-editor-table-wrap ::deep td.metrics-mono {
+.exclude-editor-table-wrap ::deep td.metrics-mono {
     white-space: normal;
     overflow-wrap: anywhere;
 }

@@ -1,20 +1,12 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using MQTTnet.Protocol
+@using MqttProbe.Core
 @using MqttProbe.Core.Models.Mqtt
 @inject ISubscriptionManager SubscriptionManager
+@inject ITopicExcludeService TopicExcludeService
 @inject ISnackbar Snackbar
 
-<TabPanelHeader Title="Subscriptions" Icon="@LucideIcons.Layers">
-    <HeaderChips>
-        @if (SubscriptionManager.Subscriptions.Any())
-        {
-            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
-                     Class="subscription-count-chip">
-                @SubscriptionManager.Subscriptions.Count
-            </MudChip>
-        }
-    </HeaderChips>
-</TabPanelHeader>
+<TabPanelHeader Title="Subscriptions" Icon="@LucideIcons.Layers" />
 
 <div class="subs-body">
     <AuthorizeView Roles="Admin,Operator">
@@ -24,6 +16,10 @@
                                 EmptyHint="Add a topic above to start receiving messages"
                                 OnAdd="HandleAdd"
                                 OnRemove="HandleRemove" />
+
+            <ExcludeEditor Items="@TopicExcludeService.TopicExcludes"
+                           OnAdd="HandleExcludeAdd"
+                           OnRemove="HandleExcludeRemove" />
         </Authorized>
         <NotAuthorized>
             <SubscriptionEditor Items="@SubscriptionManager.Subscriptions"
@@ -32,6 +28,11 @@
                                 EmptyHint="Connect as Operator or Admin to manage subscriptions"
                                 OnAdd="HandleAdd"
                                 OnRemove="HandleRemove" />
+
+            <ExcludeEditor Items="@TopicExcludeService.TopicExcludes"
+                           Disabled="true"
+                           OnAdd="HandleExcludeAdd"
+                           OnRemove="HandleExcludeRemove" />
         </NotAuthorized>
     </AuthorizeView>
 </div>
@@ -51,6 +52,52 @@
 
     private async Task HandleRemove(IReadOnlyList<string> topics)
     {
-        await SubscriptionManager.Remove(topics);
+        try
+        {
+            await SubscriptionManager.Remove(topics);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to unsubscribe: {ex.Message}", Severity.Error);
+        }
     }
+
+    private async Task HandleExcludeAdd(string topic)
+    {
+        try
+        {
+            var validation = TopicExcludeService.ValidateAdd(topic);
+            if (validation is { IsValid: false, Feedback: not null })
+            {
+                ShowExcludeFeedback(validation.Feedback);
+                return;
+            }
+
+            var result = await TopicExcludeService.Add(topic);
+            if (result is { IsValid: false, Feedback: not null })
+                ShowExcludeFeedback(result.Feedback);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to add exclude: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleExcludeRemove(IReadOnlyList<string> topics)
+    {
+        try
+        {
+            var result = await TopicExcludeService.Remove(topics);
+            if (!result.IsValid && result.Feedback is { } fb)
+                ShowExcludeFeedback(fb);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to remove excludes: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void ShowExcludeFeedback(UserNotification feedback) =>
+        Snackbar.Add(feedback.Message,
+            feedback.Severity == UserNotificationSeverity.Warning ? Severity.Warning : Severity.Error);
 }

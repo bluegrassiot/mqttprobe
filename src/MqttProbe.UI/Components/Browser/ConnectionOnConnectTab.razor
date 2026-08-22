@@ -1,6 +1,6 @@
 @using MQTTnet.Protocol
 
-<MudStack Spacing="2" Class="mt-2">
+<div class="on-connect-editor-stack">
     <div>
         <MudSwitch T="bool"
                    Value="@AutoResubscribe"
@@ -28,7 +28,11 @@
                         EmptyHint="Add a topic above."
                         OnAdd="@OnAdd"
                         OnRemove="@OnRemove" />
-</MudStack>
+
+    <ExcludeEditor Items="@ExcludedItems"
+                   OnAdd="@OnExcludeAdd"
+                   OnRemove="@OnExcludeRemove" />
+</div>
 
 @code {
     [Parameter] public bool AutoResubscribe { get; set; }
@@ -36,4 +40,8 @@
     [Parameter, EditorRequired] public List<SubscribedTopic> Items { get; set; } = [];
     [Parameter] public EventCallback<(string Topic, MqttQualityOfServiceLevel Qos)> OnAdd { get; set; }
     [Parameter] public EventCallback<IReadOnlyList<string>> OnRemove { get; set; }
+
+    [Parameter, EditorRequired] public List<string> ExcludedItems { get; set; } = [];
+    [Parameter] public EventCallback<string> OnExcludeAdd { get; set; }
+    [Parameter] public EventCallback<IReadOnlyList<string>> OnExcludeRemove { get; set; }
 }

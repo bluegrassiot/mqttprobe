@@ -1,19 +1,10 @@
 .subs-body {
-    flex: 1 1 auto;
-    min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-}
-
-/* AuthorizeView may not add a wrapper; target editor root */
-.subs-body ::deep .subscription-editor {
     flex: 1 1 auto;
     min-height: 0;
-}
-
-.subscription-count-chip {
-    height: 20px;
-    font-size: 0.7rem;
-    padding: 0 6px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+    gap: 16px;
 }

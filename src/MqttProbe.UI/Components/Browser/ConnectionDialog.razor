@@ -3,6 +3,7 @@
 @using MQTTnet.Protocol
 @using MudBlazor.Utilities
 @using MqttProbe.Core.Services.Configuration
+@using MqttProbe.Core.Services.Plugins.Protobuf
 @using MqttProbe.Core.Services.Security
 @implements IAsyncDisposable
 @inject IMessageStoreManager MessageStoreManagerService
@@ -12,6 +13,7 @@
 @inject ILogger<ConnectionDialog> Logger
 @inject ISessionState SessionState
 @inject ISubscriptionManager SubscriptionManager
+@inject ITopicExcludeService TopicExcludeService
 @inject IMqttOptionsBuilder MqttOptionsBuilder
 @inject IChartDataService ChartDataService
 @inject IBrokerStateResetCoordinator BrokerResetCoordinator
@@ -59,7 +61,10 @@
                                                 AutoResubscribeChanged="@OnAutoResubscribeChanged"
                                                 Items="@_selectedConnection.SubscribedTopics"
                                                 OnAdd="HandleOnConnectEditorAdd"
-                                                OnRemove="HandleOnConnectEditorRemove" />
+                                                OnRemove="HandleOnConnectEditorRemove"
+                                                ExcludedItems="@_selectedConnection.TopicExcludes"
+                                                OnExcludeAdd="HandleOnConnectExcludeAdd"
+                                                OnExcludeRemove="HandleOnConnectExcludeRemove" />
                     </MudTabPanel>
                 </MudTabs>
                 <div class="connection-actions-footer">
@@ -398,6 +403,17 @@
         }
     }
 
+    private void SyncSessionStateTopicExcludes()
+    {
+        var active = SessionState.SelectedConnection;
+        if (active is null)
+            return;
+        if (_selectedConnection.Id == active.Id)
+        {
+            active.TopicExcludes = [.. _selectedConnection.TopicExcludes];
+        }
+    }
+
     private async Task HandleOnConnectEditorAdd((string Topic, MqttQualityOfServiceLevel Qos) request)
     {
         if (!UiSettings.Ui.AutoResubscribe)
@@ -470,4 +486,131 @@
             }
         }
     }
+
+    private async Task HandleOnConnectExcludeAdd(string topic)
+    {
+        var trimmed = topic.Trim();
+
+        if (ShouldApplyLiveSubscriptions())
+        {
+            // Active connection: validate centrally via the service, then use the
+            // service as the sole persistence/live-apply path.
+            var validation = TopicExcludeService.ValidateAdd(trimmed);
+            if (!validation.IsValid)
+            {
+                if (validation.Feedback is { } fb)
+                    ShowExcludeFeedback(fb);
+                return;
+            }
+
+            try
+            {
+                var result = await TopicExcludeService.Add(trimmed);
+                if (!result.IsValid)
+                {
+                    if (result.Feedback is { } fb)
+                        ShowExcludeFeedback(fb);
+                    return;
+                }
+
+                // Service persisted successfully; sync the dialog model so Save stays coherent.
+                _selectedConnection.TopicExcludes.Add(trimmed);
+                SyncSessionStateTopicExcludes();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to add exclude: {ex.Message}", Severity.Error);
+            }
+        }
+        else
+        {
+            // Inactive connection: validate syntax centrally, but duplicate/cap
+            // validation is against the profile's own list, not the live service state.
+            if (string.IsNullOrWhiteSpace(trimmed) || !MqttTopicMatcher.IsValidFilter(trimmed))
+            {
+                Snackbar.Add("Invalid topic", Severity.Warning);
+                return;
+            }
+            if (_selectedConnection.TopicExcludes.Any(s => string.Equals(s, trimmed, StringComparison.Ordinal)))
+            {
+                Snackbar.Add($"Already excluded: {trimmed}", Severity.Warning);
+                return;
+            }
+            const int maxExcludes = 500;
+            if (_selectedConnection.TopicExcludes.Count >= maxExcludes)
+            {
+                Snackbar.Add($"Exclude limit ({maxExcludes}) reached", Severity.Warning);
+                return;
+            }
+
+            // Transactional: persist a candidate clone first, then mutate only on success.
+            var candidate = _selectedConnection.Clone();
+            candidate.TopicExcludes.Add(trimmed);
+            try
+            {
+                await ConnectionSettings.AddConnectionAsync(candidate);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to save exclude: {ex.Message}", Severity.Error);
+                return;
+            }
+
+            _selectedConnection.TopicExcludes.Add(trimmed);
+            SyncSessionStateTopicExcludes();
+            Snackbar.Add($"Saved exclude {trimmed}", Severity.Success);
+        }
+    }
+
+    private async Task HandleOnConnectExcludeRemove(IReadOnlyList<string> topics)
+    {
+        if (ShouldApplyLiveSubscriptions())
+        {
+            // Active connection: service is the sole persistence and live-apply path.
+            try
+            {
+                var result = await TopicExcludeService.Remove(topics);
+                if (!result.IsValid)
+                {
+                    if (result.Feedback is { } fb)
+                        ShowExcludeFeedback(fb);
+                    return;
+                }
+
+                // Service persisted successfully; sync the dialog model.
+                var set = topics.ToHashSet(StringComparer.Ordinal);
+                _selectedConnection.TopicExcludes.RemoveAll(s => set.Contains(s));
+                SyncSessionStateTopicExcludes();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to remove excludes: {ex.Message}", Severity.Error);
+            }
+        }
+        else
+        {
+            // Inactive connection: transactional — persist a candidate first.
+            var set = topics.ToHashSet(StringComparer.Ordinal);
+            var candidate = _selectedConnection.Clone();
+            candidate.TopicExcludes.RemoveAll(s => set.Contains(s));
+            try
+            {
+                await ConnectionSettings.AddConnectionAsync(candidate);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to remove excludes: {ex.Message}", Severity.Error);
+                return;
+            }
+
+            _selectedConnection.TopicExcludes.RemoveAll(s => set.Contains(s));
+            SyncSessionStateTopicExcludes();
+        }
+    }
+
+    private void ShowExcludeFeedback(Core.UserNotification feedback) =>
+        Snackbar.Add(feedback.Message,
+            feedback.Severity == Core.UserNotificationSeverity.Warning
+                ? Severity.Warning
+                : Severity.Error);
 }

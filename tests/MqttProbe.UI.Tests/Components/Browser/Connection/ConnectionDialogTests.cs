@@ -11,6 +11,7 @@ using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.TestInfrastructure.Security;
+using MqttProbe.UI.Components.Browser.Connection;
 using MqttProbe.UI.Tests.TestHelpers;
 // TestHelpers moved to Core.Tests
 using MudBlazor;
@@ -1543,9 +1544,7 @@ public class ConnectionDialogTests : BunitTestContext
 
         // Model value should be retained
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
-        var connField = typeof(ConnectionDialog)
-            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var conn = (Connection)connField.GetValue(dialog)!;
+        var conn = dialog.SelectedConnectionForTests;
         conn.SessionExpiryIntervalSeconds.Should().Be(3600u,
             "the default session expiry value should be retained on the model even after re-checking CleanStart");
     }
@@ -1706,9 +1705,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Render();
 
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
-        var connField = typeof(ConnectionDialog)
-            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var updatedConn = (Connection)connField.GetValue(dialog)!;
+        var updatedConn = dialog.SelectedConnectionForTests;
         updatedConn.Port.Should().Be(8883, "toggling TLS on for port 1883 should pair to 8883");
 
         var portField = _dialogProvider.FindComponents<MudTextField<int>>()
@@ -1730,9 +1727,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Render();
 
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
-        var connField = typeof(ConnectionDialog)
-            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var updatedConn = (Connection)connField.GetValue(dialog)!;
+        var updatedConn = dialog.SelectedConnectionForTests;
         updatedConn.Port.Should().Be(8884, "custom port should not be changed by TLS toggle");
 
         var portField = _dialogProvider.FindComponents<MudTextField<int>>()
@@ -1754,9 +1749,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Render();
 
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
-        var connField = typeof(ConnectionDialog)
-            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var updatedConn = (Connection)connField.GetValue(dialog)!;
+        var updatedConn = dialog.SelectedConnectionForTests;
         updatedConn.Port.Should().Be(8084, "toggling TLS on for WebSocket port 8083 should pair to 8084");
 
         var portField = _dialogProvider.FindComponents<MudTextField<int>>()
@@ -1791,9 +1784,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Render();
 
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
-        var connField = typeof(ConnectionDialog)
-            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var updatedConn = (Connection)connField.GetValue(dialog)!;
+        var updatedConn = dialog.SelectedConnectionForTests;
         updatedConn.AllowUntrustedCertificate.Should().BeTrue(
             "AllowUntrustedCertificate should survive TLS off/on toggle");
         updatedConn.ClientCertificateAssetId.Should().Be("keep-me",
@@ -1815,9 +1806,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Render();
 
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
-        var connField = typeof(ConnectionDialog)
-            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var updatedConn = (Connection)connField.GetValue(dialog)!;
+        var updatedConn = dialog.SelectedConnectionForTests;
         updatedConn.Port.Should().Be(8083, "switching protocol from MQTT to WebSocket with port 1883 should pair to 8083");
 
         var portField = _dialogProvider.FindComponents<MudTextField<int>>()
@@ -1845,9 +1834,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Render();
 
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
-        var connField = typeof(ConnectionDialog)
-            .GetField("_selectedConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        var updatedConn = (Connection)connField.GetValue(dialog)!;
+        var updatedConn = dialog.SelectedConnectionForTests;
         updatedConn.Port.Should().Be(8084, "after protocol switch to WS (8083) then TLS on should pair to 8084");
 
         var portField = _dialogProvider.FindComponents<MudTextField<int>>()

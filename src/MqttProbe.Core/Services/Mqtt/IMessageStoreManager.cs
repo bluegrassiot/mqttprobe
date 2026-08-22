@@ -13,6 +13,7 @@ public interface IMessageStoreManager : IDisposable
     public int TotalStoredMessages { get; }
     public int TopicNodeCount { get; }
     public long DroppedMessageCount { get; }
+    public long ExcludedMessageCount { get; }
     public Task<IEnumerable<MqttMessage>> GetMessagesForSelectedTopic();
     public Task<IReadOnlyList<MqttMessage>> GetRecentMessagesAsync(string topic, int limit);
     public long GetVersion();

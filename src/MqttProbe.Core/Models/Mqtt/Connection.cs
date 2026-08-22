@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace MqttProbe.Core.Models.Mqtt;
 
 public sealed class Connection : IEquatable<Connection>
@@ -25,6 +27,7 @@ public sealed class Connection : IEquatable<Connection>
     public uint SessionExpiryIntervalSeconds { get; set; } = 3600;
     [System.Text.Json.Serialization.JsonConverter(typeof(SubscribedTopicsJsonConverter))]
     public List<SubscribedTopic> SubscribedTopics { get; set; } = [];
+    public List<string> TopicExcludes { get; set; } = [];
 
     public Connection CloneWithoutPassword()
     {
@@ -43,6 +46,7 @@ public sealed class Connection : IEquatable<Connection>
                 QualityOfServiceLevel = t.QualityOfServiceLevel
             })
             .ToList();
+        clone.TopicExcludes = [.. TopicExcludes];
         return clone;
     }
 
@@ -69,11 +73,13 @@ public sealed class Connection : IEquatable<Connection>
                WebsocketBasePath == other.WebsocketBasePath &&
                ClientCertificateAssetId == other.ClientCertificateAssetId &&
                CleanStart == other.CleanStart &&
-               SessionExpiryIntervalSeconds == other.SessionExpiryIntervalSeconds;
+               SessionExpiryIntervalSeconds == other.SessionExpiryIntervalSeconds &&
+               TopicExcludes.SequenceEqual(other.TopicExcludes, StringComparer.Ordinal);
     }
 
     public override bool Equals(object? obj) => Equals(obj as Connection);
 
+    [SuppressMessage("ReSharper", "NonReadonlyMemberInGetHashCode")]
     public override int GetHashCode()
     {
         var hash = new HashCode();
@@ -94,6 +100,8 @@ public sealed class Connection : IEquatable<Connection>
         hash.Add(ClientCertificateAssetId, StringComparer.Ordinal);
         hash.Add(CleanStart);
         hash.Add(SessionExpiryIntervalSeconds);
+        foreach (var topic in TopicExcludes)
+            hash.Add(topic, StringComparer.Ordinal);
         return hash.ToHashCode();
     }
 }

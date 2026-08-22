@@ -29,12 +29,14 @@ public class ChartDataService(
     PayloadPipeline pipeline,
     ISparkplugSettings sparkplugSettings,
     ISparkplugTopologyService? topologyService = null,
-    ILogger<ChartDataService>? logger = null)
+    ILogger<ChartDataService>? logger = null,
+    ITopicExcludeService? topicExcludeService = null)
     : IChartDataService
 {
     private readonly ConcurrentDictionary<Guid, ConcurrentQueue<ChartDataPoint>> _buffers = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Guid _connectionId;
+    private readonly ITopicExcludeService? _topicExcludeService = topicExcludeService;
 
     public event Action? OnDataUpdated;
     public bool IsListening { get; private set; }
@@ -62,6 +64,8 @@ public class ChartDataService(
             if (IsListening) return;
             client.ApplicationMessageReceivedAsync += MessageHandler;
             chartSettings.ChartsChanged += OnChartsChanged;
+            if (_topicExcludeService is not null)
+                _topicExcludeService.TopicExcluded += OnTopicExcluded;
             IsListening = true;
         }
         finally
@@ -78,6 +82,8 @@ public class ChartDataService(
             if (!IsListening) return;
             client.ApplicationMessageReceivedAsync -= MessageHandler;
             chartSettings.ChartsChanged -= OnChartsChanged;
+            if (_topicExcludeService is not null)
+                _topicExcludeService.TopicExcluded -= OnTopicExcluded;
             IsListening = false;
         }
         finally
@@ -91,6 +97,9 @@ public class ChartDataService(
         try
         {
             var topic = e.ApplicationMessage.Topic;
+            if (_topicExcludeService?.IsExcluded(topic) == true)
+                return Task.CompletedTask;
+
             var result = pipeline.ProcessInbound(e);
             var payload = result.Envelope.DisplayText;
 
@@ -121,6 +130,26 @@ public class ChartDataService(
         }
 
         return Task.CompletedTask;
+    }
+
+    private void OnTopicExcluded(string filter)
+    {
+        var registryChanged = registry.RemoveMatchingTopic(filter);
+        var buffersChanged = false;
+        foreach (var config in chartSettings.GetCharts(_connectionId))
+        {
+            foreach (var series in config.Series)
+            {
+                if (!TopicExcludeService.Matches(series.Topic, filter)
+                    || !_buffers.TryRemove(series.Id, out _))
+                    continue;
+
+                buffersChanged = true;
+            }
+        }
+
+        if (registryChanged || buffersChanged)
+            OnDataUpdated?.Invoke();
     }
 
     private bool TryExtractFields(
@@ -194,6 +223,8 @@ public class ChartDataService(
         {
             client.ApplicationMessageReceivedAsync -= MessageHandler;
             chartSettings.ChartsChanged -= OnChartsChanged;
+            if (_topicExcludeService is not null)
+                _topicExcludeService.TopicExcluded -= OnTopicExcluded;
             IsListening = false;
             _gate.Dispose();
         }

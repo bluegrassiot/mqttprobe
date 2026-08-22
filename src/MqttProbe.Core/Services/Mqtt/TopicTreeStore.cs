@@ -87,6 +87,31 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
         lock (_storeSync) { TrimToLimit(); }
     }
 
+    public void RemoveMatchingTopic(string filter)
+    {
+        lock (_storeSync)
+        {
+            var removed = false;
+            foreach (var (key, store) in MessageStores.ToArray())
+            {
+                if (!PurgeNode(store, filter, out var nodeRemoved))
+                    continue;
+
+                removed = true;
+                if (nodeRemoved)
+                    MessageStores.TryRemove(key, out _);
+            }
+
+            if (!removed)
+                return;
+
+            RecalculateCounters();
+            RebuildRetentionOrder();
+            Interlocked.Increment(ref _globalVersion);
+            Interlocked.Increment(ref _selectedTopicVersion);
+        }
+    }
+
     public IEnumerable<MqttMessage> GetMessagesForSelectedTopic()
     {
         lock (_storeSync)
@@ -205,6 +230,119 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
             Interlocked.Increment(ref _globalVersion);
             if (IsSelectedTopicOrDescendant(oldest))
                 Interlocked.Increment(ref _selectedTopicVersion);
+        }
+    }
+
+    private static bool PurgeNode(MessageStore node, string filter, out bool nodeRemoved)
+    {
+        var changed = TopicExcludeService.Matches(node.FullTopic ?? string.Empty, filter);
+        if (node.SubTopics is not null)
+        {
+            foreach (var (key, child) in node.SubTopics.ToArray())
+            {
+                if (!PurgeNode(child, filter, out var childRemoved))
+                    continue;
+
+                changed = true;
+                if (childRemoved || IsEmpty(child))
+                    node.SubTopics.TryRemove(key, out _);
+            }
+
+            if (node.SubTopics.IsEmpty)
+                node.SubTopics = null;
+        }
+
+        if (node.Messages is { IsEmpty: false })
+        {
+            var remaining = new ConcurrentQueue<MqttMessage>();
+            while (node.Messages.TryDequeue(out var message))
+            {
+                if (TopicExcludeService.Matches(message.Topic ?? node.FullTopic ?? string.Empty, filter))
+                    changed = true;
+                else
+                    remaining.Enqueue(message);
+            }
+
+            node.Messages = remaining.IsEmpty ? null : remaining;
+        }
+
+        nodeRemoved = changed && IsEmpty(node);
+
+        return changed;
+    }
+
+    private static bool IsEmpty(MessageStore store) =>
+        (store.Messages is null || store.Messages.IsEmpty)
+        && (store.SubTopics is null || store.SubTopics.IsEmpty);
+
+    private void RecalculateCounters()
+    {
+        _totalNodeCount = 0;
+        _totalMessageCount = 0;
+        foreach (var store in MessageStores.Values)
+            RecalculateNode(store);
+
+        if (SelectedMessageStore is not null && !ContainsStore(SelectedMessageStore))
+            SelectedMessageStore = null;
+    }
+
+    private void RecalculateNode(MessageStore node)
+    {
+        _totalNodeCount++;
+        node.MessageCount = node.Messages?.Count ?? 0;
+        node.TopicCount = 0;
+        _totalMessageCount += node.MessageCount;
+
+        if (node.SubTopics is null)
+            return;
+
+        foreach (var child in node.SubTopics.Values)
+        {
+            child.Parent = node;
+            RecalculateNode(child);
+            node.TopicCount += child.TopicCount + 1;
+            node.MessageCount += child.MessageCount;
+        }
+    }
+
+    private bool ContainsStore(MessageStore selected)
+    {
+        return MessageStores.Values.Any(root => ContainsStore(root, selected));
+    }
+
+    private static bool ContainsStore(MessageStore current, MessageStore selected)
+    {
+        if (ReferenceEquals(current, selected))
+            return true;
+
+        return current.SubTopics?.Values.Any(child => ContainsStore(child, selected)) == true;
+    }
+
+    private void RebuildRetentionOrder()
+    {
+        _retentionOrder.Clear();
+        foreach (var store in EnumerateMessages(MessageStores.Values)
+                     .OrderBy(item => item.Message.DateTimeReceived)
+                     .Select(item => item.Store))
+            _retentionOrder.Enqueue(store);
+    }
+
+    private static IEnumerable<(MessageStore Store, MqttMessage Message)> EnumerateMessages(
+        IEnumerable<MessageStore> stores)
+    {
+        foreach (var store in stores)
+        {
+            if (store.Messages is not null)
+            {
+                foreach (var message in store.Messages)
+                    yield return (store, message);
+            }
+
+            if (store.SubTopics is not null)
+            {
+                foreach (var item in EnumerateMessages(store.SubTopics.Values))
+                    yield return item;
+            }
         }
     }
 

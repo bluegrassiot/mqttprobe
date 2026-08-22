@@ -58,6 +58,15 @@ public class UxMetricsServiceTests
     }
 
     [Test]
+    public void RecordMessageExcluded_RemainsInSnapshotForProcessLifetime()
+    {
+        _service.RecordMessageExcluded();
+        _service.RecordMessageExcluded();
+
+        _service.GetSnapshot().MessagesExcluded.Should().Be(2);
+    }
+
+    [Test]
     public void GetSnapshot_DefaultDisplayedCount_IsZero()
     {
         var snapshot = _service.GetSnapshot();

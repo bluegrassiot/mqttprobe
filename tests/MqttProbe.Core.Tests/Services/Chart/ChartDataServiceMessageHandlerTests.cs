@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MqttProbe.Core.Models.Chart;
+using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Chart;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Mqtt;
+using MqttProbe.Core.Tests.Services.Mqtt;
 using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Core.Tests.Services.Chart;
@@ -276,6 +278,41 @@ public class ChartDataServiceMessageHandlerTests
 
         _service.GetPoints(seriesId).Should().ContainSingle()
             .Which.Value.Should().BeApproximately(21.5, 0.001);
+    }
+
+    [Test]
+    public async Task TopicExclusion_PurgesRegistryAndBuffersAndGatesFutureMessages()
+    {
+        var client = Substitute.For<IMqttManagedClient>();
+        var registry = new ChartFieldRegistry();
+        var settings = Substitute.For<IChartSettings>();
+        var connection = Guid.NewGuid();
+        var series = Guid.NewGuid();
+        settings.GetCharts(connection).Returns([
+            ConfigWith(100, new ChartSeries { Id = series, Topic = "sensors/temp", JsonPath = "value" })]);
+
+        var session = new SessionState { SelectedConnection = new Connection() };
+        var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        using var service = new ChartDataService(client, new JsonFieldExtractor(), registry, settings,
+            TestPipelineHelper.BuildBuiltInPipeline(), Substitute.For<ISparkplugSettings>(),
+            topicExcludeService: excludes);
+        service.SetConnection(connection);
+        await service.StartAsync();
+        await handler!(MakeArgs("sensors/temp", "{\"value\": 1}"));
+
+        await excludes.Add("sensors/#");
+
+        registry.GetTopics().Should().BeEmpty();
+        service.GetPoints(series).Should().BeEmpty();
+        await handler!(MakeArgs("sensors/temp", "{\"value\": 2}"));
+        service.GetPoints(series).Should().BeEmpty();
+        excludes.Dispose();
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

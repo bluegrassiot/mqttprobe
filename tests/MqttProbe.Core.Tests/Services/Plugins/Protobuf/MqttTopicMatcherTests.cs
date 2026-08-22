@@ -15,4 +15,26 @@ public class MqttTopicMatcherTests
     {
         MqttTopicMatcher.Matches(topic, filter).Should().Be(expected);
     }
+
+    [Test]
+    public void Matches_HashPreservesStandardMqttSysSemantics()
+    {
+        MqttTopicMatcher.Matches("$SYS/broker/uptime", "#").Should().BeFalse();
+    }
+
+    [TestCase("a/#/b")]
+    [TestCase("a/+suffix")]
+    [TestCase("a#")]
+    public void IsValidFilter_RejectsMisplacedWildcards(string filter)
+    {
+        MqttTopicMatcher.IsValidFilter(filter).Should().BeFalse();
+    }
+
+    [TestCase("#")]
+    [TestCase("a/+")]
+    [TestCase("a/b/#")]
+    public void IsValidFilter_AllowsValidWildcards(string filter)
+    {
+        MqttTopicMatcher.IsValidFilter(filter).Should().BeTrue();
+    }
 }

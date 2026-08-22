@@ -540,6 +540,74 @@ public class MessageStoreManagerMessageHandlerTests
         manager.MessageStores["after"].Messages!.Count.Should().Be(3);
     }
 
+    [Test]
+    public async Task TopicExclusion_PurgesExistingDataAndGatesFutureMessages()
+    {
+        var client = Substitute.For<IMqttManagedClient>();
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        var session = new SessionState { SelectedConnection = new Connection() };
+        var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        var metrics = Substitute.For<IUxMetricsService>();
+        var performance = Substitute.For<IPerformanceSettings>();
+        performance.Performance.Returns(new AppConfiguration().Performance);
+        var sparkplug = Substitute.For<ISparkplugSettings>();
+        sparkplug.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
+
+        using var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
+            performance, metrics, TestPipelineHelper.BuildBuiltInPipeline(), sparkplug,
+            topicExcludeService: excludes);
+        await manager.Start();
+        await handler!(MakeArgs("sensors/temp", "before"));
+
+        await excludes.Add("sensors/#");
+        manager.MessageStores.Should().BeEmpty();
+
+        await handler!(MakeArgs("sensors/temp", "after"));
+
+        manager.MessageStores.Should().BeEmpty();
+        metrics.Received(1).RecordMessageExcluded();
+        excludes.Dispose();
+    }
+
+    [Test]
+    public async Task TopicExclusion_PurgesEmptyRetentionNodes()
+    {
+        var client = Substitute.For<IMqttManagedClient>();
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        var session = new SessionState { SelectedConnection = new Connection() };
+        var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        var performance = Substitute.For<IPerformanceSettings>();
+        performance.Performance.Returns(new AppConfiguration
+        {
+            Performance = new PerformanceSettings { MaxStoredMessages = 0, MaxMessagesPerSecond = 50_000 }
+        }.Performance);
+        var sparkplug = Substitute.For<ISparkplugSettings>();
+        sparkplug.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
+
+        using var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
+            performance, Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline(), sparkplug,
+            topicExcludeService: excludes);
+        await manager.Start();
+        await handler!(MakeArgs("empty/topic", "payload"));
+        manager.MessageStores.Should().ContainKey("empty");
+
+        await excludes.Add("empty/#");
+
+        manager.MessageStores.Should().BeEmpty();
+        manager.TopicNodeCount.Should().Be(0);
+        excludes.Dispose();
+    }
+
     private static byte[] SparkplugPayload()
     {
         var payload = new Payload { Timestamp = 1 };

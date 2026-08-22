@@ -3,6 +3,7 @@ using MQTTnet;
 using MQTTnet.Protocol;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Configuration;
+using MqttProbe.Core.Services.Plugins.Protobuf;
 
 namespace MqttProbe.Core.Services.Mqtt;
 
@@ -90,7 +91,7 @@ public class SubscriptionManager : ISubscriptionManager
 
     public async Task Add(string topic, MqttQualityOfServiceLevel qos = MqttQualityOfServiceLevel.AtLeastOnce)
     {
-        if (string.IsNullOrWhiteSpace(topic) || topic.Contains('\0') || topic.Length > 65_535)
+        if (!MqttTopicMatcher.IsValidFilter(topic))
         {
             _notifier.Notify(new UserNotification(UserNotificationSeverity.Warning, "Invalid topic"));
             _logger.LogWarning("Rejected invalid subscription topic (length={Len})", topic.Length);

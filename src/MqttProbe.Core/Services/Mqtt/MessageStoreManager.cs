@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MqttProbe.Core.Models.Mqtt;
@@ -23,6 +24,7 @@ public class MessageStoreManager : IMessageStoreManager
     private readonly TopicTreeStore _store;
     private readonly InboundRateLimiter _rateLimiter;
     private readonly SparkplugAliasEnricher _aliasEnricher;
+    private readonly ITopicExcludeService? _topicExcludeService;
     private readonly Lock _lifecycleSync = new();
     private int _disposed;
 
@@ -30,7 +32,8 @@ public class MessageStoreManager : IMessageStoreManager
         IPerformanceSettings performanceSettings, IUxMetricsService metrics,
         PayloadPipeline pipeline, ISparkplugSettings sparkplugSettings,
         ISparkplugTopologyService? topologyService = null,
-        ISparkplugCommandService? commandService = null)
+        ISparkplugCommandService? commandService = null,
+        ITopicExcludeService? topicExcludeService = null)
     {
         _client = client;
         _logger = logger;
@@ -39,10 +42,13 @@ public class MessageStoreManager : IMessageStoreManager
         _pipeline = pipeline;
         _topologyService = topologyService;
         _commandService = commandService;
+        _topicExcludeService = topicExcludeService;
         _store = new TopicTreeStore(performanceSettings, logger);
         _rateLimiter = new InboundRateLimiter(performanceSettings, metrics, logger);
         _aliasEnricher = new SparkplugAliasEnricher(sparkplugSettings, topologyService);
         performanceSettings.PerformanceSettingsChanged += OnPerformanceSettingsChanged;
+        if (_topicExcludeService is not null)
+            _topicExcludeService.TopicExcluded += OnTopicExcluded;
     }
 
     public ConcurrentDictionary<string, MessageStore> MessageStores => _store.MessageStores;
@@ -65,6 +71,8 @@ public class MessageStoreManager : IMessageStoreManager
 
     public long DroppedMessageCount => _rateLimiter.DroppedCount;
 
+    public long ExcludedMessageCount => _metrics.GetSnapshot().MessagesExcluded;
+
     public event Func<MqttMessage, Task>? MessageReceived;
 
     private void OnPerformanceSettingsChanged()
@@ -74,6 +82,7 @@ public class MessageStoreManager : IMessageStoreManager
         _store.ApplyRetentionLimit();
     }
 
+    [SuppressMessage("ReSharper", "InconsistentlySynchronizedField")]
     protected virtual void Dispose(bool disposing)
     {
         // Claim disposal before tearing anything down. Raising the flag last would leave a
@@ -84,6 +93,8 @@ public class MessageStoreManager : IMessageStoreManager
         {
             Stop().GetAwaiter().GetResult();
             _performanceSettings.PerformanceSettingsChanged -= OnPerformanceSettingsChanged;
+            if (_topicExcludeService is not null)
+                _topicExcludeService.TopicExcluded -= OnTopicExcluded;
             _rateLimiter.Dispose();
         }
     }
@@ -137,9 +148,22 @@ public class MessageStoreManager : IMessageStoreManager
 
     internal void AddMessage(string fullTopic, MqttMessage message) => _store.Add(fullTopic, message);
 
-    private async Task MessageHandler(MqttApplicationMessageReceivedEventArgs arg)
+    private Task MessageHandler(MqttApplicationMessageReceivedEventArgs arg)
     {
-        if (!_rateLimiter.TryAcquire()) return;
+        var topic = arg.ApplicationMessage.Topic;
+        if (_topicExcludeService?.IsExcluded(topic) == true)
+        {
+            _metrics.RecordMessageExcluded();
+            return Task.CompletedTask;
+        }
+
+        return !_rateLimiter.TryAcquire()
+            ? Task.CompletedTask
+            : ProcessMessageAsync(arg, topic);
+    }
+
+    private async Task ProcessMessageAsync(MqttApplicationMessageReceivedEventArgs arg, string topic)
+    {
 
         var payloadSize = arg.ApplicationMessage.GetPayloadSegment().Count;
         _metrics.RecordPayloadSize(payloadSize);
@@ -150,7 +174,6 @@ public class MessageStoreManager : IMessageStoreManager
 
         try
         {
-            var topic = arg.ApplicationMessage.Topic;
             var result = _pipeline.ProcessInbound(arg);
             var payloadText = result.Envelope.DisplayText;
             formatId = result.Envelope.FormatId;
@@ -196,6 +219,13 @@ public class MessageStoreManager : IMessageStoreManager
         {
             await NotifyMessageReceivedAsync(message);
         }
+    }
+
+    private void OnTopicExcluded(string filter)
+    {
+        _store.RemoveMatchingTopic(filter);
+        // ReSharper disable once InconsistentlySynchronizedField
+        _topologyService?.RemoveMatchingTopic(filter);
     }
 
     private void LogPipelineDiagnostics(string topic, IReadOnlyList<string> diagnostics)

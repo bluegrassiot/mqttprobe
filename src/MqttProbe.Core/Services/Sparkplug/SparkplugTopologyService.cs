@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using MqttProbe.Core.Models.Sparkplug;
+using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.PluginContracts;
 
 namespace MqttProbe.Core.Services.Sparkplug;
@@ -9,6 +10,7 @@ public interface ISparkplugTopologyService
     public IReadOnlyDictionary<string, SpbGroup> Groups { get; }
     public event Action? TopologyChanged;
     public bool RemoveNode(string groupId, string nodeId);
+    public int RemoveMatchingTopic(string filter);
     public int RemoveOfflineNodes();
     public void ClearAll();
     public Task ApplyTopologyEventsAsync(IReadOnlyList<TopologyEvent> events);
@@ -16,6 +18,8 @@ public interface ISparkplugTopologyService
 
 public sealed class SparkplugTopologyService : ISparkplugTopologyService
 {
+    private static readonly string[] _nodeVerbs = ["NBIRTH", "NDATA", "NDEATH"];
+    private static readonly string[] _deviceVerbs = ["DBIRTH", "DDATA", "DDEATH"];
     private readonly ConcurrentDictionary<string, SpbGroup> _groups = new(StringComparer.Ordinal);
 
     public IReadOnlyDictionary<string, SpbGroup> Groups => _groups;
@@ -58,6 +62,40 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         return removed;
     }
 
+    public int RemoveMatchingTopic(string filter)
+    {
+        var removed = 0;
+
+        foreach (var (groupId, group) in _groups)
+        {
+            foreach (var (nodeId, node) in group.Nodes)
+            {
+                foreach (var (deviceId, _) in node.Devices)
+                {
+                    if (TopicMatchesDevice(filter, groupId, nodeId, deviceId)
+                        && node.Devices.TryRemove(deviceId, out _))
+                    {
+                        removed++;
+                    }
+                }
+
+                if (TopicMatchesNode(filter, groupId, nodeId)
+                    && group.Nodes.TryRemove(nodeId, out _))
+                {
+                    removed++;
+                }
+            }
+
+            if (group.Nodes.IsEmpty && _groups.TryRemove(groupId, out _))
+                removed++;
+        }
+
+        if (removed > 0)
+            TopologyChanged?.Invoke();
+
+        return removed;
+    }
+
     public void ClearAll()
     {
         var wasEmpty = _groups.IsEmpty;
@@ -65,6 +103,14 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         if (!wasEmpty)
             TopologyChanged?.Invoke();
     }
+
+    private static bool TopicMatchesNode(string filter, string groupId, string nodeId) =>
+        _nodeVerbs
+            .Any(verb => TopicExcludeService.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}", filter));
+
+    private static bool TopicMatchesDevice(string filter, string groupId, string nodeId, string deviceId) =>
+        _deviceVerbs
+            .Any(verb => TopicExcludeService.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}/{deviceId}", filter));
 
     internal static bool TryParseTopic(string topic, out string group, out string verb, out string node, out string? device)
     {

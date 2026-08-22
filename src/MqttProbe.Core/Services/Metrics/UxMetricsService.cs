@@ -30,7 +30,8 @@ public sealed record UxMetricsSnapshot(
     // Emulation scope
     int EmulatorPublishersOnline,
     long EmulatorPublishCycles,
-    int EmulatorNodesInError);
+    int EmulatorNodesInError,
+    long MessagesExcluded = 0);
 
 public interface IUxMetricsService
 {
@@ -41,6 +42,7 @@ public interface IUxMetricsService
     public void RecordChartFunnel(string source, bool createdNewChart);
     public void RecordMessageProcessed(string format);
     public void RecordMessageDropped();
+    public void RecordMessageExcluded();
     public void RecordProcessingTime(double microseconds);
     public void RecordPayloadSize(long bytes);
     public UxMetricsSnapshot GetSnapshot();
@@ -75,6 +77,7 @@ public sealed class UxMetricsService : IUxMetricsService
 
     private long _messagesProcessed;
     private long _messagesDropped;
+    private long _messagesExcluded;
     private readonly ConcurrentDictionary<string, long> _messagesProcessedByFormat = new(StringComparer.OrdinalIgnoreCase);
 
     // Guards the running aggregates and the rate ring below.
@@ -175,6 +178,8 @@ public sealed class UxMetricsService : IUxMetricsService
 
     public void RecordMessageDropped() => Interlocked.Increment(ref _messagesDropped);
 
+    public void RecordMessageExcluded() => Interlocked.Increment(ref _messagesExcluded);
+
     public void RecordProcessingTime(double microseconds)
     {
         lock (_statsSync)
@@ -244,7 +249,7 @@ public sealed class UxMetricsService : IUxMetricsService
         }
 
         var health = _healthCollector.GetSnapshot();
-        return new UxMetricsSnapshot(
+        var snapshot = new UxMetricsSnapshot(
             ConnectAttempts: Interlocked.Read(ref _connectAttempts),
             ConnectSuccesses: Interlocked.Read(ref _connectSuccesses),
             ConnectFailures: Interlocked.Read(ref _connectFailures),
@@ -267,7 +272,9 @@ public sealed class UxMetricsService : IUxMetricsService
             AppHealth: health,
             EmulatorPublishersOnline: _emulatorPublishersOnline,
             EmulatorPublishCycles: Volatile.Read(ref _emulatorPublishCycles),
-            EmulatorNodesInError: _emulatorNodesInError);
+            EmulatorNodesInError: _emulatorNodesInError,
+            MessagesExcluded: Interlocked.Read(ref _messagesExcluded));
+        return snapshot;
     }
 
 }

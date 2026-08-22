@@ -139,4 +139,15 @@ public class ChartFieldRegistryTests
         var field = _registry.GetFields("t").Single();
         field.LastSeen.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
     }
+
+    [Test]
+    public void RemoveMatchingTopic_RemovesWildcardMatchesOnly()
+    {
+        _registry.Update("sensors/temp", Fields(("value", 21.5)));
+        _registry.Update("devices/temp", Fields(("value", 22.5)));
+
+        _registry.RemoveMatchingTopic("sensors/#").Should().BeTrue();
+
+        _registry.GetTopics().Should().Equal("devices/temp");
+    }
 }

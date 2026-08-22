@@ -208,14 +208,15 @@ public class SubscriptionEditorTests : BunitTestContext
     }
 
     [Test]
-    public void CountChip_HiddenWhenNoItems()
+    public void CountChip_ShowsZeroWhenNoItems()
     {
         var cut = Render<SubscriptionEditor>(p => p
             .Add(x => x.Items, Array.Empty<SubscribedTopic>())
             .Add(x => x.OnAdd, NoAdd())
             .Add(x => x.OnRemove, NoRemove()));
 
-        cut.FindAll(".count-chip").Should().BeEmpty();
+        var chip = cut.Find(".count-chip");
+        chip.TextContent.Should().Be("0");
     }
 
     [Test]

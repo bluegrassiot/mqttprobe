@@ -266,14 +266,15 @@ public class ExcludeEditorTests : BunitTestContext
     }
 
     [Test]
-    public void CountChip_HiddenWhenNoItems()
+    public void CountChip_ShowsZeroWhenNoItems()
     {
         var cut = Render<ExcludeEditor>(p => p
             .Add(x => x.Items, Array.Empty<string>())
             .Add(x => x.OnAdd, NoAdd())
             .Add(x => x.OnRemove, NoRemove()));
 
-        cut.FindAll(".count-chip").Should().BeEmpty();
+        var chip = cut.Find(".count-chip");
+        chip.TextContent.Should().Be("0");
     }
 
     [Test]

@@ -7,13 +7,10 @@
             <TitleContent>
                 <div class="d-flex align-center gap-2">
                     <MudText Typo="Typo.subtitle2">Excluded topics</MudText>
-                    @if (Items is { Count: > 0 })
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
-                                 Class="count-chip">
-                            @Items.Count
-                        </MudChip>
-                    }
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                             Class="count-chip">
+                        @Items.Count
+                    </MudChip>
                 </div>
             </TitleContent>
             <ChildContent>

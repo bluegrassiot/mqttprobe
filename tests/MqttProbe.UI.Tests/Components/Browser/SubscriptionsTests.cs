@@ -267,11 +267,12 @@ public class SubscriptionsTests : BunitTestContext
     }
 
     [Test]
-    public void SubscriptionCountChip_HiddenWhenNoSubscriptions()
+    public void SubscriptionCountChip_ShowsZeroWhenNoSubscriptions()
     {
         var cut = Render<Subscriptions>();
 
-        cut.FindAll(".count-chip").Should().BeEmpty();
+        var chip = cut.Find(".count-chip");
+        chip.TextContent.Should().Be("0");
     }
 
     [Test]

@@ -31,7 +31,7 @@
                                @bind-Value="_qos" Label="QoS Level" Disabled="@Disabled">
                         @foreach (MqttQualityOfServiceLevel item in Enum.GetValues(typeof(MqttQualityOfServiceLevel)))
                         {
-                            <MudSelectItem T="MqttQualityOfServiceLevel" Value="@item">@item</MudSelectItem>
+                            <MudSelectItem T="MqttQualityOfServiceLevel" Value="@item">@MqttQosDisplay.Format(item)</MudSelectItem>
                         }
                     </MudSelect>
                     <AppPrimaryButton Class="subscription-editor-add"
@@ -89,7 +89,7 @@
                             </HeaderContent>
                             <RowTemplate>
                                 <MudTd Class="metrics-mono metrics-compact">@context.Topic</MudTd>
-                                <MudTd>@context.QualityOfServiceLevel</MudTd>
+                                <MudTd>@MqttQosDisplay.Format(context.QualityOfServiceLevel)</MudTd>
                             </RowTemplate>
                         </MudTable>
                     </div>

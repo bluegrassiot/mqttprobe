@@ -57,7 +57,7 @@
                     </tr>
                     <tr>
                         <td class="pb-meta-label">QoS</td>
-                        <td class="pb-meta-value">@((int)msg.QualityOfServiceLevel) — @msg.QualityOfServiceLevel</td>
+                        <td class="pb-meta-value">@MqttQosDisplay.Format(msg.QualityOfServiceLevel)</td>
                     </tr>
                     <tr>
                         <td class="pb-meta-label">Retained</td>

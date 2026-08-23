@@ -36,7 +36,7 @@ public class SubscriptionEditorTests : BunitTestContext
             .Add(x => x.OnRemove, NoRemove()));
 
         cut.Markup.Should().Contain("a/#");
-        cut.Markup.Should().Contain("AtMostOnce");
+        cut.Markup.Should().Contain("0 · At most once");
     }
 
     [Test]
@@ -320,5 +320,33 @@ public class SubscriptionEditorTests : BunitTestContext
         cut.Render();
 
         cut.FindComponent<MudExpansionPanel>().Instance.Expanded.Should().BeFalse();
+    }
+
+    [Test]
+    public void Selector_DisplaysFormattedQosLabels()
+    {
+        var cut = Render<SubscriptionEditor>(p => p
+            .Add(x => x.Items, Array.Empty<SubscribedTopic>())
+            .Add(x => x.OnAdd, NoAdd())
+            .Add(x => x.OnRemove, NoRemove()));
+
+        // MudSelect in closed state shows the selected value (AtLeastOnce by default).
+        cut.Markup.Should().Contain("1 · At least once");
+    }
+
+    [Test]
+    public void Table_DisplaysFormattedQosLabel()
+    {
+        var items = new List<SubscribedTopic>
+        {
+            new() { Topic = "a/#", QualityOfServiceLevel = MqttQualityOfServiceLevel.ExactlyOnce }
+        };
+
+        var cut = Render<SubscriptionEditor>(p => p
+            .Add(x => x.Items, items)
+            .Add(x => x.OnAdd, NoAdd())
+            .Add(x => x.OnRemove, NoRemove()));
+
+        cut.Markup.Should().Contain("2 · Exactly once");
     }
 }

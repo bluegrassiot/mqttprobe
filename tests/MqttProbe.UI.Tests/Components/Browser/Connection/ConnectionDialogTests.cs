@@ -337,7 +337,7 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Markup.Should().Contain("spBv1.0/#");
         _dialogProvider.Markup.Should().Contain("sensors/#");
-        _dialogProvider.Markup.Should().Contain("AtMostOnce");
+        _dialogProvider.Markup.Should().Contain("0 · At most once");
     }
 
     [Test]

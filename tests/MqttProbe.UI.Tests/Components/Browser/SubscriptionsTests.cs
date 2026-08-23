@@ -56,8 +56,8 @@ public class SubscriptionsTests : BunitTestContext
         var markup = cut.Markup;
         markup.Should().Contain("spBv1.0/+/DDATA/#");
         markup.Should().Contain("my/topic");
-        markup.Should().Contain("AtLeastOnce");
-        markup.Should().Contain("AtMostOnce");
+        markup.Should().Contain("1 · At least once");
+        markup.Should().Contain("0 · At most once");
     }
 
     [Test]

@@ -1172,4 +1172,232 @@ public class EmulationServiceTests
 
         _mockMetrics.Received(1).ClearEmulatorHealth();
     }
+
+    [Test]
+    public void StartProgress_BeforeStart_IsNull()
+    {
+        _service.StartProgress.Should().BeNull();
+    }
+
+    [Test]
+    public async Task StartAsync_TwoNodes_ExactProgressSequence()
+    {
+        var tcs1 = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tcs2 = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var node1 = Substitute.For<ISparkplugNode>();
+        node1.Start(Arg.Any<SparkplugNodeOptions>()).Returns(_ => tcs1.Task);
+        node1.Stop().Returns(Task.CompletedTask);
+        node1.PublishMetrics(Arg.Any<List<Metric>>()).Returns(Task.CompletedTask);
+        node1.IsConnected.Returns(true);
+
+        var node2 = Substitute.For<ISparkplugNode>();
+        node2.Start(Arg.Any<SparkplugNodeOptions>()).Returns(_ => tcs2.Task);
+        node2.Stop().Returns(Task.CompletedTask);
+        node2.PublishMetrics(Arg.Any<List<Metric>>()).Returns(Task.CompletedTask);
+        node2.IsConnected.Returns(true);
+
+        var callCount = 0;
+        _mockNodeFactory.Create(Arg.Any<List<Metric>>(), Arg.Any<SparkplugSpecificationVersion>())
+            .Returns(_ => callCount++ == 0 ? node1 : node2);
+
+        await _service.AddNodeAsync(SparkplugNode("Node-1"));
+        await _service.AddNodeAsync(SparkplugNode("Node-2"));
+
+        var events = new List<EmulationStartProgress?>();
+        var eventSignal = new SemaphoreSlim(0);
+        _service.StateChanged += () =>
+        {
+            events.Add(_service.StartProgress);
+            eventSignal.Release();
+        };
+
+        var startTask = _service.StartAsync();
+
+        // Initial (0, 2) fires synchronously before first await yields
+        await eventSignal.WaitAsync(TimeSpan.FromSeconds(5));
+        events.Should().HaveCount(1);
+        events[0]!.InitializedNodeCount.Should().Be(0);
+        events[0]!.TotalNodeCount.Should().Be(2);
+
+        // No increment while first runner is still pending
+        _service.StartProgress!.InitializedNodeCount.Should().Be(0);
+
+        // Complete first runner
+        tcs1.SetResult();
+        await eventSignal.WaitAsync(TimeSpan.FromSeconds(5));
+        events.Should().HaveCount(2);
+        events[1]!.InitializedNodeCount.Should().Be(1);
+        events[1]!.TotalNodeCount.Should().Be(2);
+
+        // No 2/2 while second runner is still pending
+        _service.StartProgress!.InitializedNodeCount.Should().Be(1);
+
+        // Complete second runner → (2,2) then terminal null
+        tcs2.SetResult();
+        await eventSignal.WaitAsync(TimeSpan.FromSeconds(5));
+        await eventSignal.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await startTask;
+
+        events.Should().HaveCount(4);
+        events[0]!.InitializedNodeCount.Should().Be(0);
+        events[0]!.TotalNodeCount.Should().Be(2);
+        events[1]!.InitializedNodeCount.Should().Be(1);
+        events[1]!.TotalNodeCount.Should().Be(2);
+        events[2]!.InitializedNodeCount.Should().Be(2);
+        events[2]!.TotalNodeCount.Should().Be(2);
+        events[3].Should().BeNull();
+    }
+
+    [Test]
+    public async Task StartAsync_SecondNodeFails_ThrowsStartupFailed_StopCalledOnce()
+    {
+        var node1 = Substitute.For<ISparkplugNode>();
+        node1.Start(Arg.Any<SparkplugNodeOptions>()).Returns(Task.CompletedTask);
+        node1.Stop().Returns(_ => throw new Exception("rollback failed"));
+        node1.PublishMetrics(Arg.Any<List<Metric>>()).Returns(Task.CompletedTask);
+        node1.IsConnected.Returns(true);
+
+        var node2 = Substitute.For<ISparkplugNode>();
+        node2.Start(Arg.Any<SparkplugNodeOptions>())
+            .Returns<Task>(_ => throw new Exception("startup failed"));
+        node2.Stop().Returns(Task.CompletedTask);
+        node2.PublishMetrics(Arg.Any<List<Metric>>()).Returns(Task.CompletedTask);
+        node2.IsConnected.Returns(true);
+
+        var callCount = 0;
+        _mockNodeFactory.Create(Arg.Any<List<Metric>>(), Arg.Any<SparkplugSpecificationVersion>())
+            .Returns(_ => callCount++ == 0 ? node1 : node2);
+
+        await _service.AddNodeAsync(SparkplugNode("Node-1"));
+        await _service.AddNodeAsync(SparkplugNode("Node-2"));
+
+        var events = new List<EmulationStartProgress?>();
+        _service.StateChanged += () => events.Add(_service.StartProgress);
+
+        var act = () => _service.StartAsync();
+        await act.Should().ThrowAsync<Exception>().WithMessage("*startup failed*");
+
+        _ = node1.Received(1).Stop();
+        _service.StartProgress.Should().BeNull();
+
+        events.Should().HaveCount(3);
+        events[0]!.InitializedNodeCount.Should().Be(0);
+        events[0]!.TotalNodeCount.Should().Be(2);
+        events[1]!.InitializedNodeCount.Should().Be(1);
+        events[1]!.TotalNodeCount.Should().Be(2);
+        events[2].Should().BeNull();
+    }
+
+    [Test]
+    public async Task StartAsync_RetryAfterFailure_CapturesOnlyRetryEvents()
+    {
+        var failNode = Substitute.For<ISparkplugNode>();
+        failNode.Start(Arg.Any<SparkplugNodeOptions>())
+            .Returns<Task>(_ => throw new Exception("fail"));
+        failNode.Stop().Returns(Task.CompletedTask);
+        failNode.PublishMetrics(Arg.Any<List<Metric>>()).Returns(Task.CompletedTask);
+        failNode.IsConnected.Returns(true);
+        _mockNodeFactory.Create(Arg.Any<List<Metric>>(), Arg.Any<SparkplugSpecificationVersion>())
+            .Returns(failNode);
+
+        await _service.AddNodeAsync(SparkplugNode("Node-1"));
+
+        try { await _service.StartAsync(); }
+        catch { /* expected */ }
+
+        _service.StartProgress.Should().BeNull();
+
+        await _service.RemoveAllNodesAsync();
+
+        var successNode = Substitute.For<ISparkplugNode>();
+        successNode.Start(Arg.Any<SparkplugNodeOptions>()).Returns(Task.CompletedTask);
+        successNode.Stop().Returns(Task.CompletedTask);
+        successNode.PublishMetrics(Arg.Any<List<Metric>>()).Returns(Task.CompletedTask);
+        successNode.IsConnected.Returns(true);
+        _mockNodeFactory.Create(Arg.Any<List<Metric>>(), Arg.Any<SparkplugSpecificationVersion>())
+            .Returns(successNode);
+
+        await _service.AddNodeAsync(SparkplugNode("Node-2"));
+
+        var events = new List<EmulationStartProgress?>();
+        _service.StateChanged += () => events.Add(_service.StartProgress);
+
+        await _service.StartAsync();
+
+        events.Should().HaveCount(3);
+        events[0]!.InitializedNodeCount.Should().Be(0);
+        events[0]!.TotalNodeCount.Should().Be(1);
+        events[1]!.InitializedNodeCount.Should().Be(1);
+        events[1]!.TotalNodeCount.Should().Be(1);
+        events[2].Should().BeNull();
+    }
+
+    [Test]
+    public async Task StartAsync_FirstTickPending_ProgressHoldsAtOneOfOne()
+    {
+        var publishTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var publishInvoked = new SemaphoreSlim(0);
+
+        var node = Substitute.For<ISparkplugNode>();
+        node.Start(Arg.Any<SparkplugNodeOptions>()).Returns(Task.CompletedTask);
+        node.Stop().Returns(Task.CompletedTask);
+        node.PublishMetrics(Arg.Any<List<Metric>>())
+            .Returns(_ => publishTcs.Task)
+            .AndDoes(_ => publishInvoked.Release());
+        node.PublishDeviceMetrics(Arg.Any<string>(), Arg.Any<List<Metric>>())
+            .Returns(Task.CompletedTask);
+        node.IsConnected.Returns(true);
+        _mockNodeFactory.Create(Arg.Any<List<Metric>>(), Arg.Any<SparkplugSpecificationVersion>())
+            .Returns(node);
+
+        await _service.AddNodeAsync(SparkplugNode("Node-1"));
+
+        var events = new List<EmulationStartProgress?>();
+        _service.StateChanged += () => events.Add(_service.StartProgress);
+
+        var startTask = _service.StartAsync();
+
+        // Deterministically wait until PublishMetrics is invoked by the first tick
+        await publishInvoked.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Progress is 0/1, 1/1 with no terminal null while tick is pending
+        events.Should().HaveCount(2);
+        events[0]!.InitializedNodeCount.Should().Be(0);
+        events[0]!.TotalNodeCount.Should().Be(1);
+        events[1]!.InitializedNodeCount.Should().Be(1);
+        events[1]!.TotalNodeCount.Should().Be(1);
+
+        // StartProgress holds at 1/1 while the first tick is still pending
+        _service.StartProgress!.InitializedNodeCount.Should().Be(1);
+        _service.StartProgress!.TotalNodeCount.Should().Be(1);
+
+        // Complete the pending publish so StartAsync can finish
+        publishTcs.SetResult();
+        await startTask;
+
+        // Final sequence includes the terminal null
+        events.Should().HaveCount(3);
+        events[0]!.InitializedNodeCount.Should().Be(0);
+        events[0]!.TotalNodeCount.Should().Be(1);
+        events[1]!.InitializedNodeCount.Should().Be(1);
+        events[1]!.TotalNodeCount.Should().Be(1);
+        events[2].Should().BeNull();
+    }
+
+    [Test]
+    public async Task StartAsync_ZeroNodes_EmitsZeroProgress()
+    {
+        var progressSnapshots = new List<EmulationStartProgress?>();
+        _service.StateChanged += () => progressSnapshots.Add(_service.StartProgress);
+
+        await _service.StartAsync();
+
+        // Should see (0,0) then null
+        progressSnapshots.Should().HaveCount(2);
+        progressSnapshots[0]!.InitializedNodeCount.Should().Be(0);
+        progressSnapshots[0]!.TotalNodeCount.Should().Be(0);
+        progressSnapshots[1].Should().BeNull();
+    }
 }

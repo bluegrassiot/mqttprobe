@@ -1,5 +1,4 @@
 @namespace MqttProbe.UI.Components.Emulation
-@using Microsoft.AspNetCore.Components.Web.Virtualization
 @implements IDisposable
 @inject IEmulationService EmulationService
 @inject IDialogService DialogService
@@ -20,7 +19,26 @@
                     @DeviceCount device@(DeviceCount != 1 ? "s" : "")
                 </MudChip>
             }
-            @if (EmulationService.IsRunning)
+            @if (_isStarting)
+            {
+                var progress = EmulationService.StartProgress;
+                var hasDeterminateProgress = progress is not null && progress.TotalNodeCount > 0;
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                         Class="emu-count-chip emu-count-chip--starting"
+                         role="@(hasDeterminateProgress ? "progressbar" : "status")"
+                         aria-valuemin="@(hasDeterminateProgress ? "0" : null)"
+                         aria-valuemax="@(hasDeterminateProgress ? progress!.TotalNodeCount.ToString() : null)"
+                         aria-valuenow="@(hasDeterminateProgress ? progress!.InitializedNodeCount.ToString() : null)"
+                         aria-label="@(hasDeterminateProgress ? $"Starting nodes: {progress!.InitializedNodeCount} of {progress.TotalNodeCount}" : null)">
+                    <span class="emu-status-dot emu-status-dot--starting"></span>
+                    @if (hasDeterminateProgress)
+                    {
+                        <span class="emu-chip-starting-label">Starting&nbsp;</span>
+                    }
+                    @(hasDeterminateProgress ? $"{progress!.InitializedNodeCount}/{progress.TotalNodeCount}" : "Starting…")
+                </MudChip>
+            }
+            else if (EmulationService.IsRunning)
             {
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
                          Class="emu-count-chip emu-count-chip--running">
@@ -44,13 +62,14 @@
                         OnClick="@RemoveAllAsync">
                 Remove<span class="emu-action-word">&nbsp;All</span>
             </AppDestructiveButton>
-            <MudButton Variant="Variant.Filled" Class="app-btn-min"
-                       Color="@(EmulationService.IsRunning ? Color.Error : Color.Success)"
-                       StartIcon="@(EmulationService.IsRunning ? LucideIcons.Square : LucideIcons.Play)"
+            <MudButton Variant="Variant.Filled" Class="@StartStopButtonClass"
+                       Color="@StartStopColor"
+                       StartIcon="@StartStopIcon"
                        title="@(EmulationService.IsRunning ? "Stop emulation" : "Start emulation")"
-                       Disabled="@(NodeCount == 0)"
+                       Disabled="@(NodeCount == 0 || _isStarting)"
+                       aria-busy="@(_isStarting)"
                        OnClick="@OnStartStopClickAsync">
-                @(EmulationService.IsRunning ? "Stop" : "Start")
+                @StartStopLabel
             </MudButton>
         </HeaderActions>
     </TabPanelHeader>
@@ -119,6 +138,7 @@
     private string? _filterText;
     private int _intervalMs;
     private Guid? _expandedNodeId;
+    private bool _isStarting;
 
     private RenderFragment<EmulatorNodeConfig> NodeRow => node =>
         @<EmulatorNodeCard @key="node.Id" Node="node"
@@ -128,6 +148,20 @@
     private int NodeCount => EmulationService.Nodes.Count;
 
     private int DeviceCount => EmulationService.Nodes.Sum(n => n.Devices.Count);
+
+    private Color StartStopColor => _isStarting ? Color.Warning : StartStopNormalColor;
+
+    private Color StartStopNormalColor => EmulationService.IsRunning ? Color.Error : Color.Success;
+
+    private string StartStopIcon => _isStarting ? LucideIcons.RefreshCw : StartStopNormalIcon;
+
+    private string StartStopNormalIcon => EmulationService.IsRunning ? LucideIcons.Square : LucideIcons.Play;
+
+    private string StartStopLabel => _isStarting ? "Starting…" : StartStopNormalLabel;
+
+    private string StartStopNormalLabel => EmulationService.IsRunning ? "Stop" : "Start";
+
+    private string StartStopButtonClass => _isStarting ? "app-btn-min emu-btn-starting" : "app-btn-min";
 
     private List<EmulatorNodeConfig> FilteredNodes() =>
         EmulationService.Nodes
@@ -206,10 +240,23 @@
 
     private async Task OnStartStopClickAsync()
     {
+        if (_isStarting) return;
+
         if (EmulationService.IsRunning)
             await EmulationService.StopAsync();
         else
-            await EmulationService.StartAsync();
+        {
+            _isStarting = true;
+            try
+            {
+                await EmulationService.StartAsync();
+            }
+            finally
+            {
+                _isStarting = false;
+                StateHasChanged();
+            }
+        }
     }
 
     private async Task RemoveAllAsync()

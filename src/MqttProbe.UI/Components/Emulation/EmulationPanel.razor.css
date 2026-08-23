@@ -48,6 +48,36 @@
 
 ::deep .emu-count-chip--running { color: var(--mud-palette-success); }
 
+::deep .emu-count-chip--starting {
+    color: var(--mud-palette-warning);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+::deep .emu-status-dot--starting {
+    background: var(--mud-palette-warning);
+    animation: emu-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes emu-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+::deep .emu-btn-starting svg {
+    animation: emu-spin 1s linear infinite;
+}
+
+@keyframes emu-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    ::deep .emu-status-dot--starting { animation: none; }
+    ::deep .emu-btn-starting svg { animation: none; }
+}
+
 ::deep .emu-filter-text { min-width: 160px; font-size: 0.85rem; }
 
 /* ── Interval helper renders the projected msg/s figure (data → mono) ────── */
@@ -206,6 +236,12 @@
    three stay one line tall; the icons carry the rest of the meaning. */
 @media (max-width: 599px) {
     .emu-action-word {
+        display: none;
+    }
+
+    /* The progress fraction stays visible; the "Starting " prefix is hidden
+       so the chip stays compact on the same line as count chips. */
+    ::deep .emu-chip-starting-label {
         display: none;
     }
 }

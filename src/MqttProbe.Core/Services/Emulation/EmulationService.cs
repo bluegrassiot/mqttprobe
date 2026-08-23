@@ -18,6 +18,7 @@ public interface IEmulationService : IDisposable
     public IReadOnlyList<EmulatorNodeConfig> Nodes { get; }
     public int PublishIntervalMs { get; }
     public bool IsRunning { get; }
+    public EmulationStartProgress? StartProgress { get; }
     public event Action? StateChanged;
 
     public void SetConnection(Guid connectionId);
@@ -32,6 +33,8 @@ public interface IEmulationService : IDisposable
     public Task StopAsync();
     public NodeRuntimeStatus GetStatus(Guid nodeId);
 }
+
+public sealed record EmulationStartProgress(int InitializedNodeCount, int TotalNodeCount);
 
 public class EmulationService : IEmulationService
 {
@@ -53,6 +56,9 @@ public class EmulationService : IEmulationService
     private long _loopStartTimestamp;
     private bool _disposed;
     private Guid _connectionId;
+    private EmulationStartProgress? _startProgress;
+
+    public EmulationStartProgress? StartProgress => _startProgress;
 
     public EmulationService(IEmulatorSettings emulatorSettings,
         ISparkplugNodeFactory nodeFactory,
@@ -156,50 +162,68 @@ public class EmulationService : IEmulationService
         if (IsRunning) return;
 
         var snapshot = CloneNodes(_emulatorSettings.GetEmulatorNodes(_connectionId));
-        var intervalMs = _emulatorSettings.GetEmulatorPublishIntervalMs(_connectionId);
-        var connection = _sessionState.SelectedConnection;
-        var sparkplugCount = snapshot.Count(n => n.Type == EmulatorNodeType.SparkplugB);
-        var initialKnownMetrics = _healthMetrics.BuildSnapshot(sparkplugCount, 0);
+        var totalNodes = snapshot.Count;
 
-        var newRunners = snapshot
-            .Select(node => (INodeRunner)(node.Type == EmulatorNodeType.SparkplugB
-                ? new SparkplugNodeRunner(node, _nodeFactory, connection, initialKnownMetrics,
-                    _certStore, _quarantine, _logger)
-                : new GenericNodeRunner(node, _managedMqttClient, _pipeline, _logger)))
-            .ToList();
+        _startProgress = new EmulationStartProgress(0, totalNodes);
+        try { StateChanged?.Invoke(); }
+        catch { _startProgress = null; throw; }
 
         var startedRunners = new List<INodeRunner>();
         try
         {
+            var intervalMs = _emulatorSettings.GetEmulatorPublishIntervalMs(_connectionId);
+            var connection = _sessionState.SelectedConnection;
+            var sparkplugCount = snapshot.Count(n => n.Type == EmulatorNodeType.SparkplugB);
+            var initialKnownMetrics = _healthMetrics.BuildSnapshot(sparkplugCount, 0);
+
+            var newRunners = snapshot
+                .Select(node => (INodeRunner)(node.Type == EmulatorNodeType.SparkplugB
+                    ? new SparkplugNodeRunner(node, _nodeFactory, connection, initialKnownMetrics,
+                        _certStore, _quarantine, _logger)
+                    : new GenericNodeRunner(node, _managedMqttClient, _pipeline, _logger)))
+                .ToList();
+
             foreach (var runner in newRunners)
             {
                 await runner.StartAsync();
                 startedRunners.Add(runner);
+                _startProgress = new EmulationStartProgress(startedRunners.Count, totalNodes);
+                StateChanged?.Invoke();
             }
+
+            _runners = newRunners;
+            _publishCycles = 0;
+            _loopStartTimestamp = Stopwatch.GetTimestamp();
+            await TickSafelyAsync();
+            _cts = new CancellationTokenSource();
+            _publishLoop = RunPublishLoop(intervalMs, _cts.Token);
         }
         catch (Exception)
         {
-            foreach (var started in startedRunners)
-            {
-                try { await started.StopAsync(); }
-                catch (Exception stopEx)
-                {
-                    _logger.LogWarning(stopEx,
-                        "Failed to stop runner {NodeId} during StartAsync rollback",
-                        started.NodeId);
-                }
-            }
+            await RollbackStartAsync(startedRunners);
             throw;
         }
 
-        _runners = newRunners;
-
-        _publishCycles = 0;
-        _loopStartTimestamp = Stopwatch.GetTimestamp();
-        await TickSafelyAsync();
-        _cts = new CancellationTokenSource();
-        _publishLoop = RunPublishLoop(intervalMs, _cts.Token);
+        _startProgress = null;
         StateChanged?.Invoke();
+    }
+
+    private async Task RollbackStartAsync(List<INodeRunner> startedRunners)
+    {
+        foreach (var started in startedRunners)
+        {
+            try { await started.StopAsync(); }
+            catch (Exception stopEx)
+            {
+                _logger.LogWarning(stopEx,
+                    "Failed to stop runner {NodeId} during StartAsync rollback",
+                    started.NodeId);
+            }
+        }
+
+        _startProgress = null;
+        try { StateChanged?.Invoke(); }
+        catch (Exception notifyEx) { _logger.LogWarning(notifyEx, "StateChanged handler failed during startup rollback"); }
     }
 
     public async Task StopAsync()

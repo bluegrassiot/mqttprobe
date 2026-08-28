@@ -10,6 +10,7 @@
 
 - Prefer primary constructors when dependencies are only captured; keep explicit constructors when setup or accessibility constraints require them.
 - Do not add `!` immediately after FluentAssertions `Should().NotBeNull()`; retain it where compiler flow analysis cannot prove non-null.
+- Remove unused `using` directives before completing a change. Run `python scripts/ci/format-check.py` (or `--fix`) to catch stragglers.
 
 ## Comments
 

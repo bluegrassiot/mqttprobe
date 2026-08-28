@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Checks (or fixes) code formatting.
+Checks (or fixes) code formatting and unused using directives.
 
 On Windows, the full solution (MqttProbe.slnx) is used because Visual Studio
 installs MAUI workloads automatically, so all projects can be checked together.
@@ -12,6 +12,10 @@ installed, so it is checked best-effort and skipped otherwise.
 
 LucideIcons.cs and SparkplugBProtobuf.cs are always excluded (column-aligned
 constants and auto-generated protobuf code respectively).
+
+After formatting, a targeted Roslyn analyzer pass checks for unused using
+directives (IDE0005) via `dotnet format analyzers --diagnostics IDE0005`.
+Only that single diagnostic is enabled; no other analyzer fixes run.
 
 ENDOFLINE-only violations are ignored in check mode: .editorconfig mandates LF
 but git (text=auto) checks out CRLF on Windows, so every file reports
@@ -45,6 +49,12 @@ FIX = "--fix" in sys.argv
 # code fix, so --fix is a no-op against them and the check can never pass. Keep
 # this to formatting; analyzer warnings are reported by the build.
 SUBCOMMANDS = ["whitespace", "style"]
+
+# Targeted analyzer pass: only IDE0005 (remove unnecessary usings).  This runs
+# via `dotnet format analyzers --diagnostics IDE0005` so no other analyzer fixes
+# are enabled.  The severity is `info` which covers the SDK default `suggestion`
+# level for IDE0005; lower severities like `silent` or `none` are never matched.
+ANALYZER_DIAGNOSTICS = ["IDE0005"]
 
 # external/ holds vendored git submodules (e.g. SparkplugNet fork); they keep
 # their own upstream code style and must not be reformatted by mqttprobe rules.
@@ -95,6 +105,24 @@ for target, needs_workload in TARGETS:
         if result.returncode != 0:
             returncode = result.returncode
             break
+
+    # Targeted analyzer pass for unused usings (IDE0005). Only runs when
+    # formatting is clean, so a formatting failure short-circuits here.
+    if returncode == 0 and ANALYZER_DIAGNOSTICS:
+        args = [
+            "dotnet", "format", "analyzers", str(ROOT / target),
+            "--diagnostics", *ANALYZER_DIAGNOSTICS,
+            "--severity", "info",
+        ]
+        if not FIX:
+            args.append("--verify-no-changes")
+        for ex in EXCLUDES:
+            args.extend(["--exclude", ex])
+
+        result = subprocess.run(args, capture_output=True, text=True)
+        output += f"{result.stdout}\n{result.stderr}"
+        if result.returncode != 0:
+            returncode = result.returncode
 
     if returncode == 0:
         print(" OK")

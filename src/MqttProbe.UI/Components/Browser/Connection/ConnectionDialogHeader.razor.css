@@ -7,6 +7,14 @@
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
+.header-label {
+    flex-shrink: 0;
+}
+
+.header-select {
+    flex: 1;
+}
+
 .connection-dialog-actions {
     display: flex;
     align-items: center;

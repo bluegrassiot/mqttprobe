@@ -9,6 +9,10 @@ public interface ISessionState
     public Connection SelectedConnection { get; set; }
     public CertificateSessionResource? ActiveCertificateResource { get; set; }
     public bool CertificateSessionFaulted { get; set; }
+    public Guid? LastSuccessfulConnectionId { get; set; }
+    public Connection? LastSuccessfulConnectionSnapshot { get; set; }
+    public string? RetainedUnsavedAssetId { get; set; }
+    public Guid RetainedUnsavedAssetOwnerId { get; set; }
 }
 
 public class SessionState : ISessionState
@@ -32,4 +36,8 @@ public class SessionState : ISessionState
 
     public CertificateSessionResource? ActiveCertificateResource { get; set; }
     public bool CertificateSessionFaulted { get; set; }
+    public Guid? LastSuccessfulConnectionId { get; set; }
+    public Connection? LastSuccessfulConnectionSnapshot { get; set; }
+    public string? RetainedUnsavedAssetId { get; set; }
+    public Guid RetainedUnsavedAssetOwnerId { get; set; }
 }

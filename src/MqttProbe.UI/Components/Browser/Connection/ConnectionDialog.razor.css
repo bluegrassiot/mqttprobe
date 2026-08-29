@@ -29,7 +29,6 @@
 .connection-dialog-content ::deep .connection-tabs {
     flex: 1;
     min-height: 0;
-    overflow: hidden;
 }
 
 /* MudBlazor renders a .mud-tabs-panels wrapper between MudTabs and the

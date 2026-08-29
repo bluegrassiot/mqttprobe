@@ -41,6 +41,118 @@ public partial class ConnectionDialog
         }
     }
 
+    private bool HasNameCollisionForPersistence()
+    {
+        var trimmed = _selectedConnection.Name.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed)) return false;
+        var selfId = _selectedConnection.Id;
+        return ConnectionSettings.Connections.Any(c =>
+            c.Id != selfId &&
+            string.Equals(c.Name.Trim(), trimmed, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void RefreshSubscriptionBaseline()
+    {
+        _baselineConnection.SubscribedTopics = _selectedConnection.SubscribedTopics
+            .Select(t => new SubscribedTopic { Topic = t.Topic, QualityOfServiceLevel = t.QualityOfServiceLevel })
+            .ToList();
+    }
+
+    private void RefreshExcludeBaseline()
+    {
+        _baselineConnection.TopicExcludes = [.. _selectedConnection.TopicExcludes];
+    }
+
+    private bool IsConnectionSaved() =>
+        ConnectionSettings.Connections.Any(c => c.Id == _selectedConnection.Id);
+
+    private MqttProbe.Core.Models.Mqtt.Connection BuildCollectionOnlyCandidate()
+    {
+        // Build persistence candidate from baseline, patching only collections.
+        // This prevents unrelated dirty edits (Host, credentials, TLS, timing, cert)
+        // from being silently persisted through collection operations.
+        var candidate = _baselineConnection.Clone();
+        candidate.SubscribedTopics = _selectedConnection.SubscribedTopics
+            .Select(t => new SubscribedTopic { Topic = t.Topic, QualityOfServiceLevel = t.QualityOfServiceLevel })
+            .ToList();
+        candidate.TopicExcludes = [.. _selectedConnection.TopicExcludes];
+        return candidate;
+    }
+
+    private bool ValidateNewSubscriptionTopic(string rawTopic)
+    {
+        var topic = rawTopic.Trim();
+        if (string.IsNullOrWhiteSpace(topic) || topic.Contains('\0') || topic.Length > 65_535)
+        {
+            Snackbar.Add("Invalid topic", Severity.Warning);
+            return false;
+        }
+        if (_selectedConnection.SubscribedTopics.Any(s => string.Equals(s.Topic, topic, StringComparison.Ordinal)))
+        {
+            Snackbar.Add($"Already saved: {topic}", Severity.Warning);
+            return false;
+        }
+        if (_selectedConnection.SubscribedTopics.Count >= MaxOnConnectSubscriptions)
+        {
+            Snackbar.Add($"Subscription limit ({MaxOnConnectSubscriptions}) reached", Severity.Warning);
+            return false;
+        }
+        return true;
+    }
+
+    private bool ValidateNewExcludeTopic(string trimmed)
+    {
+        if (string.IsNullOrWhiteSpace(trimmed) || !MqttTopicMatcher.IsValidFilter(trimmed))
+        {
+            Snackbar.Add("Invalid topic", Severity.Warning);
+            return false;
+        }
+        if (_selectedConnection.TopicExcludes.Any(s => string.Equals(s, trimmed, StringComparison.Ordinal)))
+        {
+            Snackbar.Add($"Already excluded: {trimmed}", Severity.Warning);
+            return false;
+        }
+        const int maxExcludes = 500;
+        if (_selectedConnection.TopicExcludes.Count >= maxExcludes)
+        {
+            Snackbar.Add($"Exclude limit ({maxExcludes}) reached", Severity.Warning);
+            return false;
+        }
+        return true;
+    }
+
+    private async Task<bool> EnsureReadyForCollectionEdit(string context, bool requireSaved)
+    {
+        if (!await ValidateForm())
+        {
+            Snackbar.Add($"Fix connection validation errors before {context}.", Severity.Warning);
+            return false;
+        }
+        if (HasNameCollisionForPersistence())
+        {
+            Snackbar.Add($"Resolve the name collision before {context}.", Severity.Warning);
+            return false;
+        }
+        if (requireSaved && !IsConnectionSaved())
+        {
+            Snackbar.Add($"Save the connection first before {context}.", Severity.Warning);
+            return false;
+        }
+        return true;
+    }
+
+    private async Task ApplyLiveSubscriptionAsync(string topic, MqttQualityOfServiceLevel qos)
+    {
+        try
+        {
+            await SubscriptionManager.Add(topic, qos);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to subscribe: {ex.Message}", Severity.Error);
+        }
+    }
+
     private async Task HandleOnConnectEditorAdd((string Topic, MqttQualityOfServiceLevel Qos) request)
     {
         if (!UiSettings.Ui.AutoResubscribe)
@@ -48,45 +160,33 @@ public partial class ConnectionDialog
             Snackbar.Add("Enable Auto-resubscribe on connect to manage these topics.", Severity.Info);
             return;
         }
-        var topic = request.Topic.Trim();
-        if (string.IsNullOrWhiteSpace(topic) || topic.Contains('\0') || topic.Length > 65_535)
-        {
-            Snackbar.Add("Invalid topic", Severity.Warning);
-            return;
-        }
-        if (_selectedConnection.SubscribedTopics.Any(s => string.Equals(s.Topic, topic, StringComparison.Ordinal)))
-        {
-            Snackbar.Add($"Already saved: {topic}", Severity.Warning);
-            return;
-        }
-        if (_selectedConnection.SubscribedTopics.Count >= MaxOnConnectSubscriptions)
-        {
-            Snackbar.Add($"Subscription limit ({MaxOnConnectSubscriptions}) reached", Severity.Warning);
-            return;
-        }
+        if (!ValidateNewSubscriptionTopic(request.Topic)) return;
+        if (!await EnsureReadyForCollectionEdit("adding subscriptions", requireSaved: true)) return;
 
+        var topic = request.Topic.Trim();
         var isLive = ShouldApplyLiveSubscriptions();
         var alreadyLive = isLive && SubscriptionManager.Subscriptions.Any(s => string.Equals(s.Topic, topic, StringComparison.Ordinal));
 
+        var candidate = BuildCollectionOnlyCandidate();
+        candidate.SubscribedTopics.Add(new SubscribedTopic { Topic = topic, QualityOfServiceLevel = request.Qos });
+        try
+        {
+            await ConnectionSettings.AddConnectionAsync(candidate);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save subscription: {ex.Message}", Severity.Error);
+            return;
+        }
+
         _selectedConnection.SubscribedTopics.Add(new SubscribedTopic { Topic = topic, QualityOfServiceLevel = request.Qos });
         SyncSessionStateSelectedTopics();
-        await ConnectionSettings.AddConnectionAsync(_selectedConnection);
+        RefreshSubscriptionBaseline();
 
         if (isLive && !alreadyLive)
-        {
-            try
-            {
-                await SubscriptionManager.Add(topic, request.Qos);
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Failed to subscribe: {ex.Message}", Severity.Error);
-            }
-        }
+            await ApplyLiveSubscriptionAsync(topic, request.Qos);
         else
-        {
             Snackbar.Add($"Saved subscription {topic}", Severity.Success);
-        }
     }
 
     private async Task HandleOnConnectEditorRemove(IReadOnlyList<string> topics)
@@ -96,10 +196,39 @@ public partial class ConnectionDialog
             Snackbar.Add("Enable Auto-resubscribe on connect to manage these topics.", Severity.Info);
             return;
         }
+
+        if (!await ValidateForm())
+        {
+            Snackbar.Add("Fix connection validation errors before removing subscriptions.", Severity.Warning);
+            return;
+        }
+        if (HasNameCollisionForPersistence())
+        {
+            Snackbar.Add("Resolve the name collision before removing subscriptions.", Severity.Warning);
+            return;
+        }
+        if (!IsConnectionSaved())
+        {
+            Snackbar.Add("Save the connection first before removing subscriptions.", Severity.Warning);
+            return;
+        }
+
         var set = topics.ToHashSet(StringComparer.Ordinal);
+        var candidate = BuildCollectionOnlyCandidate();
+        candidate.SubscribedTopics.RemoveAll(s => set.Contains(s.Topic));
+        try
+        {
+            await ConnectionSettings.AddConnectionAsync(candidate);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save subscription removal: {ex.Message}", Severity.Error);
+            return;
+        }
+
         _selectedConnection.SubscribedTopics.RemoveAll(s => set.Contains(s.Topic));
         SyncSessionStateSelectedTopics();
-        await ConnectionSettings.AddConnectionAsync(_selectedConnection);
+        RefreshSubscriptionBaseline();
 
         if (ShouldApplyLiveSubscriptions())
         {
@@ -114,127 +243,123 @@ public partial class ConnectionDialog
         }
     }
 
-#pragma warning disable MA0051 // Method is too long — preserved from original Razor file
-    private async Task HandleOnConnectExcludeAdd(string topic)
+    private async Task AddExcludeLiveAsync(string trimmed)
     {
-        var trimmed = topic.Trim();
-
-        if (ShouldApplyLiveSubscriptions())
+        var validation = TopicExcludeService.ValidateAdd(trimmed);
+        if (!validation.IsValid)
         {
-            // Active connection: validate centrally via the service, then use the
-            // service as the sole persistence/live-apply path.
-            var validation = TopicExcludeService.ValidateAdd(trimmed);
-            if (!validation.IsValid)
-            {
-                if (validation.Feedback is { } fb)
-                    ShowExcludeFeedback(fb);
-                return;
-            }
-
-            try
-            {
-                var result = await TopicExcludeService.Add(trimmed);
-                if (!result.IsValid)
-                {
-                    if (result.Feedback is { } fb)
-                        ShowExcludeFeedback(fb);
-                    return;
-                }
-
-                // Service persisted successfully; sync the dialog model so Save stays coherent.
-                _selectedConnection.TopicExcludes.Add(trimmed);
-                SyncSessionStateTopicExcludes();
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Failed to add exclude: {ex.Message}", Severity.Error);
-            }
+            if (validation.Feedback is { } fb)
+                ShowExcludeFeedback(fb);
+            return;
         }
-        else
-        {
-            // Inactive connection: validate syntax centrally, but duplicate/cap
-            // validation is against the profile's own list, not the live service state.
-            if (string.IsNullOrWhiteSpace(trimmed) || !MqttTopicMatcher.IsValidFilter(trimmed))
-            {
-                Snackbar.Add("Invalid topic", Severity.Warning);
-                return;
-            }
-            if (_selectedConnection.TopicExcludes.Any(s => string.Equals(s, trimmed, StringComparison.Ordinal)))
-            {
-                Snackbar.Add($"Already excluded: {trimmed}", Severity.Warning);
-                return;
-            }
-            const int maxExcludes = 500;
-            if (_selectedConnection.TopicExcludes.Count >= maxExcludes)
-            {
-                Snackbar.Add($"Exclude limit ({maxExcludes}) reached", Severity.Warning);
-                return;
-            }
 
-            // Transactional: persist a candidate clone first, then mutate only on success.
-            var candidate = _selectedConnection.Clone();
-            candidate.TopicExcludes.Add(trimmed);
-            try
+        if (!await EnsureReadyForCollectionEdit("managing excludes", requireSaved: false)) return;
+
+        try
+        {
+            var result = await TopicExcludeService.Add(trimmed);
+            if (!result.IsValid)
             {
-                await ConnectionSettings.AddConnectionAsync(candidate);
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Failed to save exclude: {ex.Message}", Severity.Error);
+                if (result.Feedback is { } fb)
+                    ShowExcludeFeedback(fb);
                 return;
             }
 
             _selectedConnection.TopicExcludes.Add(trimmed);
             SyncSessionStateTopicExcludes();
-            Snackbar.Add($"Saved exclude {trimmed}", Severity.Success);
+            RefreshExcludeBaseline();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to add exclude: {ex.Message}", Severity.Error);
         }
     }
-#pragma warning restore MA0051
+
+    private async Task AddExcludeOfflineAsync(string trimmed)
+    {
+        if (!ValidateNewExcludeTopic(trimmed)) return;
+        if (!await EnsureReadyForCollectionEdit("managing excludes", requireSaved: true)) return;
+
+        var candidate = BuildCollectionOnlyCandidate();
+        candidate.TopicExcludes.Add(trimmed);
+        try
+        {
+            await ConnectionSettings.AddConnectionAsync(candidate);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save exclude: {ex.Message}", Severity.Error);
+            return;
+        }
+
+        _selectedConnection.TopicExcludes.Add(trimmed);
+        SyncSessionStateTopicExcludes();
+        RefreshExcludeBaseline();
+        Snackbar.Add($"Saved exclude {trimmed}", Severity.Success);
+    }
+
+    private async Task HandleOnConnectExcludeAdd(string topic)
+    {
+        var trimmed = topic.Trim();
+        if (ShouldApplyLiveSubscriptions())
+            await AddExcludeLiveAsync(trimmed);
+        else
+            await AddExcludeOfflineAsync(trimmed);
+    }
+
+    private async Task RemoveExcludeLiveAsync(IReadOnlyList<string> topics)
+    {
+        if (!await EnsureReadyForCollectionEdit("managing excludes", requireSaved: false)) return;
+
+        try
+        {
+            var result = await TopicExcludeService.Remove(topics);
+            if (!result.IsValid)
+            {
+                if (result.Feedback is { } fb)
+                    ShowExcludeFeedback(fb);
+                return;
+            }
+
+            var set = topics.ToHashSet(StringComparer.Ordinal);
+            _selectedConnection.TopicExcludes.RemoveAll(s => set.Contains(s));
+            SyncSessionStateTopicExcludes();
+            RefreshExcludeBaseline();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to remove excludes: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RemoveExcludeOfflineAsync(IReadOnlyList<string> topics)
+    {
+        if (!await EnsureReadyForCollectionEdit("managing excludes", requireSaved: true)) return;
+
+        var set = topics.ToHashSet(StringComparer.Ordinal);
+        var candidate = BuildCollectionOnlyCandidate();
+        candidate.TopicExcludes.RemoveAll(s => set.Contains(s));
+        try
+        {
+            await ConnectionSettings.AddConnectionAsync(candidate);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to remove excludes: {ex.Message}", Severity.Error);
+            return;
+        }
+
+        _selectedConnection.TopicExcludes.RemoveAll(s => set.Contains(s));
+        SyncSessionStateTopicExcludes();
+        RefreshExcludeBaseline();
+    }
 
     private async Task HandleOnConnectExcludeRemove(IReadOnlyList<string> topics)
     {
         if (ShouldApplyLiveSubscriptions())
-        {
-            // Active connection: service is the sole persistence and live-apply path.
-            try
-            {
-                var result = await TopicExcludeService.Remove(topics);
-                if (!result.IsValid)
-                {
-                    if (result.Feedback is { } fb)
-                        ShowExcludeFeedback(fb);
-                    return;
-                }
-
-                // Service persisted successfully; sync the dialog model.
-                var set = topics.ToHashSet(StringComparer.Ordinal);
-                _selectedConnection.TopicExcludes.RemoveAll(s => set.Contains(s));
-                SyncSessionStateTopicExcludes();
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Failed to remove excludes: {ex.Message}", Severity.Error);
-            }
-        }
+            await RemoveExcludeLiveAsync(topics);
         else
-        {
-            // Inactive connection: transactional — persist a candidate first.
-            var set = topics.ToHashSet(StringComparer.Ordinal);
-            var candidate = _selectedConnection.Clone();
-            candidate.TopicExcludes.RemoveAll(s => set.Contains(s));
-            try
-            {
-                await ConnectionSettings.AddConnectionAsync(candidate);
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Failed to remove excludes: {ex.Message}", Severity.Error);
-                return;
-            }
-
-            _selectedConnection.TopicExcludes.RemoveAll(s => set.Contains(s));
-            SyncSessionStateTopicExcludes();
-        }
+            await RemoveExcludeOfflineAsync(topics);
     }
 
     private void ShowExcludeFeedback(Core.UserNotification feedback) =>

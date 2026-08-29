@@ -67,3 +67,14 @@
     color: var(--mud-palette-primary);
     font-weight: 600;
 }
+
+.client-cert-revert-btn {
+    font-size: 0.8125rem;
+    text-transform: none;
+    color: var(--mud-palette-text-secondary);
+    transition: color 150ms ease-out;
+}
+
+.client-cert-revert-btn:hover {
+    color: var(--mud-palette-text-primary);
+}

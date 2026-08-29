@@ -108,6 +108,17 @@
                                   Label="@(_certInputMode == CertificateInputMode.Pfx ? "PFX Password" : "Key Password (if encrypted)")"
                                   Required="false"
                                   Class="mt-2" />
+
+        @if (HasPendingChange)
+        {
+            <MudButton Variant="Variant.Text"
+                       StartIcon="@Icons.Material.Filled.Undo"
+                       Size="Size.Small"
+                       OnClick="@RevertCertificateChanges"
+                       Class="mt-1 client-cert-revert-btn">
+                Revert changes
+            </MudButton>
+        }
     }
 
     @if (_certError is not null && !_certificateUnavailable)
@@ -120,6 +131,8 @@
 @code {
     [Parameter, EditorRequired] public Connection Connection { get; set; } = null!;
     [Parameter] public EventCallback OnStateChanged { get; set; }
+    [Parameter] public EventCallback OnRevertRequested { get; set; }
+    [Parameter] public EventCallback<string?> OnStagedAssetCleanupRequested { get; set; }
     [Parameter] public bool Visible { get; set; } = true;
 
     private CertificateInputMode _certInputMode = CertificateInputMode.Pfx;
@@ -131,6 +144,9 @@
     private bool _certificateUnavailable;
     private string? _previousAssetId;
     private bool _certificateRemoved;
+    private bool _baselineCertificateUnavailable;
+    private string? _baselineCertError;
+    private string? _baselinePreviousAssetId;
     private const long MaxCertFileSize = 1024 * 1024; // 1 MB
 
     public bool HasPendingChange =>
@@ -165,6 +181,9 @@
         _certPassword = "";
         _certError = error;
         _certificateUnavailable = unavailable;
+        _baselineCertificateUnavailable = unavailable;
+        _baselineCertError = error;
+        _baselinePreviousAssetId = previousAssetId;
     }
 
     public void ClearStagedAfterPersist(string? newPreviousAssetId)
@@ -175,6 +194,12 @@
         _certPassword = "";
         _certificateRemoved = false;
         _previousAssetId = newPreviousAssetId;
+        // Update baseline to reflect the new persisted state
+        _baselinePreviousAssetId = newPreviousAssetId;
+        _baselineCertificateUnavailable = false;
+        _baselineCertError = null;
+        _certError = null;
+        _certificateUnavailable = false;
     }
 
     public void ClearStagedFiles()
@@ -235,6 +260,23 @@
         _certificateRemoved = true;
         _certificateUnavailable = false;
         Connection.ClientCertificateAssetId = null;
+        NotifyStateChanged();
+    }
+
+    private async Task RevertCertificateChanges()
+    {
+        _pfxFileBytes = null;
+        _pemCertFileBytes = null;
+        _pemKeyFileBytes = null;
+        _certPassword = "";
+        _certificateRemoved = false;
+        _certError = _baselineCertError;
+        _certificateUnavailable = _baselineCertificateUnavailable;
+        _previousAssetId = _baselinePreviousAssetId;
+        // Restore the parent model's asset ID to match baseline
+        Connection.ClientCertificateAssetId = _baselinePreviousAssetId;
+        if (OnRevertRequested.HasDelegate)
+            await OnRevertRequested.InvokeAsync();
         NotifyStateChanged();
     }
 

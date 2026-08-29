@@ -61,6 +61,30 @@ public class MauiCertificateAssetStore : ICertificateAssetStore
     public Task<IReadOnlyList<(Guid OwnerId, string AssetId)>> ListAssetsAsync()
         => _store.ListAssetsAsync();
 
+    public async Task<string?> DuplicateAsync(Guid sourceOwnerId, string sourceAssetId, Guid targetOwnerId)
+    {
+        var staged = await _pipeline.DuplicateStagedAsync(sourceOwnerId, sourceAssetId, targetOwnerId);
+        if (staged is null) return null;
+
+        var (newAssetId, tempPath) = staged.Value;
+
+        if (!_fileProtector.ApplyProtections(tempPath))
+        {
+            await CleanupStagedOrQuarantineAsync(tempPath, newAssetId, "iOS file protections failed on duplicate");
+            return null;
+        }
+
+        try
+        {
+            return await _pipeline.PublishAsync(newAssetId, tempPath);
+        }
+        catch (Exception ex)
+        {
+            await CleanupStagedOrQuarantineAsync(tempPath, newAssetId, $"PublishAsync failed on duplicate: {ex.Message}");
+            return null;
+        }
+    }
+
     private async Task CleanupStagedOrQuarantineAsync(string tempPath, string assetId, string reason)
     {
         bool tempDeleted = _fileProtector.TryDelete(tempPath);

@@ -259,6 +259,84 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         return results;
     }
 
+    public async Task<string?> DuplicateAsync(Guid sourceOwnerId, string sourceAssetId, Guid targetOwnerId)
+    {
+        var staged = await DuplicateStagedAsync(sourceOwnerId, sourceAssetId, targetOwnerId);
+        if (staged is null) return null;
+        var (newAssetId, tempPath) = staged.Value;
+        try
+        {
+            return await PublishAsync(newAssetId, tempPath);
+        }
+        catch
+        {
+            TryDelete(tempPath);
+            try { await _envelopeKeyStore.RemoveAsync(CertificateAssetBlobCodec.EnvelopeKey(newAssetId)); } catch { /* best-effort */ }
+            return null;
+        }
+    }
+
+    public async Task<(string AssetId, string TempPath)?> DuplicateStagedAsync(
+        Guid sourceOwnerId, string sourceAssetId, Guid targetOwnerId)
+    {
+        ValidateAssetId(sourceAssetId);
+        var sourcePath = Path.Combine(CertificatesDirectory, $"cert-{sourceAssetId}.bin");
+        if (!File.Exists(sourcePath)) return null;
+
+        byte[] sourceBlob;
+        try { sourceBlob = await File.ReadAllBytesAsync(sourcePath); } catch { return null; }
+        if (!CertificateAssetBlobCodec.HasMinimumBlobLength(sourceBlob)) return null;
+
+        if (!CertificateAssetBlobCodec.TryParseHeader(sourceBlob, out var sourceHeader)
+            || !Guid.TryParse(sourceHeader.AssetId, out var parsedAssetId)
+            || parsedAssetId.ToString("D") != sourceAssetId
+            || !Guid.TryParse(sourceHeader.Owner, out var parsedOwner)
+            || parsedOwner != sourceOwnerId)
+            return null;
+
+        if (!CertificateAssetBlobCodec.TrySplit(sourceBlob, out var sourceParts)) return null;
+
+        var envelope = await ReadEnvelopeAsync(sourceAssetId);
+        if (envelope is null) return null;
+        var (sourceKey, internalPassword) = envelope.Value;
+
+        var sourceAad = CertificateAssetBlobCodec.BuildAad(
+            sourceAssetId, sourceHeader.AssetId, sourceHeader.Owner, sourceHeader.Version);
+        if (!CertificateAssetBlobCodec.TryDecrypt(sourceKey, sourceParts, sourceAad, out var pfxBytes))
+            return null;
+
+        var newAssetId = Guid.NewGuid().ToString("D");
+        var newEncryptionKey = RandomNumberGenerator.GetBytes(32);
+        var newHeader = CertificateAssetBlobCodec.BuildHeader(newAssetId, targetOwnerId);
+        var newAad = CertificateAssetBlobCodec.BuildAad(
+            newAssetId, newAssetId, targetOwnerId.ToString("D"), CertificateAssetBlobCodec.Version);
+        var newEncrypted = CertificateAssetBlobCodec.Encrypt(newEncryptionKey, pfxBytes, newAad);
+        var newBlob = CertificateAssetBlobCodec.Assemble(newHeader, newEncrypted);
+        var tempPath = Path.Combine(CertificatesDirectory, $"cert-{newAssetId}.bin.tmp");
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempPath, newBlob);
+            RestrictFilePermissions(tempPath);
+
+            var envelopeJson = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                v = CertificateAssetBlobCodec.Version,
+                k = Convert.ToBase64String(newEncryptionKey),
+                p = internalPassword
+            });
+            await _envelopeKeyStore.SetAsync(CertificateAssetBlobCodec.EnvelopeKey(newAssetId), envelopeJson);
+        }
+        catch
+        {
+            TryDelete(tempPath);
+            try { await _envelopeKeyStore.RemoveAsync(CertificateAssetBlobCodec.EnvelopeKey(newAssetId)); } catch { /* best-effort rollback */ }
+            return null;
+        }
+
+        return (newAssetId, tempPath);
+    }
+
     private static void RestrictFilePermissions(string path)
     {
         if (!OperatingSystem.IsWindows())

@@ -1,9 +1,6 @@
 @using Microsoft.Extensions.Logging
-@using MQTTnet
-@using MQTTnet.Protocol
 @using MudBlazor.Utilities
 @using MqttProbe.Core.Services.Configuration
-@using MqttProbe.Core.Services.Plugins.Protobuf
 @using MqttProbe.Core.Services.Security
 @implements IAsyncDisposable
 @inject IMessageStoreManager MessageStoreManagerService
@@ -22,15 +19,18 @@
 @inject IConnectionSessionLifecycle SessionLifecycle
 @inject ICertificateAssetStore CertStore
 @inject ISnackbar Snackbar
-<MudDialog>
+<MudDialog OnBackdropClick="OnBackdropClickAsync">
     <DialogContent>
-        <div class="connection-dialog-content">
+        <div class="connection-dialog-content" @onkeydown="HandleDialogKeyDown" tabindex="-1">
             <ConnectionDialogHeader Connections="@ConnectionSettings.Connections"
-                                    Selected="@_savedConnectionForSelector"
-                                    SelectedChanged="ConnectionChanged!"
-                                    CanSave="@_canSave"
+                                     Selected="@_savedConnectionForSelector"
+                                     SelectedChanged="ConnectionChanged!"
+                                     SelectorKey="@_selectorGeneration"
+                                     CanSave="@_canSave"
+                                    CanCopy="@(!string.IsNullOrWhiteSpace(_selectedConnection.Name))"
                                     CanDelete="@_canDelete"
-                                    OnAdd="Add"
+                                    OnAdd="@(async () => await Add())"
+                                    OnCopy="@(async () => await CopyConnection())"
                                     OnSave="@(async () => await Save(closeDialog: false))"
                                     OnDelete="@(async () => await Delete())" />
             <MudForm Model="@_selectedConnection" @ref="@_form"
@@ -52,9 +52,11 @@
                     <MudTabPanel Text="Security">
                         <ConnectionSecurityFields Connection="@_selectedConnection" />
                         <ConnectionCertificateSection @ref="_certSection"
-                                                      Connection="@_selectedConnection"
-                                                      Visible="_selectedConnection.UseTls"
-                                                      OnStateChanged="UpdateActionStates" />
+                                                       Connection="@_selectedConnection"
+                                                       Visible="_selectedConnection.UseTls"
+                                                       OnStateChanged="UpdateActionStates"
+                                                       OnStagedAssetCleanupRequested="HandleCertStagedAssetCleanup"
+                                                       OnRevertRequested="HandleCertRevert" />
                     </MudTabPanel>
                     <MudTabPanel Text="On Connect">
                         <ConnectionOnConnectTab AutoResubscribe="@UiSettings.Ui.AutoResubscribe"
@@ -68,6 +70,12 @@
                     </MudTabPanel>
                 </MudTabs>
                 <div class="connection-actions-footer">
+                    @if (_nameCollisionError is not null)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined" Class="mb-1">
+                            @_nameCollisionError
+                        </MudAlert>
+                    }
                     @if (_connectionState == ConnectionState.Connecting)
                     {
                         <div class="d-flex align-center gap-2">
@@ -78,6 +86,8 @@
                     else
                     {
                         <div class="connection-actions-footer-cta">
+                            <MudButton Variant="Variant.Text" OnClick="@(async () => await RequestClose())"
+                                       Class="mr-2">Cancel</MudButton>
                             <AppPrimaryButton title="Connect" MinWidth="true"
                                         StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect)"
                                         OnClick="@(async () => await Connect())">Connect</AppPrimaryButton>
@@ -108,9 +118,22 @@
     private int _activeTabIndex;
     private CertificateSessionResource? _activeCertResource;
     private string? _stagedAssetId;
+    private Guid _stagedAssetOwnerId;
     private ConnectionCertificateSection? _certSection;
 
+    private Connection? _pendingAttemptConnection;
+    private Connection? _pendingAttemptSavedSelector;
+
+    private Connection _baselineConnection = new();
+    private bool _baselineCertHadPendingChange;
+    private string? _baselineStagedAssetId;
+    private string? _nameCollisionError;
+    private int _selectorGeneration;
+
     internal Connection SelectedConnectionForTests => _selectedConnection;
+    internal Connection? SavedConnectionForSelectorTests => _savedConnectionForSelector;
+    internal int ActiveTabIndexForTests => _activeTabIndex;
+    internal string? NameCollisionErrorForTests => _nameCollisionError;
 
     internal void SetStagedCertificate(byte[]? pfxBytes, byte[]? pemCertBytes, byte[]? pemKeyBytes, string password)
     {
@@ -129,116 +152,82 @@
         StateHasChanged();
     }
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         ManagedMqttClient.ConnectingFailedAsync += OnConnectingFailed;
         ManagedMqttClient.ConnectedAsync += OnConnected;
-        base.OnInitialized();
-    }
 
-    public async ValueTask DisposeAsync()
-    {
-        ManagedMqttClient.ConnectingFailedAsync -= OnConnectingFailed;
-        ManagedMqttClient.ConnectedAsync -= OnConnected;
-        if (_activeCertResource is not null)
+        var preselected = false;
+        if (SessionState.LastSuccessfulConnectionId is { } lastId)
         {
-            _activeCertResource.Dispose();
-            _activeCertResource = null;
-        }
-        if (_stagedAssetId is not null)
-        {
-            try { await CertStore.DeleteAsync(_selectedConnection.Id, _stagedAssetId); } catch { /* unreferenced staged asset */ }
-            _stagedAssetId = null;
-        }
-    }
-
-    private void FormChanged(FormFieldChangedEventArgs args)
-    {
-        UpdateActionStates();
-    }
-
-    // MudForm starts out valid and IsValidChanged only fires on transitions, so a fresh
-    // dialog filled with valid input never receives the event. Validity is therefore
-    // derived from the model on every field change; the form's own report still vetoes
-    // value-conversion errors (e.g. non-numeric Port input) the model never sees.
-    private void UpdateActionStates()
-    {
-        _isFormValid = _formReportsValid && _connectionValidator.Validate(_selectedConnection).IsValid;
-        _canConnect = _isFormValid;
-        UpdateCanSave();
-        StateHasChanged();
-    }
-
-    private void UpdateCanSave()
-    {
-        var matchesSaved = ConnectionSettings.Connections.Any(conn => conn.Equals(_selectedConnection));
-        _canSave = (!matchesSaved || HasPendingCertificateChange()) && _isFormValid;
-    }
-
-    // Certificate edits live outside the Connection model (staged cert/key files, cert
-    // password, pending removal), so Connection.Equals cannot see them. Treat any such
-    // pending change as dirty so Save enables and the connect-time "unsaved changes"
-    // prompt fires, matching how ordinary fields behave.
-    private bool HasPendingCertificateChange() =>
-        (_certSection?.HasPendingChange ?? false) || _stagedAssetId is not null;
-
-    private async Task<bool> ValidateForm()
-    {
-        await _form.ValidateAsync();
-        return _form.IsValid;
-    }
-
-    private async Task<bool> Save(bool closeDialog = true)
-    {
-        if (!await ValidateForm()) return false;
-        var connection = _selectedConnection.Clone();
-        var previousAssetId = _certSection?.PreviousAssetId;
-        string? stagedAssetId = null;
-        if (_certSection is not null && _certSection.HasStagedBytes)
-        {
-            stagedAssetId = await _certSection.TryImportStagedAsync(connection.Id, _stagedAssetId);
-            if (stagedAssetId is null) { StateHasChanged(); return false; }
-            _stagedAssetId = stagedAssetId;
-            connection.ClientCertificateAssetId = stagedAssetId;
-        }
-        try { await ConnectionSettings.AddConnectionAsync(connection); }
-        catch (Exception ex)
-        {
-            if (stagedAssetId is not null)
+            var saved = ConnectionSettings.Connections.FirstOrDefault(c => c.Id == lastId);
+            if (saved is not null)
             {
-                try { await CertStore.DeleteAsync(connection.Id, stagedAssetId); } catch { /* save failed */ }
-                _stagedAssetId = null;
+                _savedConnectionForSelector = saved;
+                _selectedConnection = saved.Clone();
+                _canDelete = true;
+                preselected = true;
             }
-            _certSection?.SetError($"Failed to save: {ex.Message}");
-            StateHasChanged();
-            return false;
         }
-        if (previousAssetId is not null)
+
+        if (!preselected && SessionState.LastSuccessfulConnectionSnapshot is { } snapshot)
         {
-            bool replacedByNew = stagedAssetId is not null && previousAssetId != stagedAssetId;
-            bool removedByUser = stagedAssetId is null && connection.ClientCertificateAssetId is null;
-            if (replacedByNew || removedByUser)
-                try { await CertStore.DeleteAsync(connection.Id, previousAssetId); } catch { /* replaced asset */ }
+            _savedConnectionForSelector = null;
+            _selectedConnection = new Connection
+            {
+                Id = snapshot.Id,
+                Name = snapshot.Name,
+                Host = snapshot.Host,
+                Port = snapshot.Port,
+                User = snapshot.User,
+                Password = snapshot.Password,
+                Protocol = snapshot.Protocol,
+                MqttVersion = snapshot.MqttVersion,
+                ClientId = snapshot.ClientId,
+                WebsocketBasePath = snapshot.WebsocketBasePath,
+                UseTls = snapshot.UseTls,
+                AllowUntrustedCertificate = snapshot.AllowUntrustedCertificate,
+                ClientCertificateAssetId = snapshot.ClientCertificateAssetId,
+                ConnectTimeout = snapshot.ConnectTimeout,
+                ReconnectDelay = snapshot.ReconnectDelay,
+                KeepAlivePeriod = snapshot.KeepAlivePeriod,
+                CleanStart = snapshot.CleanStart,
+                SessionExpiryIntervalSeconds = snapshot.SessionExpiryIntervalSeconds,
+                SubscribedTopics = snapshot.SubscribedTopics.Select(t => new SubscribedTopic { Topic = t.Topic, QualityOfServiceLevel = t.QualityOfServiceLevel }).ToList(),
+                TopicExcludes = [.. snapshot.TopicExcludes]
+            };
+            _canDelete = false;
+            preselected = true;
         }
-        _stagedAssetId = null;
-        _certSection?.ClearStagedAfterPersist(connection.ClientCertificateAssetId);
-        Logger.LogInformation("Connection saved: {Name} ({Host}:{Port})", connection.Name, connection.Host, connection.Port);
-        _savedConnectionForSelector = ConnectionSettings.Connections.FirstOrDefault(c => c.Id == connection.Id) ?? connection;
-        _selectedConnection = _savedConnectionForSelector.Clone();
-        _canDelete = true;
-        UpdateActionStates();
-        if (closeDialog) MudDialog.Close(DialogResult.Ok(connection));
-        return true;
+
+        if (preselected)
+            await InitializePreselectedConnection();
+
+        CaptureBaseline();
+        _initializedPreselection = preselected;
+        await base.OnInitializedAsync();
     }
 
-    internal async Task ConnectionChanged(Connection value)
+    private bool _initializedPreselection;
+    private bool _preselectionCertInitialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await _form.ResetValidationAsync();
-        _savedConnectionForSelector = value;
-        _selectedConnection = value.Clone();
-        _activeTabIndex = 0;
-        _formReportsValid = true;
-        _canDelete = true;
+        if (firstRender && _initializedPreselection && !_preselectionCertInitialized)
+        {
+            _preselectionCertInitialized = true;
+            await InitializePreselectedCert();
+        }
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    private async Task InitializePreselectedConnection()
+    {
+        UpdateActionStates();
+    }
+
+    private async Task InitializePreselectedCert()
+    {
         var previousAssetId = _selectedConnection.ClientCertificateAssetId;
         var unavailable = false;
         string? certError = null;
@@ -254,26 +243,127 @@
             else { bundle.Certificate.Dispose(); }
         }
         _certSection?.ResetForConnection(previousAssetId, unavailable, certError);
+        CaptureBaseline();
         UpdateActionStates();
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task Delete()
+    public async ValueTask DisposeAsync()
     {
-        Logger.LogInformation("Connection deleted: {Name} ({Host}:{Port})", _selectedConnection.Name, _selectedConnection.Host, _selectedConnection.Port);
-        await ConnectionSettings.RemoveConnectionAsync(_selectedConnection);
-        Add();
+        ManagedMqttClient.ConnectingFailedAsync -= OnConnectingFailed;
+        ManagedMqttClient.ConnectedAsync -= OnConnected;
+        if (_activeCertResource is not null)
+        {
+            _activeCertResource.Dispose();
+            _activeCertResource = null;
+        }
+        if (_stagedAssetId is not null)
+        {
+            try { await CertStore.DeleteAsync(_stagedAssetOwnerId, _stagedAssetId); } catch { /* unreferenced staged asset */ }
+            _stagedAssetId = null;
+        }
     }
 
-    private void Add()
+    private void CaptureBaseline()
     {
-        _savedConnectionForSelector = null;
-        _selectedConnection = new Connection();
-        _activeTabIndex = 0;
-        _formReportsValid = true;
-        _canDelete = false;
-        _certSection?.ResetForConnection(null);
+        _baselineConnection = _selectedConnection.Clone();
+        _baselineCertHadPendingChange = HasPendingCertificateChange();
+        _baselineStagedAssetId = _stagedAssetId;
+    }
+
+    private bool IsDirty =>
+        !_baselineConnection.Equals(_selectedConnection) ||
+        !_baselineConnection.SubscribedTopics
+            .Select(t => (t.Topic, t.QualityOfServiceLevel))
+            .SequenceEqual(_selectedConnection.SubscribedTopics
+                .Select(t => (t.Topic, t.QualityOfServiceLevel))) ||
+        HasPendingCertificateChange() != _baselineCertHadPendingChange ||
+        _stagedAssetId != _baselineStagedAssetId;
+
+    private void CheckNameUniqueness()
+    {
+        var trimmed = _selectedConnection.Name.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            _nameCollisionError = null;
+            return;
+        }
+
+        if (!IsDirty)
+        {
+            _nameCollisionError = null;
+            return;
+        }
+
+        var selfId = _selectedConnection.Id;
+        var collision = ConnectionSettings.Connections.Any(c =>
+            c.Id != selfId &&
+            string.Equals(c.Name.Trim(), trimmed, StringComparison.OrdinalIgnoreCase));
+
+        _nameCollisionError = collision
+            ? $"A connection named \"{trimmed}\" already exists."
+            : null;
+    }
+
+    private async Task<bool> GuardIfDirty()
+    {
+        if (!IsDirty) return true;
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true };
+        var choice = await DialogService.ShowMessageBoxAsync(
+            "Unsaved changes",
+            "You have unsaved changes that will be discarded.",
+            yesText: "Discard", noText: "Cancel", options: options);
+
+        return choice is true;
+    }
+
+    private async Task RequestClose()
+    {
+        if (await GuardIfDirty())
+            MudDialog.Cancel();
+    }
+
+    private async Task OnBackdropClickAsync()
+    {
+        await RequestClose();
+    }
+
+    private async Task HandleDialogKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            await RequestClose();
+    }
+
+    private void FormChanged(FormFieldChangedEventArgs args)
+    {
         UpdateActionStates();
     }
 
+    private void UpdateActionStates()
+    {
+        _isFormValid = _formReportsValid && _connectionValidator.Validate(_selectedConnection).IsValid;
+        _canConnect = _isFormValid;
+        CheckNameUniqueness();
+        UpdateCanSave();
+        StateHasChanged();
+    }
+
+    private void UpdateCanSave()
+    {
+        var matchesSaved = ConnectionSettings.Connections.Any(conn => conn.Equals(_selectedConnection));
+        _canSave = (!matchesSaved || HasPendingCertificateChange()) && _isFormValid && _nameCollisionError is null;
+    }
+
+    private bool HasPendingCertificateChange() =>
+        (_certSection?.HasPendingChange ?? false) || _stagedAssetId is not null;
+
+    private async Task<bool> ValidateForm()
+    {
+        await _form.ValidateAsync();
+        return _form.IsValid;
+    }
+
+    internal bool ValidateModelOnly() =>
+        _connectionValidator.Validate(_selectedConnection).IsValid;
 }

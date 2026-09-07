@@ -9,12 +9,12 @@
     <PackageVersion Include="Blazor-ApexCharts" Version="7.0.0" />
     <PackageVersion Include="Blazor.Lucide" Version="1.0.6" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
-    <PackageVersion Include="Google.Protobuf" Version="3.35.1" />
-    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.159" />
-    <PackageVersion Include="protobuf-net.Reflection" Version="3.3.8" />
+    <PackageVersion Include="Google.Protobuf" Version="3.36.1" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.224" />
+    <PackageVersion Include="protobuf-net.Reflection" Version="3.4.21" />
     <PackageVersion Include="MessagePack" Version="3.1.8" />
-    <PackageVersion Include="MudBlazor" Version="9.8.0" />
-    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.32.0.713" />
+    <PackageVersion Include="MudBlazor" Version="9.9.0" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.33.0.1635" />
     <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.11" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.11" />
     <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.11" />
@@ -30,18 +30,18 @@
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="10.0.11" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.11" />
     <!-- ============================================================ -->
     <!-- MAUI                                                          -->
     <!-- ============================================================ -->
-    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.90" />
-    <PackageVersion Include="Microsoft.Maui.Controls.Compatibility" Version="10.0.90" />
-    <PackageVersion Include="Microsoft.Maui.Essentials" Version="10.0.90" />
-    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.90" />
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.100" />
+    <PackageVersion Include="Microsoft.Maui.Controls.Compatibility" Version="10.0.100" />
+    <PackageVersion Include="Microsoft.Maui.Essentials" Version="10.0.100" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.100" />
     <!-- ============================================================ -->
     <!-- Photino                                                       -->
     <!-- ============================================================ -->
@@ -53,8 +53,8 @@
     <!-- ============================================================ -->
     <!-- Tests                                                         -->
     <!-- ============================================================ -->
-    <PackageVersion Include="AngleSharp" Version="1.7.1" />
-    <PackageVersion Include="AwesomeAssertions" Version="9.5.0" />
+    <PackageVersion Include="AngleSharp" Version="1.8.0" />
+    <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
     <PackageVersion Include="bunit" Version="2.9.0" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="JunitXml.TestLogger" Version="8.0.0" />
@@ -63,7 +63,7 @@
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="NUnit" Version="4.6.1" />
     <PackageVersion Include="NUnit.Analyzers" Version="4.14.0" />
-    <PackageVersion Include="NUnit3TestAdapter" Version="6.2.0" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
     <PackageVersion Include="Microsoft.Playwright.NUnit" Version="1.60.0" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.60.0" />
     <PackageVersion Include="Testcontainers" Version="4.14.0" />

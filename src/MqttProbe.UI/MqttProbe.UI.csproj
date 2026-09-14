@@ -44,6 +44,8 @@
         </PackageReference>
         <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" />
         <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+        <PackageReference Include="Microsoft.Extensions.Configuration" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
         <PackageReference Include="MudBlazor" />
         <PackageReference Include="SonarAnalyzer.CSharp">
           <PrivateAssets>all</PrivateAssets>

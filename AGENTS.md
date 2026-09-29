@@ -38,6 +38,15 @@
 - Browser-verify layout changes; bUnit does not prove dimensions, clipping, overflow, or scrollbar behavior.
 - Test layout changes with long topics, overflowing lists, expanded and collapsed panels, and a short viewport. Use DOM measurements when diagnosing constrained flex layouts.
 
+### Test filtering and build/test integrity
+
+- Command-line filters (`--filter`, `--test-adapter-path`, repeated runs of a single test) are fine for focused TDD, diagnosis, repetition, or documented platform/category splits. Report the exact filter used. Never describe a filtered run as "the full suite."
+- Final validation must run the complete, unfiltered Core and UI suites (plus any required integration gates) before declaring the change ready.
+- Never add persistent source or test exclusions such as `<Compile Remove>` or alter project test discovery to bypass failures.
+- Do not add `NoWarn`, analyzer suppressions, or skip annotations merely to make a lane pass.
+- If concurrent or dependent work causes compilation failures, report blocked and wait or reconcile rather than changing the build graph.
+- Investigate unexplained test-count drops. Use `dotnet test --list-tests` after any project-file or test-discovery change to confirm the expected set still appears.
+
 ## When to add integration tests
 
 Unit and UI tests are the default. Also add or extend tests under `tests/MqttProbe.IntegrationTests` when the change touches **real MQTT broker boundary** behavior that fakes cannot prove, for example:
@@ -55,42 +64,19 @@ Rules:
 - **Still write the test** even if you cannot run Docker locally. CI runs the integration job; local skip-without-Docker is not a reason to omit the test.
 - If unsure whether a change is broker-boundary, prefer adding a focused integration test over assuming unit coverage is enough.
 
-## Agent Browser acceptance testing (Windows)
+## Browser acceptance testing (Windows)
 
-### Launching the app
-
-- Start the long-running ASP.NET app via a batch file that redirects internally. Launch a hidden `cmd.exe /c` with `Start-Process` and save the launcher PID (not PowerShell's `$pid`).
-- Pass explicit `--urls`. Bounded-poll the port before proceeding.
-- Verify port ownership before assuming a listener belongs to mqttprobe; inspect the process command line if unsure.
-- If the app is already running on the expected port, reuse it; do not start a duplicate.
-
-### Agent Browser setup
-
-- The `agent-browser` executable may not be on PATH. Use the full installed path (e.g. `agent-browser-win32-x64.exe`).
-- For visible user-observable testing, create one named session with `--headed`. If the named session already exists, reuse it; do not start a duplicate.
-- A visible browser window does not mean an agent is driving it. Every command must use the same `--session` and `--headed` flags plus an actual operation.
-- Always include an actual command when invoking the tool. In PowerShell use the call operator `&`, not `&&`.
-- Quote `@`-prefixed refs (e.g. `"@e13"`) in PowerShell; bare `@e13` is parsed as splatting.
-
-### Snapshots and interaction
-
-- Take fresh snapshots after renders; stale DOM refs may fail.
-- Scope duplicate labels to the active dialog.
-- A covered-by-overlay result usually means a duplicate background control was selected. Scope to the active dialog and do not bypass via JS click.
-- Prefer role, label, or scoped selectors over positional ones.
-- `scroll down` may target the page rather than a nested dialog; verify the intended scroll owner before asserting scroll behavior.
-
-### Broker connections and errors
-
-- Use bounded waits for broker connections. Capture exact errors and evidence on failure.
-- If one configured broker fails, try another before giving up. Continue non-connect test cases if a broker connection is blocked.
-
-### Cleanup
-
-- Close the named browser session, then stop the saved launcher tree with `taskkill` and verify the port stopped listening.
-- If the launcher PID is stale but the port remains open, inspect the listener process command line. Only terminate it when confirmed to be this repo's app. Never kill unrelated dotnet, MSBuild, or browser infrastructure.
-
-### Viewport and screenshots
-
-- Headed `set viewport` may EOF; do not claim responsive testing unless the viewport change is actually verified.
-- Save screenshots under the approved temp directory, not inside the repo.
+- Prefer Playwright for .NET for browser acceptance. An opt-in manual browser-smoke project exists at `tests/MqttProbe.BrowserSmokeTests/README.md`, deliberately kept out of the solution and CI, so run it only when asked instead of treating it as a default gate. For one-off exploratory checks, keep using a temporary harness under the approved temp directory, outside the repo, and never treat that scratch path as a permanent command or add planning docs for it.
+- Use a fresh browser context per check, with `IgnoreHTTPSErrors = true` for a local CA and no saved auth state unless the test requires it.
+- Bound every wait: action timeout around 15s, navigation timeout 30-45s, and an overall process budget for the run.
+- Launch headed when the check is user-visible, headless otherwise, and report which one ran. Close the browser in `finally`.
+- Click real controls. Dismiss overlays through visible UI (Cancel, close, backdrop) and wait for the overlay to clear before acting underneath; never bypass with a scripted POST or a JS click.
+- After each action, assert the resulting state from a fresh DOM read; a click that returns without error is not evidence. Prefer role, label and scoped selectors, and confirm the interactive UI is live rather than a static render.
+- For redirects and external integrations, assert the actual browser request that was made and the final state reached, not just a click, a 302 Location header or landing on a known page.
+- Prove responsive and layout behaviour by changing the viewport and measuring or asserting the result; cover long topics, overflowing lists and a short viewport.
+- Keep evidence sanitized: network entries as method, status, host and path, screenshots and run logs under the approved temp directory, never inside the repo.
+- Never log query strings, tokens, cookies or passwords; redact before reporting.
+- Start the app once per check with explicit `--urls`, bounded-poll the port, verify port ownership before assuming a listener is this repo's app, and reuse an existing listener instead of starting a duplicate.
+- Use bounded waits for broker connections and capture exact errors; if one configured broker fails, try another and keep running the non-connect cases. Lab-specific flows: see `deploy/authentik/README.md`.
+- After the run, close the browser, stop only the processes this run started, and verify the port stopped listening. Never kill a Docker-owned listener or unrelated dotnet, MSBuild or browser infrastructure.
+- If you stop making progress, report the last action and the blocker instead of idling.

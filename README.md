@@ -65,6 +65,8 @@ See [Getting Started](https://github.com/bluegrassiot/mqttprobe/wiki/01-Getting-
 - [Docker Deployment](https://github.com/bluegrassiot/mqttprobe/wiki/05-Docker-Deployment)
 - [Troubleshooting](https://github.com/bluegrassiot/mqttprobe/wiki/06-Troubleshooting)
 - [Development](https://github.com/bluegrassiot/mqttprobe/wiki/07-Development)
+- [Security and Storage](https://github.com/bluegrassiot/mqttprobe/wiki/08-Security-and-Storage)
+- [OIDC Authentication](https://github.com/bluegrassiot/mqttprobe/wiki/09-OIDC-Authentication)
 
 Website: https://mqttprobe.com
 

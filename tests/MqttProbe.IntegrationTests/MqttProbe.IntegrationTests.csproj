@@ -11,12 +11,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="AngleSharp" />
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="coverlet.collector">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="JunitXml.TestLogger" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="MQTTnet" />
@@ -32,6 +34,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\MqttProbe.Core\MqttProbe.Core.csproj" />
     <ProjectReference Include="..\..\src\MqttProbe.UI\MqttProbe.UI.csproj" />
+    <ProjectReference Include="..\..\src\MqttProbe.Web\MqttProbe.Web.csproj" />
     <ProjectReference Include="..\MqttProbe.TestInfrastructure\MqttProbe.TestInfrastructure.csproj" />
   </ItemGroup>
 

@@ -4,10 +4,6 @@ using MQTTnet.Packets;
 
 namespace MqttProbe.Core.Services.Mqtt;
 
-// Project-owned managed MQTT client on the MQTTnet 5 IMqttClient. Provides the subset of
-// MQTTnet-4 ManagedClient behavior mqttprobe relies on: auto-reconnect with a fixed delay,
-// subscription restore after reconnect, and a bounded publish queue that accepts messages
-// while disconnected and drains on connect.
 public sealed class MqttManagedClient : IMqttManagedClient
 {
     private const int MaxPendingMessages = 1000;
@@ -15,10 +11,12 @@ public sealed class MqttManagedClient : IMqttManagedClient
     private readonly IMqttClient _client;
     private readonly bool _ownsClient;
     private readonly ILogger<MqttManagedClient>? _logger;
+    private readonly ISessionActivityGate _activityGate;
 
     private readonly Lock _sync = new();
     private readonly Dictionary<string, MqttTopicFilter> _subscriptions = new(StringComparer.Ordinal);
     private readonly Queue<MqttApplicationMessage> _pending = new();
+    private readonly SemaphoreSlim _stopSemaphore = new(1, 1);
 
     private MqttManagedClientOptions? _options;
     private CancellationTokenSource? _reconnectCts;
@@ -26,17 +24,17 @@ public sealed class MqttManagedClient : IMqttManagedClient
     private bool _isStarted;
     private bool _disposed;
 
-    public MqttManagedClient(ILogger<MqttManagedClient>? logger = null)
-        : this(new MqttClientFactory().CreateMqttClient(), ownsClient: true, logger)
+    public MqttManagedClient(ILogger<MqttManagedClient>? logger = null, ISessionActivityGate? gate = null)
+        : this(new MqttClientFactory().CreateMqttClient(), ownsClient: true, logger, gate)
     {
     }
 
-    // Test seam.
-    public MqttManagedClient(IMqttClient client, bool ownsClient = false, ILogger<MqttManagedClient>? logger = null)
+    public MqttManagedClient(IMqttClient client, bool ownsClient = false, ILogger<MqttManagedClient>? logger = null, ISessionActivityGate? gate = null)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _ownsClient = ownsClient;
         _logger = logger;
+        _activityGate = gate ?? new AlwaysActiveSessionActivityGate();
 
         _client.ConnectedAsync += OnClientConnectedAsync;
         _client.DisconnectedAsync += OnClientDisconnectedAsync;
@@ -60,16 +58,19 @@ public sealed class MqttManagedClient : IMqttManagedClient
     public async Task StartAsync(MqttManagedClientOptions options, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
+        _activityGate.EnsureActive();
 
         lock (_sync)
         {
             _options = options;
             _isStarted = true;
-#pragma warning disable S6966 // cannot await inside a lock; see StopAsync for the async path
+#pragma warning disable S6966
             _reconnectCts?.Cancel();
 #pragma warning restore S6966
             _reconnectCts?.Dispose();
-            _reconnectCts = new CancellationTokenSource();
+            _reconnectCts = _activityGate.RevocationToken.CanBeCanceled
+                ? CancellationTokenSource.CreateLinkedTokenSource(_activityGate.RevocationToken)
+                : new CancellationTokenSource();
         }
 
         await TryConnectAsync(cancellationToken).ConfigureAwait(false);
@@ -77,38 +78,47 @@ public sealed class MqttManagedClient : IMqttManagedClient
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
-        CancellationTokenSource? cts;
-        lock (_sync)
+        await _stopSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            _isStarted = false;
-            cts = _reconnectCts;
-            _reconnectCts = null;
-            _pending.Clear();
-        }
-
-        if (cts is not null)
-        {
-            // CancelAsync rather than Cancel: registered callbacks then run on the pool
-            // instead of synchronously on the thread calling StopAsync.
-            await cts.CancelAsync().ConfigureAwait(false);
-            cts.Dispose();
-        }
-
-        if (_client.IsConnected)
-        {
-            try
+            CancellationTokenSource? cts;
+            lock (_sync)
             {
-                await _client.DisconnectAsync(new MqttClientDisconnectOptions(), cancellationToken).ConfigureAwait(false);
+                if (!_isStarted)
+                    return;
+                _isStarted = false;
+                cts = _reconnectCts;
+                _reconnectCts = null;
+                _pending.Clear();
             }
-            catch (Exception ex)
+
+            if (cts is not null)
             {
-                _logger?.LogWarning(ex, "Error while disconnecting MQTT client during stop");
+                await cts.CancelAsync().ConfigureAwait(false);
+                cts.Dispose();
             }
+
+            if (_client.IsConnected)
+            {
+                try
+                {
+                    await _client.DisconnectAsync(new MqttClientDisconnectOptions(), cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Error while disconnecting MQTT client during stop");
+                }
+            }
+        }
+        finally
+        {
+            _stopSemaphore.Release();
         }
     }
 
     public async Task SubscribeAsync(IEnumerable<MqttTopicFilter> topicFilters, CancellationToken cancellationToken = default)
     {
+        _activityGate.EnsureActive();
         var filters = topicFilters.ToList();
         if (filters.Count == 0)
             return;
@@ -124,12 +134,15 @@ public sealed class MqttManagedClient : IMqttManagedClient
             var builder = new MqttClientSubscribeOptionsBuilder();
             foreach (var filter in filters)
                 builder.WithTopicFilter(filter);
-            await _client.SubscribeAsync(builder.Build(), cancellationToken).ConfigureAwait(false);
+            using var linked = LinkWithRevocation(cancellationToken);
+            var token = linked?.Token ?? cancellationToken;
+            await _client.SubscribeAsync(builder.Build(), token).ConfigureAwait(false);
         }
     }
 
     public async Task UnsubscribeAsync(IEnumerable<string> topics, CancellationToken cancellationToken = default)
     {
+        _activityGate.EnsureActive();
         var list = topics.ToList();
         if (list.Count == 0)
             return;
@@ -145,17 +158,22 @@ public sealed class MqttManagedClient : IMqttManagedClient
             var builder = new MqttClientUnsubscribeOptionsBuilder();
             foreach (var topic in list)
                 builder.WithTopicFilter(topic);
-            await _client.UnsubscribeAsync(builder.Build(), cancellationToken).ConfigureAwait(false);
+            using var linked = LinkWithRevocation(cancellationToken);
+            var token = linked?.Token ?? cancellationToken;
+            await _client.UnsubscribeAsync(builder.Build(), token).ConfigureAwait(false);
         }
     }
 
     public async Task EnqueueAsync(MqttApplicationMessage applicationMessage, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(applicationMessage);
+        _activityGate.EnsureActive();
 
         if (_client.IsConnected)
         {
-            await _client.PublishAsync(applicationMessage, cancellationToken).ConfigureAwait(false);
+            using var linked = LinkWithRevocation(cancellationToken);
+            var token = linked?.Token ?? cancellationToken;
+            await _client.PublishAsync(applicationMessage, token).ConfigureAwait(false);
             return;
         }
 
@@ -184,9 +202,18 @@ public sealed class MqttManagedClient : IMqttManagedClient
         if (options is null)
             return;
 
+        var linkedToken = _activityGate.RevocationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _activityGate.RevocationToken)
+            : null;
         try
         {
-            await _client.ConnectAsync(options.ClientOptions, cancellationToken).ConfigureAwait(false);
+            var token = linkedToken?.Token ?? cancellationToken;
+            await _client.ConnectAsync(options.ClientOptions, token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_activityGate.RevocationToken.IsCancellationRequested)
+        {
+            // Revocation during initial connect is expected session termination;
+            // do not schedule reconnect or raise ConnectingFailed.
         }
         catch (Exception ex)
         {
@@ -194,12 +221,12 @@ public sealed class MqttManagedClient : IMqttManagedClient
             await RaiseAsync(ConnectingFailedAsync, new MqttConnectingFailedEventArgs(ex), nameof(ConnectingFailedAsync))
                 .ConfigureAwait(false);
         }
+        finally
+        {
+            linkedToken?.Dispose();
+        }
     }
 
-    // Subscribers are observers: one that throws must not starve the rest of the multicast
-    // list, and must never take reconnect down with it. MQTTnet swallows exceptions thrown
-    // out of its own event handlers, so an escaping fault here disappears silently and the
-    // client stops retrying forever.
     private async Task RaiseAsync<TArgs>(Func<TArgs, Task>? handler, TArgs args, string eventName)
     {
         if (handler is null)
@@ -243,7 +270,7 @@ public sealed class MqttManagedClient : IMqttManagedClient
                 started = _isStarted;
             }
 
-            if (!started || _client.IsConnected)
+            if (!started || _client.IsConnected || !_activityGate.IsActive)
                 return;
 
             try
@@ -283,6 +310,18 @@ public sealed class MqttManagedClient : IMqttManagedClient
 
     private async Task OnClientConnectedAsync(MqttClientConnectedEventArgs args)
     {
+        if (!_activityGate.IsActive)
+        {
+            // Connected callback arrived after session revocation. Disconnect immediately
+            // without resubscribing, draining, or emitting any application events.
+            if (_client.IsConnected)
+            {
+                try { await _client.DisconnectAsync(new MqttClientDisconnectOptions(), CancellationToken.None).ConfigureAwait(false); }
+                catch { /* best-effort disconnect after late connect */ }
+            }
+            return;
+        }
+
         await ResubscribeAsync().ConfigureAwait(false);
         await DrainPendingAsync().ConfigureAwait(false);
 
@@ -292,23 +331,26 @@ public sealed class MqttManagedClient : IMqttManagedClient
 
     private async Task OnClientDisconnectedAsync(MqttClientDisconnectedEventArgs args)
     {
-        // Before the subscribers, not after: reconnect is this client's own job and must not
-        // wait on — or be skipped by — observers such as emulator teardown or a Blazor render.
         bool started;
         lock (_sync)
         {
             started = _isStarted;
         }
 
-        if (started)
+        if (started && _activityGate.IsActive)
             StartReconnectLoop();
 
         await RaiseAsync(DisconnectedAsync, args, nameof(DisconnectedAsync)).ConfigureAwait(false);
         await RaiseConnectionStateChangedAsync().ConfigureAwait(false);
     }
 
-    private Task OnClientApplicationMessageReceivedAsync(MqttApplicationMessageReceivedEventArgs args) =>
-        ApplicationMessageReceivedAsync?.Invoke(args) ?? Task.CompletedTask;
+    private Task OnClientApplicationMessageReceivedAsync(MqttApplicationMessageReceivedEventArgs args)
+    {
+        if (!_activityGate.IsActive)
+            return Task.CompletedTask;
+
+        return ApplicationMessageReceivedAsync?.Invoke(args) ?? Task.CompletedTask;
+    }
 
     private async Task ResubscribeAsync()
     {
@@ -322,10 +364,15 @@ public sealed class MqttManagedClient : IMqttManagedClient
 
         try
         {
+            if (!_activityGate.IsActive) return;
             var builder = new MqttClientSubscribeOptionsBuilder();
             foreach (var filter in filters)
                 builder.WithTopicFilter(filter);
-            await _client.SubscribeAsync(builder.Build(), CancellationToken.None).ConfigureAwait(false);
+            await _client.SubscribeAsync(builder.Build(), _activityGate.RevocationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_activityGate.RevocationToken.IsCancellationRequested)
+        {
+            // Revocation during resubscribe is expected; suppress.
         }
         catch (Exception ex)
         {
@@ -339,6 +386,9 @@ public sealed class MqttManagedClient : IMqttManagedClient
     {
         while (true)
         {
+            if (!_activityGate.IsActive)
+                return;
+
             MqttApplicationMessage? message;
             lock (_sync)
             {
@@ -349,7 +399,11 @@ public sealed class MqttManagedClient : IMqttManagedClient
 
             try
             {
-                await _client.PublishAsync(message, CancellationToken.None).ConfigureAwait(false);
+                await _client.PublishAsync(message, _activityGate.RevocationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (_activityGate.RevocationToken.IsCancellationRequested)
+            {
+                return;
             }
             catch (Exception ex)
             {
@@ -368,6 +422,15 @@ public sealed class MqttManagedClient : IMqttManagedClient
     private Task RaiseConnectionStateChangedAsync() =>
         RaiseAsync(ConnectionStateChangedAsync, EventArgs.Empty, nameof(ConnectionStateChangedAsync));
 
+    private CancellationTokenSource? LinkWithRevocation(CancellationToken cancellationToken)
+    {
+        if (!_activityGate.RevocationToken.CanBeCanceled)
+            return null;
+        if (!cancellationToken.CanBeCanceled)
+            return CancellationTokenSource.CreateLinkedTokenSource(_activityGate.RevocationToken);
+        return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _activityGate.RevocationToken);
+    }
+
     public void Dispose()
     {
         CancellationTokenSource? cts;
@@ -383,6 +446,7 @@ public sealed class MqttManagedClient : IMqttManagedClient
 
         cts?.Cancel();
         cts?.Dispose();
+        _stopSemaphore.Dispose();
 
         _client.ConnectedAsync -= OnClientConnectedAsync;
         _client.DisconnectedAsync -= OnClientDisconnectedAsync;

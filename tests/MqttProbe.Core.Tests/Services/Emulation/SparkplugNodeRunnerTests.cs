@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using MqttProbe.Core.Models.Emulation;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Emulation;
+using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.TestInfrastructure.Security;
@@ -63,13 +64,15 @@ public class SparkplugNodeRunnerTests
     {
         var node = Substitute.For<ISparkplugNode, IDisposable>();
         node.IsConnected.Returns(isConnected);
-        _factory.Create(Arg.Any<IReadOnlyList<Metric>>(), Arg.Any<SparkplugSpecificationVersion>())
+        _factory.Create(Arg.Any<IReadOnlyList<Metric>>(), Arg.Any<SparkplugSpecificationVersion>(),
+                Arg.Any<CancellationToken>())
             .Returns(node);
         _factory.Create(
                 Arg.Any<IReadOnlyList<Metric>>(),
                 Arg.Any<SparkplugSpecificationVersion>(),
                 Arg.Any<IReadOnlyList<string>>(),
-                Arg.Any<Func<string, IReadOnlyList<Metric>>>())
+                Arg.Any<Func<string, IReadOnlyList<Metric>>>(),
+                Arg.Any<CancellationToken>())
             .Returns(node);
         return node;
     }
@@ -77,6 +80,10 @@ public class SparkplugNodeRunnerTests
     private SparkplugNodeRunner Runner(
         EmulatorNodeConfig config, Connection connection, params Metric[] knownMetrics) =>
         new(config, _factory, connection, knownMetrics, _certStore, _quarantine, _logger);
+
+    private SparkplugNodeRunner Runner(
+        EmulatorNodeConfig config, Connection connection, ISessionActivityGate? gate, params Metric[] knownMetrics) =>
+        new(config, _factory, connection, knownMetrics, _certStore, _quarantine, _logger, gate);
 
     [Test]
     public async Task StartAsync_WithCertificateAsset_PassesCertificateToNodeOptions()
@@ -247,5 +254,140 @@ public class SparkplugNodeRunnerTests
         published!.Should().HaveCount(1);
         published[0].Name.Should().BeNull();
         published[0].Alias.Should().Be(1);
+    }
+
+    [Test]
+    public async Task StartAsync_passes_revocation_token_to_factory()
+    {
+        var gate = new RevocableSessionActivityGate();
+        var node = SetupNode();
+        CancellationToken capturedToken = default;
+        _factory.Create(Arg.Any<IReadOnlyList<Metric>>(), Arg.Any<SparkplugSpecificationVersion>(),
+                Arg.Do<CancellationToken>(t => capturedToken = t))
+            .Returns(node);
+
+        var runner = Runner(NodeConfig(), TcpConnection(), gate);
+        await runner.StartAsync();
+
+        capturedToken.Should().Be(gate.RevocationToken);
+    }
+
+    [Test]
+    public async Task StartAsync_revoked_gate_skips_device_births()
+    {
+        var gate = new RevocableSessionActivityGate();
+        var node = SetupNode();
+        var deviceBirthCount = 0;
+        node.PublishDeviceBirthMessage(Arg.Any<string>(), Arg.Any<IReadOnlyList<Metric>>())
+            .Returns(ci =>
+            {
+                deviceBirthCount++;
+                if (deviceBirthCount == 1)
+                    gate.Revoke();
+                return Task.CompletedTask;
+            });
+
+        var config = new EmulatorNodeConfig
+        {
+            NodeId = "Press-01",
+            GroupId = "Plant"
+        };
+        config.Devices.Add(new EmulatorDeviceConfig
+        {
+            DeviceId = "Device-1",
+            Metrics = [new EmulatorMetricConfig { Name = "Temp", ValueType = MetricValueType.Double }]
+        });
+        config.Devices.Add(new EmulatorDeviceConfig
+        {
+            DeviceId = "Device-2",
+            Metrics = [new EmulatorMetricConfig { Name = "Pressure", ValueType = MetricValueType.Double }]
+        });
+
+        var runner = Runner(config, TcpConnection(), gate);
+        await runner.StartAsync();
+
+        deviceBirthCount.Should().Be(1);
+    }
+
+    [Test]
+    public async Task StartAsync_revoked_before_any_birth_skips_all_device_births()
+    {
+        var gate = new RevocableSessionActivityGate();
+        gate.Revoke();
+        var node = SetupNode();
+
+        var config = new EmulatorNodeConfig
+        {
+            NodeId = "Press-01",
+            GroupId = "Plant"
+        };
+        config.Devices.Add(new EmulatorDeviceConfig
+        {
+            DeviceId = "Device-1",
+            Metrics = [new EmulatorMetricConfig { Name = "Temp", ValueType = MetricValueType.Double }]
+        });
+
+        var runner = Runner(config, TcpConnection(), gate);
+        await runner.StartAsync();
+
+        await node.DidNotReceive().PublishDeviceBirthMessage(Arg.Any<string>(), Arg.Any<IReadOnlyList<Metric>>());
+    }
+
+    [Test]
+    public async Task PublishTickAsync_after_revoke_does_not_publish()
+    {
+        var gate = new RevocableSessionActivityGate();
+        var node = SetupNode();
+        var runner = Runner(NodeConfig(), TcpConnection(), gate);
+        await runner.StartAsync();
+
+        gate.Revoke();
+
+        await runner.PublishTickAsync(1.0, [new Metric("Health", DataType.Double, 2.0)]);
+
+        await node.DidNotReceive().PublishMetrics(Arg.Any<IReadOnlyList<Metric>>());
+        await node.DidNotReceive().PublishDeviceMetrics(Arg.Any<string>(), Arg.Any<IReadOnlyList<Metric>>());
+    }
+
+    [Test]
+    public async Task PublishTickAsync_before_revoke_publishes_normally()
+    {
+        var gate = new RevocableSessionActivityGate();
+        var node = SetupNode();
+        var runner = Runner(NodeConfig(), TcpConnection(), gate);
+        await runner.StartAsync();
+
+        await runner.PublishTickAsync(1.0, [new Metric("Health", DataType.Double, 2.0)]);
+
+        await node.Received(1).PublishMetrics(Arg.Any<IReadOnlyList<Metric>>());
+    }
+
+    [Test]
+    public async Task StopAsync_after_revoke_skips_ndeath()
+    {
+        var gate = new RevocableSessionActivityGate();
+        var node = SetupNode();
+        var runner = Runner(NodeConfig(), TcpConnection(), gate);
+        await runner.StartAsync();
+
+        gate.Revoke();
+
+        await runner.StopAsync();
+
+        await node.DidNotReceive().PublishNodeDeathMessage();
+        await node.Received(1).Stop();
+    }
+
+    [Test]
+    public async Task StopAsync_normal_stop_publishes_ndeath()
+    {
+        var node = SetupNode();
+        var runner = Runner(NodeConfig(), TcpConnection());
+        await runner.StartAsync();
+
+        await runner.StopAsync();
+
+        await node.Received(1).PublishNodeDeathMessage();
+        await node.Received(1).Stop();
     }
 }

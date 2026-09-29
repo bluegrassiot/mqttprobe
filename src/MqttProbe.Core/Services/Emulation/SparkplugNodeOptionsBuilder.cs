@@ -13,7 +13,8 @@ internal static class SparkplugNodeOptionsBuilder
     public static SparkplugNodeOptions Build(
         Connection connection, EmulatorNodeConfig config,
         CertificateSessionResource? certResource = null,
-        string? mqttClientId = null)
+        string? mqttClientId = null,
+        CancellationToken cancellationToken = default)
     {
         MqttClientWebSocketOptions? webSocketOptions = null;
         var brokerAddress = connection.Host;
@@ -59,6 +60,6 @@ internal static class SparkplugNodeOptionsBuilder
             webSocketOptions,
             config.GroupId,
             config.NodeId,
-            CancellationToken.None);
+            cancellationToken);
     }
 }

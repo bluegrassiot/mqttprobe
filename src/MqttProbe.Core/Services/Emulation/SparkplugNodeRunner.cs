@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using MqttProbe.Core.Models.Emulation;
 using MqttProbe.Core.Models.Mqtt;
+using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.Core.Services.Sparkplug;
 using SparkplugNet.Core.Enumerations;
@@ -15,7 +16,8 @@ public class SparkplugNodeRunner(
     IReadOnlyList<Metric> initialKnownMetrics,
     ICertificateAssetStore certStore,
     ICertificateSessionQuarantine quarantine,
-    ILogger logger) : INodeRunner
+    ILogger logger,
+    ISessionActivityGate? activityGate = null) : INodeRunner
 {
     private readonly Dictionary<Guid, WaveformState> _states = [];
     private readonly string _sessionSuffix = "-" + Guid.NewGuid().ToString("N")[..6];
@@ -54,18 +56,19 @@ public class SparkplugNodeRunner(
             }
 
             var birthMetrics = BuildBirthMetrics();
+            var revocationToken = activityGate?.RevocationToken ?? CancellationToken.None;
 
             localNode = config.UseMetricAliases
                 ? nodeFactory.Create(birthMetrics, SparkplugSpecificationVersion.Version30,
                     [.. config.Devices.Select(d => d.DeviceId)],
                     deviceId => SampleDeviceMetrics(
-                        config.Devices.First(d => string.Equals(d.DeviceId, deviceId, StringComparison.Ordinal)), 0, isBirth: true))
-                : nodeFactory.Create(birthMetrics, SparkplugSpecificationVersion.Version30);
+                        config.Devices.First(d => string.Equals(d.DeviceId, deviceId, StringComparison.Ordinal)), 0, isBirth: true),
+                    revocationToken)
+                : nodeFactory.Create(birthMetrics, SparkplugSpecificationVersion.Version30, revocationToken);
             await localNode.Start(SparkplugNodeOptionsBuilder.Build(
-                connection, config, localCertResource, config.NodeId + _sessionSuffix)).ConfigureAwait(false);
+                connection, config, localCertResource, config.NodeId + _sessionSuffix, revocationToken)).ConfigureAwait(false);
 
-            foreach (var device in config.Devices)
-                await localNode.PublishDeviceBirthMessage(device.DeviceId, SampleDeviceMetrics(device, 0, isBirth: true)).ConfigureAwait(false);
+            await PublishDeviceBirthsAsync(localNode, revocationToken).ConfigureAwait(false);
 
             _certResource = localCertResource;
             _node = localNode;
@@ -80,6 +83,21 @@ public class SparkplugNodeRunner(
             DisposeAfterStartFailure(ex, localNode, localCertResource);
 
             throw;
+        }
+    }
+
+    private async Task PublishDeviceBirthsAsync(ISparkplugNode node, CancellationToken revocationToken)
+    {
+        foreach (var device in config.Devices)
+        {
+            if (revocationToken.IsCancellationRequested)
+            {
+                logger.LogWarning("Device birth skipped for {DeviceId} on node {NodeId}: gate revoked",
+                    device.DeviceId, config.NodeId);
+                break;
+            }
+
+            await node.PublishDeviceBirthMessage(device.DeviceId, SampleDeviceMetrics(device, 0, isBirth: true)).ConfigureAwait(false);
         }
     }
 
@@ -127,6 +145,7 @@ public class SparkplugNodeRunner(
     public async Task PublishTickAsync(double tSeconds, IReadOnlyList<Metric> nodeHealthMetrics)
     {
         if (_node is not { IsConnected: true }) return;
+        if (activityGate?.IsActive == false) return;
 
         var healthMetrics = _aliases?.ApplyToNodeMetrics(nodeHealthMetrics, isBirth: false)
                             ?? [.. nodeHealthMetrics];
@@ -141,9 +160,11 @@ public class SparkplugNodeRunner(
     {
         if (_node is null) return;
 
+        var isRevoked = activityGate?.IsActive == false;
+
         try
         {
-            if (_node.IsConnected)
+            if (_node.IsConnected && !isRevoked)
             {
                 try
                 {

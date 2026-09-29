@@ -1,0 +1,48 @@
+@page
+@model MqttProbe.Pages.AccessDeniedModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MQTTProbe — Access Denied</title>
+    <link href="/_content/MqttProbe.UI/css/fonts.css" rel="stylesheet" />
+    <link href="/_content/MqttProbe.UI/css/auth-layout.css" rel="stylesheet" />
+</head>
+<body class="@(Model.IsAccessibleFontProfile ? "font-accessible" : null)">
+<div class="auth-card access-denied-card">
+    <h1><img src="/favicon.svg" height="34" alt="" aria-hidden="true" /><span class="brand-mqtt">MQTT</span><span class="brand-probe">Probe</span></h1>
+    <p class="subtitle">Access not authorized</p>
+
+    @if (!string.IsNullOrEmpty(Model.DisplayName))
+    {
+        <div class="denial-detail">
+            Signed in as <strong>@Model.DisplayName</strong>
+            @if (!string.IsNullOrEmpty(Model.ProviderDisplayName))
+            {
+                <span> via @Model.ProviderDisplayName</span>
+            }
+        </div>
+    }
+
+    <p class="denial-detail">
+        Your identity was verified, but your account does not have permission to access mqttprobe.
+        Please contact your deployment administrator to request access.
+    </p>
+
+    <div class="action-row">
+        <form method="post" asp-page="/Logout" class="denial-action-form">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="denial-action denial-action--primary">Use another account</button>
+        </form>
+        <form method="post" asp-page="/Logout" class="denial-action-form">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="denial-action">Sign out</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

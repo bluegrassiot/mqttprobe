@@ -1,0 +1,29 @@
+@implements IDisposable
+@inject ILoginNavigationNotifier LoginNotifier
+@inject NavigationManager Navigation
+
+@code {
+    private volatile bool _disposed;
+
+    private void OnForceLogin()
+    {
+        if (_disposed) return;
+
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed) return;
+            Navigation.NavigateTo("/Login", forceLoad: true);
+        });
+    }
+
+    protected override void OnInitialized()
+    {
+        LoginNotifier.ForceLoginRequested += OnForceLogin;
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        LoginNotifier.ForceLoginRequested -= OnForceLogin;
+    }
+}

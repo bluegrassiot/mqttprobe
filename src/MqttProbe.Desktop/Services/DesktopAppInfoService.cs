@@ -7,6 +7,8 @@ public class DesktopAppInfoService : IAppInfoService
 {
     public bool RequiresAuthentication => false;
     public bool IsNative => true;
+    public bool IsOidcMode => false;
+    public string? ProviderDisplayName => null;
 
     public string GetVersion() =>
         AppVersionResolver.Resolve(

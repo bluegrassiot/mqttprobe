@@ -17,6 +17,10 @@
         <NoWarn>$(NoWarn);S8970</NoWarn>
     </PropertyGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="MqttProbe.UI.Tests" />
+    </ItemGroup>
+
     <PropertyGroup>
         <ServerGarbageCollection>false</ServerGarbageCollection>
         <DefaultLanguage>en-US</DefaultLanguage>
@@ -48,6 +52,8 @@
         <PrivateAssets>all</PrivateAssets>
         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       </PackageReference>
+      <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
+      <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
       <PackageReference Include="SonarAnalyzer.CSharp">
         <PrivateAssets>all</PrivateAssets>
         <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

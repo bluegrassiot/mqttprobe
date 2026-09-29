@@ -1,0 +1,157 @@
+/* Bare full-page surface for the signed-out and access-denied states.
+   Rendered without the app shell, so nothing needs to be covered here. */
+.auth-state {
+    --auth-bg: #0F172A;
+    --auth-surface: #1E293B;
+    --auth-border: #334155;
+    --auth-text: #F1F5F9;
+    --auth-muted: #94A3B8;
+    --auth-accent: #F97316;
+    --auth-accent-hover: #EA6C0A;
+
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    overflow-y: auto;
+    background-color: var(--auth-bg);
+    background-image:
+        radial-gradient(ellipse 90% 65% at 50% 34%, rgba(249, 115, 22, 0.07), transparent 70%),
+        linear-gradient(rgba(148, 163, 184, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.045) 1px, transparent 1px);
+    background-size: 100% 100%, 38px 38px, 38px 38px;
+    color: var(--auth-text);
+    font-family: var(--font-ui, system-ui, sans-serif);
+}
+
+.auth-state::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: url(/_content/MqttProbe.UI/img/signal-motif.svg) no-repeat center / min(640px, 80vmin);
+    opacity: 0.14;
+    pointer-events: none;
+}
+
+.auth-state__card {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 380px;
+    padding: 2rem 1.75rem;
+    background: var(--auth-surface);
+    border: 1px solid var(--auth-border);
+    border-radius: 8px;
+    text-align: center;
+}
+
+.auth-state__brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    margin: 0 0 1.25rem;
+    font-family: var(--font-display, sans-serif);
+    font-size: 1.35rem;
+    line-height: 1;
+}
+
+.auth-state__brand img { display: block; }
+
+.auth-state__brand-mqtt {
+    color: var(--auth-accent);
+    font-weight: 700;
+}
+
+.auth-state__brand-probe {
+    color: var(--auth-text);
+    font-weight: 500;
+}
+
+.auth-state__title {
+    margin: 0 0 .5rem;
+    font-family: var(--font-display, sans-serif);
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.auth-state__text {
+    margin: 0 0 1.5rem;
+    color: var(--auth-muted);
+    font-size: .9rem;
+    line-height: 1.5;
+}
+
+.auth-state__action {
+    display: inline-block;
+    padding: .7rem 1.5rem;
+    border: 1px solid var(--auth-border);
+    border-radius: 6px;
+    background: var(--auth-bg);
+    color: var(--auth-text);
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.auth-state__action:hover {
+    border-color: var(--auth-accent);
+    color: var(--auth-accent);
+}
+
+.auth-state__action:focus-visible {
+    outline: 2px solid var(--auth-accent);
+    outline-offset: 2px;
+}
+
+.auth-state__action--primary {
+    background: var(--auth-accent);
+    border-color: var(--auth-accent);
+    color: var(--auth-bg);
+}
+
+.auth-state__action--primary:hover {
+    background: var(--auth-accent-hover);
+    border-color: var(--auth-accent-hover);
+    color: var(--auth-bg);
+}
+
+.auth-state__action--primary:focus-visible {
+    outline-color: var(--auth-text);
+}
+
+@media (max-height: 600px) {
+    .auth-state {
+        align-items: flex-start;
+        padding: .75rem;
+    }
+
+    .auth-state__card {
+        padding: 1.25rem;
+    }
+
+    .auth-state__brand {
+        margin-bottom: .75rem;
+    }
+
+    .auth-state__text {
+        margin-bottom: 1rem;
+    }
+}
+
+@media (max-width: 380px) {
+    .auth-state {
+        padding: .5rem;
+    }
+
+    .auth-state__card {
+        padding: 1.25rem 1rem;
+    }
+
+    .auth-state__action {
+        display: block;
+    }
+}

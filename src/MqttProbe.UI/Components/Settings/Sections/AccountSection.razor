@@ -1,12 +1,43 @@
 @namespace MqttProbe.UI.Components.Settings
+@using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
+@inject IAppInfoService AppInfoService
 
 <AuthorizeView>
     <Authorized>
-        <AppSecondaryButton MinWidth="true"
-                            StartIcon="@LucideIcons.Lock"
-                            Href="/change-password">
-            Change password
-        </AppSecondaryButton>
+        @if (AppInfoService.IsOidcMode)
+        {
+            <div class="account-identity">
+                <MudText Typo="Typo.body2" Class="mb-1">
+                    Signed in as <strong>@GetDisplayName(context.User)</strong>
+                </MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Identity managed by @AppInfoService.ProviderDisplayName
+                </MudText>
+            </div>
+        }
+        else
+        {
+            <AppSecondaryButton MinWidth="true"
+                                StartIcon="@LucideIcons.Lock"
+                                Href="/change-password">
+                Change password
+            </AppSecondaryButton>
+        }
     </Authorized>
 </AuthorizeView>
+
+@code {
+    private static string GetDisplayName(ClaimsPrincipal user)
+    {
+        // Prefer Identity.Name (respects the configured NameClaimType).
+        if (!string.IsNullOrWhiteSpace(user.Identity?.Name))
+            return user.Identity.Name;
+
+        // Safe fallback: read well-known claims directly.
+        return user.FindFirst(ClaimTypes.Name)?.Value
+            ?? user.FindFirst("preferred_username")?.Value
+            ?? user.FindFirst("sub")?.Value
+            ?? string.Empty;
+    }
+}

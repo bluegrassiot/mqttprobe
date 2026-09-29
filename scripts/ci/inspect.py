@@ -71,6 +71,38 @@ JB_EXCLUDE = ";".join([f"**/{d}/**/*" for d in SKIP_DIRS] + [f"**/{f}" for f in 
 # SARIF levels, worst first. Anything unrecognised sorts last under "other".
 LEVEL_ORDER = ["error", "warning", "note", "none", "other"]
 
+# Findings --fail-on accepts even though the scanner still reports them. JSON has
+# no comments, so DevSkim's inline suppression cannot be used inside realm.json;
+# Keycloak reads that file verbatim at container start. The listed value is the
+# compose-internal backchannel logout URL: mqttprobe only serves plain HTTP on
+# 8080 inside the Docker network, so https here would break logout.
+#
+# Fail closed: an entry matches only when rule, repo-relative file, and the exact
+# value all sit on the reported line. A different URL, rule, file, or line keeps
+# blocking; a raise of --fail-on still applies to everything else.
+GATED_EXCEPTIONS = [
+    {
+        "rule": "DS137138",
+        "file": "deploy/keycloak/realm.json",
+        "value": '"backchannel.logout.url": "http://mqttprobe:8080/signout-oidc"',  # DevSkim: ignore DS137138 mirrors the realm.json value the gate checks
+    },
+]
+
+
+def is_gated_exception(finding):
+    """True only for an exact (rule, file, source line holds value) match."""
+    for exception in GATED_EXCEPTIONS:
+        if finding["rule"] != exception["rule"] or finding["file"] != exception["file"]:
+            continue
+        try:
+            lines = (ROOT / exception["file"]).read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue  # unreadable file: keep the finding blocking
+        line = lines[finding["line"] - 1] if 0 < finding["line"] <= len(lines) else ""
+        if exception["value"] in line:
+            return True
+    return False
+
 
 def run_tool(name, cmd, sarif_path):
     """Run one analyzer. Returns the SARIF path, or None if it produced nothing."""
@@ -269,13 +301,20 @@ def main():
     sections = []
     totals = []
     gated = []
+    accepted = []
     for label, sarif in runs:
         findings, rules = parse_sarif(sarif)
         totals.append(f"{len(findings)} from {label}")
         sections += render(label, findings, rules, args.max_per_rule)
         if args.fail_on != "never":
-            gated += [f for f in findings
-                      if level_key(f["level"]) <= level_key(args.fail_on)]
+            for finding in findings:
+                if level_key(finding["level"]) > level_key(args.fail_on):
+                    continue
+                # Reported either way; only the exit code is affected.
+                if is_gated_exception(finding):
+                    accepted.append(finding)
+                else:
+                    gated.append(finding)
 
     report = [
         "# Static analysis report",
@@ -298,6 +337,12 @@ def main():
     print(f"\n=== Report: {output.relative_to(ROOT) if output.is_relative_to(ROOT) else output} ===")
     for total in totals:
         print(f"  {total}")
+
+    if accepted:
+        print(f"\n=== {len(accepted)} finding(s) accepted by a narrow exception "
+              f"(still listed in the report) ===")
+        for file, line, rule in sorted({(f["file"], f["line"], f["rule"]) for f in accepted}):
+            print(f"  {rule:10} {file}:{line}")
 
     if gated:
         print(f"\n=== {len(gated)} finding(s) at or above {args.fail_on} ===")

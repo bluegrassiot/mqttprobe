@@ -36,13 +36,17 @@ services:
       Authentication__Oidc__AcceptedValues__0: admin
       Authentication__Oidc__PublicBaseUrl: https://localhost:5001
       ForwardedHeaders__ForwardLimit: "1"
-      ForwardedHeaders__KnownNetworks__0: 172.28.0.0/16
+      ForwardedHeaders__KnownNetworks__0: 172.29.0.0/16
       SSL_CERT_FILE: /ca-bundle/ca-certificates.crt
     depends_on:
       ca-init:
         condition: service_completed_successfully
     volumes:
       - ca-bundle:/ca-bundle:ro
+      # Persists DataProtection keys (dp-keys), secrets.dat, and per-deploy config
+      # across --force-recreate; without it, antiforgery/secret payloads fail to
+      # decrypt after the container image is rebuilt.
+      - mqttprobe-config:/app/config
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/health"]
       interval: 10s
@@ -85,9 +89,13 @@ volumes:
   caddy-data:
   caddy-config:
   ca-bundle:
+  mqttprobe-config:
 
 networks:
   keycloak-net:
     ipam:
       config:
-        - subnet: 172.28.0.0/16
+        # Each stack needs a distinct subnet: the prod compose pins
+        # 172.28.0.0/24 and the authentik lab 172.30.0.0/16. Overlapping them
+        # makes Docker refuse to create the second network.
+        - subnet: 172.29.0.0/16

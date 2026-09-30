@@ -344,7 +344,7 @@ cat <<EOF
 
   Need test certificates and an mTLS broker?
       python scripts/dev/generate-mtls-certs.py
-      docker compose -f docker-compose.mtls.yml up -d
+      docker compose -f deploy/docker-compose.mtls.yml up -d
 
 EOF
 

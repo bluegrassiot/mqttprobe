@@ -9,12 +9,12 @@ services:
       # Restart the container after adding or updating plugins.
       - mqttprobe-plugins:/app/Plugins
     environment:
-      - ASPNETCORE_ENVIRONMENT=Production
+      ASPNETCORE_ENVIRONMENT: Production
       # Host filtering answers "Bad Request - Invalid Hostname" (400) to any Host
       # header not listed here, so reaching this container by LAN IP or hostname
       # needs that name added. Set MQTTPROBE_HOST in a .env file next to this
       # compose file, e.g. MQTTPROBE_HOST=192.168.1.50, then recreate the container.
-      - AllowedHosts=${MQTTPROBE_HOST:-localhost};localhost;127.0.0.1;[::1]
+      AllowedHosts: "${MQTTPROBE_HOST:-localhost};localhost;127.0.0.1;[::1]"
     networks:
       - mqttprobe-net
     restart: unless-stopped
@@ -24,36 +24,10 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     entrypoint:
-      - sh
-      - -c
-      - |
-        apk add --no-cache openssl > /dev/null 2>&1
-        openssl req -x509 -newkey rsa:2048 -keyout /tmp/server.key \
-          -out /tmp/server.crt -days 3650 -nodes -subj '/CN=mosquitto' \
-          > /dev/null 2>&1
-        chmod 644 /tmp/server.key /tmp/server.crt
-        printf '%s\n' \
-          'listener 1883' \
-          'allow_anonymous true' \
-          '' \
-          'listener 8883' \
-          'allow_anonymous true' \
-          'certfile /tmp/server.crt' \
-          'keyfile /tmp/server.key' \
-          '' \
-          'listener 9001' \
-          'protocol websockets' \
-          'allow_anonymous true' \
-          '' \
-          'listener 9002' \
-          'protocol websockets' \
-          'allow_anonymous true' \
-          'certfile /tmp/server.crt' \
-          'keyfile /tmp/server.key' \
-          '' \
-          'log_dest stdout' \
-          > /tmp/mosquitto.conf
-        exec mosquitto -c /tmp/mosquitto.conf
+      - /bin/sh
+      - /mosquitto/bootstrap.sh
+    volumes:
+      - ./deploy/mosquitto/bootstrap.sh:/mosquitto/bootstrap.sh:ro
     ports:
       - "1883:1883"   # Plain MQTT
       - "8883:8883"   # MQTT over TLS (MQTTS)

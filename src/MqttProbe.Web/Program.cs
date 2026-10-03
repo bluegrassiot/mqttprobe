@@ -258,6 +258,13 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapGet("/health", () => Results.Text("OK", "text/plain")).AllowAnonymous();
+
+// Provider-initiated logout; separate from the OIDC middleware's /signout-oidc.
+if (isOidc)
+{
+    app.MapOidcBackChannelLogout();
+}
+
 app.MapRazorPages().RequireAuthorization();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()

@@ -1,7 +1,7 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Web.Authentication;
-using NSubstitute;
 using SessionState = MqttProbe.Web.Authentication.SessionState;
 
 namespace MqttProbe.UI.Tests.Authentication;
@@ -200,7 +200,7 @@ public class AppSessionRecordTests
         var found = record.GetLease("c1");
 
         found.Should().BeSameAs(lease);
-        found!.CircuitId.Should().Be("c1");
+        found.CircuitId.Should().Be("c1");
         found.Session.Should().BeSameAs(record);
     }
 
@@ -234,6 +234,47 @@ public class AppSessionRecordTests
         gate1.IsActive.Should().BeFalse();
         gate2.IsActive.Should().BeFalse();
         record.State.Should().Be(SessionState.Revoked);
+    }
+
+    [Test]
+    public async Task Revoke_ThrowingCallback_StillRevokesEveryGateAndLogsTheFailure()
+    {
+        var logger = Substitute.For<ILogger<RevocableSessionActivityGate>>();
+        var record = CreateCoordinator().CreateSession(CreateIdentity());
+        var throwingGate = new RevocableSessionActivityGate(logger);
+        var siblingGate = new RevocableSessionActivityGate();
+        var throwingLease = new CircuitLease(throwingGate, Substitute.For<ICircuitTeardownHandler>());
+        var siblingLease = new CircuitLease(siblingGate, Substitute.For<ICircuitTeardownHandler>());
+        throwingLease.TryBind("c1", record);
+        siblingLease.TryBind("c2", record);
+        record.RegisterCircuit(throwingLease);
+        record.RegisterCircuit(siblingLease);
+        throwingGate.RevocationToken.Register(() => throw new InvalidOperationException("callback failed"));
+
+        var revoked = record.Revoke();
+
+        // The gate closes and the sibling is revoked without waiting for the
+        // callback that is about to throw.
+        revoked.Should().BeEquivalentTo(new[] { throwingLease, siblingLease });
+        throwingGate.IsActive.Should().BeFalse();
+        siblingGate.IsActive.Should().BeFalse();
+        record.State.Should().Be(SessionState.Revoked);
+        record.AreGatesRevoked.Should().BeTrue();
+
+        await throwingGate.RevocationCompletion.WaitAsync(TimeSpan.FromSeconds(10));
+        logger.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(ILogger.Log))
+            .Select(call => call.GetArguments()[2]?.ToString() ?? "")
+            .Should().Contain(message => message.Contains("revocation callback failed"));
+    }
+
+    [Test]
+    public void AreGatesRevoked_ActiveSession_ReturnsFalse()
+    {
+        var record = CreateCoordinator().CreateSession(CreateIdentity());
+        record.RegisterCircuit(CreateBoundLease(record));
+
+        record.AreGatesRevoked.Should().BeFalse();
     }
 
     [Test]

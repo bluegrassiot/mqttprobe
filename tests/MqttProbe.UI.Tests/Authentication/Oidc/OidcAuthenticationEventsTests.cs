@@ -1,6 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -13,8 +12,6 @@ using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.Web.Authentication;
-using NSubstitute;
-using NSubstitute.Core;
 using AuthOptions = MqttProbe.Web.Authentication.AuthenticationOptions;
 
 namespace MqttProbe.UI.Tests.Authentication;
@@ -45,8 +42,7 @@ public class OidcAuthenticationEventsTests
     }
 
     private static TokenValidatedContext CreateTokenValidatedContext(
-        JwtSecurityToken token,
-        OidcAuthenticationEvents events)
+        JwtSecurityToken token)
     {
         var httpContext = new DefaultHttpContext();
         var authScheme = new AuthenticationScheme("OpenIdConnect", "OpenIdConnect", typeof(OpenIdConnectHandler));
@@ -65,7 +61,7 @@ public class OidcAuthenticationEventsTests
     {
         var (events, coordinator, _) = CreateEvents();
         var jwt = CreateJwtSecurityToken("""{"iss":"https://idp.example.com","sub":"user-123","name":"John Doe","groups":"mqttprobe-users"}""");
-        var context = CreateTokenValidatedContext(jwt, events);
+        var context = CreateTokenValidatedContext(jwt);
 
         await events.OnTokenValidated(context);
 
@@ -75,11 +71,37 @@ public class OidcAuthenticationEventsTests
     }
 
     [Test]
+    public async Task OnTokenValidated_AdmittedUser_CapturesSidOnSession()
+    {
+        var (events, coordinator, _) = CreateEvents();
+        var jwt = CreateJwtSecurityToken("""{"iss":"https://idp.example.com","sub":"user-123","sid":"provider-sid-1","name":"John Doe","groups":"mqttprobe-users"}""");
+        var context = CreateTokenValidatedContext(jwt);
+
+        await events.OnTokenValidated(context);
+
+        var sessionId = context.Principal!.FindFirst(AuthClaimTypes.AppSessionId)!.Value;
+        coordinator.GetSession(sessionId)!.Sid.Should().Be("provider-sid-1");
+    }
+
+    [Test]
+    public async Task OnTokenValidated_AdmittedUser_WithoutSid_LeavesSessionSidNull()
+    {
+        var (events, coordinator, _) = CreateEvents();
+        var jwt = CreateJwtSecurityToken("""{"iss":"https://idp.example.com","sub":"user-123","name":"John Doe","groups":"mqttprobe-users"}""");
+        var context = CreateTokenValidatedContext(jwt);
+
+        await events.OnTokenValidated(context);
+
+        var sessionId = context.Principal!.FindFirst(AuthClaimTypes.AppSessionId)!.Value;
+        coordinator.GetSession(sessionId)!.Sid.Should().BeNull();
+    }
+
+    [Test]
     public async Task OnTokenValidated_DeniedUser_RedirectsToAccessDenied()
     {
         var (events, _, _) = CreateEvents();
         var jwt = CreateJwtSecurityToken("""{"iss":"https://idp.example.com","sub":"user-123","name":"John Doe","groups":"other-group"}""");
-        var context = CreateTokenValidatedContext(jwt, events);
+        var context = CreateTokenValidatedContext(jwt);
 
         await events.OnTokenValidated(context);
 
@@ -92,7 +114,7 @@ public class OidcAuthenticationEventsTests
     {
         var (events, _, _) = CreateEvents();
         var jwt = CreateJwtSecurityToken("""{"iss":"https://idp.example.com","sub":"user-123","name":"John Doe","groups":"other-group"}""");
-        var context = CreateTokenValidatedContext(jwt, events);
+        var context = CreateTokenValidatedContext(jwt);
 
         await events.OnTokenValidated(context);
 
@@ -105,7 +127,7 @@ public class OidcAuthenticationEventsTests
     {
         var (events, _, _) = CreateEvents();
         var jwt = CreateJwtSecurityToken("""{"iss":"https://idp.example.com","sub":"user-123","name":"John Doe","groups":"mqttprobe-users"}""");
-        var context = CreateTokenValidatedContext(jwt, events);
+        var context = CreateTokenValidatedContext(jwt);
 
         await events.OnTokenValidated(context);
 
@@ -124,7 +146,7 @@ public class OidcAuthenticationEventsTests
     {
         var (events, _, _) = CreateEvents();
         var jwt = CreateJwtSecurityToken("""{"iss":"https://idp.example.com","sub":"user-123","name":"John Doe","groups":"mqttprobe-users"}""");
-        var context = CreateTokenValidatedContext(jwt, events);
+        var context = CreateTokenValidatedContext(jwt);
 
         await events.OnTokenValidated(context);
 
@@ -139,7 +161,7 @@ public class OidcAuthenticationEventsTests
     {
         var (events, _, _) = CreateEvents();
         var jwt = CreateJwtSecurityToken("""{"iss":"https://idp.example.com","sub":"user-123","name":"John Doe","groups":"mqttprobe-users"}""");
-        var context = CreateTokenValidatedContext(jwt, events);
+        var context = CreateTokenValidatedContext(jwt);
         context.Properties!.RedirectUri = "/dashboard";
 
         await events.OnTokenValidated(context);
@@ -159,7 +181,7 @@ public class OidcAuthenticationEventsTests
         // Use a non-JWT SecurityToken
         var context = new TokenValidatedContext(httpContext, authScheme, oidcOptions, principal, new AuthenticationProperties())
         {
-            SecurityToken = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken()
+            SecurityToken = new JwtSecurityToken()
         };
 
         await events.OnTokenValidated(context);
@@ -254,7 +276,7 @@ public class OidcAuthenticationEventsTests
     public async Task HandleValidatePrincipal_SessionNotFound_RejectsWithSessionNotFound()
     {
         var logger = Substitute.For<ILogger<OidcAuthenticationEvents>>();
-        var (events, coordinator, _) = CreateEventsWithLogger(logger);
+        var (events, _, _) = CreateEventsWithLogger(logger);
         var principal = CreatePrincipalWithClaims("session-1", "https://idp.example.com", "user-1", _epoch.AddHours(1));
         var context = CreateCookieValidateContext(principal);
 
@@ -422,7 +444,7 @@ public class OidcAuthenticationEventsTests
         httpContext.Request.Scheme = "https";
         httpContext.Request.Host = new HostString("mqttprobe.test");
         var services = new ServiceCollection();
-        services.AddSingleton<PublicOriginResolver>(new PublicOriginResolver("https://mqttprobe.test", "*"));
+        services.AddSingleton(new PublicOriginResolver("https://mqttprobe.test", "*"));
         httpContext.RequestServices = services.BuildServiceProvider();
 
         var properties = new AuthenticationProperties();
@@ -460,7 +482,7 @@ public class OidcAuthenticationEventsTests
         httpContext.Request.Scheme = "https";
         httpContext.Request.Host = new HostString("mqttprobe.test");
         var services = new ServiceCollection();
-        services.AddSingleton<PublicOriginResolver>(new PublicOriginResolver("https://mqttprobe.test", "*"));
+        services.AddSingleton(new PublicOriginResolver("https://mqttprobe.test", "*"));
         httpContext.RequestServices = services.BuildServiceProvider();
 
         var properties = new AuthenticationProperties();

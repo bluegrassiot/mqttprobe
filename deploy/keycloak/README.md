@@ -112,7 +112,7 @@ Browse to `https://keycloak.localhost:8443/admin` and log in with the admin cred
 - **Secrets are gitignored.** The `.env` file is listed in `.gitignore`. Never commit it.
 - **Caddy CA is ephemeral.** The root CA lives in the `caddy-data` volume. Wiping volumes (`docker compose down -v`) regenerates it, and you must re-trust it.
 - **Realm import runs once.** Keycloak imports `realm.json` on first start. To re-import after changing `realm.json`, wipe volumes and restart: `docker compose down -v && docker compose up --build -d`. Without `-v`, persisted realm data from the previous import is reused.
-- **Back-channel logout uses internal URL.** The client's `backchannel.logout.url` is `http://mqttprobe:8080/signout-oidc` (Docker-internal). Browser redirect and post-logout URLs remain `https://localhost:5001/...`. If you see Keycloak back-channel logout errors against `localhost:5001`, your realm was imported from an older `realm.json`; wipe volumes to re-import.
+- **Back-channel logout uses internal URL.** The client's `backchannel.logout.url` is `http://mqttprobe:8080/oidc/backchannel-logout` (Docker-internal). Browser redirect and post-logout URLs remain `https://localhost:5001/...`, and the OIDC middleware's own `/signout-oidc` path is a separate, browser-facing route. If you see Keycloak back-channel logout errors against `localhost:5001` or against `/signout-oidc`, your realm was imported from an older `realm.json`; wipe volumes to re-import.
 - **Loopback only.** Caddy ports are bound to `127.0.0.1`. Other machines cannot reach this lab.
 
 ## Cleanup

@@ -49,8 +49,10 @@ public sealed class CircuitLease
             return;
         }
 
+        // Revoke() closes the gate without waiting on its callbacks, so cleanup
+        // starts even while a revocation callback is still running.
         Gate.Revoke();
-        await invokeTeardownHandler();
+        await invokeTeardownHandler().ConfigureAwait(false);
     }
 }
 

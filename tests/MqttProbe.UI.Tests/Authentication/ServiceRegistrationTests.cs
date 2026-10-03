@@ -1,12 +1,11 @@
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using MqttProbe.Core.Services.Emulation;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Web.Authentication;
-using NSubstitute;
 
 namespace MqttProbe.UI.Tests.Authentication;
 
@@ -65,6 +64,40 @@ public class ServiceRegistrationTests
         var coordinator2 = scope2.ServiceProvider.GetRequiredService<AppSessionCoordinator>();
 
         coordinator1.Should().BeSameAs(coordinator2);
+    }
+
+    [Test]
+    public async Task AddOidcAuthentication_CoordinatorLogsThroughDiRegisteredLogger()
+    {
+        ILogger<AppSessionCoordinator> coordinatorLogger = Substitute.For<ILogger<AppSessionCoordinator>>();
+
+        var services = new ServiceCollection();
+
+        services.AddSingleton<TimeProvider>(new FakeTimeProvider(_epoch));
+        services.AddSingleton(coordinatorLogger);
+        services.AddScoped<IMqttManagedClient>(sp => Substitute.For<IMqttManagedClient>());
+        services.AddScoped<IEmulationService>(sp => Substitute.For<IEmulationService>());
+        services.AddScoped<AuthenticationStateProvider, TestBlazorAuthProvider>();
+
+        services.AddOidcAuthentication(TimeSpan.FromHours(8));
+
+        using var provider = services.BuildServiceProvider();
+
+        var coordinator = provider.GetRequiredService<AppSessionCoordinator>();
+        var identity = ExternalIdentity.Create("https://idp.example.com", "user-123", "John Doe");
+        var record = coordinator.CreateSession(identity);
+
+        // NullLogger swallows this, so a missing DI logger fails the assertion.
+        coordinator.SessionRevoked += _ => throw new InvalidOperationException("subscriber failed");
+
+        await coordinator.RevokeSessionAsync(record.SessionId);
+
+        var warnings = coordinatorLogger.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(ILogger.Log)
+                && Equals(call.GetArguments()[0], LogLevel.Warning))
+            .Select(call => call.GetArguments()[2]?.ToString() ?? "");
+
+        warnings.Should().Contain(message => message.Contains("SessionRevoked subscriber failed"));
     }
 
     [Test]

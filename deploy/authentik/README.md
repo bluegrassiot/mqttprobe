@@ -135,7 +135,7 @@ This user can authenticate through Authentik (no IdP-level block). The custom sc
 
 ## Logout behavior
 
-The provider is configured with back-channel logout (`logout_uri: http://mqttprobe:8080/signout-oidc`). This means Authentik sends a server-to-server POST to mqttprobe's internal HTTP endpoint when a session ends. The browser redirect and post-logout callback URLs remain the public `https://localhost:5001/...` addresses.
+The provider is configured with back-channel logout (`logout_uri: http://mqttprobe:8080/oidc/backchannel-logout`). This means Authentik sends a server-to-server POST to mqttprobe's internal HTTP endpoint when a session ends. The browser redirect and post-logout callback URLs remain the public `https://localhost:5001/...` addresses, and the OIDC middleware's own `/signout-oidc` path is a separate, browser-facing route.
 
 The provider uses a custom invalidation flow (`mqttprobe-invalidation-flow`) that includes a `UserLogoutStage`. When a user signs out of mqttprobe, the RP-initiated logout hits this flow, which destroys the shared Authentik SSO session cookie and manages provider-scoped token invalidation. Because the SSO session is terminated, other applications sharing the same Authentik instance will also lose their sessions on the next request.
 

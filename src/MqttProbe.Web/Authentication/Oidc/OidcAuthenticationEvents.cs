@@ -1,4 +1,3 @@
-using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -92,7 +91,7 @@ public sealed class OidcAuthenticationEvents
             }
         }
 
-        if (context.SecurityToken is JwtSecurityToken legacyToken)
+        if (context.SecurityToken is { } legacyToken)
         {
             try
             {
@@ -144,7 +143,9 @@ public sealed class OidcAuthenticationEvents
         var displayName = AdmissionEvaluator.GetDisplayName(payload);
         var identity = ExternalIdentity.Create(issuer, subject, displayName);
 
-        var session = _coordinator.CreateSession(identity);
+        // sid is what a back-channel logout token will name later.
+        var sid = GetStringProperty(payload.Root, AuthClaimTypes.Sid);
+        var session = _coordinator.CreateSession(identity, sid.Length == 0 ? null : sid);
 
         var issuedAt = context.Properties?.IssuedUtc ?? DateTimeOffset.UtcNow;
         var expiresAt = session.ExpiresAt;
@@ -238,7 +239,6 @@ public sealed class OidcAuthenticationEvents
         {
             _logger.LogDebug(RejectReasonLog, "session_invalid");
             context.RejectPrincipal();
-            return Task.CompletedTask;
         }
 
         return Task.CompletedTask;

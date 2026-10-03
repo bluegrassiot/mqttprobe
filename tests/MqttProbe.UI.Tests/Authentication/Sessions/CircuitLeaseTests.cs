@@ -79,6 +79,32 @@ public class CircuitLeaseTests
         gate.IsActive.Should().BeFalse();
     }
 
+    [Test]
+    public async Task TeardownAsync_RevocationCallbackBlocked_TeardownStillCompletes()
+    {
+        var gate = new RevocableSessionActivityGate();
+        var release = new ManualResetEventSlim(false);
+        var teardown = Substitute.For<ICircuitTeardownHandler>();
+        var lease = CreateLease(gate, teardown);
+
+        try
+        {
+            gate.RevocationToken.Register(() => release.Wait(TimeSpan.FromSeconds(15)));
+
+            await lease.TeardownAsync().WaitAsync(TimeSpan.FromSeconds(5));
+
+            gate.IsActive.Should().BeFalse();
+            await teardown.Received(1).TeardownAsync(Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        }
+        finally
+        {
+            release.Set();
+        }
+
+        await gate.RevocationCompletion.WaitAsync(TimeSpan.FromSeconds(10));
+        release.Dispose();
+    }
+
     // ── Gate is the exact scoped instance ────────────────────────────────────
 
     [Test]

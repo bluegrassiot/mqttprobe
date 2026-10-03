@@ -19,8 +19,14 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddSingleton(sp =>
         {
             var timeProvider = sp.GetRequiredService<TimeProvider>();
-            return new AppSessionCoordinator(timeProvider, sessionLifetime);
+            var logger = sp.GetService<ILogger<AppSessionCoordinator>>()
+                ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<AppSessionCoordinator>.Instance;
+            return new AppSessionCoordinator(timeProvider, sessionLifetime, logger);
         });
+
+        services.AddSingleton<BackChannelLogoutReplayCache>();
+        services.AddSingleton<BackChannelLogoutValidator>();
+        services.AddSingleton<BackChannelLogoutHandler>();
 
         services.AddScoped<RevocableSessionActivityGate>();
 

@@ -259,10 +259,10 @@ except Exception as e:
     Write-Host "  provider: OK"
 
     # Verify backchannel logout is configured correctly
-    if ($providerCheck -match 'provider:logout_uri=http://mqttprobe:8080/signout-oidc') { # DevSkim: ignore DS137138 compose-internal backchannel URL
+    if ($providerCheck -match 'provider:logout_uri=http://mqttprobe:8080/oidc/backchannel-logout') { # DevSkim: ignore DS137138 compose-internal backchannel URL
         Write-Host "  backchannel logout_uri (internal): OK"
     } else {
-        throw "FAIL: provider logout_uri is not http://mqttprobe:8080/signout-oidc" # DevSkim: ignore DS137138 compose-internal backchannel URL
+        throw "FAIL: provider logout_uri is not http://mqttprobe:8080/oidc/backchannel-logout" # DevSkim: ignore DS137138 compose-internal backchannel URL
     }
     if ($providerCheck -match 'provider:logout_method=backchannel') {
         Write-Host "  logout_method=backchannel: OK"

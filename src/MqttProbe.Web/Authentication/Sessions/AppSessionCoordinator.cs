@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace MqttProbe.Web.Authentication;
 
@@ -10,21 +11,26 @@ public sealed class AppSessionCoordinator : IDisposable
     private readonly HashSet<string> _forceLoginSuppressed = new(StringComparer.Ordinal);
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _sessionLifetime;
+    private readonly ILogger<AppSessionCoordinator> _logger;
 
-    public AppSessionCoordinator(TimeProvider timeProvider, TimeSpan sessionLifetime)
+    public AppSessionCoordinator(
+        TimeProvider timeProvider,
+        TimeSpan sessionLifetime,
+        ILogger<AppSessionCoordinator>? logger = null)
     {
         _timeProvider = timeProvider;
         _sessionLifetime = sessionLifetime;
+        _logger = logger ?? NullLogger<AppSessionCoordinator>.Instance;
     }
 
     public event Action<AppSessionRecord>? SessionRevoked;
 
-    public AppSessionRecord CreateSession(ExternalIdentity identity)
+    public AppSessionRecord CreateSession(ExternalIdentity identity, string? sid = null)
     {
         var sessionId = GenerateSessionId();
         var expiresAt = _timeProvider.GetUtcNow().Add(_sessionLifetime);
 
-        var record = new AppSessionRecord(sessionId, identity, expiresAt);
+        var record = new AppSessionRecord(sessionId, identity, expiresAt, sid);
 
         lock (_lock)
         {
@@ -85,6 +91,19 @@ public sealed class AppSessionCoordinator : IDisposable
         lock (_lock)
         {
             return _sessions.Values.FirstOrDefault(s => s.ContainsCircuit(circuitId));
+        }
+    }
+
+    // Snapshot only: callers revoke through RevokeSessionAsync so teardown stays
+    // outside this lock. Records rather than ids, so a session that leaves the
+    // registry mid-revocation can still be checked for closed gates.
+    public IReadOnlyList<AppSessionRecord> FindSessionsForLogout(string issuer, string? sid, string? subject)
+    {
+        lock (_lock)
+        {
+            return _sessions.Values
+                .Where(record => record.MatchesBackChannelLogout(issuer, sid, subject))
+                .ToList();
         }
     }
 
@@ -169,21 +188,39 @@ public sealed class AppSessionCoordinator : IDisposable
             {
                 SessionRevoked?.Invoke(record);
             }
-            catch
+            catch (Exception ex)
             {
-                // Event exceptions cannot prevent session removal
+                _logger.LogWarning(ex, "SessionRevoked subscriber failed for session {SessionId}", sessionId);
+            }
+
+            // Secure invalidation failed: still tear everything down below, but
+            // let the caller see that a gate can still admit activity.
+            if (!record.AreGatesRevoked)
+            {
+                fault = new InvalidOperationException(
+                    "Session activity gate remained active after revocation.");
             }
 
             await TearDownLeasesAsync(
                 leases,
+                sessionId,
                 () => !IsForceLoginSuppressed(sessionId),
                 cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            fault = ex;
+            fault ??= ex;
         }
 
+        CompleteRevocation(sessionId, leases, fault, tcs);
+    }
+
+    private void CompleteRevocation(
+        string sessionId,
+        IReadOnlyList<CircuitLease> leases,
+        Exception? fault,
+        TaskCompletionSource<IReadOnlyList<CircuitLease>> tcs)
+    {
         // Registry cleanup under lock BEFORE signaling the TCS, so that any
         // caller resuming from await sees the dictionaries already updated.
         lock (_lock)
@@ -212,8 +249,9 @@ public sealed class AppSessionCoordinator : IDisposable
         }
     }
 
-    private static async Task TearDownLeasesAsync(
+    private async Task TearDownLeasesAsync(
         IReadOnlyList<CircuitLease> leases,
+        string sessionId,
         Func<bool> shouldNotifyForceLogin,
         CancellationToken cancellationToken)
     {
@@ -222,14 +260,22 @@ public sealed class AppSessionCoordinator : IDisposable
             return;
         }
 
-        try
+        // Every lease starts before the first await, so one failing teardown
+        // can neither skip a sibling nor hide its failure.
+        var teardownTasks = leases
+            .Select(lease => lease.TeardownAsync(shouldNotifyForceLogin, cancellationToken))
+            .ToList();
+
+        foreach (var teardownTask in teardownTasks)
         {
-            var teardownTasks = leases.Select(l => l.TeardownAsync(shouldNotifyForceLogin, cancellationToken));
-            await Task.WhenAll(teardownTasks).ConfigureAwait(false);
-        }
-        catch
-        {
-            // Cleanup exceptions cannot prevent session removal
+            try
+            {
+                await teardownTask.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Circuit teardown failed for session {SessionId}", sessionId);
+            }
         }
     }
 

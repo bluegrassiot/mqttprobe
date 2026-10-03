@@ -25,7 +25,7 @@
         "post.logout.redirect.uris": "https://localhost:5001/signout-callback-oidc",
         "oauth2.device.authorization.grant.enabled": "false",
         "backchannel.logout.session.required": "true",
-        "backchannel.logout.url": "http://mqttprobe:8080/signout-oidc"
+        "backchannel.logout.url": "http://mqttprobe:8080/oidc/backchannel-logout"
       },
       "protocolMappers": [
         {

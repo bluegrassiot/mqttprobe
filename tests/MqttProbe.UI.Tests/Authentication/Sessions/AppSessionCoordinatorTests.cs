@@ -1,12 +1,7 @@
-using System.Security.Claims;
-using System.Text.Json;
-using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
-using MqttProbe.Core.Services.Emulation;
 using MqttProbe.Core.Services.Mqtt;
-using MqttProbe.Core.Services.Security;
 using MqttProbe.Web.Authentication;
-using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using SessionState = MqttProbe.Web.Authentication.SessionState;
 
@@ -19,12 +14,20 @@ public class AppSessionCoordinatorTests
 
     private static AppSessionCoordinator CreateCoordinator(
         TimeProvider? timeProvider = null,
-        TimeSpan? sessionLifetime = null)
+        TimeSpan? sessionLifetime = null,
+        ILogger<AppSessionCoordinator>? logger = null)
     {
         return new AppSessionCoordinator(
             timeProvider ?? new FakeTimeProvider(_epoch),
-            sessionLifetime ?? TimeSpan.FromHours(8));
+            sessionLifetime ?? TimeSpan.FromHours(8),
+            logger);
     }
+
+    private static IEnumerable<string> WarningMessages(ILogger logger)
+        => logger.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(ILogger.Log)
+                && Equals(call.GetArguments()[0], LogLevel.Warning))
+            .Select(call => call.GetArguments()[2]?.ToString() ?? "");
 
     private static ExternalIdentity CreateIdentity(
         string iss = "https://idp.example.com",
@@ -225,7 +228,7 @@ public class AppSessionCoordinatorTests
     // ── One-shot exact deadline ──────────────────────────────────────────────
 
     [Test]
-    public async Task ExpiredSession_IsAutomaticallyRevoked()
+    public void ExpiredSession_IsAutomaticallyRevoked()
     {
         var timeProvider = new FakeTimeProvider(_epoch);
         var coordinator = CreateCoordinator(timeProvider: timeProvider, sessionLifetime: TimeSpan.FromHours(8));
@@ -250,7 +253,7 @@ public class AppSessionCoordinatorTests
     }
 
     [Test]
-    public async Task Session_CreatedOffCycle_ExpiresAtCorrectTime()
+    public void Session_CreatedOffCycle_ExpiresAtCorrectTime()
     {
         var timeProvider = new FakeTimeProvider(_epoch);
         var coordinator = CreateCoordinator(timeProvider: timeProvider, sessionLifetime: TimeSpan.FromHours(8));
@@ -440,6 +443,80 @@ public class AppSessionCoordinatorTests
         coordinator.GetSession(record.SessionId).Should().BeNull();
     }
 
+    // ── Callback/cleanup failures stay observable, never skip siblings ──────
+
+    [Test]
+    public async Task RevokeSessionAsync_GateCallbackThrows_RevokesEveryGateAndTearsDownEveryLease()
+    {
+        var logger = Substitute.For<ILogger<RevocableSessionActivityGate>>();
+        var coordinator = CreateCoordinator();
+        var record = coordinator.CreateSession(CreateIdentity());
+        var throwingGate = new RevocableSessionActivityGate(logger);
+        var siblingGate = new RevocableSessionActivityGate();
+        var throwingTeardown = Substitute.For<ICircuitTeardownHandler>();
+        var siblingTeardown = Substitute.For<ICircuitTeardownHandler>();
+        coordinator.ValidateAndRegister(record.SessionId, "https://idp.example.com", "user-123",
+            CreateBoundLease(record, "c1", throwingGate, throwingTeardown));
+        coordinator.ValidateAndRegister(record.SessionId, "https://idp.example.com", "user-123",
+            CreateBoundLease(record, "c2", siblingGate, siblingTeardown));
+        throwingGate.RevocationToken.Register(() => throw new InvalidOperationException("callback failed"));
+
+        await coordinator.RevokeSessionAsync(record.SessionId);
+
+        throwingGate.IsActive.Should().BeFalse();
+        siblingGate.IsActive.Should().BeFalse();
+        record.State.Should().Be(SessionState.Revoked);
+        record.AreGatesRevoked.Should().BeTrue();
+        await throwingTeardown.Received(1).TeardownAsync(Arg.Any<Func<bool>>(), Arg.Any<CancellationToken>());
+        await siblingTeardown.Received(1).TeardownAsync(Arg.Any<Func<bool>>(), Arg.Any<CancellationToken>());
+
+        await throwingGate.RevocationCompletion.WaitAsync(TimeSpan.FromSeconds(10));
+        WarningMessages(logger).Should().Contain(message => message.Contains("revocation callback failed"));
+    }
+
+    // ── A retry after the record is gone cannot fabricate a revocation ─────
+
+    [Test]
+    public async Task RevokeSessionAsync_RetryAfterTheRecordIsGone_CannotReportLeasesItNeverRevoked()
+    {
+        var coordinator = CreateCoordinator();
+        var record = coordinator.CreateSession(CreateIdentity());
+        var gate = new RevocableSessionActivityGate();
+        coordinator.ValidateAndRegister(record.SessionId, "https://idp.example.com", "user-123",
+            CreateBoundLease(record, "c1", gate));
+
+        var first = await coordinator.RevokeSessionAsync(record.SessionId);
+        var retry = await coordinator.RevokeSessionAsync(record.SessionId);
+
+        first.Should().ContainSingle();
+        retry.Should().BeEmpty();
+        coordinator.GetSession(record.SessionId).Should().BeNull();
+
+        // Closure is proven by the record the first revocation left behind, not
+        // by the retry, which verified nothing.
+        record.AreGatesRevoked.Should().BeTrue();
+        gate.IsActive.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task RevokeSessionAsync_TeardownThrows_LogsWarningAndCompletes()
+    {
+        var logger = Substitute.For<ILogger<AppSessionCoordinator>>();
+        var coordinator = CreateCoordinator(logger: logger);
+        var record = coordinator.CreateSession(CreateIdentity());
+        var teardown = Substitute.For<ICircuitTeardownHandler>();
+        teardown.TeardownAsync(Arg.Any<Func<bool>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("cleanup failed"));
+        coordinator.ValidateAndRegister(record.SessionId, "https://idp.example.com", "user-123",
+            CreateBoundLease(record, "c1", new RevocableSessionActivityGate(), teardown));
+
+        await coordinator.RevokeSessionAsync(record.SessionId);
+
+        record.State.Should().Be(SessionState.Revoked);
+        coordinator.GetSession(record.SessionId).Should().BeNull();
+        WarningMessages(logger).Should().Contain(message => message.Contains("Circuit teardown failed"));
+    }
+
     // ── Zero-circuit sessions retained until expiry ──────────────────────────
 
     [Test]
@@ -456,7 +533,7 @@ public class AppSessionCoordinatorTests
     }
 
     [Test]
-    public async Task Session_ZeroCircuits_RevokedAtExpiry()
+    public void Session_ZeroCircuits_RevokedAtExpiry()
     {
         var timeProvider = new FakeTimeProvider(_epoch);
         var coordinator = CreateCoordinator(timeProvider: timeProvider, sessionLifetime: TimeSpan.FromHours(8));
@@ -666,7 +743,7 @@ public class AppSessionCoordinatorTests
     // ── Timer expiry removes registry entry ──────────────────────────────────
 
     [Test]
-    public async Task TimerExpiry_RemovesRegistryEntry()
+    public void TimerExpiry_RemovesRegistryEntry()
     {
         var timeProvider = new FakeTimeProvider(_epoch);
         var coordinator = new AppSessionCoordinator(timeProvider, TimeSpan.FromHours(8));
@@ -680,7 +757,7 @@ public class AppSessionCoordinatorTests
     // ── Timer expiry disposes timer ──────────────────────────────────────────
 
     [Test]
-    public async Task TimerExpiry_DisposesTimer()
+    public void TimerExpiry_DisposesTimer()
     {
         var timeProvider = new FakeTimeProvider(_epoch);
         var coordinator = new AppSessionCoordinator(timeProvider, TimeSpan.FromHours(8));

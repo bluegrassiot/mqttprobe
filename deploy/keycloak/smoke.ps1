@@ -246,10 +246,10 @@ try {
             $backchannelUrl = $Matches[1]
             Write-Host "  backchannel.logout.url: $backchannelUrl"
             if ($backchannelUrl -match 'localhost:5001') {
-                throw "backchannel.logout.url points to localhost:5001 (unreachable from Keycloak container). Expected http://mqttprobe:8080/signout-oidc" # DevSkim: ignore DS137138 compose-internal backchannel URL
+                throw "backchannel.logout.url points to localhost:5001 (unreachable from Keycloak container). Expected http://mqttprobe:8080/oidc/backchannel-logout" # DevSkim: ignore DS137138 compose-internal backchannel URL
             }
-            if ($backchannelUrl -ne 'http://mqttprobe:8080/signout-oidc') { # DevSkim: ignore DS137138 compose-internal backchannel URL
-                throw "backchannel.logout.url unexpected: $backchannelUrl (expected http://mqttprobe:8080/signout-oidc)" # DevSkim: ignore DS137138 compose-internal backchannel URL
+            if ($backchannelUrl -ne 'http://mqttprobe:8080/oidc/backchannel-logout') { # DevSkim: ignore DS137138 compose-internal backchannel URL
+                throw "backchannel.logout.url unexpected: $backchannelUrl (expected http://mqttprobe:8080/oidc/backchannel-logout)" # DevSkim: ignore DS137138 compose-internal backchannel URL
             }
             Write-Host "  backchannel.logout.url is internal: OK"
         } else {

@@ -1,9 +1,7 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Time.Testing;
 using MqttProbe.Core.Services.Emulation;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Web.Authentication;
-using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
 namespace MqttProbe.UI.Tests.Authentication;
@@ -11,8 +9,6 @@ namespace MqttProbe.UI.Tests.Authentication;
 [TestFixture]
 public class ScopedCircuitTeardownHandlerTests
 {
-    private static readonly DateTimeOffset _epoch = new(2026, 8, 29, 8, 0, 0, TimeSpan.Zero);
-
     private static (
         ScopedCircuitTeardownHandler Handler,
         IMqttManagedClient MqttClient,
@@ -31,12 +27,18 @@ public class ScopedCircuitTeardownHandlerTests
         return (handler, mqtt, emulation, authInvalidator, loginNotifier);
     }
 
+    private static IEnumerable<string> WarningMessages(ILogger<ScopedCircuitTeardownHandler> logger)
+        => logger.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(ILogger.Log)
+                && Equals(call.GetArguments()[0], LogLevel.Warning))
+            .Select(call => call.GetArguments()[2]?.ToString() ?? "");
+
     // ── Gate first, then cleanup ─────────────────────────────────────────────
 
     [Test]
     public async Task TeardownAsync_RevokesGateFirst()
     {
-        var (handler, mqtt, emulation, _, _) = CreateSut();
+        var (handler, _, _, _, _) = CreateSut();
         var gate = new RevocableSessionActivityGate();
 
         // Gate is revoked by CircuitLease.TeardownAsync before handler.TeardownAsync
@@ -91,6 +93,49 @@ public class ScopedCircuitTeardownHandlerTests
     }
 
     [Test]
+    public async Task TeardownAsync_ResourceFails_StopsTheOtherResourceAndLogsWarning()
+    {
+        var mqtt = Substitute.For<IMqttManagedClient>();
+        var emulation = Substitute.For<IEmulationService>();
+        var logger = Substitute.For<ILogger<ScopedCircuitTeardownHandler>>();
+        var handler = new ScopedCircuitTeardownHandler(
+            mqtt,
+            emulation,
+            Substitute.For<IAuthenticationStateInvalidator>(),
+            Substitute.For<ILoginNavigationNotifier>(),
+            logger);
+        emulation.StopAsync().ThrowsAsync(new InvalidOperationException("emulator fault"));
+
+        await handler.TeardownAsync();
+
+        await mqtt.Received(1).StopAsync(Arg.Any<CancellationToken>());
+        WarningMessages(logger).Should().Contain(message => message.Contains("Failed to stop emulation"));
+    }
+
+    [Test]
+    public async Task TeardownAsync_CleanupTimesOut_LogsWarningAndKeepsGoing()
+    {
+        var mqtt = Substitute.For<IMqttManagedClient>();
+        var emulation = Substitute.For<IEmulationService>();
+        var authInvalidator = Substitute.For<IAuthenticationStateInvalidator>();
+        var logger = Substitute.For<ILogger<ScopedCircuitTeardownHandler>>();
+        var handler = new ScopedCircuitTeardownHandler(
+            mqtt,
+            emulation,
+            authInvalidator,
+            Substitute.For<ILoginNavigationNotifier>(),
+            logger,
+            cleanupTimeout: TimeSpan.FromMilliseconds(50));
+        emulation.StopAsync().Returns(new TaskCompletionSource().Task);
+
+        await handler.TeardownAsync();
+
+        await mqtt.Received(1).StopAsync(Arg.Any<CancellationToken>());
+        authInvalidator.Received(1).SetAnonymous();
+        WarningMessages(logger).Should().Contain(message => message.Contains("Emulation stop timed out"));
+    }
+
+    [Test]
     public async Task TeardownAsync_MqttFails_StillSetsAnonymousAndNotifies()
     {
         var (handler, mqtt, _, authInvalidator, loginNotifier) = CreateSut();
@@ -133,7 +178,7 @@ public class ScopedCircuitTeardownHandlerTests
     [Test]
     public async Task TeardownAsync_CalledTwice_DoesNotThrow()
     {
-        var (handler, mqtt, emulation, _, _) = CreateSut();
+        var (handler, _, _, _, _) = CreateSut();
 
         await handler.TeardownAsync();
         var act = () => handler.TeardownAsync();

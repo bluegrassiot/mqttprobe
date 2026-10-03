@@ -270,12 +270,12 @@ else
   else
     echo "  backchannel.logout.url: $BACKCHANNEL_URL"
     if echo "$BACKCHANNEL_URL" | grep -q 'localhost:5001'; then
-      echo "FAIL: backchannel.logout.url points to localhost:5001 (unreachable from Keycloak container). Expected http://mqttprobe:8080/signout-oidc" # DevSkim: ignore DS137138 compose-internal backchannel URL
+      echo "FAIL: backchannel.logout.url points to localhost:5001 (unreachable from Keycloak container). Expected http://mqttprobe:8080/oidc/backchannel-logout" # DevSkim: ignore DS137138 compose-internal backchannel URL
       ORIGINAL_EXIT=1
       exit 1
     fi
-    if [ "$BACKCHANNEL_URL" != "http://mqttprobe:8080/signout-oidc" ]; then # DevSkim: ignore DS137138 compose-internal backchannel URL
-      echo "FAIL: backchannel.logout.url unexpected: $BACKCHANNEL_URL (expected http://mqttprobe:8080/signout-oidc)" # DevSkim: ignore DS137138 compose-internal backchannel URL
+    if [ "$BACKCHANNEL_URL" != "http://mqttprobe:8080/oidc/backchannel-logout" ]; then # DevSkim: ignore DS137138 compose-internal backchannel URL
+      echo "FAIL: backchannel.logout.url unexpected: $BACKCHANNEL_URL (expected http://mqttprobe:8080/oidc/backchannel-logout)" # DevSkim: ignore DS137138 compose-internal backchannel URL
       ORIGINAL_EXIT=1
       exit 1
     fi

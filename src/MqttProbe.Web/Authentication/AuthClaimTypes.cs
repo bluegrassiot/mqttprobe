@@ -8,6 +8,9 @@ public static class AuthClaimTypes
     public const string Name = "name";
     public const string PreferredUsername = "preferred_username";
 
+    // Provider session id from the ID token, distinct from AppSessionId.
+    public const string Sid = "sid";
+
     // App principal claim types (explicit, not remapped)
     public const string AppIssuer = "iss";
     public const string AppSubject = "sub";

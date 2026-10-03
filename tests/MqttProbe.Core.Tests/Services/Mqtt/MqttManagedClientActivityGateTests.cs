@@ -205,7 +205,7 @@ public class MqttManagedClientActivityGateTests
         // Make PublishAsync succeed for the first, then revoke before drain processes the second.
         var publishCount = 0;
         client.PublishAsync(Arg.Any<MqttApplicationMessage>(), Arg.Any<CancellationToken>())
-            .Returns(ci =>
+            .Returns(_ =>
             {
                 publishCount++;
                 if (publishCount == 1)
@@ -307,7 +307,7 @@ public class MqttManagedClientActivityGateTests
     }
 
     [Test]
-    public async Task Dispose_after_revoke_disposes_cleanly()
+    public Task Dispose_after_revoke_disposes_cleanly()
     {
         var client = Substitute.For<IMqttClient>();
         var gate = new RevocableSessionActivityGate();
@@ -319,6 +319,7 @@ public class MqttManagedClientActivityGateTests
         act.Should().NotThrow();
 
         client.Received(1).Dispose();
+        return Task.CompletedTask;
     }
 
     [Test]
@@ -337,6 +338,7 @@ public class MqttManagedClientActivityGateTests
 
         capturedToken.CanBeCanceled.Should().BeTrue();
         gate.Revoke();
+        await gate.RevocationCompletion.WaitAsync(TimeSpan.FromSeconds(10));
         capturedToken.IsCancellationRequested.Should().BeTrue();
         tcs.SetResult(new MqttClientSubscribeResult(0, Array.Empty<MqttClientSubscribeResultItem>(), null!, Array.Empty<MqttUserProperty>()));
         await subscribeTask;
@@ -358,6 +360,7 @@ public class MqttManagedClientActivityGateTests
 
         capturedToken.CanBeCanceled.Should().BeTrue();
         gate.Revoke();
+        await gate.RevocationCompletion.WaitAsync(TimeSpan.FromSeconds(10));
         capturedToken.IsCancellationRequested.Should().BeTrue();
         tcs.SetResult(new MqttClientUnsubscribeResult(0, Array.Empty<MqttClientUnsubscribeResultItem>(), null!, Array.Empty<MqttUserProperty>()));
         await unsubTask;
@@ -380,6 +383,7 @@ public class MqttManagedClientActivityGateTests
 
         capturedToken.CanBeCanceled.Should().BeTrue();
         gate.Revoke();
+        await gate.RevocationCompletion.WaitAsync(TimeSpan.FromSeconds(10));
         capturedToken.IsCancellationRequested.Should().BeTrue();
         tcs.SetResult(new MqttClientPublishResult(null, default, null!, Array.Empty<MqttUserProperty>()));
         await publishTask;
@@ -443,7 +447,7 @@ public class MqttManagedClientActivityGateTests
 
         gate.Revoke();
 
-        var act = () => sut.SubscribeAsync(new[] { Filter("a/b") });
+        var act = () => sut.SubscribeAsync([Filter("a/b")]);
         await act.Should().ThrowExactlyAsync<InvalidOperationException>();
     }
 
@@ -511,12 +515,13 @@ public class MqttManagedClientActivityGateTests
 
         // Make ConnectAsync cancel via the linked revocation token.
         client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
-            .Returns(ci =>
+            .Returns(async ci =>
             {
                 var ct = ci.ArgAt<CancellationToken>(1);
                 gate.Revoke();
+                await gate.RevocationCompletion.WaitAsync(TimeSpan.FromSeconds(10));
                 ct.ThrowIfCancellationRequested();
-                return Task.FromResult(new MqttClientConnectResult());
+                return new MqttClientConnectResult();
             });
 
         await sut.StartAsync(BuildOptions());

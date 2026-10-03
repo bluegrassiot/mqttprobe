@@ -67,9 +67,13 @@ public sealed class ScopedCircuitTeardownHandler : ICircuitTeardownHandler
         {
             _logger.LogWarning(ex, "Emulation stop cancelled");
         }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Emulation stop timed out");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to stop emulation");
+            _logger.LogWarning(ex, "Failed to stop emulation");
         }
     }
 
@@ -87,9 +91,13 @@ public sealed class ScopedCircuitTeardownHandler : ICircuitTeardownHandler
         {
             _logger.LogWarning(ex, "MQTT stop cancelled");
         }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogWarning(ex, "MQTT stop timed out");
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to stop MQTT client");
+            _logger.LogWarning(ex, "Failed to stop MQTT client");
         }
     }
 }

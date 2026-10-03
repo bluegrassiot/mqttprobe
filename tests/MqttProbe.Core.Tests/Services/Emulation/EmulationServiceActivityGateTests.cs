@@ -186,7 +186,9 @@ public class EmulationServiceActivityGateTests
         _mockNode.ClearReceivedCalls();
         _gate.Revoke();
 
-        // Linked CTS cancels immediately: IsRunning flips without a timing window.
+        // Linked CTS cancellation runs with the revocation callbacks, so wait for
+        // them before reading IsRunning.
+        await _gate.RevocationCompletion.WaitAsync(TimeSpan.FromSeconds(10));
         service.IsRunning.Should().BeFalse();
 
         // Give the cancelled Task.Delay time to unwind, then prove no further tick ran.

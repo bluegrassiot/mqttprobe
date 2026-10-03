@@ -76,32 +76,110 @@ LEVEL_ORDER = ["error", "warning", "note", "none", "other"]
 # Keycloak reads that file verbatim at container start. The listed value is the
 # compose-internal backchannel logout URL: mqttprobe only serves plain HTTP on
 # 8080 inside the Docker network, so https here would break logout.
-#
-# Fail closed: an entry matches only when rule, repo-relative file, and the exact
-# value all sit on the reported line. A different URL, rule, file, or line keeps
-# blocking; a raise of --fail-on still applies to everything else.
 GATED_EXCEPTIONS = [
     {
         "rule": "DS137138",
         "file": "deploy/keycloak/realm.json",
-        "value": '"backchannel.logout.url": "http://mqttprobe:8080/signout-oidc"',  # DevSkim: ignore DS137138 mirrors the realm.json value the gate checks
+        "value": '"backchannel.logout.url": "http://mqttprobe:8080/oidc/backchannel-logout"',  # DevSkim: ignore DS137138 mirrors the realm.json value the gate checks
     },
 ]
 
+# DS137138 also fires on the OpenID Connect backchannel-logout event type: a
+# fixed spec identifier, never fetched. Only the listed files may use it over
+# plain http, and only when the reported line holds the exact quoted identifier
+# (C#-escaped quotes included) and no other http URL.
+SPEC_IDENTIFIER_FILES = [
+    "src/MqttProbe.Web/Authentication/Oidc/BackChannelLogoutValidator.cs",
+    "tests/MqttProbe.UI.Tests/Authentication/Oidc/LogoutTokenFactory.cs",
+    "tests/MqttProbe.UI.Tests/Authentication/Oidc/BackChannelLogoutValidatorTests.cs",
+    "tests/MqttProbe.IntegrationTests/Authentication/Shared/BackchannelLogoutBridge.cs",
+    "tests/MqttProbe.IntegrationTests/Authentication/Keycloak/KeycloakBackchannelLogoutTests.cs",
+]
+SPEC_IDENTIFIER_QUOTED = '"http://schemas.openid.net/event/backchannel-logout"'  # DevSkim: ignore DS137138 mirrors the identifier the gate checks
+SPEC_IDENTIFIER_ESCAPED = SPEC_IDENTIFIER_QUOTED.replace('"', r'\"')
+
+
+def parse_property_line(line):
+    """Parse a source line as exactly one JSON property, or None.
+
+    The JSON parse does the normalising: indentation, spacing around the colon
+    and a trailing comma all disappear. A second property on the same line, a
+    redefined key, or anything that is not a single property parse to None.
+    """
+    text = line.strip()
+    if text.endswith(","):
+        text = text[:-1].rstrip()
+    if not text:
+        return None
+    try:
+        pairs = json.loads("{" + text + "}", object_pairs_hook=list)
+    except ValueError:
+        return None
+    return pairs[0] if len(pairs) == 1 else None
+
+
+def json_property_occurrences(text, key):
+    """Every value stored under `key` anywhere in `text`, plus whether `key` was
+    ever redefined inside a single object.
+
+    Raises ValueError on malformed JSON so callers can fail closed.
+    """
+    occurrences = []
+    redefined = False
+
+    def hook(pairs):
+        nonlocal redefined
+        seen = set()
+        for name, value in pairs:
+            if name == key:
+                if name in seen:
+                    redefined = True
+                occurrences.append(value)
+            seen.add(name)
+        return dict(pairs)
+
+    json.loads(text, object_pairs_hook=hook)
+    return occurrences, redefined
+
 
 def is_gated_exception(finding):
-    """True only for an exact (rule, file, source line holds value) match."""
+    """True only for an exact (rule, file, whole property line, effective value) match."""
     for exception in GATED_EXCEPTIONS:
         if finding["rule"] != exception["rule"] or finding["file"] != exception["file"]:
             continue
+        approved = parse_property_line(exception["value"])
+        if approved is None:
+            continue  # misconfigured exception: keep the finding blocking
         try:
-            lines = (ROOT / exception["file"]).read_text(encoding="utf-8").splitlines()
-        except OSError:
+            text = (ROOT / exception["file"]).read_text(encoding="utf-8")
+        except (OSError, ValueError):
             continue  # unreadable file: keep the finding blocking
+        lines = text.splitlines()
         line = lines[finding["line"] - 1] if 0 < finding["line"] <= len(lines) else ""
-        if exception["value"] in line:
-            return True
+        if parse_property_line(line) != approved:
+            continue  # approved value sharing the line with anything else
+        try:
+            occurrences, redefined = json_property_occurrences(text, approved[0])
+        except ValueError:
+            continue  # malformed JSON: keep the finding blocking
+        if redefined or occurrences != [approved[1]]:
+            continue  # duplicate or overridden property: no unique approved value
+        return True
     return False
+
+
+def is_spec_identifier_exception(finding):
+    """True only for DS137138 on the exact quoted spec identifier line."""
+    if finding["rule"] != "DS137138" or finding["file"] not in SPEC_IDENTIFIER_FILES:
+        return False
+    try:
+        lines = (ROOT / finding["file"]).read_text(encoding="utf-8").splitlines()
+    except (OSError, ValueError):
+        return False  # unreadable file: keep the finding blocking
+    line = lines[finding["line"] - 1] if 0 < finding["line"] <= len(lines) else ""
+    if SPEC_IDENTIFIER_QUOTED not in line and SPEC_IDENTIFIER_ESCAPED not in line:
+        return False
+    return line.count("http://") == 1
 
 
 def run_tool(name, cmd, sarif_path):
@@ -311,7 +389,7 @@ def main():
                 if level_key(finding["level"]) > level_key(args.fail_on):
                     continue
                 # Reported either way; only the exit code is affected.
-                if is_gated_exception(finding):
+                if is_gated_exception(finding) or is_spec_identifier_exception(finding):
                     accepted.append(finding)
                 else:
                     gated.append(finding)

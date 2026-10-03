@@ -255,10 +255,10 @@ fi
 echo "  provider: OK"
 
 # Verify backchannel logout is configured correctly
-if echo "$PROVIDER_CHECK" | grep -q 'provider:logout_uri=http://mqttprobe:8080/signout-oidc'; then # DevSkim: ignore DS137138 compose-internal backchannel URL
+if echo "$PROVIDER_CHECK" | grep -q 'provider:logout_uri=http://mqttprobe:8080/oidc/backchannel-logout'; then # DevSkim: ignore DS137138 compose-internal backchannel URL
   echo "  backchannel logout_uri (internal): OK"
 else
-  echo "FAIL: provider logout_uri is not http://mqttprobe:8080/signout-oidc" >&2 # DevSkim: ignore DS137138 compose-internal backchannel URL
+  echo "FAIL: provider logout_uri is not http://mqttprobe:8080/oidc/backchannel-logout" >&2 # DevSkim: ignore DS137138 compose-internal backchannel URL
   exit 1
 fi
 if echo "$PROVIDER_CHECK" | grep -q 'provider:logout_method=backchannel'; then

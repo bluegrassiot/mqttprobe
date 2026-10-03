@@ -113,7 +113,7 @@ entries:
         - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
         - !Find [authentik_providers_oauth2.scopemapping, [managed, mqttprobe.io/providers/oauth2/scope-mqttprobe-access]]
       signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
-      logout_uri: http://mqttprobe:8080/signout-oidc # DevSkim: ignore DS137138 compose-internal backchannel URL
+      logout_uri: http://mqttprobe:8080/oidc/backchannel-logout # DevSkim: ignore DS137138 compose-internal backchannel URL
       logout_method: backchannel
 
   # --- Application ---

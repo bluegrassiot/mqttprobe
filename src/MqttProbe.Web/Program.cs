@@ -70,9 +70,14 @@ if (isOidc)
     builder.Services.AddSingleton<IPostConfigureOptions<OpenIdConnectOptions>>(sp =>
         sp.GetRequiredService<AuthenticationConfigurator>());
 }
+else
+{
+    // ForceLoginNotifier in Routes.razor injects ILoginNavigationNotifier unconditionally.
+    builder.Services.AddScoped<ILoginNavigationNotifier, LoginNavigationNotifier>();
+}
 
-// Configure authentication - one options configuration path before materialization
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+// OIDC registered only when isOidc: middleware initializes every IAuthenticationRequestHandler even in Local mode, so unconfigured OIDC 500s.
+var authBuilder = builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
         if (isOidc)
@@ -96,12 +101,12 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 
         options.LoginPath = "/Login";
         options.LogoutPath = "/Logout";
-    })
-    .AddOpenIdConnect(options =>
-    {
-        if (!isOidc)
-            return;
+    });
 
+if (isOidc)
+{
+    authBuilder.AddOpenIdConnect(options =>
+    {
         var oidc = authOptions.Oidc;
 
         options.Authority = oidc.Authority;
@@ -134,6 +139,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.NonceCookie.SameSite = SameSiteMode.None;
         options.NonceCookie.SecurePolicy = CookieSecurePolicy.Always;
     });
+}
 
 builder.Services.AddAuthorization();
 builder.Services.AddRateLimiter(options => options.AddLoginRateLimitPolicy());

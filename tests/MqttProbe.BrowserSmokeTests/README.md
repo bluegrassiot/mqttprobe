@@ -51,6 +51,78 @@ Optional `MQTTPROBE_TEST_BASE_URL` must be an https loopback origin (default
 that is the client's redirect allowlist entry, and it fails early when the `/Login` button is
 not the Keycloak one.
 
+## Local authentication smoke test
+
+`Local/LocalAuthenticationSmokeTests.cs` tests the local (non-OIDC) login flow: invalid
+password error, valid sign-in and app shell, logout with redirect to `/Login`, re-login, and
+a second logout. Same credentials as the OIDC tests. `MQTTPROBE_TEST_BASE_URL` defaults to
+`https://localhost:5081` (must be an https loopback origin).
+
+```powershell
+$env:MQTTPROBE_TEST_USERNAME = 'your-local-user'
+$env:MQTTPROBE_TEST_PASSWORD = '<password>'
+
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter FullyQualifiedName~LocalAuthenticationSmokeTests
+
+Remove-Item Env:MQTTPROBE_TEST_USERNAME, Env:MQTTPROBE_TEST_PASSWORD
+```
+
+## Exclusion smoke tests
+
+Two parameterized cases in `Exclusions/ExclusionBrowserSmokeTests.cs` exercise the
+topic-exclusion feature through the real UI: one exact filter, one wildcard. Each test:
+
+1. signs in once through the local Login page (`#username` / `#password`),
+2. configures a unique new MQTT connection through the dialog (Name, Client ID, Host,
+   Port, TLS off), clicks Connect, and waits for the connected chip and Pause button,
+3. subscribes to `<root>/#` through the Subscriptions tab and publishes baseline messages
+   via a plain-TCP MQTTnet client,
+4. verifies each baseline topic+payload pair in the Browser payload table (`.pb-cell-topic`
+   / `.pb-cell-payload`),
+5. adds an exclude filter through the Subscriptions Excluded topics panel,
+6. returns to Browser, verifies matching topics are absent from the payload table while
+   unaffected topics remain visible,
+7. publishes blocked markers then an unaffected sentinel, waits for the sentinel, then
+   asserts blocked messages stay absent across repeated DOM checks (~3 s),
+8. removes the exclude filter, publishes a fresh matching message, and verifies it resumes
+   while historical baseline and blocked payloads stay purged,
+9. disconnects through the real UI button.
+
+Each case uses a unique single-segment root (`exclude{Guid}`), explicit topic arrays for
+matches and controls, and a per-case wildcard subscribe filter. The MQTT client is bounded
+by a scenario cancellation token and disposed even if connect fails.
+
+Not listed in `MqttProbe.slnx`, not wired into CI. **Always pass a `--filter`.**
+
+### Prerequisites
+
+- A separate local app instance on `https://localhost:5081` (temporary dev config). Adjust
+  `MQTTPROBE_TEST_BASE_URL` if your instance runs elsewhere.
+- A real MQTT broker reachable at `localhost:1883` (the existing local Mosquitto service).
+  Adjust `MQTTPROBE_TEST_MQTT_HOST` / `MQTTPROBE_TEST_MQTT_PORT` if it differs.
+- Chromium installed once per machine (same as the auth tests above).
+- Local login credentials in the environment.
+
+### Run (Windows PowerShell 5.1)
+
+```powershell
+$env:MQTTPROBE_TEST_USERNAME = 'your-local-user'
+$env:MQTTPROBE_TEST_PASSWORD = '<password>'
+
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter FullyQualifiedName~ExclusionBrowserSmokeTests
+
+# Unset the credentials afterwards
+Remove-Item Env:MQTTPROBE_TEST_USERNAME, Env:MQTTPROBE_TEST_PASSWORD
+```
+
+Optional environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `MQTTPROBE_TEST_BASE_URL` | `https://localhost:5081` | App origin (must be https loopback) |
+| `MQTTPROBE_TEST_MQTT_HOST` | `localhost` | MQTT broker host |
+| `MQTTPROBE_TEST_MQTT_PORT` | `1883` | MQTT broker port |
+
 ## Behaviour
 
 The browser runs headed so you can watch the flow; waits are bounded with a 180s overall

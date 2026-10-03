@@ -633,7 +633,7 @@ public class MessageStoreManagerMessageHandlerTests
 
     private static (MessageStoreManager Manager, Func<MqttApplicationMessageReceivedEventArgs, Task> Fire)
         BuildManagerWithTopology(IUxMetricsService metrics, ISparkplugTopologyService topology,
-            ISparkplugCommandService? commandService = null)
+            ISparkplugCommandService? commandService = null, ITopicExcludeService? excludes = null)
     {
         var client = Substitute.For<IMqttManagedClient>();
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
@@ -647,7 +647,8 @@ public class MessageStoreManagerMessageHandlerTests
         sparkplugSettings.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
 
         var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
-            performanceSettings, metrics, TestPipelineHelper.BuildBuiltInPipeline(), sparkplugSettings, topology, commandService);
+            performanceSettings, metrics, TestPipelineHelper.BuildBuiltInPipeline(), sparkplugSettings,
+            topology, commandService, excludes);
         manager.Start().GetAwaiter().GetResult();
         return (manager, handler!);
     }
@@ -728,5 +729,466 @@ public class MessageStoreManagerMessageHandlerTests
         await built.Fire(MakeBinaryArgs("spBv1.0/g/DDATA/n1/d1", payload.ToByteArray()));
 
         await commandService.Received(1).RequestNodeRebirthIfNeededAsync("g", "n1");
+    }
+
+    [Test]
+    public async Task TopicExclusion_AddWaitsForInFlightMessage_ThenPurgesStoreAndTopology()
+    {
+        var client = Substitute.For<IMqttManagedClient>();
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        var session = new SessionState { SelectedConnection = new Connection() };
+        using var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        var performance = Substitute.For<IPerformanceSettings>();
+        performance.Performance.Returns(new AppConfiguration().Performance);
+        var sparkplug = Substitute.For<ISparkplugSettings>();
+        sparkplug.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
+        var topology = new BarrierTopologyService();
+        MqttMessage? received = null;
+
+        using var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
+            performance, Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline(),
+            sparkplug, topology, topicExcludeService: excludes);
+        manager.MessageReceived += msg =>
+        {
+            received = msg;
+            return Task.CompletedTask;
+        };
+        await manager.Start();
+
+        const string topic = "spBv1.0/g/NBIRTH/n1";
+        var fireTask = handler!(MakeBinaryArgs(topic, SparkplugPayload()));
+        Task<TopicExcludeOperationResult>? addTask = null;
+        var filterApplied = false;
+        var finishedWhileParked = false;
+        try
+        {
+            (await SatisfiesAsync(() => topology.Reached, TimeSpan.FromSeconds(5))).Should().BeTrue(
+                "the message has to be parked inside the exclusion read gate before Add starts");
+            addTask = excludes.Add("spBv1.0/#");
+            filterApplied = await SatisfiesAsync(() => excludes.IsExcluded(topic), TimeSpan.FromSeconds(2));
+            finishedWhileParked = await SatisfiesAsync(
+                () => addTask.IsCompleted, TimeSpan.FromMilliseconds(250));
+        }
+        finally
+        {
+            topology.Release();
+        }
+
+        var result = await addTask.WaitAsync(TimeSpan.FromSeconds(10));
+        await fireTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        filterApplied.Should().BeTrue("the filter has to be live before the purge waits for readers");
+        finishedWhileParked.Should().BeFalse(
+            "Add must not purge while the message is still in flight, or the insert lands after the purge");
+        result.IsValid.Should().BeTrue();
+        received.Should().NotBeNull("the in-flight message is stored first and purged after, not dropped");
+        manager.MessageStores.Should().BeEmpty();
+        topology.Groups.Should().BeEmpty(
+            "topology written while the message was in flight has to be purged as well");
+    }
+
+    [Test]
+    public async Task TopicExclusion_ReloadDuringInFlightMessage_PurgesAfterTheCommit()
+    {
+        var session = new SessionState { SelectedConnection = new Connection() };
+        using var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        var published = new List<string>();
+        excludes.TopicExcluded += published.Add;
+        var topology = new BarrierTopologyService();
+        var built = BuildManagerWithTopology(Substitute.For<IUxMetricsService>(), topology, excludes: excludes);
+        using var manager = built.Manager;
+
+        const string topic = "spBv1.0/g/NBIRTH/n1";
+        var fireTask = built.Fire(MakeBinaryArgs(topic, SparkplugPayload()));
+        var reloaded = false;
+        var publishedWhileParked = false;
+        try
+        {
+            (await SatisfiesAsync(() => topology.Reached, TimeSpan.FromSeconds(5))).Should().BeTrue(
+                "the message has to be parked inside the read gate before the reload installs filters");
+            session.SelectedConnection = new Connection { Id = Guid.NewGuid(), TopicExcludes = ["spBv1.0/#"] };
+            reloaded = await SatisfiesAsync(() => excludes.IsExcluded(topic), TimeSpan.FromSeconds(2));
+            publishedWhileParked = published.Count > 0;
+        }
+        finally
+        {
+            topology.Release();
+        }
+
+        await fireTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        reloaded.Should().BeTrue();
+        publishedWhileParked.Should().BeFalse(
+            "a reload must not purge while a message admitted under the old filters is still writing");
+        published.Should().Equal("spBv1.0/#");
+        manager.MessageStores.Should().BeEmpty();
+        topology.Groups.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task MessageReceived_SubscriberAddsExclusion_CompletesWithoutDeadlock()
+    {
+        var client = Substitute.For<IMqttManagedClient>();
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        var session = new SessionState { SelectedConnection = new Connection() };
+        using var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        var performance = Substitute.For<IPerformanceSettings>();
+        performance.Performance.Returns(new AppConfiguration().Performance);
+        var sparkplug = Substitute.For<ISparkplugSettings>();
+        sparkplug.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
+
+        using var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
+            performance, Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline(),
+            sparkplug, topicExcludeService: excludes);
+        await manager.Start();
+        manager.MessageReceived += async _ => await excludes.Add("sensors/#");
+
+        await handler!(MakeArgs("sensors/temp", "hello")).WaitAsync(TimeSpan.FromSeconds(10));
+
+        excludes.IsExcluded("sensors/temp").Should().BeTrue();
+        manager.MessageStores.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task TopicExclusion_UnrelatedInFlightMessage_DoesNotStallTheWaitingAdd()
+    {
+        var session = new SessionState { SelectedConnection = new Connection() };
+        using var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        var topology = new BarrierTopologyService();
+
+        var parkRequested = false;
+        var parkReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var parkRelease = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var metrics = Substitute.For<IUxMetricsService>();
+        metrics.When(m => m.RecordPayloadSize(Arg.Any<long>())).Do(_ =>
+        {
+            if (!Volatile.Read(ref parkRequested))
+                return;
+
+            Volatile.Write(ref parkRequested, false);
+            parkReached.TrySetResult();
+            parkRelease.Task.Wait(TimeSpan.FromSeconds(30));
+        });
+
+        var built = BuildManagerWithTopology(metrics, topology, excludes: excludes);
+        using var manager = built.Manager;
+
+        const string parkedTopic = "spBv1.0/g/NBIRTH/n1";
+        var fireMatching = built.Fire(MakeBinaryArgs(parkedTopic, SparkplugPayload()));
+        Task<TopicExcludeOperationResult>? addTask = null;
+        Task? fireUnrelated = null;
+        var filterApplied = false;
+        var unrelatedStillInFlight = false;
+        try
+        {
+            (await SatisfiesAsync(() => topology.Reached, TimeSpan.FromSeconds(5))).Should().BeTrue(
+                "the matching message has to be parked inside the read gate before Add starts");
+            addTask = excludes.Add("spBv1.0/#");
+            filterApplied = await SatisfiesAsync(
+                () => excludes.IsExcluded(parkedTopic), TimeSpan.FromSeconds(2));
+
+            // A second message, on a topic the new filter cannot match, stays in flight while
+            // the purge is waiting.
+            Volatile.Write(ref parkRequested, true);
+            fireUnrelated = Task.Run(() => built.Fire(MakeArgs("other/topic", "payload")));
+            (await SatisfiesAsync(() => parkReached.Task.IsCompleted, TimeSpan.FromSeconds(5)))
+                .Should().BeTrue();
+
+            topology.Release();
+
+            var result = await addTask.WaitAsync(TimeSpan.FromSeconds(10));
+            await fireMatching.WaitAsync(TimeSpan.FromSeconds(10));
+            unrelatedStillInFlight = !fireUnrelated.IsCompleted;
+
+            result.IsValid.Should().BeTrue(
+                "the purge may not wait on traffic the new filter cannot match");
+            filterApplied.Should().BeTrue();
+        }
+        finally
+        {
+            topology.Release();
+            parkRelease.TrySetResult();
+        }
+
+        unrelatedStillInFlight.Should().BeTrue(
+            "the unrelated message was still in flight when the purge published");
+        await fireUnrelated.WaitAsync(TimeSpan.FromSeconds(10));
+
+        manager.MessageStores.Should().ContainKey("other");
+        manager.MessageStores.Should().NotContainKey("spBv1.0");
+    }
+
+    // Real topology service plus a started manager, seeded with one node so a purge has
+    // something to remove.
+    private static async Task<(TopicExcludeService Excludes, SparkplugTopologyService Topology,
+        MessageStoreManager Manager)> BuildExclusionScenarioAsync()
+    {
+        var session = new SessionState { SelectedConnection = new Connection() };
+        var settings = Substitute.For<IConnectionSettings>();
+        settings.Connections.Returns([]);
+        var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(), settings, session);
+        var topology = new SparkplugTopologyService();
+        var built = BuildManagerWithTopology(Substitute.For<IUxMetricsService>(), topology, excludes: excludes);
+        await built.Fire(MakeBinaryArgs("spBv1.0/g/NBIRTH/n1", SparkplugPayload()));
+        return (excludes, topology, built.Manager);
+    }
+
+    private sealed class ReentrantTopologySubscriber
+    {
+        private readonly TopicExcludeService _excludes;
+        private int _notified;
+        private int _reentered;
+        private int _innerCompleted;
+
+        public ReentrantTopologySubscriber(ISparkplugTopologyService topology, TopicExcludeService excludes)
+        {
+            _excludes = excludes;
+            topology.TopologyChanged += OnTopologyChanged;
+        }
+
+        public int Notified => Volatile.Read(ref _notified);
+
+        public int Reentered => Volatile.Read(ref _reentered);
+
+        public bool InnerCompleted => Volatile.Read(ref _innerCompleted) != 0;
+
+        private void OnTopologyChanged()
+        {
+            Interlocked.Increment(ref _notified);
+            if (Interlocked.Exchange(ref _reentered, 1) != 0)
+                return;
+
+            try
+            {
+                // Bounded: a re-entrant deadlock has to surface as a failed assertion, not a
+                // hung run whose cleanup then blocks on the lock the deadlock is holding.
+                _excludes.Add("reentrant/#").WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+                Interlocked.Exchange(ref _innerCompleted, 1);
+            }
+            catch (Exception)
+            {
+                // Surfaced through InnerCompleted; nothing may escape into the purge.
+            }
+        }
+    }
+
+    [Test]
+    public async Task TopologyChanged_SubscriberReenteringAddDuringImmediatePurge_CompletesWithoutDeadlock()
+    {
+        var scenario = await BuildExclusionScenarioAsync();
+        using var excludes = scenario.Excludes;
+        using var manager = scenario.Manager;
+        var topology = scenario.Topology;
+        var subscriber = new ReentrantTopologySubscriber(topology, excludes);
+
+        // Pooled so a re-entrant deadlock shows up as a bounded failure, not a hung run.
+        var result = await Task.Run(() => excludes.Add("spBv1.0/#").WaitAsync(TimeSpan.FromSeconds(10)))
+            .WaitAsync(TimeSpan.FromSeconds(15));
+
+        result.IsValid.Should().BeTrue();
+        subscriber.Reentered.Should().Be(1, "the subscriber has to re-enter the exclude service for this to prove anything");
+        subscriber.InnerCompleted.Should().BeTrue("the re-entrant Add must finish, not just start");
+        subscriber.Notified.Should().BeGreaterThan(0, "the purge must still announce the topology it removed");
+        topology.Groups.Should().BeEmpty();
+        excludes.IsExcluded("reentrant/#").Should().BeTrue();
+        manager.MessageStores.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task TopologyChanged_SubscriberReenteringAddDuringDeferredPurge_CompletesWithoutDeadlock()
+    {
+        var scenario = await BuildExclusionScenarioAsync();
+        using var excludes = scenario.Excludes;
+        using var manager = scenario.Manager;
+        var topology = scenario.Topology;
+        var subscriber = new ReentrantTopologySubscriber(topology, excludes);
+        const string topic = "spBv1.0/g/NBIRTH/n1";
+
+        var gate = excludes.TryEnter(topic);
+        gate.Should().NotBeNull();
+        var addTask = excludes.Add("spBv1.0/#");
+        (await SatisfiesAsync(() => excludes.IsExcluded(topic), TimeSpan.FromSeconds(2))).Should().BeTrue(
+            "the filter has to be live before the purge parks");
+        addTask.IsCompleted.Should().BeFalse("the purge is parked on the in-flight reader");
+
+        // Releasing on the pool keeps a deadlock visible as a bounded failure, not a hang.
+        await Task.Run(() => gate.Dispose()).WaitAsync(TimeSpan.FromSeconds(15));
+        var result = await addTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        result.IsValid.Should().BeTrue();
+        subscriber.Reentered.Should().Be(1);
+        subscriber.InnerCompleted.Should().BeTrue("the re-entrant Add must finish, not just start");
+        subscriber.Notified.Should().BeGreaterThan(0);
+        topology.Groups.Should().BeEmpty();
+        manager.MessageStores.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task TopologyChanged_SubscriberThrowing_DoesNotFailTheExclusion()
+    {
+        var scenario = await BuildExclusionScenarioAsync();
+        using var excludes = scenario.Excludes;
+        using var manager = scenario.Manager;
+        scenario.Topology.TopologyChanged += () => throw new InvalidOperationException("subscriber boom");
+
+        var result = await Task.Run(() => excludes.Add("spBv1.0/#").WaitAsync(TimeSpan.FromSeconds(10)))
+            .WaitAsync(TimeSpan.FromSeconds(15));
+
+        result.IsValid.Should().BeTrue("a throwing topology subscriber is isolated from the purge outcome");
+        scenario.Topology.Groups.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Dispose_BetweenPurgeAndObserver_DropsThePendingTopologyNotification()
+    {
+        var scenario = await BuildExclusionScenarioAsync();
+        using var manager = scenario.Manager;
+        using var excludes = scenario.Excludes;
+        var topology = scenario.Topology;
+        var notified = 0;
+        topology.TopologyChanged += () => Interlocked.Increment(ref notified);
+
+        // Registered after the manager's purger, so this one runs inside the trusted purge
+        // and holds it open while the manager tears down in between.
+        var purgerReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releasePurger = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        excludes.PurgeExcludedTopic += _ =>
+        {
+            purgerReached.TrySetResult();
+            releasePurger.Task.Wait(TimeSpan.FromSeconds(30));
+        };
+
+        var addTask = Task.Run(() => excludes.Add("spBv1.0/#"));
+        try
+        {
+            (await SatisfiesAsync(() => purgerReached.Task.IsCompleted, TimeSpan.FromSeconds(5))).Should().BeTrue(
+                "the purge has to be mid-flight before the observer is torn down");
+
+            await Task.Run(() => manager.Dispose()).WaitAsync(TimeSpan.FromSeconds(10));
+
+            notified.Should().Be(0,
+                "teardown may not announce topology while a purge still holds the exclude service");
+        }
+        finally
+        {
+            releasePurger.TrySetResult();
+        }
+
+        var result = await addTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        result.IsValid.Should().BeTrue();
+        notified.Should().Be(0, "the detached observer must not announce it either");
+        topology.Groups.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Dispose_WhileTrustedPurgeActive_SubscriberReenteringAdd_DoesNotDeadlock()
+    {
+        var scenario = await BuildExclusionScenarioAsync();
+        using var manager = scenario.Manager;
+        using var excludes = scenario.Excludes;
+        var topology = scenario.Topology;
+        var subscriber = new ReentrantTopologySubscriber(topology, excludes);
+
+        var purgerReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releasePurger = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        excludes.PurgeExcludedTopic += _ =>
+        {
+            purgerReached.TrySetResult();
+            releasePurger.Task.Wait(TimeSpan.FromSeconds(30));
+        };
+
+        var addTask = Task.Run(() => excludes.Add("spBv1.0/#"));
+        try
+        {
+            (await SatisfiesAsync(() => purgerReached.Task.IsCompleted, TimeSpan.FromSeconds(5))).Should().BeTrue(
+                "the purge has to be mid-flight before teardown");
+
+            // Bounded: a teardown that raises into a subscriber re-entering the exclude
+            // service here blocks on the operation lock the purge still owns, and has to
+            // surface as a timeout instead of a hung run.
+            await Task.Run(() => manager.Dispose()).WaitAsync(TimeSpan.FromSeconds(10));
+
+            subscriber.Notified.Should().Be(0,
+                "teardown must not raise TopologyChanged while the purge holds the exclude service");
+        }
+        finally
+        {
+            releasePurger.TrySetResult();
+        }
+
+        var result = await addTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        result.IsValid.Should().BeTrue();
+        subscriber.Reentered.Should().Be(0, "without a teardown raise there is no re-entrant Add to deadlock against");
+        topology.Groups.Should().BeEmpty();
+        manager.MessageStores.Should().BeEmpty();
+    }
+
+    private static async Task<bool> SatisfiesAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition())
+                return true;
+
+            await Task.Delay(10);
+        }
+
+        return condition();
+    }
+
+    private sealed class BarrierTopologyService : ISparkplugTopologyService
+    {
+        private readonly SparkplugTopologyService _inner = new();
+        private readonly TaskCompletionSource _reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool Reached => _reached.Task.IsCompleted;
+
+        public void Release() => _release.TrySetResult();
+
+        public IReadOnlyDictionary<string, SpbGroup> Groups => _inner.Groups;
+
+        public event Action? TopologyChanged
+        {
+            add => _inner.TopologyChanged += value;
+            remove => _inner.TopologyChanged -= value;
+        }
+
+        public bool RemoveNode(string groupId, string nodeId) => _inner.RemoveNode(groupId, nodeId);
+
+        public int RemoveMatchingTopic(string filter) => _inner.RemoveMatchingTopic(filter);
+
+        public int RemoveMatchingTopicSilent(string filter) => _inner.RemoveMatchingTopicSilent(filter);
+
+        public void RaiseTopologyChanged() => _inner.RaiseTopologyChanged();
+
+        public int RemoveOfflineNodes() => _inner.RemoveOfflineNodes();
+
+        public void ClearAll() => _inner.ClearAll();
+
+        public async Task ApplyTopologyEventsAsync(IReadOnlyList<TopologyEvent> events)
+        {
+            _reached.TrySetResult();
+            await _release.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            await _inner.ApplyTopologyEventsAsync(events);
+        }
     }
 }

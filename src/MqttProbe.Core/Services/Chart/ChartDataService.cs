@@ -36,6 +36,8 @@ public class ChartDataService(
     private readonly ConcurrentDictionary<Guid, ConcurrentQueue<ChartDataPoint>> _buffers = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Guid _connectionId;
+    private int _exclusionHooks;
+    private int _purgedNotify;
     private readonly ITopicExcludeService? _topicExcludeService = topicExcludeService;
 
     public event Action? OnDataUpdated;
@@ -64,8 +66,7 @@ public class ChartDataService(
             if (IsListening) return;
             client.ApplicationMessageReceivedAsync += MessageHandler;
             chartSettings.ChartsChanged += OnChartsChanged;
-            if (_topicExcludeService is not null)
-                _topicExcludeService.TopicExcluded += OnTopicExcluded;
+            AttachExclusionHooks();
             IsListening = true;
         }
         finally
@@ -82,8 +83,10 @@ public class ChartDataService(
             if (!IsListening) return;
             client.ApplicationMessageReceivedAsync -= MessageHandler;
             chartSettings.ChartsChanged -= OnChartsChanged;
-            if (_topicExcludeService is not null)
-                _topicExcludeService.TopicExcluded -= OnTopicExcluded;
+
+            // Exclusion hooks deliberately survive StopAsync: stopping listening must not
+            // blind the service to purges, or a handler admitted before the stop can write
+            // registry and buffer data that then outlives the exclusion into the next start.
             IsListening = false;
         }
         finally
@@ -92,14 +95,43 @@ public class ChartDataService(
         }
     }
 
+    private void AttachExclusionHooks()
+    {
+        if (_topicExcludeService is null)
+            return;
+
+        if (Interlocked.Exchange(ref _exclusionHooks, 1) != 0)
+            return;
+
+        _topicExcludeService.PurgeExcludedTopic += OnPurgeExcludedTopic;
+        _topicExcludeService.TopicExcluded += OnTopicExcluded;
+    }
+
+    private void DetachExclusionHooks()
+    {
+        if (_topicExcludeService is null)
+            return;
+
+        if (Interlocked.Exchange(ref _exclusionHooks, 0) == 0)
+            return;
+
+        _topicExcludeService.PurgeExcludedTopic -= OnPurgeExcludedTopic;
+        _topicExcludeService.TopicExcluded -= OnTopicExcluded;
+    }
+
     private Task MessageHandler(MqttApplicationMessageReceivedEventArgs e)
     {
+        var topic = e.ApplicationMessage.Topic;
+        IDisposable? exclusionGate = null;
+        if (_topicExcludeService is { } excludes)
+        {
+            exclusionGate = excludes.TryEnter(topic);
+            if (exclusionGate is null)
+                return Task.CompletedTask;
+        }
+
         try
         {
-            var topic = e.ApplicationMessage.Topic;
-            if (_topicExcludeService?.IsExcluded(topic) == true)
-                return Task.CompletedTask;
-
             var result = pipeline.ProcessInbound(e);
             var payload = result.Envelope.DisplayText;
 
@@ -122,20 +154,37 @@ public class ChartDataService(
 
             var updated = UpdateBuffers(topic, fields, DateTime.UtcNow);
 
+            // Released before the notification: a subscriber that calls Add would wait on this gate.
+            exclusionGate?.Dispose();
+            exclusionGate = null;
             if (updated) OnDataUpdated?.Invoke();
         }
         catch (Exception ex)
         {
             logger?.LogError(ex, "Error processing chart data message on topic {Topic}", e.ApplicationMessage.Topic);
         }
+        finally
+        {
+            exclusionGate?.Dispose();
+        }
 
         return Task.CompletedTask;
     }
 
-    private void OnTopicExcluded(string filter)
+    private void OnPurgeExcludedTopic(string filter)
     {
-        var registryChanged = registry.RemoveMatchingTopic(filter);
-        var buffersChanged = false;
+        var changed = PurgeChart(filter);
+
+        // Notification stays out of the purge itself: it runs while the exclude service
+        // holds its locks. One coalesced flag is enough, and a purge whose observer never
+        // runs cannot leave per-filter state behind to misfire on a later exclusion.
+        if (changed)
+            Interlocked.Exchange(ref _purgedNotify, 1);
+    }
+
+    private bool PurgeChart(string filter)
+    {
+        var changed = registry.RemoveMatchingTopic(filter);
         foreach (var config in chartSettings.GetCharts(_connectionId))
         {
             foreach (var series in config.Series)
@@ -144,11 +193,18 @@ public class ChartDataService(
                     || !_buffers.TryRemove(series.Id, out _))
                     continue;
 
-                buffersChanged = true;
+                changed = true;
             }
         }
 
-        if (registryChanged || buffersChanged)
+        return changed;
+    }
+
+    // Runs right after the matching purge on the same thread, so consuming the flag here
+    // notifies only when that purge actually changed chart state.
+    private void OnTopicExcluded(string filter)
+    {
+        if (Interlocked.Exchange(ref _purgedNotify, 0) != 0)
             OnDataUpdated?.Invoke();
     }
 
@@ -223,8 +279,8 @@ public class ChartDataService(
         {
             client.ApplicationMessageReceivedAsync -= MessageHandler;
             chartSettings.ChartsChanged -= OnChartsChanged;
-            if (_topicExcludeService is not null)
-                _topicExcludeService.TopicExcluded -= OnTopicExcluded;
+            DetachExclusionHooks();
+
             IsListening = false;
             _gate.Dispose();
         }

@@ -11,6 +11,13 @@ public interface ISparkplugTopologyService
     public event Action? TopologyChanged;
     public bool RemoveNode(string groupId, string nodeId);
     public int RemoveMatchingTopic(string filter);
+
+    // Exclusion purgers run while the exclude service holds its locks; a subscriber that
+    // re-enters the service from TopologyChanged would deadlock, so the purge removes
+    // silently and the caller raises the event later through RaiseTopologyChanged.
+    public int RemoveMatchingTopicSilent(string filter);
+    public void RaiseTopologyChanged();
+
     public int RemoveOfflineNodes();
     public void ClearAll();
     public Task ApplyTopologyEventsAsync(IReadOnlyList<TopologyEvent> events);
@@ -64,6 +71,19 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
 
     public int RemoveMatchingTopic(string filter)
     {
+        var removed = RemoveMatchingTopicCore(filter);
+        if (removed > 0)
+            TopologyChanged?.Invoke();
+
+        return removed;
+    }
+
+    public int RemoveMatchingTopicSilent(string filter) => RemoveMatchingTopicCore(filter);
+
+    public void RaiseTopologyChanged() => TopologyChanged?.Invoke();
+
+    private int RemoveMatchingTopicCore(string filter)
+    {
         var removed = 0;
 
         foreach (var (groupId, group) in _groups)
@@ -89,9 +109,6 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
             if (group.Nodes.IsEmpty && _groups.TryRemove(groupId, out _))
                 removed++;
         }
-
-        if (removed > 0)
-            TopologyChanged?.Invoke();
 
         return removed;
     }

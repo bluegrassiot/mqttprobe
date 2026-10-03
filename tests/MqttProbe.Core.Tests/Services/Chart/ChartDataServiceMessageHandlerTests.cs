@@ -314,6 +314,265 @@ public class ChartDataServiceMessageHandlerTests
         service.GetPoints(series).Should().BeEmpty();
         excludes.Dispose();
     }
+    [Test]
+    public async Task TopicExclusion_AddWaitsForInFlightHandler_ThenPurgesRegistryAndBuffers()
+    {
+        var client = Substitute.For<IMqttManagedClient>();
+        var registry = new ChartFieldRegistry();
+        var settings = Substitute.For<IChartSettings>();
+        var connection = Guid.NewGuid();
+        var series = Guid.NewGuid();
+        settings.GetCharts(connection).Returns([
+            ConfigWith(100, new ChartSeries { Id = series, Topic = "sensors/temp", JsonPath = "value" })]);
+
+        var session = new SessionState { SelectedConnection = new Connection() };
+        using var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        var extractor = new BarrierFieldExtractor();
+        using var service = new ChartDataService(client, extractor, registry, settings,
+            TestPipelineHelper.BuildBuiltInPipeline(), Substitute.For<ISparkplugSettings>(),
+            topicExcludeService: excludes);
+        service.SetConnection(connection);
+        await service.StartAsync();
+
+        var fireTask = Task.Run(() => handler!(MakeArgs("sensors/temp", """{"value": 1}""")));
+        Task<TopicExcludeOperationResult>? addTask = null;
+        var filterApplied = false;
+        var finishedWhileParked = false;
+        try
+        {
+            (await SatisfiesAsync(() => extractor.Reached, TimeSpan.FromSeconds(5))).Should().BeTrue(
+                "the handler has to be parked inside the exclusion read gate before Add starts");
+            addTask = excludes.Add("sensors/#");
+            filterApplied = await SatisfiesAsync(
+                () => excludes.IsExcluded("sensors/temp"), TimeSpan.FromSeconds(2));
+            finishedWhileParked = await SatisfiesAsync(
+                () => addTask.IsCompleted, TimeSpan.FromMilliseconds(250));
+        }
+        finally
+        {
+            extractor.Release();
+        }
+
+        var result = await addTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        await fireTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        filterApplied.Should().BeTrue("the filter has to be live before the purge waits for readers");
+        finishedWhileParked.Should().BeFalse(
+            "Add must not purge while the handler is in flight, or the handler repopulates the registry and buffer");
+        result.IsValid.Should().BeTrue();
+        registry.GetTopics().Should().BeEmpty();
+        service.GetPoints(series).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task OnDataUpdated_HandlerAddingExclusion_CompletesWithoutDeadlock()
+    {
+        var client = Substitute.For<IMqttManagedClient>();
+        var registry = new ChartFieldRegistry();
+        var settings = Substitute.For<IChartSettings>();
+        var connection = Guid.NewGuid();
+        var series = Guid.NewGuid();
+        settings.GetCharts(connection).Returns([
+            ConfigWith(100, new ChartSeries { Id = series, Topic = "sensors/temp", JsonPath = "value" })]);
+
+        var session = new SessionState { SelectedConnection = new Connection() };
+        using var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        using var service = new ChartDataService(client, new JsonFieldExtractor(), registry, settings,
+            TestPipelineHelper.BuildBuiltInPipeline(), Substitute.For<ISparkplugSettings>(),
+            topicExcludeService: excludes);
+        service.SetConnection(connection);
+        await service.StartAsync();
+
+        var probed = 0;
+        service.OnDataUpdated += () =>
+        {
+            // The purge re-enters this handler; only the first call probes the gate.
+            if (Interlocked.Exchange(ref probed, 1) != 0)
+                return;
+
+            excludes.Add("sensors/#").GetAwaiter().GetResult();
+        };
+
+        var fireTask = Task.Run(() => handler!(MakeArgs("sensors/temp", """{"value": 1}""")));
+
+        await fireTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        excludes.IsExcluded("sensors/temp").Should().BeTrue();
+        registry.GetTopics().Should().BeEmpty();
+        service.GetPoints(series).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task ExclusionAddedWhileStopped_LeavesNoExcludedDataOnRestart()
+    {
+        var client = Substitute.For<IMqttManagedClient>();
+        var registry = new ChartFieldRegistry();
+        var settings = Substitute.For<IChartSettings>();
+        var connection = Guid.NewGuid();
+        var series = Guid.NewGuid();
+        settings.GetCharts(connection).Returns([
+            ConfigWith(100, new ChartSeries { Id = series, Topic = "sensors/temp", JsonPath = "value" })]);
+
+        var session = new SessionState { SelectedConnection = new Connection() };
+        using var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        using var service = new ChartDataService(client, new JsonFieldExtractor(), registry, settings,
+            TestPipelineHelper.BuildBuiltInPipeline(), Substitute.For<ISparkplugSettings>(),
+            topicExcludeService: excludes);
+        service.SetConnection(connection);
+        await service.StartAsync();
+        await handler!(MakeArgs("sensors/temp", """{"value": 1}"""));
+        registry.GetTopics().Should().Contain("sensors/temp");
+        service.GetPoints(series).Should().NotBeEmpty();
+
+        await service.StopAsync();
+        (await excludes.Add("sensors/#").WaitAsync(TimeSpan.FromSeconds(10))).IsValid.Should().BeTrue();
+
+        registry.GetTopics().Should().BeEmpty(
+            "stopping must not blind the chart to purges, or excluded data outlives the exclusion");
+        service.GetPoints(series).Should().BeEmpty();
+
+        await service.StartAsync();
+        await handler!(MakeArgs("sensors/temp", """{"value": 2}"""));
+
+        service.GetPoints(series).Should().BeEmpty();
+        registry.GetTopics().Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task AdmittedHandlerFinishingAfterStop_LeavesNoExcludedDataOnRestart()
+    {
+        var client = Substitute.For<IMqttManagedClient>();
+        var registry = new ChartFieldRegistry();
+        var settings = Substitute.For<IChartSettings>();
+        var connection = Guid.NewGuid();
+        var series = Guid.NewGuid();
+        settings.GetCharts(connection).Returns([
+            ConfigWith(100, new ChartSeries { Id = series, Topic = "sensors/temp", JsonPath = "value" })]);
+
+        var session = new SessionState { SelectedConnection = new Connection() };
+        using var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        var extractor = new BarrierFieldExtractor();
+        using var service = new ChartDataService(client, extractor, registry, settings,
+            TestPipelineHelper.BuildBuiltInPipeline(), Substitute.For<ISparkplugSettings>(),
+            topicExcludeService: excludes);
+        service.SetConnection(connection);
+        await service.StartAsync();
+
+        var fireTask = Task.Run(() => handler!(MakeArgs("sensors/temp", """{"value": 1}""")));
+        Task<TopicExcludeOperationResult>? addTask = null;
+        var filterApplied = false;
+        try
+        {
+            (await SatisfiesAsync(() => extractor.Reached, TimeSpan.FromSeconds(5))).Should().BeTrue(
+                "the handler has to be admitted inside the read gate before the service stops");
+            await service.StopAsync();
+            addTask = excludes.Add("sensors/#");
+            filterApplied = await SatisfiesAsync(
+                () => excludes.IsExcluded("sensors/temp"), TimeSpan.FromSeconds(2));
+        }
+        finally
+        {
+            extractor.Release();
+        }
+
+        var purgeResult = await addTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        await fireTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        filterApplied.Should().BeTrue();
+        purgeResult.IsValid.Should().BeTrue();
+        registry.GetTopics().Should().BeEmpty(
+            "the admitted handler writes after the stop, so the purge still has to reach the chart");
+        service.GetPoints(series).Should().BeEmpty();
+
+        await service.StartAsync();
+        registry.GetTopics().Should().BeEmpty();
+        service.GetPoints(series).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task StartStopStart_AttachesExclusionHooksOnlyOnce()
+    {
+        var client = Substitute.For<IMqttManagedClient>();
+        var excludes = Substitute.For<ITopicExcludeService>();
+        var service = new ChartDataService(client, new JsonFieldExtractor(), new ChartFieldRegistry(),
+            Substitute.For<IChartSettings>(), TestPipelineHelper.BuildBuiltInPipeline(),
+            Substitute.For<ISparkplugSettings>(), topicExcludeService: excludes);
+
+        await service.StartAsync();
+        await service.StopAsync();
+        await service.StartAsync();
+        await service.StopAsync();
+        service.Dispose();
+
+        excludes.Received(1).PurgeExcludedTopic += Arg.Any<Action<string>>();
+        excludes.Received(1).TopicExcluded += Arg.Any<Action<string>>();
+        excludes.Received(1).PurgeExcludedTopic -= Arg.Any<Action<string>>();
+        excludes.Received(1).TopicExcluded -= Arg.Any<Action<string>>();
+    }
+
+    private static async Task<bool> SatisfiesAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition())
+                return true;
+
+            await Task.Delay(10);
+        }
+
+        return condition();
+    }
+
+    private sealed class BarrierFieldExtractor : IJsonFieldExtractor
+    {
+        private readonly JsonFieldExtractor _inner = new();
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _reached;
+
+        public bool Reached => Volatile.Read(ref _reached) != 0;
+
+        public void Release() => _release.TrySetResult();
+
+        public IReadOnlyDictionary<string, ExtractedField> Extract(string jsonPayload) =>
+            ExtractCore(jsonPayload);
+
+        public IReadOnlyDictionary<string, ExtractedField> Extract(
+            string jsonPayload,
+            IReadOnlyDictionary<ulong, string>? aliasNames) =>
+            ExtractCore(jsonPayload);
+
+        private IReadOnlyDictionary<string, ExtractedField> ExtractCore(string jsonPayload)
+        {
+            Interlocked.Exchange(ref _reached, 1);
+            _release.Task.Wait(TimeSpan.FromSeconds(30));
+            return _inner.Extract(jsonPayload);
+        }
+    }
 
     private sealed class CapturingLogger<T> : ILogger<T>
     {

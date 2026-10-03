@@ -132,7 +132,6 @@
     [Parameter, EditorRequired] public Connection Connection { get; set; } = null!;
     [Parameter] public EventCallback OnStateChanged { get; set; }
     [Parameter] public EventCallback OnRevertRequested { get; set; }
-    [Parameter] public EventCallback<string?> OnStagedAssetCleanupRequested { get; set; }
     [Parameter] public bool Visible { get; set; } = true;
 
     private CertificateInputMode _certInputMode = CertificateInputMode.Pfx;

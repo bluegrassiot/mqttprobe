@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
@@ -462,6 +463,55 @@ public class ConnectionDialogTests : BunitTestContext
         await _dialogProvider.InvokeAsync(() => editor.AddForTests());
 
         conn.SubscribedTopics.Count(s => s.Topic == "dup/#").Should().Be(1);
+        await _mockConnections.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+    }
+
+    [Test]
+    public async Task OnConnectTab_Add_AcceptsTopicAtUtf8ByteLimit()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var atLimit = new string('é', 32_767) + "a";
+        Encoding.UTF8.GetByteCount(atLimit).Should().Be(65_535);
+
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>().Instance;
+        editor.TopicDraft = atLimit;
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        dialog.SelectedConnectionForTests.SubscribedTopics.Should()
+            .ContainSingle(s => s.Topic == atLimit);
+        await _mockConnections.Received().AddConnectionAsync(
+            Arg.Is<Connection>(c =>
+                c!.SubscribedTopics.Any(s => s.Topic == atLimit)));
+    }
+
+    [Test]
+    public async Task OnConnectTab_Add_RejectsTopicPastUtf8ByteLimit()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var overlong = new string('é', 32_768);
+        Encoding.UTF8.GetByteCount(overlong).Should().Be(65_536);
+        overlong.Length.Should().BeLessThan(65_535);
+
+        var editor = _dialogProvider.FindComponent<SubscriptionEditor>().Instance;
+        editor.TopicDraft = overlong;
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        dialog.SelectedConnectionForTests.SubscribedTopics.Should().BeEmpty();
+        conn.SubscribedTopics.Should().BeEmpty();
         await _mockConnections.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
     }
 

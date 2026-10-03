@@ -82,7 +82,7 @@ public partial class ConnectionDialog
     private bool ValidateNewSubscriptionTopic(string rawTopic)
     {
         var topic = rawTopic.Trim();
-        if (string.IsNullOrWhiteSpace(topic) || topic.Contains('\0') || topic.Length > 65_535)
+        if (!MqttTopicMatcher.IsValidFilter(topic))
         {
             Snackbar.Add("Invalid topic", Severity.Warning);
             return false;

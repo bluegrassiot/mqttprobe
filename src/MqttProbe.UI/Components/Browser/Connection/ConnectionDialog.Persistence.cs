@@ -126,16 +126,6 @@ public partial class ConnectionDialog
         }
     }
 
-    private async Task HandleCertStagedAssetCleanup(string? assetId)
-    {
-        if (assetId is not null && _stagedAssetId == assetId)
-        {
-            try { await CertStore.DeleteAsync(_stagedAssetOwnerId, _stagedAssetId); } catch { /* cleanup best-effort */ }
-            _stagedAssetId = null;
-            UpdateActionStates();
-        }
-    }
-
     private async Task HandleCertRevert()
     {
         // When the user reverts certificate changes in the child section,

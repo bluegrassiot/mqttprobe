@@ -305,6 +305,51 @@ public class MqttManagedClientTests
         client.DidNotReceive().Dispose();
     }
 
+    [Test]
+    public async Task StopAsync_after_Dispose_does_not_throw()
+    {
+        var client = Substitute.For<IMqttClient>();
+        var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
+
+        sut.Dispose();
+
+        // The stop semaphore outlives Dispose so a teardown already holding it can
+        // still release; entering after Dispose must return, not throw.
+        await sut.StopAsync();
+
+        sut.IsStarted.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task StopAsync_in_flight_when_Dispose_lands_still_releases()
+    {
+        var disconnectEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDisconnect = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var client = Substitute.For<IMqttClient>();
+        client.IsConnected.Returns(true);
+        client.DisconnectAsync(Arg.Any<MqttClientDisconnectOptions>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                disconnectEntered.SetResult();
+                await releaseDisconnect.Task;
+            });
+
+        var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
+
+        var stop = sut.StopAsync();
+        await disconnectEntered.Task;
+
+        // Dispose lands while the stop still holds the semaphore. Releasing a disposed
+        // semaphore throws, which would surface as a failed teardown.
+        sut.Dispose();
+        releaseDisconnect.SetResult();
+
+        await stop;
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 2000)
     {
         var waited = 0;

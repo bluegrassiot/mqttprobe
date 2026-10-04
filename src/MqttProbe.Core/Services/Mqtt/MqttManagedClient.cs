@@ -446,7 +446,10 @@ public sealed class MqttManagedClient : IMqttManagedClient
 
         cts?.Cancel();
         cts?.Dispose();
-        _stopSemaphore.Dispose();
+
+        // _stopSemaphore is left undisposed on purpose: a StopAsync already past WaitAsync
+        // must still be able to Release. Disposing here would turn its finally into an
+        // ObjectDisposedException and strand the disconnect it was performing.
 
         _client.ConnectedAsync -= OnClientConnectedAsync;
         _client.DisconnectedAsync -= OnClientDisconnectedAsync;

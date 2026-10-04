@@ -430,7 +430,9 @@ public class EmulationService : IEmulationService
             _cts?.Dispose();
             _cts = null;
             _publishLoop = null;
-            _stopSemaphore.Dispose();
+            // Left undisposed on purpose: a StopAsync already past WaitAsync must still be
+            // able to Release. Disposing here would turn its finally into an
+            // ObjectDisposedException and strand the teardown it was performing.
         }
 
         _disposed = true;

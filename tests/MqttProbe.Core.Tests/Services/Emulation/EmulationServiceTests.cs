@@ -183,6 +183,32 @@ public class EmulationServiceTests
     }
 
     [Test]
+    public async Task StopAsync_InFlight_WhenDispose_Lands_StillReleases()
+    {
+        var nodeDeathEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseNodeDeath = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var node = SetupSuccessfulNode();
+        node.PublishNodeDeathMessage().Returns(async _ =>
+        {
+            nodeDeathEntered.SetResult();
+            await releaseNodeDeath.Task;
+        });
+
+        await _service.AddNodeAsync(SparkplugNode());
+        await _service.StartAsync();
+
+        var stop = _service.StopAsync();
+        await nodeDeathEntered.Task;
+
+        // Dispose lands while the stop still holds the semaphore. Releasing a disposed
+        // semaphore throws, which would surface as a failed teardown.
+        _service.Dispose();
+        releaseNodeDeath.SetResult();
+
+        await stop;
+    }
+
+    [Test]
     public async Task StartAsync_WhileRunning_DoesNotStartTwice()
     {
         await _service.AddNodeAsync(SparkplugNode());

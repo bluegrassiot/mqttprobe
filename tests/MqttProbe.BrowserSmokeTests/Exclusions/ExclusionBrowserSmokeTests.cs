@@ -243,11 +243,24 @@ public sealed class ExclusionBrowserSmokeTests
             SetStage("add subscription");
             await page.GetByRole(AriaRole.Tab, new() { Name = "Subscriptions" }).ClickAsync(
                 new LocatorClickOptions { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
-            await page.Locator("role=region[name='Subscriptions list']")
+            var subscriptionsList = page.Locator("role=region[name='Subscriptions list']");
+            await subscriptionsList
                 .Locator(".subscription-editor-topic input").First
                 .FillAsync(subscribeFilter, new() { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
             await page.Locator("button[title='Add subscription']").ClickAsync(
                 new LocatorClickOptions { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
+
+            // SubscriptionManager records the topic only after SubscribeAsync returns, so the
+            // listed row is the app's proof the SUBSCRIBE landed. Fail here when it never does
+            // instead of burning the publish-retry window downstream.
+            await subscriptionsList
+                .Locator($".subscription-editor-table-wrap .mud-table-row"
+                    + $":has(td:text-is('{subscribeFilter}'))")
+                .First.WaitForAsync(new LocatorWaitForOptions
+                {
+                    State = WaitForSelectorState.Visible,
+                    Timeout = SubscribeSettleTimeoutMs,
+                }).WaitAsync(scenarioToken);
 
             SetStage("publish baseline");
             for (var i = 0; i < baselineTopics.Length; i++)

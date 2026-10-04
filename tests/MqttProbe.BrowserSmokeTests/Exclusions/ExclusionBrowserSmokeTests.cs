@@ -13,6 +13,8 @@ public sealed class ExclusionBrowserSmokeTests
     private const int ScenarioBudgetSeconds = 180;
     private const int CleanupMqttSeconds = 10;
     private const int CleanupBrowserSeconds = 15;
+    private const int SubscribeSettleTimeoutMs = 8_000;
+    private const int SubscribeSettlePollMs = 250;
 
     private const string ConnectionDialog = ".connection-dialog-content";
     private const string LogoutControl =
@@ -526,9 +528,26 @@ public sealed class ExclusionBrowserSmokeTests
             .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
             .WithRetainFlag(false)
             .Build();
-        var result = await client.PublishAsync(msg, token);
-        Assert.That(result.ReasonCode, Is.EqualTo(MqttClientPublishReasonCode.Success),
-            $"publish to {topic} failed: {result.ReasonCode}");
+
+        // Mosquitto answers NoMatchingSubscribers until the app's SUBSCRIBE reaches the broker,
+        // so a publish issued right after "Add subscription" races that round trip. That reason
+        // code also means nothing was delivered anywhere, so retrying cannot duplicate a message.
+        // Any other code fails at once.
+        var deadline = DateTime.UtcNow.AddMilliseconds(SubscribeSettleTimeoutMs);
+        MqttClientPublishReasonCode code;
+        while (true)
+        {
+            code = (await client.PublishAsync(msg, token)).ReasonCode;
+            if (code != MqttClientPublishReasonCode.NoMatchingSubscribers || DateTime.UtcNow >= deadline)
+            {
+                break;
+            }
+
+            await Task.Delay(SubscribeSettlePollMs, token);
+        }
+
+        Assert.That(code, Is.EqualTo(MqttClientPublishReasonCode.Success),
+            $"publish to {topic} failed: {code}");
         await Task.Delay(200, token);
     }
 

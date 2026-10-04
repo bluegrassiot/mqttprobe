@@ -61,6 +61,36 @@ CI still runs full checks on pull requests. Prefer fixing failures over skipping
 - **Comments explain non-obvious *why*, not restate *what*.** `// increment i` is noise; `// retry after transient disconnect because the library does not handle this` is useful.
 - **Acceptable when they improve clarity** in messy CSS/Razor markup, complex regex, or otherwise hard-to-name structure.
 
+### Formatting
+
+`python scripts/ci/format-check.py` enforces whitespace, style, and unused-using
+rules on C# source. It runs in the pre-commit hook and in CI.
+
+The unused-using enforcement (IDE0005) covers C# files only. Razor `@using`
+directives are Blazor imports and are not checked. The script operates on the
+whole working tree, not the staged snapshot. The pre-commit hook runs it because
+formatting violations anywhere in the tree tend to break CI even if the staged
+hunk is clean.
+
+What it checks:
+
+- Whitespace and style rules via `dotnet format whitespace` and `dotnet format style`.
+- Unused using directives (IDE0005) via `dotnet format style --diagnostics IDE0005 --severity hidden`. Without an `.editorconfig` severity entry, IDE0005 reports at `hidden` level; `--severity hidden` is the only threshold that catches it.
+- On non-Windows, the optional MAUI project is skipped only when it fails with NETSDK1147 (missing workload). Generic restore failures are not silently skipped.
+- A workspace load warning (even with exit 0) is treated as a hard failure so stale results do not pass silently.
+
+To fix and re-stage:
+
+```bash
+python scripts/ci/format-check.py --fix
+git add <intended-files>
+```
+
+Target coverage: `dotnet format style` runs against `MqttProbe.slnx` on Windows
+(full solution, requires MAUI workloads to be installed) and
+`MqttProbe.NoMaui.slnf` plus the MAUI project best-effort on other platforms.
+`LucideIcons.cs`, `SparkplugBProtobuf.cs`, and `external/**` are always excluded.
+
 ### Tests and Coverage
 
 - Run `dotnet test` before opening a PR (or the unit/integration project commands under CI Checks).

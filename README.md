@@ -18,8 +18,10 @@ Connect to any broker, browse live topics, inspect payloads, chart JSON metrics.
 - Sparkplug B decode and EoN dashboard
 - Node and MQTT emulator
 - Live charts from payload fields
-- Multi-connection, TLS/MQTTS, WebSocket
+- Topic exclusions to ignore noisy filters
+- Multiple saved connections, TLS/MQTTS, WebSocket
 - Plugins (payload formats, protobuf schemas)
+- OIDC sign-in on the web host (Keycloak, Authentik, or any OIDC provider)
 - Runs local: desktop, Android, Docker, web
 
 ## Get MQTTProbe
@@ -47,13 +49,15 @@ Open http://localhost:8080. On first launch, create your admin password.
 
 Config persists in a Docker volume across restarts. For LAN access, TLS, reverse proxy, and plugin storage details, see the [Docker Deployment wiki](https://github.com/bluegrassiot/mqttprobe/wiki/05-Docker-Deployment).
 
+The web host can also sign users in through an identity provider instead of a local password, which suits shared or multi-user deployments. Set `Authentication:Mode` to `OIDC` and control access with a claim in the ID token. See [OIDC Authentication](https://github.com/bluegrassiot/mqttprobe/wiki/09-OIDC-Authentication).
+
 ## After install
 
 1. Create your admin password on first launch
 2. Add a broker connection
 3. Subscribe to topics and browse
 
-See [Getting Started](https://github.com/bluegrassiot/mqttprobe/wiki/01-Getting-Started) and [Connection Setup](https://github.com/bluegrassiot/mqttprobe/wiki/02-Connection-Setup).
+MQTTProbe talks to one broker at a time. Save as many connection profiles as you like and switch between them, and add topic exclusions to ignore filters you do not care about. See [Getting Started](https://github.com/bluegrassiot/mqttprobe/wiki/01-Getting-Started) and [Connection Setup](https://github.com/bluegrassiot/mqttprobe/wiki/02-Connection-Setup).
 
 ## Docs
 
@@ -67,6 +71,7 @@ See [Getting Started](https://github.com/bluegrassiot/mqttprobe/wiki/01-Getting-
 - [Development](https://github.com/bluegrassiot/mqttprobe/wiki/07-Development)
 - [Security and Storage](https://github.com/bluegrassiot/mqttprobe/wiki/08-Security-and-Storage)
 - [OIDC Authentication](https://github.com/bluegrassiot/mqttprobe/wiki/09-OIDC-Authentication)
+- [Topic Exclusions](https://github.com/bluegrassiot/mqttprobe/wiki/10-Topic-Exclusions)
 
 Website: https://mqttprobe.com
 

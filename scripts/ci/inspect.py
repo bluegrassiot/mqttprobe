@@ -206,6 +206,11 @@ def is_source_line_exception(finding):
     return _se_mod.is_source_line_exception(finding, ROOT)
 
 
+def git_ignored_paths(paths, repo_root):
+    """Delegate to the exceptions module; see there for full docstring."""
+    return _se_mod.git_ignored_paths(paths, repo_root)
+
+
 def run_tool(name, cmd, sarif_path):
     """Run one analyzer. Returns the SARIF path, or None if it produced nothing."""
     print(f"\n  {name}...", end="", flush=True)
@@ -406,6 +411,17 @@ def main():
     accepted = []
     for label, sarif in runs:
         findings, rules = parse_sarif(sarif)
+        # Filter out findings on gitignored files (e.g. deploy/mtls/certs/*.key).
+        # Tracked files are never reported as ignored by git check-ignore, so
+        # committed secrets still gate.  Untracked non-ignored source is scanned
+        # normally.  On discovery errors, no paths are excluded (fail-open for
+        # the filter, but gated findings still block).
+        all_files = {f["file"] for f in findings}
+        ignored = git_ignored_paths(all_files, ROOT)
+        if ignored:
+            before = len(findings)
+            findings = [f for f in findings if f["file"] not in ignored]
+            print(f"  {before - len(findings)} finding(s) on gitignored files skipped")
         totals.append(f"{len(findings)} from {label}")
         sections += render(label, findings, rules, args.max_per_rule)
         if args.fail_on != "never":

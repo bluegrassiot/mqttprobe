@@ -6,6 +6,7 @@ Run: python -m unittest discover -s scripts/ci/tests
 
 import importlib.util
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -385,6 +386,102 @@ class TestSourceLineExceptionNegative(unittest.TestCase):
                     file="src/MqttProbe.Web/Program.cs")
         self.assertFalse(inspect_ci.is_source_line_exception(f))
 
+
+class TestGitIgnoredPaths(unittest.TestCase):
+    """git_ignored_paths correctly identifies .gitignored files.
+
+    Uses a temporary git repo so each case controls the ignore rules and
+    tracked/untracked state without touching the real repo.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.repo = Path(self.tmp.name)
+        subprocess.run(["git", "init"], cwd=self.repo, capture_output=True,
+                        check=True)
+        # Configure git user for commits (required on some systems)
+        subprocess.run(["git", "config", "user.email", "test@test"],
+                        cwd=self.repo, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"],
+                        cwd=self.repo, capture_output=True)
+
+    def _write(self, name, content="dummy"):
+        path = self.repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def test_ignored_untracked_file_detected(self):
+        """An untracked file matching .gitignore is reported as ignored."""
+        self._write(".gitignore", "*.key\n")
+        self._write("deploy/certs/ca.key", "not-a-real-key")
+        result = inspect_ci.git_ignored_paths(
+            ["deploy/certs/ca.key"], self.repo)
+        self.assertIn("deploy/certs/ca.key", result)
+
+    def test_non_ignored_file_not_detected(self):
+        """A file not matching any .gitignore pattern is not reported."""
+        self._write(".gitignore", "*.key\n")
+        self._write("src/Program.cs", "class P {}")
+        subprocess.run(["git", "add", "."], cwd=self.repo, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=self.repo,
+                        capture_output=True)
+        result = inspect_ci.git_ignored_paths(
+            ["src/Program.cs"], self.repo)
+        self.assertNotIn("src/Program.cs", result)
+
+    def test_tracked_file_matching_ignore_not_ignored(self):
+        """A tracked file is never reported as ignored, even if .gitignore
+        matches.  This is the key safety property: committed secrets still gate.
+        """
+        self._write(".gitignore", "*.key\n")
+        self._write("server.key", "tracked-key-content")
+        # Force-add to override the ignore pattern (same as deploy/mtls/certs
+        # where the README.md is tracked but .key files are not).
+        subprocess.run(["git", "add", "-f", "server.key"], cwd=self.repo,
+                        capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "add tracked key"],
+                        cwd=self.repo, capture_output=True, check=True)
+        result = inspect_ci.git_ignored_paths(["server.key"], self.repo)
+        self.assertNotIn("server.key", result)
+
+    def test_empty_input_returns_empty_set(self):
+        """Empty path set is a no-op."""
+        self.assertEqual(inspect_ci.git_ignored_paths([], self.repo), set())
+
+    def test_non_git_dir_returns_empty_set(self):
+        """Outside a git repo, no paths are excluded (fail-open on discovery)."""
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        result = inspect_ci.git_ignored_paths(["some/file.key"],
+                                               Path(outside.name))
+        self.assertEqual(result, set())
+
+    def test_mixed_batch(self):
+        """Multiple files in one call: only ignored ones are returned."""
+        self._write(".gitignore", "*.key\n*.pfx\n")
+        self._write("ca.key", "k")
+        self._write("client.pfx", "p")
+        self._write("README.md", "readme")
+        subprocess.run(["git", "add", "README.md"], cwd=self.repo,
+                        capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=self.repo,
+                        capture_output=True)
+        result = inspect_ci.git_ignored_paths(
+            ["ca.key", "client.pfx", "README.md"], self.repo)
+        self.assertIn("ca.key", result)
+        self.assertIn("client.pfx", result)
+        self.assertNotIn("README.md", result)
+
+    def test_backslash_paths_normalised(self):
+        """Windows backslash paths are normalised for git check-ignore."""
+        self._write(".gitignore", "*.key\n")
+        self._write("deploy/mtls/certs/ca.key", "k")
+        result = inspect_ci.git_ignored_paths(
+            ["deploy\\mtls\\certs\\ca.key"], self.repo)
+        # git reports with forward slashes; the function normalises input.
+        self.assertTrue(any("ca.key" in p for p in result))
 
 
 if __name__ == "__main__":

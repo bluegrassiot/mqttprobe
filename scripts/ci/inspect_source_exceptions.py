@@ -5,6 +5,7 @@ Extracted from inspect.py to keep that module within the repository's
 callers (including the test suite) do not need to change.
 """
 
+import subprocess
 from pathlib import Path
 
 # Source-line exceptions for public checksums, open-source commit pins, and
@@ -102,3 +103,35 @@ def is_source_line_exception(finding, root):
     return False
 
 
+def git_ignored_paths(paths, repo_root):
+    """Return the subset of *paths* that .gitignore marks as ignored.
+
+    Uses ``git check-ignore --stdin`` so the result matches what ``git status``
+    would hide.  Tracked files are never reported as ignored even when a glob
+    matches, so the scanner keeps scanning committed secrets.  On any error
+    (missing git, non-repo cwd, etc.) an empty set is returned, which means no
+    paths are excluded -- fail-open on discovery, since the scanner still sees
+    every file and gated findings still block.
+    """
+    if not paths:
+        return set()
+    normalised = [p.replace("\\", "/") for p in paths]
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "--stdin", "-z"],
+            input="\0".join(normalised) + "\0",
+            cwd=repo_root,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30,
+        )
+        # git check-ignore outputs NUL-terminated paths for matched entries.
+        # Exit 0: at least one path matched.  Exit 1: none matched.
+        if result.returncode not in (0, 1):
+            return set()
+        raw = result.stdout
+        if not raw:
+            return set()
+        # Split on NUL; the trailing NUL produces an empty last element.
+        return {p for p in raw.split("\0") if p}
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return set()

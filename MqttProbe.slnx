@@ -98,7 +98,6 @@
     <Project Path="samples/CustomDemoPlugin/CustomDemoPlugin.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/MqttProbe.BrowserSmokeTests/MqttProbe.BrowserSmokeTests.csproj" />
     <Project Path="tests/MqttProbe.Core.Tests/MqttProbe.Core.Tests.csproj" />
     <Project Path="tests/MqttProbe.IntegrationTests/MqttProbe.IntegrationTests.csproj" />
     <Project Path="tests/MqttProbe.PluginLoader.Fixtures/MqttProbe.PluginLoader.Fixtures.csproj" />

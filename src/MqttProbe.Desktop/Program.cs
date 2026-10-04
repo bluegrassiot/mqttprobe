@@ -5,7 +5,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MqttProbe.Core.Models.Plugins;
-using MqttProbe.Core.Services;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Platform;
 using MqttProbe.Core.Services.Plugins;

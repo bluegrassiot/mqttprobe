@@ -2,7 +2,10 @@
 # Prerequisites:
 #   python scripts/dev/generate-mtls-certs.py
 # Then:
-#   docker compose -f deploy/docker-compose.mtls.yml up -d
+#   docker compose -f deploy/docker-compose.mtls.yml up -d --build
+#
+# --build compiles the app from the working tree, which is the point of this
+# lab: it exists to exercise unreleased mTLS and certificate handling.
 #
 # Import deploy/mtls/certs/client.pfx (password changeme) in MQTTProbe.
 # Connect to 127.0.0.1:8883 with Use TLS and Allow untrusted certificate.
@@ -10,6 +13,9 @@
 services:
   mqttprobe:
     image: bluegrassiot/mqttprobe:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     volumes:

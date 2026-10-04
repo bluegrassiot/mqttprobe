@@ -129,7 +129,7 @@ public sealed class OidcAuthenticationEvents
     {
         // Preserve existing properties (RedirectUri, items) before replacement
         var existingRedirectUri = context.Properties?.RedirectUri;
-        var existingItems = context.Properties?.Items?.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+        var existingItems = context.Properties?.Items.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
 
         // Await prior-session revocation before creating replacement
         var existingSessionId = httpContext.User.FindFirst(AuthClaimTypes.AppSessionId)?.Value;
@@ -259,7 +259,7 @@ public sealed class OidcAuthenticationEvents
         context.ProtocolMessage.PostLogoutRedirectUri = new Uri(origin, "/signout-callback-oidc").ToString();
 
         // Set id_token_hint from retained token
-        var idToken = context.Properties?.GetTokenValue("id_token");
+        var idToken = context.Properties.GetTokenValue("id_token");
         if (!string.IsNullOrEmpty(idToken))
         {
             context.ProtocolMessage.IdTokenHint = idToken;

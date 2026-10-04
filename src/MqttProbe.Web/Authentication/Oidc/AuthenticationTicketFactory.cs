@@ -1,8 +1,5 @@
-using System.Globalization;
-using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
-using MqttProbe.Core.Services.Security;
 
 namespace MqttProbe.Web.Authentication;
 

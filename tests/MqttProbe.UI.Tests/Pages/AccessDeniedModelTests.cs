@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using MqttProbe.Core.Models.Configuration;

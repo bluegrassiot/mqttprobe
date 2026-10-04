@@ -8,7 +8,6 @@ using Microsoft.Extensions.Options;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Security;
-using MqttProbe.Web.Authentication;
 using AuthOptions = MqttProbe.Web.Authentication.AuthenticationOptions;
 
 namespace MqttProbe.Pages;

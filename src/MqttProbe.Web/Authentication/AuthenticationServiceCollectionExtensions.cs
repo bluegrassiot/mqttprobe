@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using MqttProbe.Core.Services.Emulation;
 using MqttProbe.Core.Services.Mqtt;
@@ -46,7 +45,7 @@ public static class AuthenticationServiceCollectionExtensions
             var emulationService = sp.GetService<IEmulationService>();
             var authInvalidator = sp.GetRequiredService<IAuthenticationStateInvalidator>();
             var loginNotifier = sp.GetRequiredService<ILoginNavigationNotifier>();
-            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<ScopedCircuitTeardownHandler>>()
+            var logger = sp.GetService<ILogger<ScopedCircuitTeardownHandler>>()
                 ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ScopedCircuitTeardownHandler>.Instance;
             return new ScopedCircuitTeardownHandler(
                 mqttClient, emulationService, authInvalidator, loginNotifier, logger, cleanupTimeout);

@@ -1,4 +1,3 @@
-using System.Text;
 using MessagePack;
 using MQTTnet;
 using MqttProbe.PluginContracts;

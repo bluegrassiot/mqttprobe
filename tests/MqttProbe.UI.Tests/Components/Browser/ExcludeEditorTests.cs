@@ -1,6 +1,4 @@
 using Microsoft.AspNetCore.Components;
-using Microsoft.Extensions.DependencyInjection;
-using MqttProbe.UI.Components.Browser;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
 

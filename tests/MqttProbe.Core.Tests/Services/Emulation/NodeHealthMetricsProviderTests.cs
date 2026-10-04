@@ -1,8 +1,6 @@
 using Microsoft.Extensions.Logging;
 using MqttProbe.Core.Services.Emulation;
 using MqttProbe.Core.Services.Metrics;
-using SparkplugNet.Core.Enumerations;
-using SparkplugNet.VersionB.Data;
 
 namespace MqttProbe.Core.Tests.Services.Emulation;
 

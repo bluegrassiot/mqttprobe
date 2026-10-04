@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Threading;
 using Microsoft.Extensions.Logging;
 using MqttProbe.Core.Services.Metrics;
 

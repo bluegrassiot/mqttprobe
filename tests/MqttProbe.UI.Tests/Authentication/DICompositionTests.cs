@@ -2,7 +2,6 @@ using Microsoft.Extensions.Time.Testing;
 using MqttProbe.Core.Services.Emulation;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Web.Authentication;
-using NSubstitute;
 
 namespace MqttProbe.UI.Tests.Authentication;
 

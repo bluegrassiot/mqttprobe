@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Components;
-using Microsoft.Extensions.DependencyInjection;
 using MQTTnet.Protocol;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.UI.Tests.TestHelpers;

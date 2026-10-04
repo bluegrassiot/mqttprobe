@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Web.Authentication;
-using NSubstitute;
 using SessionState = MqttProbe.Web.Authentication.SessionState;
 
 namespace MqttProbe.UI.Tests.Authentication;

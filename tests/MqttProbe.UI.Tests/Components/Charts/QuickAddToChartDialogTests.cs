@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Chart;
 using MqttProbe.Core.Models.Mqtt;
-using MqttProbe.Core.Services.Chart;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;

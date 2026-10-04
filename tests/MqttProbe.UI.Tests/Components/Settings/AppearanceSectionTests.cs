@@ -1,4 +1,3 @@
-using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Services.Configuration;

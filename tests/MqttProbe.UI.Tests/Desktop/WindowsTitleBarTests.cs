@@ -1,5 +1,4 @@
 using MqttProbe.Desktop.Interop;
-using NUnit.Framework;
 
 namespace MqttProbe.UI.Tests.Desktop;
 

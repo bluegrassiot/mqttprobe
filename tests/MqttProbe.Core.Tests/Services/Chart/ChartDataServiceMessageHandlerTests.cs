@@ -5,7 +5,6 @@ using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Chart;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Mqtt;
-using MqttProbe.Core.Tests.Services.Mqtt;
 using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Core.Tests.Services.Chart;
@@ -341,9 +340,9 @@ public class ChartDataServiceMessageHandlerTests
         await service.StartAsync();
 
         var fireTask = Task.Run(() => handler!(MakeArgs("sensors/temp", """{"value": 1}""")));
-        Task<TopicExcludeOperationResult>? addTask = null;
-        var filterApplied = false;
-        var finishedWhileParked = false;
+        Task<TopicExcludeOperationResult>? addTask;
+        bool filterApplied;
+        bool finishedWhileParked;
         try
         {
             (await SatisfiesAsync(() => extractor.Reached, TimeSpan.FromSeconds(5))).Should().BeTrue(
@@ -359,7 +358,7 @@ public class ChartDataServiceMessageHandlerTests
             extractor.Release();
         }
 
-        var result = await addTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        var result = await addTask.WaitAsync(TimeSpan.FromSeconds(10));
         await fireTask.WaitAsync(TimeSpan.FromSeconds(10));
 
         filterApplied.Should().BeTrue("the filter has to be live before the purge waits for readers");
@@ -402,7 +401,7 @@ public class ChartDataServiceMessageHandlerTests
             if (Interlocked.Exchange(ref probed, 1) != 0)
                 return;
 
-            excludes.Add("sensors/#").GetAwaiter().GetResult();
+            _ = excludes.Add("sensors/#").GetAwaiter().GetResult();
         };
 
         var fireTask = Task.Run(() => handler!(MakeArgs("sensors/temp", """{"value": 1}""")));
@@ -483,8 +482,8 @@ public class ChartDataServiceMessageHandlerTests
         await service.StartAsync();
 
         var fireTask = Task.Run(() => handler!(MakeArgs("sensors/temp", """{"value": 1}""")));
-        Task<TopicExcludeOperationResult>? addTask = null;
-        var filterApplied = false;
+        Task<TopicExcludeOperationResult>? addTask;
+        bool filterApplied;
         try
         {
             (await SatisfiesAsync(() => extractor.Reached, TimeSpan.FromSeconds(5))).Should().BeTrue(
@@ -499,7 +498,7 @@ public class ChartDataServiceMessageHandlerTests
             extractor.Release();
         }
 
-        var purgeResult = await addTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        var purgeResult = await addTask.WaitAsync(TimeSpan.FromSeconds(10));
         await fireTask.WaitAsync(TimeSpan.FromSeconds(10));
 
         filterApplied.Should().BeTrue();

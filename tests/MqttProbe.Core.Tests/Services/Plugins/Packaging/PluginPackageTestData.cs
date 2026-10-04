@@ -1,7 +1,6 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
-using MqttProbe.Core.Models.Plugins;
 using MqttProbe.Core.Services.Plugins.Packaging;
 using MqttProbe.Core.Services.Plugins.Protobuf;
 

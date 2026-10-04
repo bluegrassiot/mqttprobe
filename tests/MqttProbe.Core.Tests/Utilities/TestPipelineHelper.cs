@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using MqttProbe.Core.Services.Plugins.BuiltIn;
 using MqttProbe.Core.Services.Plugins.Pipeline;
 using MqttProbe.Core.Services.Plugins.Registry;
-using NSubstitute;
 
 namespace MqttProbe.Tests.Utilities;
 

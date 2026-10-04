@@ -8,7 +8,10 @@ E2E tests are excluded from coverage (Playwright tests exercise the app external
 
 Usage:
   ./scripts/ci/coverage.py
-  ./scripts/ci/coverage.py --open --threshold 75
+  ./scripts/ci/coverage.py --open
+
+--threshold defaults to MIN_LINE_COVERAGE, which must match the gate in
+.github/workflows/ci.yml so a local pass cannot fail CI (or the reverse).
 """
 
 import argparse
@@ -32,6 +35,10 @@ ROOT = find_repo_root()
 RESULTS_DIR = ROOT / "TestResults"
 REPORT_DIR = RESULTS_DIR / "CoverageReport"
 SETTINGS = ROOT / "tests" / "coverlet.runsettings"
+
+# Keep in sync with the threshold in the "Coverage threshold check" step of
+# .github/workflows/ci.yml.
+MIN_LINE_COVERAGE = 80
 
 UNIT_PROJ = ROOT / "tests/MqttProbe.Core.Tests/MqttProbe.Core.Tests.csproj"
 UI_PROJ = ROOT / "tests/MqttProbe.UI.Tests/MqttProbe.UI.Tests.csproj"
@@ -57,7 +64,12 @@ def run_tests(project: Path, label: str, results_subdir: str):
 def main():
     parser = argparse.ArgumentParser(description="Run tests with coverage and generate HTML report.")
     parser.add_argument("--open", action="store_true", help="Open the HTML report in the default browser.")
-    parser.add_argument("--threshold", type=int, default=75, help="Minimum line coverage percentage (default: 75).")
+    parser.add_argument(
+        "--threshold",
+        type=int,
+        default=MIN_LINE_COVERAGE,
+        help=f"Minimum line coverage percentage (default: {MIN_LINE_COVERAGE}).",
+    )
     args = parser.parse_args()
 
     if RESULTS_DIR.exists():

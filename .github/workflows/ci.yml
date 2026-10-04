@@ -95,7 +95,7 @@ jobs:
           $line = $summary |
             Select-String 'Line coverage:\s+([\d.]+)%' |
             ForEach-Object { [double]$_.Matches[0].Groups[1].Value }
-          if ($line -lt 75) { Write-Error "Line coverage $line% is below 75% threshold"; exit 1 }
+          if ($line -lt 80) { Write-Error "Line coverage $line% is below 80% threshold"; exit 1 }
 
       - name: Upload test results
         uses: actions/upload-artifact@v7

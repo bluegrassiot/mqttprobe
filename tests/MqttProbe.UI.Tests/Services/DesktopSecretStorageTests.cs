@@ -111,7 +111,7 @@ public class DesktopSecretStorageTests
     }
 
     [Test]
-    public void Set_WhenKeyFacilityFails_Propagates()
+    public async Task Set_WhenKeyFacilityFails_Propagates()
     {
         var raw = new RawSecretKeyFile(_dir);
         var file = new FileSecretKeyProtector(raw);
@@ -122,10 +122,10 @@ public class DesktopSecretStorageTests
         };
         var protector = new DesktopSecretKeyProtector(_dir, fakeOs, file, raw);
 
-        Assert.DoesNotThrowAsync(async () => await protector.InitializeAsync());
+        await Assert.DoesNotThrowAsync(async () => await protector.InitializeAsync());
 
         var store = new DesktopSecretStorage(_dir, protector);
-        Assert.ThrowsAsync<SecretKeyFacilityException>(async () => await store.SetAsync("k", "v"));
+        await Assert.ThrowsAsync<SecretKeyFacilityException>(async () => await store.SetAsync("k", "v"));
     }
 
     [Test]

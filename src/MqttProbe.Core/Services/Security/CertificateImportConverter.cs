@@ -150,25 +150,30 @@ internal static class CertificateImportConverter
         }
         catch (PlatformNotSupportedException)
         {
-            try
-            {
-                return X509CertificateLoader.LoadPkcs12(
-                    request.CertificateBytes, request.Password,
-                    X509KeyStorageFlags.DefaultKeySet | X509KeyStorageFlags.Exportable);
-            }
-            catch (PlatformNotSupportedException)
-            {
-                throw new CertificateImportException("Platform does not support certificate key export.");
-            }
-            catch (CryptographicException ex)
-            {
-                throw new CertificateImportException("The PFX password is incorrect or the file is corrupt.", ex);
-            }
+            // Fall through to DefaultKeySet retry.
         }
         catch (CryptographicException ex)
         {
             throw new CertificateImportException("The PFX password is incorrect or the file is corrupt.", ex);
         }
+
+        try
+        {
+            return X509CertificateLoader.LoadPkcs12(
+                request.CertificateBytes, request.Password,
+                X509KeyStorageFlags.DefaultKeySet | X509KeyStorageFlags.Exportable);
+        }
+        catch (CryptographicException ex)
+        {
+            throw new CertificateImportException("The PFX password is incorrect or the file is corrupt.", ex);
+        }
+        catch (PlatformNotSupportedException)
+        {
+            // Both storage modes unsupported; fall through.
+        }
+
+        // Message-only: platform/key-storage details are not actionable to the user.
+        throw new CertificateImportException("Platform does not support certificate key export.");
     }
 
     private static (byte[] PfxBytes, string InternalPassword) ImportPem(CertificateImportRequest request)

@@ -83,9 +83,10 @@ public sealed class CertificateAssetStore : ICertificateAssetStore, ICertificate
         catch
         {
             TryDelete(tempPath);
-            try { await _envelopeKeyStore.RemoveAsync(CertificateAssetBlobCodec.EnvelopeKey(assetId)); } catch { /* best-effort rollback; the publish failure is reported below */ }
-            throw new CertificateImportException("Failed to publish certificate asset.");
+            try { await _envelopeKeyStore.RemoveAsync(CertificateAssetBlobCodec.EnvelopeKey(assetId)); } catch { /* best-effort rollback */ }
         }
+        // Message-only: filesystem paths are not actionable to the user.
+        throw new CertificateImportException("Failed to publish certificate asset.");
     }
 
     public async Task<ClientCertificateBundle?> LoadAsync(Guid ownerConnectionId, string assetId)

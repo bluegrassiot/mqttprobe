@@ -166,8 +166,8 @@ jobs:
           cd publish/desktop
           zip -r ../../mqttprobe-desktop-linux-x64-v${{ steps.version.outputs.value }}.zip .
 
-      - name: Install Velopack CLI (pinned 1.2.0)
-        run: dotnet tool install -g vpk --version 1.2.0
+      - name: Install Velopack CLI (pinned 1.2.161)
+        run: dotnet tool install -g vpk --version 1.2.161
 
       - name: Download previous Velopack release (for delta packages)
         continue-on-error: true

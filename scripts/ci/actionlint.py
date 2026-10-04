@@ -32,7 +32,7 @@ def find_repo_root() -> Path:
 ROOT = find_repo_root()
 
 # Pinned for reproducible results across machines/CI. Bump deliberately.
-DOCKER_IMAGE = "rhysd/actionlint:1.7.7"
+DOCKER_IMAGE = "rhysd/actionlint:1.7.12"
 
 
 def main() -> int:

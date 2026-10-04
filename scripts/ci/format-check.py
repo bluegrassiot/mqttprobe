@@ -64,13 +64,19 @@ else:
         ("src/MqttProbe.Maui/MqttProbe.Maui.csproj", True),
     ]
 
-# A missing MAUI workload surfaces as NETSDK1147 in the error output.
-# Only this specific SDK error code triggers the skip; generic messages
-# like "Restore operation failed" or the "workload" keyword alone are not
-# sufficient because they also appear for transient NuGet failures or
-# broken project files.
+# A missing MAUI workload surfaces as NETSDK1147 in the restore output.
+# Only this exact SDK error code triggers the skip for best-effort targets.
+# Generic messages like "Restore operation failed" also appear for transient
+# NuGet failures, broken project files, or dotnet format's own wrapper
+# exception, so they must not trigger a skip.
 WORKLOAD_ERROR = re.compile(r"NETSDK1147", re.IGNORECASE)
 REAL_ERROR_LINE = re.compile(r"error (?!ENDOFLINE)\w+:")
+
+# Restore-specific classifier: matches "error CODE:" or "error :" (bare).
+# Captures the diagnostic code (letters+digits) when present; bare "error:"
+# or "error :" yields an empty capture.  Used only by _is_netsdk1147_only;
+# REAL_ERROR_LINE and ENDOFLINE handling are untouched.
+RESTORE_ERROR_LINE = re.compile(r"\berror(?:\s+([A-Za-z]+\d+))?\s*:", re.IGNORECASE)
 
 # Workspace load warnings.  dotnet format may print the prefixed form
 # ("warn : ...") or the actual unprefixed message that appears on stdout:
@@ -85,8 +91,22 @@ WORKSPACE_WARN = re.compile(
 )
 
 
-def _run_dotnet(args: list[str]) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
-    return subprocess.run(args, capture_output=True, text=True)
+def _run_dotnet(args: list[str], timeout: int | None = None) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
+    return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+
+
+def _try_restore(target: str, timeout: int = 120) -> tuple[bool, str]:
+    """Explicitly restore a target before format passes.
+
+    Returns (success, combined_output).  On timeout the output is "timeout".
+    """
+    args = ["dotnet", "restore", str(ROOT / target), "--verbosity", "minimal"]
+    try:
+        result = _run_dotnet(args, timeout=timeout)
+        output = f"{result.stdout}\n{result.stderr}"
+        return result.returncode == 0, output
+    except subprocess.TimeoutExpired:
+        return False, "timeout"
 
 
 def _has_workspace_warning(output: str) -> bool:
@@ -111,6 +131,20 @@ def _extract_real_errors(output: str) -> list[str]:
     return [l.strip() for l in output.splitlines() if REAL_ERROR_LINE.search(l)]
 
 
+def _is_netsdk1147_only(output: str) -> bool:
+    """True when NETSDK1147 is present and every error diagnostic is NETSDK1147.
+
+    Uses RESTORE_ERROR_LINE to classify each "error" line.  A bare "error:"
+    or "error :" (no diagnostic code) alongside NETSDK1147 is fatal: the
+    output is not solely a workload-missing signal.
+    """
+    matches = RESTORE_ERROR_LINE.findall(output)
+    if not matches:
+        return False
+    # Every match must have a non-empty code that equals NETSDK1147.
+    return all(code and code.upper() == "NETSDK1147" for code in matches)
+
+
 def main() -> None:
     failed = 0
 
@@ -127,6 +161,27 @@ def main() -> None:
 
         print(f"\n  {label}...", end="", flush=True)
 
+        # For best-effort targets, restore explicitly once so we can inspect
+        # the real error output instead of dotnet format's wrapper exception.
+        skip_restore = False
+        if needs_workload:
+            restored, restore_output = _try_restore(target)
+            if not restored:
+                if _is_netsdk1147_only(restore_output):
+                    print(" SKIP (required MAUI workload not installed)")
+                    continue
+
+                # Fail-closed: restore failed with unclassified error
+                # (NuGet, MSBuild, timeout, or generic wrapper).
+                real = _extract_real_errors(restore_output)
+                print(" FAIL (restore)")
+                for line in (real or [restore_output.strip()]):
+                    print(f"    {line}")
+                failed += 1
+                continue
+
+            skip_restore = True
+
         # Phase 1: whitespace + style formatting passes.
         # Each invocation is classified independently.  ENDOFLINE-only
         # whitespace noise is ignored in check mode; everything else persists.
@@ -135,6 +190,8 @@ def main() -> None:
             args = ["dotnet", "format", sub, str(ROOT / target)]
             if not FIX:
                 args.append("--verify-no-changes")
+            if skip_restore:
+                args.append("--no-restore")
             for ex in EXCLUDES:
                 args.extend(["--exclude", ex])
 
@@ -152,14 +209,6 @@ def main() -> None:
                 break
 
             if result.returncode != 0:
-                # Missing MAUI workload on a best-effort target: skip
-                # gracefully.  Only NETSDK1147 triggers this; the invocation
-                # must have actually failed.
-                if needs_workload and WORKLOAD_ERROR.search(output):
-                    print(" SKIP (required MAUI workload not installed)")
-                    style_failed = True
-                    break
-
                 # ENDOFLINE-only whitespace pass: ignore in check mode and
                 # continue to the next pass (style, then targeted IDE0005).
                 if sub == "whitespace" and not FIX and _is_endofline_only(output):
@@ -188,6 +237,8 @@ def main() -> None:
             ]
             if not FIX:
                 args.append("--verify-no-changes")
+            if skip_restore:
+                args.append("--no-restore")
             for ex in EXCLUDES:
                 args.extend(["--exclude", ex])
 
@@ -203,10 +254,6 @@ def main() -> None:
                 continue
 
             if result.returncode != 0:
-                if needs_workload and WORKLOAD_ERROR.search(output):
-                    print(" SKIP (required MAUI workload not installed)")
-                    continue
-
                 real = _extract_real_errors(output)
                 print(" FAIL")
                 for line in (real or [output.strip()]):

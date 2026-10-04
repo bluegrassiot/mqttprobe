@@ -6,6 +6,7 @@ Run: python -m unittest discover -s scripts/ci/tests
 
 import importlib.util
 import io
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -287,6 +288,199 @@ class TestWorkloadSkip(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx:
             _run_main(fake_run, _Fixture(targets=[("Fake.slnf", False)]))
         self.assertEqual(ctx.exception.code, 1)
+
+
+class TestExplicitRestore(unittest.TestCase):
+    """Best-effort targets get an explicit restore before format passes."""
+
+    def test_solely_netsdk1147_skips(self):
+        """Restore fails with only NETSDK1147 → skip gracefully."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(1, "", "error NETSDK1147: workload not installed")
+            return _run(0, "", "")
+
+        out, _ = _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertIn("SKIP", out)
+        self.assertNotIn("FAIL", out)
+
+    def test_wrapper_only_fails(self):
+        """Restore fails with generic wrapper, no NETSDK1147 → fail-closed."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(1, "", (
+                    "Unhandled exception: System.Exception: Restore operation failed.\n"
+                    "   at Microsoft.CodeAnalysis.Tools.CodeFormatter"
+                    ".OpenMSBuildWorkspaceAsync(...)"
+                ))
+            return _run(0, "", "")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_nuget_error_fails(self):
+        """Restore fails with NuGet error → fail-closed."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(1, "", "error NU1301: Unable to load package")
+            return _run(0, "", "")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_mixed_netsdk1147_plus_nu_fails(self):
+        """Restore fails with NETSDK1147 AND NuGet error → fail-closed."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(1, "", "error NETSDK1147: workload\nerror NU1301: package")
+            return _run(0, "", "")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_unclassified_error_fails(self):
+        """Restore fails with unclassified error → fail-closed."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(1, "", "error: something went wrong")
+            return _run(0, "", "")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_timeout_fails(self):
+        """Restore times out → fail-closed."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                raise subprocess.TimeoutExpired(cmd=args, timeout=120)
+            return _run(0, "", "")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_restored_success_all_passes_ok(self):
+        """Restore succeeds → all3format passes use --no-restore and succeed."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(0, "", "")
+            return _run(0, "", "")
+
+        out, calls = _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        restore_calls = [c for c in calls if "restore" in c and "format" not in c]
+        format_calls = [c for c in calls if "format" in c]
+        self.assertTrue(restore_calls, "No explicit restore call found")
+        for c in format_calls:
+            self.assertIn("--no-restore", c, f"Format call missing --no-restore: {c}")
+        self.assertIn("OK", out)
+        self.assertNotIn("FAIL", out)
+
+    def test_restored_success_style_fail(self):
+        """Restore succeeds but style pass has formatting violation → fail."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(0, "", "")
+            if "style" in args and "--diagnostics" not in args:
+                return _run(2, "", "error IDE0005: Remove unused using directive")
+            return _run(0, "", "")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_restored_success_ide0005_fail(self):
+        """Restore succeeds but targeted IDE0005 pass fails → fail."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(0, "", "")
+            if "--diagnostics" in args:
+                return _run(2, "", "error IDE0005: unused using")
+            return _run(0, "", "")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_mandatory_target_no_explicit_restore(self):
+        """Mandatory targets skip the explicit restore step entirely."""
+        def fake_run(args, **kw):
+            return _run(0, "", "")
+
+        out, calls = _run_main(fake_run, _Fixture(targets=[("Fake.slnf", False)]))
+        restore_calls = [c for c in calls if "restore" in c and "format" not in c]
+        self.assertFalse(restore_calls, "Mandatory target should not have explicit restore")
+        format_calls = [c for c in calls if "format" in c]
+        for c in format_calls:
+            self.assertNotIn("--no-restore", c, f"Mandatory target should not use --no-restore: {c}")
+        self.assertIn("OK", out)
+
+    def test_mandatory_workload_error_fails(self):
+        """Mandatory target with NETSDK1147 fails (no skip)."""
+        def fake_run(args, **kw):
+            return _run(2, "", "error NETSDK1147: workload not installed")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run, _Fixture(targets=[("Fake.slnf", False)]))
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_netsdk1147_plus_bare_error_fatal(self):
+        """NETSDK1147 + bare 'error:' → fail-closed (bare has no code)."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(1, "", "error NETSDK1147: workload\nerror: something else")
+            return _run(0, "", "")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_netsdk1147_plus_spaced_error_fatal(self):
+        """NETSDK1147 + 'error :' (space before colon) → fail-closed."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(1, "", "error NETSDK1147: workload\nerror : something else")
+            return _run(0, "", "")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_nu1301_mentioning_netsdk1147_url_fatal(self):
+        """NU1301 with NETSDK1147 in URL → fail-closed (code is NU1301, not NETSDK1147)."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(1, "", "error NU1301: See https://aka.ms/netSDK1147")
+            return _run(0, "", "")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_netsdk11470_wrong_code_fatal(self):
+        """NETSDK11470 is not NETSDK1147 → fail-closed."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(1, "", "error NETSDK11470: wrong code")
+            return _run(0, "", "")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_realistic_path_prefixed_netsdk1147_skip(self):
+        """Path-prefixed 'error NETSDK1147:' → skip."""
+        def fake_run(args, **kw):
+            if "restore" in args:
+                return _run(1, "", "/home/runner/work/p/src/P.csproj : error NETSDK1147: workload")
+            return _run(0, "", "")
+
+        out, _ = _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
+        self.assertIn("SKIP", out)
+        self.assertNotIn("FAIL", out)
 
 
 class TestCleanPassExitZero(unittest.TestCase):

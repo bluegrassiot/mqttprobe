@@ -123,6 +123,49 @@ Optional environment variables:
 | `MQTTPROBE_TEST_MQTT_HOST` | `localhost` | MQTT broker host |
 | `MQTTPROBE_TEST_MQTT_PORT` | `1883` | MQTT broker port |
 
+## Live MQTT flow smoke tests
+
+Five tests in `LiveFlows/` exercise connect, subscribe, publish, topic tree
+expand/collapse, long topic overflow, status chip transitions, and mobile viewport
+behavior against a real MQTT broker and local app instance.
+
+Not listed in `MqttProbe.slnx`, not wired into CI. **Always pass a `--filter`.**
+
+### Prerequisites
+
+- A local app instance on `https://localhost:5001` (or set `MQTTPROBE_TEST_BASE_URL`).
+- A real MQTT broker at `localhost:1883` (or set `MQTTPROBE_TEST_MQTT_HOST` /
+  `MQTTPROBE_TEST_MQTT_PORT`).
+- Chromium installed once per machine.
+- Local login credentials in the environment.
+
+### Run (Windows PowerShell 5.1)
+
+```powershell
+$env:MQTTPROBE_TEST_USERNAME = 'your-local-user'
+$env:MQTTPROBE_TEST_PASSWORD = '<password>'
+
+# All five live flow tests
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter FullyQualifiedName~MqttLiveFlowsSmokeTests
+
+# Individual tests
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~ConnectSubscribePublishVisibleDisconnect
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~LongTopicStringOverflowAndScroll
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~StatusChipTransitionsDisconnectReconnect
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~TopicTreeExpandCollapseMultipleTopics
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~MobileViewportWithLiveBroker
+
+Remove-Item Env:MQTTPROBE_TEST_USERNAME, Env:MQTTPROBE_TEST_PASSWORD
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `MQTTPROBE_TEST_BASE_URL` | `https://localhost:5001` | App origin (must be https loopback) |
+| `MQTTPROBE_TEST_MQTT_HOST` | `localhost` | MQTT broker host |
+| `MQTTPROBE_TEST_MQTT_PORT` | `1883` | MQTT broker port |
+
 ## Behaviour
 
 The browser runs headed so you can watch the flow; waits are bounded with a 180s overall

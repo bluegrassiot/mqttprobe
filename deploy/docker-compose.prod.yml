@@ -2,6 +2,10 @@
 # Before starting: copy .env.example to .env and set MQTTPROBE_HOST to the
 # hostname or IP other machines will use to reach this server.
 
+# Pinned because the mTLS lab lives in this same directory and would otherwise
+# default to the same project name and fight over these volumes and the network.
+name: mqttprobe-prod
+
 services:
   mqttprobe:
     image: bluegrassiot/mqttprobe:latest

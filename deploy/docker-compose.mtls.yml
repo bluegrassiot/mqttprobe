@@ -10,6 +10,10 @@
 # Import deploy/mtls/certs/client.pfx (password changeme) in MQTTProbe.
 # Connect to 127.0.0.1:8883 with Use TLS and Allow untrusted certificate.
 
+# Pinned because the prod variant lives in this same directory and would otherwise
+# default to the same project name and fight over these volumes and the network.
+name: mqttprobe-mtls
+
 services:
   mqttprobe:
     image: bluegrassiot/mqttprobe:latest

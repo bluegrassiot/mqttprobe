@@ -1,3 +1,7 @@
+# Pinned so the project name and volumes survive a clone into a differently
+# named folder. Matches the name Compose already derives from this directory.
+name: mqttprobe
+
 services:
   mqttprobe:
     image: bluegrassiot/mqttprobe:latest

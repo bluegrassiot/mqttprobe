@@ -159,7 +159,7 @@
             await OnSelectedChanged.InvokeAsync(MessageStoreManagerService.SelectedMessageStore);
     }
 
-    private async Task ToggleExpand(string path)
+    private Task ToggleExpand(string path)
     {
         if (_expandedPaths.Contains(path))
             _expandedPaths.Remove(path);
@@ -167,6 +167,8 @@
             _expandedPaths.Add(path);
         BuildVisibleRows();
         StateHasChanged();
+
+        return Task.CompletedTask;
     }
 
     private void ExpandAll()

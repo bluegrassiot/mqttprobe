@@ -70,7 +70,7 @@ public class SubscriptionsTests : BunitTestContext
         topicInput.Input(new ChangeEventArgs { Value = "sensors/#" });
         cut.Find("button[title='Add subscription']").Click();
 
-        await _mockSubMgr.Received(1).Add("sensors/#", MqttQualityOfServiceLevel.AtLeastOnce);
+        await _mockSubMgr.Received(1).Add("sensors/#");
     }
 
     [Test]
@@ -186,7 +186,7 @@ public class SubscriptionsTests : BunitTestContext
     }
 
     [Test]
-    public async Task DeleteSelected_WhenRemoveFails_SurfacesErrorSnackbar()
+    public Task DeleteSelected_WhenRemoveFails_SurfacesErrorSnackbar()
     {
         AuthorizeAsOperator();
         _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
@@ -206,10 +206,11 @@ public class SubscriptionsTests : BunitTestContext
                 Severity.Error,
                 Arg.Any<Action<SnackbarOptions>?>(),
                 Arg.Any<string>()));
+        return Task.CompletedTask;
     }
 
     [Test]
-    public async Task ExcludeRemove_WhenRemoveFails_SurfacesErrorSnackbar()
+    public Task ExcludeRemove_WhenRemoveFails_SurfacesErrorSnackbar()
     {
         AuthorizeAsOperator();
         _mockExcludeService.TopicExcludes.Returns(new List<string> { "$SYS/#" });
@@ -227,10 +228,11 @@ public class SubscriptionsTests : BunitTestContext
                 Severity.Error,
                 Arg.Any<Action<SnackbarOptions>?>(),
                 Arg.Any<string>()));
+        return Task.CompletedTask;
     }
 
     [Test]
-    public async Task ExcludeRemove_UnsuccessfulResult_ShowsFeedbackSnackbar()
+    public Task ExcludeRemove_UnsuccessfulResult_ShowsFeedbackSnackbar()
     {
         AuthorizeAsOperator();
         _mockExcludeService.TopicExcludes.Returns(new List<string> { "$SYS/#" });
@@ -248,6 +250,7 @@ public class SubscriptionsTests : BunitTestContext
                 Severity.Error,
                 Arg.Any<Action<SnackbarOptions>?>(),
                 Arg.Any<string>()));
+        return Task.CompletedTask;
     }
 
     [Test]

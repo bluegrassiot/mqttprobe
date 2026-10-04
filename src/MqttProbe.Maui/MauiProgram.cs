@@ -1,6 +1,6 @@
-// System.Globalization is used only inside the #if IOS block below; it reads as unused
-// on every other target framework.
+#if IOS
 using System.Globalization;
+#endif
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;

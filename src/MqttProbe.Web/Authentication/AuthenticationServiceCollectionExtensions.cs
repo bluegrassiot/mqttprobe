@@ -45,7 +45,7 @@ public static class AuthenticationServiceCollectionExtensions
             var emulationService = sp.GetService<IEmulationService>();
             var authInvalidator = sp.GetRequiredService<IAuthenticationStateInvalidator>();
             var loginNotifier = sp.GetRequiredService<ILoginNavigationNotifier>();
-            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<ScopedCircuitTeardownHandler>>()
+            var logger = sp.GetService<ILogger<ScopedCircuitTeardownHandler>>()
                 ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ScopedCircuitTeardownHandler>.Instance;
             return new ScopedCircuitTeardownHandler(
                 mqttClient, emulationService, authInvalidator, loginNotifier, logger, cleanupTimeout);

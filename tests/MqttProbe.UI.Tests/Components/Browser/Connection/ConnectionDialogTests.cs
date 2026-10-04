@@ -14,7 +14,6 @@ using MqttProbe.Core.Services.Security;
 using MqttProbe.TestInfrastructure.Security;
 using MqttProbe.UI.Components.Browser.Connection;
 using MqttProbe.UI.Tests.TestHelpers;
-// TestHelpers moved to Core.Tests
 using MudBlazor;
 using MudBlazor.Extensions;
 
@@ -3369,7 +3368,7 @@ public class ConnectionDialogTests : BunitTestContext
         var buttons = _dialogProvider.FindAll("button");
         var connectAnyway = buttons.FirstOrDefault(b => b.TextContent.Contains("Connect anyway"));
         connectAnyway.Should().NotBeNull();
-        connectAnyway!.Click();
+        connectAnyway.Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
             _mockClient.Received().StartAsync(Arg.Any<MqttManagedClientOptions>()));
@@ -3409,7 +3408,7 @@ public class ConnectionDialogTests : BunitTestContext
         var buttons = _dialogProvider.FindAll("button");
         var saveConnect = buttons.FirstOrDefault(b => b.TextContent.Contains("Save & Connect"));
         saveConnect.Should().NotBeNull();
-        saveConnect!.Click();
+        saveConnect.Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
             _mockClient.Received().StartAsync(Arg.Any<MqttManagedClientOptions>()));
@@ -4352,7 +4351,7 @@ public class ConnectionDialogTests : BunitTestContext
 
         GoToOnConnectTab();
         // Try to remove (even though there are no topics, the guard should fire first)
-        var editor = _dialogProvider.FindComponent<SubscriptionEditor>();
+        _ = _dialogProvider.FindComponent<SubscriptionEditor>();
         // The guard fires before any remove attempt on unsaved connections
         // We verify by checking that AddConnectionAsync was never called
         await _mockConnections.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());

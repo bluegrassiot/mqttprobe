@@ -154,6 +154,7 @@ public sealed class KeycloakFixture : IAsyncDisposable
             .WithEnvironment("KEYCLOAK_ADMIN", "admin")
             .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", "admin")
             .WithCommand("start-dev", "--import-realm")
+            .WithExtraHost("host.docker.internal", "host-gateway")
             .WithResourceMapping(
                 Encoding.UTF8.GetBytes(RealmJson),
                 "/opt/keycloak/data/import/mqttprobe-test-realm.json")

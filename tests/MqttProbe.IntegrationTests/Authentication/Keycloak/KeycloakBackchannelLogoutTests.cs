@@ -48,6 +48,13 @@ public class KeycloakBackchannelLogoutTests : IAsyncDisposable
             bridge.ForwardToApp(factory.Server.CreateHandler());
             await _fixture!.SetBackchannelLogoutUrlAsync(bridge.BackchannelLogoutUrl);
 
+            // Early reachability probe: surface host.docker.internal resolution
+            // failures now instead of waiting for the full delivery timeout.
+            var earlyProbe = await _fixture.ProbeHostTcpAsync(bridge.ContainerHost, bridge.Port);
+            Assert.That(earlyProbe, Does.Contain("reachable"),
+                $"Keycloak container must be able to reach {bridge.ContainerHost}:{bridge.Port} " +
+                $"before attempting the logout flow. Probe result: {earlyProbe}");
+
             await AuthenticateAdmittedAsync(appClient, driver);
 
             await LogoutAtProviderAsync(driver);

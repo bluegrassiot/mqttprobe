@@ -32,7 +32,8 @@ internal sealed class BackchannelLogoutBridge : IAsyncDisposable
 {
     private const string AppOrigin = "https://mqttprobe.test";
 
-    // Resolves to the host from inside a container.
+    // Standard Docker hostname; the Keycloak container gets an explicit
+    // host-gateway extra-host mapping so it resolves to the host machine.
     private const string ContainerHostName = "host.docker.internal";
 
     private static readonly TimeSpan _forwardTimeout = TimeSpan.FromSeconds(30);

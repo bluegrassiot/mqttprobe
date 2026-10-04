@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using MqttProbe.Web.Authentication;
-using NSubstitute;
 
 namespace MqttProbe.UI.Tests.Authentication;
 

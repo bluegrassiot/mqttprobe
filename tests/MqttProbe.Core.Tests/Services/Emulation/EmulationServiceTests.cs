@@ -16,7 +16,6 @@ using MqttProbe.PluginContracts;
 using MqttProbe.Tests.Utilities;
 using SparkplugNet.Core.Enumerations;
 using SparkplugNet.Core.Node;
-using SparkplugNet.VersionB;
 using SparkplugNet.VersionB.Data;
 
 namespace MqttProbe.Core.Tests.Services.Emulation;

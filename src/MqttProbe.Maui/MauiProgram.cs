@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MqttProbe.Core.Models.Plugins;
-using MqttProbe.Core.Services;
 using MqttProbe.Core.Services.Platform;
 using MqttProbe.Core.Services.Plugins;
 using MqttProbe.Core.Services.Plugins.Packaging;

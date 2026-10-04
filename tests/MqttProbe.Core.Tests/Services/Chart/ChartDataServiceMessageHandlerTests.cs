@@ -5,7 +5,6 @@ using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Chart;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Mqtt;
-using MqttProbe.Core.Tests.Services.Mqtt;
 using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Core.Tests.Services.Chart;

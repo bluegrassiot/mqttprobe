@@ -2,7 +2,6 @@ using System.Net;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Web;
-using AngleSharp;
 using AngleSharp.Html.Parser;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Extensions.DependencyInjection;

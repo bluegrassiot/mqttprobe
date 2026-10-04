@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Tests.TestHelpers;
-using MudBlazor;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 

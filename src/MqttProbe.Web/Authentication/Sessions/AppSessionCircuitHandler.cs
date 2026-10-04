@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server.Circuits;
-using MqttProbe.Core.Services.Mqtt;
 
 namespace MqttProbe.Web.Authentication;
 

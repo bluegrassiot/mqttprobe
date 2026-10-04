@@ -1,8 +1,6 @@
 using System.Text.Json;
-using MqttProbe.Core.Models.Chart;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Mqtt;
-using MqttProbe.Core.Models.Sparkplug;
 
 namespace MqttProbe.Core.Tests.Models.Configuration;
 

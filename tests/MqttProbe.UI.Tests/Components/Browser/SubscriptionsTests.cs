@@ -5,7 +5,6 @@ using MqttProbe.Core;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Security;
-using MqttProbe.UI.Services;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
 

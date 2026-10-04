@@ -10,7 +10,6 @@ using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.Pages;
-using MqttProbe.Web.Authentication;
 using AuthOptions = MqttProbe.Web.Authentication.AuthenticationOptions;
 
 namespace MqttProbe.UI.Tests.Pages;

@@ -27,6 +27,7 @@ Usage:
 
 import argparse
 import collections
+import importlib.util as _ilu
 import json
 import subprocess
 import sys
@@ -42,6 +43,19 @@ def find_repo_root() -> Path:
 
 
 ROOT = find_repo_root()
+
+# Source-line exception definitions live in inspect_source_exceptions.py to
+# keep this file within the repository's 500-line limit.  importlib.util is
+# used because the script directory may not be on sys.path (e.g. when the test
+# suite loads this file via exec_module).
+_se_path = Path(__file__).resolve().parent / "inspect_source_exceptions.py"
+_se_spec = _ilu.spec_from_file_location("_inspect_source_exceptions", _se_path)
+if _se_spec is None or _se_spec.loader is None:
+    raise SystemExit("Cannot load inspect_source_exceptions.py")
+_se_mod = _ilu.module_from_spec(_se_spec)
+_se_spec.loader.exec_module(_se_mod)
+SOURCE_LINE_EXCEPTIONS = _se_mod.SOURCE_LINE_EXCEPTIONS
+
 ARTIFACTS = ROOT / "artifacts"
 SOLUTION = "MqttProbe.slnx"
 
@@ -180,6 +194,16 @@ def is_spec_identifier_exception(finding):
     if SPEC_IDENTIFIER_QUOTED not in line and SPEC_IDENTIFIER_ESCAPED not in line:
         return False
     return line.count("http://") == 1
+
+
+def is_source_line_exception(finding):
+    """True only for an exact (rule, file, line number, stripped source line) match.
+
+    Fail closed: unreadable file, out-of-range line, or content mismatch all
+    keep the finding blocking.  This mirrors the GATED_EXCEPTIONS pattern but
+    matches plain source lines rather than JSON properties.
+    """
+    return _se_mod.is_source_line_exception(finding, ROOT)
 
 
 def run_tool(name, cmd, sarif_path):
@@ -389,7 +413,9 @@ def main():
                 if level_key(finding["level"]) > level_key(args.fail_on):
                     continue
                 # Reported either way; only the exit code is affected.
-                if is_gated_exception(finding) or is_spec_identifier_exception(finding):
+                if (is_gated_exception(finding)
+                        or is_spec_identifier_exception(finding)
+                        or is_source_line_exception(finding)):
                     accepted.append(finding)
                 else:
                     gated.append(finding)

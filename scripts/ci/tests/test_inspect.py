@@ -250,5 +250,142 @@ class TestSpecIdentifierException(unittest.TestCase):
             inspect_ci.is_spec_identifier_exception(finding(1, file=self.SPEC_FILE)))
 
 
+class TestSourceLineExceptionSchema(unittest.TestCase):
+    """Every SOURCE_LINE_EXCEPTIONS entry has the required keys and a rationale."""
+
+    REQUIRED_KEYS = {"rule", "file", "line", "content", "rationale"}
+
+    def test_all_entries_have_required_keys(self):
+        for i, entry in enumerate(inspect_ci.SOURCE_LINE_EXCEPTIONS):
+            missing = self.REQUIRED_KEYS - entry.keys()
+            self.assertFalse(
+                missing,
+                f"SOURCE_LINE_EXCEPTIONS[{i}] missing keys: {missing}",
+            )
+
+    def test_all_entries_have_non_empty_rationale(self):
+        for i, entry in enumerate(inspect_ci.SOURCE_LINE_EXCEPTIONS):
+            self.assertTrue(
+                entry.get("rationale", "").strip(),
+                f"SOURCE_LINE_EXCEPTIONS[{i}] has empty rationale",
+            )
+
+    def test_all_entries_have_positive_line_number(self):
+        for i, entry in enumerate(inspect_ci.SOURCE_LINE_EXCEPTIONS):
+            self.assertGreaterEqual(
+                entry["line"], 1,
+                f"SOURCE_LINE_EXCEPTIONS[{i}] line must be >= 1",
+            )
+
+    def test_no_entry_looks_like_secret(self):
+        """Content must not be a bare hex blob; it must be a full source statement."""
+        for i, entry in enumerate(inspect_ci.SOURCE_LINE_EXCEPTIONS):
+            content = entry["content"]
+            # A bare hex string (no letters other than a-f) is suspicious.
+            import re
+            self.assertIsNotNone(
+                re.search(r'[g-zG-Z_=:."()\[\]{} ]', content),
+                f"SOURCE_LINE_EXCEPTIONS[{i}] content looks like a bare hex blob: {content!r}",
+            )
+
+
+class TestSourceLineExceptionPositive(unittest.TestCase):
+    """Each SOURCE_LINE_EXCEPTIONS entry is accepted against the real repo file."""
+
+    def test_all_entries_are_accepted(self):
+        for i, entry in enumerate(inspect_ci.SOURCE_LINE_EXCEPTIONS):
+            with self.subTest(i=i, rule=entry["rule"], file=entry["file"], line=entry["line"]):
+                f = finding(entry["line"], rule=entry["rule"], file=entry["file"])
+                self.assertTrue(
+                    inspect_ci.is_source_line_exception(f),
+                    f"SOURCE_LINE_EXCEPTIONS[{i}] not accepted: "
+                    f"{entry['rule']} {entry['file']}:{entry['line']} "
+                    f"({entry['rationale']})",
+                )
+
+
+class TestSourceLineExceptionNegative(unittest.TestCase):
+    """Fail-closed behaviour: wrong rule, file, line, content, or missing file."""
+
+    SAMPLE_FILE = "scripts/packaging/linux/appdir.sh"
+    SAMPLE_LINE = 14
+    SAMPLE_RULE = "DS173237"
+
+    def test_exact_match_is_accepted(self):
+        f = finding(self.SAMPLE_LINE, rule=self.SAMPLE_RULE, file=self.SAMPLE_FILE)
+        self.assertTrue(inspect_ci.is_source_line_exception(f))
+
+    def test_wrong_rule_blocks(self):
+        f = finding(self.SAMPLE_LINE, rule="DS999999", file=self.SAMPLE_FILE)
+        self.assertFalse(inspect_ci.is_source_line_exception(f))
+
+    def test_wrong_file_blocks(self):
+        f = finding(self.SAMPLE_LINE, rule=self.SAMPLE_RULE, file="nonexistent/file.sh")
+        self.assertFalse(inspect_ci.is_source_line_exception(f))
+
+    def test_wrong_line_blocks(self):
+        f = finding(999, rule=self.SAMPLE_RULE, file=self.SAMPLE_FILE)
+        self.assertFalse(inspect_ci.is_source_line_exception(f))
+
+    def test_line_zero_blocks(self):
+        f = finding(0, rule=self.SAMPLE_RULE, file=self.SAMPLE_FILE)
+        self.assertFalse(inspect_ci.is_source_line_exception(f))
+
+    def test_content_change_blocks(self):
+        """If the source line changes, the exception stops matching."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        original_root = inspect_ci.ROOT
+        self.addCleanup(setattr, inspect_ci, "ROOT", original_root)
+        setattr(inspect_ci, "ROOT", Path(tmp.name))
+
+        # Write a file at the expected path with modified content
+        path = inspect_ci.ROOT / self.SAMPLE_FILE
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('LINUXDEPLOY_SHA256="deadbeef"\n', encoding="utf-8")
+        f = finding(1, rule=self.SAMPLE_RULE, file=self.SAMPLE_FILE)
+        self.assertFalse(inspect_ci.is_source_line_exception(f))
+
+    def test_missing_file_fails_closed(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        original_root = inspect_ci.ROOT
+        self.addCleanup(setattr, inspect_ci, "ROOT", original_root)
+        setattr(inspect_ci, "ROOT", Path(tmp.name))
+
+        f = finding(self.SAMPLE_LINE, rule=self.SAMPLE_RULE, file=self.SAMPLE_FILE)
+        self.assertFalse(inspect_ci.is_source_line_exception(f))
+
+    def test_extra_content_on_line_blocks(self):
+        """A line with extra material beyond the approved statement blocks."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        original_root = inspect_ci.ROOT
+        self.addCleanup(setattr, inspect_ci, "ROOT", original_root)
+        setattr(inspect_ci, "ROOT", Path(tmp.name))
+
+        path = inspect_ci.ROOT / self.SAMPLE_FILE
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Same hash value but with a trailing comment
+        path.write_text(
+            'LINUXDEPLOY_SHA256="36a2d7e274d12e1050d0e9ecfe11d339ed54720b2bec464c286d53f8b07f5c62" # extra\n',  # DevSkim: ignore DS173237 test fixture for fail-closed test
+            encoding="utf-8",
+        )
+        f = finding(1, rule=self.SAMPLE_RULE, file=self.SAMPLE_FILE)
+        self.assertFalse(inspect_ci.is_source_line_exception(f))
+
+    def test_no_match_for_unlisted_rule(self):
+        """A finding with a rule not in SOURCE_LINE_EXCEPTIONS is not accepted."""
+        f = finding(self.SAMPLE_LINE, rule="DS000000", file=self.SAMPLE_FILE)
+        self.assertFalse(inspect_ci.is_source_line_exception(f))
+
+    def test_no_match_for_unlisted_file(self):
+        """A finding with a file not in SOURCE_LINE_EXCEPTIONS is not accepted."""
+        f = finding(self.SAMPLE_LINE, rule=self.SAMPLE_RULE,
+                    file="src/MqttProbe.Web/Program.cs")
+        self.assertFalse(inspect_ci.is_source_line_exception(f))
+
+
+
 if __name__ == "__main__":
     unittest.main()

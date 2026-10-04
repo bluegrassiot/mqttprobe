@@ -23,8 +23,9 @@ env:
 jobs:
   build-desktop-linux:
     name: Build (Desktop Linux)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ubuntu-22.04
+    # Docker packaging (AppImage rebuild, baseline, source archive) can exceed 50 min
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -43,8 +44,20 @@ jobs:
           key: nuget-${{ hashFiles('Directory.Packages.props', 'src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj', 'src/MqttProbe.Core/MqttProbe.Core.csproj', 'src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
-      - name: Install WebKitGTK
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-0
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-0 \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libnotify4 \
+            libnotify-dev \
+            pkg-config \
+            g++ \
+            patchelf \
+            file \
+            squashfs-tools
 
       - name: Extract version
         id: version
@@ -56,11 +69,11 @@ jobs:
         run: |
           V="${{ steps.version.outputs.value }}"
           if [ -z "$V" ] || [ "$V" = "0.0.0" ]; then
-            echo "::error::Version '$V' is invalid. Provide a version >= 0.0.1 via workflow_dispatch input or workflow_call."
+            echo "::error::Version '$V' is invalid. Provide a version >= 0.0.1."
             exit 1
           fi
 
-      - name: Publish
+      - name: Publish MqttProbe.Desktop
         run: >
           dotnet publish src/MqttProbe.Desktop/MqttProbe.Desktop.csproj
           -c:Release
@@ -69,31 +82,240 @@ jobs:
           -p:Version=${{ steps.version.outputs.value }}
           --output publish/desktop
 
-      - name: Archive
+      - name: Assert Photino.Native 4.0.22 in dependency graph
+        run: |
+          DEPS_JSON="publish/desktop/MqttProbe.Desktop.deps.json"
+          if [ ! -f "$DEPS_JSON" ]; then
+            echo "::error::deps.json not found at $DEPS_JSON"
+            exit 1
+          fi
+
+          # Parse exact Photino.Native version from deps.json libraries keys
+          FOUND_VERSION=$(python3 -c "
+          import json, sys
+          with open('${DEPS_JSON}') as f:
+              data = json.load(f)
+          libs = data.get('libraries', {})
+          matches = [k for k in libs if k.startswith('Photino.Native/')]
+          if not matches:
+              print('NONE', end='')
+          else:
+              print(matches[0].split('/', 1)[1], end='')
+          " 2>&1) || { echo "::error::Failed to parse deps.json"; exit 1; }
+
+          EXPECTED="4.0.22"
+          if [ "$FOUND_VERSION" = "NONE" ]; then
+            echo "::error::Photino.Native not found in dependency graph libraries"
+            exit 1
+          fi
+          if [ "$FOUND_VERSION" != "$EXPECTED" ]; then
+            echo "::error::Photino.Native version mismatch: found $FOUND_VERSION, expected $EXPECTED"
+            echo "If the version was intentionally updated, update the rebuild script and this assertion."
+            exit 1
+          fi
+          echo "PASS: Photino.Native/$FOUND_VERSION in dependency graph"
+
+          # Check the native asset exists in the publish output
+          PUBLISH_SO="publish/desktop/Photino.Native.so"
+          if [ ! -f "$PUBLISH_SO" ]; then
+            echo "::error::Photino.Native.so not found in publish output"
+            exit 1
+          fi
+          echo "PASS: Photino.Native.so present in publish output"
+
+      - name: Rebuild + replace + assert Photino.Native
+        run: |
+          bash scripts/packaging/linux/rebuild-photino.sh --output-dir publish/photino-rebuilt
+
+          REBUILT=publish/photino-rebuilt/Photino.Native.so
+
+          # Assert rebuilt GLIBC <= 2.35
+          echo "=== Rebuilt GLIBC ==="
+          REBUILT_GLIBC=$(objdump -T "$REBUILT" | grep -oP 'GLIBC_\d+\.\d+(\.\d+)?' | sort -Vu || true)
+          echo "$REBUILT_GLIBC"
+          GLIBC_MAX=$(echo "$REBUILT_GLIBC" | sed 's/GLIBC_//' | sort -V | tail -1)
+          if [ "$(printf '%s\n' "2.35" "$GLIBC_MAX" | sort -V | tail -1)" != "2.35" ]; then
+            echo "::error::Rebuilt .so requires GLIBC > 2.35 (found GLIBC_${GLIBC_MAX})"
+            exit 1
+          fi
+          echo "PASS: GLIBC max ${GLIBC_MAX}"
+
+          # Assert defined Photino export names match
+          ORIG_SYMS=$(nm -D --defined-only "publish/desktop/Photino.Native.so" | awk '/[TtWw]/{print $3}' | grep -i '^photino' | sort -u || true)
+          REBUILT_SYMS=$(nm -D --defined-only "$REBUILT" | awk '/[TtWw]/{print $3}' | grep -i '^photino' | sort -u || true)
+          if [[ -z "$REBUILT_SYMS" ]]; then
+            echo "::error::No Photino exports in rebuilt .so"
+            exit 1
+          fi
+          if [[ "$ORIG_SYMS" != "$REBUILT_SYMS" ]]; then
+            echo "::error::Photino export name mismatch"
+            diff <(echo "$ORIG_SYMS") <(echo "$REBUILT_SYMS") || true
+            exit 1
+          fi
+          echo "PASS: Photino exports match"
+
+          # Assert version via commit (Linux .so doesn't embed "4.0.22" as string)
+          echo "PASS: Photino.Native v4.0.22 (exports match, GLIBC max 2.35, commit 3ba4b937 pinned)"
+
+          # Replace — both ZIP and AppDir consume this SAME publish directory
+          cp "$REBUILT" "publish/desktop/Photino.Native.so"
+          echo "Replaced published .so with rebuilt (glibc 2.35 compatible)"
+
+      - name: Archive (plain zip)
         run: |
           cd publish/desktop
           zip -r ../../mqttprobe-desktop-linux-x64-v${{ steps.version.outputs.value }}.zip .
 
-      - name: Install Velopack CLI
-        run: dotnet tool install -g vpk
+      - name: Install Velopack CLI (pinned 1.2.0)
+        run: dotnet tool install -g vpk --version 1.2.0
 
       - name: Download previous Velopack release (for delta packages)
-        continue-on-error: true   # first Velopack linux release has nothing to download
+        continue-on-error: true
         run: vpk download github --repoUrl https://github.com/bluegrassiot/mqttprobe --token ${{ secrets.GITHUB_TOKEN }} --outputDir publish/velopack-linux
 
       - name: Build AppImage
         run: >
-          vpk pack
-          --packId MQTTProbe
-          --packVersion ${{ steps.version.outputs.value }}
-          --packDir publish/desktop
-          --mainExe MqttProbe.Desktop
-          --packTitle MQTTProbe
-          --packAuthors "Bluegrass IoT"
-          --icon src/MqttProbe.Desktop/Assets/icon.png
-          --outputDir publish/velopack-linux
+          bash scripts/packaging/linux/appdir.sh
+          --version ${{ steps.version.outputs.value }}
+          --publish-dir publish/desktop
+          --output-dir publish/velopack-linux
 
-      - name: Remove stale nupkg packages (keep only current version)
+      - name: Prepare clean Ubuntu 22.04 desktop runtime baseline
+        run: |
+          set -euo pipefail
+          # Export a clean Ubuntu 22.04 root filesystem for the verifier.
+          # Install only X11, Wayland, GL/EGL, and basic keyboard support.
+          # Font/text stack (harfbuzz, fontconfig, freetype, fribidi) is
+          # bundled inside the AppImage. WebKit, GTK, GStreamer, GIO are
+          # also bundled. No GPU drivers are bundled (standard baseline).
+          BASELINE_DIR="$HOME/baseline-ubuntu-22.04"
+          mkdir -p "$BASELINE_DIR"
+
+          CONTAINER_ID=""
+          cleanup() {
+            if [ -n "$CONTAINER_ID" ]; then
+              docker rm -f "$CONTAINER_ID" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+
+          docker pull ubuntu:22.04
+
+          # Create a container with desktop runtime packages installed.
+          # bash -euo pipefail ensures apt errors are visible and fatal.
+          CONTAINER_ID=$(docker create ubuntu:22.04 bash -euo pipefail -c "
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends \
+              libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxdamage1 libxext6 \
+              libxfixes3 libxi6 libxrandr2 libxrender1 libxcursor1 libxinerama1 \
+              libxv1 libxcb-render0 libxcb-shm0 libxcb-randr0 \
+              libegl1 libgl1 libgles2 libgbm1 libdrm2 \
+              libwayland-client0 libwayland-cursor0 \
+              libexpat1 libxkbcommon0
+            echo 'Baseline packages installed'
+          ")
+
+          # Start and wait; check exit status
+          docker start -a "$CONTAINER_ID"
+          EXIT_CODE=$(docker inspect --format='{{.State.ExitCode}}' "$CONTAINER_ID")
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "::error::Baseline container exited with code $EXIT_CODE"
+            docker logs "$CONTAINER_ID" || true
+            exit 1
+          fi
+
+          docker export "$CONTAINER_ID" | tar -C "$BASELINE_DIR" -xf -
+          docker rm "$CONTAINER_ID"
+          CONTAINER_ID=""
+          echo "baseline_dir=$BASELINE_DIR" >> "$GITHUB_ENV"
+          # Verify identity
+          cat "$BASELINE_DIR/etc/os-release"
+          echo ""
+          echo "Baseline library count: $(find "$BASELINE_DIR/usr/lib" -name '*.so*' -type f 2>/dev/null | wc -l)"
+
+      - name: Select and verify AppImage
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          APPIMAGE="publish/velopack-linux/MQTTProbe.AppImage"
+
+          if [ ! -f "$APPIMAGE" ]; then
+            echo "::error::MQTTProbe.AppImage not found in publish/velopack-linux/"
+            ls -la publish/velopack-linux/ || true
+            exit 1
+          fi
+
+          echo "Selected: $APPIMAGE"
+          echo "Size: $(du -h "$APPIMAGE" | cut -f1)"
+
+          # Assert version from Velopack releases.linux.json metadata (not filename)
+          # Actual schema: {"Assets":[{"PackageId":"MQTTProbe","Version":"...","Type":"Full","FileName":"..."}]}
+          RELEASES_JSON="publish/velopack-linux/releases.linux.json"
+          if [ ! -f "$RELEASES_JSON" ]; then
+            echo "::error::releases.linux.json not found at $RELEASES_JSON"
+            exit 1
+          fi
+          META_VERSION=$(python3 -c "
+          import json, sys
+          with open('${RELEASES_JSON}') as f:
+              data = json.load(f)
+          assets = data.get('Assets', []) if isinstance(data, dict) else []
+          target = None
+          for a in assets:
+              if a.get('PackageId') == 'MQTTProbe' and a.get('Type') == 'Full':
+                  target = a
+                  break
+          if target is None:
+              print('', end='')
+          else:
+              print(target.get('Version', ''), end='')
+          " 2>&1) || { echo "::error::Failed to parse releases.linux.json"; exit 1; }
+
+          if [ -z "$META_VERSION" ]; then
+            echo "::error::Version not found in releases.linux.json (expected MQTTProbe Full asset)"
+            cat "$RELEASES_JSON"
+            exit 1
+          fi
+          if [ "$META_VERSION" != "$VERSION" ]; then
+            echo "::error::Version mismatch: releases.linux.json has $META_VERSION, expected $VERSION"
+            exit 1
+          fi
+          echo "PASS: AppImage version $META_VERSION matches expected $VERSION"
+
+          # Also validate the FileName matches expected AppImage name
+          META_FILENAME=$(python3 -c "
+          import json, sys
+          with open('${RELEASES_JSON}') as f:
+              data = json.load(f)
+          assets = data.get('Assets', []) if isinstance(data, dict) else []
+          for a in assets:
+              if a.get('PackageId') == 'MQTTProbe' and a.get('Type') == 'Full':
+                  print(a.get('FileName', ''), end='')
+                  break
+          " 2>&1) || { echo "::error::Failed to parse FileName from releases.linux.json"; exit 1; }
+          if [ -n "$META_FILENAME" ]; then
+            echo "PASS: Full asset FileName: $META_FILENAME"
+          fi
+
+          # Run the verifier against the clean baseline root
+          python3 scripts/packaging/linux/verify.py \
+            "$APPIMAGE" \
+            --baseline-root "$baseline_dir"
+
+      - name: Collect third-party source archive
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          MANIFEST_PATH="publish/velopack-linux/package-manifest.txt"
+          if [ ! -f "$MANIFEST_PATH" ]; then
+            echo "::error::Manifest not found at $MANIFEST_PATH (appdir.sh must generate it first)"
+            exit 1
+          fi
+          bash scripts/packaging/linux/collect-sources.sh \
+            --version "$VERSION" \
+            --output-dir publish/third-party-sources \
+            --manifest "$MANIFEST_PATH"
+
+      - name: Remove stale nupkg packages
         run: find publish/velopack-linux -name '*.nupkg' ! -name "MQTTProbe-${{ steps.version.outputs.value }}-*" -delete
 
       - name: List Velopack output
@@ -104,6 +326,12 @@ jobs:
         with:
           name: desktop-linux-velopack
           path: publish/velopack-linux/
+
+      - name: Upload third-party source archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-linux-third-party-sources
+          path: publish/third-party-sources/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

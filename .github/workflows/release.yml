@@ -413,6 +413,11 @@ jobs:
           name: desktop-linux-velopack
           path: velopack-linux
 
+      - name: Download desktop-linux-third-party-sources
+        uses: actions/download-artifact@v8
+        with:
+          name: desktop-linux-third-party-sources
+
       - name: Fail on duplicate release asset names
         run: |
           DUPES=$(find velopack* -type f -printf '%f\n' 2>/dev/null | sort | uniq -d)
@@ -429,6 +434,7 @@ jobs:
             mqttprobe-windows-${{ github.ref_name }}.zip
             mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip
             mqttprobe-android-${{ github.ref_name }}.apk
+            mqttprobe-third-party-sources-${{ github.ref_name }}.tar.gz
             velopack/MQTTProbe-win-Setup.exe
             velopack/*.nupkg
             velopack/releases.win.json

@@ -481,7 +481,7 @@ jobs:
             Download `MQTTProbe-win-Setup.exe` (installs per-user, auto-updates) or the portable `mqttprobe-windows-*.zip`.
 
             ### Linux
-            Download `MQTTProbe.AppImage` (auto-updates; needs `libfuse2` on Ubuntu 22.04+ and `libwebkit2gtk-4.1`), or the zip for a plain unpacked run.
+            Download `MQTTProbe.AppImage` (auto-updates; bundles WebKit, GTK, and GStreamer, needs only `libfuse2` on Ubuntu 22.04+), or the zip for a plain unpacked run, which does need `sudo apt install libwebkit2gtk-4.1-0`.
 
             ### macOS
 

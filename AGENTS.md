@@ -48,6 +48,22 @@ Hooks live in `.githooks`, not `.git/hooks`. On a fresh clone they are inert unt
 - Check for routine XML docs with `python scripts/ci/check-comments.py`.
 - Browser-verify layout changes; bUnit does not prove dimensions, clipping, overflow, or scrollbar behavior. Method and cases are in [Browser acceptance testing](#browser-acceptance-testing-windows).
 
+## Release notes and assets
+
+The release body is generated, not typed at tag time. Three inputs, all in the repo:
+
+- `.github/release-notes.md` is the hand-written part: downloads table, quick start, per-platform notes. Use `{{VERSION}}` for the tag (`v1.2.3`) and `{{VERSION_NUM}}` for the bare form (`1.2.3`), which is what Docker tags use. A GitHub expression such as `${{ github.ref_name }}` does not work here and the check below rejects it.
+- `.github/release-assets.txt` is the single source of truth for what gets uploaded. `release.yml` ships exactly what the resolver prints, so adding an artifact here without documenting it in the notes fails the release.
+- `.git-cliff.toml` maps conventional commits to user-facing groups (Features, Fixes, Performance, Engineering) and drops `docs`, `test`, and `style`. Conventional commit types are therefore part of the release surface: a `feat:`/`fix:` prefix reaches the release page, so do not reword or drop one to tidy history.
+
+`scripts/ci/release-notes.py` has `render`, `resolve`, and `check` subcommands; `check` is the gate that runs in `create-release`. Dry-run it before tagging against a directory of built artifacts:
+
+```
+python scripts/ci/release-notes.py check --version v1.2.3 --root <dir with the artifacts>
+```
+
+Do not hand-edit the published release body after tagging. Fix `.github/release-notes.md` and re-tag, so the page stays reproducible from the repo.
+
 ### Test filtering and build/test integrity
 
 - Command-line filters (`--filter`, `--test-adapter-path`, repeated runs of a single test) are fine for focused TDD, diagnosis, repetition, or documented platform/category splits. Report the exact filter used. Never describe a filtered run as "the full suite."

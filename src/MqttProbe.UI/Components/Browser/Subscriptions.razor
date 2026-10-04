@@ -61,7 +61,7 @@
         }
     }
 
-    private async Task HandleExcludeAdd(string topic)
+    private async Task<bool> HandleExcludeAdd(string topic)
     {
         try
         {
@@ -69,16 +69,22 @@
             if (validation is { IsValid: false, Feedback: not null })
             {
                 ShowExcludeFeedback(validation.Feedback);
-                return;
+                return false;
             }
 
             var result = await TopicExcludeService.Add(topic);
             if (result is { IsValid: false, Feedback: not null })
+            {
                 ShowExcludeFeedback(result.Feedback);
+                return false;
+            }
+
+            return result.IsValid;
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to add exclude: {ex.Message}", Severity.Error);
+            return false;
         }
     }
 

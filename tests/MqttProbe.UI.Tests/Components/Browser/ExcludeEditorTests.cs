@@ -13,11 +13,21 @@ public class ExcludeEditorTests : BunitTestContext
         EnsureMudProviders();
     }
 
-    private EventCallback<string> NoAdd() =>
-        EventCallback.Factory.Create<string>(this, _ => { });
+    private static Func<string, Task<bool>> NoAdd() => _ => Task.FromResult(true);
 
     private EventCallback<IReadOnlyList<string>> NoRemove() =>
         EventCallback.Factory.Create<IReadOnlyList<string>>(this, _ => { });
+
+    private Func<string, Task<bool>> AcceptedAdd() => _ => Task.FromResult(true);
+
+    private static Func<string, Task<bool>> RejectedAdd() => _ => Task.FromResult(false);
+
+    private Func<string, Task<bool>> CapturingAdd(Action<string> capture) =>
+        v =>
+        {
+            capture(v);
+            return Task.FromResult(true);
+        };
 
     [Test]
     public void Renders_Items_TopicOnly()
@@ -51,8 +61,7 @@ public class ExcludeEditorTests : BunitTestContext
 
         var cut = Render<ExcludeEditor>(p => p
             .Add(x => x.Items, new List<string> { "$SYS/#" })
-            .Add(x => x.OnAdd, EventCallback.Factory.Create<string>(this,
-                v => captured = v))
+            .Add(x => x.OnAdd, CapturingAdd(v => captured = v))
             .Add(x => x.OnRemove, NoRemove()));
 
         // With items, the panel starts expanded and body renders
@@ -112,8 +121,7 @@ public class ExcludeEditorTests : BunitTestContext
 
         var cut = Render<ExcludeEditor>(p => p
             .Add(x => x.Items, new List<string> { "$SYS/#" })
-            .Add(x => x.OnAdd, EventCallback.Factory.Create<string>(this,
-                _ => addCalled = true))
+            .Add(x => x.OnAdd, CapturingAdd(_ => addCalled = true))
             .Add(x => x.OnRemove, NoRemove()));
 
         var chip = cut.FindAll(".mud-chip, button")
@@ -131,8 +139,7 @@ public class ExcludeEditorTests : BunitTestContext
 
         var cut = Render<ExcludeEditor>(p => p
             .Add(x => x.Items, new List<string> { "$SYS/#" })
-            .Add(x => x.OnAdd, EventCallback.Factory.Create<string>(this,
-                v => captured = v))
+            .Add(x => x.OnAdd, CapturingAdd(v => captured = v))
             .Add(x => x.OnRemove, NoRemove()));
 
         var topicInput = cut.FindAll("input")
@@ -151,8 +158,7 @@ public class ExcludeEditorTests : BunitTestContext
 
         var cut = Render<ExcludeEditor>(p => p
             .Add(x => x.Items, Array.Empty<string>())
-            .Add(x => x.OnAdd, EventCallback.Factory.Create<string>(this,
-                v => captured = v))
+            .Add(x => x.OnAdd, CapturingAdd(v => captured = v))
             .Add(x => x.OnRemove, NoRemove()));
 
         cut.Instance.TopicDraft = "  $SYS/#  ";
@@ -371,5 +377,58 @@ public class ExcludeEditorTests : BunitTestContext
             .Add(x => x.OnRemove, NoRemove()));
 
         cut.FindAll(".exclude-editor-table-wrap").Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Add_WhenRejected_KeepsTopicDraft()
+    {
+        var cut = Render<ExcludeEditor>(p => p
+            .Add(x => x.Items, new List<string> { "$SYS/#" })
+            .Add(x => x.OnAdd, RejectedAdd())
+            .Add(x => x.OnRemove, NoRemove()));
+
+        cut.Instance.TopicDraft = "$SYS/#";
+
+        await cut.InvokeAsync(() => cut.Instance.AddForTests());
+
+        cut.Instance.TopicDraft.Should().Be("$SYS/#");
+    }
+
+    [Test]
+    public async Task Add_WhenAccepted_ClearsTopicDraft()
+    {
+        var cut = Render<ExcludeEditor>(p => p
+            .Add(x => x.Items, new List<string> { "$SYS/#" })
+            .Add(x => x.OnAdd, AcceptedAdd())
+            .Add(x => x.OnRemove, NoRemove()));
+
+        cut.Instance.TopicDraft = "sensors/+/temp";
+
+        await cut.InvokeAsync(() => cut.Instance.AddForTests());
+
+        cut.Instance.TopicDraft.Should().BeEmpty();
+    }
+
+    [Test]
+    public void RemoveButton_DisablesWhenSelectionNoLongerInItems()
+    {
+        var removed = false;
+        var cut = Render<ExcludeEditor>(p => p
+            .Add(x => x.Items, new List<string> { "stale/topic" })
+            .Add(x => x.OnAdd, NoAdd())
+            .Add(x => x.OnRemove, EventCallback.Factory.Create<IReadOnlyList<string>>(this,
+                _ => removed = true)));
+
+        // Row 0's checkbox; index 0 is the header select-all.
+        cut.FindAll("input[type='checkbox']")[1].Change(true);
+        cut.Find("button[title='Remove']").HasAttribute("disabled").Should().BeFalse();
+
+        // Switching connection replaces the whole list, so the selection goes stale.
+        cut.Render(p => p.Add(x => x.Items, new List<string> { "other/topic" }));
+
+        cut.Find("button[title='Remove']").HasAttribute("disabled").Should().BeTrue();
+
+        cut.InvokeAsync(() => cut.Instance.RemoveSelectedForTests()).Wait();
+        removed.Should().BeFalse();
     }
 }

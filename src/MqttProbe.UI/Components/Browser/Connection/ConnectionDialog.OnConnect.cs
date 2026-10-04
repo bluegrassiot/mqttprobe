@@ -243,17 +243,17 @@ public partial class ConnectionDialog
         }
     }
 
-    private async Task AddExcludeLiveAsync(string trimmed)
+    private async Task<bool> AddExcludeLiveAsync(string trimmed)
     {
         var validation = TopicExcludeService.ValidateAdd(trimmed);
         if (!validation.IsValid)
         {
             if (validation.Feedback is { } fb)
                 ShowExcludeFeedback(fb);
-            return;
+            return false;
         }
 
-        if (!await EnsureReadyForCollectionEdit("managing excludes", requireSaved: false)) return;
+        if (!await EnsureReadyForCollectionEdit("managing excludes", requireSaved: false)) return false;
 
         try
         {
@@ -262,23 +262,25 @@ public partial class ConnectionDialog
             {
                 if (result.Feedback is { } fb)
                     ShowExcludeFeedback(fb);
-                return;
+                return false;
             }
 
             _selectedConnection.TopicExcludes.Add(trimmed);
             SyncSessionStateTopicExcludes();
             RefreshExcludeBaseline();
+            return true;
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to add exclude: {ex.Message}", Severity.Error);
+            return false;
         }
     }
 
-    private async Task AddExcludeOfflineAsync(string trimmed)
+    private async Task<bool> AddExcludeOfflineAsync(string trimmed)
     {
-        if (!ValidateNewExcludeTopic(trimmed)) return;
-        if (!await EnsureReadyForCollectionEdit("managing excludes", requireSaved: true)) return;
+        if (!ValidateNewExcludeTopic(trimmed)) return false;
+        if (!await EnsureReadyForCollectionEdit("managing excludes", requireSaved: true)) return false;
 
         var candidate = BuildCollectionOnlyCandidate();
         candidate.TopicExcludes.Add(trimmed);
@@ -289,22 +291,22 @@ public partial class ConnectionDialog
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to save exclude: {ex.Message}", Severity.Error);
-            return;
+            return false;
         }
 
         _selectedConnection.TopicExcludes.Add(trimmed);
         SyncSessionStateTopicExcludes();
         RefreshExcludeBaseline();
         Snackbar.Add($"Saved exclude {trimmed}", Severity.Success);
+        return true;
     }
 
-    private async Task HandleOnConnectExcludeAdd(string topic)
+    private Task<bool> HandleOnConnectExcludeAdd(string topic)
     {
         var trimmed = topic.Trim();
-        if (ShouldApplyLiveSubscriptions())
-            await AddExcludeLiveAsync(trimmed);
-        else
-            await AddExcludeOfflineAsync(trimmed);
+        return ShouldApplyLiveSubscriptions()
+            ? AddExcludeLiveAsync(trimmed)
+            : AddExcludeOfflineAsync(trimmed);
     }
 
     private async Task RemoveExcludeLiveAsync(IReadOnlyList<string> topics)

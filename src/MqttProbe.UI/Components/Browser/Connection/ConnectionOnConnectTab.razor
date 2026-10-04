@@ -42,6 +42,6 @@
     [Parameter] public EventCallback<IReadOnlyList<string>> OnRemove { get; set; }
 
     [Parameter, EditorRequired] public List<string> ExcludedItems { get; set; } = [];
-    [Parameter] public EventCallback<string> OnExcludeAdd { get; set; }
+    [Parameter] public Func<string, Task<bool>> OnExcludeAdd { get; set; } = _ => Task.FromResult(true);
     [Parameter] public EventCallback<IReadOnlyList<string>> OnExcludeRemove { get; set; }
 }

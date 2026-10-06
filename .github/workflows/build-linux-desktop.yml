@@ -82,6 +82,9 @@ jobs:
           -p:Version=${{ steps.version.outputs.value }}
           --output publish/desktop
 
+      - name: Validate CSS isolation scopes
+        run: python3 scripts/packaging/linux/check-scoped-css.py --publish-dir publish/desktop
+
       - name: Assert Photino.Native 4.0.22 in dependency graph
         run: |
           DEPS_JSON="publish/desktop/MqttProbe.Desktop.deps.json"

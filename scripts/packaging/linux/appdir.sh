@@ -177,12 +177,13 @@ if [[ -f "$TRACE_PROVIDER" ]]; then
     rm -f "$TRACE_PROVIDER"
 fi
 
-# JACK audio plugin links libjack.so.0, not a standard desktop dependency.
-# MQTTProbe does not use JACK audio.
-JACK_PLUGIN=$(find "$APPDIR" -name "libgstjack.so" -type f 2>/dev/null || true)
-if [[ -n "$JACK_PLUGIN" ]]; then
-    echo "Removing JACK audio plugin: $(basename "$JACK_PLUGIN")"
-    rm -f "$JACK_PLUGIN"
+# .NET crash-dump helper: not needed at runtime, absent from the final
+# AppImage (Velopack/vpk exclude via regex). Prune early so dependency
+# scanning does not waste time resolving its transitive libs.
+CREATEDUMP="$APPDIR/usr/bin/createdump"
+if [[ -f "$CREATEDUMP" ]]; then
+    echo "Removing .NET crash-dump helper: createdump (excluded from AppImage)"
+    rm -f "$CREATEDUMP"
 fi
 
 cp "$SCRIPT_DIR/vendor/linuxdeploy-plugin-gtk.sh" "$WORK_DIR/linuxdeploy-plugin-gtk.sh"
@@ -196,6 +197,15 @@ bash "$WORK_DIR/linuxdeploy-plugin-gtk.sh" --appdir "$APPDIR"
 
 LINUXDEPLOY="$LINUXDEPLOY" \
 bash "$WORK_DIR/linuxdeploy-plugin-gstreamer.sh" --appdir "$APPDIR"
+
+# Must run after the GStreamer plugin: libgstjack.so arrives with the plugin
+# deploy, so pruning earlier finds nothing and leaves libjack.so.0 unresolved.
+# JACK audio is not a standard desktop dependency and MQTTProbe does not use it.
+JACK_PLUGIN=$(find "$APPDIR" -name "libgstjack.so" -type f 2>/dev/null || true)
+if [[ -n "$JACK_PLUGIN" ]]; then
+    echo "Removing JACK audio plugin: $(basename "$JACK_PLUGIN")"
+    rm -f "$JACK_PLUGIN"
+fi
 
 # ── Step 5b: Bundle font/text stack (harfbuzz, fontconfig, freetype, fribidi) ──
 # Previously a separate helper; consolidated here as an

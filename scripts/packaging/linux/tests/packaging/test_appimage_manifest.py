@@ -221,7 +221,7 @@ class TestNoticeBuilder(unittest.TestCase):
             all_bundled_files=[],
             unknown_files=[],
         )
-        notice = _nb(manifest, "1.0.6", "test.tar.gz")
+        notice = _nb(manifest, "1.0.6", "test.tar.gz", source_date_epoch="2026-10-04")
         self.assertIn("2026-10-04", notice)
 
     @unittest.skipUnless(NOTICE_AVAILABLE, "notices not importable")
@@ -420,6 +420,10 @@ class TestDotnetRuntimeVendor(unittest.TestCase):
     def test_dotnet_vendor_has_system_native(self):
         from manifest import DOTNET_RUNTIME_NATIVE
         self.assertIn("usr/bin/libSystem.Native.so", DOTNET_RUNTIME_NATIVE.bundled_paths)
+
+    def test_dotnet_vendor_excludes_createdump(self):
+        from manifest import DOTNET_RUNTIME_NATIVE
+        self.assertNotIn("usr/bin/createdump", DOTNET_RUNTIME_NATIVE.bundled_paths)
 
     def test_generate_manifest_includes_dotnet_vendor(self):
         from manifest import DOTNET_RUNTIME_NATIVE

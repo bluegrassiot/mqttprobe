@@ -64,6 +64,31 @@ class TestFetchSourceRetrievalGuards(unittest.TestCase):
     def test_rejects_unsafe_payload_paths(self):
         self.assertIn("_SAFE_FILENAME_RE", self.content)
 
+    def test_apt_origin_is_pinned_not_ambient(self):
+        """apt must run against one owned sources file, never host defaults."""
+        self.assertIn("def apt_config_options(", self.content)
+        self.assertIn("Dir::Etc::sourcelist", self.content)
+        self.assertIn("Dir::Etc::sourceparts", self.content)
+        self.assertIn("Dir::Etc::Parts", self.content)
+        self.assertIn("Dir::Etc::main", self.content)
+        self.assertIn("apt_env(", self.content)
+
+    def test_apt_bootstrap_config_is_written_and_owned(self):
+        """An early APT_CONFIG must disable Parts/main, owner-only."""
+        self.assertIn("def write_apt_bootstrap_conf(", self.content)
+        self.assertIn('_APT_BOOTSTRAP_CONF', self.content)
+        self.assertIn('Dir::Etc::Parts "/dev/null";', self.content)
+        self.assertIn('Dir::Etc::main "/dev/null";', self.content)
+        self.assertIn("chmod(0o600)", self.content)
+        # APT_CONFIG names the file, never a bare /dev/null.
+        self.assertIn('env["APT_CONFIG"] = str(bootstrap_conf)', self.content)
+        self.assertNotIn('env["APT_CONFIG"] = "/dev/null"', self.content)
+
+    def test_timeout_is_not_hardcoded_for_apt(self):
+        """The caller's budget reaches apt instead of a fixed 120s."""
+        self.assertNotIn("dest_dir, timeout=120)", self.content)
+        self.assertIn("timeout=timeout, apt_sources=apt_sources", self.content)
+
 
 class TestCollectorNaming(unittest.TestCase):
     def test_archive_name_pattern(self):

@@ -24,6 +24,7 @@ from manifest import (
     SystemPackage,
     _classify_file,
     _is_dotnet_runtime_file,
+    _is_shared_lib_name,
     _query_dpkg_owner,
     _query_dpkg_owner_with_relocation,
     _system_path_candidates,
@@ -97,6 +98,76 @@ class TestCollisionsNonclaim(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libfoo.so")
         self.assertIn("Ambiguous", str(ctx.exception))
+
+    @patch("manifest.subprocess.run")
+    def test_owner_containing_diversion_substring_resolves(self, mock_run):
+        """A real owner whose package or path contains 'diversion' resolves.
+
+        Only the two annotation prefixes are diverted; a substring match would
+        wrongly discard these ownership records.
+        """
+        path = "/usr/lib/x86_64-linux-gnu/libdiversion.so"
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=f"libdiversion1:amd64: {path}\n"),
+            MagicMock(returncode=0, stdout="1.0-1\tdiversion-src\t1.0-1\n"),
+        ]
+        result = _query_dpkg_owner(path)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.binary_package, "libdiversion1")
+        self.assertEqual(result.source_package, "diversion-src")
+
+    @patch("manifest.subprocess.run")
+    def test_owner_with_diversion_in_path_resolves(self, mock_run):
+        """Package name plain, but the owned path contains 'diversion'."""
+        path = "/usr/lib/x86_64-linux-gnu/diversion/libfoo.so"
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=f"libfoo0:amd64: {path}\n"),
+            MagicMock(returncode=0, stdout="2.0-1\tfoo\t2.0-1\n"),
+        ]
+        result = _query_dpkg_owner(path)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.binary_package, "libfoo0")
+
+    @patch("manifest.subprocess.run")
+    def test_real_diversion_annotations_skipped(self, mock_run):
+        """Real dpkg diversion lines must not be parsed as owners.
+
+        dpkg-query -S prints these annotation forms rather than ownership
+        records; each names a package and path but grants no ownership.
+        """
+        path = "/usr/lib/x86_64-linux-gnu/libfoo.so"
+        for annotation in (
+            "diversion by libbar from: " + path,
+            "diversion by libbar to: " + path,
+            "local diversion from: " + path,
+            "local diversion to: " + path,
+        ):
+            with self.subTest(annotation=annotation):
+                mock_run.reset_mock()
+                mock_run.side_effect = [MagicMock(
+                    returncode=0, stdout=annotation + "\n"
+                )]
+                self.assertIsNone(_query_dpkg_owner(path))
+
+    @patch("manifest.subprocess.run")
+    def test_diversion_annotation_plus_real_owner(self, mock_run):
+        """A real owner alongside diversion annotations still resolves."""
+        path = "/usr/lib/x86_64-linux-gnu/libfoo.so"
+        mock_run.side_effect = [
+            MagicMock(
+                returncode=0,
+                stdout=(
+                    "diversion by libbar from: " + path + "\n"
+                    "local diversion to: /usr/lib/x86_64-linux-gnu/libbar.so\n"
+                    "libreal:amd64: " + path + "\n"
+                ),
+            ),
+            MagicMock(returncode=0, stdout="1.0\treal-src\t1.0\n"),
+        ]
+        result = _query_dpkg_owner(path)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.binary_package, "libreal")
+        self.assertEqual(result.source_package, "real-src")
 
     @patch("manifest.subprocess.run")
     def test_same_package_multiline_not_ambiguous(self, mock_run):
@@ -233,6 +304,47 @@ class TestResourceOwnership(unittest.TestCase):
             # Relocation must not have been attempted at all.
             mock_walk.assert_not_called()
 
+    @patch("manifest._query_dpkg_owner")
+    def test_socket_elf_not_claimed_by_relocation(self, mock_owner):
+        """A staged foo.socket ELF gets no owner from an unrelated host lib.
+
+        It is a real ELF, so it is reported as unclaimed, but the relocation
+        fallback must not run: its basename is not a shared-library name, so
+        no same-named host library may take ownership.
+        """
+        host_pkg = SystemPackage(
+            binary_package="libhostonly",
+            binary_version="1.0",
+            source_package="hostonly",
+            source_version="1.0",
+            license_hint="",
+            bundled_files=[],
+        )
+        with tempfile.TemporaryDirectory() as td:
+            appdir = Path(td)
+            lib_dir = appdir / "usr" / "lib"
+            lib_dir.mkdir(parents=True)
+            (lib_dir / "foo.socket").write_bytes(b"\x7fELF" + b"\x00" * 60)
+
+            host_dir = Path(td) / "host" / "x86_64-linux-gnu"
+            host_dir.mkdir(parents=True)
+            (host_dir / "foo.socket").write_bytes(b"\x7fELF" + b"\x00" * 32)
+
+            mock_owner.side_effect = lambda path: (
+                host_pkg if "host" in str(path) else None
+            )
+            with patch("manifest.os.walk") as mock_walk:
+                mock_walk.return_value = [
+                    (str(host_dir), [], ["foo.socket"]),
+                ]
+                manifest = generate_manifest(appdir, "2026-10-04")
+
+            owners = {p.binary_package for p in manifest.build_system_packages}
+            self.assertNotIn("libhostonly", owners)
+            # It is an ELF, so being unowned means it is reported unknown.
+            self.assertIn("usr/lib/foo.socket", manifest.unknown_files)
+            mock_walk.assert_not_called()
+
 
 # -- Alias dedup: usrmerge same real file, reject distinct candidates ----------
 
@@ -308,6 +420,56 @@ class TestNonElfReject(unittest.TestCase):
                 result = _query_dpkg_owner_with_relocation("usr/lib/libpulsecommon-15.99.so")
         self.assertIsNotNone(result)
         self.assertEqual(result.binary_package, "libpulse0")
+
+
+class TestSharedLibPredicate(unittest.TestCase):
+    """Native shared-library basenames only; no bare '.so' substring."""
+
+    def test_plain_so_is_shared_lib(self):
+        self.assertTrue(_is_shared_lib_name("libfoo.so"))
+
+    def test_numeric_versioned_so_is_shared_lib(self):
+        self.assertTrue(_is_shared_lib_name("libfoo.so.1"))
+        self.assertTrue(_is_shared_lib_name("libfoo.so.1.2"))
+        self.assertTrue(_is_shared_lib_name("libpulsecommon-15.99.so"))
+
+    def test_socket_name_is_not_shared_lib(self):
+        """A '.so' substring inside another word must not match."""
+        self.assertFalse(_is_shared_lib_name("foo.socket"))
+        self.assertFalse(_is_shared_lib_name("libthing.sofoo"))
+        self.assertFalse(_is_shared_lib_name("mysocket.so.backup"))
+
+    def test_non_library_names_rejected(self):
+        self.assertFalse(_is_shared_lib_name("MqttProbe.Desktop"))
+        self.assertFalse(_is_shared_lib_name("libcoreclr.so.config"))
+        self.assertFalse(_is_shared_lib_name("icon.png"))
+
+    def test_classify_socket_elf_as_elf_not_shared_lib(self):
+        with tempfile.TemporaryDirectory() as td:
+            appdir = Path(td)
+            lib_dir = appdir / "usr" / "lib"
+            lib_dir.mkdir(parents=True)
+            (lib_dir / "foo.socket").write_bytes(b"\x7fELF" + b"\x00" * 60)
+            self.assertEqual(_classify_file("usr/lib/foo.socket", appdir), "ELF")
+
+    def test_classify_real_versioned_so_as_shared_lib(self):
+        with tempfile.TemporaryDirectory() as td:
+            appdir = Path(td)
+            lib_dir = appdir / "usr" / "lib"
+            lib_dir.mkdir(parents=True)
+            (lib_dir / "libfoo.so.1.2").write_bytes(b"\x7fELF" + b"\x00" * 60)
+            self.assertEqual(
+                _classify_file("usr/lib/libfoo.so.1.2", appdir), "shared-lib"
+            )
+
+    @patch("manifest._query_dpkg_owner")
+    def test_socket_staged_file_no_relocation(self, mock_owner):
+        """A staged foo.socket ELF must not trigger relocation."""
+        mock_owner.side_effect = [None, None, None, None]
+        with patch("manifest.os.walk") as mock_walk:
+            result = _query_dpkg_owner_with_relocation("usr/lib/foo.socket")
+        self.assertIsNone(result)
+        mock_walk.assert_not_called()
 
 
 # -- Arch metadata + failed query raises --------------------------------------
@@ -402,14 +564,40 @@ class TestEpochsDistinct(unittest.TestCase):
 
     @patch("manifest.subprocess.run")
     def test_epoch_in_source_version(self, mock_run):
+        # Real epoch-bearing case: binary carries `1:`, source does not.
         mock_run.side_effect = [
             MagicMock(returncode=0, stdout="libssl3:amd64: /usr/lib/x86_64-linux-gnu/libssl.so.3\n"),
-            MagicMock(returncode=0, stdout="3.0.2-0ubuntu1.29\topenssl\t3.0.2-0ubuntu1.29\n"),
+            MagicMock(returncode=0, stdout="1:3.0.2-0ubuntu1.29\topenssl\t3.0.2-0ubuntu1.29\n"),
         ]
         result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libssl.so.3")
         self.assertIsNotNone(result)
+        self.assertEqual(result.binary_version, "1:3.0.2-0ubuntu1.29")
         self.assertEqual(result.source_version, "3.0.2-0ubuntu1.29")
-        self.assertEqual(result.binary_version, "3.0.2-0ubuntu1.29")
+
+    @patch("manifest.subprocess.run")
+    def test_epoch_preserved_in_source_version(self, mock_run):
+        """A source version that itself carries an epoch keeps it verbatim."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="libfoo:amd64: /usr/lib/x86_64-linux-gnu/libfoo.so.1\n"),
+            MagicMock(returncode=0, stdout="2:1.4.6-2ubuntu1\tfoo-src\t2:1.4.6-2ubuntu1\n"),
+        ]
+        result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libfoo.so.1")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.binary_version, "2:1.4.6-2ubuntu1")
+        self.assertEqual(result.source_version, "2:1.4.6-2ubuntu1")
+        self.assertEqual(result.source_package, "foo-src")
+
+    @patch("manifest.subprocess.run")
+    def test_binary_source_epochs_differ(self, mock_run):
+        """Binary and source epochs may differ; neither is normalized."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="libbar:amd64: /usr/lib/x86_64-linux-gnu/libbar.so.1\n"),
+            MagicMock(returncode=0, stdout="1:5.0-1\tbar-src\t3:5.0-1\n"),
+        ]
+        result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libbar.so.1")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.binary_version, "1:5.0-1")
+        self.assertEqual(result.source_version, "3:5.0-1")
 
     @patch("manifest.subprocess.run")
     def test_binary_source_versions_differ(self, mock_run):

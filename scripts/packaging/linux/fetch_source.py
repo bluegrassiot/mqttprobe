@@ -12,6 +12,7 @@ Not a standalone script; called by collect-sources.sh.
 """
 
 import hashlib
+import os
 import re
 import shutil
 import subprocess
@@ -425,11 +426,81 @@ def _validate_downloaded_package(
 
 # -- apt-get source path -------------------------------------------------------
 
+# Directories apt would otherwise read for extra configuration. Each is
+# redirected to /dev/null so a host's ambient apt setup cannot contribute
+# sources to a fetch that is supposed to come from one owned file.
+_APT_CONFIG_KEYS = (
+    "Dir::Etc::sourceparts",  # other *.list / *.sources in the list dir
+    "Dir::Etc::Parts",        # apt.conf.d/*.conf
+    "Dir::Etc::main",         # /etc/apt/apt.conf
+)
+
+# Early bootstrap configuration, passed via APT_CONFIG so it is read before apt
+# resolves its own defaults. Setting Parts/main here is what actually stops
+# ambient apt.conf.d and apt.conf from being loaded; the command-line -o flags
+# below only override values apt has already read.
+# Fixed contents, no caller data interpolated.
+_APT_BOOTSTRAP_CONF = (
+    'Dir::Etc::Parts "/dev/null";\n'
+    'Dir::Etc::main "/dev/null";\n'
+)
+
+
+def write_apt_bootstrap_conf(directory: Path) -> Path:
+    """Write the early apt bootstrap config into ``directory``.
+
+    Owner-only permissions; it holds no secrets but nothing else needs to read
+    it. The caller owns the lifetime and should delete it with the directory.
+    """
+    path = Path(directory) / "apt-bootstrap.conf"
+    path.write_text(_APT_BOOTSTRAP_CONF, encoding="utf-8")
+    path.chmod(0o600)
+    return path
+
+
+def apt_config_options(apt_sources: Path | str) -> list[str]:
+    """Build the apt options that pin a fetch to one owned, signed sources file.
+
+    Returns a flat ``["-o", "Key=Value", ...]`` list suitable for both
+    ``apt-get update`` and ``apt-get source`` so the two always agree on origin.
+
+    ``sourceparts``/``Parts``/``main`` pointing at /dev/null is what makes the
+    owned file authoritative: apt reads no other sources file, no apt.conf.d
+    drop-in, and no main apt.conf. The archive still authenticates with its
+    ``Signed-By`` keyring, so this narrows origin rather than weakening
+    signature checking.
+    """
+    path = Path(apt_sources)
+    if not path.is_absolute():
+        raise ValueError(
+            f"apt sources path must be absolute, got {apt_sources!r}")
+    opts = [f"Dir::Etc::sourcelist={path}"]
+    opts += [f"{key}=/dev/null" for key in _APT_CONFIG_KEYS]
+    flat: list[str] = []
+    for opt in opts:
+        flat.extend(["-o", opt])
+    return flat
+
+
+def apt_env(bootstrap_conf: Path | str) -> dict[str, str]:
+    """Environment for apt subprocesses with an early, owned APT_CONFIG.
+
+    ``APT_CONFIG`` points at the bootstrap file rather than ``/dev/null``, so
+    apt reads our Parts/main redirects as its first configuration and never
+    opens the ambient ``apt.conf`` or ``apt.conf.d``. An inherited APT_CONFIG
+    is overwritten so nothing from the host environment survives.
+    """
+    env = dict(os.environ)
+    env["APT_CONFIG"] = str(bootstrap_conf)
+    return env
+
+
 def try_apt_source(
     source: str,
     version: str,
     dest_dir: Path,
     timeout: int = 120,
+    apt_sources: Path | str | None = None,
 ) -> list[Path] | None:
     """Try ``apt-get source --only-source`` for the exact requested version.
 
@@ -438,24 +509,40 @@ def try_apt_source(
     directory so a failed or partial apt run cannot leave files in
     ``dest_dir`` that would later be mistaken for a good download.
 
+    ``apt_sources`` must point at the caller's owned, Signed-By sources file.
+    When it is ``None`` this returns ``None`` without invoking apt at all: a
+    standalone run must never silently source from whatever ambient apt
+    configuration the host happens to have, so the caller falls back to the
+    official Launchpad archive instead.
+
     Returns the verified file list on success, ``None`` on any failure
-    (non-zero exit, timeout, missing/incorrect .dsc, checksum mismatch).
-    Callers fall back to Launchpad when this returns ``None``.
+    (no owned config, non-zero exit, timeout, missing/incorrect .dsc, checksum
+    mismatch).
     """
     _validate_safe(source, _SAFE_NAME_RE, "source package name")
     _validate_safe(version, _SAFE_VERSION_RE, "version")
+
+    # No owned sources file means no apt. Fall back to Launchpad rather than
+    # trusting ambient configuration.
+    if apt_sources is None:
+        return None
+
     dest_dir.mkdir(parents=True, exist_ok=True)
+    apt_opts = apt_config_options(apt_sources)
 
     # Isolate apt output so failed leftovers never reach dest_dir.
     work_dir = Path(tempfile.mkdtemp(prefix=f"apt-{source}-", dir=str(dest_dir)))
+    bootstrap = write_apt_bootstrap_conf(work_dir)
     try:
         result = subprocess.run(
             [
-                "apt-get", "source", "--download-only", "--only-source",
+                "apt-get",
+                *apt_opts,
+                "source", "--download-only", "--only-source",
                 f"{source}={version}",
             ],
             capture_output=True, text=True, timeout=timeout,
-            cwd=str(work_dir),
+            cwd=str(work_dir), env=apt_env(bootstrap),
         )
         if result.returncode != 0:
             return None
@@ -620,14 +707,19 @@ def fetch_source(
     source: str,
     version: str,
     dest_dir: Path,
-    timeout: int = 60,
+    timeout: int = 120,
+    apt_sources: Path | str | None = None,
 ) -> list[Path]:
     """Fetch exact source package: try apt-get first, then Launchpad fallback.
 
+    ``timeout`` is the caller's overall budget and is passed to both paths.
+    ``apt_sources`` is the owned sources file; without it apt is skipped and
+    the Launchpad archive is used.
+
     Returns list of downloaded file paths, or raises on failure.
     """
-    # Try apt-get source first
-    apt_result = try_apt_source(source, version, dest_dir, timeout=120)
+    apt_result = try_apt_source(
+        source, version, dest_dir, timeout=timeout, apt_sources=apt_sources)
     if apt_result is not None:
         return apt_result
 
@@ -656,15 +748,25 @@ if __name__ == "__main__":
     parser.add_argument("version", help="Exact source version")
     parser.add_argument("--dest", required=True, help="Destination directory")
     parser.add_argument(
-        "--timeout", type=int, default=60,
-        help="Network timeout per request (seconds)",
+        "--timeout", type=int, default=120,
+        help="Budget in seconds, applied to apt and to network reads",
+    )
+    parser.add_argument(
+        "--apt-sources",
+        help=(
+            "Absolute path to this project's owned, Signed-By deb822 "
+            "sources file. Required for apt; without it the official "
+            "Launchpad archive is used instead."
+        ),
     )
     args = parser.parse_args()
 
     dest = Path(args.dest)
     try:
         files = fetch_source(
-            args.source, args.version, dest, timeout=args.timeout)
+            args.source, args.version, dest, timeout=args.timeout,
+            apt_sources=args.apt_sources,
+        )
         for f in files:
             print(f"  {f.name} ({f.stat().st_size} bytes)")
         print(f"Downloaded {len(files)} file(s) to {dest}")

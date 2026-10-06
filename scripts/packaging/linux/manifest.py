@@ -13,6 +13,7 @@ Not a standalone script; no CLI, no side effects on import.
 
 import fnmatch
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -89,6 +90,31 @@ def _is_elf(path: Path) -> bool:
         return False
 
 
+_SHARED_LIB_RE = re.compile(r"\.so(\.\d+)*$")
+
+# dpkg-query -S emits diversion annotations, not ownership records. Real
+# forms seen on Ubuntu include "diversion by <pkg> from: <path>",
+# "local diversion from: <path>" and "local diversion to: <path>".
+# Matched by prefix, not substring, so a real owner whose package or path
+# merely contains "diversion" still resolves.
+_DIVERSION_ANNOTATION_PREFIXES = ("diversion by ", "local diversion ")
+
+
+def _is_diversion_annotation(line: str) -> bool:
+    """True for a dpkg diversion annotation line."""
+    return line.startswith(_DIVERSION_ANNOTATION_PREFIXES)
+
+
+def _is_shared_lib_name(name: str) -> bool:
+    """True for native shared-library basenames.
+
+    Matches plain `.so` and numeric versioned `.so.N[.N...]` forms that
+    Ubuntu ships. Anchored so names like `foo.socket` or `libthing.sofoo`
+    are not shared libraries.
+    """
+    return _SHARED_LIB_RE.search(name) is not None
+
+
 def _classify_file(staged_path: str, appdir: Path) -> str:
     """Classify a bundled file by its type."""
     full = appdir / staged_path
@@ -98,8 +124,7 @@ def _classify_file(staged_path: str, appdir: Path) -> str:
         return "other"
     if _is_elf(full):
         # Check if it's a shared lib or executable
-        name = full.name
-        if ".so" in name or name.endswith(".so"):
+        if _is_shared_lib_name(full.name):
             return "shared-lib"
         return "ELF"
     if full.suffix in (".woff2", ".ttf", ".otf", ".woff"):
@@ -189,8 +214,9 @@ def _query_dpkg_owner(system_path: str) -> SystemPackage | None:
         line = line.strip()
         if not line or ": " not in line:
             continue
-        # Reject diversions
-        if "diverted" in line:
+        # dpkg-query -S reports diversions as annotation lines rather than
+        # ownership records; they must not be parsed as package owners.
+        if _is_diversion_annotation(line):
             continue
         pkg_part, path_part = line.rsplit(": ", 1)
         returned_path = path_part.strip()
@@ -292,7 +318,7 @@ def _query_dpkg_owner_with_relocation(
     remainder = staged_rel[len("usr/lib/"):]
     if "/" in remainder:
         return None
-    if not (".so" in remainder or ".so." in remainder):
+    if not _is_shared_lib_name(remainder):
         return None
 
     search_dirs = [

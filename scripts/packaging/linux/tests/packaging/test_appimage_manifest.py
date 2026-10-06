@@ -324,11 +324,17 @@ class TestDpkgParsing(unittest.TestCase):
 
     @patch("manifest.subprocess.run")
     def test_diverted_entry_returns_none(self, mock_run):
+        """Real dpkg diversion annotations confer no ownership."""
+        path = "/usr/lib/x86_64-linux-gnu/libgtk-3.so.0"
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout="diverted to libgtk-3-0 by libgtk-3-0:amd64: /usr/lib/x86_64-linux-gnu/libgtk-3.so.0\n",
+            stdout=(
+                f"diversion by libgtk-3-common from: {path}\n"
+                f"local diversion from: {path}\n"
+                f"local diversion to: /usr/lib/x86_64-linux-gnu/libgtk-3-common.so.0\n"
+            ),
         )
-        result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libgtk-3.so.0")
+        result = _query_dpkg_owner(path)
         self.assertIsNone(result)
 
     @patch("manifest.subprocess.run")
@@ -383,14 +389,23 @@ class TestDpkgParsing(unittest.TestCase):
 
     @patch("manifest.subprocess.run")
     def test_epoch_preserved_in_source_version(self, mock_run):
-        """Epochs must be preserved verbatim."""
+        """Epochs must be preserved verbatim, including the `1:` prefix.
+
+        Fixture fields, in the order the resolver requests them:
+          ${Version}=1:3.0.2-0ubuntu1.29   (binary, epoch 1)
+          ${source:Package}=openssl
+          ${source:Version}=1:3.0.2-0ubuntu1.29   (source, epoch 1)
+        The source field itself carries the epoch and must come back intact.
+        """
         mock_run.side_effect = [
             MagicMock(returncode=0, stdout="libssl3:amd64: /usr/lib/x86_64-linux-gnu/libssl.so.3\n"),
-            MagicMock(returncode=0, stdout="3.0.2-0ubuntu1.29\topenssl\t3.0.2-0ubuntu1.29\n"),
+            MagicMock(returncode=0, stdout="1:3.0.2-0ubuntu1.29\topenssl\t1:3.0.2-0ubuntu1.29\n"),
         ]
         result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libssl.so.3")
         self.assertIsNotNone(result)
-        self.assertEqual(result.source_version, "3.0.2-0ubuntu1.29")
+        self.assertEqual(result.binary_version, "1:3.0.2-0ubuntu1.29")
+        self.assertEqual(result.source_package, "openssl")
+        self.assertEqual(result.source_version, "1:3.0.2-0ubuntu1.29")
 
     @patch("manifest.subprocess.run")
     def test_binary_source_version_distinct(self, mock_run):

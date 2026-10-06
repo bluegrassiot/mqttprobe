@@ -113,6 +113,10 @@ APT_KEYRING="${APT_KEYRING:-/usr/share/keyrings/ubuntu-archive-keyring.gpg}"
 
 DEB822_FILE="$APT_SOURCES_DIR/mqttprobe-${CODENAME}-deb-src.sources"
 mkdir -p "$APT_SOURCES_DIR" 2>/dev/null || $SUDO mkdir -p "$APT_SOURCES_DIR"
+# Resolve to an absolute path: apt options require it, and the collector cds
+# into a work directory later.
+mkdir -p "$APT_SOURCES_DIR"
+DEB822_FILE="$(cd "$(dirname "$DEB822_FILE")" && pwd)/$(basename "$DEB822_FILE")"
 
 # Overwrite unconditionally so the file always holds known-good contents
 # rather than whatever a previous run (or filename collision) left behind.
@@ -131,8 +135,34 @@ Components: main restricted universe multiverse
 Signed-By: ${APT_KEYRING}
 DEBSRC_EOF
 
-echo "Running apt-get update..."
-$SUDO apt-get update -qq 2>&1 || {
+# Pin apt to the owned file only. sourceparts/Parts/main are redirected to
+# /dev/null so no ambient .list/.sources, apt.conf.d drop-in, or apt.conf can
+# contribute a source. The same options are handed to fetch_source.py so the
+# update and the later apt-get source agree on origin exactly.
+APT_OPTS=(
+    -o "Dir::Etc::sourcelist=$DEB822_FILE"
+    -o "Dir::Etc::sourceparts=/dev/null"
+    -o "Dir::Etc::Parts=/dev/null"
+    -o "Dir::Etc::main=/dev/null"
+)
+
+# Early bootstrap: APT_CONFIG is read before apt resolves its own defaults, so
+# redirecting Parts/main here is what actually prevents ambient apt.conf and
+# apt.conf.d from being loaded. The -o flags above only pin the sources file.
+# Fixed contents, owner-only, created in WORK_DIR and removed by the EXIT trap.
+APT_BOOTSTRAP="$WORK_DIR/apt-bootstrap.conf"
+cat > "$APT_BOOTSTRAP" << 'APT_BOOTSTRAP_EOF'
+Dir::Etc::Parts "/dev/null";
+Dir::Etc::main "/dev/null";
+APT_BOOTSTRAP_EOF
+chmod 600 "$APT_BOOTSTRAP"
+
+echo "Running apt-get update against $DEB822_FILE only..."
+# `env` carries APT_CONFIG explicitly. A bare `VAR=value apt-get` prefix does
+# not work here: with SUDO empty the shell would treat the assignment as the
+# command name (127). Going through env also survives sudo's env_reset, which
+# strips an inherited variable before apt ever sees it.
+$SUDO env APT_CONFIG="$APT_BOOTSTRAP" apt-get update -qq "${APT_OPTS[@]}" 2>&1 || {
     echo "FATAL: apt-get update failed, source packages unavailable"
     exit 1
 }
@@ -247,8 +277,11 @@ for src_name in "${!SOURCE_PACKAGES[@]}"; do
     pkg_dir="$SOURCES_DIR/$src_name"
     mkdir -p "$pkg_dir"
 
-    # Try Python fetcher (apt-get first, then Launchpad fallback)
-    if python3 "$FETCH_SCRIPT" "$src_name" "$src_ver" --dest "$pkg_dir" 2>&1; then
+    # Try Python fetcher (apt-get first, then Launchpad fallback).
+    # --apt-sources is required: without an owned sources file the helper
+    # skips apt entirely rather than trusting ambient configuration.
+    if python3 "$FETCH_SCRIPT" "$src_name" "$src_ver" --dest "$pkg_dir" \
+        --apt-sources "$DEB822_FILE" 2>&1; then
         DOWNLOADED=$((DOWNLOADED + 1))
     else
         echo "  ERROR: Failed to download source for $src_name=$src_ver"

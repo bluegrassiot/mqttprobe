@@ -45,15 +45,17 @@ def _make_manifest(path: Path, lines: list[str]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _make_stubs(tmpdir: Path, apt_update_fails: bool = False) -> Path:
-    """Create stub executables for git, apt-get, sudo, tee, and sed.
+def _make_stubs(tmpdir: Path, apt_update_fails: bool = False,
+                uid: int = 1000) -> Path:
+    """Create stub executables for git, apt-get, sudo, tee, sed, and id.
 
     git:      clone/fetch/checkout/rev-parse → minimal Photino-like tree
     apt-get:  source --download-only         → valid .dsc/.orig/.debian fixtures
               update                         → no-op (or fail if apt_update_fails)
-    sudo:     pass-through (execute the command that follows)
+    sudo:     pass-through honouring `VAR=value` prefixes and explicit `env`
     tee:      write stdin to the given file
     sed:      no-op (deb-src enablement)
+    id:       reports `uid`, so the root lane (SUDO empty) is exercisable
     """
     stubs = tmpdir / "stubs"
     stubs.mkdir(parents=True)
@@ -76,18 +78,37 @@ def _make_stubs(tmpdir: Path, apt_update_fails: bool = False) -> Path:
 
     # Built with a placeholder instead of an f-string so the bash body needs
     # no brace escaping and every line keeps the same indent (dedent-safe).
+    # -o options precede the subcommand, so skip them to find the verb, and
+    # record every invocation for assertions about origin pinning.
     apt_stub = textwrap.dedent("""\
         #!/usr/bin/env bash
         set -u
-        if [ "${1:-}" = "source" ]; then
-            # Find the name=version spec by position, not a fixed index:
-            # flags such as --download-only/--only-source may come first.
-            spec=""
-            for arg in "$@"; do
-                case "$arg" in
-                    *=*) spec="$arg"; break ;;
-                esac
-            done
+        echo "$@" >> "$APT_ARGS_LOG"
+        # APT_CONFIG must name a real bootstrap file (not /dev/null) whose
+        # contents disable the ambient config dirs before apt reads defaults.
+        conf="${APT_CONFIG:-}"
+        if [ -z "$conf" ] || [ "$conf" = "/dev/null" ] || [ ! -f "$conf" ]; then
+            echo "E: APT_CONFIG is not a real bootstrap file: '$conf'" >&2
+            exit 100
+        fi
+        if ! grep -q 'Dir::Etc::Parts "/dev/null";' "$conf" ||
+           ! grep -q 'Dir::Etc::main "/dev/null";' "$conf"; then
+            echo "E: bootstrap does not disable Parts/main: $conf" >&2
+            exit 101
+        fi
+        # Strip global -o Key=Value options to find the subcommand.
+        sub=""
+        spec=""
+        prev=""
+        for arg in "$@"; do
+            if [ "$prev" = "-o" ]; then prev=""; continue; fi
+            case "$arg" in
+                -o) prev="-o"; continue ;;
+                source|update) sub="$arg"; continue ;;
+                *=*) spec="$arg" ;;
+            esac
+        done
+        if [ "$sub" = "source" ]; then
             if [ -z "$spec" ]; then echo "E: no source spec" >&2; exit 1; fi
             name="${spec%%=*}"
             ver="${spec#*=}"
@@ -109,7 +130,7 @@ def _make_stubs(tmpdir: Path, apt_update_fails: bool = False) -> Path:
             } > "${name}_${file_ver}.dsc"
             exit 0
         fi
-        if [ "${1:-}" = "update" ]; then
+        if [ "$sub" = "update" ]; then
             __APT_UPDATE_RC__
         fi
         exit 0
@@ -117,9 +138,23 @@ def _make_stubs(tmpdir: Path, apt_update_fails: bool = False) -> Path:
     (stubs / "apt-get").write_text(apt_stub, encoding="utf-8")
     (stubs / "apt-get").chmod(0o755)
 
-    # sudo: pass-through — execute the command after "sudo"
+    # sudo: pass-through that understands both `VAR=value cmd` prefixes and an
+    # explicit `env VAR=value cmd`, reporting the APT_CONFIG the command sees.
     (stubs / "sudo").write_text(textwrap.dedent("""\
         #!/usr/bin/env bash
+        set -u
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                [A-Z_]*=*)
+                    name="${1%%=*}"
+                    export "$name=${1#*=}"
+                    shift
+                    ;;
+                env) shift; continue ;;
+                *) break ;;
+            esac
+        done
+        echo "APT_CONFIG_SEEN=${APT_CONFIG:-}" >> "$APT_ARGS_LOG"
         exec "$@"
     """), encoding="utf-8")
     (stubs / "sudo").chmod(0o755)
@@ -147,6 +182,20 @@ def _make_stubs(tmpdir: Path, apt_update_fails: bool = False) -> Path:
     (stubs / "sed").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     (stubs / "sed").chmod(0o755)
 
+    # id: lets a test pick the root lane (SUDO empty) or the non-root lane.
+    id_stub = stubs / "id"
+    id_stub.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = "-u" ]; then echo "__UID__";'
+        ' else echo "uid=__UID__"; fi\n',
+        encoding="utf-8",
+    )
+    id_stub.write_text(
+        id_stub.read_text(encoding="utf-8").replace("__UID__", str(uid)),
+        encoding="utf-8",
+    )
+    id_stub.chmod(0o755)
+
     return stubs
 
 
@@ -164,6 +213,9 @@ def _run_collector(
     apt_dir.mkdir(parents=True, exist_ok=True)
     env["APT_SOURCES_DIR"] = str(apt_dir)
     env["APT_KEYRING"] = str(apt_dir / "ubuntu-archive-keyring.gpg")
+    # Record every apt invocation so tests can assert what the collector
+    # actually asked apt to do.
+    env["APT_ARGS_LOG"] = str(output.parent / "apt-args.log")
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
@@ -288,6 +340,96 @@ class TestCollectorArchiveLayout(unittest.TestCase):
 # ── TestCollectorCopyright ──────────────────────────────────────────────────
 
 
+class TestAptBootstrapRootRegression(unittest.TestCase):
+    """apt-get update must run in both the root and sudo lanes.
+
+    Regression: ``$SUDO APT_CONFIG=... apt-get`` breaks when SUDO is empty,
+    because the shell then reads ``APT_CONFIG=...`` as the command name and
+    exits 127. The collector must go through ``env`` so the assignment is
+    unambiguous in both lanes.
+    """
+
+    def setUp(self) -> None:
+        _skip_unless_linux()
+        self.tmpdir = Path(tempfile.mkdtemp(prefix="collect-root-"))
+        self.output = self.tmpdir / "output"
+        self.output.mkdir()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _manifest(self) -> Path:
+        manifest = self.tmpdir / "manifest.txt"
+        _make_manifest(manifest, [
+            "# Test", "## System Packages", "",
+            "libc6 | 2.35-0ubuntu3 | glibc | 2.35-0ubuntu3 | 1",
+        ])
+        return manifest
+
+    def _run(self, uid: int):
+        stubs = _make_stubs(self.tmpdir / f"stubs-{uid}", uid=uid)
+        return _run_collector(self._manifest(), self.output, stubs), stubs
+
+    def _apt_calls(self) -> list[str]:
+        log = self.tmpdir / "apt-args.log"
+        if not log.exists():
+            return []
+        return [
+            ln for ln in log.read_text(encoding="utf-8").splitlines()
+            if ln and not ln.startswith("APT_CONFIG_SEEN=")
+        ]
+
+    def _sudo_seen(self) -> list[str]:
+        log = self.tmpdir / "apt-args.log"
+        if not log.exists():
+            return []
+        return [
+            ln.split("=", 1)[1]
+            for ln in log.read_text(encoding="utf-8").splitlines()
+            if ln.startswith("APT_CONFIG_SEEN=")
+        ]
+
+    def test_root_lane_update_succeeds(self):
+        """uid 0 means SUDO is empty: the update must still run."""
+        result, _stubs = self._run(uid=0)
+        self.assertEqual(
+            result.returncode, 0,
+            f"root lane failed:\n{result.stdout[-2000:]}\n{result.stderr[-2000:]}")
+        self.assertNotIn("No such file or directory", result.stderr)
+        calls = self._apt_calls()
+        self.assertTrue(any("update" in c.split() for c in calls),
+                        f"no apt-get update recorded: {calls}")
+
+    def test_nonroot_lane_update_succeeds(self):
+        """uid 1000 means SUDO is sudo: the update must still run."""
+        result, _stubs = self._run(uid=1000)
+        self.assertEqual(
+            result.returncode, 0,
+            f"sudo lane failed:\n{result.stdout[-2000:]}\n{result.stderr[-2000:]}")
+        calls = self._apt_calls()
+        self.assertTrue(any("update" in c.split() for c in calls),
+                        f"no apt-get update recorded: {calls}")
+
+    def test_sudo_lane_forwards_bootstrap_to_apt(self):
+        """In the sudo lane APT_CONFIG must reach apt as the bootstrap file."""
+        result, _stubs = self._run(uid=1000)
+        self.assertEqual(result.returncode, 0, result.stderr[-2000:])
+        seen = [v for v in self._sudo_seen() if v]
+        self.assertTrue(seen, "APT_CONFIG never observed through sudo")
+        for conf in seen:
+            self.assertTrue(conf.endswith("apt-bootstrap.conf"), conf)
+
+    def test_no_etc_writes_and_bootstrap_not_left_behind(self):
+        """Both lanes must leave no bootstrap file behind."""
+        for uid in (0, 1000):
+            with self.subTest(uid=uid):
+                result, _stubs = self._run(uid=uid)
+                self.assertEqual(result.returncode, 0, result.stderr[-2000:])
+        # WORK_DIR (and the bootstrap inside it) is removed by the EXIT trap.
+        strays = list(self.output.rglob("apt-bootstrap.conf"))
+        self.assertEqual(strays, [], f"bootstrap left behind: {strays}")
+
+
 class TestCollectorCopyright(unittest.TestCase):
     """Copyright handling: arch stripping and fail on missing."""
 
@@ -368,7 +510,95 @@ class TestCollectorErrorHandling(unittest.TestCase):
             "PATH": f"{self.stubs}:{os.environ.get('PATH', '')}",
             "APT_SOURCES_DIR": str(apt_dir),
             "APT_KEYRING": str(apt_dir / "ubuntu-archive-keyring.gpg"),
+            "APT_ARGS_LOG": str(self.tmpdir / "apt-args.log"),
         }
+
+    def _apt_calls(self) -> list[str]:
+        """Every recorded apt-get invocation, one per line.
+
+        The sudo stub also logs which APT_CONFIG it saw; that line is kept
+        separately by _sudo_apt_config_lines().
+        """
+        log = self.tmpdir / "apt-args.log"
+        if not log.exists():
+            return []
+        return [
+            ln for ln in log.read_text(encoding="utf-8").splitlines()
+            if ln and not ln.startswith("APT_CONFIG_SEEN=")
+        ]
+
+    def _sudo_apt_config_lines(self) -> list[str]:
+        """APT_CONFIG values the sudo stub observed."""
+        log = self.tmpdir / "apt-args.log"
+        if not log.exists():
+            return []
+        return [
+            ln.split("=", 1)[1]
+            for ln in log.read_text(encoding="utf-8").splitlines()
+            if ln.startswith("APT_CONFIG_SEEN=")
+        ]
+
+    def test_apt_pinned_to_owned_sources_file(self):
+        """Both apt-get update and apt-get source must use the owned file only."""
+        manifest = self.tmpdir / "manifest.txt"
+        _make_manifest(manifest, [
+            "# Test", "## System Packages", "",
+            "libc6 | 2.35-0ubuntu3 | glibc | 2.35-0ubuntu3 | 1",
+        ])
+        r = _run_collector(manifest, self.output, self.stubs)
+        self.assertEqual(r.returncode, 0, f"Failed:\n{r.stderr}\n{r.stdout}")
+
+        calls = self._apt_calls()
+        self.assertTrue(calls, "apt was never invoked")
+        self.assertTrue(any("update" in c.split() for c in calls),
+                        f"no apt-get update call recorded: {calls}")
+        self.assertTrue(any("source" in c.split() for c in calls),
+                        f"no apt-get source call recorded: {calls}")
+
+        owned = self.output.parent / "apt-sources.d" / "mqttprobe-jammy-deb-src.sources"
+        for call in calls:
+            self.assertIn(f"Dir::Etc::sourcelist={owned}", call)
+            self.assertIn("Dir::Etc::sourceparts=/dev/null", call)
+            self.assertIn("Dir::Etc::Parts=/dev/null", call)
+            self.assertIn("Dir::Etc::main=/dev/null", call)
+
+    def test_apt_runs_with_owned_bootstrap_config(self):
+        """APT_CONFIG must reach apt as a real bootstrap file, not /dev/null."""
+        manifest = self.tmpdir / "manifest.txt"
+        _make_manifest(manifest, [
+            "# Test", "## System Packages", "",
+            "libc6 | 2.35-0ubuntu3 | glibc | 2.35-0ubuntu3 | 1",
+        ])
+        r = _run_collector(manifest, self.output, self.stubs)
+        self.assertEqual(r.returncode, 0, f"Failed:\n{r.stderr}\n{r.stdout}")
+
+        # The apt stub exits 100/101 if the bootstrap is missing or wrong, so a
+        # zero exit already proves both invocations saw a valid bootstrap.
+        seen = [v for v in self._sudo_apt_config_lines() if v]
+        self.assertTrue(seen, "APT_CONFIG never observed by apt")
+        for conf in seen:
+            self.assertNotEqual(conf, "/dev/null")
+            self.assertTrue(Path(conf).name.endswith("apt-bootstrap.conf"), conf)
+        # It must be owner-only and removed with the collector's work dir.
+        for conf in seen:
+            self.assertFalse(Path(conf).exists(),
+                             "bootstrap conf must not outlive the run")
+
+    def test_source_call_carries_owned_file_to_helper(self):
+        """The collector must hand its owned sources file to fetch_source.py."""
+        manifest = self.tmpdir / "manifest.txt"
+        _make_manifest(manifest, [
+            "# Test", "## System Packages", "",
+            "libc6 | 2.35-0ubuntu3 | glibc | 2.35-0ubuntu3 | 1",
+        ])
+        r = _run_collector(manifest, self.output, self.stubs)
+        self.assertEqual(r.returncode, 0, f"Failed:\n{r.stderr}\n{r.stdout}")
+        source_calls = [c for c in self._apt_calls() if "source" in c.split()]
+        self.assertTrue(source_calls, "apt-get source was never invoked")
+        # If apt ran at all, the helper received the owned file rather than
+        # falling back to ambient configuration.
+        for call in source_calls:
+            self.assertIn("Dir::Etc::sourcelist=", call)
 
     def test_missing_manifest_flag_exits(self):
         """--manifest required; must exit before git operations."""

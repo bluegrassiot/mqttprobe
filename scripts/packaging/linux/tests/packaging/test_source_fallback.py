@@ -6,6 +6,8 @@ libs, .dsc parsing/validation, and fetch_source.py helpers.
 
 import hashlib
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -48,8 +50,31 @@ from fetch_source import (
     _MAX_DSC_BYTES,
     _MAX_TOTAL_BYTES,
     _dsc_filename,
+    apt_config_options,
+    write_apt_bootstrap_conf,
+    fetch_source,
     DscInfo,
 )
+
+
+def _owned_sources(td: str, name: str = "owned.sources") -> Path:
+    """Write a minimal owned, Signed-By deb822 sources file under a temp dir.
+
+    Placed in its own subdirectory so tests can assert exactly what a fetch
+    left behind in the destination without this fixture appearing in it.
+    """
+    cfg_dir = Path(td) / "aptcfg"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    path = cfg_dir / name
+    path.write_text(
+        "Types: deb-src\n"
+        "URIs: https://archive.ubuntu.com/ubuntu/\n"
+        "Suites: jammy\n"
+        "Components: main restricted universe multiverse\n"
+        "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n",
+        encoding="utf-8",
+    )
+    return path
 
 
 # -- Helpers -------------------------------------------------------------------
@@ -134,9 +159,19 @@ class TestDpkgOwnerExactOnly(unittest.TestCase):
 
     @patch("manifest.subprocess.run")
     def test_diverted_returns_none(self, mock_run):
+        """dpkg reports diversions as annotation lines, never as owners."""
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout="diverted to libfoo by libbar: /usr/lib/x86_64-linux-gnu/libfoo.so\n",
+            stdout="diversion by libbar from: /usr/lib/x86_64-linux-gnu/libfoo.so\n",
+        )
+        result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libfoo.so")
+        self.assertIsNone(result)
+
+    @patch("manifest.subprocess.run")
+    def test_local_diversion_returns_none(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="local diversion from /usr/lib/x86_64-linux-gnu/libfoo.so\n",
         )
         result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libfoo.so")
         self.assertIsNone(result)
@@ -303,13 +338,16 @@ class TestSourceMetadataEpochs(unittest.TestCase):
 
     @patch("manifest.subprocess.run")
     def test_epoch_preserved_in_source_version(self, mock_run):
+        """A source epoch survives into source_version, binary version is its own."""
         mock_run.side_effect = [
             MagicMock(returncode=0, stdout="libssl3:amd64: /usr/lib/x86_64-linux-gnu/libssl.so.3\n"),
-            MagicMock(returncode=0, stdout="3.0.2-0ubuntu1.29\topenssl\t3.0.2-0ubuntu1.29\n"),
+            MagicMock(returncode=0, stdout="3.0.2-0ubuntu1.30\topenssl\t1:3.0.2-0ubuntu1.29\n"),
         ]
         result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libssl.so.3")
         self.assertIsNotNone(result)
-        self.assertEqual(result.source_version, "3.0.2-0ubuntu1.29")
+        self.assertEqual(result.source_version, "1:3.0.2-0ubuntu1.29")
+        self.assertEqual(result.binary_version, "3.0.2-0ubuntu1.30")
+        self.assertEqual(result.source_package, "openssl")
 
     @patch("manifest.subprocess.run")
     def test_binary_source_version_differs(self, mock_run):
@@ -672,17 +710,20 @@ class TestValidateDownloadedPackage(unittest.TestCase):
             self.assertIn("missing", str(ctx.exception))
 
     def test_bad_payload_sha256_raises(self):
+        """Equal-length but different bytes must fail on SHA256, not size."""
         dsc_text, payloads = _valid_dsc_content()
         with tempfile.TemporaryDirectory() as td:
             dest = Path(td)
             dsc_path = dest / "test.dsc"
             dsc_path.write_text(dsc_text)
             for fname, size, content, sha256 in payloads:
-                # Write wrong content
-                (dest / fname).write_bytes(b"WRONG" + content)
+                # Same length, different bytes, so size still matches and the
+                # SHA256 comparison is what must catch it.
+                (dest / fname).write_bytes(bytes(b ^ 0xFF for b in content))
+                self.assertEqual((dest / fname).stat().st_size, size)
             with self.assertRaises(ValueError) as ctx:
                 _validate_downloaded_package(dsc_path, dest, "openssl", "3.0.2-0ubuntu1.29")
-            self.assertIn("Size mismatch", str(ctx.exception))
+            self.assertIn("SHA256 mismatch", str(ctx.exception))
 
     def test_bad_payload_size_raises(self):
         dsc_text, payloads = _valid_dsc_content()
@@ -1031,12 +1072,172 @@ class TestAptSourceArgs(unittest.TestCase):
     def test_apt_source_command_format(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
         with tempfile.TemporaryDirectory() as td:
-            try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td))
+            owned = _owned_sources(td)
+            try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td),
+                           apt_sources=owned)
         args = mock_run.call_args[0][0]
-        self.assertEqual(args[0:3], ["apt-get", "source", "--download-only"])
+        # Global options must precede the subcommand for apt to accept them.
+        self.assertEqual(args[0], "apt-get")
+        subcmd = args.index("source")
+        self.assertEqual(args[subcmd:subcmd + 3],
+                         ["source", "--download-only", "--only-source"])
         # Source only: never accept binary packages as "sources"
-        self.assertIn("--only-source", args)
         self.assertIn("openssl=3.0.2-0ubuntu1.29", args)
+        # Origin pinning options all precede the subcommand.
+        self.assertEqual([a for a in args[1:subcmd:2]], ["-o"] * 4)
+        opts = args[2:subcmd:2]
+        self.assertIn(f"Dir::Etc::sourcelist={owned}", opts)
+
+    @patch("fetch_source.subprocess.run")
+    def test_apt_pins_origin_and_ignores_ambient_config(self, mock_run):
+        """Every extra apt config dir is redirected to /dev/null."""
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        with tempfile.TemporaryDirectory() as td:
+            owned = _owned_sources(td)
+            try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td),
+                           apt_sources=owned)
+        args = mock_run.call_args[0][0]
+        subcmd = args.index("source")
+        opts = set(args[2:subcmd:2])
+        self.assertIn(f"Dir::Etc::sourcelist={owned}", opts)
+        # No third-party .list/.sources, no apt.conf.d, no main apt.conf.
+        self.assertIn("Dir::Etc::sourceparts=/dev/null", opts)
+        self.assertIn("Dir::Etc::Parts=/dev/null", opts)
+        self.assertIn("Dir::Etc::main=/dev/null", opts)
+        # Inherited APT_CONFIG must name our bootstrap, never a bare /dev/null.
+        env = mock_run.call_args[1]["env"]
+        conf = env["APT_CONFIG"]
+        self.assertNotEqual(conf, "/dev/null")
+        self.assertTrue(conf.endswith("apt-bootstrap.conf"), conf)
+
+    @patch("fetch_source.subprocess.run")
+    def test_no_owned_sources_skips_apt_entirely(self, mock_run):
+        """Without --apt-sources the helper must not consult ambient apt.
+
+        A standalone run cannot assume the host's apt configuration is ours,
+        so it goes straight to the official Launchpad archive instead.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            self.assertIsNone(
+                try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td)))
+        mock_run.assert_not_called()
+
+    @patch("fetch_source.subprocess.run")
+    def test_relative_apt_sources_rejected(self, mock_run):
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(ValueError) as ctx:
+                try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td),
+                               apt_sources="relative/owned.sources")
+        self.assertIn("absolute", str(ctx.exception))
+        mock_run.assert_not_called()
+
+    @patch("fetch_source.subprocess.run")
+    def test_caller_timeout_reaches_apt(self, mock_run):
+        """The caller's budget must be honoured instead of a fixed 120s."""
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        with tempfile.TemporaryDirectory() as td:
+            owned = _owned_sources(td)
+            try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td),
+                           timeout=10, apt_sources=owned)
+            fetch_source("openssl", "3.0.2-0ubuntu1.29", Path(td) / "dest",
+                         timeout=10, apt_sources=owned)
+        self.assertEqual(mock_run.call_args[1]["timeout"], 10)
+
+    def test_apt_config_options_match_expected_pairs(self):
+        opts = apt_config_options("/etc/apt/sources.list.d/owned.sources")
+        self.assertEqual(opts[0::2], ["-o"] * 4)
+        self.assertEqual(opts[1::2], [
+            "Dir::Etc::sourcelist=/etc/apt/sources.list.d/owned.sources",
+            "Dir::Etc::sourceparts=/dev/null",
+            "Dir::Etc::Parts=/dev/null",
+            "Dir::Etc::main=/dev/null",
+        ])
+
+    def test_bootstrap_conf_disables_parts_and_main(self):
+        """The early APT_CONFIG must redirect both ambient config dirs."""
+        with tempfile.TemporaryDirectory() as td:
+            path = write_apt_bootstrap_conf(Path(td))
+            text = path.read_text(encoding="utf-8")
+        self.assertIn('Dir::Etc::Parts "/dev/null";', text)
+        self.assertIn('Dir::Etc::main "/dev/null";', text)
+
+    def test_bootstrap_conf_is_owner_only(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = write_apt_bootstrap_conf(Path(td))
+            mode = path.stat().st_mode & 0o777
+        self.assertEqual(mode, 0o600, f"bootstrap mode was {oct(mode)}")
+
+    @patch("fetch_source.subprocess.run")
+    def test_apt_env_points_at_bootstrap_not_devnull(self, mock_run):
+        """APT_CONFIG must name the real bootstrap file, never /dev/null."""
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        with tempfile.TemporaryDirectory() as td:
+            owned = _owned_sources(td)
+            try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td),
+                           apt_sources=owned)
+        conf = mock_run.call_args[1]["env"]["APT_CONFIG"]
+        self.assertNotEqual(conf, "/dev/null")
+        self.assertTrue(conf.endswith("apt-bootstrap.conf"), conf)
+
+    @patch("fetch_source.subprocess.run")
+    def test_bootstrap_removed_with_work_dir(self, mock_run):
+        """The bootstrap lives only as long as the apt subprocess."""
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        with tempfile.TemporaryDirectory() as td:
+            dest = Path(td)
+            owned = _owned_sources(td)
+            try_apt_source("openssl", "3.0.2-0ubuntu1.29", dest,
+                           apt_sources=owned)
+            self.assertEqual(
+                [p.name for p in dest.iterdir() if p.is_file()], [],
+                "apt work dir and its bootstrap must not survive")
+
+    def test_bootstrap_suppresses_ambient_apt_config_with_real_apt(self):
+        """Real apt startup: ambient config must not be loaded.
+
+        Runs ``apt-config dump`` only (no network, no apt-get update, no writes
+        anywhere under /etc). The host's own ambient apt.conf.d settings are the
+        sentinel: with ``APT_CONFIG=/dev/null`` they are still loaded, while with
+        APT_CONFIG pointing at our bootstrap they must disappear, because the
+        bootstrap redirects Parts/main before apt resolves its defaults.
+        """
+        apt_config_bin = shutil.which("apt-config")
+        if not apt_config_bin:
+            self.skipTest("apt-config not available")
+
+        # A setting Ubuntu/Debian always ship in apt.conf.d.
+        ambient_keys = ("APT::Periodic::Unattended-Upgrade", "DPkg::Post-Invoke")
+
+        def dump(apt_config_value, owned):
+            env = {**os.environ, "APT_CONFIG": apt_config_value}
+            proc = subprocess.run(
+                [apt_config_bin,
+                 "-o", f"Dir::Etc::sourcelist={owned}",
+                 "-o", "Dir::Etc::sourceparts=/dev/null",
+                 "dump"],
+                capture_output=True, text=True, timeout=30, env=env)
+            return proc.stdout
+
+        with tempfile.TemporaryDirectory() as td:
+            owned = _owned_sources(td)
+            bootstrap = write_apt_bootstrap_conf(Path(td))
+
+            # Control: APT_CONFIG=/dev/null alone does not stop ambient loading.
+            control = dump("/dev/null", owned)
+            if not any(k in control for k in ambient_keys):
+                self.skipTest(
+                    "no ambient apt.conf.d settings found to use as a sentinel")
+
+            with_bootstrap = dump(str(bootstrap), owned)
+            for key in ambient_keys:
+                self.assertNotIn(
+                    key, with_bootstrap,
+                    f"ambient {key} survived our APT_CONFIG bootstrap")
+            # The bootstrap's redirects must be the resolved values.
+            self.assertIn('Dir::Etc::parts "/dev/null";', with_bootstrap)
+            self.assertIn('Dir::Etc::main "/dev/null";', with_bootstrap)
+            # The owned sources file is still the only one configured.
+            self.assertIn(f'Dir::Etc::sourcelist "{owned}";', with_bootstrap)
 
     @patch("fetch_source.subprocess.run")
     def test_apt_source_valid_dsc_returns_validated_files(self, mock_run):
@@ -1053,7 +1254,8 @@ class TestAptSourceArgs(unittest.TestCase):
         mock_run.side_effect = side_effect
 
         with tempfile.TemporaryDirectory() as td:
-            result = try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td))
+            result = try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td),
+                              apt_sources=_owned_sources(td))
             self.assertIsNotNone(result)
             self.assertEqual(len(result), 3)  # .dsc + 2 payloads
             for p in result:
@@ -1081,13 +1283,13 @@ class TestAptSourceArgs(unittest.TestCase):
         mock_run.side_effect = side_effect
         with tempfile.TemporaryDirectory() as td:
             dest = Path(td)
-            result = try_apt_source("foo", version, dest)
+            result = try_apt_source("foo", version, dest, apt_sources=_owned_sources(td))
             self.assertIsNotNone(result)
             names = sorted(p.name for p in result)
             self.assertIn("foo_2.3.4-1ubuntu1.dsc", names)
             # No underscored-epoch filename should have been invented.
             self.assertNotIn("foo_1_2.3.4-1ubuntu1.dsc", names)
-            self.assertEqual(sorted(p.name for p in dest.iterdir()), names)
+            self.assertEqual(sorted(p.name for p in dest.iterdir() if p.is_file()), names)
 
     @patch("fetch_source.subprocess.run")
     def test_apt_source_epoch_underscore_filename_rejected(self, mock_run):
@@ -1105,7 +1307,8 @@ class TestAptSourceArgs(unittest.TestCase):
 
         mock_run.side_effect = side_effect
         with tempfile.TemporaryDirectory() as td:
-            self.assertIsNone(try_apt_source("foo", version, Path(td)))
+            self.assertIsNone(try_apt_source("foo", version, Path(td),
+                                             apt_sources=_owned_sources(td)))
 
     @patch("fetch_source.subprocess.run")
     def test_apt_source_malformed_checksum_row_rejected(self, mock_run):
@@ -1127,7 +1330,8 @@ Checksums-Sha256:
 
         mock_run.side_effect = side_effect
         with tempfile.TemporaryDirectory() as td:
-            self.assertIsNone(try_apt_source("openssl", version, Path(td)))
+            self.assertIsNone(try_apt_source("openssl", version, Path(td),
+                                             apt_sources=_owned_sources(td)))
 
     @patch("fetch_source.subprocess.run")
     def test_apt_source_isolates_failed_downloads(self, mock_run):
@@ -1145,8 +1349,9 @@ Checksums-Sha256:
             # Pre-existing unrelated file must survive untouched
             (dest / "keepme.txt").write_text("unrelated")
             self.assertIsNone(
-                try_apt_source("openssl", "3.0.2-0ubuntu1.29", dest))
-            leftovers = sorted(p.name for p in dest.iterdir())
+                try_apt_source("openssl", "3.0.2-0ubuntu1.29", dest,
+                              apt_sources=_owned_sources(td)))
+            leftovers = sorted(p.name for p in dest.iterdir() if p.is_file())
             self.assertEqual(leftovers, ["keepme.txt"],
                              f"failed download leaked files: {leftovers}")
 
@@ -1166,7 +1371,8 @@ Checksums-Sha256:
         mock_run.side_effect = side_effect
 
         with tempfile.TemporaryDirectory() as td:
-            result = try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td))
+            result = try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td),
+                              apt_sources=_owned_sources(td))
         self.assertIsNone(result)
 
     @patch("fetch_source.subprocess.run")
@@ -1179,7 +1385,8 @@ Checksums-Sha256:
         mock_run.side_effect = side_effect
 
         with tempfile.TemporaryDirectory() as td:
-            result = try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td))
+            result = try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td),
+                              apt_sources=_owned_sources(td))
         self.assertIsNone(result)
 
     @patch("fetch_source.subprocess.run")
@@ -1195,14 +1402,16 @@ Checksums-Sha256:
         mock_run.side_effect = side_effect
 
         with tempfile.TemporaryDirectory() as td:
-            result = try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td))
+            result = try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td),
+                              apt_sources=_owned_sources(td))
         self.assertIsNone(result)
 
     @patch("fetch_source.subprocess.run")
     def test_apt_source_failure_returns_none(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
         with tempfile.TemporaryDirectory() as td:
-            result = try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td))
+            result = try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td),
+                              apt_sources=_owned_sources(td))
         self.assertIsNone(result)
 
     @patch("fetch_source.subprocess.run")
@@ -1210,7 +1419,8 @@ Checksums-Sha256:
         import subprocess
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="apt-get", timeout=120)
         with tempfile.TemporaryDirectory() as td:
-            result = try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td))
+            result = try_apt_source("openssl", "3.0.2-0ubuntu1.29", Path(td),
+                              apt_sources=_owned_sources(td))
         self.assertIsNone(result)
 
     @patch("fetch_source.subprocess.run")
@@ -1228,7 +1438,8 @@ Checksums-Sha256:
 
         with tempfile.TemporaryDirectory() as td:
             dest = Path(td)
-            try_apt_source("openssl", "3.0.2-0ubuntu1.29", dest)
+            try_apt_source("openssl", "3.0.2-0ubuntu1.29", dest,
+                              apt_sources=_owned_sources(td))
             # No .apt-work-* directories should remain
             work_dirs = list(dest.glob(".apt-work-*"))
             self.assertEqual(work_dirs, [],
@@ -1240,7 +1451,8 @@ Checksums-Sha256:
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
         with tempfile.TemporaryDirectory() as td:
             dest = Path(td)
-            try_apt_source("openssl", "3.0.2-0ubuntu1.29", dest)
+            try_apt_source("openssl", "3.0.2-0ubuntu1.29", dest,
+                              apt_sources=_owned_sources(td))
             work_dirs = list(dest.glob(".apt-work-*"))
             self.assertEqual(work_dirs, [],
                              f"Work dir not cleaned up on failure: {work_dirs}")

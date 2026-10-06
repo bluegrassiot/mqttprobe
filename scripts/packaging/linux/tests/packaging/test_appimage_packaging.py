@@ -465,14 +465,11 @@ class TestCollectThirdPartySources(unittest.TestCase):
         import re
         content = (LINUX_DIR / "collect-sources.sh").read_text(
             encoding="utf-8", errors="replace")
-        match = re.search(r"apt-get update[^\n]*\n(.{0,300})", content,
-                          re.DOTALL)
+        match = re.search(r"apt-get update.*?exit 1", content, re.DOTALL)
         self.assertIsNotNone(match, "apt-get update invocation not found")
-        block = match.group(1)
+        block = match.group(0)
         self.assertIn("FATAL", block,
                       "apt-get update failure must be reported as FATAL")
-        self.assertIn("exit 1", block,
-                      "apt-get update failure must abort with non-zero exit")
 
     def test_overwrites_owned_deb_src_config(self):
         """Owned config is rewritten unconditionally, not trusted by filename."""
@@ -481,6 +478,59 @@ class TestCollectThirdPartySources(unittest.TestCase):
         self.assertNotIn('if [ ! -f "$DEB822_FILE" ]', content,
                          "Must not skip writing owned config when file exists")
         self.assertIn('$SUDO tee "$DEB822_FILE"', content)
+
+    def test_apt_pinned_to_owned_sources_file(self):
+        """update and apt-get source must both pin the owned sources file."""
+        content = (LINUX_DIR / "collect-sources.sh").read_text(
+            encoding="utf-8", errors="replace")
+        for key in ("Dir::Etc::sourcelist", "Dir::Etc::sourceparts",
+                    "Dir::Etc::Parts", "Dir::Etc::main"):
+            self.assertIn(key, content,
+                          f"apt origin pinning must set {key}")
+        self.assertIn('APT_OPTS=(', content)
+        # The update call must use the shared option array...
+        self.assertIn('apt-get update -qq "${APT_OPTS[@]}"', content)
+        # ...and the helper must be handed the same owned file.
+        self.assertIn('--apt-sources "$DEB822_FILE"', content)
+
+    def test_apt_uses_owned_bootstrap_config_not_devnull(self):
+        """update must run with an owned APT_CONFIG, not /dev/null."""
+        content = (LINUX_DIR / "collect-sources.sh").read_text(
+            encoding="utf-8", errors="replace")
+        self.assertIn('APT_BOOTSTRAP="$WORK_DIR/apt-bootstrap.conf"', content)
+        self.assertIn('Dir::Etc::Parts "/dev/null";', content)
+        self.assertIn('Dir::Etc::main "/dev/null";', content)
+        self.assertIn("chmod 600", content)
+        # Must go through `env`: a bare VAR=value prefix is read as the
+        # command name (127) once SUDO is empty, and an exported variable is
+        # stripped by sudo's env_reset.
+        self.assertIn(
+            '$SUDO env APT_CONFIG="$APT_BOOTSTRAP" apt-get update', content)
+        self.assertNotIn(
+            '$SUDO APT_CONFIG="$APT_BOOTSTRAP" apt-get update', content,
+            "bare VAR=value prefix breaks the root lane")
+        self.assertNotIn('APT_CONFIG=/dev/null', content)
+
+    def test_helper_requires_owned_sources_flag(self):
+        """fetch_source.py must offer --apt-sources and refuse ambient apt."""
+        content = (LINUX_DIR / "fetch_source.py").read_text(
+            encoding="utf-8", errors="replace")
+        self.assertIn('"--apt-sources"', content)
+        self.assertIn("def apt_config_options(", content)
+        self.assertIn("def apt_env(", content)
+        self.assertIn("def write_apt_bootstrap_conf(", content)
+        self.assertIn('env["APT_CONFIG"] = str(bootstrap_conf)', content)
+        self.assertNotIn('env["APT_CONFIG"] = "/dev/null"', content)
+
+    def test_no_insecure_apt_flags(self):
+        """No unauthenticated or trust-all apt flags."""
+        for name in ("collect-sources.sh", "fetch_source.py"):
+            content = (LINUX_DIR / name).read_text(
+                encoding="utf-8", errors="replace")
+            for flag in ("--allow-unauthenticated", "--allow-insecure-repositories",
+                         "--force-yes", "trusted=yes", "APT::Get::AllowUnauthenticated"):
+                self.assertNotIn(flag, content,
+                                 f"{name} must not disable apt signature checks")
 
     def test_archive_includes_fetch_source_helper(self):
         """The retrieval helper ships with the archived build recipes."""

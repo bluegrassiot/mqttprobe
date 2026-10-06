@@ -272,16 +272,18 @@ _bundle_font_libs() {
 _bundle_font_libs "$APPDIR" "$LINUXDEPLOY"
 
 # ── Step 6: Deploy-deps-only for each helper/injected/plugin ELF ────────────
+# Batch all --deploy-deps-only targets into a single linuxdeploy invocation.
+# Each invocation previously rescanned usr/bin and recursively usr/lib;
+# batching amortizes the full scan across all helpers/plugins.
 
 echo "=== Step 6: Deploy-deps-only for WebKit/GStreamer ELFs ==="
+_deploy_args=()
+
 deploy_deps_for_elf() {
     local elf="$1"
     if [[ ! -f "$elf" ]]; then return; fi
     if ! file "$elf" | grep -q "ELF"; then return; fi
-    "$LINUXDEPLOY" --appdir "$APPDIR" --deploy-deps-only "$elf" 2>&1 || {
-        echo "FATAL: linuxdeploy --deploy-deps-only failed for $(basename "$elf")"
-        exit 1
-    }
+    _deploy_args+=("--deploy-deps-only" "$elf")
 }
 
 for helper in "$APPDIR$WEBKIT_LIBDIR"/WebKit*; do
@@ -309,6 +311,13 @@ for gst_helper_dir in "$APPDIR"/usr/lib/gstreamer*/gstreamer-*; do
         done
     fi
 done
+
+if [[ "${#_deploy_args[@]}" -gt 0 ]]; then
+    "$LINUXDEPLOY" --appdir "$APPDIR" "${_deploy_args[@]}" 2>&1 || {
+        echo "FATAL: linuxdeploy --deploy-deps-only batch failed"
+        exit 1
+    }
+fi
 
 "$LINUXDEPLOY" --appdir "$APPDIR" \
     --executable "$APPDIR/usr/bin/MqttProbe.Desktop" \

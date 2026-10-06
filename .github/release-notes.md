@@ -10,6 +10,7 @@ Pick the desktop app if you want a window, or one of the web builds if you would
 |----------|-------------|
 | `MQTTProbe-win-Setup.exe` | Windows desktop app, recommended: installs per-user and auto-updates. Unsigned, so SmartScreen asks you to confirm. |
 | `mqttprobe-windows-{{VERSION}}.zip` | Windows desktop app, portable: the MAUI build with no installer. Unsigned, so SmartScreen asks you to confirm. |
+| `MQTTProbe-win-Portable.zip` | Windows desktop app, portable: the same MAUI app packaged by Velopack, nothing to install. Does not auto-update, so pick the installer if you want updates. Unsigned, so SmartScreen asks you to confirm. |
 | `MQTTProbe-osx-Setup.pkg` | macOS desktop app, recommended: universal Intel and Apple Silicon, signed and notarized, auto-updates. |
 | `MQTTProbe-osx-Portable.zip` | macOS desktop app, portable: signed and notarized, nothing to install. |
 | `MQTTProbe.AppImage` | Linux desktop app, recommended: bundles WebKit, GTK, and GStreamer, so it needs only `libfuse2` on Ubuntu 22.04+. Auto-updates. |
@@ -40,7 +41,7 @@ chmod +x MqttProbe.Desktop && ./MqttProbe.Desktop
 
 ### Windows
 
-Download `MQTTProbe-win-Setup.exe` for a per-user install with auto-updates, or `mqttprobe-windows-{{VERSION}}.zip` if you prefer a portable copy. Both are unsigned, so Windows SmartScreen shows a warning the first time: choose More info, then Run anyway.
+Download `MQTTProbe-win-Setup.exe` for a per-user install with auto-updates, or `mqttprobe-windows-{{VERSION}}.zip` if you prefer a portable copy. `MQTTProbe-win-Portable.zip` is the same app packaged by Velopack, which is what the installer is built from, and it does not auto-update. All three are unsigned, so Windows SmartScreen shows a warning the first time: choose More info, then Run anyway.
 
 ### Linux
 
@@ -55,5 +56,9 @@ Download the `.pkg` installer: it installs to Applications and enables in-app au
 ### Android
 
 Download the APK to your device and open it to install. Your browser asks you to allow installing unknown apps the first time, and Play Protect warns about apps from outside the Play Store: choose Install anyway.
+
+### Automatic updates
+
+Desktop downloads with automatic updates use [Velopack](https://github.com/velopack/velopack). Each desktop channel also ships the files its updater reads: the `RELEASES` index (`RELEASES-osx` and `RELEASES-linux` on macOS and Linux), the `releases.*.json` and `assets.*.json` feeds, and the `*.nupkg` full and delta packages. None of them is something to download or install. They are in the asset list because the updater fetches them by name.
 
 Read the [README](https://github.com/bluegrassiot/mqttprobe#readme) for configuration, broker setup, and plugin docs.

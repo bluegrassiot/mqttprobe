@@ -412,8 +412,8 @@ class TestCollectThirdPartySources(unittest.TestCase):
     def test_script_downloads_actual_source_archives(self):
         script = LINUX_DIR / "collect-sources.sh"
         content = script.read_text(encoding="utf-8", errors="replace")
-        self.assertIn("apt-get source", content)
-        self.assertIn("--download-only", content)
+        # Script delegates to fetch_source.py which uses apt-get internally
+        self.assertIn("fetch_source.py", content)
 
     def test_script_copies_actual_copyright_files(self):
         script = LINUX_DIR / "collect-sources.sh"
@@ -425,6 +425,69 @@ class TestCollectThirdPartySources(unittest.TestCase):
         script = LINUX_DIR / "collect-sources.sh"
         content = script.read_text(encoding="utf-8", errors="replace")
         self.assertIn("deb-src", content)
+
+    def test_deb_src_uses_https_ubuntu_mirrors(self):
+        """Source archives must come from HTTPS mirrors, never plain http."""
+        content = (LINUX_DIR / "collect-sources.sh").read_text(
+            encoding="utf-8", errors="replace")
+        self.assertIn("https://archive.ubuntu.com/ubuntu/", content)
+        self.assertIn("https://security.ubuntu.com/ubuntu/", content)
+        # Any remaining http:// mirror would fail the secret/injection scan
+        # and would let source payloads travel unauthenticated.
+        self.assertNotIn("http://", content,
+                         "deb-src configuration must not use plain http://")
+
+    def test_deb_src_covers_release_updates_and_security(self):
+        content = (LINUX_DIR / "collect-sources.sh").read_text(
+            encoding="utf-8", errors="replace")
+        self.assertIn("Suites: ${CODENAME} ${CODENAME}-updates", content)
+        self.assertIn("Suites: ${CODENAME}-security", content)
+
+    def test_deb_src_pins_ubuntu_archive_keyring(self):
+        """Signed-By must name the Ubuntu archive keyring."""
+        content = (LINUX_DIR / "collect-sources.sh").read_text(
+            encoding="utf-8", errors="replace")
+        self.assertIn("Signed-By: ${APT_KEYRING}", content)
+        self.assertIn("ubuntu-archive-keyring.gpg", content)
+
+    def test_does_not_mutate_thirdparty_apt_sources(self):
+        """Only the script-owned file may be written; shared config is untouched."""
+        content = (LINUX_DIR / "collect-sources.sh").read_text(
+            encoding="utf-8", errors="replace")
+        self.assertNotIn("sed -i", content,
+                         "Must not rewrite third-party .list/.sources files")
+        # The only apt file the script writes is its own.
+        self.assertIn('DEB822_FILE="$APT_SOURCES_DIR/mqttprobe-${CODENAME}-deb-src.sources"',
+                      content)
+
+    def test_apt_update_failure_is_fatal(self):
+        """A failed apt-get update must abort, not warn and continue."""
+        import re
+        content = (LINUX_DIR / "collect-sources.sh").read_text(
+            encoding="utf-8", errors="replace")
+        match = re.search(r"apt-get update[^\n]*\n(.{0,300})", content,
+                          re.DOTALL)
+        self.assertIsNotNone(match, "apt-get update invocation not found")
+        block = match.group(1)
+        self.assertIn("FATAL", block,
+                      "apt-get update failure must be reported as FATAL")
+        self.assertIn("exit 1", block,
+                      "apt-get update failure must abort with non-zero exit")
+
+    def test_overwrites_owned_deb_src_config(self):
+        """Owned config is rewritten unconditionally, not trusted by filename."""
+        content = (LINUX_DIR / "collect-sources.sh").read_text(
+            encoding="utf-8", errors="replace")
+        self.assertNotIn('if [ ! -f "$DEB822_FILE" ]', content,
+                         "Must not skip writing owned config when file exists")
+        self.assertIn('$SUDO tee "$DEB822_FILE"', content)
+
+    def test_archive_includes_fetch_source_helper(self):
+        """The retrieval helper ships with the archived build recipes."""
+        content = (LINUX_DIR / "collect-sources.sh").read_text(
+            encoding="utf-8", errors="replace")
+        self.assertIn('cp "$SCRIPT_DIR/fetch_source.py" "$RECIPES_LINUX/"',
+                      content)
 
     def test_script_includes_webkit_modification_notice(self):
         script = LINUX_DIR / "collect-sources.sh"

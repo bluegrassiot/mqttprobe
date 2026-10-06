@@ -25,6 +25,46 @@ LINUX_DIR = PACKAGING_DIR / "linux"
 SCRATCH_DIR = Path(os.environ.get("LOCALAPPDATA", "")) / "Temp" / "opencode"
 
 
+class TestFetchSourceRetrievalGuards(unittest.TestCase):
+    """Structural guards in the exact-version source fetcher."""
+
+    def setUp(self) -> None:
+        self.content = (LINUX_DIR / "fetch_source.py").read_text(
+            encoding="utf-8", errors="replace")
+
+    def test_requests_source_only(self):
+        """apt must be asked for source only, never binaries."""
+        self.assertIn("--only-source", self.content)
+
+    def test_pins_exact_version(self):
+        self.assertIn('f"{source}={version}"', self.content)
+
+    def test_verifies_identity_and_checksums(self):
+        """Both retrieval paths share the same verification."""
+        self.assertIn("verify_dsc_identity", self.content)
+        self.assertIn("def _validate_downloaded_package", self.content)
+        # Shared validator is used by apt as well as Launchpad.
+        self.assertIn("_validate_downloaded_package(", self.content)
+
+    def test_isolates_failed_downloads(self):
+        """A failed apt run must not leave files behind for the fallback."""
+        self.assertIn("tempfile.mkdtemp", self.content)
+        self.assertIn("shutil.rmtree", self.content)
+
+    def test_enforces_https_and_host_allowlist(self):
+        self.assertIn("https", self.content)
+        self.assertIn("launchpadlibrarian.net", self.content)
+        self.assertIn("_ALLOWED_HOSTS", self.content)
+
+    def test_bounds_descriptor_and_total_budget(self):
+        self.assertIn("_MAX_DSC_BYTES", self.content)
+        self.assertIn("_MAX_TOTAL_BYTES", self.content)
+        self.assertIn("_TOTAL_DEADLINE_SECONDS", self.content)
+
+    def test_rejects_unsafe_payload_paths(self):
+        self.assertIn("_SAFE_FILENAME_RE", self.content)
+
+
 class TestCollectorNaming(unittest.TestCase):
     def test_archive_name_pattern(self):
         version = "1.0.6"

@@ -90,20 +90,52 @@ rm -rf "$PHOTINO_DIR/.git"
 cd "$WORK_DIR"
 
 # ── 2. Enable deb-src repositories ──────────────────────────────────────────
+#
+# Only a script-owned deb822 file is written.  Third-party .list/.sources
+# files are never edited: rewriting shared apt configuration would mutate
+# the build host's state for unrelated suites and can break apt itself.
+# APT_SOURCES_DIR exists so tests can redirect this to a temp directory.
 
 echo ""
-echo "=== Enabling deb-src repositories ==="
+echo "=== Configuring deb-src repositories ==="
 if [ "$(id -u)" -eq 0 ]; then
     SUDO=""
 else
     SUDO="sudo"
 fi
 
-$SUDO sed -i 's/^# deb-src /deb-src /' /etc/apt/sources.list 2>/dev/null || true
-for f in /etc/apt/sources.list.d/*.list; do
-    [ -f "$f" ] && $SUDO sed -i 's/^# deb-src /deb-src /' "$f" 2>/dev/null || true
-done
-$SUDO apt-get update -qq 2>&1 || { echo "WARNING: apt-get update failed, source packages may be unavailable"; }
+# MQTTProbe ships an Ubuntu 22.04 AppImage, so the source baseline is jammy.
+# Do not probe the running host: a non-jammy build host must not silently
+# change which source versions get archived.
+CODENAME="jammy"
+APT_SOURCES_DIR="${APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
+APT_KEYRING="${APT_KEYRING:-/usr/share/keyrings/ubuntu-archive-keyring.gpg}"
+
+DEB822_FILE="$APT_SOURCES_DIR/mqttprobe-${CODENAME}-deb-src.sources"
+mkdir -p "$APT_SOURCES_DIR" 2>/dev/null || $SUDO mkdir -p "$APT_SOURCES_DIR"
+
+# Overwrite unconditionally so the file always holds known-good contents
+# rather than whatever a previous run (or filename collision) left behind.
+echo "Writing deterministic deb-src configuration for $CODENAME..."
+$SUDO tee "$DEB822_FILE" > /dev/null << DEBSRC_EOF
+Types: deb-src
+URIs: https://archive.ubuntu.com/ubuntu/
+Suites: ${CODENAME} ${CODENAME}-updates
+Components: main restricted universe multiverse
+Signed-By: ${APT_KEYRING}
+
+Types: deb-src
+URIs: https://security.ubuntu.com/ubuntu/
+Suites: ${CODENAME}-security
+Components: main restricted universe multiverse
+Signed-By: ${APT_KEYRING}
+DEBSRC_EOF
+
+echo "Running apt-get update..."
+$SUDO apt-get update -qq 2>&1 || {
+    echo "FATAL: apt-get update failed, source packages unavailable"
+    exit 1
+}
 
 # ── 3. Parse bundled packages from manifest (REQUIRED, no fallback) ──────────
 
@@ -204,6 +236,7 @@ echo "=== Downloading source archives ==="
 SOURCES_DIR="$COLLECT_DIR/ubuntu-sources"
 mkdir -p "$SOURCES_DIR"
 
+FETCH_SCRIPT="$SCRIPT_DIR/fetch_source.py"
 DOWNLOADED=0
 FAILED=0
 FAIL_LIST=""
@@ -211,8 +244,11 @@ FAIL_LIST=""
 for src_name in "${!SOURCE_PACKAGES[@]}"; do
     src_ver="${SOURCE_PACKAGES[$src_name]}"
     echo "  Downloading: $src_name=$src_ver"
+    pkg_dir="$SOURCES_DIR/$src_name"
+    mkdir -p "$pkg_dir"
 
-    if (cd "$SOURCES_DIR" && apt-get source --download-only "$src_name=$src_ver" 2>&1); then
+    # Try Python fetcher (apt-get first, then Launchpad fallback)
+    if python3 "$FETCH_SCRIPT" "$src_name" "$src_ver" --dest "$pkg_dir" 2>&1; then
         DOWNLOADED=$((DOWNLOADED + 1))
     else
         echo "  ERROR: Failed to download source for $src_name=$src_ver"
@@ -317,6 +353,7 @@ mkdir -p "$RECIPES_LINUX/vendor" "$RECIPES_WORKFLOW"
 cp "$SCRIPT_DIR/appdir.sh" "$RECIPES_LINUX/"
 cp "$SCRIPT_DIR/rebuild-photino.sh" "$RECIPES_LINUX/"
 cp "$SCRIPT_DIR/collect-sources.sh" "$RECIPES_LINUX/"
+cp "$SCRIPT_DIR/fetch_source.py" "$RECIPES_LINUX/"
 cp "$SCRIPT_DIR/manifest.py" "$RECIPES_LINUX/"
 cp "$SCRIPT_DIR/notices.py" "$RECIPES_LINUX/"
 cp "$SCRIPT_DIR/verify.py" "$RECIPES_LINUX/"

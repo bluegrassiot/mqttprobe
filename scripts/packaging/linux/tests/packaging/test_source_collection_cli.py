@@ -7,14 +7,15 @@ copyright processing, and manifest parsing without network access.
 Must run on Linux (Ubuntu) with bash and tar available.  On non-Linux
 hosts every test is skipped (the script is bash-only).
 
-Test inventory (16 tests):
-  TestCollectorArchiveLayout   — 4  (archive tree structure)
+Test inventory:
+  TestCollectorArchiveLayout   — 5  (archive tree structure + fetch_source inclusion)
   TestCollectorCopyright       — 3  (arch stripping, fail on missing)
-  TestCollectorErrorHandling   — 4  (missing manifest, bad versions)
+  TestCollectorErrorHandling   — 5  (missing manifest, bad versions, apt update fatal)
   TestCollectorManifestParsing — 3  (section parsing, empty manifest)
   TestNoticesCliRejection      — 2  (unknown ELF rejection via CLI)
 """
 
+import hashlib
 import os
 import shutil
 import subprocess
@@ -44,15 +45,18 @@ def _make_manifest(path: Path, lines: list[str]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _make_stubs(tmpdir: Path) -> Path:
-    """Create stub executables for git, apt-get, and sed.
+def _make_stubs(tmpdir: Path, apt_update_fails: bool = False) -> Path:
+    """Create stub executables for git, apt-get, sudo, tee, and sed.
 
     git:      clone/fetch/checkout/rev-parse → minimal Photino-like tree
     apt-get:  source --download-only         → valid .dsc/.orig/.debian fixtures
+              update                         → no-op (or fail if apt_update_fails)
+    sudo:     pass-through (execute the command that follows)
+    tee:      write stdin to the given file
     sed:      no-op (deb-src enablement)
     """
     stubs = tmpdir / "stubs"
-    stubs.mkdir()
+    stubs.mkdir(parents=True)
 
     (stubs / "git").write_text(textwrap.dedent("""\
         #!/usr/bin/env bash
@@ -68,21 +72,77 @@ def _make_stubs(tmpdir: Path) -> Path:
     """), encoding="utf-8")
     (stubs / "git").chmod(0o755)
 
-    (stubs / "apt-get").write_text(textwrap.dedent("""\
+    apt_update_rc = "exit 1" if apt_update_fails else "exit 0"
+
+    # Built with a placeholder instead of an f-string so the bash body needs
+    # no brace escaping and every line keeps the same indent (dedent-safe).
+    apt_stub = textwrap.dedent("""\
         #!/usr/bin/env bash
-        if [[ "$1" == "source" && "$2" == "--download-only" ]]; then
-            spec="$3"
+        set -u
+        if [ "${1:-}" = "source" ]; then
+            # Find the name=version spec by position, not a fixed index:
+            # flags such as --download-only/--only-source may come first.
+            spec=""
+            for arg in "$@"; do
+                case "$arg" in
+                    *=*) spec="$arg"; break ;;
+                esac
+            done
+            if [ -z "$spec" ]; then echo "E: no source spec" >&2; exit 1; fi
             name="${spec%%=*}"
             ver="${spec#*=}"
-            touch "${name}_${ver}.dsc"
-            touch "${name}_${ver}.orig.tar.gz"
-            touch "${name}_${ver}.debian.tar.xz"
+            # Descriptor name uses the upstream version (epoch dropped), while
+            # the Version field keeps the epoch.
+            file_ver="${ver#*:}"
+            orig_name="${name}_${file_ver}.orig.tar.gz"
+            deb_name="${name}_${file_ver}.debian.tar.xz"
+            # Real payload bytes so fetch_source.py SHA256/size checks pass.
+            printf 'orig' > "$orig_name"
+            printf 'debian' > "$deb_name"
+            {
+                printf 'Format: 3.0 (quilt)\\n'
+                printf 'Source: %s\\n' "$name"
+                printf 'Version: %s\\n' "$ver"
+                printf 'Checksums-Sha256:\\n'
+                printf ' %s 4 %s\\n' "$(printf 'orig' | sha256sum | cut -d' ' -f1)" "$orig_name"
+                printf ' %s 6 %s\\n' "$(printf 'debian' | sha256sum | cut -d' ' -f1)" "$deb_name"
+            } > "${name}_${file_ver}.dsc"
             exit 0
         fi
-        # apt-get update → no-op
+        if [ "${1:-}" = "update" ]; then
+            __APT_UPDATE_RC__
+        fi
         exit 0
-    """), encoding="utf-8")
+    """).replace("__APT_UPDATE_RC__", apt_update_rc)
+    (stubs / "apt-get").write_text(apt_stub, encoding="utf-8")
     (stubs / "apt-get").chmod(0o755)
+
+    # sudo: pass-through — execute the command after "sudo"
+    (stubs / "sudo").write_text(textwrap.dedent("""\
+        #!/usr/bin/env bash
+        exec "$@"
+    """), encoding="utf-8")
+    (stubs / "sudo").chmod(0o755)
+
+    # tee: write stdin to the file argument (for deb-src config creation)
+    (stubs / "tee").write_text(textwrap.dedent("""\
+        #!/usr/bin/env bash
+        # Find the file argument (after any flags)
+        target=""
+        for arg in "$@"; do
+            case "$arg" in
+                -*) ;;
+                *) target="$arg"; break ;;
+            esac
+        done
+        if [[ -n "$target" ]]; then
+            mkdir -p "$(dirname "$target")"
+            cat > "$target"
+        else
+            cat > /dev/null
+        fi
+    """), encoding="utf-8")
+    (stubs / "tee").chmod(0o755)
 
     (stubs / "sed").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     (stubs / "sed").chmod(0o755)
@@ -91,9 +151,21 @@ def _make_stubs(tmpdir: Path) -> Path:
 
 
 def _run_collector(
-    manifest: Path, output: Path, stubs: Path
+    manifest: Path, output: Path, stubs: Path,
+    apt_sources_dir: Path | None = None,
+    extra_env: dict | None = None,
 ) -> subprocess.CompletedProcess:
+    # Redirect the script-owned apt config into a temp directory so tests
+    # never read or write the real /etc/apt tree, and stub apt-get so no
+    # network fetch or privileged package operation ever happens.  Defaults
+    # to a directory beside --output-dir, which every test owns and cleans up.
     env = {**os.environ, "PATH": f"{stubs}:{os.environ.get('PATH', '')}"}
+    apt_dir = apt_sources_dir or (output.parent / "apt-sources.d")
+    apt_dir.mkdir(parents=True, exist_ok=True)
+    env["APT_SOURCES_DIR"] = str(apt_dir)
+    env["APT_KEYRING"] = str(apt_dir / "ubuntu-archive-keyring.gpg")
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(
         [
             "bash",
@@ -162,6 +234,16 @@ class TestCollectorArchiveLayout(unittest.TestCase):
         self.assertTrue(
             any("build-recipes/scripts/packaging/linux/appdir.sh" in n for n in names),
             f"appdir.sh not at expected path. First entries: {names[:20]}",
+        )
+
+    def test_archive_contains_fetch_source_in_recipes(self):
+        """fetch_source.py must be under build-recipes/scripts/packaging/linux/."""
+        r, tar_path = self._run_with_real_pkg()
+        self.assertEqual(r.returncode, 0, f"Script failed:\n{r.stderr}\n{r.stdout}")
+        names = self._tar_names(tar_path)
+        self.assertTrue(
+            any("build-recipes/scripts/packaging/linux/fetch_source.py" in n for n in names),
+            f"fetch_source.py not in build-recipes. Entries: {names[:20]}",
         )
 
     def test_archive_contains_vendor_under_recipes(self):
@@ -265,7 +347,7 @@ class TestCollectorCopyright(unittest.TestCase):
 
 
 class TestCollectorErrorHandling(unittest.TestCase):
-    """Error conditions: missing manifest, bad versions."""
+    """Error conditions: missing manifest, bad versions, apt update failure."""
 
     def setUp(self) -> None:
         _skip_unless_linux()
@@ -277,9 +359,20 @@ class TestCollectorErrorHandling(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
+    def _env(self) -> dict:
+        """Isolated env: stubbed tools plus a temp APT_SOURCES_DIR."""
+        apt_dir = self.tmpdir / "apt-sources.d"
+        apt_dir.mkdir(parents=True, exist_ok=True)
+        return {
+            **os.environ,
+            "PATH": f"{self.stubs}:{os.environ.get('PATH', '')}",
+            "APT_SOURCES_DIR": str(apt_dir),
+            "APT_KEYRING": str(apt_dir / "ubuntu-archive-keyring.gpg"),
+        }
+
     def test_missing_manifest_flag_exits(self):
         """--manifest required; must exit before git operations."""
-        env = {**os.environ, "PATH": f"{self.stubs}:{os.environ.get('PATH', '')}"}
+        env = self._env()
         r = subprocess.run(
             [
                 "bash", str(LINUX_DIR / "collect-sources.sh"),
@@ -292,7 +385,7 @@ class TestCollectorErrorHandling(unittest.TestCase):
 
     def test_nonexistent_manifest_file_exits(self):
         """Non-existent manifest path must exit with error."""
-        env = {**os.environ, "PATH": f"{self.stubs}:{os.environ.get('PATH', '')}"}
+        env = self._env()
         r = subprocess.run(
             [
                 "bash", str(LINUX_DIR / "collect-sources.sh"),
@@ -326,6 +419,23 @@ class TestCollectorErrorHandling(unittest.TestCase):
         r = _run_collector(manifest, self.output, self.stubs)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("conflicting", (r.stdout + r.stderr).lower())
+
+    def test_apt_update_failure_is_fatal(self):
+        """apt-get update failure must be fatal, not a warning."""
+        # Use stubs where apt-get update fails
+        stubs = _make_stubs(self.tmpdir / "fail-stubs", apt_update_fails=True)
+        manifest = self.tmpdir / "manifest.txt"
+        ver = _get_real_pkg_version("libc6") or "2.35-0ubuntu3"
+        _make_manifest(manifest, [
+            "# Test", "## System Packages", "",
+            f"libc6 | {ver} | glibc | {ver} | 1",
+        ])
+        r = _run_collector(manifest, self.output, stubs)
+        self.assertNotEqual(r.returncode, 0,
+                            "apt-get update failure must be fatal")
+        combined = (r.stdout + r.stderr).lower()
+        self.assertIn("fatal", combined,
+                      "Must say FATAL not WARNING for apt update failure")
 
 
 # ── TestCollectorManifestParsing ────────────────────────────────────────────
@@ -376,7 +486,6 @@ class TestCollectorManifestParsing(unittest.TestCase):
         ])
         r = _run_collector(self.manifest, self.output, self.stubs)
         self.assertEqual(r.returncode, 0, r.stderr)
-        # Verify the version file was written with parsed values
         tar_path = self.output / "mqttprobe-third-party-sources-v1.0.6.tar.gz"
         self.assertTrue(tar_path.exists())
         with tarfile.open(tar_path) as tf:
@@ -406,12 +515,10 @@ class TestNoticesCliRejection(unittest.TestCase):
         bindir = appdir / "usr" / "bin"
         bindir.mkdir(parents=True)
 
-        # Fake MqttProbe.Desktop (ELF magic + padding, skipped by _APP_BINARIES)
         (bindir / "MqttProbe.Desktop").write_bytes(b"\x7fELF" + b"\x00" * 64)
         (bindir / "MqttProbe.Desktop").chmod(0o755)
 
         if with_unknown_elf:
-            # Unknown ELF not owned by any package or vendor list
             (bindir / "libunknown-foo.so").write_bytes(b"\x7fELF" + b"\x00" * 64)
 
         return appdir

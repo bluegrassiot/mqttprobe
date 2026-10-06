@@ -279,12 +279,14 @@ class TestSystemPathCandidates(unittest.TestCase):
             "/usr/lib/x86_64-linux-gnu/libgtk-3.so.0",
             "/lib/x86_64-linux-gnu/libgtk-3.so.0",
             "/usr/lib/libgtk-3.so.0",
+            "/lib/libgtk-3.so.0",
         ])
 
     def test_single_candidate_for_preserved_path(self):
         candidates = _system_path_candidates("usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/libwebkit2gtk-4.1.so.0")
         self.assertEqual(candidates, [
             "/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/libwebkit2gtk-4.1.so.0",
+            "/lib/x86_64-linux-gnu/webkit2gtk-4.1/libwebkit2gtk-4.1.so.0",
         ])
 
     def test_single_candidate_for_usr_bin(self):
@@ -301,21 +303,20 @@ class TestDpkgParsing(unittest.TestCase):
     def test_simple_package_format(self, mock_run):
         mock_run.side_effect = [
             MagicMock(returncode=0, stdout="libgtk-3-0: /usr/lib/x86_64-linux-gnu/libgtk-3.so.0\n"),
-            MagicMock(stdout="3.24.33-1ubuntu2\n"),
-            MagicMock(stdout="gtk+3.0\n"),
-            MagicMock(stdout="3.24.33-1ubuntu2\n"),
+            MagicMock(returncode=0, stdout="3.24.33-1ubuntu2\tgtk+3.0\t3.24.33-1ubuntu2\n"),
         ]
         result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libgtk-3.so.0")
         self.assertIsNotNone(result)
         self.assertEqual(result.binary_package, "libgtk-3-0")
+        self.assertEqual(result.binary_version, "3.24.33-1ubuntu2")
+        self.assertEqual(result.source_package, "gtk+3.0")
+        self.assertEqual(result.source_version, "3.24.33-1ubuntu2")
 
     @patch("manifest.subprocess.run")
     def test_multiarch_package_format(self, mock_run):
         mock_run.side_effect = [
             MagicMock(returncode=0, stdout="libgtk-3-0:amd64: /usr/lib/x86_64-linux-gnu/libgtk-3.so.0\n"),
-            MagicMock(stdout="3.24.33-1ubuntu2\n"),
-            MagicMock(stdout="gtk+3.0\n"),
-            MagicMock(stdout="3.24.33-1ubuntu2\n"),
+            MagicMock(returncode=0, stdout="3.24.33-1ubuntu2\tgtk+3.0\t3.24.33-1ubuntu2\n"),
         ]
         result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libgtk-3.so.0")
         self.assertIsNotNone(result)
@@ -340,9 +341,7 @@ class TestDpkgParsing(unittest.TestCase):
     def test_consolidates_source_version(self, mock_run):
         mock_run.side_effect = [
             MagicMock(returncode=0, stdout="libnotify4:amd64: /usr/lib/x86_64-linux-gnu/libnotify.so.4\n"),
-            MagicMock(stdout="0.7.9-3ubuntu5\n"),
-            MagicMock(stdout="libnotify\n"),
-            MagicMock(stdout="0.7.9-3ubuntu5\n"),
+            MagicMock(returncode=0, stdout="0.7.9-3ubuntu5\tlibnotify\t0.7.9-3ubuntu5\n"),
         ]
         result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libnotify.so.4")
         self.assertIsNotNone(result)
@@ -350,15 +349,92 @@ class TestDpkgParsing(unittest.TestCase):
         self.assertEqual(result.source_version, "0.7.9-3ubuntu5")
 
     @patch("manifest.subprocess.run")
-    def test_basename_fallback_for_subdirectory_libs(self, mock_run):
+    def test_ambiguous_ownership_raises(self, mock_run):
+        """Multiple different packages owning same path must raise."""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="pkg-a:amd64: /usr/lib/x86_64-linux-gnu/libfoo.so\npkg-b:amd64: /usr/lib/x86_64-linux-gnu/libfoo.so\n",
+        )
+        with self.assertRaises(ValueError) as ctx:
+            _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libfoo.so")
+        self.assertIn("Ambiguous", str(ctx.exception))
+
+    @patch("manifest.subprocess.run")
+    def test_metadata_failure_raises(self, mock_run):
+        """dpkg-query metadata failure must raise, not silently substitute."""
         mock_run.side_effect = [
-            MagicMock(returncode=1, stdout=""),
-            MagicMock(returncode=0, stdout="libpulse0:amd64: /usr/lib/x86_64-linux-gnu/pulseaudio/libpulsecommon-15.99.so\n"),
-            MagicMock(stdout="15.99.1-0ubuntu3\n"),
-            MagicMock(stdout="pulseaudio\n"),
-            MagicMock(stdout="15.99.1-0ubuntu3\n"),
+            MagicMock(returncode=0, stdout="libfoo:amd64: /usr/lib/x86_64-linux-gnu/libfoo.so\n"),
+            MagicMock(returncode=1, stdout="", stderr="error"),
         ]
-        result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libpulsecommon-15.99.so")
+        with self.assertRaises(ValueError) as ctx:
+            _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libfoo.so")
+        self.assertIn("metadata failed", str(ctx.exception))
+
+    @patch("manifest.subprocess.run")
+    def test_metadata_empty_field_raises(self, mock_run):
+        """Empty metadata fields must raise, not substitute defaults."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="libfoo:amd64: /usr/lib/x86_64-linux-gnu/libfoo.so\n"),
+            MagicMock(returncode=0, stdout="1.0\t\t1.0\n"),  # empty source:Package
+        ]
+        with self.assertRaises(ValueError) as ctx:
+            _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libfoo.so")
+        self.assertIn("empty metadata", str(ctx.exception))
+
+    @patch("manifest.subprocess.run")
+    def test_epoch_preserved_in_source_version(self, mock_run):
+        """Epochs must be preserved verbatim."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="libssl3:amd64: /usr/lib/x86_64-linux-gnu/libssl.so.3\n"),
+            MagicMock(returncode=0, stdout="3.0.2-0ubuntu1.29\topenssl\t3.0.2-0ubuntu1.29\n"),
+        ]
+        result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libssl.so.3")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.source_version, "3.0.2-0ubuntu1.29")
+
+    @patch("manifest.subprocess.run")
+    def test_binary_source_version_distinct(self, mock_run):
+        """Binary and source versions can differ."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="libfoo:amd64: /usr/lib/x86_64-linux-gnu/libfoo.so\n"),
+            MagicMock(returncode=0, stdout="1.2.3-1ubuntu1\tfoo-src\t1.2.3-1ubuntu2\n"),
+        ]
+        result = _query_dpkg_owner("/usr/lib/x86_64-linux-gnu/libfoo.so")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.binary_version, "1.2.3-1ubuntu1")
+        self.assertEqual(result.source_version, "1.2.3-1ubuntu2")
+
+    @patch("manifest._is_elf", return_value=True)
+    @patch("manifest._query_dpkg_owner")
+    def test_relocation_finds_subdirectory_lib(self, mock_owner, mock_elf):
+        """Native .so in subdirectory found via relocation fallback."""
+        pulseaudio_pkg = SystemPackage(
+            binary_package="libpulse0",
+            binary_version="15.99.1-0ubuntu3",
+            source_package="pulseaudio",
+            source_version="15.99.1-0ubuntu3",
+            license_hint="",
+            bundled_files=[],
+        )
+        # All exact path queries fail, then relocation succeeds
+        mock_owner.side_effect = [
+            None,  # /usr/lib/x86_64-linux-gnu/libpulsecommon-15.99.so
+            None,  # /lib/x86_64-linux-gnu/libpulsecommon-15.99.so
+            None,  # /usr/lib/libpulsecommon-15.99.so
+            None,  # /lib/libpulsecommon-15.99.so
+            pulseaudio_pkg,  # relocated path
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            real_path = Path(td) / "usr" / "lib" / "x86_64-linux-gnu" / "pulseaudio"
+            real_path.mkdir(parents=True)
+            (real_path / "libpulsecommon-15.99.so").write_bytes(b"\x7fELF" + b"\x00" * 60)
+            with patch("manifest.os.walk") as mock_walk:
+                mock_walk.side_effect = [
+                    [(str(real_path), [], ["libpulsecommon-15.99.so"])],
+                    [],
+                ]
+                from manifest import _query_dpkg_owner_with_relocation
+                result = _query_dpkg_owner_with_relocation("usr/lib/libpulsecommon-15.99.so")
         self.assertIsNotNone(result)
         self.assertEqual(result.binary_package, "libpulse0")
 

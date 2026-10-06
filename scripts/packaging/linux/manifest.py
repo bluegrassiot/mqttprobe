@@ -12,6 +12,8 @@ Not a standalone script; no CLI, no side effects on import.
 """
 
 import fnmatch
+import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -88,6 +90,31 @@ def _is_elf(path: Path) -> bool:
         return False
 
 
+_SHARED_LIB_RE = re.compile(r"\.so(\.\d+)*$")
+
+# dpkg-query -S emits diversion annotations, not ownership records. Real
+# forms seen on Ubuntu include "diversion by <pkg> from: <path>",
+# "local diversion from: <path>" and "local diversion to: <path>".
+# Matched by prefix, not substring, so a real owner whose package or path
+# merely contains "diversion" still resolves.
+_DIVERSION_ANNOTATION_PREFIXES = ("diversion by ", "local diversion ")
+
+
+def _is_diversion_annotation(line: str) -> bool:
+    """True for a dpkg diversion annotation line."""
+    return line.startswith(_DIVERSION_ANNOTATION_PREFIXES)
+
+
+def _is_shared_lib_name(name: str) -> bool:
+    """True for native shared-library basenames.
+
+    Matches plain `.so` and numeric versioned `.so.N[.N...]` forms that
+    Ubuntu ships. Anchored so names like `foo.socket` or `libthing.sofoo`
+    are not shared libraries.
+    """
+    return _SHARED_LIB_RE.search(name) is not None
+
+
 def _classify_file(staged_path: str, appdir: Path) -> str:
     """Classify a bundled file by its type."""
     full = appdir / staged_path
@@ -97,13 +124,16 @@ def _classify_file(staged_path: str, appdir: Path) -> str:
         return "other"
     if _is_elf(full):
         # Check if it's a shared lib or executable
-        name = full.name
-        if ".so" in name or name.endswith(".so"):
+        if _is_shared_lib_name(full.name):
             return "shared-lib"
         return "ELF"
     if full.suffix in (".woff2", ".ttf", ".otf", ".woff"):
         return "font"
-    if full.suffix in (".xml", ".gschema.compiled", ".gresource"):
+    # Compound extensions: check full name for multi-part suffixes
+    name = full.name
+    if name.endswith((".gschema.compiled", ".gresource")):
+        return "config"
+    if full.suffix in (".xml",):
         return "config"
     if full.suffix in (".png", ".svg", ".ico", ".desktop"):
         return "resource"
@@ -133,16 +163,24 @@ def _system_path_candidates(staged_rel: str) -> list[str]:
 
     Tries the multiarch path first (most common on Ubuntu), then the plain
     path as fallback. On Ubuntu 22.04, /lib is a symlink to /usr/lib but
-    dpkg tracks the canonical /lib/ path, so both are tried.
+    dpkg tracks the canonical /lib/ path, so both are tried.  Preserved
+    multiarch paths also get a /lib counterpart for usr-merge coverage.
     """
     if staged_rel.startswith("usr/lib/"):
         if "x86_64-linux-gnu" in staged_rel:
-            return ["/" + staged_rel]
+            # Preserved multiarch: also try /lib counterpart
+            lib_counterpart = staged_rel.replace(
+                "usr/lib/x86_64-linux-gnu",
+                "lib/x86_64-linux-gnu",
+                1,
+            )
+            return ["/" + staged_rel, "/" + lib_counterpart]
         rest = staged_rel[len("usr/lib/"):]
         return [
             f"/usr/lib/x86_64-linux-gnu/{rest}",
             f"/lib/x86_64-linux-gnu/{rest}",
             f"/usr/lib/{rest}",
+            f"/lib/{rest}",
         ]
     if staged_rel.startswith("usr/"):
         return ["/" + staged_rel]
@@ -153,78 +191,166 @@ def _query_dpkg_owner(system_path: str) -> SystemPackage | None:
     """Query dpkg for the package that owns a given system path.
 
     Returns SystemPackage with binary+source version info, or None if
-    not owned by any package.  Uses rsplit(': ', 1) to handle multiarch
-    package names (e.g., "libfoo:amd64: /path").  Falls back to basename
-    search when the exact path is not tracked by dpkg (e.g., libs in
-    version-specific subdirectories like pulseaudio/).
-    """
-    # Try exact path first, then basename fallback
-    paths_to_try = [system_path]
-    basename = system_path.rsplit("/", 1)[-1] if "/" in system_path else ""
-    if basename:
-        paths_to_try.append(f"*/{basename}")
+    not owned by any package.  Raises ValueError on ambiguous ownership
+    or metadata query failures (fail-closed, not silent substitution).
 
-    for try_path in paths_to_try:
-        try:
-            result = subprocess.run(
-                ["dpkg-query", "-S", try_path],
-                capture_output=True, text=True, timeout=5,
-            )
-            if result.returncode != 0:
-                continue
-            # Output format: "package: /path/to/file" or "package:amd64: /path"
-            # Use rsplit to correctly handle multiarch package names
-            line = result.stdout.strip().split("\n")[0]
-            if ": " not in line:
-                continue
-            pkg_part, _ = line.rsplit(": ", 1)
-            pkg_name = pkg_part.strip()
-            # Strip architecture suffix (e.g., "libfoo:amd64" -> "libfoo")
-            if ":" in pkg_name:
-                pkg_name = pkg_name.rsplit(":", 1)[0].strip()
-            if not pkg_name or "diverted" in pkg_name:
-                continue
-            break  # Found a valid package
-        except (OSError, subprocess.TimeoutExpired):
-            continue
-    else:
+    Parses ALL dpkg ownership lines, rejects diversions and ambiguity
+    (multiple different packages owning the same path), and queries
+    metadata using the arch-qualified owner name in a single invocation.
+    """
+    try:
+        result = subprocess.run(
+            ["dpkg-query", "-S", system_path],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+    except (OSError, subprocess.TimeoutExpired):
         return None
 
-    # Get binary version
-    try:
-        bin_ver = subprocess.run(
-            ["dpkg-query", "-W", "-f=${Version}", pkg_name],
-            capture_output=True, text=True, timeout=5,
-        ).stdout.strip()
-    except (OSError, subprocess.TimeoutExpired):
-        bin_ver = "unknown"
+    # Parse ALL ownership lines, filter for exact path match
+    owners: set[str] = set()
+    for line in result.stdout.strip().splitlines():
+        line = line.strip()
+        if not line or ": " not in line:
+            continue
+        # dpkg-query -S reports diversions as annotation lines rather than
+        # ownership records; they must not be parsed as package owners.
+        if _is_diversion_annotation(line):
+            continue
+        pkg_part, path_part = line.rsplit(": ", 1)
+        returned_path = path_part.strip()
+        # Only accept exact path matches
+        if returned_path != system_path:
+            continue
+        owners.add(pkg_part.strip())
 
-    # Get source package name
-    try:
-        src_name = subprocess.run(
-            ["dpkg-query", "-W", "-f=${source:Package}", pkg_name],
-            capture_output=True, text=True, timeout=5,
-        ).stdout.strip()
-    except (OSError, subprocess.TimeoutExpired):
-        src_name = pkg_name
+    if not owners:
+        return None
+    # Ambiguity: multiple different packages own the same path
+    if len(owners) > 1:
+        raise ValueError(
+            f"Ambiguous ownership for {system_path}: {owners}"
+        )
 
-    # Get source version
+    # Use arch-qualified owner for metadata query
+    full_pkg_name = next(iter(owners))
+
+    # Single metadata query with arch-qualified name
     try:
-        src_ver = subprocess.run(
-            ["dpkg-query", "-W", "-f=${source:Version}", pkg_name],
+        meta = subprocess.run(
+            ["dpkg-query", "-W",
+             "-f=${Version}\t${source:Package}\t${source:Version}",
+             full_pkg_name],
             capture_output=True, text=True, timeout=5,
-        ).stdout.strip()
-    except (OSError, subprocess.TimeoutExpired):
-        src_ver = bin_ver
+        )
+        if meta.returncode != 0:
+            raise ValueError(
+                f"dpkg-query metadata failed for {full_pkg_name}: "
+                f"rc={meta.returncode} stderr={meta.stderr.strip()!r}"
+            )
+        # Use rstrip to preserve leading/trailing empty tab-separated fields
+        parts = meta.stdout.rstrip("\n").split("\t")
+        if len(parts) != 3:
+            raise ValueError(
+                f"dpkg-query unexpected format for {full_pkg_name}: "
+                f"{meta.stdout.strip()!r}"
+            )
+        bin_ver, src_name, src_ver = parts
+        if not bin_ver or not src_name or not src_ver:
+            raise ValueError(
+                f"dpkg-query empty metadata for {full_pkg_name}: "
+                f"bin_ver={bin_ver!r} src_name={src_name!r} src_ver={src_ver!r}"
+            )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise ValueError(
+            f"dpkg-query metadata error for {full_pkg_name}: {e}"
+        ) from e
+
+    # Strip architecture suffix for binary_package name
+    pkg_name = full_pkg_name
+    if ":" in pkg_name:
+        pkg_name = pkg_name.rsplit(":", 1)[0].strip()
 
     return SystemPackage(
         binary_package=pkg_name,
         binary_version=bin_ver,
-        source_package=src_name or pkg_name,
-        source_version=src_ver or bin_ver,
+        source_package=src_name,
+        source_version=src_ver,
         license_hint="",
         bundled_files=[],
     )
+
+
+def _query_dpkg_owner_with_relocation(
+    staged_rel: str,
+    staged_is_native_lib: bool = True,
+) -> SystemPackage | None:
+    """Query dpkg owner with a restricted relocation fallback for native libs.
+
+    Exact system path candidates are always tried first, so resources
+    (fonts, schemas, typelibs) and preserved multiarch trees keep exact
+    ownership regardless of type.
+
+    Relocation is a second chance for a native shared library that
+    linuxdeploy flattened out of its host subdirectory.  Callers pass
+    staged_is_native_lib from the staged file's own classification so a
+    staged resource can never be claimed by a same-named host library.
+
+    usrmerge makes /lib/x86_64-linux-gnu an alias of /usr/lib/x86_64-linux-gnu,
+    so host matches are grouped by real path identity.  Alias twins collapse
+    into one group whose every textual spelling is retried, because dpkg may
+    track either form; two genuinely distinct host files stay rejected.
+    """
+    candidates = _system_path_candidates(staged_rel)
+    for candidate in candidates:
+        pkg = _query_dpkg_owner(candidate)
+        if pkg is not None:
+            return pkg
+
+    if not staged_is_native_lib:
+        return None
+
+    # Relocation fallback: native library flattened directly into usr/lib/.
+    # Nested staged paths (usr/lib/<dir>/<name>) keep exact-only lookup.
+    if not staged_rel.startswith("usr/lib/"):
+        return None
+    remainder = staged_rel[len("usr/lib/"):]
+    if "/" in remainder:
+        return None
+    if not _is_shared_lib_name(remainder):
+        return None
+
+    search_dirs = [
+        "/usr/lib/x86_64-linux-gnu",
+        "/lib/x86_64-linux-gnu",
+    ]
+    # real path -> every textual spelling that resolves to it
+    aliases_by_identity: dict[str, list[str]] = {}
+    for search_dir in search_dirs:
+        for root, _dirs, files in os.walk(search_dir):
+            if remainder not in files:
+                continue
+            full = os.path.join(root, remainder)
+            try:
+                identity = os.path.realpath(full)
+            except OSError:
+                identity = full
+            aliases_by_identity.setdefault(identity, []).append(full)
+
+    if not aliases_by_identity:
+        return None
+    # Two genuinely distinct host files: ambiguous, refuse to guess.
+    if len(aliases_by_identity) > 1:
+        return None
+
+    # Same underlying file under one or more aliases: try each spelling,
+    # since dpkg records ownership against either /usr/lib or /lib.
+    for alias in aliases_by_identity[next(iter(aliases_by_identity))]:
+        pkg = _query_dpkg_owner(alias)
+        if pkg is not None:
+            return pkg
+    return None
 
 
 # -- .NET runtime identification -----------------------------------------------
@@ -372,18 +498,19 @@ def generate_manifest(appdir: Path, build_date: str = "") -> PackageManifest:
         if is_vendor:
             continue
 
-        # Try candidate system paths for dpkg lookup
-        candidates = _system_path_candidates(bf.staged_path)
-        pkg = None
-        for candidate in candidates:
-            pkg = _query_dpkg_owner(candidate)
-            if pkg is not None:
-                break
+        # .NET runtime libs not in the static vendor list — check BEFORE
+        # system owner lookup to avoid host dpkg collisions
+        if _is_dotnet_runtime_file(bf.staged_path):
+            continue
+
+        # Exact ownership for every file type; relocation is offered only for
+        # staged native shared-library ELFs, decided from the staged bytes.
+        pkg = _query_dpkg_owner_with_relocation(
+            bf.staged_path,
+            staged_is_native_lib=bf.file_type in ("ELF", "shared-lib"),
+        )
 
         if pkg is None:
-            # .NET runtime libs not in the static vendor list
-            if _is_dotnet_runtime_file(bf.staged_path):
-                continue
             if bf.file_type in ("ELF", "shared-lib"):
                 manifest.unknown_files.append(bf.staged_path)
             continue

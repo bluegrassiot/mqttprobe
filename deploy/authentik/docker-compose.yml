@@ -1,0 +1,145 @@
+services:
+  postgresql:
+    image: docker.io/library/postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${PG_DB:-authentik}
+      POSTGRES_PASSWORD: ${PG_PASS:?database password required}
+      POSTGRES_USER: ${PG_USER:-authentik}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    volumes:
+      - database:/var/lib/postgresql/data
+    networks:
+      - authentik-net
+
+  server:
+    image: ghcr.io/goauthentik/server:2026.8
+    command: server
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?secret key required}
+      AUTHENTIK_WEB__BASE_URL: https://authentik.localhost:9443
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD}
+      MQTT_PROBE_CLIENT_SECRET: ${MQTT_PROBE_CLIENT_SECRET}
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:9000/-/health/live/')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+    volumes:
+      - ./blueprints:/blueprints/custom
+    networks:
+      - authentik-net
+
+  worker:
+    image: ghcr.io/goauthentik/server:2026.8
+    command: worker
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD}
+      MQTT_PROBE_CLIENT_SECRET: ${MQTT_PROBE_CLIENT_SECRET}
+    user: root
+    restart: unless-stopped
+    volumes:
+      - ./blueprints:/blueprints/custom
+    networks:
+      - authentik-net
+
+  mqttprobe:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    environment:
+      ASPNETCORE_HTTP_PORTS: "8080"
+      AllowedHosts: "*"
+      Authentication__Mode: OIDC
+      Authentication__Oidc__Authority: https://authentik.localhost:9443/application/o/mqttprobe/
+      Authentication__Oidc__ClientId: mqttprobe
+      Authentication__Oidc__ClientSecret: ${MQTT_PROBE_CLIENT_SECRET}
+      Authentication__Oidc__ProviderDisplayName: Authentik (local)
+      Authentication__Oidc__AdmissionClaim: mqttprobe_access
+      Authentication__Oidc__AcceptedValues__0: admin
+      Authentication__Oidc__PublicBaseUrl: https://localhost:5001
+      ForwardedHeaders__ForwardLimit: "1"
+      ForwardedHeaders__KnownNetworks__0: 172.30.0.0/16
+      SSL_CERT_FILE: /ca-bundle/ca-certificates.crt
+    depends_on:
+      ca-init:
+        condition: service_completed_successfully
+    volumes:
+      - ca-bundle:/ca-bundle:ro
+      # Persists DataProtection keys (dp-keys), secrets.dat, and per-deploy config
+      # across --force-recreate; without it, antiforgery/secret payloads fail to
+      # decrypt after the container image is rebuilt.
+      - mqttprobe-config:/app/config
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - authentik-net
+
+  ca-init:
+    image: alpine:3.23
+    entrypoint: ["/bin/sh", "/scripts/init-ca.sh"]
+    depends_on:
+      - caddy
+    volumes:
+      - caddy-data:/caddy-data:ro
+      - ca-bundle:/ca-bundle
+      - ./ca-init.sh:/scripts/init-ca.sh:ro
+    networks:
+      - authentik-net
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "127.0.0.1:9443:9443"
+      - "127.0.0.1:5001:5001"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      authentik-net:
+        aliases:
+          - authentik.localhost
+
+volumes:
+  database:
+    driver: local
+  caddy-data:
+  caddy-config:
+  ca-bundle:
+  mqttprobe-config:
+
+networks:
+  authentik-net:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16

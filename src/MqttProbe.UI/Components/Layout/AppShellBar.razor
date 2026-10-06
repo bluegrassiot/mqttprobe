@@ -4,7 +4,6 @@
 @inject IMessageStoreManager MessageStoreManagerService
 @inject IDialogService DialogService
 @inject IAppInfoService AppInfoService
-@inject NavigationManager NavigationManager
 @inject ISessionState SessionState
 @inject IConnectionSessionLifecycle SessionLifecycle
 @implements IAsyncDisposable
@@ -159,7 +158,7 @@
     {
         var options = new DialogOptions
         {
-            CloseOnEscapeKey = true,
+            CloseOnEscapeKey = false,
             MaxWidth = MaxWidth.Small,
             FullWidth = true
         };

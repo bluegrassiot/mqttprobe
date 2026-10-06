@@ -1,8 +1,6 @@
 using Microsoft.JSInterop;
 using Microsoft.JSInterop.Infrastructure;
 using MqttProbe.Desktop.Services;
-using NSubstitute;
-using NUnit.Framework;
 
 namespace MqttProbe.UI.Tests.Desktop;
 

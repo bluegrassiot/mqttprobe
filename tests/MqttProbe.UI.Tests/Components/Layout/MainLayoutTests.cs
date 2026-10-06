@@ -11,6 +11,7 @@ using MqttProbe.Core.Services.Plugins.BuiltIn;
 using MqttProbe.Core.Services.Plugins.Pipeline;
 using MqttProbe.Core.Services.Plugins.Registry;
 using MqttProbe.Core.Services.Security;
+using MqttProbe.UI.Components.Browser.Connection;
 using MqttProbe.UI.Components.Layout;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;

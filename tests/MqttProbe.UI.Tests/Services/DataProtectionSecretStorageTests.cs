@@ -1,12 +1,5 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
-using MqttProbe.Core.Services.Chart;
-using MqttProbe.Core.Services.Configuration;
-using MqttProbe.Core.Services.Metrics;
-using MqttProbe.Core.Services.Mqtt;
-using MqttProbe.Core.Services.Platform;
-using MqttProbe.Core.Services.Security;
-using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.Web.Services;
 
 namespace MqttProbe.UI.Tests.Services;

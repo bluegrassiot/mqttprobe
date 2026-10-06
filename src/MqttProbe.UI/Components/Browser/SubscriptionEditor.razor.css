@@ -1,9 +1,20 @@
 .subscription-editor {
-    flex: 1 1 auto;
-    min-height: 0;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: var(--mud-default-borderradius);
+    background: var(--mud-palette-surface);
     overflow: hidden;
+}
+
+.subscription-editor:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
+.subscription-editor ::deep .mud-expand-panel-header {
+    background: var(--mud-palette-action-default-hover);
 }
 
 .subscription-editor-add-row,
@@ -45,28 +56,21 @@
 }
 
 .subscription-editor-table-wrap {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
     margin-top: 8px;
 }
 
-.subscription-editor-table-wrap ::deep .mud-table {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
+.subscription-editor-table-wrap ::deep .mud-table,
+.subscription-editor-table-wrap ::deep .mud-table-container {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .subscription-editor-table-wrap ::deep .mud-table-container {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
+    overflow: visible;
 }
 
-.subscription-editor-table-wrap ::deep .mud-table-toolbar {
-    flex-shrink: 0;
-    gap: 8px;
+.subscription-editor-table-wrap ::deep td.metrics-mono {
+    white-space: normal;
+    overflow-wrap: anywhere;
 }

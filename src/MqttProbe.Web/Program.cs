@@ -1,10 +1,12 @@
 using System.Net;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.XmlEncryption;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Options;
 using MqttProbe.Core.Models.Plugins;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Platform;
@@ -13,6 +15,7 @@ using MqttProbe.Core.Services.Plugins.Packaging;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.UI.Services.Platform;
 using MqttProbe.Web;
+using MqttProbe.Web.Authentication;
 using MqttProbe.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,24 +26,128 @@ builder.Services.AddRazorPages();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddMqttProbeUi();
 
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+// Register TimeProvider.System
+builder.Services.AddSingleton(TimeProvider.System);
+
+// Determine mode once from bound startup config
+var authSection = builder.Configuration.GetSection(AuthenticationOptions.SectionName);
+var authOptions = authSection.Get<AuthenticationOptions>() ?? new AuthenticationOptions();
+var isOidc = string.Equals(authOptions.Mode, "OIDC", StringComparison.OrdinalIgnoreCase);
+
+// Bind Authentication options with validation
+builder.Services.Configure<AuthenticationOptions>(authSection);
+builder.Services.AddSingleton<IValidateOptions<AuthenticationOptions>, AuthenticationOptionsValidator>();
+builder.Services.AddOptions<AuthenticationOptions>()
+    .ValidateOnStart();
+
+// Register PublicOriginResolver
+builder.Services.AddSingleton(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<AuthenticationOptions>>().Value;
+    var allowedHosts = builder.Configuration.GetValue<string>("AllowedHosts");
+    return new PublicOriginResolver(options.Oidc.PublicBaseUrl, allowedHosts);
+});
+
+// Register DenialStateStore
+builder.Services.AddSingleton(sp =>
+{
+    var timeProvider = sp.GetRequiredService<TimeProvider>();
+    return new DenialStateStore(timeProvider);
+});
+
+// In OIDC mode, register OIDC circuit services BEFORE AddMqttProbeCore
+// so scoped RevocableSessionActivityGate/ISessionActivityGate/CircuitLease/
+// teardown/invalidator/notifier/CircuitHandler are production services.
+if (isOidc)
+{
+    builder.Services.AddOidcAuthentication(TimeSpan.FromHours(8));
+
+    // Register events and configurator for event wiring via IPostConfigureOptions
+    builder.Services.AddSingleton<OidcAuthenticationEvents>();
+    builder.Services.AddSingleton<AuthenticationConfigurator>();
+    builder.Services.AddSingleton<IPostConfigureOptions<CookieAuthenticationOptions>>(sp =>
+        sp.GetRequiredService<AuthenticationConfigurator>());
+    builder.Services.AddSingleton<IPostConfigureOptions<OpenIdConnectOptions>>(sp =>
+        sp.GetRequiredService<AuthenticationConfigurator>());
+}
+else
+{
+    // ForceLoginNotifier in Routes.razor injects ILoginNavigationNotifier unconditionally.
+    builder.Services.AddScoped<ILoginNavigationNotifier, LoginNavigationNotifier>();
+}
+
+// OIDC registered only when isOidc: middleware initializes every IAuthenticationRequestHandler even in Local mode, so unconfigured OIDC 500s.
+var authBuilder = builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
+        if (isOidc)
+        {
+            // OIDC mode: SameSite=Lax, absolute 8h, no sliding
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.ExpireTimeSpan = TimeSpan.FromHours(8);
+            options.SlidingExpiration = false;
+        }
+        else
+        {
+            // Local mode: preserve current behavior
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            options.Cookie.SameSite = SameSiteMode.Strict;
+            options.ExpireTimeSpan = TimeSpan.FromHours(8);
+            options.SlidingExpiration = true;
+        }
+
         options.LoginPath = "/Login";
         options.LogoutPath = "/Logout";
-        options.Cookie.HttpOnly = true;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-        options.Cookie.SameSite = SameSiteMode.Strict;
-        options.ExpireTimeSpan = TimeSpan.FromHours(8);
-        options.SlidingExpiration = true;
     });
+
+if (isOidc)
+{
+    authBuilder.AddOpenIdConnect(options =>
+    {
+        var oidc = authOptions.Oidc;
+
+        options.Authority = oidc.Authority;
+        options.ClientId = oidc.ClientId;
+        options.ClientSecret = oidc.ClientSecret;
+        options.ResponseType = "code";
+        options.UsePkce = true;
+        options.RequireHttpsMetadata = true;
+        options.MapInboundClaims = false;
+        // Clear all default claim actions so the minimal principal's six app claims
+        // survive the OIDC handler pipeline. OnTokenValidated builds the principal
+        // from the raw token payload; default mappings would delete or remap iss/sub/name.
+        options.ClaimActions.Clear();
+        options.GetClaimsFromUserInfoEndpoint = false;
+        options.SaveTokens = false;
+
+        // Scopes
+        options.Scope.Clear();
+        options.Scope.Add("openid");
+        options.Scope.Add("profile");
+
+        // Callback paths
+        options.CallbackPath = "/signin-oidc";
+        options.SignedOutCallbackPath = "/signout-callback-oidc";
+        options.RemoteSignOutPath = "/signout-oidc";
+
+        // Correlation/nonce cookies: SameSite=None + Secure
+        options.CorrelationCookie.SameSite = SameSiteMode.None;
+        options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.NonceCookie.SameSite = SameSiteMode.None;
+        options.NonceCookie.SecurePolicy = CookieSecurePolicy.Always;
+    });
+}
+
 builder.Services.AddAuthorization();
 builder.Services.AddRateLimiter(options => options.AddLoginRateLimitPolicy());
 
 var forwardedHeadersSection = builder.Configuration.GetSection("ForwardedHeaders");
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
     options.ForwardLimit = forwardedHeadersSection.GetValue<int?>("ForwardLimit") ?? 1;
 
     var knownProxies = forwardedHeadersSection.GetSection("KnownProxies").Get<string[]>() ?? [];
@@ -151,6 +258,13 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapGet("/health", () => Results.Text("OK", "text/plain")).AllowAnonymous();
+
+// Provider-initiated logout; separate from the OIDC middleware's /signout-oidc.
+if (isOidc)
+{
+    app.MapOidcBackChannelLogout();
+}
+
 app.MapRazorPages().RequireAuthorization();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()

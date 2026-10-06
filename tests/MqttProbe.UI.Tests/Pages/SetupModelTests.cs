@@ -5,10 +5,12 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.Pages;
+using AuthOptions = MqttProbe.Web.Authentication.AuthenticationOptions;
 
 namespace MqttProbe.UI.Tests.Pages;
 
@@ -30,7 +32,8 @@ public class SetupModelTests
         _mockUiSettings.Ui.Returns(new UiPreferences());
     }
 
-    private SetupModel Create() => new(_mockConfig, _mockAuth, _mockUiSettings);
+    private SetupModel Create(AuthOptions? authOptions = null)
+        => new(_mockConfig, _mockAuth, _mockUiSettings, Options.Create(authOptions ?? new AuthOptions()));
 
     private static PageContext PageContextWithAuth(IAuthenticationService authService)
     {
@@ -39,8 +42,10 @@ public class SetupModelTests
         return new PageContext { HttpContext = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() } };
     }
 
+    // ── Local mode ───────────────────────────────────────────────────────────
+
     [Test]
-    public void OnGet_NoPasswordHash_ReturnsPage()
+    public void OnGet_LocalMode_NoPasswordHash_ReturnsPage()
     {
         var config = new AppConfiguration { Auth = new Auth { PasswordHash = "" } };
         _mockConfig.Auth.Returns(config.Auth);
@@ -51,7 +56,7 @@ public class SetupModelTests
     }
 
     [Test]
-    public void OnGet_PasswordAlreadyConfigured_RedirectsToLogin()
+    public void OnGet_LocalMode_PasswordAlreadyConfigured_RedirectsToLogin()
     {
         var config = new AppConfiguration { Auth = new Auth { PasswordHash = "hashed" } };
         _mockConfig.Auth.Returns(config.Auth);
@@ -63,7 +68,7 @@ public class SetupModelTests
     }
 
     [Test]
-    public async Task OnPost_AlreadySetUp_RedirectsToLogin()
+    public async Task OnPost_LocalMode_AlreadySetUp_RedirectsToLogin()
     {
         var config = new AppConfiguration { Auth = new Auth { PasswordHash = "already-set" } };
         _mockConfig.Auth.Returns(config.Auth);
@@ -75,7 +80,7 @@ public class SetupModelTests
     }
 
     [Test]
-    public async Task OnPost_EmptyUsername_SetsErrorAndReturnsPage()
+    public async Task OnPost_LocalMode_EmptyUsername_SetsErrorAndReturnsPage()
     {
         var model = Create();
         var result = await model.OnPostAsync("", "pass", "pass");
@@ -85,7 +90,7 @@ public class SetupModelTests
     }
 
     [Test]
-    public async Task OnPost_WhitespaceUsername_SetsErrorAndReturnsPage()
+    public async Task OnPost_LocalMode_WhitespaceUsername_SetsErrorAndReturnsPage()
     {
         var model = Create();
         var result = await model.OnPostAsync("   ", "pass", "pass");
@@ -95,7 +100,7 @@ public class SetupModelTests
     }
 
     [Test]
-    public async Task OnPost_EmptyPassword_SetsErrorAndReturnsPage()
+    public async Task OnPost_LocalMode_EmptyPassword_SetsErrorAndReturnsPage()
     {
         var model = Create();
         var result = await model.OnPostAsync("admin", "", "");
@@ -105,7 +110,7 @@ public class SetupModelTests
     }
 
     [Test]
-    public async Task OnPost_PasswordMismatch_SetsErrorAndReturnsPage()
+    public async Task OnPost_LocalMode_PasswordMismatch_SetsErrorAndReturnsPage()
     {
         var model = Create();
         var result = await model.OnPostAsync("admin", "password1", "password2");
@@ -115,7 +120,7 @@ public class SetupModelTests
     }
 
     [Test]
-    public async Task OnPost_ValidData_CallsCreateUserAsync()
+    public async Task OnPost_LocalMode_ValidData_CallsCreateUserAsync()
     {
         _mockAuth.CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
             .Returns(new AuthServiceResult(true));
@@ -134,7 +139,7 @@ public class SetupModelTests
     }
 
     [Test]
-    public async Task OnPost_ValidData_SignsInAndRedirectsToRoot()
+    public async Task OnPost_LocalMode_ValidData_SignsInAndRedirectsToRoot()
     {
         _mockAuth.CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
             .Returns(new AuthServiceResult(true));
@@ -160,7 +165,7 @@ public class SetupModelTests
     }
 
     [Test]
-    public async Task OnPost_ValidData_UsesSessionCookieForFirstSession()
+    public async Task OnPost_LocalMode_ValidData_UsesSessionCookieForFirstSession()
     {
         _mockAuth.CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
             .Returns(new AuthServiceResult(true));
@@ -183,7 +188,7 @@ public class SetupModelTests
     }
 
     [Test]
-    public async Task OnPost_CreateUserFails_SetsErrorAndReturnsPage()
+    public async Task OnPost_LocalMode_CreateUserFails_SetsErrorAndReturnsPage()
     {
         _mockAuth.CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
             .Returns(new AuthServiceResult(false, "Not supported."));
@@ -196,7 +201,7 @@ public class SetupModelTests
     }
 
     [Test]
-    public async Task OnPost_CreateUserFailsWithMinLengthError_SetsErrorAndReturnsPage()
+    public async Task OnPost_LocalMode_CreateUserFailsWithMinLengthError_SetsErrorAndReturnsPage()
     {
         _mockAuth.CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
             .Returns(new AuthServiceResult(false, "Password must be at least 12 characters."));
@@ -222,5 +227,29 @@ public class SetupModelTests
         _mockUiSettings.Ui.Returns(new UiPreferences { FontProfile = FontProfiles.Accessible });
 
         Create().IsAccessibleFontProfile.Should().BeTrue();
+    }
+
+    // ── OIDC mode ────────────────────────────────────────────────────────────
+
+    [Test]
+    public void OnGet_OidcMode_RedirectsToLogin()
+    {
+        var authOptions = new AuthOptions { Mode = "OIDC" };
+
+        var result = Create(authOptions).OnGet();
+
+        result.Should().BeOfType<RedirectToPageResult>()
+            .Which.PageName.Should().Be("/Login");
+    }
+
+    [Test]
+    public async Task OnPost_OidcMode_RedirectsToLogin()
+    {
+        var authOptions = new AuthOptions { Mode = "OIDC" };
+
+        var result = await Create(authOptions).OnPostAsync("admin", "pass", "pass");
+
+        result.Should().BeOfType<RedirectToPageResult>()
+            .Which.PageName.Should().Be("/Login");
     }
 }

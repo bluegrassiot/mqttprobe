@@ -61,6 +61,17 @@
     border-left: 2px solid #f97316;
 }
 
+::deep .topic-tree-row {
+    min-width: 0;
+    max-width: 100%;
+}
+
+::deep .topic-tree-row .flex-grow-1 {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 ::deep .topic-stat-text {
     font-size: 0.7rem;
     opacity: 0.6;

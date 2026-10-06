@@ -513,6 +513,51 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
+    public async Task RemoveMatchingTopic_RemovesMatchesAndRaisesEventOnce()
+    {
+        await Fire("spBv1.0/factory/NBIRTH/edge-01", SpbPayload());
+        await Fire("spBv1.0/factory/DBIRTH/edge-01/sensor-A", SpbPayload());
+        var raised = 0;
+        _service.TopologyChanged += () => raised++;
+
+        var removed = _service.RemoveMatchingTopic("spBv1.0/#");
+
+        removed.Should().BeGreaterThan(0);
+        _service.Groups.Should().BeEmpty();
+        raised.Should().Be(1);
+    }
+
+    [Test]
+    public async Task RemoveMatchingTopicSilent_RemovesWithoutNotifying()
+    {
+        await Fire("spBv1.0/factory/NBIRTH/edge-01", SpbPayload());
+        var raised = 0;
+        _service.TopologyChanged += () => raised++;
+
+        var removed = _service.RemoveMatchingTopicSilent("spBv1.0/#");
+
+        removed.Should().BeGreaterThan(0);
+        _service.Groups.Should().BeEmpty();
+        raised.Should().Be(0,
+            "the exclusion purge runs under the exclude service lock, where notifying can deadlock");
+    }
+
+    [Test]
+    public async Task RaiseTopologyChanged_AfterSilentRemoval_NotifiesOnce()
+    {
+        await Fire("spBv1.0/factory/NBIRTH/edge-01", SpbPayload());
+        var raised = 0;
+        _service.TopologyChanged += () => raised++;
+
+        _service.RemoveMatchingTopicSilent("spBv1.0/#");
+        raised.Should().Be(0);
+
+        _service.RaiseTopologyChanged();
+
+        raised.Should().Be(1);
+    }
+
+    [Test]
     public async Task RemoveNode_AfterRemoval_NextNBirthRecreatesTheNode()
     {
         await Fire("spBv1.0/factory/NBIRTH/edge-01", SpbPayload(("X", 0, 10, 1.0)));

@@ -86,7 +86,6 @@ public class BrokerStateResetCoordinator : IBrokerStateResetCoordinator
 
         await SafeResetAsync("MessageStoreManager.ClearAllMessages",
             () => _messageStore.ClearAllMessages());
-
         SafeReset("SparkplugTopologyService.ClearAll",
             () => _topology.ClearAll());
 

@@ -79,25 +79,25 @@ public class DesktopSecretKeyProtectorTests
     }
 
     [Test]
-    public void Init_FacilityUnavailable_DatOnly_ThrowsOrphaned()
+    public async Task Init_FacilityUnavailable_DatOnly_ThrowsOrphaned()
     {
         File.WriteAllBytes(Path.Combine(_tmpDir, "x.dat"), new byte[] { 1, 2, 3 });
         _fakeOs.NextLoad = new SecretKeyLoadResult.FacilityUnavailable();
         var sut = CreateSut();
 
-        var ex = Assert.ThrowsAsync<OrphanedSecretStoreException>(
+        var ex = await Assert.ThrowsAsync<OrphanedSecretStoreException>(
             async () => await sut.InitializeAsync());
         Assert.That(ex.Message, Does.Contain("Ciphertext"));
     }
 
     [Test]
-    public void Init_UnexpectedOsFailure_ThrowsFacility_NoFallback()
+    public async Task Init_UnexpectedOsFailure_ThrowsFacility_NoFallback()
     {
         _fakeOs.NextLoad = new SecretKeyLoadResult.UnexpectedFailure(
             new Exception("OS error"));
         var sut = CreateSut();
 
-        var ex = Assert.ThrowsAsync<SecretKeyFacilityException>(
+        var ex = await Assert.ThrowsAsync<SecretKeyFacilityException>(
             async () => await sut.InitializeAsync());
         Assert.That(ex.Message, Does.Contain("OS keyring"));
     }
@@ -117,14 +117,14 @@ public class DesktopSecretKeyProtectorTests
     }
 
     [Test]
-    public void Init_MigrateStoreOk_DeleteFails_PartialMigration()
+    public async Task Init_MigrateStoreOk_DeleteFails_PartialMigration()
     {
         var rawKey = RandomNumberGenerator.GetBytes(MasterKeyConstants.KeySize);
         _fakeRaw.Bytes = rawKey;
         _fakeRaw.DeleteShouldFail = true;
         var sut = CreateSut();
 
-        Assert.ThrowsAsync<PartialSecretKeyMigrationException>(
+        await Assert.ThrowsAsync<PartialSecretKeyMigrationException>(
             async () => await sut.InitializeAsync());
     }
 
@@ -159,7 +159,7 @@ public class DesktopSecretKeyProtectorTests
     }
 
     [Test]
-    public void Init_OsAndRawDiffer_DatExist_Ambiguous()
+    public async Task Init_OsAndRawDiffer_DatExist_Ambiguous()
     {
         File.WriteAllBytes(Path.Combine(_tmpDir, "x.dat"), new byte[] { 1, 2, 3 });
         var osKey = RandomNumberGenerator.GetBytes(MasterKeyConstants.KeySize);
@@ -168,29 +168,29 @@ public class DesktopSecretKeyProtectorTests
         _fakeRaw.Bytes = rawKey;
         var sut = CreateSut();
 
-        var ex = Assert.ThrowsAsync<AmbiguousSecretKeyException>(
+        var ex = await Assert.ThrowsAsync<AmbiguousSecretKeyException>(
             async () => await sut.InitializeAsync());
         Assert.That(ex.Message, Does.Contain("OS keyring"));
     }
 
     [Test]
-    public void Init_OsNotFound_DatExist_NoRaw_Orphaned()
+    public async Task Init_OsNotFound_DatExist_NoRaw_Orphaned()
     {
         File.WriteAllBytes(Path.Combine(_tmpDir, "x.dat"), new byte[] { 1, 2, 3 });
         var sut = CreateSut();
 
-        var ex = Assert.ThrowsAsync<OrphanedSecretStoreException>(
+        var ex = await Assert.ThrowsAsync<OrphanedSecretStoreException>(
             async () => await sut.InitializeAsync());
         Assert.That(ex.Message, Does.Contain("Ciphertext"));
     }
 
     [Test]
-    public void Init_RawKeyWrongLength_Throws()
+    public async Task Init_RawKeyWrongLength_Throws()
     {
         _fakeRaw.Bytes = new byte[16];
         var sut = CreateSut();
 
-        Assert.ThrowsAsync<SecretStorageException>(
+        await Assert.ThrowsAsync<SecretStorageException>(
             async () => await sut.InitializeAsync());
     }
 
@@ -222,17 +222,17 @@ public class DesktopSecretKeyProtectorTests
     }
 
     [Test]
-    public void GetOrCreateKey_BeforeInit_Throws()
+    public async Task GetOrCreateKey_BeforeInit_Throws()
     {
         var sut = CreateSut();
 
-        var ex = Assert.ThrowsAsync<InvalidOperationException>(
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await sut.GetOrCreateKeyAsync());
         Assert.That(ex.Message, Does.Contain("not been initialized"));
     }
 
     [Test]
-    public void Init_OsNotFound_LegacyDpapiDat_AllowsInit()
+    public async Task Init_OsNotFound_LegacyDpapiDat_AllowsInit()
     {
         if (!OperatingSystem.IsWindows())
             Assert.Ignore("DPAPI is Windows-only.");
@@ -244,12 +244,12 @@ public class DesktopSecretKeyProtectorTests
         File.WriteAllBytes(Path.Combine(_tmpDir, "x.dat"), blob);
         var sut = CreateSut();
 
-        Assert.DoesNotThrowAsync(async () => await sut.InitializeAsync());
+        await Assert.DoesNotThrowAsync(async () => await sut.InitializeAsync());
         Assert.That(sut.Mode, Is.EqualTo(SecretProtectionMode.OsKeyring));
     }
 
     [Test]
-    public void Init_OsNotFound_MixedDpapiAndNonDpapiDat_ThrowsOrphaned()
+    public async Task Init_OsNotFound_MixedDpapiAndNonDpapiDat_ThrowsOrphaned()
     {
         if (!OperatingSystem.IsWindows())
             Assert.Ignore("DPAPI is Windows-only.");
@@ -262,7 +262,7 @@ public class DesktopSecretKeyProtectorTests
         File.WriteAllBytes(Path.Combine(_tmpDir, "modern.dat"), new byte[] { 0xDE, 0xAD, 0xBE, 0xEF });
         var sut = CreateSut();
 
-        var ex = Assert.ThrowsAsync<OrphanedSecretStoreException>(
+        var ex = await Assert.ThrowsAsync<OrphanedSecretStoreException>(
             async () => await sut.InitializeAsync());
         Assert.That(ex.Message, Does.Contain("Ciphertext"));
     }

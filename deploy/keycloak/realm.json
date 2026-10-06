@@ -1,0 +1,87 @@
+{
+  "realm": "mqttprobe-test",
+  "enabled": true,
+  "sslRequired": "none",
+  "clients": [
+    {
+      "clientId": "mqttprobe",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "mqttprobe-test-secret",
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://localhost:5001/signin-oidc"
+      ],
+      "webOrigins": [
+        "https://localhost:5001"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://localhost:5001/signout-callback-oidc",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "backchannel.logout.session.required": "true",
+        "backchannel.logout.url": "http://mqttprobe:8080/oidc/backchannel-logout"
+      },
+      "protocolMappers": [
+        {
+          "name": "mqttprobe_access",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "mqttprobe_access",
+            "claim.name": "mqttprobe_access",
+            "id.token.claim": "true",
+            "access.token.claim": "false",
+            "userinfo.token.claim": "false",
+            "jsonType.label": "String",
+            "multivalued": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admitted-user",
+      "enabled": true,
+      "firstName": "Admitted",
+      "lastName": "User",
+      "email": "admitted@mqttprobe.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test-password",
+          "temporary": false
+        }
+      ],
+      "attributes": {
+        "mqttprobe_access": ["admin"]
+      }
+    },
+    {
+      "username": "denied-user",
+      "enabled": true,
+      "firstName": "Denied",
+      "lastName": "User",
+      "email": "denied@mqttprobe.test",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test-password",
+          "temporary": false
+        }
+      ],
+      "attributes": {
+        "mqttprobe_access": ["viewer"]
+      }
+    }
+  ]
+}

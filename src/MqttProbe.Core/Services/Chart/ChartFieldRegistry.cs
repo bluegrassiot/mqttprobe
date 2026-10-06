@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using MqttProbe.Core.Models.Chart;
+using MqttProbe.Core.Services.Mqtt;
 
 namespace MqttProbe.Core.Services.Chart;
 
@@ -9,6 +10,7 @@ public interface IChartFieldRegistry
     public IReadOnlyList<string> GetTopics();
     public IReadOnlyList<DiscoveredField> GetFields(string topic);
     public IReadOnlyList<DiscoveredField> GetAllFields();
+    public bool RemoveMatchingTopic(string filter);
 }
 
 public class ChartFieldRegistry : IChartFieldRegistry
@@ -53,4 +55,18 @@ public class ChartFieldRegistry : IChartFieldRegistry
         [.. _registry.Values.SelectMany(d => d.Values)
             .OrderBy(f => f.Topic, StringComparer.Ordinal)
             .ThenBy(f => f.JsonPath, StringComparer.Ordinal)];
+
+    public bool RemoveMatchingTopic(string filter)
+    {
+        var removed = false;
+        foreach (var topic in _registry.Keys)
+        {
+            if (!TopicExcludeService.Matches(topic, filter))
+                continue;
+
+            removed |= _registry.TryRemove(topic, out _);
+        }
+
+        return removed;
+    }
 }

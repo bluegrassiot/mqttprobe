@@ -191,7 +191,7 @@ jobs:
         run: Compress-Archive -Path publish/windows/* -DestinationPath publish/mqttprobe-windows-${{ github.ref_name }}.zip -Force
 
       - name: Install Velopack CLI
-        run: dotnet tool install -g vpk
+        run: dotnet tool install -g vpk --version 1.2.161
 
       - name: Download previous Velopack release (for delta packages)
         shell: pwsh
@@ -247,7 +247,7 @@ jobs:
         with:
           dotnet-version: '10.x'
 
-      - uses: actions/setup-java@v5.7.0
+      - uses: actions/setup-java@v6.0.1
         with:
           distribution: 'microsoft'
           java-version: '17'
@@ -365,6 +365,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Full history and tags: git-cliff diffs the previous tag against this one
+      # to build the changelog, and a shallow clone would leave it empty. No
+      # submodules, because only commit messages are read.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Download web-linux-x64
         uses: actions/download-artifact@v8
         with:
@@ -413,76 +420,82 @@ jobs:
           name: desktop-linux-velopack
           path: velopack-linux
 
+      - name: Download desktop-linux-third-party-sources
+        uses: actions/download-artifact@v8
+        with:
+          name: desktop-linux-third-party-sources
+
       - name: Fail on duplicate release asset names
         run: |
           DUPES=$(find velopack* -type f -printf '%f\n' 2>/dev/null | sort | uniq -d)
           if [ -n "$DUPES" ]; then echo "::error::Duplicate asset filenames across Velopack channels:"; echo "$DUPES"; exit 1; fi
 
+      # Everything below is derived from .github/, not typed into this file, so the
+      # release page cannot drift away from what actually ships.
+      - name: Resolve release assets
+        id: assets
+        # shell: bash adds -eo pipefail, so a failing resolve is not hidden by tee.
+        shell: bash
+        run: |
+          python3 scripts/ci/release-notes.py resolve \
+            --manifest .github/release-assets.txt \
+            --version "${{ github.ref_name }}" \
+            --root . | tee release-assets.resolved.txt
+          {
+            echo 'list<<RELEASE_ASSETS'
+            cat release-assets.resolved.txt
+            echo 'RELEASE_ASSETS'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Render release notes
+        run: |
+          python3 scripts/ci/release-notes.py render \
+            --notes .github/release-notes.md \
+            --version "${{ github.ref_name }}" \
+            --out release-notes.md
+
+      - name: Find previous tag
+        id: prevtag
+        run: |
+          PREV=$(git describe --tags --abbrev=0 "${{ github.ref_name }}^" 2>/dev/null || true)
+          echo "value=$PREV" >> "$GITHUB_OUTPUT"
+          echo "Previous tag: ${PREV:-<none>}"
+
+      - name: Generate changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: .git-cliff.toml
+          args: --output changelog.md "${{ steps.prevtag.outputs.value }}..${{ github.ref_name }}"
+
+      - name: Assemble release body
+        env:
+          PREV_TAG: ${{ steps.prevtag.outputs.value }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          {
+            cat release-notes.md
+            echo
+            echo
+            cat changelog.md
+            if [ -n "$PREV_TAG" ]; then
+              echo
+              echo "**Full Changelog**: https://github.com/$REPO/compare/$PREV_TAG...$TAG"
+            fi
+          } > release-body.md
+
+      # Fails the release when an uploaded artifact is undocumented, or a downloads
+      # table row names something that was never shipped.
+      - name: Check release notes cover the shipped assets
+        run: |
+          python3 scripts/ci/release-notes.py check \
+            --manifest .github/release-assets.txt \
+            --notes release-body.md \
+            --version "${{ github.ref_name }}" \
+            --root .
+
       - name: Create release
         uses: softprops/action-gh-release@v3
         with:
-          generate_release_notes: true
-          files: |
-            mqttprobe-web-linux-x64-${{ github.ref_name }}.zip
-            mqttprobe-web-linux-arm64-${{ github.ref_name }}.zip
-            mqttprobe-web-win-x64-${{ github.ref_name }}.zip
-            mqttprobe-windows-${{ github.ref_name }}.zip
-            mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip
-            mqttprobe-android-${{ github.ref_name }}.apk
-            velopack/MQTTProbe-win-Setup.exe
-            velopack/*.nupkg
-            velopack/releases.win.json
-            velopack/assets.win.json
-            velopack-linux/*
-            velopack-osx/*
-          body: |
-            ## MQTT Probe ${{ github.ref_name }}
-
-            Requires [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) for the web builds.
-
-            ### Downloads
-
-            | Artifact | Description |
-            |----------|-------------|
-            | `mqttprobe-web-linux-x64-${{ github.ref_name }}.zip` | Web app (Blazor Server) — single binary, Linux x64 |
-            | `mqttprobe-web-linux-arm64-${{ github.ref_name }}.zip` | Web app (Blazor Server) — single binary, Linux arm64 (Raspberry Pi, NAS) |
-            | `mqttprobe-web-win-x64-${{ github.ref_name }}.zip` | Web app (Blazor Server) — single exe, Windows x64 |
-            | `mqttprobe-windows-${{ github.ref_name }}.zip` | Windows desktop app — MAUI (unsigned, SmartScreen warning expected) |
-            | MQTTProbe `.pkg` installer | macOS desktop app (recommended) — universal Intel + Apple Silicon, signed & notarized, auto-updates |
-            | `mqttprobe-desktop-linux-x64-${{ github.ref_name }}.zip` | Linux desktop app — Photino/Blazor, self-contained (requires `libwebkit2gtk-4.1-0`) |
-            | `mqttprobe-android-${{ github.ref_name }}.apk` | Android app — sideload APK, Android 7.0+ (API 24) |
-            | `docker pull bluegrassiot/mqttprobe:${{ github.ref_name }}` | Docker image (amd64 + arm64, no runtime install needed) |
-
-            ### Quick Start
-
-            ```bash
-            # Docker (recommended for servers)
-            docker compose up -d
-
-            # Linux bare metal — extract zip and run
-            chmod +x MqttProbe.Web && ./MqttProbe.Web
-
-            # Windows bare metal — extract zip and run
-            MqttProbe.Web.exe
-
-            # Linux desktop — extract zip, install WebKitGTK, and run
-            sudo apt install libwebkit2gtk-4.1-0
-            chmod +x MqttProbe.Desktop && ./MqttProbe.Desktop
-            ```
-
-            ### Windows
-
-            Download `MQTTProbe-win-Setup.exe` (installs per-user, auto-updates) or the portable `mqttprobe-windows-*.zip`.
-
-            ### Linux
-            Download `MQTTProbe.AppImage` (auto-updates; needs `libfuse2` on Ubuntu 22.04+ and `libwebkit2gtk-4.1`), or the zip for a plain unpacked run.
-
-            ### macOS
-
-            Download the `.pkg` installer (recommended — installs and enables in-app auto-updates) or the portable Velopack zip in the release assets. Both are signed and notarized by Apple, so Gatekeeper accepts them without security prompts.
-
-            ### Android
-
-            Download the APK on your device and open it to install. Your browser will ask you to allow installing unknown apps the first time, and Play Protect may show a warning for apps installed outside the Play Store — choose "Install anyway".
-
-            See [README](https://github.com/bluegrassiot/mqttprobe#readme) for full documentation.
+          body_path: release-body.md
+          files: ${{ steps.assets.outputs.list }}

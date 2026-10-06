@@ -27,6 +27,7 @@ Usage:
 
 import argparse
 import collections
+import importlib.util as _ilu
 import json
 import subprocess
 import sys
@@ -42,6 +43,19 @@ def find_repo_root() -> Path:
 
 
 ROOT = find_repo_root()
+
+# Source-line exception definitions live in inspect_source_exceptions.py to
+# keep this file within the repository's 500-line limit.  importlib.util is
+# used because the script directory may not be on sys.path (e.g. when the test
+# suite loads this file via exec_module).
+_se_path = Path(__file__).resolve().parent / "inspect_source_exceptions.py"
+_se_spec = _ilu.spec_from_file_location("_inspect_source_exceptions", _se_path)
+if _se_spec is None or _se_spec.loader is None:
+    raise SystemExit("Cannot load inspect_source_exceptions.py")
+_se_mod = _ilu.module_from_spec(_se_spec)
+_se_spec.loader.exec_module(_se_mod)
+SOURCE_LINE_EXCEPTIONS = _se_mod.SOURCE_LINE_EXCEPTIONS
+
 ARTIFACTS = ROOT / "artifacts"
 SOLUTION = "MqttProbe.slnx"
 
@@ -70,6 +84,131 @@ JB_EXCLUDE = ";".join([f"**/{d}/**/*" for d in SKIP_DIRS] + [f"**/{f}" for f in 
 
 # SARIF levels, worst first. Anything unrecognised sorts last under "other".
 LEVEL_ORDER = ["error", "warning", "note", "none", "other"]
+
+# Findings --fail-on accepts even though the scanner still reports them. JSON has
+# no comments, so DevSkim's inline suppression cannot be used inside realm.json;
+# Keycloak reads that file verbatim at container start. The listed value is the
+# compose-internal backchannel logout URL: mqttprobe only serves plain HTTP on
+# 8080 inside the Docker network, so https here would break logout.
+GATED_EXCEPTIONS = [
+    {
+        "rule": "DS137138",
+        "file": "deploy/keycloak/realm.json",
+        "value": '"backchannel.logout.url": "http://mqttprobe:8080/oidc/backchannel-logout"',  # DevSkim: ignore DS137138 mirrors the realm.json value the gate checks
+    },
+]
+
+# DS137138 also fires on the OpenID Connect backchannel-logout event type: a
+# fixed spec identifier, never fetched. Only the listed files may use it over
+# plain http, and only when the reported line holds the exact quoted identifier
+# (C#-escaped quotes included) and no other http URL.
+SPEC_IDENTIFIER_FILES = [
+    "src/MqttProbe.Web/Authentication/Oidc/BackChannelLogoutValidator.cs",
+    "tests/MqttProbe.UI.Tests/Authentication/Oidc/LogoutTokenFactory.cs",
+    "tests/MqttProbe.UI.Tests/Authentication/Oidc/BackChannelLogoutValidatorTests.cs",
+    "tests/MqttProbe.IntegrationTests/Authentication/Shared/BackchannelLogoutBridge.cs",
+    "tests/MqttProbe.IntegrationTests/Authentication/Keycloak/KeycloakBackchannelLogoutTests.cs",
+]
+SPEC_IDENTIFIER_QUOTED = '"http://schemas.openid.net/event/backchannel-logout"'  # DevSkim: ignore DS137138 mirrors the identifier the gate checks
+SPEC_IDENTIFIER_ESCAPED = SPEC_IDENTIFIER_QUOTED.replace('"', r'\"')
+
+
+def parse_property_line(line):
+    """Parse a source line as exactly one JSON property, or None.
+
+    The JSON parse does the normalising: indentation, spacing around the colon
+    and a trailing comma all disappear. A second property on the same line, a
+    redefined key, or anything that is not a single property parse to None.
+    """
+    text = line.strip()
+    if text.endswith(","):
+        text = text[:-1].rstrip()
+    if not text:
+        return None
+    try:
+        pairs = json.loads("{" + text + "}", object_pairs_hook=list)
+    except ValueError:
+        return None
+    return pairs[0] if len(pairs) == 1 else None
+
+
+def json_property_occurrences(text, key):
+    """Every value stored under `key` anywhere in `text`, plus whether `key` was
+    ever redefined inside a single object.
+
+    Raises ValueError on malformed JSON so callers can fail closed.
+    """
+    occurrences = []
+    redefined = False
+
+    def hook(pairs):
+        nonlocal redefined
+        seen = set()
+        for name, value in pairs:
+            if name == key:
+                if name in seen:
+                    redefined = True
+                occurrences.append(value)
+            seen.add(name)
+        return dict(pairs)
+
+    json.loads(text, object_pairs_hook=hook)
+    return occurrences, redefined
+
+
+def is_gated_exception(finding):
+    """True only for an exact (rule, file, whole property line, effective value) match."""
+    for exception in GATED_EXCEPTIONS:
+        if finding["rule"] != exception["rule"] or finding["file"] != exception["file"]:
+            continue
+        approved = parse_property_line(exception["value"])
+        if approved is None:
+            continue  # misconfigured exception: keep the finding blocking
+        try:
+            text = (ROOT / exception["file"]).read_text(encoding="utf-8")
+        except (OSError, ValueError):
+            continue  # unreadable file: keep the finding blocking
+        lines = text.splitlines()
+        line = lines[finding["line"] - 1] if 0 < finding["line"] <= len(lines) else ""
+        if parse_property_line(line) != approved:
+            continue  # approved value sharing the line with anything else
+        try:
+            occurrences, redefined = json_property_occurrences(text, approved[0])
+        except ValueError:
+            continue  # malformed JSON: keep the finding blocking
+        if redefined or occurrences != [approved[1]]:
+            continue  # duplicate or overridden property: no unique approved value
+        return True
+    return False
+
+
+def is_spec_identifier_exception(finding):
+    """True only for DS137138 on the exact quoted spec identifier line."""
+    if finding["rule"] != "DS137138" or finding["file"] not in SPEC_IDENTIFIER_FILES:
+        return False
+    try:
+        lines = (ROOT / finding["file"]).read_text(encoding="utf-8").splitlines()
+    except (OSError, ValueError):
+        return False  # unreadable file: keep the finding blocking
+    line = lines[finding["line"] - 1] if 0 < finding["line"] <= len(lines) else ""
+    if SPEC_IDENTIFIER_QUOTED not in line and SPEC_IDENTIFIER_ESCAPED not in line:
+        return False
+    return line.count("http://") == 1
+
+
+def is_source_line_exception(finding):
+    """True only for an exact (rule, file, line number, stripped source line) match.
+
+    Fail closed: unreadable file, out-of-range line, or content mismatch all
+    keep the finding blocking.  This mirrors the GATED_EXCEPTIONS pattern but
+    matches plain source lines rather than JSON properties.
+    """
+    return _se_mod.is_source_line_exception(finding, ROOT)
+
+
+def git_ignored_paths(paths, repo_root):
+    """Delegate to the exceptions module; see there for full docstring."""
+    return _se_mod.git_ignored_paths(paths, repo_root)
 
 
 def run_tool(name, cmd, sarif_path):
@@ -269,13 +408,33 @@ def main():
     sections = []
     totals = []
     gated = []
+    accepted = []
     for label, sarif in runs:
         findings, rules = parse_sarif(sarif)
+        # Filter out findings on gitignored files (e.g. deploy/mtls/certs/*.key).
+        # Tracked files are never reported as ignored by git check-ignore, so
+        # committed secrets still gate.  Untracked non-ignored source is scanned
+        # normally.  On discovery errors, no paths are excluded (fail-open for
+        # the filter, but gated findings still block).
+        all_files = {f["file"] for f in findings}
+        ignored = git_ignored_paths(all_files, ROOT)
+        if ignored:
+            before = len(findings)
+            findings = [f for f in findings if f["file"] not in ignored]
+            print(f"  {before - len(findings)} finding(s) on gitignored files skipped")
         totals.append(f"{len(findings)} from {label}")
         sections += render(label, findings, rules, args.max_per_rule)
         if args.fail_on != "never":
-            gated += [f for f in findings
-                      if level_key(f["level"]) <= level_key(args.fail_on)]
+            for finding in findings:
+                if level_key(finding["level"]) > level_key(args.fail_on):
+                    continue
+                # Reported either way; only the exit code is affected.
+                if (is_gated_exception(finding)
+                        or is_spec_identifier_exception(finding)
+                        or is_source_line_exception(finding)):
+                    accepted.append(finding)
+                else:
+                    gated.append(finding)
 
     report = [
         "# Static analysis report",
@@ -298,6 +457,12 @@ def main():
     print(f"\n=== Report: {output.relative_to(ROOT) if output.is_relative_to(ROOT) else output} ===")
     for total in totals:
         print(f"  {total}")
+
+    if accepted:
+        print(f"\n=== {len(accepted)} finding(s) accepted by a narrow exception "
+              f"(still listed in the report) ===")
+        for file, line, rule in sorted({(f["file"], f["line"], f["rule"]) for f in accepted}):
+            print(f"  {rule:10} {file}:{line}")
 
     if gated:
         print(f"\n=== {len(gated)} finding(s) at or above {args.fail_on} ===")

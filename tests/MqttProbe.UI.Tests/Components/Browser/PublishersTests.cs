@@ -260,4 +260,13 @@ public class PublishersTests : BunitTestContext
         _mockSnackbar.Received(1).Add("Payload is empty.", Severity.Info,
             Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
     }
+
+    [Test]
+    public void Selector_DisplaysFormattedQosLabels()
+    {
+        var cut = Render<Publishers>();
+
+        // MudSelect in closed state shows the selected value (AtMostOnce by default).
+        cut.Markup.Should().Contain("0 · At most once");
+    }
 }

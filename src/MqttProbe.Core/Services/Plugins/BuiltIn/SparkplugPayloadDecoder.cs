@@ -1,4 +1,3 @@
-using System.Text;
 using MQTTnet;
 using MqttProbe.PluginContracts;
 using Org.Eclipse.Tahu.Protobuf;

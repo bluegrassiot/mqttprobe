@@ -1,0 +1,73 @@
+<MudDialog>
+    <DialogContent>
+        <MudTextField Value="@_name" Label="Connection name" Immediate="true"
+                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                      ErrorText="@_errorText" Error="@_hasError"
+                      For="@(() => _name)"
+                      ValueChanged="@((string v) => OnNameChanged(v))" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit"
+                   Disabled="@(!CanSubmit)">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public required IMudDialogInstance MudDialog { get; set; }
+    [Parameter] public string SuggestedName { get; set; } = "";
+    [Parameter] public IReadOnlyList<string> ExistingNames { get; set; } = [];
+
+    private string _name = "";
+    private string? _errorText;
+    private bool _hasError;
+
+    private bool CanSubmit =>
+        !string.IsNullOrWhiteSpace(_name) && !_hasError;
+
+    protected override void OnParametersSet()
+    {
+        if (string.IsNullOrEmpty(_name) && !string.IsNullOrEmpty(SuggestedName))
+            _name = SuggestedName;
+        ValidateName();
+    }
+
+    private void OnNameChanged(string value)
+    {
+        _name = value;
+        ValidateName();
+    }
+
+    private void ValidateName()
+    {
+        var trimmed = _name?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            _errorText = null;
+            _hasError = false;
+            return;
+        }
+
+        var collision = ExistingNames.Any(n =>
+            string.Equals(n.Trim(), trimmed, StringComparison.OrdinalIgnoreCase));
+        if (collision)
+        {
+            _errorText = $"A connection named \"{trimmed}\" already exists.";
+            _hasError = true;
+        }
+        else
+        {
+            _errorText = null;
+            _hasError = false;
+        }
+    }
+
+    private void Submit()
+    {
+        ValidateName();
+        if (_hasError) return;
+        MudDialog.Close(DialogResult.Ok(_name.Trim()));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

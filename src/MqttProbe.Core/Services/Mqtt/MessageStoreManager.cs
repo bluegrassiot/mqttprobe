@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MqttProbe.Core.Models.Mqtt;
@@ -23,14 +24,17 @@ public class MessageStoreManager : IMessageStoreManager
     private readonly TopicTreeStore _store;
     private readonly InboundRateLimiter _rateLimiter;
     private readonly SparkplugAliasEnricher _aliasEnricher;
+    private readonly ITopicExcludeService? _topicExcludeService;
     private readonly Lock _lifecycleSync = new();
     private int _disposed;
+    private int _topologyChangedPending;
 
     public MessageStoreManager(IMqttManagedClient client, ILogger<MessageStoreManager> logger,
         IPerformanceSettings performanceSettings, IUxMetricsService metrics,
         PayloadPipeline pipeline, ISparkplugSettings sparkplugSettings,
         ISparkplugTopologyService? topologyService = null,
-        ISparkplugCommandService? commandService = null)
+        ISparkplugCommandService? commandService = null,
+        ITopicExcludeService? topicExcludeService = null)
     {
         _client = client;
         _logger = logger;
@@ -39,10 +43,16 @@ public class MessageStoreManager : IMessageStoreManager
         _pipeline = pipeline;
         _topologyService = topologyService;
         _commandService = commandService;
+        _topicExcludeService = topicExcludeService;
         _store = new TopicTreeStore(performanceSettings, logger);
         _rateLimiter = new InboundRateLimiter(performanceSettings, metrics, logger);
         _aliasEnricher = new SparkplugAliasEnricher(sparkplugSettings, topologyService);
         performanceSettings.PerformanceSettingsChanged += OnPerformanceSettingsChanged;
+        if (_topicExcludeService is not null)
+        {
+            _topicExcludeService.PurgeExcludedTopic += OnPurgeExcludedTopic;
+            _topicExcludeService.TopicExcluded += OnTopicExcluded;
+        }
     }
 
     public ConcurrentDictionary<string, MessageStore> MessageStores => _store.MessageStores;
@@ -65,6 +75,8 @@ public class MessageStoreManager : IMessageStoreManager
 
     public long DroppedMessageCount => _rateLimiter.DroppedCount;
 
+    public long ExcludedMessageCount => _metrics.GetSnapshot().MessagesExcluded;
+
     public event Func<MqttMessage, Task>? MessageReceived;
 
     private void OnPerformanceSettingsChanged()
@@ -74,6 +86,7 @@ public class MessageStoreManager : IMessageStoreManager
         _store.ApplyRetentionLimit();
     }
 
+    [SuppressMessage("ReSharper", "InconsistentlySynchronizedField")]
     protected virtual void Dispose(bool disposing)
     {
         // Claim disposal before tearing anything down. Raising the flag last would leave a
@@ -84,6 +97,18 @@ public class MessageStoreManager : IMessageStoreManager
         {
             Stop().GetAwaiter().GetResult();
             _performanceSettings.PerformanceSettingsChanged -= OnPerformanceSettingsChanged;
+            if (_topicExcludeService is not null)
+            {
+                _topicExcludeService.PurgeExcludedTopic -= OnPurgeExcludedTopic;
+                _topicExcludeService.TopicExcluded -= OnTopicExcluded;
+            }
+
+            // Never raise TopologyChanged from teardown. A purge can still be mid-flight,
+            // and it holds the exclude service while its purgers run, so a subscriber that
+            // re-enters the exclude service from a synchronous raise here would deadlock
+            // against it. The scope that owns this manager is going away, so the pending
+            // notification is dropped with it instead of being announced late.
+            Interlocked.Exchange(ref _topologyChangedPending, 0);
             _rateLimiter.Dispose();
         }
     }
@@ -137,64 +162,131 @@ public class MessageStoreManager : IMessageStoreManager
 
     internal void AddMessage(string fullTopic, MqttMessage message) => _store.Add(fullTopic, message);
 
-    private async Task MessageHandler(MqttApplicationMessageReceivedEventArgs arg)
+    private Task MessageHandler(MqttApplicationMessageReceivedEventArgs arg)
     {
-        if (!_rateLimiter.TryAcquire()) return;
+        var topic = arg.ApplicationMessage.Topic;
+        IDisposable? exclusionGate = null;
+        if (_topicExcludeService is { } excludes)
+        {
+            exclusionGate = excludes.TryEnter(topic);
+            if (exclusionGate is null)
+            {
+                _metrics.RecordMessageExcluded();
+                return Task.CompletedTask;
+            }
+        }
 
-        var payloadSize = arg.ApplicationMessage.GetPayloadSegment().Count;
-        _metrics.RecordPayloadSize(payloadSize);
+        if (!_rateLimiter.TryAcquire())
+        {
+            exclusionGate?.Dispose();
+            return Task.CompletedTask;
+        }
 
-        var sw = Stopwatch.StartNew();
+        return ProcessMessageAsync(arg, topic, exclusionGate);
+    }
+
+    private async Task ProcessMessageAsync(MqttApplicationMessageReceivedEventArgs arg, string topic,
+        IDisposable? exclusionGate)
+    {
         MqttMessage? message = null;
         string? formatId = null;
-
         try
         {
-            var topic = arg.ApplicationMessage.Topic;
-            var result = _pipeline.ProcessInbound(arg);
-            var payloadText = result.Envelope.DisplayText;
-            formatId = result.Envelope.FormatId;
+            var payloadSize = arg.ApplicationMessage.GetPayloadSegment().Count;
+            _metrics.RecordPayloadSize(payloadSize);
 
-            LogPipelineDiagnostics(topic, result.Diagnostics);
+            var sw = Stopwatch.StartNew();
 
-            if (_topologyService is not null && result.TopologyEvents.Count > 0)
-                await _topologyService.ApplyTopologyEventsAsync(result.TopologyEvents);
-
-            if (_commandService is not null)
+            try
             {
-                foreach (var evt in result.TopologyEvents)
+                var result = _pipeline.ProcessInbound(arg);
+                var payloadText = result.Envelope.DisplayText;
+                formatId = result.Envelope.FormatId;
+
+                LogPipelineDiagnostics(topic, result.Diagnostics);
+
+                if (result.TopologyEvents.Count > 0)
+                    await ApplyTopologyEventsAsync(result.TopologyEvents);
+
+                var aliasNames = _aliasEnricher.Resolve(topic, arg, result);
+
+                message = new MqttMessage(payloadText, topic,
+                    arg.ApplicationMessage.Retain, arg.ApplicationMessage.QualityOfServiceLevel)
                 {
-                    if (evt is NodeDataEvent nde)
-                        await _commandService.RequestNodeRebirthIfNeededAsync(nde.GroupId, nde.NodeId);
-                    else if (evt is DeviceDataEvent dde)
-                        await _commandService.RequestNodeRebirthIfNeededAsync(dde.GroupId, dde.NodeId);
-                }
+                    AliasNames = aliasNames,
+                    FormatId = formatId
+                };
+
+                AddMessage(topic, message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing message on topic {Topic}: {Message}", arg.ApplicationMessage.Topic, ex.Message);
             }
 
-            var aliasNames = _aliasEnricher.Resolve(topic, arg, result);
-
-            message = new MqttMessage(payloadText, topic,
-                arg.ApplicationMessage.Retain, arg.ApplicationMessage.QualityOfServiceLevel)
-            {
-                AliasNames = aliasNames,
-                FormatId = formatId
-            };
-
-            AddMessage(topic, message);
+            sw.Stop();
+            _metrics.RecordProcessingTime(sw.Elapsed.TotalMicroseconds);
+            if (formatId is not null)
+                _metrics.RecordMessageProcessed(formatId);
         }
-        catch (Exception ex)
+        finally
         {
-            _logger.LogError(ex, "Error processing message on topic {Topic}: {Message}", arg.ApplicationMessage.Topic, ex.Message);
+            // Released before MessageReceived: a subscriber that awaits Add would wait on this gate.
+            exclusionGate?.Dispose();
         }
-
-        sw.Stop();
-        _metrics.RecordProcessingTime(sw.Elapsed.TotalMicroseconds);
-        if (formatId is not null)
-            _metrics.RecordMessageProcessed(formatId);
 
         if (message != null)
         {
             await NotifyMessageReceivedAsync(message);
+        }
+    }
+
+    private async Task ApplyTopologyEventsAsync(IReadOnlyList<TopologyEvent> events)
+    {
+        if (_topologyService is not null)
+            await _topologyService.ApplyTopologyEventsAsync(events);
+
+        if (_commandService is null)
+            return;
+
+        foreach (var evt in events)
+        {
+            if (evt is NodeDataEvent nde)
+                await _commandService.RequestNodeRebirthIfNeededAsync(nde.GroupId, nde.NodeId);
+            else if (evt is DeviceDataEvent dde)
+                await _commandService.RequestNodeRebirthIfNeededAsync(dde.GroupId, dde.NodeId);
+        }
+    }
+
+    // Trusted purger: runs while the exclude service holds its lock, so topology removal
+    // must stay silent here. A purge running inline with Add/Remove also holds the operation
+    // semaphore; a purge finished later from a reader release holds no semaphore at all.
+    private void OnPurgeExcludedTopic(string filter)
+    {
+        _store.RemoveMatchingTopic(filter);
+        // ReSharper disable once InconsistentlySynchronizedField
+        if (_topologyService?.RemoveMatchingTopicSilent(filter) > 0)
+            Interlocked.Exchange(ref _topologyChangedPending, 1);
+    }
+
+    // Observer phase: no locks and no semaphore held, so a TopologyChanged subscriber may
+    // re-enter the exclude service.
+    private void OnTopicExcluded(string filter) => FlushTopologyChanged();
+
+    // Teardown never gets here: it drops its pending notification instead of raising
+    // publicly while a purge may still be in flight.
+    private void FlushTopologyChanged()
+    {
+        if (Interlocked.Exchange(ref _topologyChangedPending, 0) == 0)
+            return;
+
+        try
+        {
+            _topologyService?.RaiseTopologyChanged();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "TopologyChanged subscriber failed after an excluded topic purge");
         }
     }
 

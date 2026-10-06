@@ -36,8 +36,12 @@
     background-color: rgba(249, 115, 22, 0.1) !important;
 }
 
-/* Disabled buttons: 40% opacity (brand guide). */
-.mud-button-root.mud-disabled {
+/* Disabled buttons: 40% opacity (brand guide). MudBlazor 9.11 dropped the
+   .mud-disabled class from MudButton; it now uses the native disabled
+   attribute only. Keep the .mud-disabled rule for any components that still
+   emit it, and add :disabled for MudButton. */
+.mud-button-root.mud-disabled,
+.mud-button-root:disabled {
     opacity: 0.4 !important;
 }
 
@@ -263,8 +267,13 @@ body:has(.mud-dialog-container) .mobile-primary-nav {
    flex:1 / min-height:0 children can scroll internally. Must target ONLY the
    active panel: MudBlazor (9.6+) hides inactive panels via
    `.mud-tabs-panels > .mud-tab-panel { display:none }`, which this rule's
-   higher specificity would otherwise override — rendering every tab at once. */
-.app-shell-body .mud-tab-panel[role='tabpanel'].mud-tab-panel-active {
+   higher specificity would otherwise override — rendering every tab at once.
+
+   MudBlazor 9.11 sets display:contents on the active panel via
+   `.mud-tab-panel:not(.mud-tab).mud-tab-panel-active:not(.mud-tab-panel-hidden)`
+   at specificity (0,4,0). The extra .mud-tabs-panels ancestor raises this
+   rule to (0,5,0) so it wins in the cascade. */
+.app-shell-body .mud-tabs-panels .mud-tab-panel[role='tabpanel'].mud-tab-panel-active {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;

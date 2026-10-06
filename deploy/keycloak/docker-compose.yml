@@ -1,0 +1,101 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak@sha256:357829ec7c4693397533035092ad13b0644bcc95ded311f33a3738c4d9e9bdba # DevSkim: ignore DS117838 pinned image digest, not a secret
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}
+      KC_HOSTNAME: https://keycloak.localhost:8443
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+    volumes:
+      - ./realm.json:/opt/keycloak/data/import/realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    networks:
+      - keycloak-net
+
+  mqttprobe:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    environment:
+      ASPNETCORE_HTTP_PORTS: "8080"
+      Authentication__Mode: OIDC
+      Authentication__Oidc__Authority: https://keycloak.localhost:8443/realms/mqttprobe-test
+      Authentication__Oidc__ClientId: mqttprobe
+      Authentication__Oidc__ClientSecret: ${MQTT_PROBE_CLIENT_SECRET:-mqttprobe-test-secret}
+      Authentication__Oidc__ProviderDisplayName: Keycloak (local)
+      Authentication__Oidc__AdmissionClaim: mqttprobe_access
+      Authentication__Oidc__AcceptedValues__0: admin
+      Authentication__Oidc__PublicBaseUrl: https://localhost:5001
+      ForwardedHeaders__ForwardLimit: "1"
+      ForwardedHeaders__KnownNetworks__0: 172.29.0.0/16
+      SSL_CERT_FILE: /ca-bundle/ca-certificates.crt
+    depends_on:
+      ca-init:
+        condition: service_completed_successfully
+    volumes:
+      - ca-bundle:/ca-bundle:ro
+      # Persists DataProtection keys (dp-keys), secrets.dat, and per-deploy config
+      # across --force-recreate; without it, antiforgery/secret payloads fail to
+      # decrypt after the container image is rebuilt.
+      - mqttprobe-config:/app/config
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - keycloak-net
+
+  ca-init:
+    image: alpine:3.23
+    entrypoint: ["/bin/sh", "/scripts/init-ca.sh"]
+    depends_on:
+      - caddy
+    volumes:
+      - caddy-data:/caddy-data:ro
+      - ca-bundle:/ca-bundle
+      - ./ca-init.sh:/scripts/init-ca.sh:ro
+    networks:
+      - keycloak-net
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "127.0.0.1:8443:8443"
+      - "127.0.0.1:5001:5001"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      keycloak-net:
+        aliases:
+          - keycloak.localhost
+
+volumes:
+  caddy-data:
+  caddy-config:
+  ca-bundle:
+  mqttprobe-config:
+
+networks:
+  keycloak-net:
+    ipam:
+      config:
+        # Each stack needs a distinct subnet: the prod compose pins
+        # 172.28.0.0/24 and the authentik lab 172.30.0.0/16. Overlapping them
+        # makes Docker refuse to create the second network.
+        - subnet: 172.29.0.0/16

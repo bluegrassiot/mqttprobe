@@ -30,13 +30,13 @@
 </div>
 
 @code {
-    private void OnThemeSelectionChanged(string value)
+    private void OnThemeSelectionChanged(string? value)
     {
         Themes.SetTheme(value == "dark");
     }
 
-    private void OnFontProfileChanged(string value)
+    private void OnFontProfileChanged(string? value)
     {
-        Themes.SetFontProfile(value);
+        Themes.SetFontProfile(value ?? FontProfiles.Standard);
     }
 }

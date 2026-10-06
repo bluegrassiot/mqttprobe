@@ -1,0 +1,118 @@
+.connection-dialog-content {
+    display: flex;
+    flex-direction: column;
+    /* Fixed height matching the Transport tab's natural size so shorter tabs
+       (Identity, On Connect) do not shrink the dialog. Capped by the viewport
+       so it never overflows on phones. */
+    height: 560px;
+    /* Ceiling: never exceed viewport minus title + chrome + device safe areas. */
+    max-height: calc(
+        100dvh
+        - env(safe-area-inset-top, 0px)
+        - env(safe-area-inset-bottom, 0px)
+        - 32px
+    );
+}
+
+
+/* MudForm must be a flex column so the step selector, tabs, and footer
+   distribute height correctly within the fixed-height dialog. Without this,
+   .connection-tabs flex:1 has no effect because the parent form defaults to
+   display:block. */
+.connection-dialog-content ::deep .mud-form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+.connection-dialog-content ::deep .connection-tabs {
+    flex: 1;
+    min-height: 0;
+}
+
+/* MudBlazor renders a .mud-tabs-panels wrapper between MudTabs and the
+   individual tab panels. Make it a bounded flex column so the active
+   panel can fill the available space. */
+.connection-dialog-content ::deep .connection-tabs .mud-tabs-panels {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+.connection-dialog-content ::deep .connection-tabs .mud-tab-panel[role='tabpanel'] {
+    padding: 16px;
+    background: var(--mud-palette-surface);
+}
+
+/* Active tab panel is the outer vertical scroll owner. */
+.connection-dialog-content ::deep .connection-tabs .mud-tab-panel[role='tabpanel'].mud-tab-panel-active {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+}
+
+.connection-actions-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--mud-palette-surface);
+    border-top: 1px solid var(--mud-palette-divider);
+    flex-shrink: 0;
+}
+
+.connection-actions-footer-cta {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.signal-connecting-sm {
+    width: 26px;
+    height: 26px;
+    animation: signal-breathe 1.6s ease-in-out infinite;
+}
+
+/* Compact step selector — visible only on mobile */
+.step-selector {
+    display: none;
+}
+
+.step-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: color 150ms ease-out, border-color 150ms ease-out;
+    border-bottom: 2px solid transparent;
+}
+
+.step-btn.active {
+    color: var(--mud-palette-primary);
+    border-bottom-color: var(--mud-palette-primary);
+    font-weight: 600;
+}
+
+.step-btn:hover {
+    color: var(--mud-palette-text-primary);
+}
+
+@media (max-width: 599px) {
+    .step-selector {
+        display: flex;
+        border-bottom: 1px solid var(--mud-palette-divider);
+    }
+
+    /* Hide the MudTabs tabbar on mobile, keep panels */
+    .connection-dialog-content ::deep .connection-tabs .mud-tabs-tabbar {
+        display: none;
+    }
+}

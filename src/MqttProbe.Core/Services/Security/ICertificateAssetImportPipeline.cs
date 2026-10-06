@@ -6,4 +6,5 @@ public interface ICertificateAssetImportPipeline
 {
     public Task<(string AssetId, string TempPath)> ImportStagedAsync(Guid ownerConnectionId, CertificateImportRequest request);
     public Task<string> PublishAsync(string assetId, string tempPath);
+    public Task<(string AssetId, string TempPath)?> DuplicateStagedAsync(Guid sourceOwnerId, string sourceAssetId, Guid targetOwnerId);
 }

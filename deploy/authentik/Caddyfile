@@ -1,0 +1,19 @@
+https://authentik.localhost:9443 {
+	tls internal
+
+	reverse_proxy server:9000 {
+		header_up X-Forwarded-Host {http.request.hostport}
+		header_up X-Forwarded-Port 9443
+		header_up X-Forwarded-Proto https
+	}
+}
+
+https://localhost:5001 {
+	tls internal
+
+	reverse_proxy mqttprobe:8080 {
+		header_up X-Forwarded-Host {http.request.hostport}
+		header_up X-Forwarded-Port 5001
+		header_up X-Forwarded-Proto https
+	}
+}

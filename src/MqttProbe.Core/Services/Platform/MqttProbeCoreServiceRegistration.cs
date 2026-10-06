@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MqttProbe.Core.Models.Plugins;
@@ -32,8 +33,12 @@ public static class MqttProbeCoreServiceRegistration
             ? ServiceLifetime.Scoped
             : ServiceLifetime.Singleton;
 
+        services.TryAddSingleton<ISessionActivityGate, AlwaysActiveSessionActivityGate>();
+
         services.Add(new ServiceDescriptor(typeof(IMqttManagedClient),
-            sp => new MqttManagedClient(sp.GetService<ILogger<MqttManagedClient>>()), session));
+            sp => new MqttManagedClient(
+                sp.GetService<ILogger<MqttManagedClient>>(),
+                gate: sp.GetService<ISessionActivityGate>()), session));
         services.Add(new ServiceDescriptor(typeof(ISessionState), typeof(SessionState), session));
         services.Add(new ServiceDescriptor(typeof(IEmulationService),
             sp => new EmulationService(
@@ -46,9 +51,12 @@ public static class MqttProbeCoreServiceRegistration
                 sp.GetRequiredService<ICertificateSessionQuarantine>(),
                 sp.GetRequiredService<PayloadPipeline>(),
                 sp.GetRequiredService<ILogger<EmulationService>>(),
-                sp.GetRequiredService<IAppHealthMetricsCollector>()), session));
-        services.Add(new ServiceDescriptor(
-            typeof(IMessageStoreManager), typeof(MessageStoreManager), session));
+                sp.GetRequiredService<IAppHealthMetricsCollector>(),
+                sp.GetService<ISessionActivityGate>()), session));
+        // These services carry per-session topic state and subscribe to each other. Keep them
+        // scoped even for the single-session hosts so they cannot capture the UI's scoped
+        // notifier as a singleton dependency.
+        services.AddScoped<IMessageStoreManager, MessageStoreManager>();
         services.Add(new ServiceDescriptor(typeof(IMqttOptionsBuilder),
             sp => new MqttOptionsBuilder(sp.GetRequiredService<ICertificateAssetStore>()), session));
         services.Add(new ServiceDescriptor(
@@ -59,6 +67,7 @@ public static class MqttProbeCoreServiceRegistration
         // Scoped in every host, including the single-session ones. Preserved as-is rather
         // than folded into the session lifetime above, which would be a behaviour change.
         services.AddScoped<ISubscriptionManager, SubscriptionManager>();
+        services.AddScoped<ITopicExcludeService, TopicExcludeService>();
         services.AddScoped<IBrokerStateResetCoordinator, BrokerStateResetCoordinator>();
 
         services.AddSingleton<ICertificateSessionQuarantine, CertificateSessionQuarantine>();
@@ -109,7 +118,7 @@ public static class MqttProbeCoreServiceRegistration
     public static IServiceCollection AddMqttProbeChartData(this IServiceCollection services)
     {
         services.AddSingleton<IJsonFieldExtractor, JsonFieldExtractor>();
-        services.AddSingleton<IChartFieldRegistry, ChartFieldRegistry>();
+        services.AddScoped<IChartFieldRegistry, ChartFieldRegistry>();
         services.AddScoped<IChartDataService, ChartDataService>();
         return services;
     }

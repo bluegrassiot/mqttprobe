@@ -1,14 +1,4 @@
-using MqttProbe.Core.Models.Chart;
-using MqttProbe.Core.Models.Configuration;
-using MqttProbe.Core.Models.Mqtt;
-using MqttProbe.Core.Models.Sparkplug;
 using MqttProbe.Core.Services.Chart;
-using MqttProbe.Core.Services.Configuration;
-using MqttProbe.Core.Services.Metrics;
-using MqttProbe.Core.Services.Mqtt;
-using MqttProbe.Core.Services.Platform;
-using MqttProbe.Core.Services.Security;
-using MqttProbe.Core.Services.Sparkplug;
 
 namespace MqttProbe.Core.Tests.Services.Chart;
 
@@ -138,5 +128,16 @@ public class ChartFieldRegistryTests
 
         var field = _registry.GetFields("t").Single();
         field.LastSeen.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
+    }
+
+    [Test]
+    public void RemoveMatchingTopic_RemovesWildcardMatchesOnly()
+    {
+        _registry.Update("sensors/temp", Fields(("value", 21.5)));
+        _registry.Update("devices/temp", Fields(("value", 22.5)));
+
+        _registry.RemoveMatchingTopic("sensors/#").Should().BeTrue();
+
+        _registry.GetTopics().Should().Equal("devices/temp");
     }
 }

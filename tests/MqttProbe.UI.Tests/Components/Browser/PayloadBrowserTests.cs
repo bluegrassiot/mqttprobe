@@ -729,4 +729,39 @@ public class PayloadBrowserTests : BunitTestContext
 
         _mockMetrics.Received().SetDisplayedMessageCount(0);
     }
+
+    [Test]
+    public async Task DetailView_QosRow_DisplaysFormattedLabel()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            QualityOfServiceLevel = MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var meta = cut.Find(".payload-detail-meta");
+        meta.TextContent.Should().Contain("1 · At least once");
+    }
+
+    [Test]
+    public async Task DetailView_QosRow_DoesNotShowRawEnumName()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            QualityOfServiceLevel = MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var meta = cut.Find(".payload-detail-meta");
+        meta.TextContent.Should().Contain("0 · At most once");
+        meta.TextContent.Should().NotContain("AtMostOnce");
+    }
 }

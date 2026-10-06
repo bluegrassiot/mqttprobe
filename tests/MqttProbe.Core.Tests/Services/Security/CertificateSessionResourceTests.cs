@@ -1,4 +1,3 @@
-using System.Security.Cryptography.X509Certificates;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.TestInfrastructure.Security;
 

@@ -1,0 +1,62 @@
+# Changelog generator for the GitHub release body.
+#
+# Replaces the post-tag manual edit. release.yml runs git-cliff over
+# <previous tag>..<this tag> and appends the result to .github/release-notes.md,
+# so the per-release "important changes" list is derived from commit history
+# instead of retyped after every tag.
+#
+# Conventional commits are already the repo convention, so the type drives the
+# user-facing group and the type filters decide what a download page cares about.
+# Test locally with:
+#   git cliff --config .git-cliff.toml v1.0.5..HEAD
+
+[remote.github]
+owner = "bluegrassiot"
+repo = "mqttprobe"
+
+[changelog]
+header = ""
+footer = ""
+
+# Whitespace note: in a TOML multi-line string a trailing backslash swallows the
+# newline, which is how the control lines below emit no blank lines of their own.
+# Every line that should produce output therefore ends without a backslash.
+body = """
+## What's Changed
+{% for group, commits in commits | group_by(attribute="group") %}\
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}\
+- {{ commit.message | upper_first }}{% if commit.breaking %} (**breaking**){% endif %} ([`{{ commit.id | truncate(length=7, end="") }}`](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }}))
+{% endfor %}\
+{% endfor %}"""
+
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+
+# Order is set by the <!-- N --> sort prefixes, so Features lands above Fixes.
+# docs, test, and style are dropped: they are contributor-facing and would bury
+# the changes a person downloading this release actually cares about.
+commit_parsers = [
+  { message = "^feat", group = "<!-- 0 -->Features" },
+  { message = "^fix", group = "<!-- 1 -->Fixes" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^refactor", group = "<!-- 3 -->Engineering" },
+  { message = "^build", group = "<!-- 3 -->Engineering" },
+  { message = "^ci", group = "<!-- 3 -->Engineering" },
+  { message = "^chore", group = "<!-- 3 -->Engineering" },
+  { message = "^docs", skip = true },
+  { message = "^doc", skip = true },
+  { message = "^test", skip = true },
+  { message = "^style", skip = true },
+  # Catch-all so a new commit type is reported rather than silently dropped.
+  { message = ".*", group = "<!-- 3 -->Engineering" },
+]
+
+filter_commits = true
+tag_pattern = "v[0-9].*"
+sort_commits = "oldest"

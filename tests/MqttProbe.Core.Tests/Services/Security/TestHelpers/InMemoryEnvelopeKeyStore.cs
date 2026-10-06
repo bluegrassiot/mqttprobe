@@ -9,4 +9,5 @@ internal class InMemoryEnvelopeKeyStore : ICertificateEnvelopeKeyStore
     public Task<string?> GetAsync(string key) => Task.FromResult(_store.GetValueOrDefault(key));
     public Task SetAsync(string key, string value) { _store[key] = value; return Task.CompletedTask; }
     public Task RemoveAsync(string key) { _store.Remove(key); return Task.CompletedTask; }
+    public IReadOnlyList<string> GetAllKeys() => [.. _store.Keys];
 }

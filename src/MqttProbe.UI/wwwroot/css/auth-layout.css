@@ -108,6 +108,14 @@ input:focus { outline: none; border-color: var(--signal-orange); box-shadow: 0 0
 
 .password-toggle:hover { background: transparent; color: var(--off-white); }
 
+.password-toggle:focus-visible {
+    outline: 2px solid var(--signal-orange);
+    outline-offset: 2px;
+}
+
+.pw-visible { display: block; }
+.pw-hidden { display: none; }
+
 button[type=submit] {
     width: 100%;
     padding: .7rem;
@@ -122,6 +130,11 @@ button[type=submit] {
 
 button[type=submit]:hover { background: #EA6C0A; }
 
+button[type=submit]:focus-visible {
+    outline: 2px solid var(--off-white);
+    outline-offset: 2px;
+}
+
 .error {
     background: rgba(239, 68, 68, .14);
     border: 1px solid var(--signal-red);
@@ -130,4 +143,86 @@ button[type=submit]:hover { background: #EA6C0A; }
     padding: .5rem .75rem;
     margin-bottom: 1rem;
     font-size: .875rem;
+}
+
+.oidc-button {
+    width: 100%;
+    padding: .7rem;
+    background: var(--signal-orange);
+    color: var(--slate-black);
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.oidc-button:hover { background: #EA6C0A; }
+
+.oidc-button:focus-visible {
+    outline: 2px solid var(--off-white);
+    outline-offset: 2px;
+}
+
+.access-denied-card { text-align: center; }
+.access-denied-card .denial-detail { color: var(--slate-gray); font-size: .875rem; margin: .5rem 0 1.25rem; }
+.access-denied-card .action-row { display: flex; gap: .75rem; justify-content: center; margin-top: 1.25rem; flex-wrap: wrap; }
+
+.denial-action {
+    padding: .5rem 1rem;
+    border-radius: 6px;
+    font-size: .875rem;
+    cursor: pointer;
+    text-decoration: none;
+    font-weight: 600;
+    display: inline-block;
+    border: 1px solid var(--slate-border);
+    background: var(--slate-black);
+    color: var(--off-white);
+    text-align: center;
+}
+
+.denial-action:hover { border-color: var(--signal-orange); color: var(--signal-orange); }
+
+.denial-action:focus-visible {
+    outline: 2px solid var(--signal-orange);
+    outline-offset: 2px;
+}
+
+.denial-action--primary {
+    background: var(--signal-orange);
+    color: var(--slate-black);
+    border-color: var(--signal-orange);
+}
+
+.denial-action--primary:hover { background: #EA6C0A; border-color: #EA6C0A; color: var(--slate-black); }
+
+.denial-action--primary:focus-visible {
+    outline-color: var(--off-white);
+}
+
+@media (max-height: 600px) {
+    body { padding: .5rem; }
+
+    .auth-card { padding: 1.25rem 1.25rem; }
+
+    .auth-card h1 { margin-bottom: .25rem; font-size: 1.25rem; }
+
+    .subtitle { margin-bottom: .75rem; }
+
+    .field { margin-bottom: .6rem; }
+
+    .oidc-button { padding: .55rem; }
+
+    .access-denied-card .denial-detail { margin: .35rem 0 .75rem; }
+
+    .access-denied-card .action-row { margin-top: .75rem; }
+}
+
+@media (max-width: 380px) {
+    .auth-card { padding: 1.25rem 1rem; border-radius: 0; }
+
+    .action-row { flex-direction: column; align-items: stretch; }
+
+    .denial-action { width: 100%; }
 }

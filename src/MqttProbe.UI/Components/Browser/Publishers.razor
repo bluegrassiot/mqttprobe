@@ -3,7 +3,6 @@
 @using MQTTnet.Protocol
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.Extensions.Logging
-@using MqttProbe.Core.Models
 @using MqttProbe.Core.Services.Security
 @inject IMqttManagedClient ManagedMqttClient
 @inject ILogger<Publishers> Logger
@@ -69,7 +68,7 @@
             <MudSelect Variant="Variant.Outlined" Margin="Margin.Dense" @bind-Value="_message.QualityOfServiceLevel" Label="QoS Level">
                 @foreach (MqttQualityOfServiceLevel item in Enum.GetValues(typeof(MqttQualityOfServiceLevel)))
                 {
-                    <MudSelectItem Value="@item">@item</MudSelectItem>
+                    <MudSelectItem Value="@item">@MqttQosDisplay.Format(item)</MudSelectItem>
                 }
             </MudSelect>
         </MudItem>

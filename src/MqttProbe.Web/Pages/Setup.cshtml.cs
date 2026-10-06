@@ -4,9 +4,11 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Options;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Security;
+using AuthOptions = MqttProbe.Web.Authentication.AuthenticationOptions;
 
 namespace MqttProbe.Pages;
 
@@ -16,12 +18,18 @@ public class SetupModel : PageModel
     private readonly IAuthSettings _authSettings;
     private readonly IUserAuthService _userAuthService;
     private readonly IUiSettings _uiSettings;
+    private readonly AuthOptions _authOptions;
 
-    public SetupModel(IAuthSettings authSettings, IUserAuthService userAuthService, IUiSettings uiSettings)
+    public SetupModel(
+        IAuthSettings authSettings,
+        IUserAuthService userAuthService,
+        IUiSettings uiSettings,
+        IOptions<AuthOptions> authOptions)
     {
         _authSettings = authSettings;
         _userAuthService = userAuthService;
         _uiSettings = uiSettings;
+        _authOptions = authOptions.Value;
     }
 
     public bool IsAccessibleFontProfile =>
@@ -31,6 +39,10 @@ public class SetupModel : PageModel
 
     public IActionResult OnGet()
     {
+        // OIDC mode: Setup is inaccessible
+        if (_authOptions.Mode.Equals("OIDC", StringComparison.OrdinalIgnoreCase))
+            return RedirectToPage("/Login");
+
         if (!string.IsNullOrEmpty(_authSettings.Auth.PasswordHash))
             return RedirectToPage("/Login");
 
@@ -39,6 +51,10 @@ public class SetupModel : PageModel
 
     public async Task<IActionResult> OnPostAsync(string username, string password, string confirmPassword)
     {
+        // OIDC mode: Setup is inaccessible
+        if (_authOptions.Mode.Equals("OIDC", StringComparison.OrdinalIgnoreCase))
+            return RedirectToPage("/Login");
+
         if (!string.IsNullOrEmpty(_authSettings.Auth.PasswordHash))
             return RedirectToPage("/Login");
 

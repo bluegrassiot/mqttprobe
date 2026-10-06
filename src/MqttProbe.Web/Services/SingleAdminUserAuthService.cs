@@ -1,5 +1,4 @@
 using MqttProbe.Core.Services.Configuration;
-using MqttProbe.Core.Services.Security;
 
 namespace MqttProbe.Web.Services;
 

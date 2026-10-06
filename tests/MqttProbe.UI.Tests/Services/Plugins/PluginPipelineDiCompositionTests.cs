@@ -27,6 +27,7 @@ namespace MqttProbe.UI.Tests.Services.Plugins;
 public class PluginPipelineDiCompositionTests
 {
     private ServiceProvider _serviceProvider = null!;
+    private IServiceScope _serviceScope = null!;
     private IMqttManagedClient _mockClient = null!;
     private Func<MqttApplicationMessageReceivedEventArgs, Task>? _capturedHandler;
 
@@ -79,11 +80,13 @@ public class PluginPipelineDiCompositionTests
         services.AddSingleton(Substitute.For<IUxMetricsService>());
 
         _serviceProvider = services.BuildServiceProvider(validateScopes: true);
+        _serviceScope = _serviceProvider.CreateScope();
     }
 
     [TearDown]
     public void TearDown()
     {
+        _serviceScope.Dispose();
         _serviceProvider.Dispose();
         _mockClient.Dispose();
     }
@@ -122,23 +125,23 @@ public class PluginPipelineDiCompositionTests
     [Test]
     public void ResolveFromDi_BuildsFullObjectGraph()
     {
-        var manager = _serviceProvider.GetRequiredService<IMessageStoreManager>();
+        var manager = _serviceScope.ServiceProvider.GetRequiredService<IMessageStoreManager>();
 
         manager.Should().NotBeNull();
         manager.Should().BeOfType<MessageStoreManager>();
 
-        var pipeline = _serviceProvider.GetRequiredService<PayloadPipeline>();
+        var pipeline = _serviceScope.ServiceProvider.GetRequiredService<PayloadPipeline>();
         pipeline.Should().NotBeNull();
 
-        var formatDisplayNames = _serviceProvider.GetRequiredService<IFormatDisplayNames>();
+        var formatDisplayNames = _serviceScope.ServiceProvider.GetRequiredService<IFormatDisplayNames>();
         formatDisplayNames.Should().NotBeNull();
         formatDisplayNames.Should().BeOfType<FormatDisplayNames>();
 
-        var topology = _serviceProvider.GetRequiredService<ISparkplugTopologyService>();
+        var topology = _serviceScope.ServiceProvider.GetRequiredService<ISparkplugTopologyService>();
         topology.Should().NotBeNull();
         topology.Should().BeOfType<SparkplugTopologyService>();
 
-        var commandService = _serviceProvider.GetRequiredService<ISparkplugCommandService>();
+        var commandService = _serviceScope.ServiceProvider.GetRequiredService<ISparkplugCommandService>();
         commandService.Should().NotBeNull();
         commandService.Should().BeOfType<SparkplugCommandService>();
     }
@@ -157,12 +160,13 @@ public class PluginPipelineDiCompositionTests
         services.AddMqttProbePlugins();
         services.AddMqttProbeSettings(Path.Combine(Path.GetTempPath(), $"c_{Guid.NewGuid()}.json"));
         using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
 
         // These GetRequiredService calls are the assertion: this fixture composes its own
         // ServiceCollection, so a failure here verifies the AddMqttProbeCore/AddMqttProbeSettings
         // pairing, not that any particular host is wired correctly.
-        provider.GetRequiredService<IEmulationService>().Should().NotBeNull();
-        provider.GetRequiredService<IMessageStoreManager>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<IEmulationService>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<IMessageStoreManager>().Should().NotBeNull();
     }
 
     [Test]
@@ -199,20 +203,20 @@ public class PluginPipelineDiCompositionTests
     [Test]
     public void ResolveFromDi_BuildsPluginPackagingServices()
     {
-        _serviceProvider.GetRequiredService<PluginInventoryService>().Should().NotBeNull();
-        var firstInstaller = _serviceProvider.GetRequiredService<PluginPackageInstaller>();
-        var secondInstaller = _serviceProvider.GetRequiredService<PluginPackageInstaller>();
+        _serviceScope.ServiceProvider.GetRequiredService<PluginInventoryService>().Should().NotBeNull();
+        var firstInstaller = _serviceScope.ServiceProvider.GetRequiredService<PluginPackageInstaller>();
+        var secondInstaller = _serviceScope.ServiceProvider.GetRequiredService<PluginPackageInstaller>();
 
         firstInstaller.Should().BeSameAs(secondInstaller);
-        _serviceProvider.GetRequiredService<PluginReloadService>().Should().NotBeNull();
+        _serviceScope.ServiceProvider.GetRequiredService<PluginReloadService>().Should().NotBeNull();
     }
 
     [Test]
     public void ResolveFromDi_BuildsPluginPickerAndInputCapability()
     {
-        _serviceProvider.GetRequiredService<IPluginPackagePicker>().Should().NotBeNull();
+        _serviceScope.ServiceProvider.GetRequiredService<IPluginPackagePicker>().Should().NotBeNull();
 
-        var inputCapability = _serviceProvider.GetRequiredService<IPluginInputCapability>();
+        var inputCapability = _serviceScope.ServiceProvider.GetRequiredService<IPluginInputCapability>();
         inputCapability.Should().NotBeNull();
         inputCapability.UsesInputFileComponent.Should().BeTrue();
     }
@@ -224,11 +228,11 @@ public class PluginPipelineDiCompositionTests
         // from sp rather than constructing their own; a singleton lifetime is what makes
         // Reload() reuse already-loaded assemblies instead of leaking a second
         // AssemblyLoadContext for the same DLLs. Force both through DI to prove it.
-        _ = _serviceProvider.GetRequiredService<PluginRegistry>();
-        _ = _serviceProvider.GetRequiredService<PluginReloadService>();
+        _ = _serviceScope.ServiceProvider.GetRequiredService<PluginRegistry>();
+        _ = _serviceScope.ServiceProvider.GetRequiredService<PluginReloadService>();
 
-        var first = _serviceProvider.GetRequiredService<PluginAssemblyCache>();
-        var second = _serviceProvider.GetRequiredService<PluginAssemblyCache>();
+        var first = _serviceScope.ServiceProvider.GetRequiredService<PluginAssemblyCache>();
+        var second = _serviceScope.ServiceProvider.GetRequiredService<PluginAssemblyCache>();
 
         first.Should().BeSameAs(second);
     }
@@ -236,7 +240,7 @@ public class PluginPipelineDiCompositionTests
     [Test]
     public async Task JsonMessage_RoutedThroughPipeline_StoredInMessageStore()
     {
-        var manager = _serviceProvider.GetRequiredService<IMessageStoreManager>();
+        var manager = _serviceScope.ServiceProvider.GetRequiredService<IMessageStoreManager>();
         await manager.Start();
 
         _capturedHandler.Should().NotBeNull();
@@ -251,8 +255,8 @@ public class PluginPipelineDiCompositionTests
     [Test]
     public async Task SparkplugNBirth_RoutedThroughPipeline_UpdatesTopologyAndStoresMessage()
     {
-        var manager = _serviceProvider.GetRequiredService<IMessageStoreManager>();
-        var topology = _serviceProvider.GetRequiredService<ISparkplugTopologyService>();
+        var manager = _serviceScope.ServiceProvider.GetRequiredService<IMessageStoreManager>();
+        var topology = _serviceScope.ServiceProvider.GetRequiredService<ISparkplugTopologyService>();
         await manager.Start();
 
         _capturedHandler.Should().NotBeNull();

@@ -1,0 +1,127 @@
+# yaml-language-server: $schema=https://goauthentik.io/blueprints/schema.json
+version: 1
+metadata:
+  name: mqttprobe-oidc
+  labels:
+    blueprints.goauthentik.io/description: OIDC provider, application, and group for mqttprobe
+entries:
+  # --- Ensure system/default blueprints are applied before ours ---
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        name: System - OAuth2 Provider - Scopes
+      required: true
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        name: Default - Provider authorization flow (implicit consent)
+      required: true
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        name: Default - Provider invalidation flow
+      required: true
+
+  # --- Custom provider invalidation flow ---
+  # A dedicated invalidation flow for the mqttprobe provider.  It includes
+  # the existing UserLogoutStage ("default-invalidation-logout") which
+  # destroys the authentik session cookie.  Assigning this per-provider
+  # flow (rather than the global default-invalidation-flow) lets authentik
+  # properly manage provider-scoped session invalidation on RP-initiated
+  # logout while also tearing down the shared SSO session.
+  #
+  # title is required on the Flow serializer; omitting it silently fails
+  # the entire blueprint (the engine aborts on any invalid entry).
+  - model: authentik_stages_user_logout.userlogoutstage
+    id: default-invalidation-logout
+    identifiers:
+      name: default-invalidation-logout
+
+  - model: authentik_flows.flow
+    id: mqttprobe-invalidation-flow
+    identifiers:
+      slug: mqttprobe-invalidation-flow
+    attrs:
+      name: mqttprobe invalidation
+      title: mqttprobe invalidation
+      designation: invalidation
+      authentication: none
+
+  - model: authentik_flows.flowstagebinding
+    id: mqttprobe-invalidation-binding
+    identifiers:
+      order: 0
+      stage: !KeyOf default-invalidation-logout
+      target: !KeyOf mqttprobe-invalidation-flow
+    attrs: {}
+
+  # --- Custom scope mapping: emits mqttprobe_access claim ---
+  # scope_name must be "profile" (not a custom name) because mqttprobe only
+  # requests "openid" and "profile".  A custom scope name would never be
+  # requested, so the mapping would never fire.  Multiple mappings can share
+  # the same scope_name; results are merged.
+  #
+  # ak_is_group_member passes **kwargs to Django ORM .filter(), so the
+  # keyword must be the Group model field name "name", not "group_name".
+  - model: authentik_providers_oauth2.scopemapping
+    identifiers:
+      managed: mqttprobe.io/providers/oauth2/scope-mqttprobe-access
+    attrs:
+      name: "mqttprobe: mqttprobe_access"
+      scope_name: profile
+      description: "Emits mqttprobe_access = admin for members of mqttprobe Users"
+      expression: |
+        if ak_is_group_member(request.user, name="mqttprobe Users"):
+            return {
+                "mqttprobe_access": "admin",
+            }
+        return {}
+
+  # --- Group ---
+  - model: authentik_core.group
+    identifiers:
+      name: mqttprobe Users
+    attrs:
+      name: mqttprobe Users
+
+  # --- OAuth2 provider ---
+  - model: authentik_providers_oauth2.oauth2provider
+    id: mqttprobe-provider
+    identifiers:
+      name: mqttprobe
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      # Custom provider invalidation flow that includes the UserLogoutStage.
+      # Destroys the authentik session cookie AND manages provider-scoped
+      # session invalidation on RP-initiated logout.
+      invalidation_flow: !KeyOf mqttprobe-invalidation-flow
+      client_id: mqttprobe
+      client_secret: !Env MQTT_PROBE_CLIENT_SECRET
+      redirect_uris:
+        - matching_mode: strict
+          url: https://localhost:5001/signin-oidc
+          redirect_uri_type: authorization
+        - matching_mode: strict
+          url: https://localhost:5001/signout-callback-oidc
+          redirect_uri_type: logout
+      grant_types:
+        - authorization_code
+        - refresh_token
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, mqttprobe.io/providers/oauth2/scope-mqttprobe-access]]
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+      logout_uri: http://mqttprobe:8080/oidc/backchannel-logout # DevSkim: ignore DS137138 compose-internal backchannel URL
+      logout_method: backchannel
+
+  # --- Application ---
+  - model: authentik_core.application
+    identifiers:
+      slug: mqttprobe
+    attrs:
+      provider: !KeyOf mqttprobe-provider
+      name: mqttprobe
+      meta_launch_url: https://localhost:5001
+      open_in_new_tab: true

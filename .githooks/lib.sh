@@ -231,7 +231,7 @@ classify_push_paths() {
             Directory.Build.props|Directory.Packages.props|global.json|MqttProbe.slnx|MqttProbe.NoMaui.slnf|dotnet-tools.json)
                 has_infra=1
                 ;;
-            scripts/*|.github/*|.githooks/*|Dockerfile|docker-compose.yml|docker-compose.*.yml|.dockerignore)
+            scripts/*|.github/*|.githooks/*|Dockerfile|docker-compose.yml|docker-compose.*.yml|deploy/docker-compose.*.yml|.dockerignore)
                 has_scripts=1
                 ;;
             *)

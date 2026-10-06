@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using MQTTnet.Protocol;
+using MqttProbe.Core;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Security;
@@ -13,6 +15,7 @@ public class SubscriptionsTests : BunitTestContext
 {
     private ISubscriptionManager _mockSubMgr = null!;
     private ISnackbar _mockSnackbar = null!;
+    private ITopicExcludeService _mockExcludeService = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -24,6 +27,12 @@ public class SubscriptionsTests : BunitTestContext
         _mockSnackbar = Substitute.For<ISnackbar>();
         Services.AddSingleton(_mockSnackbar);
 
+        _mockExcludeService = Substitute.For<ITopicExcludeService>();
+        _mockExcludeService.TopicExcludes.Returns(Array.Empty<string>());
+        _mockExcludeService.ValidateAdd(Arg.Any<string>()).Returns(new TopicExcludeValidationResult(true));
+        Services.AddSingleton(_mockExcludeService);
+
+        Services.AddSingleton(Substitute.For<IDialogService>());
         EnsureMudProviders();
     }
 
@@ -46,8 +55,8 @@ public class SubscriptionsTests : BunitTestContext
         var markup = cut.Markup;
         markup.Should().Contain("spBv1.0/+/DDATA/#");
         markup.Should().Contain("my/topic");
-        markup.Should().Contain("AtLeastOnce");
-        markup.Should().Contain("AtMostOnce");
+        markup.Should().Contain("1 · At least once");
+        markup.Should().Contain("0 · At most once");
     }
 
     [Test]
@@ -58,10 +67,10 @@ public class SubscriptionsTests : BunitTestContext
         var cut = Render<Subscriptions>();
 
         var topicInput = cut.FindAll("input").First(e => !e.HasAttribute("readonly") && e.GetAttribute("type") != "checkbox");
-        topicInput.Change("sensors/#");
+        topicInput.Input(new ChangeEventArgs { Value = "sensors/#" });
         cut.Find("button[title='Add subscription']").Click();
 
-        await _mockSubMgr.Received(1).Add("sensors/#", MqttQualityOfServiceLevel.AtLeastOnce);
+        await _mockSubMgr.Received(1).Add("sensors/#");
     }
 
     [Test]
@@ -90,7 +99,7 @@ public class SubscriptionsTests : BunitTestContext
         var cut = Render<Subscriptions>();
 
         var topicInput = cut.FindAll("input").First(e => !e.HasAttribute("readonly") && e.GetAttribute("type") != "checkbox");
-        topicInput.Change("sensors/#");
+        topicInput.Input(new ChangeEventArgs { Value = "sensors/#" });
         cut.Find("button[title='Add subscription']").Click();
 
         cut.Find("button[title='Add subscription']").HasAttribute("disabled")
@@ -117,7 +126,7 @@ public class SubscriptionsTests : BunitTestContext
         var cut = Render<Subscriptions>();
 
         var topicInput = cut.FindAll("input").First(e => !e.HasAttribute("readonly") && e.GetAttribute("type") != "checkbox");
-        topicInput.Change("bad/#");
+        topicInput.Input(new ChangeEventArgs { Value = "bad/#" });
         cut.Find("button[title='Add subscription']").Click();
 
         cut.WaitForAssertion(() =>
@@ -174,5 +183,170 @@ public class SubscriptionsTests : BunitTestContext
         var cut = Render<Subscriptions>();
 
         cut.Find("button[title='Add subscription']").HasAttribute("disabled").Should().BeTrue();
+    }
+
+    [Test]
+    public Task DeleteSelected_WhenRemoveFails_SurfacesErrorSnackbar()
+    {
+        AuthorizeAsOperator();
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "a/topic" }
+        });
+        _mockSubMgr.Remove(Arg.Any<List<string>>())
+            .Returns(Task.FromException(new InvalidOperationException("broker rejected")));
+        var cut = Render<Subscriptions>();
+
+        cut.Find("input[type='checkbox']").Change(true);
+        cut.Find("button[title='Remove']").Click();
+
+        cut.WaitForAssertion(() =>
+            _mockSnackbar.Received().Add(
+                Arg.Is<string>(m => m!.Contains("Failed to unsubscribe")),
+                Severity.Error,
+                Arg.Any<Action<SnackbarOptions>?>(),
+                Arg.Any<string>()));
+        return Task.CompletedTask;
+    }
+
+    [Test]
+    public Task ExcludeRemove_WhenRemoveFails_SurfacesErrorSnackbar()
+    {
+        AuthorizeAsOperator();
+        _mockExcludeService.TopicExcludes.Returns(new List<string> { "$SYS/#" });
+        _mockExcludeService.Remove(Arg.Any<IReadOnlyList<string>>())
+            .Returns(Task.FromException<TopicExcludeOperationResult>(
+                new InvalidOperationException("storage error")));
+        var cut = Render<Subscriptions>();
+
+        cut.Find("input[type='checkbox']").Change(true);
+        cut.Find("button[title='Remove']").Click();
+
+        cut.WaitForAssertion(() =>
+            _mockSnackbar.Received().Add(
+                Arg.Is<string>(m => m!.Contains("storage error")),
+                Severity.Error,
+                Arg.Any<Action<SnackbarOptions>?>(),
+                Arg.Any<string>()));
+        return Task.CompletedTask;
+    }
+
+    [Test]
+    public Task ExcludeRemove_UnsuccessfulResult_ShowsFeedbackSnackbar()
+    {
+        AuthorizeAsOperator();
+        _mockExcludeService.TopicExcludes.Returns(new List<string> { "$SYS/#" });
+        _mockExcludeService.Remove(Arg.Any<IReadOnlyList<string>>())
+            .Returns(Task.FromResult(new TopicExcludeOperationResult(false,
+                new UserNotification(UserNotificationSeverity.Error, "Failed to save topic exclusions"))));
+        var cut = Render<Subscriptions>();
+
+        cut.Find("input[type='checkbox']").Change(true);
+        cut.Find("button[title='Remove']").Click();
+
+        cut.WaitForAssertion(() =>
+            _mockSnackbar.Received().Add(
+                Arg.Is<string>(m => m!.Contains("Failed to save topic exclusions")),
+                Severity.Error,
+                Arg.Any<Action<SnackbarOptions>?>(),
+                Arg.Any<string>()));
+        return Task.CompletedTask;
+    }
+
+    [Test]
+    public void SubscriptionCountChip_PresentInPanelHeader()
+    {
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "a/topic" },
+            new() { Topic = "b/topic" }
+        });
+
+        var cut = Render<Subscriptions>();
+
+        var chip = cut.Find(".count-chip");
+        chip.TextContent.Should().Be("2");
+    }
+
+    [Test]
+    public void SubscriptionCountChip_ShowsZeroWhenNoSubscriptions()
+    {
+        var cut = Render<Subscriptions>();
+
+        var chip = cut.Find(".count-chip");
+        chip.TextContent.Should().Be("0");
+    }
+
+    [Test]
+    public void BothEditors_Present_WhenBothHaveItems()
+    {
+        AuthorizeAsOperator();
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "a/topic" }
+        });
+        _mockExcludeService.TopicExcludes.Returns(new List<string> { "$SYS/#" });
+
+        var cut = Render<Subscriptions>();
+
+        cut.Find(".subscription-editor").Should().NotBeNull();
+        cut.Find(".exclude-editor").Should().NotBeNull();
+    }
+
+    [Test]
+    public void ExcludeEditor_CollapsedWhenExcludesEmpty()
+    {
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "a/topic" }
+        });
+        _mockExcludeService.TopicExcludes.Returns(Array.Empty<string>());
+
+        var cut = Render<Subscriptions>();
+
+        var excludePanel = cut.FindComponent<ExcludeEditor>();
+        excludePanel.FindComponent<MudExpansionPanel>().Instance.Expanded.Should().BeFalse();
+    }
+
+    [Test]
+    public void BothEditors_HaveIndependentExpansionPanels()
+    {
+        AuthorizeAsOperator();
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "a/topic" }
+        });
+        _mockExcludeService.TopicExcludes.Returns(new List<string> { "$SYS/#" });
+
+        var cut = Render<Subscriptions>();
+
+        // Both editors should have their own MudExpansionPanel
+        var panels = cut.FindComponents<MudExpansionPanel>();
+        panels.Should().HaveCount(2);
+    }
+
+    [Test]
+    public void SubsBody_ContainsBothEditors_WithAccessibleRegions()
+    {
+        AuthorizeAsOperator();
+        _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>
+        {
+            new() { Topic = "a/topic" }
+        });
+        _mockExcludeService.TopicExcludes.Returns(new List<string> { "$SYS/#" });
+
+        var cut = Render<Subscriptions>();
+
+        cut.Find(".subs-body").Should().NotBeNull();
+
+        var subEditor = cut.Find(".subscription-editor");
+        subEditor.GetAttribute("role").Should().Be("region");
+        subEditor.GetAttribute("aria-label").Should().Be("Subscriptions list");
+        subEditor.GetAttribute("tabindex").Should().Be("0");
+
+        var excEditor = cut.Find(".exclude-editor");
+        excEditor.GetAttribute("role").Should().Be("region");
+        excEditor.GetAttribute("aria-label").Should().Be("Excluded topics list");
+        excEditor.GetAttribute("tabindex").Should().Be("0");
     }
 }

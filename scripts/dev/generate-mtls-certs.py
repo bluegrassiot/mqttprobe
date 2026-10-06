@@ -257,7 +257,7 @@ def print_next_steps(out: Path, pfx_password: str) -> None:
     print(f"Wrote mTLS lab certificates to: {rel}")
     print()
     print("Next steps:")
-    print("  1. docker compose -f docker-compose.mtls.yml up -d")
+    print("  1. docker compose -f deploy/docker-compose.mtls.yml up -d")
     print(f"  2. Import {rel / 'client.pfx'} in MQTTProbe (password: {pfx_password})")
     print("     or use client.crt + client.key for PEM mode")
     print("  3. Connect to 127.0.0.1:8883 with Use TLS and Allow untrusted certificate")

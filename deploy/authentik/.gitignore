@@ -1,0 +1,12 @@
+# Secrets (copy from .env.example)
+.env
+
+# Caddy persistent state (certs, keys)
+caddy-data/
+caddy-config/
+
+# Exported Caddy root CA
+caddy-root-ca.crt
+
+# Authentik runtime data
+data/

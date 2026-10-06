@@ -1,0 +1,43 @@
+# Release assets for the GitHub release, one glob per line.
+#
+# This file is the single source of truth. scripts/ci/release-notes.py resolves it
+# in the create-release job, release.yml uploads exactly what it prints, and the
+# same script fails the release when a shipped file is missing from
+# .github/release-notes.md. Adding an artifact here without documenting it in the
+# notes is therefore a build failure, not a silently undocumented download.
+#
+# Placeholders, substituted with the tag name and its bare form:
+#   {{VERSION}}      v1.2.3
+#   {{VERSION_NUM}}  1.2.3   (Docker tags have no v prefix)
+#
+# A leading ! excludes matches. The Velopack directories are globbed whole
+# because Velopack names its outputs per platform and per release type; the
+# exclusions keep internal build files out of the published release.
+
+# Web (Blazor Server), framework-dependent single file
+mqttprobe-web-linux-x64-{{VERSION}}.zip
+mqttprobe-web-linux-arm64-{{VERSION}}.zip
+mqttprobe-web-win-x64-{{VERSION}}.zip
+
+# Desktop and mobile
+mqttprobe-windows-{{VERSION}}.zip
+mqttprobe-android-{{VERSION}}.apk
+
+# Linux desktop (Photino): the plain zip predates the AppImage and still needs
+# WebKitGTK installed, because only the AppImage bundles it.
+mqttprobe-desktop-linux-x64-{{VERSION}}.zip
+
+# Licence compliance for the code bundled inside the AppImage
+mqttprobe-third-party-sources-{{VERSION}}.tar.gz
+
+# Windows Velopack channel
+velopack/*
+!*/package-manifest.txt
+
+# Linux Velopack channel
+velopack-linux/*
+!*/package-manifest.txt
+
+# macOS Velopack channel
+velopack-osx/*
+!*/package-manifest.txt

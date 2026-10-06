@@ -195,6 +195,45 @@ public class ConnectionTests
     }
 
     [Test]
+    public void Clone_DeepCopiesTopicExcludes()
+    {
+        var original = new Connection { TopicExcludes = ["sensors/#"] };
+
+        var clone = original.Clone();
+        clone.TopicExcludes.Add("other");
+
+        original.TopicExcludes.Should().Equal("sensors/#");
+        clone.TopicExcludes.Should().Equal("sensors/#", "other");
+    }
+
+    [Test]
+    public void Equals_ConsidersTopicExcludes()
+    {
+        var a = new Connection { ClientId = "same", TopicExcludes = ["sensors/#"] };
+        var b = a.Clone();
+        b.TopicExcludes = ["other/#"];
+
+        a.Equals(b).Should().BeFalse();
+        a.GetHashCode().Should().NotBe(b.GetHashCode());
+    }
+
+    [Test]
+    public void JsonRoundTrip_PreservesTopicExcludes()
+    {
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+        };
+
+        var original = new Connection { TopicExcludes = ["#", "devices/+/debug"] };
+        var json = System.Text.Json.JsonSerializer.Serialize(original, options);
+        var restored = System.Text.Json.JsonSerializer.Deserialize<Connection>(json, options);
+
+        restored.Should().NotBeNull();
+        restored.TopicExcludes.Should().Equal("#", "devices/+/debug");
+    }
+
+    [Test]
     public void Constructor_SetsSessionTimingDefaults()
     {
         var conn = new Connection();

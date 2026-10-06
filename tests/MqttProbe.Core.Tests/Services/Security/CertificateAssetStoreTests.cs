@@ -800,4 +800,223 @@ public class CertificateAssetStoreTests
         var assetId = await _store.ImportAsync(Guid.NewGuid(), request);
         assetId.Should().NotBeNullOrEmpty();
     }
+
+    // --- DuplicateAsync tests ---
+
+    [Test]
+    public async Task DuplicateAsync_RoundTrip_Succeeds()
+    {
+        var (pfxBytes, password) = TestCertFactory.CreatePfx();
+        var sourceOwnerId = Guid.NewGuid();
+        var request = new CertificateImportRequest(CertificateInputMode.Pfx, pfxBytes, null, password);
+        var sourceAssetId = await _store.ImportAsync(sourceOwnerId, request);
+
+        var targetOwnerId = Guid.NewGuid();
+        var newAssetId = await _store.DuplicateAsync(sourceOwnerId, sourceAssetId, targetOwnerId);
+
+        newAssetId.Should().NotBeNull();
+        newAssetId.Should().NotBe(sourceAssetId);
+
+        var loaded = await _store.LoadAsync(targetOwnerId, newAssetId!);
+        loaded.Should().NotBeNull();
+        loaded!.Certificate.HasPrivateKey.Should().BeTrue();
+        loaded.Certificate.Dispose();
+    }
+
+    [Test]
+    public async Task DuplicateAsync_PreservesSourceAsset()
+    {
+        var (pfxBytes, password) = TestCertFactory.CreatePfx();
+        var sourceOwnerId = Guid.NewGuid();
+        var request = new CertificateImportRequest(CertificateInputMode.Pfx, pfxBytes, null, password);
+        var sourceAssetId = await _store.ImportAsync(sourceOwnerId, request);
+
+        var targetOwnerId = Guid.NewGuid();
+        await _store.DuplicateAsync(sourceOwnerId, sourceAssetId, targetOwnerId);
+
+        var sourceLoaded = await _store.LoadAsync(sourceOwnerId, sourceAssetId);
+        sourceLoaded.Should().NotBeNull("source asset must be preserved after duplication");
+        sourceLoaded!.Certificate.Dispose();
+    }
+
+    [Test]
+    public async Task DuplicateAsync_TargetOwnerEnforced()
+    {
+        var (pfxBytes, password) = TestCertFactory.CreatePfx();
+        var sourceOwnerId = Guid.NewGuid();
+        var request = new CertificateImportRequest(CertificateInputMode.Pfx, pfxBytes, null, password);
+        var sourceAssetId = await _store.ImportAsync(sourceOwnerId, request);
+
+        var targetOwnerId = Guid.NewGuid();
+        var newAssetId = await _store.DuplicateAsync(sourceOwnerId, sourceAssetId, targetOwnerId);
+
+        // Target owner can load
+        var loaded = await _store.LoadAsync(targetOwnerId, newAssetId!);
+        loaded.Should().NotBeNull();
+        loaded!.Certificate.Dispose();
+
+        // Source owner cannot load the duplicate
+        var sourceLoad = await _store.LoadAsync(sourceOwnerId, newAssetId!);
+        sourceLoad.Should().BeNull("duplicate must be owned by target, not source");
+    }
+
+    [Test]
+    public async Task DuplicateAsync_UniqueKeyAndCiphertext()
+    {
+        var (pfxBytes, password) = TestCertFactory.CreatePfx();
+        var sourceOwnerId = Guid.NewGuid();
+        var request = new CertificateImportRequest(CertificateInputMode.Pfx, pfxBytes, null, password);
+        var sourceAssetId = await _store.ImportAsync(sourceOwnerId, request);
+
+        var targetOwnerId = Guid.NewGuid();
+        var newAssetId = await _store.DuplicateAsync(sourceOwnerId, sourceAssetId, targetOwnerId);
+
+        var sourcePath = Path.Combine(_store.CertificatesDirectory, $"cert-{sourceAssetId}.bin");
+        var targetPath = Path.Combine(_store.CertificatesDirectory, $"cert-{newAssetId}.bin");
+        var sourceBytes = await File.ReadAllBytesAsync(sourcePath);
+        var targetBytes = await File.ReadAllBytesAsync(targetPath);
+
+        sourceBytes.Should().NotBeEquivalentTo(targetBytes,
+            "duplicate must have different ciphertext (different encryption key)");
+    }
+
+    [Test]
+    public async Task DuplicateAsync_ReturnsNull_ForMissingSource()
+    {
+        var result = await _store.DuplicateAsync(Guid.NewGuid(), Guid.NewGuid().ToString("D"), Guid.NewGuid());
+        result.Should().BeNull();
+    }
+
+    [Test]
+    public async Task DuplicateAsync_ReturnsNull_ForWrongSourceOwner()
+    {
+        var (pfxBytes, password) = TestCertFactory.CreatePfx();
+        var sourceOwnerId = Guid.NewGuid();
+        var request = new CertificateImportRequest(CertificateInputMode.Pfx, pfxBytes, null, password);
+        var sourceAssetId = await _store.ImportAsync(sourceOwnerId, request);
+
+        var wrongOwnerId = Guid.NewGuid();
+        var result = await _store.DuplicateAsync(wrongOwnerId, sourceAssetId, Guid.NewGuid());
+        result.Should().BeNull("wrong source owner must fail");
+    }
+
+    [Test]
+    public async Task DuplicateAsync_ReturnsNull_ForTamperedEnvelope()
+    {
+        var (pfxBytes, password) = TestCertFactory.CreatePfx();
+        var sourceOwnerId = Guid.NewGuid();
+        var request = new CertificateImportRequest(CertificateInputMode.Pfx, pfxBytes, null, password);
+        var sourceAssetId = await _store.ImportAsync(sourceOwnerId, request);
+
+        // Tamper with the envelope
+        await _envelopeStore.SetAsync($"cert-env-{sourceAssetId}", "invalid-json");
+
+        var result = await _store.DuplicateAsync(sourceOwnerId, sourceAssetId, Guid.NewGuid());
+        result.Should().BeNull("tampered envelope must fail duplication");
+    }
+
+    [Test]
+    public async Task DuplicateAsync_RollsBack_WhenEnvelopeWriteFails()
+    {
+        var (pfxBytes, password) = TestCertFactory.CreatePfx();
+        var sourceOwnerId = Guid.NewGuid();
+        var request = new CertificateImportRequest(CertificateInputMode.Pfx, pfxBytes, null, password);
+        var sourceAssetId = await _store.ImportAsync(sourceOwnerId, request);
+
+        // Verify source is loadable before testing rollback
+        var sourceLoaded = await _store.LoadAsync(sourceOwnerId, sourceAssetId);
+        sourceLoaded.Should().NotBeNull("source must be loadable before rollback test");
+        sourceLoaded!.Certificate.Dispose();
+
+        // Create a failing store that can read source envelopes but fails on target SetAsync
+        var sourceEnvelopeJson = await _envelopeStore.GetAsync($"cert-env-{sourceAssetId}");
+        sourceEnvelopeJson.Should().NotBeNull("source envelope must exist");
+        var failingEnvelopeStore = new DuplicateFailingEnvelopeKeyStore(sourceAssetId, sourceEnvelopeJson!);
+        var failingStore = new CertificateAssetStore(failingEnvelopeStore, _tempDir,
+            Substitute.For<ILogger<CertificateAssetStore>>());
+
+        var result = await failingStore.DuplicateAsync(sourceOwnerId, sourceAssetId, Guid.NewGuid());
+        result.Should().BeNull("envelope write failure must cause rollback");
+
+        // No orphaned blob should remain (only the source .bin)
+        var certFiles = Directory.GetFiles(_store.CertificatesDirectory, "cert-*.bin");
+        certFiles.Should().HaveCount(1, "only the source blob should remain after rollback");
+
+        // No orphaned temp file should remain
+        var tempFiles = Directory.GetFiles(_store.CertificatesDirectory, "cert-*.bin.tmp");
+        tempFiles.Should().BeEmpty("temp file must be removed after rollback");
+
+        // Verify the target envelope is absent after rollback (RemoveAsync cleaned it up)
+        failingEnvelopeStore.GetAsync(failingEnvelopeStore.LastSetKey!).Result.Should().BeNull(
+            "the exact target envelope key must be absent after rollback");
+
+        // Verify SetAsync was called exactly once (for the target) and threw after write
+        failingEnvelopeStore.SetAsyncCallCount.Should().Be(1,
+            "SetAsync should have been called exactly once (for the target) and thrown after write");
+        failingEnvelopeStore.LastSetKey.Should().StartWith("cert-env-",
+            "SetAsync key must be a target envelope key");
+
+        // Verify RemoveAsync was called with the exact same target envelope key during rollback
+        failingEnvelopeStore.RemoveAsyncCallCount.Should().BeGreaterThanOrEqualTo(1,
+            "rollback must call RemoveAsync on the target envelope key");
+        failingEnvelopeStore.LastRemovedKey.Should().Be(failingEnvelopeStore.LastSetKey,
+            "RemoveAsync must target the exact same key that SetAsync wrote before throwing");
+
+        // Verify the target envelope key is absent from the store (rollback removed the write-then-threw data)
+        failingEnvelopeStore.Contains(failingEnvelopeStore.LastSetKey!).Should().BeFalse(
+            "the target envelope key must not exist in the store after rollback");
+
+        // Source must still be loadable after rollback
+        var sourceAfter = await _store.LoadAsync(sourceOwnerId, sourceAssetId);
+        sourceAfter.Should().NotBeNull("source must survive rollback");
+        sourceAfter!.Certificate.Dispose();
+    }
+
+    private sealed class DuplicateFailingEnvelopeKeyStore : ICertificateEnvelopeKeyStore
+    {
+        private readonly string _sourceAssetId;
+        private readonly string _sourceEnvelopeJson;
+        private readonly Dictionary<string, string> _store = new();
+
+        public int SetAsyncCallCount { get; private set; }
+        public string? LastSetKey { get; private set; }
+        public int RemoveAsyncCallCount { get; private set; }
+        public string? LastRemovedKey { get; private set; }
+
+        public DuplicateFailingEnvelopeKeyStore(string sourceAssetId, string sourceEnvelopeJson)
+        {
+            _sourceAssetId = sourceAssetId;
+            _sourceEnvelopeJson = sourceEnvelopeJson;
+        }
+
+        public Task<string?> GetAsync(string key)
+        {
+            // Allow reading the source envelope so decryption succeeds
+            if (key == $"cert-env-{_sourceAssetId}")
+                return Task.FromResult<string?>(_sourceEnvelopeJson);
+            // Also return stored values so rollback can be verified as having completed
+            return Task.FromResult(_store.GetValueOrDefault(key));
+        }
+
+        public Task SetAsync(string key, string value)
+        {
+            SetAsyncCallCount++;
+            LastSetKey = key;
+            // Model write-then-throw: persist the data, then throw to trigger rollback.
+            // This proves the rollback path calls RemoveAsync on the exact target key,
+            // and that RemoveAsync actually removes what was written.
+            _store[key] = value;
+            throw new IOException("envelope write failed");
+        }
+
+        public Task RemoveAsync(string key)
+        {
+            RemoveAsyncCallCount++;
+            LastRemovedKey = key;
+            _store.Remove(key);
+            return Task.CompletedTask;
+        }
+
+        public bool Contains(string key) => _store.ContainsKey(key);
+    }
 }

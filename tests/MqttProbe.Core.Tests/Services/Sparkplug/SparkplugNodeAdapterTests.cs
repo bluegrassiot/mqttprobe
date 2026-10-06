@@ -1,12 +1,7 @@
-using MqttProbe.Core.Services.Chart;
-using MqttProbe.Core.Services.Configuration;
-using MqttProbe.Core.Services.Metrics;
-using MqttProbe.Core.Services.Mqtt;
-using MqttProbe.Core.Services.Platform;
-using MqttProbe.Core.Services.Security;
 using MqttProbe.Core.Services.Sparkplug;
 using SparkplugNet.Core;
 using SparkplugNet.Core.Enumerations;
+using SparkplugNet.VersionB;
 using SparkplugNet.VersionB.Data;
 
 namespace MqttProbe.Core.Tests.Services.Sparkplug;
@@ -85,7 +80,7 @@ public class SparkplugNodeAdapterTests
     [Test]
     public void PublishNodeDeathMessage_WhenSendNodeDeathMessageMethodNotFound_ThrowsInvalidOperationException()
     {
-        var innerNode = new SparkplugNet.VersionB.SparkplugNode(new List<Metric>(), SparkplugSpecificationVersion.Version30);
+        var innerNode = new SparkplugNode(new List<Metric>(), SparkplugSpecificationVersion.Version30);
         var adapter = new SparkplugNodeAdapter(innerNode, new List<Metric>());
 
         // Verify the adapter is wired to the real method so that if it disappears in a SparkplugNet upgrade,
@@ -105,5 +100,59 @@ public class SparkplugNodeAdapterTests
             method.Name.Should().Be("SendNodeDeathMessage",
                 "the reflection target must exist; if it disappears the adapter must throw InvalidOperationException");
         }
+    }
+
+    [Test]
+    public async Task PublishMetrics_after_revoke_returns_completed_without_publishing()
+    {
+        var cts = new CancellationTokenSource();
+        var innerNode = new SparkplugNode(new List<Metric>(), SparkplugSpecificationVersion.Version30);
+        var adapter = new SparkplugNodeAdapter(innerNode, new List<Metric>(), revocationToken: cts.Token);
+
+        cts.Cancel();
+
+        // Should return without throwing (the real node would throw because it's not started).
+        var act = () => adapter.PublishMetrics(new List<Metric> { new("Test", DataType.Double, 1.0) });
+        await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task PublishDeviceBirthMessage_after_revoke_returns_without_delegating()
+    {
+        var cts = new CancellationTokenSource();
+        var innerNode = new SparkplugNode(new List<Metric>(), SparkplugSpecificationVersion.Version30);
+        var adapter = new SparkplugNodeAdapter(innerNode, new List<Metric>(), revocationToken: cts.Token);
+
+        cts.Cancel();
+
+        // Should return without throwing (the real node would throw ArgumentNullException("Options")).
+        var act = () => adapter.PublishDeviceBirthMessage("Dev-0", new List<Metric>());
+        await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task PublishDeviceMetrics_after_revoke_returns_completed_without_publishing()
+    {
+        var cts = new CancellationTokenSource();
+        var innerNode = new SparkplugNode(new List<Metric>(), SparkplugSpecificationVersion.Version30);
+        var adapter = new SparkplugNodeAdapter(innerNode, new List<Metric>(), revocationToken: cts.Token);
+
+        cts.Cancel();
+
+        // Should return without throwing (the real node would throw because it's not started).
+        var act = () => adapter.PublishDeviceMetrics("Dev-0", new List<Metric> { new("Test", DataType.Double, 1.0) });
+        await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public async Task PublishMetrics_before_revoke_attempts_to_delegate()
+    {
+        var cts = new CancellationTokenSource();
+        var innerNode = new SparkplugNode(new List<Metric>(), SparkplugSpecificationVersion.Version30);
+        var adapter = new SparkplugNodeAdapter(innerNode, new List<Metric>(), revocationToken: cts.Token);
+
+        // Should attempt to delegate (the real node will throw because it's not started).
+        var act = () => adapter.PublishMetrics(new List<Metric> { new("Test", DataType.Double, 1.0) });
+        await act.Should().ThrowAsync<Exception>();
     }
 }

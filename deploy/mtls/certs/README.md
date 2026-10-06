@@ -18,7 +18,7 @@ Do not commit private keys or PFX files. This directory is gitignored except thi
 After generating certs:
 
 ```bash
-docker compose -f docker-compose.mtls.yml up -d
+docker compose -f deploy/docker-compose.mtls.yml up -d
 ```
 
 Import `client.pfx` (or PEM pair) in MQTTProbe. Connect to `127.0.0.1:8883` with TLS and **Allow untrusted certificate** enabled for the lab server cert.

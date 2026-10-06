@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Reflection;
-using Microsoft.Maui.ApplicationModel;
 using MqttProbe.Core.Services.Platform;
 
 namespace MqttProbe.Maui.Services;
@@ -28,6 +27,8 @@ public class AppInfoService : IAppInfoService
 
     public bool RequiresAuthentication => false;
     public bool IsNative => true;
+    public bool IsOidcMode => false;
+    public string? ProviderDisplayName => null;
 
     public string GetVersion() =>
         AppVersionResolver.Resolve(
@@ -35,7 +36,7 @@ public class AppInfoService : IAppInfoService
             _processProductVersionProvider,
             _assemblyInformationalVersionProvider);
 
-    private static string? GetAppVersion() => AppInfo.Current.VersionString;
+    private static string GetAppVersion() => AppInfo.Current.VersionString;
 
     private static string? GetProcessProductVersion()
     {

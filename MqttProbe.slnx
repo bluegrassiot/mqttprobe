@@ -8,9 +8,14 @@
     <File Path=".dockerignore" />
     <File Path=".env.example" />
     <File Path="docker-compose.yml" />
-    <File Path="docker-compose.prod.yml" />
-    <File Path="docker-compose.mtls.yml" />
     <File Path="Dockerfile" />
+  </Folder>
+  <Folder Name="/deploy/">
+    <File Path="deploy/.env.example" />
+    <File Path="deploy/Caddyfile" />
+    <File Path="deploy/docker-compose.prod.yml" />
+    <File Path="deploy/docker-compose.mtls.yml" />
+    <File Path="deploy/mosquitto/bootstrap.sh" />
   </Folder>
   <Folder Name="/docs/">
     <File Path="AGENTS.md" />

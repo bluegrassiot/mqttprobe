@@ -1,0 +1,91 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inject IAuthorizationPolicyProvider PolicyProvider
+@inject IAuthorizationService AuthorizationService
+
+@* AuthorizeRouteView renders its NotAuthorized content inside the page layout, which
+   drags the app shell and its dialog/popover providers behind signed-out states.
+   This gate renders unauthorized content bare instead, and fails closed while
+   authorization for the current route is unknown or in flight. *@
+@if (_authorized == true)
+{
+    <RouteView RouteData="@RouteData" DefaultLayout="@DefaultLayout" />
+}
+else if (_authorized == false && _authenticationState is not null)
+{
+    @NotAuthorized?.Invoke(_authenticationState)
+}
+
+@code {
+    // Display-only context for the unauthorized view when no auth state is cascaded.
+    // It never feeds an authorization decision.
+    private static readonly AuthenticationState UnauthenticatedDisplayState =
+        new(new ClaimsPrincipal());
+
+    private bool? _authorized;
+    private AuthenticationState? _authenticationState;
+    private int _generation;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    [Parameter, EditorRequired]
+    public RouteData RouteData { get; set; } = default!;
+
+    [Parameter]
+    public Type? DefaultLayout { get; set; }
+
+    [Parameter]
+    public RenderFragment<AuthenticationState>? NotAuthorized { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Fail closed while re-evaluating: never keep a previous route's grant
+        // rendered against a newer route or auth state.
+        _authorized = null;
+        _authenticationState = null;
+
+        var generation = ++_generation;
+        var routeData = RouteData;
+        var authenticationStateTask = AuthenticationStateTask;
+
+        if (authenticationStateTask is null)
+        {
+            // Without a cascaded auth state nothing can be evaluated: deny and
+            // never consult the authorization service.
+            Commit(generation, false, UnauthenticatedDisplayState);
+            return;
+        }
+
+        var metadata = routeData.PageType.GetCustomAttributes(inherit: true);
+        var authorizeData = metadata.OfType<IAuthorizeData>().ToArray();
+
+        if (authorizeData.Length == 0 || metadata.OfType<IAllowAnonymous>().Any())
+        {
+            Commit(generation, true, null);
+            return;
+        }
+
+        var authenticationState = await authenticationStateTask;
+        var policy = await AuthorizationPolicy.CombineAsync(PolicyProvider, authorizeData);
+        if (policy is null)
+        {
+            // CombineAsync returns null only for empty data, ruled out above;
+            // still fail closed rather than assuming non-null.
+            Commit(generation, false, authenticationState);
+            return;
+        }
+
+        var result = await AuthorizationService.AuthorizeAsync(authenticationState.User, routeData, policy);
+        Commit(generation, result.Succeeded, authenticationState);
+    }
+
+    private void Commit(int generation, bool authorized, AuthenticationState? authenticationState)
+    {
+        // A newer parameter set owns the render state: drop this stale completion.
+        if (generation != _generation) return;
+
+        _authorized = authorized;
+        _authenticationState = authenticationState;
+    }
+}

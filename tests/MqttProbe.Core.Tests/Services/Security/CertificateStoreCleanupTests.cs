@@ -287,6 +287,9 @@ public class CertificateStoreCleanupTests
 
         public Task<ClientCertificateBundle?> LoadAsync(Guid ownerConnectionId, string assetId) =>
             throw new NotSupportedException("Cleanup must never load a bundle.");
+
+        public Task<string?> DuplicateAsync(Guid sourceOwnerId, string sourceAssetId, Guid targetOwnerId) =>
+            throw new NotSupportedException("Cleanup must never duplicate.");
     }
 
     private sealed class FakeEnvelopeKeyStore : ICertificateEnvelopeKeyStore

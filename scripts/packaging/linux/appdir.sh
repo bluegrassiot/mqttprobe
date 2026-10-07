@@ -132,6 +132,22 @@ else
     echo "WARNING: icon.png not found at $ICON_SRC"
 fi
 
+# AppImageHub appdir-lint.sh requires .DirIcon in the AppDir root and vpk pack
+# never creates one. A relative symlink keeps a single PNG in the image and
+# still resolves after linuxdeploy rewrites icon.png into a symlink pointing
+# into usr/share/icons.
+ensure_diricon() {
+    local appdir="$1"
+    if [[ ! -f "$appdir/icon.png" ]]; then
+        echo "FATAL: $appdir/icon.png missing, cannot create .DirIcon"
+        exit 1
+    fi
+    ln -sf icon.png "$appdir/.DirIcon"
+    echo "  .DirIcon -> icon.png"
+}
+
+ensure_diricon "$APPDIR"
+
 # ── Step 5: Download linuxdeploy + install prerequisites ────────────────────
 
 echo "=== Step 5: Running linuxdeploy with GTK/GStreamer plugins ==="
@@ -463,6 +479,11 @@ fi
 echo "NOTICE written to: $NOTICE_PATH"
 
 # ── Step 10: Feed to vpk pack ───────────────────────────────────────────────
+
+# Re-assert: linuxdeploy rewrites the AppDir root icon set (icon.png becomes a
+# symlink into usr/share/icons), so the link is rebuilt immediately before
+# packing rather than trusted from Step 4.
+ensure_diricon "$APPDIR"
 
 echo "=== Step 10: Building AppImage via vpk pack ==="
 vpk pack \

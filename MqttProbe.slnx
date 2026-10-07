@@ -4,6 +4,38 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Folder Name="/deploy/authentik/">
+    <File Path="deploy/authentik/.env.example" />
+    <File Path="deploy/authentik/ca-init.sh" />
+    <File Path="deploy/authentik/Caddyfile" />
+    <File Path="deploy/authentik/docker-compose.yml" />
+    <File Path="deploy/authentik/README.md" />
+    <File Path="deploy/authentik/smoke.ps1" />
+    <File Path="deploy/authentik/smoke.sh" />
+  </Folder>
+  <Folder Name="/deploy/authentik/blueprints/">
+    <File Path="deploy/authentik/blueprints/mqttprobe.yaml" />
+  </Folder>
+  <Folder Name="/deploy/keycloak/">
+    <File Path="deploy/keycloak/.env.example" />
+    <File Path="deploy/keycloak/.gitignore" />
+    <File Path="deploy/keycloak/ca-init.sh" />
+    <File Path="deploy/keycloak/Caddyfile" />
+    <File Path="deploy/keycloak/docker-compose.yml" />
+    <File Path="deploy/keycloak/README.md" />
+    <File Path="deploy/keycloak/realm.json" />
+    <File Path="deploy/keycloak/smoke.ps1" />
+    <File Path="deploy/keycloak/smoke.sh" />
+  </Folder>
+  <Folder Name="/deploy/mosquitto/">
+    <File Path="deploy/mosquitto/bootstrap.sh" />
+  </Folder>
+  <Folder Name="/deploy/mtls/">
+    <File Path="deploy/mtls/mosquitto.conf" />
+  </Folder>
+  <Folder Name="/deploy/mtls/certs/">
+    <File Path="deploy/mtls/certs/README.md" />
+  </Folder>
   <Folder Name="/docker/">
     <File Path=".dockerignore" />
     <File Path=".env.example" />
@@ -15,7 +47,6 @@
     <File Path="deploy/Caddyfile" />
     <File Path="deploy/docker-compose.prod.yml" />
     <File Path="deploy/docker-compose.mtls.yml" />
-    <File Path="deploy/mosquitto/bootstrap.sh" />
   </Folder>
   <Folder Name="/docs/">
     <File Path="AGENTS.md" />

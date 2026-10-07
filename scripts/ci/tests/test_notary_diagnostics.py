@@ -30,6 +30,11 @@ PACK_START = "2026-01-30T12:34:56Z"
 KEYCHAIN = "/tmp/runner/signing.keychain-db"
 NOISE = "https://appstoreconnect.apple.com/notary/download/deadbeef"
 
+# The two names vpk actually submits, as seen on the macOS runner.
+APP_NAME = "notarize.zip"
+PKG_NAME = "MQTTProbe-osx-Setup.pkg"
+OTHER_NAME = "SomeOtherApp-2.0.0.pkg"
+
 
 def ok(payload, returncode=0):
     return subprocess.CompletedProcess(
@@ -41,9 +46,8 @@ def fail(returncode=1, stdout="", stderr=""):
     return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=stderr)
 
 
-def entry(submission_id, created, status):
-    return {"id": submission_id, "createdDate": created, "status": status,
-            "name": "MQTTProbe-1.0.6-arm64.dmg.zip"}
+def entry(submission_id, created, status, name=APP_NAME):
+    return {"id": submission_id, "createdDate": created, "status": status, "name": name}
 
 
 def history(*entries):
@@ -99,12 +103,15 @@ class Tests(unittest.TestCase):
         workflow = script.parents[2] / ".github/workflows/build-macos-desktop.yml"
         self.assertIn("-I scripts/ci/notary-diagnostics.py", workflow.read_text(encoding="utf-8"))
 
-    def run_helper(self, plan, pack_start=PACK_START):
+    def run_helper(self, plan, pack_start=PACK_START, names=None):
         fake = Fake(plan)
         output = io.StringIO()
+        argv = ["--pack-start", pack_start, "--keychain", KEYCHAIN]
+        for name in names or ():
+            argv += ["--expected-name", name]
         with mock.patch.object(subprocess, "run", fake):
             with contextlib.redirect_stdout(output):
-                code = notary.main(["--pack-start", pack_start, "--keychain", KEYCHAIN])
+                code = notary.main(argv)
         self.assertEqual(code, 0, "diagnostics must never fail the step")
         return output.getvalue(), fake
 
@@ -124,14 +131,126 @@ class Tests(unittest.TestCase):
 
     def test_no_match_is_not_proof_the_upload_never_happened(self) -> None:
         output, fake = self.run_helper({"history": history(entry("old", "2026-01-30T11:00:00Z", "Accepted"))})
-        self.assertIn("Not proof the upload never completed", output)
+        self.assertIn("not proof the upload never completed", output)
         self.assertNotIn("old", output)
         self.assertEqual(fake.called(), ["history"])
 
     def test_unreadable_created_date_is_counted(self) -> None:
         output, _ = self.run_helper({"history": history(entry("bad", "whenever", "Invalid"))})
         self.assertIn("1 of 1 entries had an unreadable createdDate", output)
-        self.assertIn("None found", output)
+        self.assertIn("None matched that search", output)
+
+    def test_unrelated_newer_submissions_do_not_hide_this_run(self) -> None:
+        # Four unrelated submissions are newer than both of ours, so a cap
+        # applied before the name filter would report only those.
+        rows = [entry(f"other-{n}", f"2026-01-30T14:0{n}:00Z", "Accepted", OTHER_NAME)
+                for n in range(4)]
+        rows += [entry("app-1", "2026-01-30T12:40:00Z", "Accepted", APP_NAME),
+                 entry("pkg-1", "2026-01-30T12:41:00Z", "Accepted", PKG_NAME)]
+        plan = {"history": history(*rows)}
+        for key, name in (("app-1", APP_NAME), ("pkg-1", PKG_NAME)):
+            plan[f"info {key}"] = ok({"id": key, "status": "Accepted", "name": name})
+            plan[f"log {key}"] = ok({"issues": []})
+        output, fake = self.run_helper(plan, names=[APP_NAME, PKG_NAME])
+
+        self.assertEqual(fake.called(),
+                         ["history", "info pkg-1", "log pkg-1", "info app-1", "log app-1"])
+        self.assertNotIn("other-", output)
+        self.assertIn(APP_NAME, output.splitlines()[0])
+        self.assertIn(PKG_NAME, output.splitlines()[0])
+
+    def test_cap_and_pre_start_apply_within_matching_names(self) -> None:
+        rows = [entry(f"app-{n}", f"2026-01-30T12:{40 + n}:00Z", "Accepted", APP_NAME)
+                for n in range(5)]
+        rows.append(entry("old-app", "2026-01-30T11:00:00Z", "Accepted", APP_NAME))
+        plan = {"history": history(*rows)}
+        for n in range(5):
+            key = f"app-{n}"
+            plan[f"info {key}"] = ok({"id": key, "status": "Accepted"})
+            plan[f"log {key}"] = ok({"issues": []})
+        output, fake = self.run_helper(plan, names=[APP_NAME])
+
+        self.assertIn("capped at 3", output)
+        self.assertNotIn("id=old-app", output)
+        self.assertEqual([k for k in fake.called() if k.startswith("info")],
+                         ["info app-4", "info app-3", "info app-2"])
+
+    def test_no_matching_name_reports_the_search_not_a_failed_upload(self) -> None:
+        # A malformed non-string name must be skipped, not compared into the set.
+        broken = entry("broken", "2026-01-30T12:45:00Z", "Accepted")
+        broken["name"] = {"unexpected": True}
+        output, fake = self.run_helper(
+            {"history": history(entry("x", "2026-01-30T12:40:00Z", "Accepted", OTHER_NAME), broken)},
+            names=[APP_NAME, PKG_NAME],
+        )
+        self.assertIn("None matched that search", output)
+        self.assertIn("not proof the upload never completed", output)
+        self.assertNotIn("id=x", output)
+        self.assertNotIn("id=broken", output)
+        self.assertEqual(fake.called(), ["history"])
+
+    def test_unavailable_info_reports_status_unknown_and_skips_the_log(self) -> None:
+        for label, answer in [("nonzero", fail(1, stderr=f"key {NOISE}")),
+                              ("timeout", subprocess.TimeoutExpired(cmd=["xcrun"], timeout=notary.TIMEOUT)),
+                              ("nonjson", fail(stdout="not json", returncode=0)),
+                              ("list", ok(["not", "an", "object"])),
+                              ("text", ok("text"))]:
+            with self.subTest(answer=label):
+                output, fake = self.run_helper({
+                    "history": history(entry("s", "2026-01-30T12:40:00Z", "Accepted")),
+                    "info s": answer,
+                })
+                self.assertIn("status unknown", output)
+                self.assertNotIn("no issues reported", output)
+                self.assertNotIn(NOISE, output)
+                self.assertEqual(fake.called(), ["history", "info s"])
+
+    def test_missing_or_malformed_status_is_unknown_not_pending(self) -> None:
+        for label, payload in [("absent", {"id": "s"}),
+                               ("null", {"id": "s", "status": None}),
+                               ("object", {"id": "s", "status": {}})]:
+            with self.subTest(status=label):
+                output, fake = self.run_helper({
+                    "history": history(entry("s", "2026-01-30T12:40:00Z", "Accepted")),
+                    "info s": ok(payload),
+                })
+                self.assertIn("status unknown", output)
+                self.assertEqual(fake.called(), ["history", "info s"])
+
+    def test_unavailable_log_is_never_reported_as_no_issues(self) -> None:
+        for label, answer in [("nonzero", fail(4)),
+                              ("timeout", subprocess.TimeoutExpired(cmd=["xcrun"], timeout=notary.TIMEOUT)),
+                              ("nonjson", fail(stdout="{oops", returncode=0)),
+                              ("list", ok(["nope"])), ("null", ok(None))]:
+            with self.subTest(answer=label):
+                output, _ = self.run_helper({
+                    "history": history(entry("s", "2026-01-30T12:40:00Z", "Accepted")),
+                    "info s": ok({"id": "s", "status": "Accepted"}),
+                    "log s": answer,
+                })
+                self.assertIn("issues unknown", output)
+                self.assertNotIn("no issues reported", output)
+
+    def test_malformed_issues_field_is_unknown_not_clean(self) -> None:
+        output, _ = self.run_helper({
+            "history": history(entry("s", "2026-01-30T12:40:00Z", "Invalid")),
+            "info s": ok({"id": "s", "status": "Invalid"}),
+            "log s": ok({"issues": {"unexpected": True}}),
+        })
+        self.assertIn("issues unknown (unexpected issues field)", output)
+        self.assertNotIn("no issues reported", output)
+
+    def test_accepted_log_without_issues_is_still_clean(self) -> None:
+        # The real Accepted response carries no issues key at all.
+        for label, answer in [("absent", ok({})), ("null", ok({"issues": None})),
+                              ("empty", ok({"issues": []}))]:
+            with self.subTest(issues=label):
+                output, _ = self.run_helper({
+                    "history": history(entry("s", "2026-01-30T12:40:00Z", "Accepted")),
+                    "info s": ok({"id": "s", "status": "Accepted"}),
+                    "log s": answer,
+                })
+                self.assertIn("no issues reported", output)
 
     def test_candidates_are_capped_at_three_newest_and_labelled_unproven(self) -> None:
         plan = {"history": history(*[entry(f"sub-{i}", f"2026-01-30T13:0{i}:00Z", "Invalid") for i in range(5)])}
@@ -156,7 +275,11 @@ class Tests(unittest.TestCase):
                 })
                 self.assertEqual(fake.called(),
                                  ["history", "info sub-1"] + (["log sub-1"] if logged else []))
-                self.assertEqual("not terminal, log not fetched" in output, not logged)
+                if logged:
+                    self.assertNotIn("log not fetched", output)
+                else:
+                    self.assertIn("status unknown" if not isinstance(status, str)
+                                  else "is not terminal, log not fetched", output)
 
     def test_non_object_history_entries_are_skipped(self) -> None:
         output, fake = self.run_helper({
@@ -170,7 +293,7 @@ class Tests(unittest.TestCase):
     def test_issue_list_is_capped_and_reports_truncation(self) -> None:
         issues = [{"code": f"ITMS-{n:05d}"} for n in range(15)]
         for answer, expected in [(ok({"issues": issues}), "5 further issues not shown"),
-                                 (ok({"issues": "none"}), "no issue list in the response"),
+                                 (ok({"issues": "none"}), "issues unknown (unexpected issues field)"),
                                  (ok({}), "no issues reported"),
                                  (ok({"issues": []}), "no issues reported")]:
             with self.subTest(expected=expected):
@@ -180,8 +303,6 @@ class Tests(unittest.TestCase):
                     "log sub-1": answer,
                 })
                 self.assertIn(expected, output)
-                if expected == "no issue list in the response":
-                    self.assertNotIn("no issues reported", output)
                 if expected.startswith("5"):
                     self.assertEqual(output.count("    issue: "), notary.MAX_ISSUES)
 

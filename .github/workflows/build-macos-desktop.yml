@@ -374,9 +374,14 @@ jobs:
           fi
           # -I is required: this directory holds an inspect.py that shadows the
           # stdlib module, which crashes argparse on Python 3.14 runners.
+          # Both names come from what vpk actually submits: the app bundle as a
+          # ditto zip, then the installer pkg. Filtering by name keeps a busier
+          # Apple team from filling the report with unrelated submissions.
           python3 -I scripts/ci/notary-diagnostics.py \
             --pack-start "$PACK_START_UTC" \
             --keychain "$NOTARY_KEYCHAIN" \
+            --expected-name notarize.zip \
+            --expected-name MQTTProbe-osx-Setup.pkg \
             || { echo "::warning::Notarization diagnostics failed; see output above."; exit 1; }
 
       - name: Upload artifact

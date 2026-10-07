@@ -73,6 +73,8 @@ def main(argv=None):
     )
     parser.add_argument("--pack-start", required=True, help="UTC time vpk pack started")
     parser.add_argument("--keychain", required=True, help="CI signing keychain path")
+    parser.add_argument("--expected-name", action="append", default=None,
+                        help="only report submissions with this artifact name; repeatable")
     args = parser.parse_args(argv)
 
     start = parse_stamp(args.pack_start)
@@ -94,7 +96,9 @@ def main(argv=None):
         print("Submission history unavailable, so no status can be reported.")
         return 0
 
-    print(f"Candidate submissions created at or after pack start {start.isoformat()}:")
+    wanted = set(args.expected_name or ())
+    criteria = f" named {' or '.join(sorted(wanted))}" if wanted else ""
+    print(f"Candidate submissions created at or after pack start {start.isoformat()}{criteria}:")
     rows = [row for row in entries if isinstance(row, dict)]
     if len(rows) != len(entries):
         print(f"  skipped {len(entries) - len(rows)} history entries that were not objects.")
@@ -103,18 +107,30 @@ def main(argv=None):
     if unreadable:
         print(f"  {unreadable} of {len(rows)} entries had an unreadable createdDate, "
               "so they could not be matched against the pack start.")
-    fresh = [(stamp, row) for stamp, row in dated if stamp is not None and stamp >= start]
+    # Name is matched before the cap so a busier team cannot push this run's
+    # own submissions out of the report. A malformed non-string name is skipped
+    # rather than compared, since it cannot be a member of the expected set.
+    fresh = [
+        (stamp, row)
+        for stamp, row in dated
+        if stamp is not None
+        and stamp >= start
+        and (not wanted
+             or (isinstance(row.get("name"), str) and row.get("name") in wanted))
+    ]
     fresh.sort(reverse=True, key=lambda pair: pair[0])
 
     if not fresh:
-        print("  None found. Not proof the upload never completed: history can lag behind\n"
-              "  an accepted upload, or the upload never left the runner.")
+        print("  None matched that search. This is not proof the upload never completed:\n"
+              "  history can lag behind an accepted upload, or the upload never left the\n"
+              "  runner. Check the pack step output for the notarytool error.")
         return 0
 
     candidates = fresh[:MAX_CANDIDATES]
     print(f"  {len(candidates)} shown, capped at {MAX_CANDIDATES}. History lists every submission\n"
           "  on the team, so these are candidates only: a matching time and name do not prove\n"
-          "  this run created them.")
+          "  this run created them. The app bundle is submitted under a generic zip name, so a\n"
+          "  concurrent build of the same app would match too.")
     for index, (_, entry) in enumerate(candidates, 1):
         submission_id = entry.get("id")
         print(f"  [{index}] id={submission_id} created={entry.get('createdDate')} "
@@ -124,30 +140,39 @@ def main(argv=None):
             continue
 
         info = call("info", submission_id)
-        info = info if isinstance(info, dict) else {}
+        # A failed, timed out or non-object response must stay unknown rather
+        # than read as a clean submission.
+        if not isinstance(info, dict):
+            print(f"    info {submission_id} unavailable; status unknown")
+            continue
         for field in SUMMARY_FIELDS:
             if info.get(field):
                 print(f"    {field}: {info[field]}")
 
         # Fresh status from info, so no log is fetched while Apple is still working.
         status = info.get("status")
-        if not isinstance(status, str) or status not in TERMINAL:
+        if not isinstance(status, str):
+            print("    status unknown (missing or not a string), log not fetched")
+            continue
+        if status not in TERMINAL:
             print(f"    status {status!r} is not terminal, log not fetched")
             continue
 
         # log repeats statusCode and statusSummary, which info may not carry.
         log = call("log", submission_id)
-        log = log if isinstance(log, dict) else {}
+        if not isinstance(log, dict):
+            print(f"    log {submission_id} unavailable; issues unknown")
+            continue
         for field in ("statusCode", "statusSummary"):
             if log.get(field) is not None:
                 print(f"    log {field}: {log[field]}")
         issues = log.get("issues")
-        # An Accepted submission comes back with no issues key at all, so only a
-        # present value of the wrong type means an unexpected response shape.
+        # An Accepted submission carries no issues at all, which is genuinely
+        # clean. Only a present value of the wrong shape means we cannot tell.
         if issues is None or issues == []:
             print(f"    log {submission_id}: no issues reported")
         elif not isinstance(issues, list):
-            print(f"    log {submission_id}: no issue list in the response")
+            print(f"    log {submission_id}: issues unknown (unexpected issues field)")
         else:
             for issue in issues[:MAX_ISSUES]:
                 if isinstance(issue, dict):

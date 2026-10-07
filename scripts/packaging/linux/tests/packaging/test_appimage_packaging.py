@@ -637,6 +637,8 @@ class TestDirIcon(unittest.TestCase):
         content = (LINUX_DIR / "appdir.sh").read_text(encoding="utf-8", errors="replace")
         self.assertIn('ln -sf icon.png "$appdir/.DirIcon"', content)
         last_assert = content.rfind('ensure_diricon "$APPDIR"')
+        self.assertNotEqual(last_assert, -1,
+                            'ensure_diricon "$APPDIR" invocation not found in appdir.sh')
         pack = content.rfind("\nvpk pack")
         self.assertGreater(pack, 0, "vpk pack invocation not found in appdir.sh")
         self.assertGreater(pack, last_assert,

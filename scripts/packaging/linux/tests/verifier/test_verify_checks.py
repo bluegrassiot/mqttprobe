@@ -369,6 +369,87 @@ class TestResources(unittest.TestCase):
             self.assertEqual(mod.check_resources(root), [])
 
 
+class TestDirIcon(unittest.TestCase):
+    """.DirIcon regression: v1.0.6 shipped without it and appdir-lint is fatal."""
+
+    PNG = b"\x89PNG\r\n\x1a\n"
+
+    def _appdir(self, td):
+        root = Path(td)
+        (root / "usr" / "share" / "icons" / "hicolor" / "256x256" / "apps").mkdir(parents=True)
+        return root
+
+    def test_missing_diricon_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = self._appdir(td)
+            (root / "icon.png").write_bytes(self.PNG)
+            issues = mod.check_diricon(root)
+        self.assertEqual(len(issues), 1)
+        self.assertIn("missing .DirIcon", issues[0])
+
+    def test_root_png_file_passes(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = self._appdir(td)
+            (root / ".DirIcon").write_bytes(self.PNG)
+            self.assertEqual(mod.check_diricon(root), [])
+
+    def test_symlink_to_root_png_passes(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = self._appdir(td)
+            (root / "icon.png").write_bytes(self.PNG)
+            (root / ".DirIcon").symlink_to("icon.png")
+            self.assertEqual(mod.check_diricon(root), [])
+
+    @unittest.skipIf(sys.platform == "win32",
+                     "nested relative symlink targets need POSIX separators")
+    def test_symlink_to_deployed_icon_passes(self):
+        """linuxdeploy makes icon.png a symlink into usr/share/icons; still valid."""
+        with tempfile.TemporaryDirectory() as td:
+            root = self._appdir(td)
+            deployed = root / "usr/share/icons/hicolor/256x256/apps/icon.png"
+            deployed.write_bytes(self.PNG)
+            (root / "icon.png").symlink_to("usr/share/icons/hicolor/256x256/apps/icon.png")
+            (root / ".DirIcon").symlink_to("icon.png")
+            self.assertEqual(mod.check_diricon(root), [])
+
+    def test_dangling_symlink_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = self._appdir(td)
+            (root / ".DirIcon").symlink_to("icon.png")
+            issues = mod.check_diricon(root)
+        self.assertEqual(len(issues), 1)
+        self.assertIn("broken .DirIcon", issues[0])
+
+    def test_non_png_target_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = self._appdir(td)
+            (root / "icon.svg").write_bytes(b"<svg xmlns='http://www.w3.org/2000/svg'/>")
+            (root / ".DirIcon").symlink_to("icon.svg")
+            issues = mod.check_diricon(root)
+        self.assertEqual(len(issues), 1)
+        self.assertIn("not a PNG", issues[0])
+
+    def test_empty_target_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = self._appdir(td)
+            (root / ".DirIcon").write_bytes(b"")
+            issues = mod.check_diricon(root)
+        self.assertIn("not a PNG", issues[0])
+
+    def test_directory_target_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = self._appdir(td)
+            (root / "icons").mkdir()
+            (root / ".DirIcon").symlink_to("icons")
+            issues = mod.check_diricon(root)
+        self.assertIn("not resolve to a regular file", issues[0])
+
+    def test_registered_in_main_checks(self):
+        import inspect
+        source = inspect.getsource(mod.main)
+        self.assertIn("check_diricon", source)
+
+
 class TestSymlinks(unittest.TestCase):
     def test_safe(self):
         with tempfile.TemporaryDirectory() as td:

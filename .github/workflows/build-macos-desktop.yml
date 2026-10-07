@@ -62,7 +62,9 @@ jobs:
     # pinning needed. Any macOS runner works; macos-latest is Apple Silicon,
     # matching the osx-arm64 target and the signing/notarization tooling.
     runs-on: macos-latest
-    timeout-minutes: 25
+    # Baseline was 25. The extra 5 minutes covers the 4-minute diagnostic step,
+    # keychain cleanup and the earlier publish; it is not a fix for pack.
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -91,6 +93,31 @@ jobs:
             exit 1
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Record build provenance
+        # Values arrive through env so no expression lands in the script body.
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          SELECTED_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          echo "Checked-out commit: $(git rev-parse HEAD)"
+          echo "Workflow ref: $REF_TYPE $REF_NAME"
+          echo "Selected version: $SELECTED_VERSION"
+          # Signing and notarization depend on both tool versions, so report
+          # whichever probe answers rather than failing the step.
+          echo "Xcode:"
+          if command -v xcodebuild > /dev/null 2>&1; then
+            xcodebuild -version || echo "  xcodebuild -version did not succeed"
+          else
+            echo "  xcodebuild is not on PATH"
+          fi
+          echo "Notarytool:"
+          if xcrun notarytool --version > /dev/null 2>&1; then
+            xcrun notarytool --version || echo "  xcrun notarytool --version did not succeed"
+          else
+            echo "  xcrun notarytool --version is not supported here"
+          fi
 
       - name: Import signing certificate into temporary keychain
         env:
@@ -277,6 +304,7 @@ jobs:
           echo "Pre-signing complete."
 
       - name: Velopack pack (sign, notarize, staple)
+        id: pack
         timeout-minutes: 15
         run: |
           # Re-unlock keychain and re-apply partition list so productsign can
@@ -287,8 +315,23 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
           security list-keychains -d user -s "$KEYCHAIN" login.keychain
-          echo "Starting vpk pack at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # On-disk size only, not the upload size: the first submission is a
+          # ditto zip of the signed app bundle, the installer pkg comes later.
+          echo "Published payload and app bundle size before packaging:"
+          for DIR in publish/desktop publish/macos-app/MQTTProbe.app; do
+            if [ -d "$DIR" ]; then
+              du -sk "$DIR"
+              du -sh "$DIR"
+            else
+              echo "::warning::$DIR is missing, cannot report its size"
+            fi
+          done
           vpk download github --repoUrl https://github.com/bluegrassiot/mqttprobe --token ${{ secrets.GITHUB_TOKEN }} --outputDir publish/velopack-osx || echo "No previous Velopack osx release; deltas skipped."
+          PACK_START=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "started=$PACK_START" >> "$GITHUB_OUTPUT"
+          echo "Starting vpk pack at $PACK_START"
+          # --verbose logs the codesign/ditto/staple steps vpk runs, not live
+          # progress. Left off vpk download, which carries --token.
           vpk pack \
             --packId MQTTProbe \
             --packVersion ${{ steps.version.outputs.value }} \
@@ -303,10 +346,38 @@ jobs:
             --signDisableDeep \
             --notaryProfile velopack-profile \
             --keychain "$RUNNER_TEMP/signing.keychain-db" \
-            --outputDir publish/velopack-osx
+            --outputDir publish/velopack-osx \
+            --verbose
           find publish/velopack-osx -name '*.nupkg' ! -name "MQTTProbe-${{ steps.version.outputs.value }}-*" -delete
           ls -la publish/velopack-osx
           echo "Finished vpk pack at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+      - name: Notarization diagnostics
+        # Runs on failure too, while the keychain and profile still exist. The
+        # keychain is not unlocked here: that would hide the state to diagnose.
+        if: always()
+        timeout-minutes: 4
+        continue-on-error: true
+        env:
+          PACK_START_UTC: ${{ steps.pack.outputs.started }}
+          NOTARY_KEYCHAIN: ${{ runner.temp }}/signing.keychain-db
+        run: |
+          if [ -z "$PACK_START_UTC" ]; then
+            echo "No pack start timestamp was recorded, so there is no window to search."
+            echo "Skipping notarization diagnostics."
+            exit 0
+          fi
+          if [ ! -f "$NOTARY_KEYCHAIN" ]; then
+            echo "Signing keychain $NOTARY_KEYCHAIN is not present (setup did not run or already cleaned up)."
+            echo "Skipping notarization diagnostics."
+            exit 0
+          fi
+          # -I is required: this directory holds an inspect.py that shadows the
+          # stdlib module, which crashes argparse on Python 3.14 runners.
+          python3 -I scripts/ci/notary-diagnostics.py \
+            --pack-start "$PACK_START_UTC" \
+            --keychain "$NOTARY_KEYCHAIN" \
+            || { echo "::warning::Notarization diagnostics failed; see output above."; exit 1; }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

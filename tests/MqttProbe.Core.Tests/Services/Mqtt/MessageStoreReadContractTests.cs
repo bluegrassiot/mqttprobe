@@ -38,11 +38,11 @@ public sealed class MessageStoreReadContractTests
         var store = CreateStore();
         store.Add("Root// Child /Leaf/", Message("x", 1));
 
-        var result = store.SelectTopic("/Root// Child /Leaf/");
+        store.SelectTopic("/Root// Child /Leaf/");
 
-        result.Status.Should().Be(TopicSelectionStatus.Selected);
-        result.State.FullTopic.Should().Be("Root/ Child /Leaf");
-        result.State.MessageCount.Should().Be(1);
+        var state = store.GetSelectedTopicState();
+        state.FullTopic.Should().Be("Root/ Child /Leaf");
+        state.MessageCount.Should().Be(1);
     }
 
     [Test]
@@ -53,16 +53,14 @@ public sealed class MessageStoreReadContractTests
         store.SelectTopic("root/child");
         var selected = store.GetSelectedTopicState();
 
-        var empty = store.SelectTopic(string.Empty);
-        var slashes = store.SelectTopic("///");
-        var missing = store.SelectTopic("root/missing");
+        store.SelectTopic(string.Empty);
+        store.GetSelectedTopicState().Should().Be(selected);
 
-        empty.Status.Should().Be(TopicSelectionStatus.InvalidPath);
-        slashes.Status.Should().Be(TopicSelectionStatus.InvalidPath);
-        missing.Status.Should().Be(TopicSelectionStatus.NotFound);
-        empty.State.Should().Be(selected);
-        slashes.State.Should().Be(selected);
-        missing.State.Should().Be(selected);
+        store.SelectTopic("///");
+        store.GetSelectedTopicState().Should().Be(selected);
+
+        store.SelectTopic("root/missing");
+        store.GetSelectedTopicState().Should().Be(selected);
     }
 
     [Test]
@@ -74,10 +72,13 @@ public sealed class MessageStoreReadContractTests
         store.Add("root/b", Message("b", 2));
         otherStore.Add("root/a", Message("foreign", 3));
 
-        var a = store.SelectTopic("root/a").State;
-        var foreign = otherStore.SelectTopic("root/a").State;
+        store.SelectTopic("root/a");
+        var a = store.GetSelectedTopicState();
+        otherStore.SelectTopic("root/a");
+        var foreign = otherStore.GetSelectedTopicState();
         store.SelectTopic("root/b");
-        var aAgain = store.SelectTopic("root/a").State;
+        store.SelectTopic("root/a");
+        var aAgain = store.GetSelectedTopicState();
 
         aAgain.Token.Generation.Should().BeGreaterThan(a.Token.Generation);
         store.GetSelectedMessages(a.Token, 10).Should().BeNull();
@@ -101,7 +102,8 @@ public sealed class MessageStoreReadContractTests
         store.Add("root", oldest);
         store.Add("root/child", middle);
         store.Add("root/child", newest);
-        var state = store.SelectTopic("root").State;
+        store.SelectTopic("root");
+        var state = store.GetSelectedTopicState();
 
         var selected = store.GetSelectedMessages(state.Token, 2);
 
@@ -118,14 +120,16 @@ public sealed class MessageStoreReadContractTests
     {
         var store = CreateStore();
         store.Add("root/child", Message("before", 1));
-        var initial = store.SelectTopic("root/child").State;
+        store.SelectTopic("root/child");
+        var initial = store.GetSelectedTopicState();
 
         store.Clear();
         store.GetSelectedTopicState().FullTopic.Should().BeNull();
         store.GetSelectedMessages(initial.Token, 10).Should().BeNull();
 
         store.Add("root/child", Message("after-clear", 2));
-        var recreated = store.SelectTopic("root/child").State;
+        store.SelectTopic("root/child");
+        var recreated = store.GetSelectedTopicState();
         recreated.Token.Generation.Should().BeGreaterThan(initial.Token.Generation);
 
         store.RemoveMatchingTopic("#");
@@ -133,7 +137,8 @@ public sealed class MessageStoreReadContractTests
         store.GetSelectedMessages(recreated.Token, 10).Should().BeNull();
 
         store.Add("root/child", Message("after-purge", 3));
-        var afterPurge = store.SelectTopic("root/child").State;
+        store.SelectTopic("root/child");
+        var afterPurge = store.GetSelectedTopicState();
         afterPurge.Token.Generation.Should().BeGreaterThan(recreated.Token.Generation);
     }
 
@@ -142,12 +147,16 @@ public sealed class MessageStoreReadContractTests
     {
         var store = CreateStore();
         var empty = store.GetSelectedTopicState();
-        store.SelectTopic(null).State.Token.Should().Be(empty.Token);
+        store.SelectTopic(null);
+        store.GetSelectedTopicState().Token.Should().Be(empty.Token);
 
         store.Add("root", Message("x", 1));
-        var selected = store.SelectTopic("root").State;
-        store.SelectTopic("root").State.Token.Should().Be(selected.Token);
-        store.SelectTopic(null).State.Token.Generation.Should().Be(selected.Token.Generation + 1);
+        store.SelectTopic("root");
+        var selected = store.GetSelectedTopicState();
+        store.SelectTopic("root");
+        store.GetSelectedTopicState().Token.Should().Be(selected.Token);
+        store.SelectTopic(null);
+        store.GetSelectedTopicState().Token.Generation.Should().Be(selected.Token.Generation + 1);
 
         var cleared = store.GetSelectedTopicState();
         store.Clear();
@@ -191,7 +200,8 @@ public sealed class MessageStoreReadContractTests
     {
         var store = CreateStore(maxTopicNodes: 2);
         store.Add("root", Message("stored", 1, "root"));
-        var selected = store.SelectTopic("root").State;
+        store.SelectTopic("root");
+        var selected = store.GetSelectedTopicState();
 
         store.Add("root/child/leaf", Message("rejected", 2, "root/child/leaf"));
 
@@ -209,7 +219,8 @@ public sealed class MessageStoreReadContractTests
         var second = Message("second", 2, "root/b");
         store.Add("root/a", first);
         store.Add("root/b", second);
-        var selected = store.SelectTopic("root").State;
+        store.SelectTopic("root");
+        var selected = store.GetSelectedTopicState();
         var beforeRetention = store.GetSelectedMessages(selected.Token, 10)!;
 
         var third = Message("third", 3, "root/c");
@@ -223,7 +234,8 @@ public sealed class MessageStoreReadContractTests
         store.GetSelectedMessages(selected.Token, 10).Should().BeNull();
 
         store.Add("root", Message("after-purge", 4, "root"));
-        var afterPurge = store.SelectTopic("root").State;
+        store.SelectTopic("root");
+        var afterPurge = store.GetSelectedTopicState();
         var beforeClear = store.GetSelectedMessages(afterPurge.Token, 10)!;
         store.Clear();
         beforeClear.Messages.Should().ContainSingle().Which.Payload.Should().Be("after-purge");
@@ -266,7 +278,8 @@ public sealed class MessageStoreReadContractTests
     {
         var store = CreateStore(maxMessages: 1);
         store.Add("root/first", Message("first", 1, "root/first"));
-        var selected = store.SelectTopic("root").State;
+        store.SelectTopic("root");
+        var selected = store.GetSelectedTopicState();
 
         store.Add("root/second", Message("second", 2, "root/second"));
         var afterRetention = store.GetSelectedTopicState();
@@ -278,7 +291,8 @@ public sealed class MessageStoreReadContractTests
         var partialStore = CreateStore();
         partialStore.Add("root/keep", Message("keep", 1, "root/keep"));
         partialStore.Add("root/remove", Message("remove", 2, "root/remove"));
-        var partialSelection = partialStore.SelectTopic("root").State;
+        partialStore.SelectTopic("root");
+        var partialSelection = partialStore.GetSelectedTopicState();
         partialStore.RemoveMatchingTopic("root/remove");
         var afterPartialPurge = partialStore.GetSelectedTopicState();
         afterPartialPurge.FullTopic.Should().Be("root");
@@ -294,7 +308,8 @@ public sealed class MessageStoreReadContractTests
         const int iterations = 50;
         var store = CreateStore(maxMessages: iterations + 1);
         store.Add("root", Message("initial", 0, "root"));
-        var token = store.SelectTopic("root").State.Token;
+        store.SelectTopic("root");
+        var token = store.GetSelectedTopicState().Token;
         using var barrier = new Barrier(2);
         var snapshots = new List<SelectedMessagesSnapshot>(iterations);
 
@@ -332,7 +347,8 @@ public sealed class MessageStoreReadContractTests
             var store = CreateStore();
             var original = Message("before", 1, "root/child");
             store.Add("root/child", original);
-            var selected = store.SelectTopic("root/child").State;
+            store.SelectTopic("root/child");
+            var selected = store.GetSelectedTopicState();
             using var barrier = new Barrier(2);
 
             var query = Task.Run(() =>

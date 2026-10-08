@@ -60,7 +60,7 @@ public class MessageStoreManager : IMessageStoreManager
 
     public SelectedTopicState GetSelectedTopicState() => _store.GetSelectedTopicState();
 
-    public TopicSelectionResult SelectTopic(string? fullTopic) => _store.SelectTopic(fullTopic);
+    public void SelectTopic(string? fullTopic) => _store.SelectTopic(fullTopic);
 
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit) =>
         Task.FromResult(_store.GetSelectedMessages(expectedSelection, limit));
@@ -145,12 +145,7 @@ public class MessageStoreManager : IMessageStoreManager
         return Task.CompletedTask;
     }
 
-
-    public Task<IReadOnlyList<MqttMessage>> GetRecentMessagesAsync(string topic, int limit) =>
-        Task.FromResult(_store.GetRecentMessages(topic, limit));
-
     public long GetVersion() => _store.Version;
-
 
     public Task ClearAllMessages()
     {

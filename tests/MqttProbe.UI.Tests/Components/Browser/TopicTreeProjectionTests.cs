@@ -18,7 +18,7 @@ internal sealed class TopicBrowserTestFixture
         _manager.RootTopicCount.Returns(_ => _snapshot.Roots.IsDefault ? 0 : _snapshot.Roots.Length);
         _manager.GetTopicTreeSnapshot().Returns(_ => _snapshot);
         _manager.GetSelectedTopicState().Returns(_ => _selection);
-        _manager.SelectTopic(Arg.Any<string?>()).Returns(call => Select(call.Arg<string?>()));
+        _manager.When(m => m.SelectTopic(Arg.Any<string?>())).Do(call => Select(call.Arg<string?>()));
     }
 
     public void SetSnapshot(params TopicNodeSnapshot[] roots) =>
@@ -26,20 +26,19 @@ internal sealed class TopicBrowserTestFixture
 
     public void SetSelection(SelectedTopicState selection) => _selection = selection;
 
-    private TopicSelectionResult Select(string? fullTopic)
+    private void Select(string? fullTopic)
     {
         if (fullTopic is null)
         {
             _selection = new SelectedTopicState(new SelectedTopicToken(_storeId, ++_generation, 0), null, 0);
-            return new TopicSelectionResult(TopicSelectionStatus.Cleared, _selection);
+            return;
         }
 
         var node = Find(_snapshot.Roots, fullTopic);
         if (node is null)
-            return new TopicSelectionResult(TopicSelectionStatus.NotFound, _selection);
+            return;
         if (_selection.FullTopic != fullTopic)
             _selection = new SelectedTopicState(new SelectedTopicToken(_storeId, ++_generation, 0), fullTopic, node.MessageCount);
-        return new TopicSelectionResult(TopicSelectionStatus.Selected, _selection);
     }
 
     private static TopicNodeSnapshot? Find(ImmutableArray<TopicNodeSnapshot> nodes, string fullTopic)

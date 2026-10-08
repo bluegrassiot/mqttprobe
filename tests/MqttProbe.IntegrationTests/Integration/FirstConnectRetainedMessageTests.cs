@@ -11,6 +11,7 @@ using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Plugins.BuiltIn;
 using MqttProbe.Core.Services.Plugins.Pipeline;
 using MqttProbe.Core.Services.Plugins.Registry;
+using MqttProbe.TestInfrastructure;
 using MqttProbe.TestInfrastructure.Fixtures;
 
 namespace MqttProbe.IntegrationTests.Integration;
@@ -111,7 +112,7 @@ public class FirstConnectRetainedMessageTests
         guidNode.HasDirectMessages.Should().BeTrue();
         guidNode.MessageCount.Should().Be(1, "exactly one retained message should be present");
 
-        var messages = await storeManager.GetRecentMessagesAsync(topic, 10);
+        var messages = await MessageStoreReads.ReadMessagesAsync(storeManager, topic, 10);
         var message = messages.Should().ContainSingle().Subject;
         message.Payload.Should().Be(payload);
         message.RetainedMessage.Should().BeTrue(

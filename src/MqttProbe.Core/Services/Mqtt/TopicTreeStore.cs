@@ -18,7 +18,6 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
     private readonly ConcurrentDictionary<string, MessageStore> _messageStores = new(StringComparer.Ordinal);
 
-
     public int MaxStoredMessages => performanceSettings.Performance.MaxStoredMessages;
 
     public int MaxTopicNodes => performanceSettings.Performance.MaxTopicNodes;
@@ -31,7 +30,6 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
     public int TopicNodeCount => Volatile.Read(ref _totalNodeCount);
 
     public long Version => Interlocked.Read(ref _globalVersion);
-
 
     public void Add(string fullTopic, MqttMessage message)
     {
@@ -114,26 +112,6 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
                 _selectionContentVersion++;
             Interlocked.Increment(ref _globalVersion);
             InvalidateTopicTree();
-        }
-    }
-
-
-    public IReadOnlyList<MqttMessage> GetRecentMessages(string topic, int limit)
-    {
-        lock (_storeSync)
-        {
-            var node = FindNode(topic);
-            if (node is null)
-                return [];
-
-            var collected = new List<MqttMessage>();
-            CollectMessages(node, collected);
-            if (collected.Count == 0)
-                return [];
-
-            collected.Sort(static (a, b) => b.DateTimeReceived.CompareTo(a.DateTimeReceived));
-
-            return collected.Count <= limit ? collected : collected.GetRange(0, limit);
         }
     }
 

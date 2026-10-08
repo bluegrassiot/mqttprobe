@@ -322,6 +322,7 @@ else
         if (result is { Canceled: false, Data: string message })
             Snackbar.Add(message, Severity.Success);
     }
+
     internal bool FilterFunc(MqttMessage msg)
     {
         if (string.IsNullOrWhiteSpace(SearchStringTerm)) return true;

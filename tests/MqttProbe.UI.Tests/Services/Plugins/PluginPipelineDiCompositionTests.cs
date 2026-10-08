@@ -15,9 +15,9 @@ using MqttProbe.Core.Services.Plugins.Pipeline;
 using MqttProbe.Core.Services.Plugins.Registry;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.Core.Services.Sparkplug;
+using MqttProbe.TestInfrastructure;
 using MqttProbe.Web.Services;
 using Org.Eclipse.Tahu.Protobuf;
-
 namespace MqttProbe.UI.Tests.Services.Plugins;
 
 // Proves the DI-composed object graph used by both Web and MAUI hosts builds correctly
@@ -247,7 +247,7 @@ public class PluginPipelineDiCompositionTests
 
         await _capturedHandler!(MakeArgs("data", """{"temp":21.5}"""));
 
-        var messages = await manager.GetRecentMessagesAsync("data", 10);
+        var messages = await MessageStoreReads.ReadMessagesAsync(manager, "data", 10);
         messages.Should().ContainSingle(m => m.Payload != null && m.Payload.Contains("temp"));
     }
 
@@ -263,7 +263,7 @@ public class PluginPipelineDiCompositionTests
         var payload = SpbPayload(("Temperature", 0, 10, 23.5));
         await _capturedHandler!(MakeArgs("spBv1.0/factory/NBIRTH/edge-01", payload));
 
-        (await manager.GetRecentMessagesAsync("spBv1.0/factory/NBIRTH/edge-01", 10))
+        (await MessageStoreReads.ReadMessagesAsync(manager, "spBv1.0/factory/NBIRTH/edge-01", 10))
             .Should().ContainSingle();
 
         // Topology updated

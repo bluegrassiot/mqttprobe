@@ -41,7 +41,7 @@ internal sealed partial class TopicTreeStore
             return CaptureSelectedTopicState();
     }
 
-    public TopicSelectionResult SelectTopic(string? fullTopic)
+    public void SelectTopic(string? fullTopic)
     {
         lock (_storeSync)
         {
@@ -50,16 +50,16 @@ internal sealed partial class TopicTreeStore
                 if (_selectedMessageStore is not null)
                     InvalidateSelection();
 
-                return new TopicSelectionResult(TopicSelectionStatus.Cleared, CaptureSelectedTopicState());
+                return;
             }
 
             var normalized = Normalize(fullTopic);
             if (normalized is null)
-                return new TopicSelectionResult(TopicSelectionStatus.InvalidPath, CaptureSelectedTopicState());
+                return;
 
             var selected = FindNode(normalized);
             if (selected is null)
-                return new TopicSelectionResult(TopicSelectionStatus.NotFound, CaptureSelectedTopicState());
+                return;
 
             if (!ReferenceEquals(selected, _selectedMessageStore))
             {
@@ -67,8 +67,6 @@ internal sealed partial class TopicTreeStore
                 _selectionGeneration++;
                 _selectionContentVersion++;
             }
-
-            return new TopicSelectionResult(TopicSelectionStatus.Selected, CaptureSelectedTopicState());
         }
     }
 

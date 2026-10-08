@@ -5,6 +5,7 @@ using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
+using MqttProbe.TestInfrastructure;
 using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Core.Tests.Services.Mqtt;
@@ -116,7 +117,8 @@ public class MessageStoreManagerTests
     public async Task GetMessagesForSelectedTopic_Should_ReturnMessages_WhenMessagesExist()
     {
         _messageStoreManager.AddMessage("selected/topic", new MqttMessage());
-        var state = _messageStoreManager.SelectTopic("selected/topic").State;
+        _messageStoreManager.SelectTopic("selected/topic");
+        var state = _messageStoreManager.GetSelectedTopicState();
         var result = await _messageStoreManager.GetSelectedMessagesAsync(state.Token, 10);
         result!.Messages.Should().ContainSingle();
     }
@@ -131,7 +133,8 @@ public class MessageStoreManagerTests
     public async Task ClearAllMessages_Should_ClearStoreAndSelection()
     {
         _messageStoreManager.AddMessage("root", new MqttMessage());
-        var selection = _messageStoreManager.SelectTopic("root").State;
+        _messageStoreManager.SelectTopic("root");
+        var selection = _messageStoreManager.GetSelectedTopicState();
 
         await _messageStoreManager.ClearAllMessages();
 
@@ -173,24 +176,24 @@ public class MessageStoreManagerTests
     }
 
     [Test]
-    public async Task GetRecentMessagesAsync_ReturnsAtMostLimitMessages()
+    public async Task ReadSelectedTopic_RespectsLimit()
     {
         for (int i = 0; i < 100; i++)
             _messageStoreManager.AddMessage("sensors/temp", new MqttMessage { DateTimeReceived = DateTime.UtcNow.AddSeconds(-i) });
 
-        var result = await _messageStoreManager.GetRecentMessagesAsync("sensors/temp", 10);
+        var result = await MessageStoreReads.ReadMessagesAsync(_messageStoreManager, "sensors/temp", 10);
 
         result.Should().HaveCount(10);
         result.Should().BeInDescendingOrder(m => m.DateTimeReceived);
     }
 
     [Test]
-    public async Task GetRecentMessagesAsync_ReturnsAllWhenFewerThanLimit()
+    public async Task ReadSelectedTopic_ReturnsAllWhenUnderLimit()
     {
         for (int i = 0; i < 3; i++)
             _messageStoreManager.AddMessage("sensors/humidity", new MqttMessage { DateTimeReceived = DateTime.UtcNow.AddSeconds(-i) });
 
-        var result = await _messageStoreManager.GetRecentMessagesAsync("sensors/humidity", 10);
+        var result = await MessageStoreReads.ReadMessagesAsync(_messageStoreManager, "sensors/humidity", 10);
 
         result.Should().HaveCount(3);
     }
@@ -209,7 +212,8 @@ public class MessageStoreManagerTests
     public void GetSelectedTopicVersion_IncrementsWhenSelectedTopicMessagesChange()
     {
         _messageStoreManager.AddMessage("sensors/temp", new MqttMessage());
-        var before = _messageStoreManager.SelectTopic("sensors/temp").State.Token.ContentVersion;
+        _messageStoreManager.SelectTopic("sensors/temp");
+        var before = _messageStoreManager.GetSelectedTopicState().Token.ContentVersion;
         _messageStoreManager.AddMessage("sensors/temp", new MqttMessage());
         var after = _messageStoreManager.GetSelectedTopicState().Token.ContentVersion;
 
@@ -217,7 +221,7 @@ public class MessageStoreManagerTests
     }
 
     [Test]
-    public async Task GetRecentMessagesAsync_AggregatesDescendantMessagesForParentTopic()
+    public async Task ReadSelectedTopic_AggregatesDescendantMessagesForParentTopic()
     {
         var t1 = DateTime.UtcNow.AddSeconds(-10);
         var t2 = DateTime.UtcNow.AddSeconds(-5);
@@ -227,21 +231,21 @@ public class MessageStoreManagerTests
         _messageStoreManager.AddMessage("sensors/temp", new MqttMessage { DateTimeReceived = t3, Topic = "sensors/temp" });
         _messageStoreManager.AddMessage("sensors/humidity", new MqttMessage { DateTimeReceived = t2, Topic = "sensors/humidity" });
 
-        var result = await _messageStoreManager.GetRecentMessagesAsync("sensors", 10);
+        var result = await MessageStoreReads.ReadMessagesAsync(_messageStoreManager, "sensors", 10);
 
         result.Should().HaveCount(3);
         result.Should().BeInDescendingOrder(m => m.DateTimeReceived);
     }
 
     [Test]
-    public async Task GetRecentMessagesAsync_ParentTopic_RespectsLimitAcrossDescendants()
+    public async Task ReadSelectedTopic_ParentTopic_RespectsLimitAcrossDescendants()
     {
         for (int i = 0; i < 5; i++)
             _messageStoreManager.AddMessage("sensors/temp", new MqttMessage { DateTimeReceived = DateTime.UtcNow.AddSeconds(-i), Topic = "sensors/temp" });
         for (int i = 0; i < 5; i++)
             _messageStoreManager.AddMessage("sensors/humidity", new MqttMessage { DateTimeReceived = DateTime.UtcNow.AddSeconds(-i - 100), Topic = "sensors/humidity" });
 
-        var result = await _messageStoreManager.GetRecentMessagesAsync("sensors", 3);
+        var result = await MessageStoreReads.ReadMessagesAsync(_messageStoreManager, "sensors", 3);
 
         result.Should().HaveCount(3);
         result.Should().BeInDescendingOrder(m => m.DateTimeReceived);
@@ -251,7 +255,8 @@ public class MessageStoreManagerTests
     public void GetSelectedTopicVersion_IncrementsWhenDescendantMessagesChange()
     {
         _messageStoreManager.AddMessage("sensors/temp", new MqttMessage());
-        var before = _messageStoreManager.SelectTopic("sensors").State.Token.ContentVersion;
+        _messageStoreManager.SelectTopic("sensors");
+        var before = _messageStoreManager.GetSelectedTopicState().Token.ContentVersion;
         _messageStoreManager.AddMessage("sensors/temp", new MqttMessage());
         var after = _messageStoreManager.GetSelectedTopicState().Token.ContentVersion;
 
@@ -340,7 +345,8 @@ public class MessageStoreManagerTests
         var msg = new MqttMessage();
         _messageStoreManager.AddMessage("/sensors/temp", msg);
 
-        var selection = _messageStoreManager.SelectTopic("sensors/temp").State;
+        _messageStoreManager.SelectTopic("sensors/temp");
+        var selection = _messageStoreManager.GetSelectedTopicState();
         (await _messageStoreManager.GetSelectedMessagesAsync(selection.Token, 10))!
             .Messages.Should().ContainSingle().Which.Should().BeSameAs(msg);
     }

@@ -6,13 +6,3 @@ namespace MqttProbe.Core.Models.Mqtt;
 public readonly record struct SelectedTopicToken(Guid StoreId, long Generation, long ContentVersion);
 
 public sealed record SelectedTopicState(SelectedTopicToken Token, string? FullTopic, int MessageCount);
-
-public enum TopicSelectionStatus
-{
-    Selected,
-    Cleared,
-    InvalidPath,
-    NotFound
-}
-
-public sealed record TopicSelectionResult(TopicSelectionStatus Status, SelectedTopicState State);

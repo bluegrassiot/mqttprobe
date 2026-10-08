@@ -7,7 +7,7 @@ public interface IMessageStoreManager : IDisposable
     public int RootTopicCount { get; }
     public TopicTreeSnapshot GetTopicTreeSnapshot();
     public SelectedTopicState GetSelectedTopicState();
-    public TopicSelectionResult SelectTopic(string? fullTopic);
+    public void SelectTopic(string? fullTopic);
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit);
     public bool IsListening { get; }
     public int MaxStoredMessages { get; }
@@ -16,7 +16,6 @@ public interface IMessageStoreManager : IDisposable
     public int TopicNodeCount { get; }
     public long DroppedMessageCount { get; }
     public long ExcludedMessageCount { get; }
-    public Task<IReadOnlyList<MqttMessage>> GetRecentMessagesAsync(string topic, int limit);
     public long GetVersion();
     public Task ClearAllMessages();
 

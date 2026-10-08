@@ -139,8 +139,11 @@ public class PayloadBrowserTests : BunitTestContext
 
         var cut = Render<PayloadBrowser>();
 
-        cut.WaitForAssertion(() => cut.Markup.Should().Contain("3 msgs"));
-        cut.FindAll(".payload-row").Should().HaveCount(3);
+        cut.WaitForAssertion(() =>
+        {
+            cut.Markup.Should().Contain("3 msgs");
+            cut.FindAll(".payload-row").Should().HaveCount(3);
+        });
 
         // Verify the selected snapshot query uses the custom display cap (3).
         _mockMsgStore.Received(1).GetSelectedMessagesAsync(Arg.Any<SelectedTopicToken>(), 3);

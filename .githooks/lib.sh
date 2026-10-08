@@ -84,15 +84,16 @@ is_docs_only_path() {
 is_format_relevant_path() {
     local p=$1
     p=${p//\\//}
-    local base
+    local base lower
     base=$(basename "$p")
-    case "$base" in
-        .editorconfig) return 0 ;;
+    lower=${p,,}
+    case "$lower" in
+        *.cs|*.razor|*.cshtml|*.csproj|*.fsproj|*.vbproj|*.proj|*.props|*.targets|*.sln|*.slnx|*.slnf) return 0 ;;
     esac
-    case "$p" in
-        *.cs|*.razor|*.csproj|*.props|*.targets) return 0 ;;
-        *) return 1 ;;
+    case "${base,,}" in
+        .editorconfig|global.json|nuget.config|directory.build.*|directory.packages.props|directory.solution.*|directory.build.rsp|msbuild.rsp|packages.lock.json|dotnet-tools.json) return 0 ;;
     esac
+    return 1
 }
 
 # stdin: one path per line. Returns 0 if every path is docs-only (and at least one path).
@@ -136,6 +137,18 @@ any_format_relevant() {
     local p
     while IFS= read -r p || [[ -n "$p" ]]; do
         [[ -z "$p" ]] && continue
+        if is_format_relevant_path "$p"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Returns 0 if any positional path is format-relevant. Use for NUL-read arrays
+# when staged filenames must remain intact even if they contain newlines.
+any_format_relevant_paths() {
+    local p
+    for p in "$@"; do
         if is_format_relevant_path "$p"; then
             return 0
         fi

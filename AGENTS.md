@@ -3,14 +3,17 @@
 ## Formatting
 
 - `.editorconfig` is the source of truth for C# formatting.
-- Check formatting with `python scripts/ci/format-check.py`.
+- For a quick local check, use `python scripts/ci/format-check.py --changed` to check staged and unstaged tracked changes relative to `HEAD`, plus untracked files.
+- Use `python scripts/ci/format-check.py --staged` to check staged filenames against their current on-disk content. This does not check the staged snapshot, so partially staged files are checked in full as they exist in the working tree.
+- `--changed` and `--staged` are mutually exclusive. Either can be combined with `--fix` to apply formatting to the selected scope.
+- With neither scope flag, `python scripts/ci/format-check.py` checks the full tree. Keep this as the final validation and CI command. Changes to `.editorconfig`, project or solution files, build configuration, SDK configuration, or NuGet configuration force full-tree scope even when a scoped mode is selected. No applicable files is a successful no-op.
 - Auto-fix formatting with `python scripts/ci/format-check.py --fix`.
 
 ## C#
 
 - Prefer primary constructors when dependencies are only captured; keep explicit constructors when setup or accessibility constraints require them.
 - Do not add `!` immediately after FluentAssertions `Should().NotBeNull()`; retain it where compiler flow analysis cannot prove non-null.
-- Remove unused `using` directives before completing a change. Run `python scripts/ci/format-check.py` (or `--fix`) to catch stragglers.
+- Remove unused `using` directives before completing a change.
 
 ### Code navigation
 
@@ -36,7 +39,7 @@
 
 Hooks live in `.githooks`, not `.git/hooks`. On a fresh clone they are inert until you run `git config core.hooksPath .githooks`, so without that every check in Verification passes by never running. Verify with `git config --get core.hooksPath`.
 
-`pre-commit` runs the security scan, actionlint, format check, file-length check, blocking-awaits check, and comment check, each skipped when no staged file is relevant. `pre-push` builds `MqttProbe.NoMaui.slnf` and runs the Core and UI tests. Deliberate escape hatches are `SKIP_PRE_COMMIT=1` and `SKIP_PRE_PUSH=1`, but CI still runs everything on a PR, so prefer fixing failures.
+`pre-commit` runs the security scan, actionlint, staged format check (`python scripts/ci/format-check.py --staged`), file-length check, blocking-awaits check, and comment check, each skipped when no staged file is relevant. `pre-push` builds `MqttProbe.NoMaui.slnf` and runs the Core and UI tests. Deliberate escape hatches are `SKIP_PRE_COMMIT=1` and `SKIP_PRE_PUSH=1`, but CI still runs everything on a PR, so prefer fixing failures.
 
 ## Verification
 

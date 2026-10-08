@@ -16,7 +16,22 @@ if env_truthy "${SKIP_PRE_COMMIT:-}"; then
 fi
 
 step "Classify staged files"
-STAGED=$(git diff --cached --name-only --diff-filter=ACMR || true)
+if ! STAGED_PATHS_FILE=$(mktemp); then
+    fail "Classify staged files"
+    printf "\nCould not create a temporary file for staged path discovery.\n"
+    print_total
+    exit 1
+fi
+if ! git diff --cached --name-only -z >"$STAGED_PATHS_FILE"; then
+    rm -f "$STAGED_PATHS_FILE"
+    fail "Classify staged files"
+    printf "\nCould not read staged paths from Git.\n"
+    print_total
+    exit 1
+fi
+mapfile -d '' -t STAGED_PATHS <"$STAGED_PATHS_FILE"
+rm -f "$STAGED_PATHS_FILE"
+STAGED=$(printf '%s\n' "${STAGED_PATHS[@]}")
 if [[ -z "${STAGED//[$'\t\r\n']/}" ]]; then
     skip_msg "no staged files"
     print_total
@@ -57,12 +72,12 @@ else
 fi
 
 step "Format"
-if ! printf '%s\n' "$STAGED" | any_format_relevant; then
+if ! any_format_relevant_paths "${STAGED_PATHS[@]}"; then
     skip_msg "no format-relevant staged files"
 else
-    if ! python "$ROOT/scripts/ci/format-check.py"; then
+    if ! python "$ROOT/scripts/ci/format-check.py" --staged; then
         fail "Format"
-        printf "\nFormatting violations found - run: python scripts/ci/format-check.py --fix\n"
+        printf "\nFormatting violations found - run: python scripts/ci/format-check.py --staged --fix\n"
         print_total
         exit 1
     fi

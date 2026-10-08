@@ -32,7 +32,7 @@ Connect to any broker, browse live topics, inspect payloads, chart JSON metrics.
 | macOS | [MQTTProbe-osx-Setup.pkg](https://github.com/bluegrassiot/mqttprobe/releases/latest/download/MQTTProbe-osx-Setup.pkg) | Signed and notarized, auto-update, installs to Applications |
 | Linux | [MQTTProbe.AppImage](https://github.com/bluegrassiot/mqttprobe/releases/latest/download/MQTTProbe.AppImage) | `chmod +x` and run. WebKit and GTK are bundled; needs `libfuse2` on Ubuntu 22.04+ |
 | Android | [APK on latest release](https://github.com/bluegrassiot/mqttprobe/releases/latest) | `mqttprobe-android-*.apk`; sideload, allow unknown apps if prompted |
-| Docker | `bluegrassiot/mqttprobe` (compose) | See Docker section |
+| Docker | [bluegrassiot/mqttprobe](https://hub.docker.com/r/bluegrassiot/mqttprobe) | See Docker section |
 | iOS | -- | Not available yet |
 
 Portable zips and web self-host builds are on the [latest release page](https://github.com/bluegrassiot/mqttprobe/releases/latest).
@@ -40,38 +40,24 @@ Portable zips and web self-host builds are on the [latest release page](https://
 ## Docker
 
 ```bash
-git clone https://github.com/bluegrassiot/mqttprobe
-cd mqttprobe
-docker compose up -d
+docker run -d --name mqttprobe -p 8080:8080 -v mqttprobe-config:/app/config --restart unless-stopped bluegrassiot/mqttprobe:latest
 ```
 
-Open http://localhost:8080. On first launch, create your admin password.
+No repository checkout is needed. Open http://localhost:8080 and create your admin password on first launch.
 
-Config persists in a Docker volume across restarts. For LAN access, TLS, reverse proxy, and plugin storage details, see the [Docker Deployment wiki](https://github.com/bluegrassiot/mqttprobe/wiki/05-Docker-Deployment).
-
-The web host can also sign users in through an identity provider instead of a local password, which suits shared or multi-user deployments. Set `Authentication:Mode` to `OIDC` and control access with a claim in the ID token. See [OIDC Authentication](https://github.com/bluegrassiot/mqttprobe/wiki/09-OIDC-Authentication).
+Your configuration persists in the `mqttprobe-config` volume across restarts. For LAN access, TLS, reverse proxy, and plugin storage, see the [Docker Deployment wiki](https://github.com/bluegrassiot/mqttprobe/wiki/05-Docker-Deployment).
 
 ## After install
 
-1. Create your admin password on first launch
-2. Add a broker connection
-3. Subscribe to topics and browse
+Create your admin password, add a broker connection, then subscribe to topics and browse. MQTTProbe connects to one broker at a time; save connection profiles to switch between brokers.
 
-MQTTProbe talks to one broker at a time. Save as many connection profiles as you like and switch between them, and add topic exclusions to ignore filters you do not care about. See [Getting Started](https://github.com/bluegrassiot/mqttprobe/wiki/01-Getting-Started) and [Connection Setup](https://github.com/bluegrassiot/mqttprobe/wiki/02-Connection-Setup).
+See [Getting Started](https://github.com/bluegrassiot/mqttprobe/wiki/01-Getting-Started) and [Connection Setup](https://github.com/bluegrassiot/mqttprobe/wiki/02-Connection-Setup).
 
 ## Docs
 
 - [Home](https://github.com/bluegrassiot/mqttprobe/wiki)
-- [Getting Started](https://github.com/bluegrassiot/mqttprobe/wiki/01-Getting-Started)
-- [Connection Setup](https://github.com/bluegrassiot/mqttprobe/wiki/02-Connection-Setup)
-- [Sparkplug B Decode](https://github.com/bluegrassiot/mqttprobe/wiki/03-Sparkplug-B-Decode)
-- [Emulation](https://github.com/bluegrassiot/mqttprobe/wiki/04-Emulation)
-- [Docker Deployment](https://github.com/bluegrassiot/mqttprobe/wiki/05-Docker-Deployment)
 - [Troubleshooting](https://github.com/bluegrassiot/mqttprobe/wiki/06-Troubleshooting)
-- [Development](https://github.com/bluegrassiot/mqttprobe/wiki/07-Development)
-- [Security and Storage](https://github.com/bluegrassiot/mqttprobe/wiki/08-Security-and-Storage)
 - [OIDC Authentication](https://github.com/bluegrassiot/mqttprobe/wiki/09-OIDC-Authentication)
-- [Topic Exclusions](https://github.com/bluegrassiot/mqttprobe/wiki/10-Topic-Exclusions)
 
 Website: https://mqttprobe.com
 

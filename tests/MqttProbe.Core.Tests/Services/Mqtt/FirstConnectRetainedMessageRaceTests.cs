@@ -7,6 +7,7 @@ using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
+using MqttProbe.TestInfrastructure;
 using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Core.Tests.Services.Mqtt;
@@ -83,7 +84,7 @@ public class FirstConnectRetainedMessageRaceTests
 
         _fakeClient.SubscribeAsyncCallCount.Should().Be(1);
 
-        var messages = await _storeManager.GetRecentMessagesAsync("race/retained", 10);
+        var messages = await MessageStoreReads.ReadMessagesAsync(_storeManager, "race/retained", 10);
         messages.Should().ContainSingle().Which.Payload.Should().Be("hello-retained");
     }
 
@@ -104,7 +105,7 @@ public class FirstConnectRetainedMessageRaceTests
         await _storeManager.Start();
         await _fakeClient.DeliverRetainedMessageAsync();
 
-        var messages = await _storeManager.GetRecentMessagesAsync("race/retained", 10);
+        var messages = await MessageStoreReads.ReadMessagesAsync(_storeManager, "race/retained", 10);
         messages.Should().ContainSingle().Which.Payload.Should().Be("hello-retained");
     }
 

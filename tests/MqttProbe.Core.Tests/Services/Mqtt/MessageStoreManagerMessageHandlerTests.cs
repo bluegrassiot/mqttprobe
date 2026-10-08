@@ -10,6 +10,7 @@ using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.PluginContracts;
+using MqttProbe.TestInfrastructure;
 using MqttProbe.Tests.Utilities;
 using Org.Eclipse.Tahu.Protobuf;
 
@@ -71,7 +72,7 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("sensors", "42 degrees");
 
-        (await _manager.GetRecentMessagesAsync("sensors", 10))
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "sensors", 10))
             .Should().ContainSingle(m => m.Payload == "42 degrees");
     }
 
@@ -80,7 +81,7 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("data", """{"temp":21.5}""");
 
-        (await _manager.GetRecentMessagesAsync("data", 10))
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "data", 10))
             .Should().ContainSingle(m => m.Payload != null && m.Payload.Contains("temp"));
     }
 
@@ -90,7 +91,7 @@ public class MessageStoreManagerMessageHandlerTests
         var act = async () => await Fire("empty/topic");
         await act.Should().NotThrowAsync();
 
-        (await _manager.GetRecentMessagesAsync("empty/topic", 10)).Should().ContainSingle();
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "empty/topic", 10)).Should().ContainSingle();
     }
 
     [Test]
@@ -99,7 +100,7 @@ public class MessageStoreManagerMessageHandlerTests
         for (var i = 0; i < 10_010; i++)
             await Fire("capped", $"msg-{i}");
 
-        (await _manager.GetRecentMessagesAsync("capped", 10_000)).Should().HaveCount(10_000);
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "capped", 10_000)).Should().HaveCount(10_000);
         _manager.TotalStoredMessages.Should().Be(10_000);
     }
 
@@ -117,7 +118,8 @@ public class MessageStoreManagerMessageHandlerTests
         store.Messages.Enqueue(newest);
         _manager.AddMessage("t", old);
         _manager.AddMessage("t", newest);
-        var selection = _manager.SelectTopic("t").State;
+        _manager.SelectTopic("t");
+        var selection = _manager.GetSelectedTopicState();
 
         var result = (await _manager.GetSelectedMessagesAsync(selection.Token, 10))!.Messages;
 
@@ -130,7 +132,8 @@ public class MessageStoreManagerMessageHandlerTests
     {
         _manager.AddMessage("a/b", new MqttMessage("from-child-1", "a/b", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce));
         _manager.AddMessage("a/c", new MqttMessage("from-child-2", "a/c", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce));
-        var selection = _manager.SelectTopic("a").State;
+        _manager.SelectTopic("a");
+        var selection = _manager.GetSelectedTopicState();
         var result = (await _manager.GetSelectedMessagesAsync(selection.Token, 10))!.Messages;
 
         result.Should().HaveCount(2);
@@ -146,7 +149,7 @@ public class MessageStoreManagerMessageHandlerTests
         var a = _manager.GetTopicTreeSnapshot().Roots.Should().ContainSingle(node => node.Topic == "a").Subject;
         var b = a.Children.Should().ContainSingle(node => node.Topic == "b").Subject;
         b.Children.Should().ContainSingle(node => node.Topic == "c");
-        (await _manager.GetRecentMessagesAsync("a/b/c", 10)).Should().ContainSingle(m => m.Payload == "deep value");
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "a/b/c", 10)).Should().ContainSingle(m => m.Payload == "deep value");
     }
 
     [Test]
@@ -154,7 +157,7 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("plant/area/line", "first");
 
-        (await _manager.GetRecentMessagesAsync("plant/area/line", 10))
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "plant/area/line", 10))
             .Should().ContainSingle(m => m.Payload == "first");
     }
 
@@ -172,7 +175,7 @@ public class MessageStoreManagerMessageHandlerTests
 
         await Fire("spBv1.0/group/DDATA/eon1", json);
 
-        (await _manager.GetRecentMessagesAsync("spBv1.0/group/DDATA/eon1", 10))
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "spBv1.0/group/DDATA/eon1", 10))
             .Should().ContainSingle(m => m.Payload == json && m.FormatId == "json");
     }
 
@@ -201,7 +204,7 @@ public class MessageStoreManagerMessageHandlerTests
         var act = async () => await Fire("fault/topic", "data");
 
         await act.Should().NotThrowAsync();
-        (await _manager.GetRecentMessagesAsync("fault/topic", 10)).Should().ContainSingle();
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "fault/topic", 10)).Should().ContainSingle();
     }
 
     [Test]
@@ -239,7 +242,7 @@ public class MessageStoreManagerMessageHandlerTests
         await handler!(MakeArgs("rl", "second"));
         await handler!(MakeArgs("rl", "third"));
 
-        (await manager.GetRecentMessagesAsync("rl", 10)).Should().ContainSingle();
+        (await MessageStoreReads.ReadMessagesAsync(manager, "rl", 10)).Should().ContainSingle();
     }
 
     [Test]
@@ -314,7 +317,7 @@ public class MessageStoreManagerMessageHandlerTests
             "the live counter must match the messages actually retained in the tree");
         var actualRetained = 0;
         for (var i = 0; i < 12; i++)
-            actualRetained += (await manager.GetRecentMessagesAsync($"topic-{i}", 20)).Count;
+            actualRetained += (await MessageStoreReads.ReadMessagesAsync(manager, $"topic-{i}", 20)).Count;
         actualRetained.Should().Be(5);
     }
 
@@ -335,9 +338,9 @@ public class MessageStoreManagerMessageHandlerTests
         await fire(MakeArgs("c", "3"));
 
         manager.TotalStoredMessages.Should().Be(3);
-        (await manager.GetRecentMessagesAsync("a", 10)).Should().ContainSingle().Which.Payload.Should().Be("2");
-        (await manager.GetRecentMessagesAsync("b", 10)).Should().ContainSingle(m => m.Payload == "1");
-        (await manager.GetRecentMessagesAsync("c", 10)).Should().ContainSingle(m => m.Payload == "3");
+        (await MessageStoreReads.ReadMessagesAsync(manager, "a", 10)).Should().ContainSingle().Which.Payload.Should().Be("2");
+        (await MessageStoreReads.ReadMessagesAsync(manager, "b", 10)).Should().ContainSingle(m => m.Payload == "1");
+        (await MessageStoreReads.ReadMessagesAsync(manager, "c", 10)).Should().ContainSingle(m => m.Payload == "3");
     }
 
     [Test]
@@ -355,7 +358,7 @@ public class MessageStoreManagerMessageHandlerTests
             await fire(MakeArgs("hot", $"msg-{i}"));
 
         manager.TotalStoredMessages.Should().Be(4);
-        (await manager.GetRecentMessagesAsync("hot", 10)).Select(m => m.Payload)
+        (await MessageStoreReads.ReadMessagesAsync(manager, "hot", 10)).Select(m => m.Payload)
             .Should().BeEquivalentTo("msg-6", "msg-7", "msg-8", "msg-9");
     }
 
@@ -375,7 +378,7 @@ public class MessageStoreManagerMessageHandlerTests
 
         manager.TotalStoredMessages.Should().Be(0);
         manager.GetTopicTreeSnapshot().Roots.Sum(node => node.MessageCount).Should().Be(0);
-        (await manager.GetRecentMessagesAsync("zero", 10)).Should().BeEmpty();
+        (await MessageStoreReads.ReadMessagesAsync(manager, "zero", 10)).Should().BeEmpty();
     }
 
     [Test]
@@ -461,9 +464,9 @@ public class MessageStoreManagerMessageHandlerTests
         manager.TotalStoredMessages.Should().Be(3);
         manager.GetTopicTreeSnapshot().Roots.Sum(node => node.MessageCount).Should().Be(3);
         for (var i = 0; i < 5; i++)
-            (await manager.GetRecentMessagesAsync($"t-{i}", 10)).Should().BeEmpty();
+            (await MessageStoreReads.ReadMessagesAsync(manager, $"t-{i}", 10)).Should().BeEmpty();
         for (var i = 5; i < 8; i++)
-            (await manager.GetRecentMessagesAsync($"t-{i}", 10)).Should().ContainSingle()
+            (await MessageStoreReads.ReadMessagesAsync(manager, $"t-{i}", 10)).Should().ContainSingle()
                 .Which.Topic.Should().Be($"t-{i}");
     }
 
@@ -472,7 +475,7 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("fmt/test", """{"temp":21.5}""");
 
-        (await _manager.GetRecentMessagesAsync("fmt/test", 10))
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "fmt/test", 10))
             .Should().ContainSingle(m => m.FormatId == "json");
     }
 
@@ -481,7 +484,7 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("fmt/empty");
 
-        (await _manager.GetRecentMessagesAsync("fmt/empty", 10))
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "fmt/empty", 10))
             .Should().ContainSingle(m => m.FormatId == "empty");
     }
 
@@ -490,7 +493,7 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("fmt/plain", "hello world");
 
-        (await _manager.GetRecentMessagesAsync("fmt/plain", 10))
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "fmt/plain", 10))
             .Should().ContainSingle(m => m.FormatId == "plaintext");
     }
 
@@ -520,7 +523,7 @@ public class MessageStoreManagerMessageHandlerTests
         await handler!(MakeArgs("before", "x"));
         await handler!(MakeArgs("before", "y"));
         await handler!(MakeArgs("before", "z"));
-        (await manager.GetRecentMessagesAsync("before", 10)).Should().ContainSingle();
+        (await MessageStoreReads.ReadMessagesAsync(manager, "before", 10)).Should().ContainSingle();
 
         config.Performance.MaxMessagesPerSecond = 10_000;
         mockPerformance.PerformanceSettingsChanged += Raise.Event<Action>();
@@ -528,7 +531,7 @@ public class MessageStoreManagerMessageHandlerTests
         await handler!(MakeArgs("after", "1"));
         await handler!(MakeArgs("after", "2"));
         await handler!(MakeArgs("after", "3"));
-        (await manager.GetRecentMessagesAsync("after", 10)).Should().HaveCount(3);
+        (await MessageStoreReads.ReadMessagesAsync(manager, "after", 10)).Should().HaveCount(3);
     }
 
     [Test]

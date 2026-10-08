@@ -28,6 +28,22 @@ def _run_main_quietly(args):
     return output.getvalue()
 
 
+def _expected_call_sequence():
+    """The args[2] of every _run_dotnet call a full-tree run makes.
+
+    TARGETS is platform-dependent by design (see format-check.py): Windows formats the
+    whole solution, while other platforms add the MAUI project behind an explicit
+    restore. Deriving the expectation keeps these tests about invocation shape instead
+    of hardcoding one platform's target set.
+    """
+    expected = []
+    for target, needs_workload in format_ci.TARGETS:
+        if needs_workload:
+            expected.append(str(format_ci.ROOT / target))
+        expected.extend(["whitespace", "style"])
+    return expected
+
+
 class GitFixture(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -191,8 +207,16 @@ class TestScopedSelection(GitFixture):
 
         self.assertIn("workspace or policy input changed", output)
         self.assertNotIn("Nothing to format", output)
-        self.assertEqual([call[2] for call in calls], ["whitespace", "style"])
+        self.assertEqual([call[2] for call in calls], _expected_call_sequence())
         self.assertTrue(all("--include" not in call for call in calls))
+
+    def test_expected_sequence_restores_best_effort_target_first(self):
+        # The multi-target shape is the Linux one, so cover it on every platform.
+        with patch.object(format_ci, "TARGETS", [("A.slnf", False), ("B.csproj", True)]):
+            self.assertEqual(
+                _expected_call_sequence(),
+                ["whitespace", "style", str(format_ci.ROOT / "B.csproj"), "whitespace", "style"],
+            )
 
     def test_deleted_workspace_config_on_rename_forces_full_tree(self):
         config = self.put(".editorconfig", "root = true\n")
@@ -234,8 +258,10 @@ class TestScopedSelection(GitFixture):
         with patch.object(format_ci, "_run_dotnet", side_effect=fake_run):
             format_ci.main(["--changed"])
 
-        self.assertEqual([args[2] for args, _ in calls], ["whitespace", "style"])
+        self.assertEqual([args[2] for args, _ in calls], _expected_call_sequence())
         for call, kwargs in calls:
+            if "--include" not in call:
+                continue
             include_index = call.index("--include")
             self.assertEqual(call[include_index + 1], os.path.relpath(path, self.root))
             self.assertEqual(call[include_index + 2], "--verify-no-changes")
@@ -268,8 +294,10 @@ class TestScopedSelection(GitFixture):
         with patch.object(format_ci, "_run_dotnet", side_effect=fake_run):
             _run_main_quietly(["--changed", "--fix"])
 
-        self.assertEqual([args[2] for args, _ in calls], ["whitespace", "style"])
+        self.assertEqual([args[2] for args, _ in calls], _expected_call_sequence())
         for call, kwargs in calls:
+            if "--include" not in call:
+                continue
             self.assertEqual(call[call.index("--include") + 1], os.path.relpath(path, self.root))
             self.assertNotIn("--verify-no-changes", call)
             self.assertEqual(kwargs["cwd"], self.root)

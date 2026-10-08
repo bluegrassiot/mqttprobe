@@ -20,12 +20,14 @@ jobs:
     permissions:
       contents: read
     strategy:
+      # Every ubuntu job here is pinned, not -latest: ubuntu-latest moves to 26.04
+      # from 19 Oct 2026. Desktop Linux delegates to build-linux-desktop.yml.
       matrix:
         include:
           - rid: linux-x64
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - rid: linux-arm64
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - rid: win-x64
             os: windows-latest
     steps:
@@ -80,7 +82,7 @@ jobs:
 
   build-docker:
     name: Build (Docker)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
       contents: read
@@ -234,7 +236,7 @@ jobs:
 
   build-maui-android:
     name: Build (MAUI Android)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read
@@ -361,7 +363,7 @@ jobs:
   create-release:
     name: Create Release
     needs: [build-web, build-docker, build-desktop-linux, build-maui-windows, build-macos-desktop, build-maui-android]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

@@ -46,6 +46,11 @@ jobs:
       - name: Restore tools
         run: dotnet tool restore
 
+      # First, because a gate is only as trustworthy as the script behind it: one that
+      # silently checks nothing still exits 0. Needs no dotnet and runs in ~15s.
+      - name: Script tests
+        run: python3 -m unittest discover -s scripts/ci/tests
+
       # Same gate as .githooks/pre-commit. Keep --fail-on matching there so a commit
       # that passes locally cannot fail here. ~5s, so it runs before the slow steps.
       - name: Security scan
@@ -65,6 +70,11 @@ jobs:
       # Enforces AGENTS.md ban on routine XML doc comments.
       - name: Comments
         run: python3 scripts/ci/check-comments.py
+
+      # Also in .githooks/pre-commit and skippable the same way. A bare run sweeps
+      # the whole src tree rather than only what a commit happened to stage.
+      - name: File length
+        run: python3 scripts/ci/check-file-length.py
 
       - name: Unit tests
         run: |

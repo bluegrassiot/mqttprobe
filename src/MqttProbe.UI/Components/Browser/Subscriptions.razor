@@ -86,6 +86,11 @@
             Snackbar.Add($"Failed to add exclude: {ex.Message}", Severity.Error);
             return false;
         }
+        finally
+        {
+            // OnAdd is a plain Func, so Blazor does not re-render us and the list would stay stale.
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task HandleExcludeRemove(IReadOnlyList<string> topics)

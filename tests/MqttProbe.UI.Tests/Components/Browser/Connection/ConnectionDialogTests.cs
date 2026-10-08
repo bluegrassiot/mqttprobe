@@ -1950,6 +1950,29 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
+    public async Task OnConnectTab_ExcludeAdd_RendersNewExcludeAndUpdatesCount()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var excludeEditor = _dialogProvider.FindComponent<ExcludeEditor>();
+        excludeEditor.Find(".count-chip").TextContent.Should().Be("0");
+
+        var editor = excludeEditor.Instance;
+        editor.TopicDraft = "$SYS/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        excludeEditor.Find(".count-chip").TextContent.Should().Be("1");
+        excludeEditor.Find(".mud-expand-panel-header").Click();
+        excludeEditor.Markup.Should().Contain("$SYS/#");
+    }
+
+    [Test]
     public async Task OnConnectTab_ExcludeRemove_WorksRegardlessOfAutoResubscribe()
     {
         _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);

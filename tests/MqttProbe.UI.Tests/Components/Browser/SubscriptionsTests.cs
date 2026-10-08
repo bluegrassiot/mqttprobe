@@ -254,6 +254,60 @@ public class SubscriptionsTests : BunitTestContext
     }
 
     [Test]
+    public void ExcludeAdd_RendersNewExcludeAndUpdatesCount()
+    {
+        AuthorizeAsOperator();
+        var excludes = new List<string> { "$SYS/#" };
+        // The real service hands out a fresh snapshot per read, so a stale component
+        // parameter cannot pick the new entry up by mutation alone.
+        _mockExcludeService.TopicExcludes.Returns(_ => excludes.ToArray());
+        _mockExcludeService.Add(Arg.Any<string>()).Returns(call =>
+        {
+            excludes.Add(call.Arg<string>());
+            return Task.FromResult(new TopicExcludeOperationResult(true));
+        });
+        var cut = Render<Subscriptions>();
+
+        var excludeEditor = cut.FindComponent<ExcludeEditor>();
+        excludeEditor.FindAll("input")
+            .First(e => !e.HasAttribute("readonly") && e.GetAttribute("type") != "checkbox")
+            .Input(new ChangeEventArgs { Value = "sensors/+/temp" });
+        excludeEditor.Find("button[title='Add exclude topic']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            excludeEditor.Find(".count-chip").TextContent.Should().Be("2");
+            excludeEditor.Markup.Should().Contain("sensors/+/temp");
+        });
+    }
+
+    [Test]
+    public void ExcludeRemove_RendersRemovalAndUpdatesCount()
+    {
+        AuthorizeAsOperator();
+        var excludes = new List<string> { "$SYS/#", "sensors/+/temp" };
+        _mockExcludeService.TopicExcludes.Returns(_ => excludes.ToArray());
+        _mockExcludeService.Remove(Arg.Any<IReadOnlyList<string>>()).Returns(call =>
+        {
+            var removed = call.Arg<IReadOnlyList<string>>();
+            excludes.RemoveAll(t => removed.Contains(t));
+            return Task.FromResult(new TopicExcludeOperationResult(true));
+        });
+        var cut = Render<Subscriptions>();
+
+        var excludeEditor = cut.FindComponent<ExcludeEditor>();
+        // [0] = header select-all, [1] = $SYS/#, [2] = sensors/+/temp
+        excludeEditor.FindAll("input[type='checkbox']")[2].Change(true);
+        excludeEditor.Find("button[title='Remove']").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            excludeEditor.Find(".count-chip").TextContent.Should().Be("1");
+            excludeEditor.Markup.Should().NotContain("sensors/+/temp");
+        });
+    }
+
+    [Test]
     public void SubscriptionCountChip_PresentInPanelHeader()
     {
         _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>

@@ -210,7 +210,7 @@ public class PayloadBrowserTests : BunitTestContext
     public void FilterFunc_WithTopicSearchTerm_MatchesByTopicCaseInsensitive()
     {
         var cut = Render<PayloadBrowser>();
-        cut.Instance._searchStringTerm = "SENSOR";
+        cut.Instance.SearchStringTerm = "SENSOR";
 
         cut.Instance.FilterFunc(new MqttMessage { Topic = "sensor/temp", Payload = "42" })
             .Should().BeTrue();
@@ -222,7 +222,7 @@ public class PayloadBrowserTests : BunitTestContext
     public void FilterFunc_WithPayloadSearchTerm_MatchesByPayloadCaseInsensitive()
     {
         var cut = Render<PayloadBrowser>();
-        cut.Instance._searchStringTerm = "hello";
+        cut.Instance.SearchStringTerm = "hello";
 
         cut.Instance.FilterFunc(new MqttMessage { Topic = "any/topic", Payload = "Hello World" })
             .Should().BeTrue();
@@ -236,13 +236,13 @@ public class PayloadBrowserTests : BunitTestContext
         var cut = Render<PayloadBrowser>();
         var msg = new MqttMessage { Topic = "sensor/temp", Payload = "42" };
 
-        cut.Instance._searchStringTerm = null;
+        cut.Instance.SearchStringTerm = null;
         cut.Instance.FilterFunc(msg).Should().BeTrue();
 
-        cut.Instance._searchStringTerm = "   ";
+        cut.Instance.SearchStringTerm = "   ";
         cut.Instance.FilterFunc(msg).Should().BeTrue();
 
-        cut.Instance._searchStringTerm = string.Empty;
+        cut.Instance.SearchStringTerm = string.Empty;
         cut.Instance.FilterFunc(msg).Should().BeTrue();
     }
 
@@ -664,7 +664,7 @@ public class PayloadBrowserTests : BunitTestContext
 
         await cut.Instance.DisposeAsync();
 
-        cut.Instance._disposed.Should().BeTrue();
+        cut.Instance.Disposed.Should().BeTrue();
     }
 
 

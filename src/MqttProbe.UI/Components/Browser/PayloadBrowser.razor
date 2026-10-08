@@ -190,7 +190,7 @@ else
                   Hover="true" Breakpoint="Breakpoint.None" Virtualize="true" FixedHeader="true" Striped="true"
                   RowClassFunc="GetRowClass">
             <ToolBarContent>
-                <MudTextField @bind-Value="_searchStringTerm" Placeholder="Search messages…"
+                <MudTextField @bind-Value="SearchStringTerm" Placeholder="Search messages…"
                               Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
                               Immediate="true" Clearable="true" Variant="Variant.Outlined"
                               Margin="Margin.Dense" Class="mt-0"/>
@@ -244,19 +244,19 @@ else
     [Inject] public required IClipboardService Clipboard { get; set; }
 
     private int MaxMessageCount => PerfSettings.Performance.MaxDisplayMessages;
-    internal string? _searchStringTerm;
+    internal string? SearchStringTerm;
     private List<MqttMessage> _messageList = [];
     private MqttMessage? _selectedMessage;
     private JsonTreeView? _jsonTreeView;
     private Func<MqttMessage, bool> _filterFunc = null!;
-    internal bool _disposed;
+    internal bool Disposed;
     private bool _newestFirst = true;
     private bool CanNavigatePrevious => _selectedMessage != null && _messageList.IndexOf(_selectedMessage) >= 1;
     private bool CanNavigateNext => _selectedMessage != null && _messageList.IndexOf(_selectedMessage) < _messageList.Count - 1;
 
     public async ValueTask DisposeAsync()
     {
-        _disposed = true;
+        Disposed = true;
         Metrics.SetDisplayedMessageCount(0);
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();
@@ -324,9 +324,9 @@ else
     }
     internal bool FilterFunc(MqttMessage msg)
     {
-        if (string.IsNullOrWhiteSpace(_searchStringTerm)) return true;
-        if (msg.Topic != null && msg.Topic.Contains(_searchStringTerm, StringComparison.OrdinalIgnoreCase)) return true;
-        return msg.Payload != null && msg.Payload.Contains(_searchStringTerm, StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(SearchStringTerm)) return true;
+        if (msg.Topic != null && msg.Topic.Contains(SearchStringTerm, StringComparison.OrdinalIgnoreCase)) return true;
+        return msg.Payload != null && msg.Payload.Contains(SearchStringTerm, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetRowClass(MqttMessage _, int __) => "payload-row";

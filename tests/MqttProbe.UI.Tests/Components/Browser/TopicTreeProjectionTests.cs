@@ -8,7 +8,7 @@ internal sealed class TopicBrowserTestFixture
     private readonly MqttProbe.Core.Services.Mqtt.IMessageStoreManager _manager;
     private readonly Guid _storeId = Guid.NewGuid();
     private long _generation;
-    private TopicTreeSnapshot _snapshot = new(0, System.Collections.Immutable.ImmutableArray<TopicNodeSnapshot>.Empty);
+    private TopicTreeSnapshot _snapshot = new(0, ImmutableArray<TopicNodeSnapshot>.Empty);
     private SelectedTopicState _selection = new(default, null, 0);
 
     public TopicBrowserTestFixture(MqttProbe.Core.Services.Mqtt.IMessageStoreManager manager) => _manager = manager;
@@ -18,11 +18,11 @@ internal sealed class TopicBrowserTestFixture
         _manager.RootTopicCount.Returns(_ => _snapshot.Roots.IsDefault ? 0 : _snapshot.Roots.Length);
         _manager.GetTopicTreeSnapshot().Returns(_ => _snapshot);
         _manager.GetSelectedTopicState().Returns(_ => _selection);
-        _manager.SelectTopic(NSubstitute.Arg.Any<string?>()).Returns(call => Select(call.Arg<string?>()));
+        _manager.SelectTopic(Arg.Any<string?>()).Returns(call => Select(call.Arg<string?>()));
     }
 
     public void SetSnapshot(params TopicNodeSnapshot[] roots) =>
-        _snapshot = new TopicTreeSnapshot(_snapshot.Version + 1, System.Collections.Immutable.ImmutableArray.CreateRange(roots));
+        _snapshot = new TopicTreeSnapshot(_snapshot.Version + 1, ImmutableArray.CreateRange(roots));
 
     public void SetSelection(SelectedTopicState selection) => _selection = selection;
 
@@ -42,7 +42,7 @@ internal sealed class TopicBrowserTestFixture
         return new TopicSelectionResult(TopicSelectionStatus.Selected, _selection);
     }
 
-    private static TopicNodeSnapshot? Find(System.Collections.Immutable.ImmutableArray<TopicNodeSnapshot> nodes, string fullTopic)
+    private static TopicNodeSnapshot? Find(ImmutableArray<TopicNodeSnapshot> nodes, string fullTopic)
     {
         if (nodes.IsDefaultOrEmpty)
             return null;

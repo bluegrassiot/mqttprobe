@@ -28,7 +28,7 @@ public partial class PayloadBrowser
         {
             await RefreshMessagesAsync();
         }
-        catch (Exception ex) when (_disposed)
+        catch (Exception ex) when (Disposed)
         {
             Logger.LogDebug(ex, "PayloadBrowser was disposed during refresh");
         }
@@ -40,13 +40,13 @@ public partial class PayloadBrowser
 
     private async Task RefreshMessagesAsync()
     {
-        if (_disposed || Interlocked.Exchange(ref _queryInFlight, 1) != 0)
+        if (Disposed || Interlocked.Exchange(ref _queryInFlight, 1) != 0)
             return;
 
         try
         {
             var selection = MessageStoreManager.GetSelectedTopicState();
-            if (_disposed)
+            if (Disposed)
                 return;
 
             if (string.IsNullOrEmpty(selection.FullTopic))
@@ -73,7 +73,7 @@ public partial class PayloadBrowser
 
     private void ClearIfNoSelection()
     {
-        if (_disposed || !string.IsNullOrEmpty(MessageStoreManager.GetSelectedTopicState().FullTopic))
+        if (Disposed || !string.IsNullOrEmpty(MessageStoreManager.GetSelectedTopicState().FullTopic))
             return;
 
         var needsRefresh = _messageList.Count > 0 || _selectedMessage is not null;
@@ -92,7 +92,7 @@ public partial class PayloadBrowser
         int requestedLimit,
         SelectedMessagesSnapshot? result)
     {
-        if (_disposed)
+        if (Disposed)
             return;
 
         var currentSelection = MessageStoreManager.GetSelectedTopicState();

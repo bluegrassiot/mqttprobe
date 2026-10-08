@@ -25,7 +25,9 @@ jobs:
 
   test:
     name: Test (Unit)
-    runs-on: ubuntu-latest
+    # Every ubuntu job here is pinned, not -latest: ubuntu-latest moves to 26.04
+    # from 19 Oct 2026, which changes the Android SDK and libwebkit2gtk-4.1-0.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -117,7 +119,7 @@ jobs:
 
   test-integration:
     name: Test (Integration)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -189,7 +191,7 @@ jobs:
   build-docker:
     name: Build (Docker)
     needs: [test, test-integration]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
       contents: read
@@ -289,7 +291,7 @@ jobs:
   build-maui-android:
     name: Build (MAUI Android)
     needs: [test, test-integration]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -342,7 +344,7 @@ jobs:
   build-desktop-linux:
     name: Build (Desktop Linux)
     needs: [test, test-integration]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7

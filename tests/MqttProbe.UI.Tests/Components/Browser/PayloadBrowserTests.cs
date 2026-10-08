@@ -21,18 +21,18 @@ public class PayloadBrowserTests : BunitTestContext
     private IMessageStoreManager _mockMsgStore = null!;
     private IPerformanceSettings _mockPerformance = null!;
     private IUxMetricsService _mockMetrics = null!;
+    private Guid _storeId;
+    private SelectedTopicState _selection = null!;
+    private TaskCompletionSource<(SelectedTopicToken Token, int Limit)>? _nextQueryRequest;
 
     [SetUp]
     public void SetupMocks()
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
-        _mockMsgStore.GetMessagesForSelectedTopic()
-            .Returns(Task.FromResult<IEnumerable<MqttMessage>>(Array.Empty<MqttMessage>()));
-        _mockMsgStore.GetSelectedTopicVersion().Returns(1L);
-        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
-            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(Array.Empty<MqttMessage>()));
-        var mockStore = new MessageStore { Topic = "sensor", FullTopic = "sensor" };
-        _mockMsgStore.SelectedMessageStore.Returns(mockStore);
+        _storeId = Guid.NewGuid();
+        _selection = MakeSelection("sensor", generation: 1, contentVersion: 1);
+        _mockMsgStore.GetSelectedTopicState().Returns(_ => _selection);
+        ReturnMessages([]);
         Services.AddSingleton(_mockMsgStore);
 
         _mockPerformance = Substitute.For<IPerformanceSettings>();
@@ -55,6 +55,41 @@ public class PayloadBrowserTests : BunitTestContext
         Services.AddSingleton<IFormatDisplayNames>(new FormatDisplayNames(pipeline));
     }
 
+    private SelectedTopicState MakeSelection(string? fullTopic, long generation, long contentVersion, int messageCount = 0) =>
+        new(new SelectedTopicToken(_storeId, generation, contentVersion), fullTopic, messageCount);
+
+    private void ReturnMessages(IReadOnlyList<MqttMessage> messages)
+    {
+        _mockMsgStore.GetSelectedMessagesAsync(Arg.Any<SelectedTopicToken>(), Arg.Any<int>())
+            .Returns(call =>
+            {
+                var token = call.ArgAt<SelectedTopicToken>(0);
+                Interlocked.Exchange(ref _nextQueryRequest, null)?.TrySetResult((token, call.ArgAt<int>(1)));
+                return Task.FromResult<SelectedMessagesSnapshot?>(
+                    new SelectedMessagesSnapshot(_selection with { Token = token }, call.ArgAt<int>(1),
+                        System.Collections.Immutable.ImmutableArray.CreateRange(messages)));
+            });
+    }
+
+    private static SelectedMessagesSnapshot Snapshot(SelectedTopicState state, int limit, string payload) =>
+        new(state, limit,
+            System.Collections.Immutable.ImmutableArray.Create(new MqttMessage { Topic = state.FullTopic, Payload = payload }));
+
+    private void ReturnResponses(params Task<SelectedMessagesSnapshot?>[] responses)
+    {
+        var responseIndex = -1;
+        _mockMsgStore.GetSelectedMessagesAsync(Arg.Any<SelectedTopicToken>(), Arg.Any<int>())
+            .Returns(call =>
+            {
+                var request = Interlocked.Exchange(ref _nextQueryRequest, null);
+                request?.TrySetResult((call.ArgAt<SelectedTopicToken>(0), call.ArgAt<int>(1)));
+                return responses[Math.Min(Interlocked.Increment(ref responseIndex), responses.Length - 1)];
+            });
+    }
+
+    private void ObserveNextQuery(TaskCompletionSource<(SelectedTopicToken Token, int Limit)> request) =>
+        _nextQueryRequest = request;
+
 
     [Test]
     public void MessageList_AtOrAboveCap_ShowsTruncationWarning()
@@ -62,16 +97,15 @@ public class PayloadBrowserTests : BunitTestContext
         var messages = Enumerable.Range(0, 600)
             .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
             .ToList();
-        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
-            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(messages));
+        ReturnMessages(messages);
         EnsureMudProviders();
 
         var cut = Render<PayloadBrowser>();
 
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("500 msgs"));
 
-        // Verify GetRecentMessagesAsync was called with the default display cap (500).
-        _mockMsgStore.Received(1).GetRecentMessagesAsync(Arg.Any<string>(), 500);
+        // Verify the selected snapshot query uses the default display cap (500).
+        _mockMsgStore.Received(1).GetSelectedMessagesAsync(Arg.Any<SelectedTopicToken>(), 500);
     }
 
     [Test]
@@ -80,8 +114,7 @@ public class PayloadBrowserTests : BunitTestContext
         var messages = Enumerable.Range(0, 10)
             .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
             .ToList();
-        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
-            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(messages));
+        ReturnMessages(messages);
         EnsureMudProviders();
 
         var cut = Render<PayloadBrowser>();
@@ -101,8 +134,7 @@ public class PayloadBrowserTests : BunitTestContext
         var messages = Enumerable.Range(0, 3)
             .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
             .ToList();
-        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
-            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(messages));
+        ReturnMessages(messages);
         EnsureMudProviders();
 
         var cut = Render<PayloadBrowser>();
@@ -110,76 +142,67 @@ public class PayloadBrowserTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("3 msgs"));
         cut.FindAll(".payload-row").Should().HaveCount(3);
 
-        // Verify GetRecentMessagesAsync was called with the custom display cap (3).
-        _mockMsgStore.Received(1).GetRecentMessagesAsync(Arg.Any<string>(), 3);
+        // Verify the selected snapshot query uses the custom display cap (3).
+        _mockMsgStore.Received(1).GetSelectedMessagesAsync(Arg.Any<SelectedTopicToken>(), 3);
     }
 
     [Test]
     public void DoesNotQuery_WhenVersionUnchanged()
     {
-        _mockMsgStore.GetSelectedTopicVersion().Returns(42L);
-        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
-            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(
-                new List<MqttMessage>
-                {
-                    new() { Topic = "sensor/temp", Payload = "1" },
-                    new() { Topic = "sensor/temp", Payload = "2" },
-                    new() { Topic = "sensor/temp", Payload = "3" },
-                    new() { Topic = "sensor/temp", Payload = "4" },
-                    new() { Topic = "sensor/temp", Payload = "5" }
-                }));
+        ReturnMessages(Enumerable.Range(1, 5)
+            .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
+            .ToList());
         EnsureMudProviders();
 
         var cut = Render<PayloadBrowser>();
 
-        // First tick: _lastVersion (0) != 42 → queries.
+        // First tick queries the current selection/content token.
         cut.WaitForAssertion(() =>
-            _mockMsgStore.Received(1).GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>()));
+            _mockMsgStore.Received(1).GetSelectedMessagesAsync(Arg.Any<SelectedTopicToken>(), Arg.Any<int>()));
 
         // Wait past a second timer tick (500ms interval) to prove no second query fires.
         Thread.Sleep(600);
 
-        // Still exactly 1 call — version unchanged, second tick is a no-op.
-        _mockMsgStore.Received(1).GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>());
+        // Still exactly 1 call while the selection/content token is unchanged.
+        _mockMsgStore.Received(1).GetSelectedMessagesAsync(Arg.Any<SelectedTopicToken>(), Arg.Any<int>());
     }
 
     [Test]
-    public void QueriesAgain_WhenVersionChanges()
+    public async Task QueriesAgain_WhenVersionChanges()
     {
-        _mockMsgStore.GetSelectedTopicVersion().Returns(42L, 43L);
-        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
-            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(
-                new List<MqttMessage>
-                {
-                    new() { Topic = "sensor/temp", Payload = "1" },
-                    new() { Topic = "sensor/temp", Payload = "2" },
-                    new() { Topic = "sensor/temp", Payload = "3" },
-                    new() { Topic = "sensor/temp", Payload = "4" },
-                    new() { Topic = "sensor/temp", Payload = "5" }
-                }));
+        ReturnMessages(Enumerable.Range(1, 5)
+            .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
+            .ToList());
         EnsureMudProviders();
 
+        var initialQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(initialQuery);
         var cut = Render<PayloadBrowser>();
+        (await initialQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((_selection.Token, 500));
+        cut.WaitForAssertion(() => _mockMetrics.Received().SetDisplayedMessageCount(5), TimeSpan.FromSeconds(5));
 
-        // First tick: version 42 → queries.
-        // Second tick: version 43 → queries again.
-        cut.WaitForAssertion(() =>
-            _mockMsgStore.Received(2).GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>()));
+        var updatedSelection = MakeSelection("sensor", generation: 1, contentVersion: 2);
+        var updatedQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(updatedQuery);
+        _selection = updatedSelection;
+        (await updatedQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((updatedSelection.Token, 500));
 
         // Verify limit matches default MaxDisplayMessages (500).
-        _mockMsgStore.Received(2).GetRecentMessagesAsync(Arg.Any<string>(), 500);
+        _ = _mockMsgStore.Received(2).GetSelectedMessagesAsync(Arg.Any<SelectedTopicToken>(), 500);
     }
 
     [Test]
     public void NoSelectedTopic_DoesNotQueryAndShowsEmpty()
     {
-        _mockMsgStore.SelectedMessageStore.Returns((MessageStore?)null);
+        _selection = MakeSelection(null, generation: 2, contentVersion: 0);
         EnsureMudProviders();
 
         var cut = Render<PayloadBrowser>();
 
         cut.WaitForAssertion(() =>
-            _mockMsgStore.DidNotReceive().GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>()));
+            _mockMsgStore.DidNotReceive().GetSelectedMessagesAsync(Arg.Any<SelectedTopicToken>(), Arg.Any<int>()));
         cut.FindAll(".payload-row").Should().BeEmpty();
     }
 
@@ -381,6 +404,258 @@ public class PayloadBrowserTests : BunitTestContext
     }
 
 
+
+    [Test]
+    public async Task DelayedSelectionSwitch_IgnoresPreviousTopicResult()
+    {
+        var requestedSelection = _selection;
+        var staleResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var currentResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ReturnResponses(staleResponse.Task, currentResponse.Task);
+        EnsureMudProviders();
+
+        var initialQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(initialQuery);
+        var cut = Render<PayloadBrowser>();
+        (await initialQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((requestedSelection.Token, 500));
+
+        var currentSelection = MakeSelection("other", generation: 2, contentVersion: 1);
+        var currentQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(currentQuery);
+        _selection = currentSelection;
+        staleResponse.SetResult(Snapshot(requestedSelection, 500, "stale"));
+        (await currentQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((currentSelection.Token, 500));
+
+        await cut.InvokeAsync(() => { });
+        cut.Markup.Should().NotContain("stale");
+
+        currentResponse.SetResult(Snapshot(currentSelection, 500, "current"));
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".payload-row").Should().ContainSingle();
+            cut.Markup.Should().Contain("current");
+            cut.Markup.Should().NotContain("stale");
+        }, TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public async Task DelayedClearThenReselect_IgnoresOldResultAndLoadsCurrentSelection()
+    {
+        var requestedSelection = _selection;
+        var staleResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var currentResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ReturnResponses(staleResponse.Task, currentResponse.Task);
+        EnsureMudProviders();
+
+        var initialQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(initialQuery);
+        var cut = Render<PayloadBrowser>();
+        (await initialQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((requestedSelection.Token, 500));
+
+        var clearedSelection = MakeSelection(null, generation: 2, contentVersion: 0);
+        var currentSelection = MakeSelection("sensor", generation: 3, contentVersion: 0);
+        var currentQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(currentQuery);
+        _selection = clearedSelection;
+        _selection = currentSelection;
+        staleResponse.SetResult(Snapshot(requestedSelection, 500, "stale"));
+
+        (await currentQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((currentSelection.Token, 500));
+        await cut.InvokeAsync(() => { });
+        cut.Markup.Should().NotContain("stale");
+        currentResponse.SetResult(Snapshot(currentSelection, 500, "current-after-clear"));
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Markup.Should().Contain("current-after-clear");
+            cut.Markup.Should().NotContain("stale");
+        }, TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public async Task DelayedResult_AfterPurgeAndSamePathRecreation_LoadsOnlyTheNewGeneration()
+    {
+        var requestedSelection = _selection;
+        var staleResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var currentResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ReturnResponses(staleResponse.Task, currentResponse.Task);
+        EnsureMudProviders();
+
+        var initialQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(initialQuery);
+        var cut = Render<PayloadBrowser>();
+        (await initialQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((requestedSelection.Token, 500));
+
+        var currentSelection = MakeSelection("sensor", generation: 3, contentVersion: 0);
+        var currentQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(currentQuery);
+        _selection = MakeSelection("other", generation: 2, contentVersion: 1);
+        _selection = currentSelection;
+        staleResponse.SetResult(Snapshot(requestedSelection, 500, "stale"));
+
+        (await currentQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((currentSelection.Token, 500));
+        await cut.InvokeAsync(() => { });
+        cut.Markup.Should().NotContain("stale");
+        currentResponse.SetResult(Snapshot(currentSelection, 500, "current-recreated"));
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Markup.Should().Contain("current-recreated");
+            cut.Markup.Should().NotContain("stale");
+        }, TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public async Task DelayedResult_WhenDisplayLimitChanges_QueriesAndAppliesTheNewLimit()
+    {
+        var requestedSelection = _selection;
+        var staleResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var currentResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ReturnResponses(staleResponse.Task, currentResponse.Task);
+        EnsureMudProviders();
+
+        var initialQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(initialQuery);
+        var cut = Render<PayloadBrowser>();
+        (await initialQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((requestedSelection.Token, 500));
+
+        _mockPerformance.Performance.Returns(new PerformanceSettings { MaxDisplayMessages = 3 });
+        var updatedLimitQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(updatedLimitQuery);
+        staleResponse.SetResult(Snapshot(requestedSelection, 500, "stale"));
+
+        (await updatedLimitQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((requestedSelection.Token, 3));
+        await cut.InvokeAsync(() => { });
+        cut.Markup.Should().NotContain("stale");
+        currentResponse.SetResult(Snapshot(requestedSelection, 3, "current-limited"));
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Markup.Should().Contain("current-limited");
+            cut.Markup.Should().NotContain("stale");
+        }, TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public async Task DelayedResult_AfterDispose_DrainsWithoutApplying()
+    {
+        var requestedSelection = _selection;
+        var response = new TaskCompletionSource<SelectedMessagesSnapshot?>();
+        ReturnResponses(response.Task);
+        EnsureMudProviders();
+
+        var initialQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(initialQuery);
+        var cut = Render<PayloadBrowser>();
+        (await initialQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((requestedSelection.Token, 500));
+        await cut.Instance.DisposeAsync();
+        response.SetResult(Snapshot(requestedSelection, 500, "stale"));
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        _mockMetrics.DidNotReceive().SetDisplayedMessageCount(1);
+    }
+
+    [Test]
+    public async Task ContentAdvancingDuringFetch_AppliesInterimThenRefreshesNewestVersion()
+    {
+        var requestedSelection = _selection;
+        var interimResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var latestResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ReturnResponses(interimResponse.Task, latestResponse.Task);
+        EnsureMudProviders();
+
+        var initialQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(initialQuery);
+        var cut = Render<PayloadBrowser>();
+        (await initialQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((requestedSelection.Token, 500));
+        var latestSelection = MakeSelection("sensor", generation: 1, contentVersion: 2);
+        _selection = latestSelection;
+        var latestQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(latestQuery);
+        interimResponse.SetResult(Snapshot(requestedSelection, 500, "interim"));
+
+        (await latestQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((latestSelection.Token, 500));
+        await cut.InvokeAsync(() => Task.CompletedTask);
+        cut.Markup.Should().Contain("interim");
+        latestResponse.SetResult(Snapshot(latestSelection, 500, "latest"));
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Markup.Should().Contain("latest");
+            cut.Markup.Should().NotContain("interim");
+        }, TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public async Task ContentRefreshPreservesDetailWithinGeneration_AndNewGenerationAtSamePathClearsIt()
+    {
+        var initialSelection = _selection;
+        var initialResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sameGenerationResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recreatedResponse = new TaskCompletionSource<SelectedMessagesSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ReturnResponses(initialResponse.Task, sameGenerationResponse.Task, recreatedResponse.Task);
+        EnsureMudProviders();
+
+        var initialQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(initialQuery);
+        var cut = Render<PayloadBrowser>();
+        (await initialQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((initialSelection.Token, 500));
+        initialResponse.SetResult(Snapshot(initialSelection, 500, "initial-row"));
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("initial-row"), TimeSpan.FromSeconds(5));
+
+        var detailMessage = new MqttMessage { Topic = "sensor/detail", Payload = "user-detail" };
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(detailMessage));
+        cut.Markup.Should().Contain("Message Details");
+        cut.Markup.Should().Contain("user-detail");
+
+        var sameGeneration = MakeSelection("sensor", generation: 1, contentVersion: 2);
+        var sameGenerationQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(sameGenerationQuery);
+        _selection = sameGeneration;
+        (await sameGenerationQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((sameGeneration.Token, 500));
+        sameGenerationResponse.SetResult(new SelectedMessagesSnapshot(sameGeneration, 500,
+            System.Collections.Immutable.ImmutableArray.Create(
+                new MqttMessage { Topic = "sensor", Payload = "same-generation-row" },
+                new MqttMessage { Topic = "sensor", Payload = "second-same-generation-row" })));
+        cut.WaitForAssertion(() => _mockMetrics.Received().SetDisplayedMessageCount(2), TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() =>
+        {
+            cut.Markup.Should().Contain("Message Details");
+            cut.Markup.Should().Contain("user-detail");
+        }, TimeSpan.FromSeconds(5));
+
+        await cut.InvokeAsync(() => cut.Find("button[title='Back to message list']").Click());
+        cut.Markup.Should().Contain("same-generation-row");
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(detailMessage));
+
+        var recreated = MakeSelection("sensor", generation: 2, contentVersion: 0);
+        var recreatedQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(recreatedQuery);
+        _selection = recreated;
+        (await recreatedQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((recreated.Token, 500));
+        recreatedResponse.SetResult(Snapshot(recreated, 500, "recreated-row"));
+        cut.WaitForAssertion(() => _mockMetrics.Received().SetDisplayedMessageCount(1), TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() =>
+        {
+            cut.Markup.Should().Contain("recreated-row");
+            cut.Markup.Should().NotContain("Message Details");
+            cut.Markup.Should().NotContain("user-detail");
+        }, TimeSpan.FromSeconds(5));
+    }
 
     [Test]
     public async Task DisposeAsync_SetsDisposedFlagAndDoesNotThrow()
@@ -670,8 +945,7 @@ public class PayloadBrowserTests : BunitTestContext
         {
             new() { Topic = "sensor/temp", Payload = "1" }
         };
-        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
-            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(messages));
+        ReturnMessages(messages);
         EnsureMudProviders();
 
         var cut = Render<PayloadBrowser>();
@@ -683,9 +957,11 @@ public class PayloadBrowserTests : BunitTestContext
         var message = new MqttMessage { Topic = "sensor/temp", Payload = "42" };
         await cut.InvokeAsync(() => cut.Instance.MessageChanged(message));
 
-        // Wait past another timer cycle — selection must survive.
-        cut.WaitForElement("button[title='Copy topic']");
-        Thread.Sleep(600);
+        var refreshedSelection = MakeSelection("sensor", generation: 1, contentVersion: 2);
+        _selection = refreshedSelection;
+        cut.WaitForAssertion(() =>
+            _mockMsgStore.Received(1).GetSelectedMessagesAsync(refreshedSelection.Token, 500),
+            TimeSpan.FromSeconds(5));
 
         cut.Find("button[title='Copy topic']").Should().NotBeNull();
         cut.Find("button[title='Copy payload']").Should().NotBeNull();
@@ -697,8 +973,7 @@ public class PayloadBrowserTests : BunitTestContext
         var messages = Enumerable.Range(0, 5)
             .Select(i => new MqttMessage { Topic = "sensor/temp", Payload = i.ToString() })
             .ToList();
-        _mockMsgStore.GetRecentMessagesAsync(Arg.Any<string>(), Arg.Any<int>())
-            .Returns(Task.FromResult<IReadOnlyList<MqttMessage>>(messages));
+        ReturnMessages(messages);
         EnsureMudProviders();
 
         var cut = Render<PayloadBrowser>();
@@ -710,7 +985,7 @@ public class PayloadBrowserTests : BunitTestContext
     [Test]
     public void NoSelectedTopic_ResetsDisplayedCountToZero()
     {
-        _mockMsgStore.SelectedMessageStore.Returns((MessageStore?)null);
+        _selection = MakeSelection(null, generation: 2, contentVersion: 0);
         EnsureMudProviders();
 
         var cut = Render<PayloadBrowser>();

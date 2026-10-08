@@ -64,9 +64,9 @@
 
     private void SyncFromManager()
     {
-        var store = MessageStoreManager.SelectedMessageStore;
-        _selectedTopic = store?.FullTopic ?? store?.Topic;
-        _messageCount = store?.MessageCount ?? 0;
+        var state = MessageStoreManager.GetSelectedTopicState();
+        _selectedTopic = state.FullTopic;
+        _messageCount = state.MessageCount;
     }
 
     private async Task OpenPicker()

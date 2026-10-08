@@ -6,6 +6,7 @@ Run: python -m unittest discover -s scripts/ci/tests
 
 import importlib.util
 import io
+import os
 import subprocess
 import sys
 import unittest
@@ -65,12 +66,12 @@ def _run_main(fake_run, fixture=None):
 
 
 class TestInvocationArgs(unittest.TestCase):
-    """Verify both formatting passes and their shared invocation options."""
+    """Verify formatting passes and their shared invocation options."""
 
-    def test_exactly_whitespace_and_style_passes_run(self):
+    def test_whitespace_general_style_and_targeted_style_passes_run(self):
         _, calls = _run_main(lambda a, **kw: _run())
-        self.assertEqual([c[2] for c in calls], ["whitespace", "style"])
-        self.assertTrue(all("--diagnostics" not in c for c in calls))
+        self.assertEqual([c[2] for c in calls], ["whitespace", "style", "style"])
+        self.assertEqual(sum("--diagnostics" in c for c in calls), 1)
 
     def test_all_invocations_include_excludes(self):
         _, calls = _run_main(lambda a, **kw: _run())
@@ -84,9 +85,30 @@ class TestInvocationArgs(unittest.TestCase):
 
     def test_fix_mode_runs_both_passes_without_verify_flag(self):
         _, calls = _run_main(lambda a, **kw: _run(), _Fixture(fix=True))
-        self.assertEqual([c[2] for c in calls], ["whitespace", "style"])
+        self.assertEqual([c[2] for c in calls], ["whitespace", "style", "style"])
         for c in calls:
             self.assertNotIn("--verify-no-changes", c)
+
+    def test_ide0005_pass_uses_hidden_severity(self):
+        _, calls = _run_main(lambda a, **kw: _run())
+        call = next(c for c in calls if "--diagnostics" in c)
+        self.assertEqual(call[call.index("--diagnostics") + 1], "IDE0005")
+        self.assertEqual(call[call.index("--severity") + 1], "hidden")
+
+    def test_scoped_ide0005_pass_preserves_include_and_fix_options(self):
+        path = Path("/tmp/fake/src/changed.cs")
+        original_select = format_ci._select_files
+        format_ci._select_files = lambda selection: (False, [path])
+        try:
+            _, calls = _run_main(lambda a, **kw: _run())
+            _, fix_calls = _run_main(lambda a, **kw: _run(), _Fixture(fix=True))
+        finally:
+            format_ci._select_files = original_select
+        for call in (next(c for c in calls if "--diagnostics" in c),
+                     next(c for c in fix_calls if "--diagnostics" in c)):
+            self.assertEqual(call[call.index("--include") + 1], os.path.join("src", "changed.cs"))
+        self.assertIn("--verify-no-changes", next(c for c in calls if "--diagnostics" in c))
+        self.assertNotIn("--verify-no-changes", next(c for c in fix_calls if "--diagnostics" in c))
 
 
 class TestCrlfExecutesBothStylePasses(unittest.TestCase):
@@ -100,7 +122,7 @@ class TestCrlfExecutesBothStylePasses(unittest.TestCase):
 
         out, calls = _run_main(fake_run)
         subs = [c[2] for c in calls]
-        self.assertEqual(subs, ["whitespace", "style"])
+        self.assertEqual(subs, ["whitespace", "style", "style"])
 
     def test_endofline_only_reports_ok(self):
         def fake_run(args, **kw):

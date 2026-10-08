@@ -221,6 +221,23 @@ public class TopicBrowserInteractionTests : BunitTestContext
     }
 
     [Test]
+    public void ClickingPurgedRow_DoesNotPublishPreviousSelection()
+    {
+        SelectedTopicState? callbackState = null;
+        var cut = RenderWithTree(state =>
+        {
+            callbackState = state;
+            return Task.CompletedTask;
+        });
+        _fixture.SetSnapshot();
+
+        cut.Find(".topic-tree-row").Click();
+
+        callbackState.Should().BeNull();
+        _mockMsgStore.Received().SelectTopic("sensors");
+    }
+
+    [Test]
     public void ExpandRoot_ShowsChildrenInParentThenChildOrder()
     {
         var cut = RenderWithTree();

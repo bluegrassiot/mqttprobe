@@ -29,10 +29,13 @@ if ! git diff --cached --name-only -z >"$STAGED_PATHS_FILE"; then
     print_total
     exit 1
 fi
-mapfile -d '' -t STAGED_PATHS <"$STAGED_PATHS_FILE"
+STAGED_PATHS=()
+while IFS= read -r -d '' staged_path; do
+    STAGED_PATHS+=("$staged_path")
+done <"$STAGED_PATHS_FILE"
 rm -f "$STAGED_PATHS_FILE"
 STAGED=$(printf '%s\n' "${STAGED_PATHS[@]}")
-if [[ -z "${STAGED//[$'\t\r\n']/}" ]]; then
+if [[ ${#STAGED_PATHS[@]} -eq 0 ]]; then
     skip_msg "no staged files"
     print_total
     exit 0

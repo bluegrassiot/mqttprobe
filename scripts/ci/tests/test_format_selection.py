@@ -40,7 +40,7 @@ def _expected_call_sequence():
     for target, needs_workload in format_ci.TARGETS:
         if needs_workload:
             expected.append(str(format_ci.ROOT / target))
-        expected.extend(["whitespace", "style"])
+        expected.extend(["whitespace", "style", "style"])
     return expected
 
 
@@ -215,7 +215,8 @@ class TestScopedSelection(GitFixture):
         with patch.object(format_ci, "TARGETS", [("A.slnf", False), ("B.csproj", True)]):
             self.assertEqual(
                 _expected_call_sequence(),
-                ["whitespace", "style", str(format_ci.ROOT / "B.csproj"), "whitespace", "style"],
+                ["whitespace", "style", "style", str(format_ci.ROOT / "B.csproj"),
+                 "whitespace", "style", "style"],
             )
 
     def test_deleted_workspace_config_on_rename_forces_full_tree(self):
@@ -314,6 +315,7 @@ class TestPreCommitFormatSelection(unittest.TestCase):
             "src/Page.cshtml", "src/App.fsproj", "Directory.Build.props",
             "MqttProbe.slnx", "global.json", "config/NuGeT.CoNfIg",
             "Directory.Packages.props", "Directory.Solution.targets",
+            "SRC/UPPER.CS", "CONFIG/NUGet.CONFIG",
         ]
         for path in paths:
             result = subprocess.run(
@@ -341,6 +343,10 @@ class TestPreCommitFormatSelection(unittest.TestCase):
         self.assertIn('format-check.py" --staged', content)
         self.assertIn("--name-only -z", content)
         self.assertIn('any_format_relevant_paths "${STAGED_PATHS[@]}"', content)
+        self.assertIn("while IFS= read -r -d '' staged_path; do", content)
+        self.assertIn('STAGED_PATHS+=("$staged_path")', content)
+        self.assertIn("${#STAGED_PATHS[@]} -eq 0", content)
+        self.assertNotIn("mapfile", content)
 
 
 if __name__ == "__main__":

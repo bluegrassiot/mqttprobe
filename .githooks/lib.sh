@@ -86,11 +86,12 @@ is_format_relevant_path() {
     p=${p//\\//}
     local base lower
     base=$(basename "$p")
-    lower=${p,,}
+    lower=$(printf '%s' "$p" | tr '[:upper:]' '[:lower:]')
     case "$lower" in
         *.cs|*.razor|*.cshtml|*.csproj|*.fsproj|*.vbproj|*.proj|*.props|*.targets|*.sln|*.slnx|*.slnf) return 0 ;;
     esac
-    case "${base,,}" in
+    base=$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]')
+    case "$base" in
         .editorconfig|global.json|nuget.config|directory.build.*|directory.packages.props|directory.solution.*|directory.build.rsp|msbuild.rsp|packages.lock.json|dotnet-tools.json) return 0 ;;
     esac
     return 1

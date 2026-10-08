@@ -244,12 +244,12 @@ else
     [Inject] public required IClipboardService Clipboard { get; set; }
 
     private int MaxMessageCount => PerfSettings.Performance.MaxDisplayMessages;
-    internal string? SearchStringTerm;
+    internal string? SearchStringTerm { get; set; }
     private List<MqttMessage> _messageList = [];
     private MqttMessage? _selectedMessage;
     private JsonTreeView? _jsonTreeView;
     private Func<MqttMessage, bool> _filterFunc = null!;
-    internal bool Disposed;
+    internal bool Disposed { get; set; }
     private bool _newestFirst = true;
     private bool CanNavigatePrevious => _selectedMessage != null && _messageList.IndexOf(_selectedMessage) >= 1;
     private bool CanNavigateNext => _selectedMessage != null && _messageList.IndexOf(_selectedMessage) < _messageList.Count - 1;

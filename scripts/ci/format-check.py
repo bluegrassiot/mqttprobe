@@ -14,7 +14,7 @@ ENDOFLINE-only violations are ignored in check mode: .editorconfig mandates LF
 but git (text=auto) checks out CRLF on Windows, so every file reports
 ENDOFLINE locally. CI normalizes line endings before checking and is
 unaffected. The ENDOFLINE bypass applies only to the whitespace pass result and
-never suppresses the style pass.
+never suppresses the style or targeted IDE0005 passes.
 
 Usage:
   ./scripts/ci/format-check.py                  # full-tree check
@@ -42,6 +42,10 @@ def find_repo_root() -> Path:
 ROOT = find_repo_root()
 
 SUBCOMMANDS = ["whitespace", "style"]
+
+# IDE0005 defaults to hidden without an explicit .editorconfig severity. Keep
+# this focused pass separate so ordinary style fixes retain their existing scope.
+TARGETED_STYLE_DIAGNOSTICS = ["IDE0005"]
 
 # external/ holds vendored git submodules (e.g. SparkplugNet fork); they keep
 # their own upstream code style and must not be reformatted by mqttprobe rules.
@@ -372,6 +376,41 @@ def main(argv: list[str] | None = None) -> None:
                 break
 
         if style_failed:
+            continue
+
+        # IDE0005 is hidden by default, so the normal style pass does not
+        # enforce unused using directives. Preserve the selected file scope.
+        args = [
+            "dotnet", "format", "style", str(ROOT / target),
+            "--diagnostics", *TARGETED_STYLE_DIAGNOSTICS,
+            "--severity", "hidden",
+        ]
+        if not full_tree:
+            args.extend(["--include", *(str(path.relative_to(ROOT)) for path in includes)])
+        if not options.fix:
+            args.append("--verify-no-changes")
+        if skip_restore:
+            args.append("--no-restore")
+        for ex in EXCLUDES:
+            args.extend(["--exclude", ex])
+
+        result = _run_dotnet(args, cwd=ROOT if not full_tree else None)
+        output = f"{result.stdout}\n{result.stderr}"
+
+        if result.returncode == 0 and _has_workspace_warning(output):
+            print(" FAIL")
+            for line in output.splitlines():
+                if WORKSPACE_WARN.search(line):
+                    print(f"    {line.strip()}")
+            failed += 1
+            continue
+
+        if result.returncode != 0:
+            real = _extract_real_errors(output)
+            print(" FAIL")
+            for line in (real or [output.strip()]):
+                print(f"    {line}")
+            failed += 1
             continue
 
         print(" OK")

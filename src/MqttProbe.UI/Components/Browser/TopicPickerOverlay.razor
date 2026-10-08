@@ -25,7 +25,7 @@
         await OnClose.InvokeAsync();
     }
 
-    private async Task OnTopicSelected(MessageStore? _)
+    private async Task OnTopicSelected(SelectedTopicState _)
     {
         await OnClose.InvokeAsync();
     }

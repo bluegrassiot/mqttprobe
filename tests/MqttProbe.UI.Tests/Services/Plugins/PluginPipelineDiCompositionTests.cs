@@ -247,9 +247,8 @@ public class PluginPipelineDiCompositionTests
 
         await _capturedHandler!(MakeArgs("data", """{"temp":21.5}"""));
 
-        manager.MessageStores.Should().ContainKey("data");
-        manager.MessageStores["data"].Messages
-            .Should().Contain(m => m.Payload != null && m.Payload.Contains("temp"));
+        var messages = await manager.GetRecentMessagesAsync("data", 10);
+        messages.Should().ContainSingle(m => m.Payload != null && m.Payload.Contains("temp"));
     }
 
     [Test]
@@ -264,8 +263,8 @@ public class PluginPipelineDiCompositionTests
         var payload = SpbPayload(("Temperature", 0, 10, 23.5));
         await _capturedHandler!(MakeArgs("spBv1.0/factory/NBIRTH/edge-01", payload));
 
-        // Message stored
-        manager.MessageStores.Should().ContainKey("spBv1.0");
+        (await manager.GetRecentMessagesAsync("spBv1.0/factory/NBIRTH/edge-01", 10))
+            .Should().ContainSingle();
 
         // Topology updated
         topology.Groups.Should().ContainKey("factory");

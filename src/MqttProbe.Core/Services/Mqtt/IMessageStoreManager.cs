@@ -1,12 +1,14 @@
-using System.Collections.Concurrent;
 using MqttProbe.Core.Models.Mqtt;
 
 namespace MqttProbe.Core.Services.Mqtt;
 
 public interface IMessageStoreManager : IDisposable
 {
-    public ConcurrentDictionary<string, MessageStore> MessageStores { get; }
-    public MessageStore? SelectedMessageStore { get; set; }
+    public int RootTopicCount { get; }
+    public TopicTreeSnapshot GetTopicTreeSnapshot();
+    public SelectedTopicState GetSelectedTopicState();
+    public TopicSelectionResult SelectTopic(string? fullTopic);
+    public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit);
     public bool IsListening { get; }
     public int MaxStoredMessages { get; }
     public int MaxTopicNodes { get; }
@@ -14,10 +16,8 @@ public interface IMessageStoreManager : IDisposable
     public int TopicNodeCount { get; }
     public long DroppedMessageCount { get; }
     public long ExcludedMessageCount { get; }
-    public Task<IEnumerable<MqttMessage>> GetMessagesForSelectedTopic();
     public Task<IReadOnlyList<MqttMessage>> GetRecentMessagesAsync(string topic, int limit);
     public long GetVersion();
-    public long GetSelectedTopicVersion();
     public Task ClearAllMessages();
 
     // CA1716: "Stop" clashes with a VB keyword. This is public API surface

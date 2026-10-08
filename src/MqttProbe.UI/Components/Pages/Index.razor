@@ -235,7 +235,7 @@
 
 @code {
     private string BrowserTabLabel =>
-        MessageStoreManager.MessageStores.Count > 0 ? $"Browser ({MessageStoreManager.MessageStores.Count})" : "Browser";
+        MessageStoreManager.RootTopicCount > 0 ? $"Browser ({MessageStoreManager.RootTopicCount})" : "Browser";
 
     private string ChartsTabLabel =>
         ChartSettings.GetCharts(SessionState.SelectedConnection.Id).Count > 0 ? $"Charts ({ChartSettings.GetCharts(SessionState.SelectedConnection.Id).Count})" : "Charts";

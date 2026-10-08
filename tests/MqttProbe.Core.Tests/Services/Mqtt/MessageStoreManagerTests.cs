@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MqttProbe.Core.Models.Configuration;
@@ -42,8 +41,8 @@ public class MessageStoreManagerTests
     public void Constructor_Should_InitializeProperties()
     {
         _messageStoreManager.Should().NotBeNull();
-        _messageStoreManager.MessageStores.Should().BeOfType<ConcurrentDictionary<string, MessageStore>>();
-        _messageStoreManager.SelectedMessageStore.Should().BeNull();
+        _messageStoreManager.RootTopicCount.Should().Be(0);
+        _messageStoreManager.GetSelectedTopicState().FullTopic.Should().BeNull();
         _messageStoreManager.IsListening.Should().BeFalse();
     }
 
@@ -108,53 +107,37 @@ public class MessageStoreManagerTests
     [Test]
     public async Task GetMessagesForSelectedTopic_Should_ReturnEmpty_WhenNoMessagesExist()
     {
-
-        _messageStoreManager.SelectedMessageStore = null;
-
-
-        var result = await _messageStoreManager.GetMessagesForSelectedTopic();
-
-
-        result.Should().BeEmpty();
+        var state = _messageStoreManager.GetSelectedTopicState();
+        var result = await _messageStoreManager.GetSelectedMessagesAsync(state.Token, 10);
+        result!.Messages.Should().BeEmpty();
     }
 
     [Test]
     public async Task GetMessagesForSelectedTopic_Should_ReturnMessages_WhenMessagesExist()
     {
-
-        var messages = new ConcurrentQueue<MqttMessage>();
-        messages.Enqueue(new MqttMessage());
-        var messageStore = new MessageStore { Messages = messages };
-        _messageStoreManager.SelectedMessageStore = messageStore;
-
-
-        var result = await _messageStoreManager.GetMessagesForSelectedTopic();
-
-
-        result.Should().HaveCount(1);
+        _messageStoreManager.AddMessage("selected/topic", new MqttMessage());
+        var state = _messageStoreManager.SelectTopic("selected/topic").State;
+        var result = await _messageStoreManager.GetSelectedMessagesAsync(state.Token, 10);
+        result!.Messages.Should().ContainSingle();
     }
 
     [Test]
     public void MessageStores_Should_BeInitializedProperly()
     {
-
-        _messageStoreManager.MessageStores.Should().NotBeNull();
-        _messageStoreManager.MessageStores.Should().BeEmpty();
+        _messageStoreManager.RootTopicCount.Should().Be(0);
     }
 
     [Test]
     public async Task ClearAllMessages_Should_ClearStoreAndSelection()
     {
-        var queue = new ConcurrentQueue<MqttMessage>();
-        queue.Enqueue(new MqttMessage());
-        var store = new MessageStore { Topic = "root", FullTopic = "root", Messages = queue };
-        _messageStoreManager.MessageStores.TryAdd("root", store).Should().BeTrue();
-        _messageStoreManager.SelectedMessageStore = store;
+        _messageStoreManager.AddMessage("root", new MqttMessage());
+        var selection = _messageStoreManager.SelectTopic("root").State;
 
         await _messageStoreManager.ClearAllMessages();
 
-        _messageStoreManager.MessageStores.Should().BeEmpty();
-        _messageStoreManager.SelectedMessageStore.Should().BeNull();
+        _messageStoreManager.RootTopicCount.Should().Be(0);
+        _messageStoreManager.GetSelectedTopicState().FullTopic.Should().BeNull();
+        (await _messageStoreManager.GetSelectedMessagesAsync(selection.Token, 10)).Should().BeNull();
     }
 
     [Test]
@@ -179,41 +162,21 @@ public class MessageStoreManagerTests
     [Test]
     public async Task GetMessagesForSelectedTopic_AfterClearAllMessages_Should_ReturnEmpty()
     {
-        var childMessages = new ConcurrentQueue<MqttMessage>();
-        childMessages.Enqueue(new MqttMessage { Topic = "root/child", Payload = "x" });
-
-        var child = new MessageStore { Topic = "child", FullTopic = "root/child", Messages = childMessages };
-        var root = new MessageStore
-        {
-            Topic = "root",
-            FullTopic = "root",
-            SubTopics = new ConcurrentDictionary<string, MessageStore>()
-        };
-        root.SubTopics.TryAdd("child", child).Should().BeTrue();
-        _messageStoreManager.MessageStores.TryAdd("root", root).Should().BeTrue();
-        _messageStoreManager.SelectedMessageStore = root;
+        _messageStoreManager.AddMessage("root/child", new MqttMessage { Topic = "root/child", Payload = "x" });
+        _messageStoreManager.SelectTopic("root");
 
         await _messageStoreManager.ClearAllMessages();
-        var result = await _messageStoreManager.GetMessagesForSelectedTopic();
+        var state = _messageStoreManager.GetSelectedTopicState();
+        var result = await _messageStoreManager.GetSelectedMessagesAsync(state.Token, 10);
 
-        result.Should().BeEmpty();
+        result!.Messages.Should().BeEmpty();
     }
 
     [Test]
     public async Task GetRecentMessagesAsync_ReturnsAtMostLimitMessages()
     {
-        var messages = new ConcurrentQueue<MqttMessage>();
         for (int i = 0; i < 100; i++)
-            messages.Enqueue(new MqttMessage { DateTimeReceived = DateTime.UtcNow.AddSeconds(-i) });
-
-        var temp = new MessageStore { Topic = "temp", FullTopic = "sensors/temp", Messages = messages };
-        var sensors = new MessageStore
-        {
-            Topic = "sensors",
-            FullTopic = "sensors",
-            SubTopics = new ConcurrentDictionary<string, MessageStore> { ["temp"] = temp }
-        };
-        _messageStoreManager.MessageStores.TryAdd("sensors", sensors);
+            _messageStoreManager.AddMessage("sensors/temp", new MqttMessage { DateTimeReceived = DateTime.UtcNow.AddSeconds(-i) });
 
         var result = await _messageStoreManager.GetRecentMessagesAsync("sensors/temp", 10);
 
@@ -224,18 +187,8 @@ public class MessageStoreManagerTests
     [Test]
     public async Task GetRecentMessagesAsync_ReturnsAllWhenFewerThanLimit()
     {
-        var messages = new ConcurrentQueue<MqttMessage>();
         for (int i = 0; i < 3; i++)
-            messages.Enqueue(new MqttMessage { DateTimeReceived = DateTime.UtcNow.AddSeconds(-i) });
-
-        var humidity = new MessageStore { Topic = "humidity", FullTopic = "sensors/humidity", Messages = messages };
-        var sensors = new MessageStore
-        {
-            Topic = "sensors",
-            FullTopic = "sensors",
-            SubTopics = new ConcurrentDictionary<string, MessageStore> { ["humidity"] = humidity }
-        };
-        _messageStoreManager.MessageStores.TryAdd("sensors", sensors);
+            _messageStoreManager.AddMessage("sensors/humidity", new MqttMessage { DateTimeReceived = DateTime.UtcNow.AddSeconds(-i) });
 
         var result = await _messageStoreManager.GetRecentMessagesAsync("sensors/humidity", 10);
 
@@ -255,19 +208,10 @@ public class MessageStoreManagerTests
     [Test]
     public void GetSelectedTopicVersion_IncrementsWhenSelectedTopicMessagesChange()
     {
-        var store = new MessageStore { Topic = "temp", FullTopic = "sensors/temp" };
-        var sensors = new MessageStore
-        {
-            Topic = "sensors",
-            FullTopic = "sensors",
-            SubTopics = new ConcurrentDictionary<string, MessageStore> { ["temp"] = store }
-        };
-        _messageStoreManager.MessageStores.TryAdd("sensors", sensors);
-        _messageStoreManager.SelectedMessageStore = store;
-
-        long before = _messageStoreManager.GetSelectedTopicVersion();
         _messageStoreManager.AddMessage("sensors/temp", new MqttMessage());
-        long after = _messageStoreManager.GetSelectedTopicVersion();
+        var before = _messageStoreManager.SelectTopic("sensors/temp").State.Token.ContentVersion;
+        _messageStoreManager.AddMessage("sensors/temp", new MqttMessage());
+        var after = _messageStoreManager.GetSelectedTopicState().Token.ContentVersion;
 
         after.Should().BeGreaterThan(before);
     }
@@ -279,22 +223,9 @@ public class MessageStoreManagerTests
         var t2 = DateTime.UtcNow.AddSeconds(-5);
         var t3 = DateTime.UtcNow.AddSeconds(-1);
 
-        var tempMessages = new ConcurrentQueue<MqttMessage>();
-        tempMessages.Enqueue(new MqttMessage { DateTimeReceived = t1, Topic = "sensors/temp" });
-        tempMessages.Enqueue(new MqttMessage { DateTimeReceived = t3, Topic = "sensors/temp" });
-        var temp = new MessageStore { Topic = "temp", FullTopic = "sensors/temp", Messages = tempMessages };
-
-        var humidityMessages = new ConcurrentQueue<MqttMessage>();
-        humidityMessages.Enqueue(new MqttMessage { DateTimeReceived = t2, Topic = "sensors/humidity" });
-        var humidity = new MessageStore { Topic = "humidity", FullTopic = "sensors/humidity", Messages = humidityMessages };
-
-        var sensors = new MessageStore
-        {
-            Topic = "sensors",
-            FullTopic = "sensors",
-            SubTopics = new ConcurrentDictionary<string, MessageStore> { ["temp"] = temp, ["humidity"] = humidity }
-        };
-        _messageStoreManager.MessageStores.TryAdd("sensors", sensors);
+        _messageStoreManager.AddMessage("sensors/temp", new MqttMessage { DateTimeReceived = t1, Topic = "sensors/temp" });
+        _messageStoreManager.AddMessage("sensors/temp", new MqttMessage { DateTimeReceived = t3, Topic = "sensors/temp" });
+        _messageStoreManager.AddMessage("sensors/humidity", new MqttMessage { DateTimeReceived = t2, Topic = "sensors/humidity" });
 
         var result = await _messageStoreManager.GetRecentMessagesAsync("sensors", 10);
 
@@ -305,23 +236,10 @@ public class MessageStoreManagerTests
     [Test]
     public async Task GetRecentMessagesAsync_ParentTopic_RespectsLimitAcrossDescendants()
     {
-        var tempMessages = new ConcurrentQueue<MqttMessage>();
         for (int i = 0; i < 5; i++)
-            tempMessages.Enqueue(new MqttMessage { DateTimeReceived = DateTime.UtcNow.AddSeconds(-i), Topic = "sensors/temp" });
-        var temp = new MessageStore { Topic = "temp", FullTopic = "sensors/temp", Messages = tempMessages };
-
-        var humidityMessages = new ConcurrentQueue<MqttMessage>();
+            _messageStoreManager.AddMessage("sensors/temp", new MqttMessage { DateTimeReceived = DateTime.UtcNow.AddSeconds(-i), Topic = "sensors/temp" });
         for (int i = 0; i < 5; i++)
-            humidityMessages.Enqueue(new MqttMessage { DateTimeReceived = DateTime.UtcNow.AddSeconds(-i - 100), Topic = "sensors/humidity" });
-        var humidity = new MessageStore { Topic = "humidity", FullTopic = "sensors/humidity", Messages = humidityMessages };
-
-        var sensors = new MessageStore
-        {
-            Topic = "sensors",
-            FullTopic = "sensors",
-            SubTopics = new ConcurrentDictionary<string, MessageStore> { ["temp"] = temp, ["humidity"] = humidity }
-        };
-        _messageStoreManager.MessageStores.TryAdd("sensors", sensors);
+            _messageStoreManager.AddMessage("sensors/humidity", new MqttMessage { DateTimeReceived = DateTime.UtcNow.AddSeconds(-i - 100), Topic = "sensors/humidity" });
 
         var result = await _messageStoreManager.GetRecentMessagesAsync("sensors", 3);
 
@@ -332,19 +250,10 @@ public class MessageStoreManagerTests
     [Test]
     public void GetSelectedTopicVersion_IncrementsWhenDescendantMessagesChange()
     {
-        var store = new MessageStore { Topic = "temp", FullTopic = "sensors/temp" };
-        var sensors = new MessageStore
-        {
-            Topic = "sensors",
-            FullTopic = "sensors",
-            SubTopics = new ConcurrentDictionary<string, MessageStore> { ["temp"] = store }
-        };
-        _messageStoreManager.MessageStores.TryAdd("sensors", sensors);
-        _messageStoreManager.SelectedMessageStore = sensors;
-
-        long before = _messageStoreManager.GetSelectedTopicVersion();
         _messageStoreManager.AddMessage("sensors/temp", new MqttMessage());
-        long after = _messageStoreManager.GetSelectedTopicVersion();
+        var before = _messageStoreManager.SelectTopic("sensors").State.Token.ContentVersion;
+        _messageStoreManager.AddMessage("sensors/temp", new MqttMessage());
+        var after = _messageStoreManager.GetSelectedTopicState().Token.ContentVersion;
 
         after.Should().BeGreaterThan(before);
     }
@@ -358,10 +267,10 @@ public class MessageStoreManagerTests
         _messageStoreManager.AddMessage("sensors/humidity", new MqttMessage());
         _messageStoreManager.AddMessage("sensors/humidity", new MqttMessage());
 
-        var sensors = _messageStoreManager.MessageStores["sensors"];
-        var temp = sensors.SubTopics!["temp"];
-        var room1 = temp.SubTopics!["room1"];
-        var humidity = sensors.SubTopics!["humidity"];
+        var sensors = _messageStoreManager.GetTopicTreeSnapshot().Roots.Single();
+        var temp = sensors.Children.Single(node => node.Topic == "temp");
+        var room1 = temp.Children.Single(node => node.Topic == "room1");
+        var humidity = sensors.Children.Single(node => node.Topic == "humidity");
 
         sensors.TopicCount.Should().Be(3);
         temp.TopicCount.Should().Be(1);
@@ -379,12 +288,10 @@ public class MessageStoreManagerTests
     {
         _messageStoreManager.AddMessage("/sensors/temp", new MqttMessage());
 
-        _messageStoreManager.MessageStores.Should().ContainKey("sensors");
-        var sensors = _messageStoreManager.MessageStores["sensors"];
-        sensors.SubTopics.Should().ContainKey("temp");
-        sensors.FullTopic.Should().Be("sensors");
-        sensors.SubTopics["temp"].FullTopic.Should().Be("sensors/temp");
-        _messageStoreManager.MessageStores.Should().NotContainKey("");
+        var sensors = _messageStoreManager.GetTopicTreeSnapshot().Roots.Should()
+            .ContainSingle(node => node.FullTopic == "sensors").Subject;
+        sensors.Children.Should().ContainSingle(node => node.FullTopic == "sensors/temp");
+        _messageStoreManager.RootTopicCount.Should().Be(1);
     }
 
     [Test]
@@ -392,11 +299,10 @@ public class MessageStoreManagerTests
     {
         _messageStoreManager.AddMessage("sensors/temp/", new MqttMessage());
 
-        _messageStoreManager.MessageStores.Should().ContainKey("sensors");
-        var temp = _messageStoreManager.MessageStores["sensors"].SubTopics!["temp"];
+        var temp = _messageStoreManager.GetTopicTreeSnapshot().Roots.Single().Children.Single();
         temp.FullTopic.Should().Be("sensors/temp");
-        temp.Messages.Should().NotBeNull();
-        temp.Messages.Should().HaveCount(1);
+        temp.MessageCount.Should().Be(1);
+        temp.HasDirectMessages.Should().BeTrue();
     }
 
     [Test]
@@ -404,11 +310,9 @@ public class MessageStoreManagerTests
     {
         _messageStoreManager.AddMessage("a//b", new MqttMessage());
 
-        _messageStoreManager.MessageStores.Should().ContainKey("a");
-        var a = _messageStoreManager.MessageStores["a"];
-        a.SubTopics.Should().ContainKey("b");
-        a.SubTopics.Should().NotContainKey("");
-        a.SubTopics!["b"].FullTopic.Should().Be("a/b");
+        var a = _messageStoreManager.GetTopicTreeSnapshot().Roots.Single();
+        a.FullTopic.Should().Be("a");
+        a.Children.Should().ContainSingle().Which.FullTopic.Should().Be("a/b");
     }
 
     [Test]
@@ -416,7 +320,7 @@ public class MessageStoreManagerTests
     {
         _messageStoreManager.AddMessage("///", new MqttMessage());
 
-        _messageStoreManager.MessageStores.Should().BeEmpty();
+        _messageStoreManager.RootTopicCount.Should().Be(0);
     }
 
     [Test]
@@ -424,18 +328,20 @@ public class MessageStoreManagerTests
     {
         _messageStoreManager.AddMessage("spBv1.0/group/NBIRTH/node1", new MqttMessage());
 
-        var root = _messageStoreManager.MessageStores["spBv1.0"];
-        root.SubTopics!["group"].SubTopics!["NBIRTH"].SubTopics!["node1"]
-            .Messages.Should().HaveCount(1);
+        var node = _messageStoreManager.GetTopicTreeSnapshot().Roots.Single();
+        foreach (var segment in new[] { "group", "NBIRTH", "node1" })
+            node = node.Children.Single(child => child.Topic == segment);
+        node.HasDirectMessages.Should().BeTrue();
     }
 
     [Test]
-    public void AddMessage_LeadingSlash_PreservesOriginalTopicOnMessage()
+    public async Task AddMessage_LeadingSlash_PreservesOriginalTopicOnMessage()
     {
         var msg = new MqttMessage();
         _messageStoreManager.AddMessage("/sensors/temp", msg);
 
-        var leaf = _messageStoreManager.MessageStores["sensors"].SubTopics!["temp"];
-        leaf.Messages.Should().ContainSingle().Which.Should().BeSameAs(msg);
+        var selection = _messageStoreManager.SelectTopic("sensors/temp").State;
+        (await _messageStoreManager.GetSelectedMessagesAsync(selection.Token, 10))!
+            .Messages.Should().ContainSingle().Which.Should().BeSameAs(msg);
     }
 }

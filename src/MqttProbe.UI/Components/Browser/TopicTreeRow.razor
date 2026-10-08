@@ -46,7 +46,7 @@
 
     private async Task OnRowClick()
     {
-        MessageStoreManager.SelectedMessageStore = Row.Store;
+        MessageStoreManager.SelectTopic(Row.FullPath);
         await OnSelected.InvokeAsync(Row.FullPath);
     }
 

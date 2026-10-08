@@ -7,11 +7,11 @@
     <div class="topic-header-row">
         <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary"/>
         <MudText Typo="Typo.subtitle2" Style="font-weight:600">Topics</MudText>
-        @if (MessageStoreManagerService.MessageStores.Any())
+        @if (MessageStoreManagerService.RootTopicCount > 0)
         {
             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
                      Style="height:20px; font-size:0.7rem; padding:0 6px;">
-                @MessageStoreManagerService.MessageStores.Count
+                @MessageStoreManagerService.RootTopicCount
             </MudChip>
         }
     </div>
@@ -34,7 +34,7 @@
                 <TopicTreeRow Row="row" IsSelected="@(row.FullPath == _selectedFullPath)" OnExpandToggled="ToggleExpand" OnSelected="OnRowSelected"/>
             </Virtualize>
         }
-        else if (MessageStoreManagerService.MessageStores.Any())
+        else if (MessageStoreManagerService.RootTopicCount > 0)
         {
             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-3">
                 No topics match "@_searchFilter"
@@ -55,23 +55,21 @@
     private string? _searchFilter;
     private Timer? _updateTimer;
     private bool _disposed;
-    private long _lastVersion;
+    private long _lastTreeVersion;
+    private Guid _lastSelectionStoreId;
+    private long _lastSelectionGeneration;
     private List<TopicTreeRowModel> _visibleRows = [];
     private readonly HashSet<string> _expandedPaths = [];
-    private bool _hasFilter;
     private string? _selectedFullPath;
 
-    [Parameter] public EventCallback<MessageStore?> OnSelectedChanged { get; set; }
+    [Parameter] public EventCallback<SelectedTopicState> OnSelectedChanged { get; set; }
 
     protected override void OnInitialized()
     {
         BuildVisibleRows();
         _updateTimer = new Timer(_ =>
         {
-            if (_disposed) return;
-            var version = MessageStoreManagerService.GetVersion();
-            if (version == _lastVersion) return;
-            _lastVersion = version;
+            // Timer callbacks cannot await; the refresh marshals its work to the renderer.
 #pragma warning disable CS4014
             RefreshAsync();
 #pragma warning restore CS4014
@@ -80,83 +78,56 @@
 
     private async Task RefreshAsync()
     {
-        BuildVisibleRows();
-        try { await InvokeAsync(StateHasChanged); }
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                if (_disposed) return;
+
+                var snapshot = MessageStoreManagerService.GetTopicTreeSnapshot();
+                var selection = MessageStoreManagerService.GetSelectedTopicState();
+                if (snapshot.Version == _lastTreeVersion
+                    && selection.Token.StoreId == _lastSelectionStoreId
+                    && selection.Token.Generation == _lastSelectionGeneration)
+                    return;
+
+                BuildVisibleRows(snapshot, selection);
+                StateHasChanged();
+            });
+        }
         catch (ObjectDisposedException) when (_disposed) { /* component torn down mid-refresh; nothing left to render */ }
         catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser refresh render failed"); }
     }
 
     private void BuildVisibleRows()
     {
-        _visibleRows = [];
-        _hasFilter = !string.IsNullOrWhiteSpace(_searchFilter);
-
-        // Keep visual selection consistent with manager state.
-        var managerSelection = MessageStoreManagerService.SelectedMessageStore;
-        _selectedFullPath = managerSelection is null
-            ? null
-            : managerSelection.FullTopic ?? managerSelection.Topic;
-
-        foreach (var kvp in MessageStoreManagerService.MessageStores
-                     .OrderBy(s => s.Key, NaturalStringComparer.Instance))
-        {
-            AppendRows(kvp.Value, _hasFilter);
-        }
+        var snapshot = MessageStoreManagerService.GetTopicTreeSnapshot();
+        var selection = MessageStoreManagerService.GetSelectedTopicState();
+        BuildVisibleRows(snapshot, selection);
     }
 
-    private void AppendRows(MessageStore store, bool hasFilter)
+    private void BuildVisibleRows(TopicTreeSnapshot snapshot, SelectedTopicState selection)
     {
-        var path = store.FullTopic ?? store.Topic ?? "";
-        var isExpanded = _expandedPaths.Contains(path);
-        var matches = hasFilter && MatchesFilter(store, _searchFilter!);
-
-        if (hasFilter && !matches && !HasAnyMatchingDescendant(store))
-            return;
-
-        _visibleRows.Add(new TopicTreeRowModel(
-            Store: store,
-            FullPath: path,
-            DisplayName: store.Topic ?? "",
-            Depth: path.Count(c => c == '/'),
-            HasChildren: store.SubTopics?.Count > 0,
-            TopicCount: store.TopicCount,
-            MessageCount: store.MessageCount,
-            IsExpanded: isExpanded || (hasFilter && matches),
-            IsValueBearer: store.Messages is { IsEmpty: false }
-        ));
-
-        if (store.SubTopics is { Count: > 0 } && (isExpanded || hasFilter))
-        {
-            foreach (var child in store.SubTopics.Values
-                         .OrderBy(s => s.Topic, NaturalStringComparer.Instance))
-            {
-                AppendRows(child, hasFilter);
-            }
-        }
+        _lastTreeVersion = snapshot.Version;
+        _lastSelectionStoreId = selection.Token.StoreId;
+        _lastSelectionGeneration = selection.Token.Generation;
+        _selectedFullPath = selection.FullTopic;
+        _visibleRows = TopicTreeProjection.CreateRows(snapshot.Roots, _searchFilter, _expandedPaths);
     }
-
-    private static bool MatchesFilter(MessageStore store, string filter) =>
-        (store.Topic?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true)
-        || (store.SubTopics?.Values.Any(s => MatchesFilter(s, filter)) ?? false);
-
-    private bool HasAnyMatchingDescendant(MessageStore store) =>
-        store.SubTopics?.Values.Any(s => MatchesFilter(s, _searchFilter!)) ?? false;
 
     private void OnSearchChanged()
     {
-        _selectedFullPath = null;
-        MessageStoreManagerService.SelectedMessageStore = null;
+        MessageStoreManagerService.SelectTopic(null);
         BuildVisibleRows();
         StateHasChanged();
     }
 
     private async Task OnRowSelected(string path)
     {
-        _selectedFullPath = path;
         BuildVisibleRows();
         StateHasChanged();
         if (OnSelectedChanged.HasDelegate)
-            await OnSelectedChanged.InvokeAsync(MessageStoreManagerService.SelectedMessageStore);
+            await OnSelectedChanged.InvokeAsync(MessageStoreManagerService.GetSelectedTopicState());
     }
 
     private Task ToggleExpand(string path)
@@ -173,18 +144,17 @@
 
     private void ExpandAll()
     {
-        foreach (var kvp in MessageStoreManagerService.MessageStores)
-            ExpandAllDescendants(kvp.Value);
+        foreach (var root in MessageStoreManagerService.GetTopicTreeSnapshot().Roots)
+            ExpandAllDescendants(root);
         BuildVisibleRows();
         StateHasChanged();
     }
 
-    private void ExpandAllDescendants(MessageStore store)
+    private void ExpandAllDescendants(TopicNodeSnapshot node)
     {
-        if (store.FullTopic != null)
-            _expandedPaths.Add(store.FullTopic);
-        if (store.SubTopics != null)
-            foreach (var child in store.SubTopics.Values)
+        _expandedPaths.Add(node.FullTopic);
+        if (!node.Children.IsDefaultOrEmpty)
+            foreach (var child in node.Children)
                 ExpandAllDescendants(child);
     }
 

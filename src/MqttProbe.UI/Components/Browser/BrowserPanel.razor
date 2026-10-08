@@ -9,11 +9,11 @@
 
 <TabPanelHeader Title="Browser" Icon="@LucideIcons.Eye">
     <HeaderChips>
-        @if (MessageStoreManager.MessageStores.Any())
+        @if (MessageStoreManager.RootTopicCount > 0)
         {
             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
                      Style="height:20px; font-size:0.7rem; padding:0 6px;">
-                @MessageStoreManager.MessageStores.Count
+                @MessageStoreManager.RootTopicCount
             </MudChip>
         }
     </HeaderChips>
@@ -21,14 +21,14 @@
         <AppDestructiveButton Size="Size.Medium"
                    StartIcon="@LucideIcons.Trash2"
                    MinWidth="true"
-                   Disabled="@(!MessageStoreManager.MessageStores.Any())"
+                   Disabled="@(MessageStoreManager.RootTopicCount == 0)"
                    OnClick="ClearAllMessages">
             Clear
         </AppDestructiveButton>
     </HeaderActions>
 </TabPanelHeader>
 <div class="tab-panel-content">
-    @if (!MessageStoreManager.MessageStores.Any() && !UiSettings.IsHintDismissed("browser"))
+    @if (MessageStoreManager.RootTopicCount == 0 && !UiSettings.IsHintDismissed("browser"))
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-2"
                   ShowCloseIcon="true" CloseIconClicked="@DismissHint">
@@ -54,7 +54,7 @@
             <div class="browser-split-wrap browser-split-wrap--mobile">
                 @* Phone layout: topic bar + payload (CSS media query hides the split) *@
                 <div class="browser-mobile-layout">
-                    <MobileTopicBar HasTopics="@MessageStoreManager.MessageStores.Any()"
+                    <MobileTopicBar HasTopics="@(MessageStoreManager.RootTopicCount > 0)"
                                     OnOpenPicker="OpenMobilePicker"/>
                     <div class="browser-mobile-payload">
                         <PayloadBrowser/>
@@ -92,7 +92,7 @@
 
     protected override void OnInitialized()
     {
-        _lastCount = MessageStoreManager.MessageStores.Count;
+        _lastCount = MessageStoreManager.RootTopicCount;
         _updateTimer = new Timer(_ =>
         {
             if (_disposed) return;
@@ -103,7 +103,7 @@
     internal void OnTimerTick()
     {
         if (_disposed) return;
-        var count = MessageStoreManager.MessageStores.Count;
+        var count = MessageStoreManager.RootTopicCount;
         if (count == _lastCount) return;
         _lastCount = count;
 #pragma warning disable CS4014 // Intentional fire-and-forget from Timer callback

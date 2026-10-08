@@ -21,6 +21,13 @@
 - Use grep for literal strings (topics, config keys, error text) and AST search for code patterns such as method shapes or call sites.
 - Fall back to plain search and reading the source when LSP is missing, fails, or returns stale results.
 
+### Roslynk diagnostic fixes
+
+- Use Roslynk first for diagnostics in compiled C#, Razor, and CSHTML files. Try `apply_code_fix` and inspect available code actions before editing manually.
+- Exception: if Roslynk reports no applicable fix, cannot map the edit back to Razor source, or offers only fixes that would change the declared intent, you may make a minimal manual repair. For example, migrate a stale API call to the current contract rather than regenerate a deliberately removed type.
+- Report the diagnostic, why the Roslynk fixes were unsuitable, and the manual change. Preserve the intended behavior; do not remove declarations, add suppressions, or change the build graph to silence errors. If the intended behavior is unclear, ask before editing.
+- After a manual repair, re-query Roslynk diagnostics and run the relevant build, tests, and formatting checks. A solution still loading or a stale snapshot is not grounds for this exception: wait for loading to finish or re-query first.
+
 ## Comments
 
 - Prefer few comments. Explain non-obvious *why*, not restate *what*.

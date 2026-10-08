@@ -46,8 +46,9 @@
 
     private async Task OnRowClick()
     {
-        var result = MessageStoreManager.SelectTopic(Row.FullPath);
-        if (result.Status != MqttProbe.Core.Models.Mqtt.TopicSelectionStatus.Selected)
+        MessageStoreManager.SelectTopic(Row.FullPath);
+        var selection = MessageStoreManager.GetSelectedTopicState();
+        if (!string.Equals(selection.FullTopic, Row.FullPath, StringComparison.Ordinal))
             return;
 
         await OnSelected.InvokeAsync(Row.FullPath);

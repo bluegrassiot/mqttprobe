@@ -2,8 +2,6 @@ using System.Collections.Immutable;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.TestInfrastructure;
-using NSubstitute;
-using NUnit.Framework;
 
 namespace MqttProbe.Core.Tests.Services.Mqtt;
 

@@ -6,7 +6,7 @@ using MQTTnet.Protocol;
 namespace MqttProbe.BrowserSmokeTests;
 
 [TestFixture]
-public sealed class ExclusionBrowserSmokeTests
+public sealed partial class ExclusionBrowserSmokeTests : LocalSmokeFixtureBase
 {
     private const int ActionTimeoutMs = 15_000;
     private const int NavTimeoutMs = 40_000;
@@ -25,9 +25,6 @@ public sealed class ExclusionBrowserSmokeTests
 
     private const string TopicInput = ".exclude-editor-topic input";
     private const string AddExcludeButton = "button.exclude-editor-add[title='Add exclude topic']";
-    private const string ExpansionPanelHeader =
-        ".exclude-editor .mud-expand-panel .mud-expand-panel-header";
-
     private string _stage = "startup";
 
     private static IEnumerable<TestCaseData> ExclusionCases()
@@ -108,10 +105,13 @@ public sealed class ExclusionBrowserSmokeTests
         IPlaywright? playwright = null;
         IBrowser? browser = null;
         IBrowserContext? context = null;
+        IPage? diagnosticsPage = null;
 
         using var scenarioCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         scenarioCts.CancelAfter(TimeSpan.FromSeconds(ScenarioBudgetSeconds));
         var scenarioToken = scenarioCts.Token;
+        var resumeDiagnostics = new List<ResumeSnapshot>();
+        var resumeDiagnosticActive = false;
 
         using var registration = scenarioToken.Register(() =>
         {
@@ -134,7 +134,7 @@ public sealed class ExclusionBrowserSmokeTests
                 IgnoreHTTPSErrors = true,
                 ViewportSize = new ViewportSize { Width = 1280, Height = 900 },
             }).WaitAsync(scenarioToken);
-            var page = await context.NewPageAsync().WaitAsync(scenarioToken);
+            var page = diagnosticsPage = await context.NewPageAsync().WaitAsync(scenarioToken);
             page.SetDefaultTimeout(ActionTimeoutMs);
             page.SetDefaultNavigationTimeout(NavTimeoutMs);
 
@@ -293,26 +293,8 @@ public sealed class ExclusionBrowserSmokeTests
             SetStage("add exclude filter");
             await page.GetByRole(AriaRole.Tab, new() { Name = "Subscriptions" }).ClickAsync(
                 new LocatorClickOptions { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
-            await page.Locator(ExpansionPanelHeader).ClickAsync(
-                new LocatorClickOptions { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
-            await page.Locator(TopicInput).WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Attached,
-                Timeout = ActionTimeoutMs,
-            }).WaitAsync(scenarioToken);
-            await page.Locator(TopicInput).FillAsync(excludeFilter,
-                new() { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
-            await page.Locator(AddExcludeButton).ClickAsync(
-                new LocatorClickOptions { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
-            await Assertions.Expect(page.Locator(".exclude-editor .count-chip"))
-                .ToHaveTextAsync("1", new() { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
-            await Assertions.Expect(page.Locator(
-                ".exclude-editor-table-wrap .mud-table-body .mud-table-row"))
-                .ToHaveCountAsync(1, new() { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
-            await Assertions.Expect(page.Locator(
-                $".exclude-editor-table-wrap .mud-table-body .mud-table-row"
-                + $":has-text('{excludeFilter}')"))
-                .ToBeVisibleAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
+            var excludeEditor = page.Locator(".mud-tab-panel-active .subs-body .exclude-editor");
+            await AddAndAssertExcludeAsync(excludeEditor, excludeFilter, scenarioToken);
 
             SetStage("verify absent after exclude");
             await page.GetByRole(AriaRole.Tab, new() { Name = "Browser" }).ClickAsync(
@@ -366,30 +348,50 @@ public sealed class ExclusionBrowserSmokeTests
             SetStage("remove exclude filter");
             await page.GetByRole(AriaRole.Tab, new() { Name = "Subscriptions" }).ClickAsync(
                 new LocatorClickOptions { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
-            await page.Locator(
-                ".exclude-editor-table-wrap .mud-table-body label.mud-checkbox").First.ClickAsync(
-                new LocatorClickOptions { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
-            await page.Locator(
-                ".exclude-editor-actions button[title='Remove']").ClickAsync(
-                new LocatorClickOptions { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
-            await Assertions.Expect(page.Locator(".exclude-editor .count-chip"))
-                .ToHaveTextAsync("0", new() { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
-            var filterRowCount = await page.Locator(
-                $".exclude-editor-table-wrap .mud-table-body .mud-table-row"
-                + $":has-text('{excludeFilter}')")
-                .CountAsync().WaitAsync(scenarioToken);
-            Assert.That(filterRowCount, Is.EqualTo(0),
-                $"exclude filter row for '{excludeFilter}' should be absent after removal");
+            await RemoveAndAssertExcludeAsync(
+                page.Locator(".mud-tab-panel-active .subs-body .exclude-editor"),
+                excludeFilter, scenarioToken);
 
-            SetStage("verify resume after removal");
+            resumeDiagnosticActive = true;
+            SetStage("resume diagnostics: capture before publish");
+            await TryCaptureResumeSnapshotAsync(page, "before-publish", root,
+                expectedBlocked[0], $"resume-{root}-{publishCount + 1}", baselineTopics, controlTopics,
+                expectedBlocked, resumeDiagnostics);
+
+            SetStage("resume publish");
             var resumePayload = $"resume-{root}-{++publishCount}";
             await PublishAsync(mqtt, expectedBlocked[0], resumePayload, scenarioToken);
+
+            SetStage("resume diagnostics: capture after publish");
+            await TryCaptureResumeSnapshotAsync(page, "after-publish-before-browser",
+                root, expectedBlocked[0], resumePayload, baselineTopics, controlTopics,
+                expectedBlocked, resumeDiagnostics);
+
+            SetStage("resume: switch to Browser tab");
             await page.GetByRole(AriaRole.Tab, new() { Name = "Browser" }).ClickAsync(
                 new LocatorClickOptions { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
-            await page.Locator($".topic-tree-row:has-text('{root}')").First.ClickAsync(
+
+            SetStage("resume diagnostics: capture Browser before root selection");
+            await TryCaptureResumeSnapshotAsync(page, "browser-before-root-selection",
+                root, expectedBlocked[0], resumePayload, baselineTopics, controlTopics,
+                expectedBlocked, resumeDiagnostics);
+
+            var rootRow = page.Locator($".topic-tree-row:has-text('{root}')").First;
+            SetStage("resume: select recreated root topic");
+            await rootRow.ClickAsync(
                 new LocatorClickOptions { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
+
+            SetStage("resume diagnostics: capture Browser after root selection");
+            await TryCaptureResumeSnapshotAsync(page, "browser-after-root-selection",
+                root, expectedBlocked[0], resumePayload, baselineTopics, controlTopics,
+                expectedBlocked, resumeDiagnostics);
+
+            SetStage("resume predicate: expected payload visible");
             await Assertions.Expect(PayloadRow(page, expectedBlocked[0], resumePayload))
                 .ToBeVisibleAsync(new() { Timeout = NavTimeoutMs }).WaitAsync(scenarioToken);
+            resumeDiagnosticActive = false;
+
+            SetStage("resume predicate: historical baseline absent");
             for (var i = 0; i < baselineTopics.Length; i++)
             {
                 var baselinePayload = $"baseline-{root}-{i + 1}";
@@ -399,6 +401,7 @@ public sealed class ExclusionBrowserSmokeTests
                     $"historical baseline on {baselineTopics[i]} should be absent after resume");
             }
             var blockedMarker = $"blocked-{root}";
+            SetStage("resume predicate: blocked marker absent");
             foreach (var topic in expectedBlocked)
             {
                 var blockedCount = await PayloadRow(page, topic, blockedMarker).CountAsync()
@@ -406,12 +409,16 @@ public sealed class ExclusionBrowserSmokeTests
                 Assert.That(blockedCount, Is.EqualTo(0),
                     $"blocked marker on {topic} should be absent after resume");
             }
+            SetStage("resume predicate: unaffected control visible");
             for (var i = 0; i < controlTopics.Length; i++)
             {
                 var payload = $"baseline-ctrl-{root}-{i + 1}";
                 await Assertions.Expect(PayloadRow(page, controlTopics[i], payload))
                     .ToBeVisibleAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
             }
+
+            SetStage("resume predicate: connection dialog editor");
+            await VerifyConnectionDialogExcludeEditorAsync(page, root, scenarioToken);
 
             SetStage("disconnect");
             await page.Locator($"button:has-text('Disconnect')").ClickAsync(
@@ -427,17 +434,37 @@ public sealed class ExclusionBrowserSmokeTests
         {
             Assert.Fail($"[{_stage}] exceeded {ScenarioBudgetSeconds}s scenario budget");
         }
-        catch (PlaywrightException)
+        catch (PlaywrightException ex)
         {
-            Assert.Fail($"[{_stage}] Playwright error");
+            var evidence = resumeDiagnosticActive || _stage.StartsWith("resume", StringComparison.Ordinal)
+                || _stage.StartsWith("connection-dialog:", StringComparison.Ordinal)
+                ? await TryWriteResumeEvidenceAsync(diagnosticsPage, _stage, ex.GetType().Name, root,
+                    expectedBlocked[0], $"resume-{root}-{Math.Max(1, publishCount)}", baselineTopics,
+                    controlTopics, expectedBlocked, resumeDiagnostics)
+                : null;
+            Assert.Fail($"[{_stage}] Playwright error{FormatEvidencePath(evidence)}");
         }
         catch (AssertionException)
         {
+            if (_stage.StartsWith("connection-dialog:", StringComparison.Ordinal))
+            {
+                var evidence = await TryWriteResumeEvidenceAsync(diagnosticsPage, _stage,
+                    "AssertionException", root, expectedBlocked[0],
+                    $"resume-{root}-{Math.Max(1, publishCount)}", baselineTopics, controlTopics,
+                    expectedBlocked, resumeDiagnostics);
+                TestContext.Progress.WriteLine($"Sanitized failure evidence: {evidence}");
+            }
             throw;
         }
         catch (Exception ex)
         {
-            Assert.Fail($"[{_stage}] unexpected {ex.GetType().Name}");
+            var evidence = resumeDiagnosticActive || _stage.StartsWith("resume", StringComparison.Ordinal)
+                || _stage.StartsWith("connection-dialog:", StringComparison.Ordinal)
+                ? await TryWriteResumeEvidenceAsync(diagnosticsPage, _stage, ex.GetType().Name, root,
+                    expectedBlocked[0], $"resume-{root}-{Math.Max(1, publishCount)}", baselineTopics,
+                    controlTopics, expectedBlocked, resumeDiagnostics)
+                : null;
+            Assert.Fail($"[{_stage}] unexpected {ex.GetType().Name}{FormatEvidencePath(evidence)}");
         }
         finally
         {

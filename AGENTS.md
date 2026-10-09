@@ -93,12 +93,15 @@ Two traps: a folder named `Integration` under `MqttProbe.Core.Tests` holds in-pr
 
 - Prefer Playwright for .NET for browser acceptance.
 - An opt-in manual browser-smoke project exists at `tests/MqttProbe.BrowserSmokeTests/README.md`, deliberately kept out of the solution and CI. Run it only when asked, not as a default gate.
+- Reuse shared fixtures for local app/broker setup. Isolate config and credentials, use dynamic ports, and override inherited settings that could redirect the test environment.
 - For one-off exploratory checks, keep using a temporary harness under the approved temp directory, outside the repo. Never treat that scratch path as a permanent command.
 - Use a fresh browser context per check, with `IgnoreHTTPSErrors = true` for a local CA and no saved auth state unless the test requires it.
 - Bound every wait: action timeout around 15s, navigation timeout 30-45s, and an overall process budget for the run.
 - Launch headed when the check is user-visible, headless otherwise, and report which one ran. Close the browser in `finally`.
 - Click real controls. Dismiss overlays through visible UI (Cancel, close, backdrop) and wait for the overlay to clear before acting underneath; never bypass with a scripted POST or a JS click.
 - After each action, assert the resulting state from a fresh DOM read; a click that returns without error is not evidence. Prefer role, label and scoped selectors, and confirm the interactive UI is live rather than a static render.
+- Scope selectors to the active, visible region. Account for responsive controls, dynamic labels, and virtualized rows; do not hide ambiguity with `.First` or `.Last`.
+- Give each awaited action a distinct failure stage. Capture sanitized DOM evidence before teardown; do not add sleeps, retries, or weaker assertions without identifying the failing condition.
 - For redirects and external integrations, assert the actual browser request that was made and the final state reached, not just a click, a 302 Location header or landing on a known page.
 - Prove responsive and layout behaviour by changing the viewport and measuring or asserting the result; cover long topics, overflowing lists, expanded and collapsed panels, and a short viewport.
 - Keep evidence sanitized: network entries as method, status, host and path, screenshots and run logs under the approved temp directory, never inside the repo.
@@ -106,4 +109,5 @@ Two traps: a folder named `Integration` under `MqttProbe.Core.Tests` holds in-pr
 - Start the app once per check with explicit `--urls`, bounded-poll the port, verify port ownership before assuming a listener is this repo's app, and reuse an existing listener instead of starting a duplicate.
 - Use bounded waits for broker connections and capture exact errors; if one configured broker fails, try another and keep running the non-connect cases. Lab-specific flows: see `deploy/authentik/README.md`.
 - After the run, close the browser, stop only the processes this run started, and verify the port stopped listening. Never kill a Docker-owned listener or unrelated dotnet, MSBuild or browser infrastructure.
+- Retain resource ownership until cleanup succeeds. If shutdown fails, preserve live config and handles for retry while still attempting independent cleanup.
 - If you stop making progress, report the last action and the blocker instead of idling.

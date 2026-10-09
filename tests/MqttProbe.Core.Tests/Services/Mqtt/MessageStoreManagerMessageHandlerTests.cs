@@ -17,7 +17,7 @@ using Org.Eclipse.Tahu.Protobuf;
 namespace MqttProbe.Core.Tests.Services.Mqtt;
 
 [TestFixture]
-public class MessageStoreManagerMessageHandlerTests
+public partial class MessageStoreManagerMessageHandlerTests
 {
     private IMqttManagedClient _mockClient = null!;
     private ILogger<MessageStoreManager> _mockLogger = null!;

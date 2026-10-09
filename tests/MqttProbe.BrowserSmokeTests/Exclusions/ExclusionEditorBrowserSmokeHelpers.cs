@@ -256,6 +256,8 @@ public sealed partial class ExclusionBrowserSmokeTests
         if (page is null)
             return "unavailable (page unavailable)";
 
+        using var timeout = new CancellationTokenSource(ResumeDiagnosticTimeoutMs);
+        var token = timeout.Token;
         var tempRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Temp", "opencode");
         string path;
@@ -263,7 +265,7 @@ public sealed partial class ExclusionBrowserSmokeTests
         {
             Directory.CreateDirectory(tempRoot);
             path = Path.Combine(tempRoot, $"mqttprobe-exclusion-{Guid.NewGuid():N}.json");
-            await WriteEvidenceAsync(path, stage, exceptionType, targetTopic, resumePayload, snapshots);
+            await WriteEvidenceAsync(path, stage, exceptionType, targetTopic, resumePayload, snapshots, token);
         }
         catch (Exception ex)
         {
@@ -279,7 +281,7 @@ public sealed partial class ExclusionBrowserSmokeTests
             {
                 snapshots.Add(await CaptureResumeSnapshotAsync(page, "failure-dom", root,
                     targetTopic, resumePayload, baselineTopics, controlTopics, expectedBlocked,
-                    CancellationToken.None));
+                    token));
             }
             catch
             {
@@ -289,7 +291,7 @@ public sealed partial class ExclusionBrowserSmokeTests
             {
                 try
                 {
-                    connectionDialog = await CaptureConnectionDialogSnapshotAsync(page, root);
+                    connectionDialog = await CaptureConnectionDialogSnapshotAsync(page, root, token);
                 }
                 catch
                 {
@@ -305,7 +307,7 @@ public sealed partial class ExclusionBrowserSmokeTests
         try
         {
             await WriteEvidenceAsync(path, stage, exceptionType, targetTopic, resumePayload,
-                snapshots, connectionDialog);
+                snapshots, token, connectionDialog);
         }
         catch
         {
@@ -322,15 +324,16 @@ public sealed partial class ExclusionBrowserSmokeTests
         string targetTopic,
         string resumePayload,
         List<ResumeSnapshot> snapshots,
+        CancellationToken token,
         ConnectionDialogSnapshot? connectionDialog = null)
     {
         var evidence = new ResumeFailureEvidence(stage, exceptionType, targetTopic, resumePayload,
             snapshots.ToArray(), connectionDialog);
-        return File.WriteAllTextAsync(path, JsonSerializer.Serialize(evidence, _evidenceJsonOptions));
+        return File.WriteAllTextAsync(path, JsonSerializer.Serialize(evidence, _evidenceJsonOptions), token);
     }
 
     private static async Task<ConnectionDialogSnapshot> CaptureConnectionDialogSnapshotAsync(
-        IPage page, string root)
+        IPage page, string root, CancellationToken token)
     {
         var dialog = page.Locator(".mud-dialog-container:visible .connection-dialog-content");
         var mobileOnConnectControl = dialog.Locator(".step-selector .step-btn")
@@ -347,45 +350,50 @@ public sealed partial class ExclusionBrowserSmokeTests
         var checkboxes = editor.Locator(".exclude-editor-table-wrap .mud-table-body label.mud-checkbox");
         var removeButton = editor.Locator(".exclude-editor-actions button[title='Remove']");
         var connectButton = dialog.GetByRole(AriaRole.Button, new() { Name = "Connect", Exact = true });
-        var mobileOnConnectCount = await mobileOnConnectControl.CountAsync();
-        var onConnectTabCount = await onConnectTab.CountAsync();
-        var topicInputCount = await topicInput.CountAsync();
-        var countChipCount = await countChip.CountAsync();
-        var checkboxCount = await checkboxes.CountAsync();
-        var connectButtonCount = await connectButton.CountAsync();
+        var mobileOnConnectCount = await mobileOnConnectControl.CountAsync().WaitAsync(token);
+        var onConnectTabCount = await onConnectTab.CountAsync().WaitAsync(token);
+        var topicInputCount = await topicInput.CountAsync().WaitAsync(token);
+        var countChipCount = await countChip.CountAsync().WaitAsync(token);
+        var checkboxCount = await checkboxes.CountAsync().WaitAsync(token);
+        var connectButtonCount = await connectButton.CountAsync().WaitAsync(token);
         var onConnectTabSelected = onConnectTabCount > 0
-            && string.Equals(await onConnectTab.Nth(0).GetAttributeAsync("aria-selected"), "true",
+            && string.Equals(await onConnectTab.Nth(0).GetAttributeAsync("aria-selected").WaitAsync(token), "true",
                 StringComparison.OrdinalIgnoreCase);
-        var inputValue = topicInputCount > 0 ? await topicInput.Nth(0).GetAttributeAsync("value") : null;
-        var chipText = countChipCount > 0 ? (await countChip.Nth(0).InnerTextAsync()).Trim() : string.Empty;
+        var inputValue = topicInputCount > 0
+            ? await topicInput.Nth(0).GetAttributeAsync("value").WaitAsync(token)
+            : null;
+        var chipText = countChipCount > 0
+            ? (await countChip.Nth(0).InnerTextAsync().WaitAsync(token)).Trim()
+            : string.Empty;
         int? countChipValue = int.TryParse(chipText, out var parsedCount) ? parsedCount : null;
 
         return new ConnectionDialogSnapshot(
-            await page.Locator(".mud-dialog-container:visible").CountAsync(),
-            await page.Locator(".mud-dialog-container:visible .connection-dialog-content").CountAsync(),
-            await dialog.CountAsync(),
+            await page.Locator(".mud-dialog-container:visible").CountAsync().WaitAsync(token),
+            await page.Locator(".mud-dialog-container:visible .connection-dialog-content").CountAsync()
+                .WaitAsync(token),
+            await dialog.CountAsync().WaitAsync(token),
             mobileOnConnectCount,
-            mobileOnConnectCount > 0 && await mobileOnConnectControl.Nth(0).IsVisibleAsync(),
+            mobileOnConnectCount > 0 && await mobileOnConnectControl.Nth(0).IsVisibleAsync().WaitAsync(token),
             onConnectTabCount,
-            onConnectTabCount > 0 && await onConnectTab.Nth(0).IsVisibleAsync(),
+            onConnectTabCount > 0 && await onConnectTab.Nth(0).IsVisibleAsync().WaitAsync(token),
             onConnectTabSelected,
-            await editor.CountAsync(),
-            await editor.IsVisibleAsync(),
-            await expandedPanel.CountAsync(),
+            await editor.CountAsync().WaitAsync(token),
+            await editor.IsVisibleAsync().WaitAsync(token),
+            await expandedPanel.CountAsync().WaitAsync(token),
             topicInputCount,
             string.Equals(inputValue, $"{root}/dialog-excluded/#", StringComparison.Ordinal),
-            await addButton.CountAsync(),
-            await addButton.IsVisibleAsync(),
+            await addButton.CountAsync().WaitAsync(token),
+            await addButton.IsVisibleAsync().WaitAsync(token),
             countChipValue,
-            await rows.CountAsync(),
-            await expectedRows.CountAsync(),
+            await rows.CountAsync().WaitAsync(token),
+            await expectedRows.CountAsync().WaitAsync(token),
             checkboxCount,
-            checkboxCount > 0 && await checkboxes.Nth(0).IsVisibleAsync(),
-            await removeButton.CountAsync(),
-            await removeButton.IsVisibleAsync(),
+            checkboxCount > 0 && await checkboxes.Nth(0).IsVisibleAsync().WaitAsync(token),
+            await removeButton.CountAsync().WaitAsync(token),
+            await removeButton.IsVisibleAsync().WaitAsync(token),
             connectButtonCount,
-            connectButtonCount > 0 && await connectButton.Nth(0).IsVisibleAsync(),
-            await page.Locator(".status-chip--connected").IsVisibleAsync());
+            connectButtonCount > 0 && await connectButton.Nth(0).IsVisibleAsync().WaitAsync(token),
+            await page.Locator(".status-chip--connected").IsVisibleAsync().WaitAsync(token));
     }
 
     private static string FormatEvidencePath(string? path) =>

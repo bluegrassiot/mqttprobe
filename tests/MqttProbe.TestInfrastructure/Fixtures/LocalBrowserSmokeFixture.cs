@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
-using System.Security.Cryptography;
 using System.Text;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
@@ -10,18 +9,50 @@ using Microsoft.Playwright;
 
 namespace MqttProbe.TestInfrastructure.Fixtures;
 
-public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
+public sealed partial class LocalBrowserSmokeFixture : IAsyncDisposable
 {
     private const string MosquittoImage =
         "eclipse-mosquitto@sha256:94f5a3d7deafa59fa3440d227ddad558f59d293c612138de841eec61bfa4d353";
-    private const int StartupTimeoutSeconds = 60;
+    private static readonly TimeSpan _startupTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan _defaultCleanupTimeout = TimeSpan.FromSeconds(10);
     private const int ActionTimeoutMs = 15_000;
 
     private readonly string _temporaryRoot;
+    private readonly Func<Task<IPlaywright>> _createPlaywright;
+    private readonly Func<CancellationToken, Task> _verifySetupListener;
+    private readonly Func<Task<string?>> _cleanupWeb;
+    private readonly TimeSpan _cleanupTimeout;
+    private readonly TimeProvider _timeProvider;
     private IContainer? _broker;
+    private Task? _brokerDisposalTask;
     private Process? _webProcess;
+    private Task? _setupTask;
+    private Task<bool>? _setupEvidenceTask;
+    private Task? _browserCleanupTask;
+    private Task? _browserCloseTask;
+    private IPlaywright? _playwright;
+    private IBrowser? _browser;
+    private IPage? _page;
+    private string _setupStage = "listener ownership verification";
+    private string _startupStage = "broker startup";
 
-    private LocalBrowserSmokeFixture(string temporaryRoot) => _temporaryRoot = temporaryRoot;
+    internal LocalBrowserSmokeFixture(
+        string temporaryRoot,
+        IContainer? broker,
+        Func<Task<IPlaywright>> createPlaywright,
+        Func<CancellationToken, Task> verifySetupListener,
+        TimeSpan cleanupTimeout,
+        TimeProvider timeProvider,
+        Func<Task<string?>>? cleanupWeb = null)
+    {
+        _temporaryRoot = temporaryRoot;
+        _broker = broker;
+        _createPlaywright = createPlaywright;
+        _verifySetupListener = verifySetupListener;
+        _cleanupTimeout = cleanupTimeout;
+        _timeProvider = timeProvider;
+        _cleanupWeb = cleanupWeb ?? CleanupWebAsync;
+    }
 
     public string BaseUrl { get; private set; } = string.Empty;
     public string BrokerHost { get; private set; } = string.Empty;
@@ -32,12 +63,26 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
     public static async Task<LocalBrowserSmokeFixture> StartAsync(string webAssemblyPath)
     {
         var temporaryRoot = CreateTemporaryRoot();
-        var fixture = new LocalBrowserSmokeFixture(temporaryRoot);
+        LocalBrowserSmokeFixture fixture = null!;
+        fixture = new LocalBrowserSmokeFixture(
+            temporaryRoot,
+            broker: null,
+            () => Playwright.CreateAsync(),
+            cancellationToken => fixture.VerifyListenerOwnershipAsync(new Uri(fixture.BaseUrl).Port, cancellationToken),
+            _defaultCleanupTimeout,
+            TimeProvider.System);
+        using var startupTimeout = new CancellationTokenSource(_startupTimeout);
         try
         {
-            await fixture.StartBrokerAsync();
-            await fixture.StartWebAsync(webAssemblyPath);
-            await fixture.ProvisionLocalAccountAsync();
+            fixture._startupStage = "broker startup";
+            await fixture.StartBrokerAsync(startupTimeout.Token);
+            startupTimeout.Token.ThrowIfCancellationRequested();
+            fixture._startupStage = "Web startup";
+            await fixture.StartWebAsync(webAssemblyPath, startupTimeout.Token);
+            startupTimeout.Token.ThrowIfCancellationRequested();
+            fixture._startupStage = "visible account setup";
+            await fixture.ProvisionLocalAccountAsync(startupTimeout.Token);
+            startupTimeout.Token.ThrowIfCancellationRequested();
             return fixture;
         }
         catch (Exception startupFailure)
@@ -49,67 +94,68 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
             catch (Exception cleanupFailure)
             {
                 throw new LocalBrowserSmokeFixtureStartException(fixture,
-                    startupFailure, cleanupFailure);
+                    startupFailure, fixture.GetStartupFailureStageSummary(), cleanupFailure);
             }
 
             throw;
         }
     }
 
+    private string GetStartupFailureStageSummary() => _startupStage switch
+    {
+        "visible account setup" => _setupStage,
+        "Web startup" => "Web startup",
+        _ => "broker startup",
+    };
+
     public async ValueTask DisposeAsync()
     {
         Exception? cleanupFailure = null;
         string? listenerValidationError = null;
-        if (_webProcess is { } webProcess)
-        {
-            for (var attempt = 0; attempt < 2 && !webProcess.HasExited; attempt++)
-            {
-                try
-                {
-                    webProcess.Kill(entireProcessTree: false);
-                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                    await webProcess.WaitForExitAsync(timeout.Token);
-                }
-                catch (Exception ex)
-                {
-                    if (attempt == 1)
-                        cleanupFailure = ex;
-                }
-            }
-
-            if (!webProcess.HasExited)
-                cleanupFailure ??= new TimeoutException();
-            else
-            {
-                try
-                {
-                    var owners = await GetListenerProcessIdsAsync(new Uri(BaseUrl).Port, CancellationToken.None);
-                    if (owners.Count > 0)
-                        listenerValidationError = "The Web listener remained in use after the owned process exited.";
-                }
-                catch (Exception ex)
-                {
-                    listenerValidationError = $"Web listener cleanup verification failed ({ex.GetType().Name}).";
-                }
-
-                webProcess.Dispose();
-                _webProcess = null;
-            }
-        }
-
         try
         {
-            if (_broker is not null)
-            {
-                await _broker.DisposeAsync();
-                _broker = null;
-            }
+            if (_setupTask is not null || _browserCleanupTask is not null
+                || _browser is not null || _playwright is not null)
+                await WaitForBrowserCleanupAsync();
         }
         catch (Exception ex)
         {
             cleanupFailure ??= ex;
         }
-        if (_webProcess is null)
+
+        try
+        {
+            listenerValidationError = await _cleanupWeb();
+        }
+        catch (Exception ex)
+        {
+            cleanupFailure ??= ex;
+        }
+
+        if (_broker is not null)
+        {
+            if (_brokerDisposalTask is { IsCompleted: true } previousTask
+                && (previousTask.IsFaulted || previousTask.IsCanceled))
+            {
+                ObserveFault(previousTask);
+                _brokerDisposalTask = null;
+            }
+            var disposalTask = _brokerDisposalTask ??= _broker.DisposeAsync().AsTask();
+            ObserveFault(disposalTask);
+            try
+            {
+                await disposalTask.WaitAsync(_cleanupTimeout, _timeProvider);
+                _broker = null;
+                _brokerDisposalTask = null;
+            }
+            catch (Exception ex)
+            {
+                if (disposalTask.IsFaulted)
+                    _ = disposalTask.Exception;
+                cleanupFailure ??= ex;
+            }
+        }
+        if (AllOwnedResourcesReleased())
         {
             try
             {
@@ -122,6 +168,9 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
             }
         }
 
+        if (!AllOwnedResourcesReleased())
+            cleanupFailure ??= new InvalidOperationException("Fixture cleanup still owns resources.");
+
         if (cleanupFailure is not null || listenerValidationError is not null)
         {
             var retry = _webProcess is null ? string.Empty : " The Web process remains active; retry DisposeAsync after it exits.";
@@ -131,7 +180,49 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
         }
     }
 
-    private async Task StartBrokerAsync()
+    private async Task<string?> CleanupWebAsync()
+    {
+        if (_webProcess is not { } webProcess)
+            return null;
+
+        Exception? cleanupFailure = null;
+        for (var attempt = 0; attempt < 2 && !webProcess.HasExited; attempt++)
+        {
+            try
+            {
+                webProcess.Kill(entireProcessTree: false);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                await webProcess.WaitForExitAsync(timeout.Token);
+            }
+            catch (Exception ex)
+            {
+                if (attempt == 1)
+                    cleanupFailure = ex;
+            }
+        }
+
+        if (!webProcess.HasExited)
+            throw new InvalidOperationException(
+                $"Local smoke Web cleanup failed ({cleanupFailure?.GetType().Name ?? "TimeoutException"}).");
+
+        string? warning = null;
+        try
+        {
+            var owners = await GetListenerProcessIdsAsync(new Uri(BaseUrl).Port, CancellationToken.None);
+            if (owners.Count > 0)
+                warning = "The Web listener remained in use after the owned process exited.";
+        }
+        catch (Exception ex)
+        {
+            warning = $"Web listener cleanup verification failed ({ex.GetType().Name}).";
+        }
+
+        webProcess.Dispose();
+        _webProcess = null;
+        return warning;
+    }
+
+    private async Task StartBrokerAsync(CancellationToken cancellationToken)
     {
         var config = """
             listener 1883
@@ -140,27 +231,30 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
             persistence false
             """;
 
-        _broker = new ContainerBuilder(MosquittoImage)
+        _broker ??= new ContainerBuilder(MosquittoImage)
             .WithPortBinding(1883, true)
             .WithResourceMapping(Encoding.UTF8.GetBytes(config), "/mosquitto/config/mosquitto.conf")
             .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("mosquitto.*running"))
             .Build();
 
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(StartupTimeoutSeconds));
-        await _broker.StartAsync(timeout.Token);
+        cancellationToken.ThrowIfCancellationRequested();
+        await _broker.StartAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         BrokerHost = _broker.Hostname;
         BrokerPort = _broker.GetMappedPublicPort(1883);
     }
 
-    private async Task StartWebAsync(string webAssemblyPath)
+    private async Task StartWebAsync(string webAssemblyPath, CancellationToken cancellationToken)
     {
         if (!File.Exists(webAssemblyPath))
             throw new InvalidOperationException("Local smoke Web assembly was not found.");
 
         Directory.CreateDirectory(Path.Combine(_temporaryRoot, "config"));
+        cancellationToken.ThrowIfCancellationRequested();
         await File.WriteAllTextAsync(Path.Combine(_temporaryRoot, "appsettings.json"),
-            "{\"Authentication\":{\"Mode\":\"Local\"},\"AllowedHosts\":\"*\"}");
+            "{\"Authentication\":{\"Mode\":\"Local\"},\"AllowedHosts\":\"*\"}", cancellationToken);
 
+        cancellationToken.ThrowIfCancellationRequested();
         var port = ReserveLoopbackPort();
         BaseUrl = $"https://localhost:{port}";
 
@@ -184,33 +278,38 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
         startInfo.Environment["DOTNET_ENVIRONMENT"] = "Development";
         startInfo.Environment["Authentication__Mode"] = "Local";
 
+        cancellationToken.ThrowIfCancellationRequested();
         _webProcess = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Local smoke Web process could not be started.");
+        cancellationToken.ThrowIfCancellationRequested();
         _ = _webProcess.StandardOutput.ReadToEndAsync();
         _ = _webProcess.StandardError.ReadToEndAsync();
 
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(StartupTimeoutSeconds));
-        await VerifyListenerOwnershipAsync(port, timeout.Token);
+        await VerifyListenerOwnershipAsync(port, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
         using var handler = new HttpClientHandler
         {
             ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
         };
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(2) };
-        while (!timeout.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested)
         {
             if (_webProcess.HasExited)
                 throw new InvalidOperationException("Local smoke Web process exited before becoming ready.");
 
             try
             {
-                using var response = await client.GetAsync($"{BaseUrl}/Setup", timeout.Token);
+                using var response = await client.GetAsync($"{BaseUrl}/Setup", cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (response.StatusCode == HttpStatusCode.OK)
                 {
-                    var body = await response.Content.ReadAsStringAsync(timeout.Token);
+                    var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
                     if (body.Contains("Create your login credentials", StringComparison.Ordinal))
                     {
-                        await VerifyListenerOwnershipAsync(port, timeout.Token);
+                        await VerifyListenerOwnershipAsync(port, cancellationToken);
+                        cancellationToken.ThrowIfCancellationRequested();
                         return;
                     }
                 }
@@ -218,177 +317,16 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
             catch (HttpRequestException)
             {
             }
-            catch (TaskCanceledException) when (!timeout.IsCancellationRequested)
+            catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
             }
 
-            await Task.Delay(250, timeout.Token);
+            await Task.Delay(250, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         throw new InvalidOperationException("Local smoke Web readiness timed out.");
-    }
-
-    private async Task ProvisionLocalAccountAsync()
-    {
-        Username = $"smoke-{Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant()}";
-        Password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
-
-        IPlaywright? playwright = null;
-        IBrowser? browser = null;
-        IPage? page = null;
-        var stage = "listener ownership verification";
-        InvalidOperationException? setupFailure = null;
-        Exception? closeFailure = null;
-        try
-        {
-            using (var ownershipTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
-                await VerifyListenerOwnershipAsync(new Uri(BaseUrl).Port, ownershipTimeout.Token);
-
-            stage = "Playwright initialization";
-            playwright = await Playwright.CreateAsync();
-            stage = "browser launch";
-            browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-            {
-                Headless = false,
-            });
-            stage = "browser context creation";
-            var context = await browser.NewContextAsync(new BrowserNewContextOptions
-            {
-                IgnoreHTTPSErrors = true,
-                ViewportSize = new ViewportSize { Width = 1280, Height = 900 },
-            });
-            stage = "page creation";
-            page = await context.NewPageAsync();
-            page.SetDefaultTimeout(ActionTimeoutMs);
-            page.SetDefaultNavigationTimeout(40_000);
-
-            stage = "Setup navigation";
-            await page.GotoAsync($"{BaseUrl}/Setup", new PageGotoOptions
-            {
-                Timeout = 40_000,
-                WaitUntil = WaitUntilState.DOMContentLoaded,
-            });
-            stage = "username input";
-            await page.Locator("#username").FillAsync(Username);
-            stage = "password input";
-            await page.Locator("#password").FillAsync(Password);
-            stage = "password confirmation input";
-            await page.Locator("#confirmPassword").FillAsync(Password);
-            stage = "Setup submit";
-            await page.Locator("form button[type='submit']").ClickAsync();
-            stage = "connection dialog wait";
-            await page.Locator(".connection-dialog-content").WaitForAsync(new LocatorWaitForOptions
-            {
-                State = WaitForSelectorState.Visible,
-                Timeout = 40_000,
-            });
-        }
-        catch (Exception ex)
-        {
-            var evidenceWritten = await TryWriteSetupFailureSnapshotAsync(page, stage);
-            var evidenceStatus = evidenceWritten ? string.Empty : " Failure evidence unavailable.";
-            setupFailure = new InvalidOperationException(
-                $"Visible local account setup failed during {stage} ({ex.GetType().Name}).{evidenceStatus}");
-        }
-        finally
-        {
-            if (browser is not null)
-            {
-                try
-                {
-                    await browser.CloseAsync().WaitAsync(TimeSpan.FromSeconds(10));
-                }
-                catch (Exception ex)
-                {
-                    closeFailure = ex;
-                }
-            }
-
-            try
-            {
-                playwright?.Dispose();
-            }
-            catch (Exception ex)
-            {
-                closeFailure ??= ex;
-            }
-        }
-
-        if (setupFailure is not null)
-        {
-            var closeStatus = closeFailure is null
-                ? string.Empty
-                : $" Browser close also failed ({closeFailure.GetType().Name}).";
-            throw new InvalidOperationException(setupFailure.Message + closeStatus, setupFailure);
-        }
-
-        if (closeFailure is TimeoutException)
-            throw new InvalidOperationException("Visible local account setup browser did not close in time.");
-        if (closeFailure is not null)
-            throw new InvalidOperationException(
-                $"Visible local account setup browser close failed ({closeFailure.GetType().Name}).");
-    }
-
-    private async Task<bool> TryWriteSetupFailureSnapshotAsync(IPage? page, string stage)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        try
-        {
-            var route = "other";
-            if (page is not null && Uri.TryCreate(page.Url, UriKind.Absolute, out var uri))
-            {
-                route = uri.AbsolutePath switch
-                {
-                    "/Setup" => "Setup",
-                    "/Login" => "Login",
-                    _ => "other",
-                };
-            }
-
-            var snapshot = page is null
-                ? new { Stage = stage, Route = route, PageAvailable = false, Controls = (object?)null }
-                : new
-                {
-                    Stage = stage,
-                    Route = route,
-                    PageAvailable = true,
-                    Controls = (object?)new
-                    {
-                        Username = await GetSelectorCountsAsync(page, "#username", timeout.Token),
-                        Password = await GetSelectorCountsAsync(page, "#password", timeout.Token),
-                        ConfirmPassword = await GetSelectorCountsAsync(page, "#confirmPassword", timeout.Token),
-                        Submit = await GetSelectorCountsAsync(page, "form button[type='submit']", timeout.Token),
-                        ValidationSummary = await GetSelectorCountsAsync(page, ".validation-summary-errors", timeout.Token),
-                        ValidationMessage = await GetSelectorCountsAsync(page, ".validation-message", timeout.Token),
-                        ConnectionDialog = await GetSelectorCountsAsync(page, ".connection-dialog-content", timeout.Token),
-                    },
-                };
-
-            var evidenceRoot = Path.GetDirectoryName(_temporaryRoot)
-                ?? throw new InvalidOperationException("Fixture temporary directory has no parent.");
-            var path = Path.Combine(evidenceRoot, $"mqttprobe-browser-smoke-{Guid.NewGuid():N}.json");
-            await File.WriteAllTextAsync(path, System.Text.Json.JsonSerializer.Serialize(snapshot), timeout.Token);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static async Task<(int Count, int VisibleCount)> GetSelectorCountsAsync(
-        IPage page, string selector, CancellationToken cancellationToken)
-    {
-        var locator = page.Locator(selector);
-        var count = await locator.CountAsync().WaitAsync(cancellationToken);
-        var visibleCount = 0;
-        for (var index = 0; index < count; index++)
-        {
-            if (await locator.Nth(index).IsVisibleAsync().WaitAsync(cancellationToken))
-                visibleCount++;
-        }
-
-        return (count, visibleCount);
     }
 
     private async Task VerifyListenerOwnershipAsync(int port, CancellationToken cancellationToken)
@@ -529,8 +467,10 @@ public sealed class LocalBrowserSmokeFixtureStartException : Exception
     public LocalBrowserSmokeFixtureStartException(
         LocalBrowserSmokeFixture fixture,
         Exception startupFailure,
+        string startupStageSummary,
         Exception cleanupFailure)
-        : base($"Local smoke fixture startup failed ({startupFailure.GetType().Name}) "
+        : base($"Local smoke fixture startup failed during {startupStageSummary} "
+            + $"({startupFailure.GetType().Name}) "
             + $"and cleanup failed ({cleanupFailure.GetType().Name}).")
     {
         Fixture = fixture;

@@ -56,6 +56,9 @@ try {
     $process.WaitForExit()
     $process.Refresh()
     $cleanupSafe = $process.HasExited
+    if ($cleanupSafe -and $process.ExitCode -ne 0) {
+        throw "Desktop update simulation process exited with code $($process.ExitCode)."
+    }
 } finally {
     [Environment]::SetEnvironmentVariable('XDG_CONFIG_HOME', $oldConfigHome, 'Process')
     [Environment]::SetEnvironmentVariable('WEBVIEW2_USER_DATA_FOLDER', $oldWebViewFolder, 'Process')

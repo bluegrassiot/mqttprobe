@@ -354,27 +354,27 @@ public sealed partial class ExclusionBrowserSmokeTests : LocalSmokeFixtureBase
 
             resumeDiagnosticActive = true;
             SetStage("resume diagnostics: capture before publish");
-            resumeDiagnostics.Add(await CaptureResumeSnapshotAsync(page, "before-publish", root,
+            await TryCaptureResumeSnapshotAsync(page, "before-publish", root,
                 expectedBlocked[0], $"resume-{root}-{publishCount + 1}", baselineTopics, controlTopics,
-                expectedBlocked, scenarioToken));
+                expectedBlocked, resumeDiagnostics);
 
             SetStage("resume publish");
             var resumePayload = $"resume-{root}-{++publishCount}";
             await PublishAsync(mqtt, expectedBlocked[0], resumePayload, scenarioToken);
 
             SetStage("resume diagnostics: capture after publish");
-            resumeDiagnostics.Add(await CaptureResumeSnapshotAsync(page, "after-publish-before-browser",
+            await TryCaptureResumeSnapshotAsync(page, "after-publish-before-browser",
                 root, expectedBlocked[0], resumePayload, baselineTopics, controlTopics,
-                expectedBlocked, scenarioToken));
+                expectedBlocked, resumeDiagnostics);
 
             SetStage("resume: switch to Browser tab");
             await page.GetByRole(AriaRole.Tab, new() { Name = "Browser" }).ClickAsync(
                 new LocatorClickOptions { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
 
             SetStage("resume diagnostics: capture Browser before root selection");
-            resumeDiagnostics.Add(await CaptureResumeSnapshotAsync(page, "browser-before-root-selection",
+            await TryCaptureResumeSnapshotAsync(page, "browser-before-root-selection",
                 root, expectedBlocked[0], resumePayload, baselineTopics, controlTopics,
-                expectedBlocked, scenarioToken));
+                expectedBlocked, resumeDiagnostics);
 
             var rootRow = page.Locator($".topic-tree-row:has-text('{root}')").First;
             SetStage("resume: select recreated root topic");
@@ -382,9 +382,9 @@ public sealed partial class ExclusionBrowserSmokeTests : LocalSmokeFixtureBase
                 new LocatorClickOptions { Timeout = ActionTimeoutMs }).WaitAsync(scenarioToken);
 
             SetStage("resume diagnostics: capture Browser after root selection");
-            resumeDiagnostics.Add(await CaptureResumeSnapshotAsync(page, "browser-after-root-selection",
+            await TryCaptureResumeSnapshotAsync(page, "browser-after-root-selection",
                 root, expectedBlocked[0], resumePayload, baselineTopics, controlTopics,
-                expectedBlocked, scenarioToken));
+                expectedBlocked, resumeDiagnostics);
 
             SetStage("resume predicate: expected payload visible");
             await Assertions.Expect(PayloadRow(page, expectedBlocked[0], resumePayload))

@@ -133,7 +133,8 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
             .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("mosquitto.*running"))
             .Build();
 
-        await _broker.StartAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(StartupTimeoutSeconds));
+        await _broker.StartAsync(timeout.Token);
         BrokerHost = _broker.Hostname;
         BrokerPort = _broker.GetMappedPublicPort(1883);
     }

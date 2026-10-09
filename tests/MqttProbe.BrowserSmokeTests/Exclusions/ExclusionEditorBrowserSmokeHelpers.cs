@@ -5,6 +5,7 @@ namespace MqttProbe.BrowserSmokeTests;
 
 public sealed partial class ExclusionBrowserSmokeTests
 {
+    private const int ResumeDiagnosticTimeoutMs = 3_000;
     private static readonly JsonSerializerOptions _evidenceJsonOptions = new() { WriteIndented = true };
 
     private sealed record ResumeSnapshot(
@@ -150,20 +151,51 @@ public sealed partial class ExclusionBrowserSmokeTests
             resumePairDetails.ToArray(), resumePayloadVisible, visibleTestPayloads.ToArray(), processed, excluded);
     }
 
+    private static async Task TryCaptureResumeSnapshotAsync(
+        IPage page,
+        string phase,
+        string root,
+        string targetTopic,
+        string resumePayload,
+        string[] baselineTopics,
+        string[] controlTopics,
+        string[] expectedBlocked,
+        List<ResumeSnapshot> snapshots)
+    {
+        var previousTimeout = ActionTimeoutMs;
+        try
+        {
+            page.SetDefaultTimeout(ResumeDiagnosticTimeoutMs);
+            using var timeout = new CancellationTokenSource(ResumeDiagnosticTimeoutMs);
+            var snapshot = await CaptureResumeSnapshotAsync(page, phase, root, targetTopic,
+                resumePayload, baselineTopics, controlTopics, expectedBlocked, timeout.Token);
+            snapshots.Add(snapshot);
+        }
+        catch
+        {
+            // Resume snapshots are diagnostic only; a transient DOM state must not fail the smoke.
+        }
+        finally
+        {
+            try
+            {
+                page.SetDefaultTimeout(previousTimeout);
+            }
+            catch
+            {
+                // The page may have closed while diagnostics were running.
+            }
+        }
+    }
+
     private static async Task<(string? Processed, string? Excluded)> ReadProcessingCountersAsync(
         IPage page, CancellationToken token)
     {
-        var trigger = page.Locator(".metrics-chip-rate").First;
-        if (await trigger.CountAsync().WaitAsync(token) == 0)
+        var flyout = page.Locator(".metrics-flyout:visible");
+        if (await flyout.CountAsync().WaitAsync(token) == 0)
             return (null, null);
 
-        await trigger.ClickAsync(new LocatorClickOptions { Timeout = 2_000 }).WaitAsync(token);
-        var rows = page.Locator(".metrics-flyout .metrics-row");
-        await rows.First.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Visible,
-            Timeout = 2_000,
-        }).WaitAsync(token);
+        var rows = flyout.Locator(".metrics-row");
 
         string? processed = null;
         string? excluded = null;
@@ -183,11 +215,33 @@ public sealed partial class ExclusionBrowserSmokeTests
                 excluded = value;
         }
 
-        await trigger.ClickAsync(new LocatorClickOptions { Timeout = 2_000 }).WaitAsync(token);
         return (processed, excluded);
     }
 
     private static async Task<string?> TryWriteResumeEvidenceAsync(
+        IPage? page,
+        string stage,
+        string exceptionType,
+        string root,
+        string targetTopic,
+        string resumePayload,
+        string[] baselineTopics,
+        string[] controlTopics,
+        string[] expectedBlocked,
+        List<ResumeSnapshot> snapshots)
+    {
+        try
+        {
+            return await WriteResumeEvidenceAsync(page, stage, exceptionType, root, targetTopic,
+                resumePayload, baselineTopics, controlTopics, expectedBlocked, snapshots);
+        }
+        catch (Exception ex)
+        {
+            return $"unavailable ({ex.GetType().Name} during evidence capture)";
+        }
+    }
+
+    private static async Task<string?> WriteResumeEvidenceAsync(
         IPage? page,
         string stage,
         string exceptionType,

@@ -1,8 +1,11 @@
 # Browser smoke tests (manual, opt-in)
 
-Opt-in Playwright for .NET acceptance tests. Provider tests cover the Authentik and Keycloak
-labs, while the local-login tests cover MQTT filtering, subscriptions, and the in-app
-emulators. Each test:
+Opt-in Playwright for .NET acceptance tests. Provider tests cover sign-in and logout in the
+Authentik and Keycloak labs. The local authentication test covers local sign-in and logout.
+Separate exclusion and live-flow tests cover MQTT filtering, subscriptions, and the in-app
+emulators using local authentication.
+
+Each provider test:
 
 1. signs in through the provider,
 2. checks the live app shell (top bar plus the auto-opened connection dialog),

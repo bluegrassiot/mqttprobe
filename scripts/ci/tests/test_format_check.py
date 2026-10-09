@@ -6,6 +6,7 @@ Run: python -m unittest discover -s scripts/ci/tests
 
 import importlib.util
 import io
+import os
 import subprocess
 import sys
 import unittest
@@ -36,18 +37,15 @@ class _Fixture:
         self._targets = targets or [("Fake.slnf", False)]
         self._fix = fix
         self._orig_root = format_ci.ROOT
-        self._orig_fix = format_ci.FIX
         self._orig_targets = format_ci.TARGETS
 
     def __enter__(self):
         format_ci.ROOT = Path("/tmp/fake")
-        format_ci.FIX = self._fix
         format_ci.TARGETS = self._targets
         return self
 
     def __exit__(self, *exc):
         format_ci.ROOT = self._orig_root
-        format_ci.FIX = self._orig_fix
         format_ci.TARGETS = self._orig_targets
         return False
 
@@ -63,27 +61,17 @@ def _run_main(fake_run, fixture=None):
     with ctx:
         with patch("subprocess.run", side_effect=tracking_run):
             with patch("sys.stdout", buf):
-                format_ci.main()
+                format_ci.main(["--fix"] if ctx._fix else [])
     return buf.getvalue(), calls
 
 
 class TestInvocationArgs(unittest.TestCase):
-    """Verify IDE0005, excludes, --verify-no-changes, --severity info in args."""
+    """Verify formatting passes and their shared invocation options."""
 
-    def test_ide0005_uses_style_subcommand_with_excludes_and_severity(self):
+    def test_whitespace_general_style_and_targeted_style_passes_run(self):
         _, calls = _run_main(lambda a, **kw: _run())
-        ide_calls = [c for c in calls if "--diagnostics" in c]
-        self.assertTrue(ide_calls, "No IDE0005 pass found")
-        c = ide_calls[0]
-        self.assertEqual(c[2], "style", "Must use 'style' subcommand")
-        self.assertNotIn("analyzers", c)
-        self.assertIn("--diagnostics", c)
-        self.assertIn("IDE0005", c)
-        idx = c.index("--severity")
-        self.assertEqual(c[idx + 1], "hidden",
-                         "IDE0005 defaults to hidden without .editorconfig entry")
-        self.assertIn("--verify-no-changes", c)
-        self.assertIn("--exclude", c)
+        self.assertEqual([c[2] for c in calls], ["whitespace", "style", "style"])
+        self.assertEqual(sum("--diagnostics" in c for c in calls), 1)
 
     def test_all_invocations_include_excludes(self):
         _, calls = _run_main(lambda a, **kw: _run())
@@ -95,11 +83,38 @@ class TestInvocationArgs(unittest.TestCase):
         for c in calls:
             self.assertIn("--verify-no-changes", c, f"Missing --verify-no-changes in: {c}")
 
+    def test_fix_mode_runs_both_passes_without_verify_flag(self):
+        _, calls = _run_main(lambda a, **kw: _run(), _Fixture(fix=True))
+        self.assertEqual([c[2] for c in calls], ["whitespace", "style", "style"])
+        for c in calls:
+            self.assertNotIn("--verify-no-changes", c)
+
+    def test_ide0005_pass_uses_hidden_severity(self):
+        _, calls = _run_main(lambda a, **kw: _run())
+        call = next(c for c in calls if "--diagnostics" in c)
+        self.assertEqual(call[call.index("--diagnostics") + 1], "IDE0005")
+        self.assertEqual(call[call.index("--severity") + 1], "hidden")
+
+    def test_scoped_ide0005_pass_preserves_include_and_fix_options(self):
+        path = Path("/tmp/fake/src/changed.cs")
+        original_select = format_ci._select_files
+        format_ci._select_files = lambda selection: (False, [path])
+        try:
+            _, calls = _run_main(lambda a, **kw: _run())
+            _, fix_calls = _run_main(lambda a, **kw: _run(), _Fixture(fix=True))
+        finally:
+            format_ci._select_files = original_select
+        for call in (next(c for c in calls if "--diagnostics" in c),
+                     next(c for c in fix_calls if "--diagnostics" in c)):
+            self.assertEqual(call[call.index("--include") + 1], os.path.join("src", "changed.cs"))
+        self.assertIn("--verify-no-changes", next(c for c in calls if "--diagnostics" in c))
+        self.assertNotIn("--verify-no-changes", next(c for c in fix_calls if "--diagnostics" in c))
+
 
 class TestCrlfExecutesBothStylePasses(unittest.TestCase):
-    """ENDOFLINE-only whitespace failure must not suppress the style or IDE0005 passes."""
+    """ENDOFLINE-only whitespace failure must not suppress the style pass."""
 
-    def test_crlf_runs_whitespace_style_and_ide0005(self):
+    def test_crlf_runs_both_formatting_passes(self):
         def fake_run(args, **kw):
             if "whitespace" in args:
                 return _run(2, "", "error ENDOFLINE: crlf")
@@ -107,10 +122,7 @@ class TestCrlfExecutesBothStylePasses(unittest.TestCase):
 
         out, calls = _run_main(fake_run)
         subs = [c[2] for c in calls]
-        self.assertIn("whitespace", subs)
-        self.assertIn("style", subs)
-        ide_calls = [c for c in calls if "--diagnostics" in c]
-        self.assertTrue(ide_calls, "IDE0005 pass was skipped despite ENDOFLINE-only noise")
+        self.assertEqual(subs, ["whitespace", "style", "style"])
 
     def test_endofline_only_reports_ok(self):
         def fake_run(args, **kw):
@@ -137,20 +149,6 @@ class TestStyleViolationAfterCrlfFails(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx:
             _run_main(fake_run)
         self.assertEqual(ctx.exception.code, 1)
-
-    def test_targeted_pass_after_endofline_whitespace_fails(self):
-        """Even if the style pass is clean, targeted IDE0005 failure persists."""
-        def fake_run(args, **kw):
-            if "whitespace" in args:
-                return _run(2, "", "error ENDOFLINE: crlf")
-            if "--diagnostics" in args:
-                return _run(2, "", "error IDE0005: unused using")
-            return _run(0, "", "")
-
-        with self.assertRaises(SystemExit) as ctx:
-            _run_main(fake_run)
-        self.assertEqual(ctx.exception.code, 1)
-
 
 class TestEndoflineWithRestoreExceptionFails(unittest.TestCase):
     """ENDOFLINE + restore/exception evidence must not be treated as ENDOFLINE-only."""
@@ -203,16 +201,6 @@ class TestTrueFailurePropagates(unittest.TestCase):
             _run_main(fake_run)
         self.assertEqual(ctx.exception.code, 1)
 
-    def test_targeted_ide0005_failure_fails(self):
-        def fake_run(args, **kw):
-            if "--diagnostics" in args:
-                return _run(2, "", "error IDE0005: unused using")
-            return _run(0, "", "")
-
-        with self.assertRaises(SystemExit) as ctx:
-            _run_main(fake_run)
-        self.assertEqual(ctx.exception.code, 1)
-
 
 class TestWorkspaceWarningExitZeroFails(unittest.TestCase):
     """A workspace load warning with exit 0 must fail closed."""
@@ -243,6 +231,20 @@ class TestWorkspaceWarningExitZeroFails(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx:
             _run_main(fake_run)
         self.assertEqual(ctx.exception.code, 1)
+
+    def test_style_pass_workspace_warning_fails_closed(self):
+        calls = []
+
+        def fake_run(args, **kw):
+            calls.append(list(args))
+            if "style" in args:
+                return _run(0, "", "warn : Workspace failed to load project")
+            return _run(0, "", "")
+
+        with self.assertRaises(SystemExit) as ctx:
+            _run_main(fake_run)
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertEqual([c[2] for c in calls], ["whitespace", "style"])
 
 
 class TestWorkloadSkip(unittest.TestCase):
@@ -364,7 +366,7 @@ class TestExplicitRestore(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
 
     def test_restored_success_all_passes_ok(self):
-        """Restore succeeds → all3format passes use --no-restore and succeed."""
+        """Restore succeeds → both format passes use --no-restore and succeed."""
         def fake_run(args, **kw):
             if "restore" in args:
                 return _run(0, "", "")
@@ -386,19 +388,6 @@ class TestExplicitRestore(unittest.TestCase):
                 return _run(0, "", "")
             if "style" in args and "--diagnostics" not in args:
                 return _run(2, "", "error IDE0005: Remove unused using directive")
-            return _run(0, "", "")
-
-        with self.assertRaises(SystemExit) as ctx:
-            _run_main(fake_run, _Fixture(targets=[("Fake.csproj", True)]))
-        self.assertEqual(ctx.exception.code, 1)
-
-    def test_restored_success_ide0005_fail(self):
-        """Restore succeeds but targeted IDE0005 pass fails → fail."""
-        def fake_run(args, **kw):
-            if "restore" in args:
-                return _run(0, "", "")
-            if "--diagnostics" in args:
-                return _run(2, "", "error IDE0005: unused using")
             return _run(0, "", "")
 
         with self.assertRaises(SystemExit) as ctx:

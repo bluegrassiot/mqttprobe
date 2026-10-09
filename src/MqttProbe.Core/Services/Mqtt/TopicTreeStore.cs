@@ -5,21 +5,18 @@ using MqttProbe.Core.Services.Configuration;
 
 namespace MqttProbe.Core.Services.Mqtt;
 
-internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, ILogger logger)
+internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSettings, ILogger logger)
 {
     private readonly Lock _storeSync = new();
     private readonly Queue<MessageStore> _retentionOrder = new();
 
     private int _totalNodeCount;
     private int _totalMessageCount;
+    private int _rootTopicCount;
     private bool _nodeLimitLogged;
     private long _globalVersion;
-    private long _selectedTopicVersion;
 
-    public ConcurrentDictionary<string, MessageStore> MessageStores { get; } = new(StringComparer.Ordinal);
-
-    // Written lock-free from the UI; reads inside _storeSync see whatever was last assigned.
-    public MessageStore? SelectedMessageStore { get; set; }
+    private readonly ConcurrentDictionary<string, MessageStore> _messageStores = new(StringComparer.Ordinal);
 
     public int MaxStoredMessages => performanceSettings.Performance.MaxStoredMessages;
 
@@ -34,8 +31,6 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
 
     public long Version => Interlocked.Read(ref _globalVersion);
 
-    public long SelectedTopicVersion => Interlocked.Read(ref _selectedTopicVersion);
-
     public void Add(string fullTopic, MqttMessage message)
     {
         lock (_storeSync)
@@ -46,7 +41,7 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
             var firstSlash = normalized.IndexOf('/', StringComparison.Ordinal);
             var rootKey = firstSlash >= 0 ? normalized[..firstSlash] : normalized;
 
-            if (!MessageStores.TryGetValue(rootKey, out var messageStore))
+            if (!_messageStores.TryGetValue(rootKey, out var messageStore))
             {
                 if (_totalNodeCount >= MaxTopicNodes)
                 {
@@ -55,9 +50,14 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
                 }
 
                 var candidate = new MessageStore { Topic = rootKey, FullTopic = rootKey };
-                messageStore = MessageStores.GetOrAdd(rootKey, candidate);
+                messageStore = _messageStores.GetOrAdd(rootKey, candidate);
                 if (ReferenceEquals(messageStore, candidate))
+                {
                     Interlocked.Increment(ref _totalNodeCount);
+                    _rootTopicCount++;
+                    Interlocked.Increment(ref _globalVersion);
+                    InvalidateTopicTree();
+                }
             }
 
             if (firstSlash >= 0)
@@ -71,14 +71,15 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
     {
         lock (_storeSync)
         {
-            MessageStores.Clear();
-            SelectedMessageStore = null;
+            _messageStores.Clear();
+            InvalidateSelection();
             _totalNodeCount = 0;
+            _rootTopicCount = 0;
             _totalMessageCount = 0;
             _retentionOrder.Clear();
             _nodeLimitLogged = false;
             Interlocked.Increment(ref _globalVersion);
-            Interlocked.Increment(ref _selectedTopicVersion);
+            InvalidateTopicTree();
         }
     }
 
@@ -92,14 +93,14 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
         lock (_storeSync)
         {
             var removed = false;
-            foreach (var (key, store) in MessageStores.ToArray())
+            foreach (var (key, store) in _messageStores.ToArray())
             {
                 if (!PurgeNode(store, filter, out var nodeRemoved))
                     continue;
 
                 removed = true;
-                if (nodeRemoved)
-                    MessageStores.TryRemove(key, out _);
+                if (nodeRemoved && _messageStores.TryRemove(key, out _))
+                    _rootTopicCount--;
             }
 
             if (!removed)
@@ -107,41 +108,10 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
 
             RecalculateCounters();
             RebuildRetentionOrder();
+            if (_selectedMessageStore is not null)
+                _selectionContentVersion++;
             Interlocked.Increment(ref _globalVersion);
-            Interlocked.Increment(ref _selectedTopicVersion);
-        }
-    }
-
-    public IEnumerable<MqttMessage> GetMessagesForSelectedTopic()
-    {
-        lock (_storeSync)
-        {
-            if (SelectedMessageStore == null)
-                return [];
-
-            var list = new List<MqttMessage>();
-            CollectMessages(SelectedMessageStore, list);
-            list.Sort(static (a, b) => b.DateTimeReceived.CompareTo(a.DateTimeReceived));
-            return list;
-        }
-    }
-
-    public IReadOnlyList<MqttMessage> GetRecentMessages(string topic, int limit)
-    {
-        lock (_storeSync)
-        {
-            var node = FindNode(topic);
-            if (node is null)
-                return [];
-
-            var collected = new List<MqttMessage>();
-            CollectMessages(node, collected);
-            if (collected.Count == 0)
-                return [];
-
-            collected.Sort(static (a, b) => b.DateTimeReceived.CompareTo(a.DateTimeReceived));
-
-            return collected.Count <= limit ? collected : collected.GetRange(0, limit);
+            InvalidateTopicTree();
         }
     }
 
@@ -159,7 +129,7 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
         var segments = fullTopic.Split('/');
         if (segments.Length == 0) return null;
 
-        if (!MessageStores.TryGetValue(segments[0], out var current))
+        if (!_messageStores.TryGetValue(segments[0], out var current))
             return null;
 
         for (var i = 1; i < segments.Length; i++)
@@ -196,6 +166,10 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
             {
                 Interlocked.Increment(ref _totalNodeCount);
                 IncrementTopicCounts(parent);
+                if (SelectionIncludes(child))
+                    _selectionContentVersion++;
+                Interlocked.Increment(ref _globalVersion);
+                InvalidateTopicTree();
             }
         }
 
@@ -213,8 +187,9 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
         _totalMessageCount++;
         IncrementMessageCounts(store);
         Interlocked.Increment(ref _globalVersion);
-        if (IsSelectedTopicOrDescendant(store))
-            Interlocked.Increment(ref _selectedTopicVersion);
+        InvalidateTopicTree();
+        if (SelectionIncludes(store))
+            _selectionContentVersion++;
         TrimToLimit();
     }
 
@@ -228,8 +203,9 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
             _totalMessageCount--;
             DecrementMessageCounts(oldest);
             Interlocked.Increment(ref _globalVersion);
-            if (IsSelectedTopicOrDescendant(oldest))
-                Interlocked.Increment(ref _selectedTopicVersion);
+            InvalidateTopicTree();
+            if (SelectionIncludes(oldest))
+                _selectionContentVersion++;
         }
     }
 
@@ -279,11 +255,12 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
     {
         _totalNodeCount = 0;
         _totalMessageCount = 0;
-        foreach (var store in MessageStores.Values)
+        _rootTopicCount = _messageStores.Count;
+        foreach (var store in _messageStores.Values)
             RecalculateNode(store);
 
-        if (SelectedMessageStore is not null && !ContainsStore(SelectedMessageStore))
-            SelectedMessageStore = null;
+        if (_selectedMessageStore is not null && !ContainsStore(_selectedMessageStore))
+            InvalidateSelection();
     }
 
     private void RecalculateNode(MessageStore node)
@@ -307,7 +284,7 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
 
     private bool ContainsStore(MessageStore selected)
     {
-        return MessageStores.Values.Any(root => ContainsStore(root, selected));
+        return _messageStores.Values.Any(root => ContainsStore(root, selected));
     }
 
     private static bool ContainsStore(MessageStore current, MessageStore selected)
@@ -321,7 +298,7 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
     private void RebuildRetentionOrder()
     {
         _retentionOrder.Clear();
-        foreach (var store in EnumerateMessages(MessageStores.Values)
+        foreach (var store in EnumerateMessages(_messageStores.Values)
                      .OrderBy(item => item.Message.DateTimeReceived)
                      .Select(item => item.Store))
             _retentionOrder.Enqueue(store);
@@ -344,29 +321,6 @@ internal sealed class TopicTreeStore(IPerformanceSettings performanceSettings, I
                     yield return item;
             }
         }
-    }
-
-    private bool IsSelectedTopicOrDescendant(MessageStore store)
-    {
-        var selected = SelectedMessageStore;
-        if (selected is null) return false;
-        if (ReferenceEquals(store, selected)) return true;
-
-        var selectedPath = selected.FullTopic;
-        var storePath = store.FullTopic;
-        if (selectedPath is null || storePath is null) return false;
-
-        if (storePath.StartsWith(selectedPath, StringComparison.Ordinal)
-            && storePath.Length > selectedPath.Length
-            && storePath[selectedPath.Length] == '/')
-            return true;
-
-        if (selectedPath.StartsWith(storePath, StringComparison.Ordinal)
-            && selectedPath.Length > storePath.Length
-            && selectedPath[storePath.Length] == '/')
-            return true;
-
-        return false;
     }
 
     private static void CollectMessages(MessageStore? store, List<MqttMessage> result)

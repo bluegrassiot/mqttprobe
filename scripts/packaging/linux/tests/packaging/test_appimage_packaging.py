@@ -553,5 +553,102 @@ class TestCollectThirdPartySources(unittest.TestCase):
                 self.fail(f"tar | head pipeline found (SIGPIPE risk): {stripped}")
 
 
+class TestDirIcon(unittest.TestCase):
+    """.DirIcon is mandatory for AppImageHub appdir-lint; vpk pack never makes it."""
+
+    def _ensure_diricon_fn(self):
+        """Extract the ensure_diricon function from appdir.sh for execution.
+
+        Fails rather than skips when the function is absent or its closing brace
+        is gone, so breaking the build script surfaces here instead of silently
+        disabling these tests.  A deleted brace would otherwise let the
+        extraction swallow the following function, so the chunk is checked for
+        stray unindented lines.
+        """
+        content = (LINUX_DIR / "appdir.sh").read_text(encoding="utf-8", errors="replace")
+        start = content.find("ensure_diricon() {")
+        self.assertNotEqual(start, -1, "ensure_diricon not found in appdir.sh")
+        end = content.find("\n}\n", start)
+        self.assertNotEqual(end, -1, "ensure_diricon has no closing brace in appdir.sh")
+        fn = content[start:end + 3]
+        unindented = [ln for ln in fn.splitlines()[1:-2] if ln and not ln[0].isspace()]
+        self.assertEqual(unindented, [],
+                         "ensure_diricon extraction swallowed following code")
+        return fn
+
+    def _run_in_bash(self, fn: str, script_body: str) -> subprocess.CompletedProcess:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = Path(tmpdir) / "run.sh"
+            runner.write_text(
+                "set -euo pipefail\n" + fn + "\n" + script_body,
+                encoding="utf-8", newline="\n",
+            )
+            return subprocess.run(["bash", str(runner)], capture_output=True, text=True,
+                                  timeout=30)
+
+    def test_creates_relative_symlink_to_icon(self):
+        if os.name == "nt":
+            self.skipTest("bash symlink creation not reliable on Windows")
+        with tempfile.TemporaryDirectory() as td:
+            appdir = Path(td) / "MQTTProbe.AppDir"
+            appdir.mkdir()
+            (appdir / "icon.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+            result = self._run_in_bash(
+                self._ensure_diricon_fn(),
+                f'APPDIR="{appdir}"\nensure_diricon "$APPDIR"\n',
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            diricon = appdir / ".DirIcon"
+            self.assertTrue(diricon.is_symlink())
+            self.assertEqual(os.readlink(diricon), "icon.png")
+            self.assertTrue(diricon.resolve().is_file())
+
+    def test_relative_link_survives_icon_replacement(self):
+        """linuxdeploy rewrites icon.png as a symlink; .DirIcon must still resolve."""
+        if os.name == "nt":
+            self.skipTest("bash symlink creation not reliable on Windows")
+        with tempfile.TemporaryDirectory() as td:
+            appdir = Path(td) / "MQTTProbe.AppDir"
+            icons = appdir / "usr" / "share" / "icons" / "hicolor" / "256x256" / "apps"
+            icons.mkdir(parents=True)
+            (icons / "icon.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+            (appdir / "icon.png").symlink_to("usr/share/icons/hicolor/256x256/apps/icon.png")
+            result = self._run_in_bash(
+                self._ensure_diricon_fn(),
+                f'APPDIR="{appdir}"\nensure_diricon "$APPDIR"\n',
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((appdir / ".DirIcon").resolve(), icons / "icon.png")
+
+    def test_missing_icon_is_fatal(self):
+        if os.name == "nt":
+            self.skipTest("bash not reliable on Windows")
+        with tempfile.TemporaryDirectory() as td:
+            appdir = Path(td) / "MQTTProbe.AppDir"
+            appdir.mkdir()
+            result = self._run_in_bash(
+                self._ensure_diricon_fn(),
+                f'APPDIR="{appdir}"\nensure_diricon "$APPDIR"\n',
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cannot create .DirIcon", result.stdout + result.stderr)
+
+    def test_asserted_before_vpk_pack(self):
+        content = (LINUX_DIR / "appdir.sh").read_text(encoding="utf-8", errors="replace")
+        self.assertIn('ln -sf icon.png "$appdir/.DirIcon"', content)
+        last_assert = content.rfind('ensure_diricon "$APPDIR"')
+        self.assertNotEqual(last_assert, -1,
+                            'ensure_diricon "$APPDIR" invocation not found in appdir.sh')
+        pack = content.rfind("\nvpk pack")
+        self.assertGreater(pack, 0, "vpk pack invocation not found in appdir.sh")
+        self.assertGreater(pack, last_assert,
+                           "ensure_diricon must run before vpk pack")
+
+    def test_keeps_desktop_icon_entry(self):
+        content = (LINUX_DIR / "appdir.sh").read_text(encoding="utf-8", errors="replace")
+        self.assertIn("Icon=icon", content)
+        self.assertIn('cp "$ICON_SRC" "$APPDIR/icon.png"', content)
+
+
 if __name__ == "__main__":
     unittest.main()

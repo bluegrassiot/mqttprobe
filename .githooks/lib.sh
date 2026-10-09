@@ -84,15 +84,17 @@ is_docs_only_path() {
 is_format_relevant_path() {
     local p=$1
     p=${p//\\//}
-    local base
+    local base lower
     base=$(basename "$p")
+    lower=$(printf '%s' "$p" | tr '[:upper:]' '[:lower:]')
+    case "$lower" in
+        *.cs|*.razor|*.cshtml|*.csproj|*.fsproj|*.vbproj|*.proj|*.props|*.targets|*.sln|*.slnx|*.slnf) return 0 ;;
+    esac
+    base=$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]')
     case "$base" in
-        .editorconfig) return 0 ;;
+        .editorconfig|global.json|nuget.config|directory.build.*|directory.packages.props|directory.solution.*|directory.build.rsp|msbuild.rsp|packages.lock.json|dotnet-tools.json) return 0 ;;
     esac
-    case "$p" in
-        *.cs|*.razor|*.csproj|*.props|*.targets) return 0 ;;
-        *) return 1 ;;
-    esac
+    return 1
 }
 
 # stdin: one path per line. Returns 0 if every path is docs-only (and at least one path).
@@ -131,11 +133,35 @@ any_workflow_relevant() {
     return 1
 }
 
+# Returns 0 if any positional path is a workflow. Use for NUL-read arrays when
+# staged filenames must remain intact even if they contain newlines.
+any_workflow_relevant_paths() {
+    local p
+    for p in "$@"; do
+        if is_workflow_path "$p"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # stdin: one path per line. Returns 0 if any path is format-relevant.
 any_format_relevant() {
     local p
     while IFS= read -r p || [[ -n "$p" ]]; do
         [[ -z "$p" ]] && continue
+        if is_format_relevant_path "$p"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Returns 0 if any positional path is format-relevant. Use for NUL-read arrays
+# when staged filenames must remain intact even if they contain newlines.
+any_format_relevant_paths() {
+    local p
+    for p in "$@"; do
         if is_format_relevant_path "$p"; then
             return 0
         fi
@@ -169,6 +195,18 @@ any_comment_check_relevant() {
     return 1
 }
 
+# Returns 0 if any positional path triggers comment check. See
+# any_format_relevant_paths for why NUL-read callers must use this form.
+any_comment_check_relevant_paths() {
+    local p
+    for p in "$@"; do
+        if is_comment_check_relevant_path "$p"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Returns 0 if path should trigger file-length check.
 is_file_length_relevant_path() {
     local p=$1
@@ -184,6 +222,18 @@ any_file_length_relevant() {
     local p
     while IFS= read -r p || [[ -n "$p" ]]; do
         [[ -z "$p" ]] && continue
+        if is_file_length_relevant_path "$p"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Returns 0 if any positional path is file-length-relevant. See
+# any_format_relevant_paths for why NUL-read callers must use this form.
+any_file_length_relevant_paths() {
+    local p
+    for p in "$@"; do
         if is_file_length_relevant_path "$p"; then
             return 0
         fi

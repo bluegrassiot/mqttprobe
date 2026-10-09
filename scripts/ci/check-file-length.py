@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Checks that source files do not exceed a line-count limit."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
@@ -22,7 +23,10 @@ GRANDFATHER = {
 }
 
 SKIP_BASENAMES = {"SparkplugBProtobuf.cs"}
+SKIP_DIR_NAMES = {"bin", "obj", "external"}
 RELEVANT_EXTENSIONS = {".cs", ".razor"}
+
+DEFAULT_ROOTS = ["src"]
 
 
 def is_relevant(path_str: str) -> bool:
@@ -30,6 +34,8 @@ def is_relevant(path_str: str) -> bool:
     if p.name in SKIP_BASENAMES:
         return False
     if not p.parts or p.parts[0] != "src":
+        return False
+    if SKIP_DIR_NAMES & set(p.parts):
         return False
     return p.suffix.lower() in RELEVANT_EXTENSIONS
 
@@ -43,12 +49,30 @@ def count_lines(text: str) -> int:
     return len(text.splitlines())
 
 
+def collect_tree_paths() -> list[str]:
+    found: list[str] = []
+    for root_name in DEFAULT_ROOTS:
+        root = ROOT / root_name
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(ROOT).as_posix()
+            if is_relevant(rel):
+                found.append(rel)
+    return found
+
+
 def get_staged_paths() -> list[str]:
+    # -z keeps paths NUL-delimited and unquoted: a filename may contain a newline,
+    # and without it git C-quotes such names, so both splitlines() and the staged
+    # lookup below would miss the real file.
     result = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
-        capture_output=True, text=True, cwd=ROOT,
+        ["git", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"],
+        capture_output=True, cwd=ROOT,
     )
-    return [p for p in result.stdout.splitlines() if p.strip()]
+    return [os.fsdecode(p) for p in result.stdout.split(b"\0") if p]
 
 
 def staged_blob(path_str: str) -> str:
@@ -63,9 +87,10 @@ def disk_text(path_str: str) -> str:
     return (ROOT / path_str).read_text(encoding="utf-8-sig")
 
 
-def main() -> int:
-    args = [a for a in sys.argv[1:] if a != "--staged"]
-    use_staged = "--staged" in sys.argv
+def main(argv: list[str] | None = None) -> int:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    args = [a for a in raw if not a.startswith("-")]
+    use_staged = "--staged" in raw
 
     print("\n=== File length ===")
 
@@ -74,14 +99,10 @@ def main() -> int:
         read = staged_blob
     elif args:
         paths = [p.replace("\\", "/") for p in args if is_relevant(p.replace("\\", "/"))]
-        read = lambda p: disk_text(p)
+        read = disk_text
     else:
-        print("No files to check.")
-        return 0
-
-    if not paths:
-        print("No relevant files to check.")
-        return 0
+        paths = collect_tree_paths()
+        read = disk_text
 
     violations = []
     for p in paths:

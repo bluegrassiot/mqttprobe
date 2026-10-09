@@ -301,12 +301,16 @@ public partial class ConnectionDialog
         return true;
     }
 
-    private Task<bool> HandleOnConnectExcludeAdd(string topic)
+    private async Task<bool> HandleOnConnectExcludeAdd(string topic)
     {
         var trimmed = topic.Trim();
-        return ShouldApplyLiveSubscriptions()
-            ? AddExcludeLiveAsync(trimmed)
-            : AddExcludeOfflineAsync(trimmed);
+        var accepted = ShouldApplyLiveSubscriptions()
+            ? await AddExcludeLiveAsync(trimmed)
+            : await AddExcludeOfflineAsync(trimmed);
+
+        // Plain Func, so Blazor does not re-render us and the editor would stay stale.
+        await InvokeAsync(StateHasChanged);
+        return accepted;
     }
 
     private async Task RemoveExcludeLiveAsync(IReadOnlyList<string> topics)

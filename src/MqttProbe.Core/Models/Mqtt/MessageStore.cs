@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 
 namespace MqttProbe.Core.Models.Mqtt;
 
-public class MessageStore
+internal class MessageStore
 {
     public ConcurrentDictionary<string, MessageStore>? SubTopics { get; set; }
     public string? Topic { get; init; }

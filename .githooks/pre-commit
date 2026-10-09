@@ -16,8 +16,28 @@ if env_truthy "${SKIP_PRE_COMMIT:-}"; then
 fi
 
 step "Classify staged files"
-STAGED=$(git diff --cached --name-only --diff-filter=ACMR || true)
-if [[ -z "${STAGED//[$'\t\r\n']/}" ]]; then
+if ! STAGED_PATHS_FILE=$(mktemp); then
+    fail "Classify staged files"
+    printf "\nCould not create a temporary file for staged path discovery.\n"
+    print_total
+    exit 1
+fi
+if ! git diff --cached --name-only -z >"$STAGED_PATHS_FILE"; then
+    rm -f "$STAGED_PATHS_FILE"
+    fail "Classify staged files"
+    printf "\nCould not read staged paths from Git.\n"
+    print_total
+    exit 1
+fi
+STAGED_PATHS=()
+while IFS= read -r -d '' staged_path; do
+    STAGED_PATHS+=("$staged_path")
+done <"$STAGED_PATHS_FILE"
+rm -f "$STAGED_PATHS_FILE"
+# Never flatten STAGED_PATHS into a newline-delimited string: a staged filename may
+# itself contain a newline, which would split it into bogus paths and silently skip
+# the gates below. Every classifier therefore takes "${STAGED_PATHS[@]}" directly.
+if [[ ${#STAGED_PATHS[@]} -eq 0 ]]; then
     skip_msg "no staged files"
     print_total
     exit 0
@@ -39,7 +59,7 @@ fi
 pass "Security scan"
 
 step "Workflow lint"
-if ! printf '%s\n' "$STAGED" | any_workflow_relevant; then
+if ! any_workflow_relevant_paths "${STAGED_PATHS[@]}"; then
     skip_msg "no staged workflow files"
 # scripts/ci/actionlint.py picks a local binary over its Docker fallback. Neither is a
 # dotnet tool we restore, so skip rather than block a contributor who has neither.
@@ -57,12 +77,12 @@ else
 fi
 
 step "Format"
-if ! printf '%s\n' "$STAGED" | any_format_relevant; then
+if ! any_format_relevant_paths "${STAGED_PATHS[@]}"; then
     skip_msg "no format-relevant staged files"
 else
-    if ! python "$ROOT/scripts/ci/format-check.py"; then
+    if ! python "$ROOT/scripts/ci/format-check.py" --staged; then
         fail "Format"
-        printf "\nFormatting violations found - run: python scripts/ci/format-check.py --fix\n"
+        printf "\nFormatting violations found - run: python scripts/ci/format-check.py --staged --fix\n"
         print_total
         exit 1
     fi
@@ -70,7 +90,7 @@ else
 fi
 
 step "File length"
-if ! printf '%s\n' "$STAGED" | any_file_length_relevant; then
+if ! any_file_length_relevant_paths "${STAGED_PATHS[@]}"; then
     skip_msg "no file-length-relevant staged files"
 else
     if ! python "$ROOT/scripts/ci/check-file-length.py" --staged; then
@@ -84,7 +104,7 @@ fi
 # Scans the whole src+tests tree rather than staged paths: a new blocking call site
 # is only unsafe in combination with the chain it blocks on, which may be untouched.
 step "Blocking awaits"
-if ! printf '%s\n' "$STAGED" | any_file_length_relevant; then
+if ! any_file_length_relevant_paths "${STAGED_PATHS[@]}"; then
     skip_msg "no C#/Razor staged files"
 else
     if ! python "$ROOT/scripts/ci/check-blocking-awaits.py"; then
@@ -97,7 +117,7 @@ fi
 
 # Enforces AGENTS.md ban on routine XML doc comments. Whole-tree scan like blocking awaits.
 step "Comments"
-if ! printf '%s\n' "$STAGED" | any_comment_check_relevant; then
+if ! any_comment_check_relevant_paths "${STAGED_PATHS[@]}"; then
     skip_msg "no C#/Razor staged files"
 else
     if ! python "$ROOT/scripts/ci/check-comments.py"; then

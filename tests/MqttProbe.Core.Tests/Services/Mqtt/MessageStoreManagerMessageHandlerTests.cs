@@ -10,13 +10,14 @@ using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.PluginContracts;
+using MqttProbe.TestInfrastructure;
 using MqttProbe.Tests.Utilities;
 using Org.Eclipse.Tahu.Protobuf;
 
 namespace MqttProbe.Core.Tests.Services.Mqtt;
 
 [TestFixture]
-public class MessageStoreManagerMessageHandlerTests
+public partial class MessageStoreManagerMessageHandlerTests
 {
     private IMqttManagedClient _mockClient = null!;
     private ILogger<MessageStoreManager> _mockLogger = null!;
@@ -71,10 +72,8 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("sensors", "42 degrees");
 
-        _manager.MessageStores.Should().ContainKey("sensors");
-        var msgs = _manager.MessageStores["sensors"].Messages;
-        msgs.Should().NotBeNull();
-        msgs.Should().Contain(m => m.Payload == "42 degrees");
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "sensors", 10))
+            .Should().ContainSingle(m => m.Payload == "42 degrees");
     }
 
     [Test]
@@ -82,8 +81,8 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("data", """{"temp":21.5}""");
 
-        _manager.MessageStores["data"].Messages!
-            .Should().Contain(m => m.Payload != null && m.Payload.Contains("temp"));
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "data", 10))
+            .Should().ContainSingle(m => m.Payload != null && m.Payload.Contains("temp"));
     }
 
     [Test]
@@ -92,7 +91,7 @@ public class MessageStoreManagerMessageHandlerTests
         var act = async () => await Fire("empty/topic");
         await act.Should().NotThrowAsync();
 
-        _manager.MessageStores.Should().ContainKey("empty");
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "empty/topic", 10)).Should().ContainSingle();
     }
 
     [Test]
@@ -101,7 +100,7 @@ public class MessageStoreManagerMessageHandlerTests
         for (var i = 0; i < 10_010; i++)
             await Fire("capped", $"msg-{i}");
 
-        _manager.MessageStores["capped"].Messages!.Count.Should().Be(10_000);
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "capped", 10_000)).Should().HaveCount(10_000);
         _manager.TotalStoredMessages.Should().Be(10_000);
     }
 
@@ -117,9 +116,12 @@ public class MessageStoreManagerMessageHandlerTests
         var newest = new MqttMessage("new", "t", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce);
         store.Messages.Enqueue(old);
         store.Messages.Enqueue(newest);
-        _manager.SelectedMessageStore = store;
+        _manager.AddMessage("t", old);
+        _manager.AddMessage("t", newest);
+        _manager.SelectTopic("t");
+        var selection = _manager.GetSelectedTopicState();
 
-        var result = (await _manager.GetMessagesForSelectedTopic()).ToList();
+        var result = (await _manager.GetSelectedMessagesAsync(selection.Token, 10))!.Messages;
 
         result[0].Payload.Should().Be("new");
         result[1].Payload.Should().Be("old");
@@ -128,20 +130,11 @@ public class MessageStoreManagerMessageHandlerTests
     [Test]
     public async Task GetMessagesForSelectedTopic_AggregatesChildTopics()
     {
-        var child1 = new MessageStore { Messages = new ConcurrentQueue<MqttMessage>() };
-        child1.Messages.Enqueue(new MqttMessage("from-child-1", "a/b", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce));
-        var child2 = new MessageStore { Messages = new ConcurrentQueue<MqttMessage>() };
-        child2.Messages.Enqueue(new MqttMessage("from-child-2", "a/c", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce));
-
-        var parent = new MessageStore
-        {
-            SubTopics = new ConcurrentDictionary<string, MessageStore>()
-        };
-        parent.SubTopics.TryAdd("b", child1);
-        parent.SubTopics.TryAdd("c", child2);
-        _manager.SelectedMessageStore = parent;
-
-        var result = (await _manager.GetMessagesForSelectedTopic()).ToList();
+        _manager.AddMessage("a/b", new MqttMessage("from-child-1", "a/b", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce));
+        _manager.AddMessage("a/c", new MqttMessage("from-child-2", "a/c", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce));
+        _manager.SelectTopic("a");
+        var selection = _manager.GetSelectedTopicState();
+        var result = (await _manager.GetSelectedMessagesAsync(selection.Token, 10))!.Messages;
 
         result.Should().HaveCount(2);
         result.Should().Contain(m => m.Payload == "from-child-1");
@@ -153,12 +146,10 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("a/b/c", "deep value");
 
-        _manager.MessageStores.Should().ContainKey("a");
-        var a = _manager.MessageStores["a"];
-        a.SubTopics.Should().ContainKey("b");
-        a.SubTopics!["b"].SubTopics.Should().ContainKey("c");
-        a.SubTopics["b"].SubTopics!["c"].Messages!
-            .Should().Contain(m => m.Payload == "deep value");
+        var a = _manager.GetTopicTreeSnapshot().Roots.Should().ContainSingle(node => node.Topic == "a").Subject;
+        var b = a.Children.Should().ContainSingle(node => node.Topic == "b").Subject;
+        b.Children.Should().ContainSingle(node => node.Topic == "c");
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "a/b/c", 10)).Should().ContainSingle(m => m.Payload == "deep value");
     }
 
     [Test]
@@ -166,12 +157,8 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("plant/area/line", "first");
 
-        var leaf = _manager.MessageStores["plant"]
-            .SubTopics!["area"]
-            .SubTopics!["line"];
-
-        leaf.Messages.Should().NotBeNull();
-        leaf.Messages!.Should().ContainSingle(m => m.Payload == "first");
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "plant/area/line", 10))
+            .Should().ContainSingle(m => m.Payload == "first");
     }
 
     [Test]
@@ -188,10 +175,8 @@ public class MessageStoreManagerMessageHandlerTests
 
         await Fire("spBv1.0/group/DDATA/eon1", json);
 
-        var msgs = _manager.MessageStores["spBv1.0"].SubTopics!["group"]
-            .SubTopics!["DDATA"].SubTopics!["eon1"].Messages;
-        msgs.Should().NotBeNull();
-        msgs.Should().ContainSingle(m => m.Payload == json && m.FormatId == "json");
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "spBv1.0/group/DDATA/eon1", 10))
+            .Should().ContainSingle(m => m.Payload == json && m.FormatId == "json");
     }
 
     [Test]
@@ -219,7 +204,7 @@ public class MessageStoreManagerMessageHandlerTests
         var act = async () => await Fire("fault/topic", "data");
 
         await act.Should().NotThrowAsync();
-        _manager.MessageStores.Should().ContainKey("fault");
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "fault/topic", 10)).Should().ContainSingle();
     }
 
     [Test]
@@ -257,7 +242,7 @@ public class MessageStoreManagerMessageHandlerTests
         await handler!(MakeArgs("rl", "second"));
         await handler!(MakeArgs("rl", "third"));
 
-        manager.MessageStores["rl"].Messages!.Count.Should().Be(1);
+        (await MessageStoreReads.ReadMessagesAsync(manager, "rl", 10)).Should().ContainSingle();
     }
 
     [Test]
@@ -328,8 +313,12 @@ public class MessageStoreManagerMessageHandlerTests
             await fire(MakeArgs($"topic-{i}", $"msg-{i}"));
 
         manager.TotalStoredMessages.Should().Be(5);
-        CountStored(manager.MessageStores.Values).Should().Be(5,
+        manager.GetTopicTreeSnapshot().Roots.Sum(node => node.MessageCount).Should().Be(5,
             "the live counter must match the messages actually retained in the tree");
+        var actualRetained = 0;
+        for (var i = 0; i < 12; i++)
+            actualRetained += (await MessageStoreReads.ReadMessagesAsync(manager, $"topic-{i}", 20)).Count;
+        actualRetained.Should().Be(5);
     }
 
     [Test]
@@ -349,9 +338,9 @@ public class MessageStoreManagerMessageHandlerTests
         await fire(MakeArgs("c", "3"));
 
         manager.TotalStoredMessages.Should().Be(3);
-        manager.MessageStores["a"].Messages!.Select(m => m.Payload).Should().ContainSingle().Which.Should().Be("2");
-        manager.MessageStores["b"].Messages!.Should().ContainSingle(m => m.Payload == "1");
-        manager.MessageStores["c"].Messages!.Should().ContainSingle(m => m.Payload == "3");
+        (await MessageStoreReads.ReadMessagesAsync(manager, "a", 10)).Should().ContainSingle().Which.Payload.Should().Be("2");
+        (await MessageStoreReads.ReadMessagesAsync(manager, "b", 10)).Should().ContainSingle(m => m.Payload == "1");
+        (await MessageStoreReads.ReadMessagesAsync(manager, "c", 10)).Should().ContainSingle(m => m.Payload == "3");
     }
 
     [Test]
@@ -369,8 +358,7 @@ public class MessageStoreManagerMessageHandlerTests
             await fire(MakeArgs("hot", $"msg-{i}"));
 
         manager.TotalStoredMessages.Should().Be(4);
-        manager.MessageStores["hot"].Messages!.Count.Should().Be(4);
-        manager.MessageStores["hot"].Messages!.Select(m => m.Payload)
+        (await MessageStoreReads.ReadMessagesAsync(manager, "hot", 10)).Select(m => m.Payload)
             .Should().BeEquivalentTo("msg-6", "msg-7", "msg-8", "msg-9");
     }
 
@@ -389,7 +377,8 @@ public class MessageStoreManagerMessageHandlerTests
         await fire(MakeArgs("zero", "y"));
 
         manager.TotalStoredMessages.Should().Be(0);
-        CountStored(manager.MessageStores.Values).Should().Be(0);
+        manager.GetTopicTreeSnapshot().Roots.Sum(node => node.MessageCount).Should().Be(0);
+        (await MessageStoreReads.ReadMessagesAsync(manager, "zero", 10)).Should().BeEmpty();
     }
 
     [Test]
@@ -410,7 +399,7 @@ public class MessageStoreManagerMessageHandlerTests
         await act.Should().NotThrowAsync(
             "a message already in flight can reach the handler after disposal, and the "
             + "MQTT client's handler must not see ObjectDisposedException");
-        manager.MessageStores.Should().NotContainKey("after-dispose");
+        manager.RootTopicCount.Should().Be(0);
     }
 
     [Test]
@@ -446,11 +435,11 @@ public class MessageStoreManagerMessageHandlerTests
         await manager.ClearAllMessages();
 
         manager.TotalStoredMessages.Should().Be(0);
-        manager.MessageStores.Should().BeEmpty();
+        manager.RootTopicCount.Should().Be(0);
 
         await fire(MakeArgs("after-clear", "y"));
         manager.TotalStoredMessages.Should().Be(1);
-        CountStored(manager.MessageStores.Values).Should().Be(1);
+        manager.GetTopicTreeSnapshot().Roots.Sum(node => node.MessageCount).Should().Be(1);
     }
 
     [Test]
@@ -473,7 +462,12 @@ public class MessageStoreManagerMessageHandlerTests
         settings.PerformanceSettingsChanged += Raise.Event<Action>();
 
         manager.TotalStoredMessages.Should().Be(3);
-        CountStored(manager.MessageStores.Values).Should().Be(3);
+        manager.GetTopicTreeSnapshot().Roots.Sum(node => node.MessageCount).Should().Be(3);
+        for (var i = 0; i < 5; i++)
+            (await MessageStoreReads.ReadMessagesAsync(manager, $"t-{i}", 10)).Should().BeEmpty();
+        for (var i = 5; i < 8; i++)
+            (await MessageStoreReads.ReadMessagesAsync(manager, $"t-{i}", 10)).Should().ContainSingle()
+                .Which.Topic.Should().Be($"t-{i}");
     }
 
     [Test]
@@ -481,7 +475,7 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("fmt/test", """{"temp":21.5}""");
 
-        _manager.MessageStores["fmt"].SubTopics!["test"].Messages!
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "fmt/test", 10))
             .Should().ContainSingle(m => m.FormatId == "json");
     }
 
@@ -490,7 +484,7 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("fmt/empty");
 
-        _manager.MessageStores["fmt"].SubTopics!["empty"].Messages!
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "fmt/empty", 10))
             .Should().ContainSingle(m => m.FormatId == "empty");
     }
 
@@ -499,7 +493,7 @@ public class MessageStoreManagerMessageHandlerTests
     {
         await Fire("fmt/plain", "hello world");
 
-        _manager.MessageStores["fmt"].SubTopics!["plain"].Messages!
+        (await MessageStoreReads.ReadMessagesAsync(_manager, "fmt/plain", 10))
             .Should().ContainSingle(m => m.FormatId == "plaintext");
     }
 
@@ -529,7 +523,7 @@ public class MessageStoreManagerMessageHandlerTests
         await handler!(MakeArgs("before", "x"));
         await handler!(MakeArgs("before", "y"));
         await handler!(MakeArgs("before", "z"));
-        manager.MessageStores["before"].Messages!.Count.Should().Be(1);
+        (await MessageStoreReads.ReadMessagesAsync(manager, "before", 10)).Should().ContainSingle();
 
         config.Performance.MaxMessagesPerSecond = 10_000;
         mockPerformance.PerformanceSettingsChanged += Raise.Event<Action>();
@@ -537,7 +531,7 @@ public class MessageStoreManagerMessageHandlerTests
         await handler!(MakeArgs("after", "1"));
         await handler!(MakeArgs("after", "2"));
         await handler!(MakeArgs("after", "3"));
-        manager.MessageStores["after"].Messages!.Count.Should().Be(3);
+        (await MessageStoreReads.ReadMessagesAsync(manager, "after", 10)).Should().HaveCount(3);
     }
 
     [Test]
@@ -565,11 +559,11 @@ public class MessageStoreManagerMessageHandlerTests
         await handler!(MakeArgs("sensors/temp", "before"));
 
         await excludes.Add("sensors/#");
-        manager.MessageStores.Should().BeEmpty();
+        manager.RootTopicCount.Should().Be(0);
 
         await handler!(MakeArgs("sensors/temp", "after"));
 
-        manager.MessageStores.Should().BeEmpty();
+        manager.RootTopicCount.Should().Be(0);
         metrics.Received(1).RecordMessageExcluded();
         excludes.Dispose();
     }
@@ -599,11 +593,11 @@ public class MessageStoreManagerMessageHandlerTests
             topicExcludeService: excludes);
         await manager.Start();
         await handler!(MakeArgs("empty/topic", "payload"));
-        manager.MessageStores.Should().ContainKey("empty");
+        manager.RootTopicCount.Should().Be(1);
 
         await excludes.Add("empty/#");
 
-        manager.MessageStores.Should().BeEmpty();
+        manager.RootTopicCount.Should().Be(0);
         manager.TopicNodeCount.Should().Be(0);
         excludes.Dispose();
     }
@@ -787,7 +781,7 @@ public class MessageStoreManagerMessageHandlerTests
             "Add must not purge while the message is still in flight, or the insert lands after the purge");
         result.IsValid.Should().BeTrue();
         received.Should().NotBeNull("the in-flight message is stored first and purged after, not dropped");
-        manager.MessageStores.Should().BeEmpty();
+        manager.RootTopicCount.Should().Be(0);
         topology.Groups.Should().BeEmpty(
             "topology written while the message was in flight has to be purged as well");
     }
@@ -828,7 +822,7 @@ public class MessageStoreManagerMessageHandlerTests
         publishedWhileParked.Should().BeFalse(
             "a reload must not purge while a message admitted under the old filters is still writing");
         published.Should().Equal("spBv1.0/#");
-        manager.MessageStores.Should().BeEmpty();
+        manager.RootTopicCount.Should().Be(0);
         topology.Groups.Should().BeEmpty();
     }
 
@@ -858,7 +852,7 @@ public class MessageStoreManagerMessageHandlerTests
         await handler!(MakeArgs("sensors/temp", "hello")).WaitAsync(TimeSpan.FromSeconds(10));
 
         excludes.IsExcluded("sensors/temp").Should().BeTrue();
-        manager.MessageStores.Should().BeEmpty();
+        manager.RootTopicCount.Should().Be(0);
     }
 
     [Test]
@@ -928,8 +922,9 @@ public class MessageStoreManagerMessageHandlerTests
             "the unrelated message was still in flight when the purge published");
         await fireUnrelated.WaitAsync(TimeSpan.FromSeconds(10));
 
-        manager.MessageStores.Should().ContainKey("other");
-        manager.MessageStores.Should().NotContainKey("spBv1.0");
+        var roots = manager.GetTopicTreeSnapshot().Roots.Select(node => node.FullTopic);
+        roots.Should().Contain("other");
+        roots.Should().NotContain("spBv1.0");
     }
 
     // Real topology service plus a started manager, seeded with one node so a purge has
@@ -1006,7 +1001,7 @@ public class MessageStoreManagerMessageHandlerTests
         subscriber.Notified.Should().BeGreaterThan(0, "the purge must still announce the topology it removed");
         topology.Groups.Should().BeEmpty();
         excludes.IsExcluded("reentrant/#").Should().BeTrue();
-        manager.MessageStores.Should().BeEmpty();
+        manager.RootTopicCount.Should().Be(0);
     }
 
     [Test]
@@ -1035,7 +1030,7 @@ public class MessageStoreManagerMessageHandlerTests
         subscriber.InnerCompleted.Should().BeTrue("the re-entrant Add must finish, not just start");
         subscriber.Notified.Should().BeGreaterThan(0);
         topology.Groups.Should().BeEmpty();
-        manager.MessageStores.Should().BeEmpty();
+        manager.RootTopicCount.Should().Be(0);
     }
 
     [Test]
@@ -1137,7 +1132,7 @@ public class MessageStoreManagerMessageHandlerTests
         result.IsValid.Should().BeTrue();
         subscriber.Reentered.Should().Be(0, "without a teardown raise there is no re-entrant Add to deadlock against");
         topology.Groups.Should().BeEmpty();
-        manager.MessageStores.Should().BeEmpty();
+        manager.RootTopicCount.Should().Be(0);
     }
 
     private static async Task<bool> SatisfiesAsync(Func<bool> condition, TimeSpan timeout)

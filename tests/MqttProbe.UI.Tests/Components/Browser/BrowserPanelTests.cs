@@ -1,6 +1,4 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
-using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Tests.TestHelpers;
@@ -20,9 +18,7 @@ public class BrowserPanelTests : BunitTestContext
     public void SetupMocks()
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>());
-        _mockMsgStore.GetMessagesForSelectedTopic()
-            .Returns(Task.FromResult<IEnumerable<MqttMessage>>(Array.Empty<MqttMessage>()));
+        _mockMsgStore.RootTopicCount.Returns(0);
 
         _mockConfig = Substitute.For<IUiSettings>();
         _mockConfig.IsHintDismissed(Arg.Any<string>()).Returns(false);
@@ -45,8 +41,7 @@ public class BrowserPanelTests : BunitTestContext
     [Test]
     public void Renders_Header_With_Title_And_Count_Chip()
     {
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>(
-            new Dictionary<string, MessageStore> { ["a/b"] = new MessageStore { Topic = "a/b", FullTopic = "a/b" } }));
+        _mockMsgStore.RootTopicCount.Returns(1);
 
         var cut = Render<BrowserPanel>();
 
@@ -68,8 +63,7 @@ public class BrowserPanelTests : BunitTestContext
     [Test]
     public void ClearMessagesButton_WhenStoresExist_IsEnabled()
     {
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>(
-            new Dictionary<string, MessageStore> { ["t"] = new MessageStore { Topic = "t", FullTopic = "t" } }));
+        _mockMsgStore.RootTopicCount.Returns(1);
 
         var cut = Render<BrowserPanel>();
 
@@ -81,8 +75,7 @@ public class BrowserPanelTests : BunitTestContext
     [Test]
     public async Task ClearMessages_WhenConfirmed_CallsStoreClear()
     {
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>(
-            new Dictionary<string, MessageStore> { ["t"] = new MessageStore { Topic = "t", FullTopic = "t" } }));
+        _mockMsgStore.RootTopicCount.Returns(1);
         _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask);
         _mockDialogService.ShowMessageBoxAsync(
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
@@ -101,8 +94,7 @@ public class BrowserPanelTests : BunitTestContext
     [Test]
     public async Task ClearMessages_WhenCancelled_DoesNotCallStoreClear()
     {
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>(
-            new Dictionary<string, MessageStore> { ["t"] = new MessageStore { Topic = "t", FullTopic = "t" } }));
+        _mockMsgStore.RootTopicCount.Returns(1);
         _mockDialogService.ShowMessageBoxAsync(
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
@@ -120,8 +112,7 @@ public class BrowserPanelTests : BunitTestContext
     [Test]
     public async Task ClearMessages_WhenConfirmed_ShowsSuccessSnackbar()
     {
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>(
-            new Dictionary<string, MessageStore> { ["t"] = new MessageStore { Topic = "t", FullTopic = "t" } }));
+        _mockMsgStore.RootTopicCount.Returns(1);
         _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask);
         _mockDialogService.ShowMessageBoxAsync(
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
@@ -141,9 +132,8 @@ public class BrowserPanelTests : BunitTestContext
     [Test]
     public async Task ClearMessages_AfterClear_DisablesButtonOnNextTick()
     {
-        var stores = new ConcurrentDictionary<string, MessageStore>(
-            new Dictionary<string, MessageStore> { ["t"] = new MessageStore { Topic = "t", FullTopic = "t" } });
-        _mockMsgStore.MessageStores.Returns(stores);
+        var rootCount = 1;
+        _mockMsgStore.RootTopicCount.Returns(_ => rootCount);
 
         _mockDialogService.ShowMessageBoxAsync(
                 Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
@@ -151,7 +141,7 @@ public class BrowserPanelTests : BunitTestContext
             .Returns(Task.FromResult<bool?>(true));
 
         _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask)
-            .AndDoes(_ => stores.Clear());
+            .AndDoes(_ => rootCount = 0);
 
         var cut = Render<BrowserPanel>();
         var btn = cut.FindAll("button")
@@ -182,8 +172,7 @@ public class BrowserPanelTests : BunitTestContext
     [Test]
     public void BrowserHint_WhenStoresExist_IsHidden()
     {
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>(
-            new Dictionary<string, MessageStore> { ["t"] = new MessageStore { Topic = "t", FullTopic = "t" } }));
+        _mockMsgStore.RootTopicCount.Returns(1);
 
         var cut = Render<BrowserPanel>();
 
@@ -212,8 +201,7 @@ public class BrowserPanelTests : BunitTestContext
     [Test]
     public void MobilePicker_OpensAndCloses()
     {
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>(
-            new Dictionary<string, MessageStore> { ["t"] = new MessageStore { Topic = "t", FullTopic = "t" } }));
+        _mockMsgStore.RootTopicCount.Returns(1);
 
         var cut = Render<BrowserPanel>();
 

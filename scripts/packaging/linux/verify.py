@@ -5,7 +5,8 @@ Static gate for Linux AppImage/AppDir portability.
 Verifies bundled ELF binaries against a GLIBC baseline (default 2.35),
 checks dependency resolution against an explicit baseline runtime root,
 validates WebKit path relocation in the runtime library, confirms executable
-permissions, and catches escaping, broken, or absolute symlinks.
+permissions, requires a root .DirIcon resolving to a PNG, and catches
+escaping, broken, or absolute symlinks.
 
 Does NOT execute any inspected ELF binaries. Uses readelf/objdump for static
 analysis only.
@@ -48,6 +49,7 @@ from _elf import (
 )
 
 APPIMAGE_TYPE2_MAGIC = b"AI\x02"
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 DEFAULT_MAX_GLIBC = (2, 35)
 
 WEBKIT_HOST_PREFIX = "/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"
@@ -245,6 +247,32 @@ def check_resources(root: Path) -> list[str]:
         )
 
     return issues
+
+
+def check_diricon(root: Path) -> list[str]:
+    """AppImageHub appdir-lint requires a root .DirIcon resolving to a PNG."""
+    diricon = root / ".DirIcon"
+    if not diricon.is_symlink() and not diricon.exists():
+        return ["DIRICON: missing .DirIcon in AppDir root"]
+
+    try:
+        resolved = diricon.resolve(strict=True)
+    except (OSError, ValueError):
+        target = diricon.readlink() if diricon.is_symlink() else diricon.name
+        return [f"DIRICON: broken .DirIcon -> {target}"]
+
+    if not resolved.is_file():
+        return [f"DIRICON: .DirIcon does not resolve to a regular file: {resolved}"]
+
+    try:
+        with open(resolved, "rb") as f:
+            header = f.read(8)
+    except OSError as e:
+        return [f"DIRICON: cannot read {resolved.name}: {e}"]
+
+    if header != PNG_MAGIC:
+        return [f"DIRICON: .DirIcon target is not a PNG: {resolved.name}"]
+    return []
 
 
 def check_webkit_paths(root: Path, baseline_root: Path | None) -> list[str]:
@@ -472,6 +500,7 @@ def main() -> int:
             ("Symlinks", lambda: check_symlinks(appdir)),
             ("Permissions", lambda: check_permissions(appdir)),
             ("Resources", lambda: check_resources(appdir)),
+            ("DirIcon", lambda: check_diricon(appdir)),
             ("WebKit paths", lambda: check_webkit_paths(appdir, baseline_root)),
             ("Dependencies", lambda: check_dependencies(appdir, elf_files, baseline_libs)),
             ("GLIBCXX/CXXABI", lambda: check_glibcxx_satisfaction(appdir, elf_files, baseline_root)),

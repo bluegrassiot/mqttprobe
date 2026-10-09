@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
@@ -54,7 +53,7 @@ public class IndexTests : BunitTestContext
         var mockSessionState = Substitute.For<ISessionState>();
         mockSessionState.SelectedConnection.Returns(new Connection());
 
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>());
+        _mockMsgStore.RootTopicCount.Returns(0);
         _mockSubManager.Subscriptions.Returns(Array.Empty<SubscribedTopic>());
         _emulatorNodes = [];
         _mockEmulation.Nodes.Returns(_ => _emulatorNodes);

@@ -22,4 +22,9 @@
     <PackageReference Include="NUnit3TestAdapter" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\MqttProbe.TestInfrastructure\MqttProbe.TestInfrastructure.csproj" />
+    <ProjectReference Include="..\..\src\MqttProbe.Web\MqttProbe.Web.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
 </Project>

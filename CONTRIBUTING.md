@@ -34,7 +34,7 @@ git config core.hooksPath .githooks
 
 | Hook | What it runs |
 |------|----------------|
-| `pre-commit` | Security scan (`devskim`, ~3s) on any staged change; workflow lint (`python scripts/ci/actionlint.py`, ~1s) when staged files include `.github/workflows/*.yml`; format check (`python scripts/ci/format-check.py`) when staged files include C#/Razor/project/editorconfig; comment check (`python scripts/ci/check-comments.py`) when staged files include C#/Razor under `src/` or `tests/` |
+| `pre-commit` | Security scan (`devskim`, ~3s) on any staged change; workflow lint (`python scripts/ci/actionlint.py`, ~1s) when staged files include `.github/workflows/*.yml`; format check (`python scripts/ci/format-check.py --staged`) when staged files include C#/Razor/project/editorconfig; comment check (`python scripts/ci/check-comments.py`) when staged files include C#/Razor under `src/` or `tests/` |
 | `pre-push` | Path-aware build (usually `MqttProbe.NoMaui.slnf`) and unit tests when code changes |
 
 Both hooks print per-step and total timing. Docs-only changes (markdown under `docs/`, `*.md`, license files) skip the heavy steps automatically — but not the security scan, since a pasted token in a README is exactly what it looks for.
@@ -63,19 +63,24 @@ CI still runs full checks on pull requests. Prefer fixing failures over skipping
 
 ### Formatting
 
-`python scripts/ci/format-check.py` enforces whitespace, style, and unused-using
-rules on C# source. It runs in the pre-commit hook and in CI.
+`python scripts/ci/format-check.py --changed` is the quick local check. It checks
+staged and unstaged tracked changes relative to `HEAD`, plus untracked files.
+`python scripts/ci/format-check.py --staged` checks staged filenames against
+their current on-disk content, not the staged snapshot. If a file is partially
+staged, the check sees the entire working-tree version of that file. The
+pre-commit hook uses `--staged`.
 
-The unused-using enforcement (IDE0005) covers C# files only. Razor `@using`
-directives are Blazor imports and are not checked. The script operates on the
-whole working tree, not the staged snapshot. The pre-commit hook runs it because
-formatting violations anywhere in the tree tend to break CI even if the staged
-hunk is clean.
+The `--changed` and `--staged` options are mutually exclusive, and either can
+be combined with `--fix` to format the selected scope. With neither scope
+option, the script checks the full tree. Use this default full-tree mode for
+final validation and CI. Changes to `.editorconfig`, project or solution files,
+build configuration, SDK configuration, or NuGet configuration force full-tree
+scope in either selected mode. If no applicable files are found, the script
+successfully does nothing.
 
 What it checks:
 
 - Whitespace and style rules via `dotnet format whitespace` and `dotnet format style`.
-- Unused using directives (IDE0005) via `dotnet format style --diagnostics IDE0005 --severity hidden`. Without an `.editorconfig` severity entry, IDE0005 reports at `hidden` level; `--severity hidden` is the only threshold that catches it.
 - On non-Windows, the optional MAUI project is skipped only when it fails with NETSDK1147 (missing workload). Generic restore failures are not silently skipped.
 - A workspace load warning (even with exit 0) is treated as a hard failure so stale results do not pass silently.
 
@@ -105,7 +110,7 @@ Before submitting changes, make sure the same checks used by CI pass locally:
 - `dotnet build MqttProbe.slnx`
 - Unit: `dotnet test tests/MqttProbe.Core.Tests` and `dotnet test tests/MqttProbe.UI.Tests`
 - Integration (needs Docker; CI always runs these): `dotnet test tests/MqttProbe.IntegrationTests`
-- `python scripts/ci/format-check.py`
+- `python scripts/ci/format-check.py` (full-tree mode)
 - `python scripts/ci/inspect.py --tool devskim --fail-on warning`
 - `python scripts/ci/check-comments.py`
 

@@ -11,6 +11,7 @@ using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Plugins.BuiltIn;
 using MqttProbe.Core.Services.Plugins.Pipeline;
 using MqttProbe.Core.Services.Plugins.Registry;
+using MqttProbe.TestInfrastructure;
 using MqttProbe.TestInfrastructure.Fixtures;
 
 namespace MqttProbe.IntegrationTests.Integration;
@@ -104,25 +105,15 @@ public class FirstConnectRetainedMessageTests
         storeManager.TotalStoredMessages.Should().BeGreaterThanOrEqualTo(1,
             "retained message should have been captured when Start() ran before connect");
 
-        storeManager.MessageStores.Should().ContainKey("race",
-            "topic tree should contain the 'race' top-level node");
+        var tree = storeManager.GetTopicTreeSnapshot();
+        var raceNode = tree.Roots.Should().ContainSingle(node => node.Topic == "race").Subject;
+        var retainedNode = raceNode.Children.Should().ContainSingle(node => node.Topic == "retained").Subject;
+        var guidNode = retainedNode.Children.Should().ContainSingle().Subject;
+        guidNode.HasDirectMessages.Should().BeTrue();
+        guidNode.MessageCount.Should().Be(1, "exactly one retained message should be present");
 
-        var raceStore = storeManager.MessageStores["race"];
-        raceStore.SubTopics.Should().NotBeNull();
-        raceStore.SubTopics.Should().ContainKey("retained",
-            "sub-topic 'retained' should exist under 'race'");
-
-        var retainedTopicNode = raceStore.SubTopics!["retained"];
-        retainedTopicNode.SubTopics.Should().NotBeNull();
-        retainedTopicNode.SubTopics.Should().NotBeEmpty(
-            "the Guid segment should appear as a sub-topic");
-
-        var guidNode = retainedTopicNode.SubTopics!.Values.First();
-        guidNode.Messages.Should().NotBeNull();
-        guidNode.Messages.Should().ContainSingle(
-            "exactly one retained message should be present");
-
-        var message = guidNode.Messages!.First();
+        var messages = await MessageStoreReads.ReadMessagesAsync(storeManager, topic, 10);
+        var message = messages.Should().ContainSingle().Subject;
         message.Payload.Should().Be(payload);
         message.RetainedMessage.Should().BeTrue(
             "the broker flagged the message as retained");

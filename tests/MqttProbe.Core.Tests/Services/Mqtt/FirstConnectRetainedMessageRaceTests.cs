@@ -7,6 +7,7 @@ using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
+using MqttProbe.TestInfrastructure;
 using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Core.Tests.Services.Mqtt;
@@ -83,11 +84,8 @@ public class FirstConnectRetainedMessageRaceTests
 
         _fakeClient.SubscribeAsyncCallCount.Should().Be(1);
 
-        _storeManager.MessageStores.Should().ContainKey("race");
-        var messages = _storeManager.MessageStores["race"].SubTopics!["retained"].Messages;
-        messages.Should().NotBeNull();
-        messages.Should().ContainSingle()
-            .Which.Payload.Should().Be("hello-retained");
+        var messages = await MessageStoreReads.ReadMessagesAsync(_storeManager, "race/retained", 10);
+        messages.Should().ContainSingle().Which.Payload.Should().Be("hello-retained");
     }
 
     [Test]
@@ -100,18 +98,15 @@ public class FirstConnectRetainedMessageRaceTests
 
         _fakeClient.SubscribeAsyncCallCount.Should().Be(1);
 
-        _storeManager.MessageStores.Should().BeEmpty(
+        _storeManager.RootTopicCount.Should().Be(0,
             "retained message arrived with no ApplicationMessageReceived handler; it was dropped");
         _storeManager.TotalStoredMessages.Should().Be(0);
 
         await _storeManager.Start();
         await _fakeClient.DeliverRetainedMessageAsync();
 
-        _storeManager.MessageStores.Should().ContainKey("race");
-        var messages = _storeManager.MessageStores["race"].SubTopics!["retained"].Messages;
-        messages.Should().NotBeNull();
-        messages.Should().ContainSingle()
-            .Which.Payload.Should().Be("hello-retained");
+        var messages = await MessageStoreReads.ReadMessagesAsync(_storeManager, "race/retained", 10);
+        messages.Should().ContainSingle().Which.Payload.Should().Be("hello-retained");
     }
 
 #pragma warning disable CS0067 // unused events required by IMqttManagedClient interface

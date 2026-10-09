@@ -190,7 +190,7 @@ else
                   Hover="true" Breakpoint="Breakpoint.None" Virtualize="true" FixedHeader="true" Striped="true"
                   RowClassFunc="GetRowClass">
             <ToolBarContent>
-                <MudTextField @bind-Value="_searchStringTerm" Placeholder="Search messages…"
+                <MudTextField @bind-Value="SearchStringTerm" Placeholder="Search messages…"
                               Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
                               Immediate="true" Clearable="true" Variant="Variant.Outlined"
                               Margin="Margin.Dense" Class="mt-0"/>
@@ -244,84 +244,19 @@ else
     [Inject] public required IClipboardService Clipboard { get; set; }
 
     private int MaxMessageCount => PerfSettings.Performance.MaxDisplayMessages;
-    internal string? _searchStringTerm;
+    internal string? SearchStringTerm { get; set; }
     private List<MqttMessage> _messageList = [];
     private MqttMessage? _selectedMessage;
-    private Timer? _updateTimer;
     private JsonTreeView? _jsonTreeView;
     private Func<MqttMessage, bool> _filterFunc = null!;
-    internal bool _disposed;
-    private int _lastAppliedMaxCount;
-    private string? _lastTopicPath;
-    private long _lastVersion;
+    internal bool Disposed { get; set; }
     private bool _newestFirst = true;
     private bool CanNavigatePrevious => _selectedMessage != null && _messageList.IndexOf(_selectedMessage) >= 1;
     private bool CanNavigateNext => _selectedMessage != null && _messageList.IndexOf(_selectedMessage) < _messageList.Count - 1;
 
-    protected override Task OnInitializedAsync()
-    {
-        _filterFunc = FilterFunc;
-        _updateTimer = new Timer(async _ =>
-        {
-            if (_disposed) return;
-            var currentTopic = MessageStoreManager.SelectedMessageStore?.FullTopic;
-            var currentVersion = MessageStoreManager.GetSelectedTopicVersion();
-            if (_disposed) return;
-
-            if (string.IsNullOrEmpty(currentTopic))
-            {
-                var needsRefresh = _messageList.Count > 0 || _selectedMessage != null;
-                _messageList = [];
-                _selectedMessage = null;
-                _lastTopicPath = null;
-                _lastVersion = 0;
-                _lastAppliedMaxCount = 0;
-                Metrics.SetDisplayedMessageCount(0);
-                if (needsRefresh)
-                {
-                    try { await InvokeAsync(StateHasChanged); }
-                    catch (Exception) when (_disposed) { /* component torn down mid-refresh; nothing left to render */ }
-                }
-                return;
-            }
-
-            var maxCount = MaxMessageCount;
-            if (currentTopic == _lastTopicPath
-                && currentVersion == _lastVersion
-                && maxCount == _lastAppliedMaxCount)
-                return;
-
-            var messages = await MessageStoreManager.GetRecentMessagesAsync(currentTopic, maxCount);
-            if (_disposed) return;
-
-            var previousTopic = _lastTopicPath;
-            var topicChanged = currentTopic != _lastTopicPath;
-            _lastTopicPath = currentTopic;
-            _lastVersion = currentVersion;
-            _lastAppliedMaxCount = maxCount;
-
-            if (topicChanged && previousTopic is not null)
-                _selectedMessage = null;
-
-            var list = _newestFirst
-                ? messages.ToList()
-                : messages.Reverse().ToList();
-            _messageList = list;
-            Metrics.SetDisplayedMessageCount(_messageList.Count);
-            // Guard against the circuit being torn down between the _disposed check
-            // above and the actual invocation — ObjectDisposedException is expected here.
-            try { await InvokeAsync(StateHasChanged); }
-            catch (Exception) when (_disposed)
-            {
-                // expected when the Blazor circuit is torn down between the _disposed check and the invocation
-            }
-        }, null, 0, 500);
-        return Task.CompletedTask;
-    }
-
     public async ValueTask DisposeAsync()
     {
-        _disposed = true;
+        Disposed = true;
         Metrics.SetDisplayedMessageCount(0);
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();
@@ -387,11 +322,12 @@ else
         if (result is { Canceled: false, Data: string message })
             Snackbar.Add(message, Severity.Success);
     }
+
     internal bool FilterFunc(MqttMessage msg)
     {
-        if (string.IsNullOrWhiteSpace(_searchStringTerm)) return true;
-        if (msg.Topic != null && msg.Topic.Contains(_searchStringTerm, StringComparison.OrdinalIgnoreCase)) return true;
-        return msg.Payload != null && msg.Payload.Contains(_searchStringTerm, StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(SearchStringTerm)) return true;
+        if (msg.Topic != null && msg.Topic.Contains(SearchStringTerm, StringComparison.OrdinalIgnoreCase)) return true;
+        return msg.Payload != null && msg.Payload.Contains(SearchStringTerm, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetRowClass(MqttMessage _, int __) => "payload-row";

@@ -24,4 +24,40 @@ public class DesktopVelopackUpdateServiceTests
     [Test]
     public void DownloadAndApplyAsync_Completes_WhenNothingPending()
         => Create().DownloadAndApplyAsync().IsCompletedSuccessfully.Should().BeTrue();
+
+    [Test]
+    public async Task RunDownloadAndApplyAsync_RethrowsFailure()
+    {
+        var service = Create();
+        var failure = new InvalidOperationException("Update failed");
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.RunDownloadAndApplyAsync(() => Task.FromException(failure)));
+
+        thrown.Should().BeSameAs(failure);
+    }
+
+#if DEBUG
+    [Test]
+    public void Simulation_IsSupported()
+        => CreateSimulation().IsSupported.Should().BeTrue();
+
+    [Test]
+    public async Task Simulation_CheckForUpdateAsync_ReturnsSimulatedVersion()
+        => (await CreateSimulation().CheckForUpdateAsync()).Should().Be("999.0.0-simulation");
+
+    [Test]
+    public async Task Simulation_DownloadAndApplyAsync_WaitsUntilCancelled()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var operation = CreateSimulation().DownloadAndApplyAsync(cancellation.Token);
+
+        operation.IsCompleted.Should().BeFalse();
+        cancellation.Cancel();
+        await Assert.CatchAsync<OperationCanceledException>(async () => await operation);
+    }
+
+    private static MqttProbe.Desktop.Program.SimulatedUpdateService CreateSimulation()
+        => new();
+#endif
 }

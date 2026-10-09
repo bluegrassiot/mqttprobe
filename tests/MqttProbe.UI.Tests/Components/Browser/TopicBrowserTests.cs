@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
@@ -10,18 +9,19 @@ namespace MqttProbe.UI.Tests.Components.Browser;
 public class TopicBrowserTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
+    private TopicBrowserTestFixture _fixture = null!;
 
     [SetUp]
     public void SetupMocks()
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
-        _mockMsgStore.MessageStores.Returns(
-            new ConcurrentDictionary<string, MessageStore>());
+        _fixture = new TopicBrowserTestFixture(_mockMsgStore);
+        _fixture.Configure();
         Services.AddSingleton(_mockMsgStore);
     }
 
     [Test]
-    public void Renders_NoMessagesText_WhenMessageStoresIsEmpty()
+    public void Renders_NoMessagesText_WhenSnapshotIsEmpty()
     {
         var cut = Render<TopicBrowser>();
 
@@ -29,15 +29,9 @@ public class TopicBrowserTests : BunitTestContext
     }
 
     [Test]
-    public void Renders_TreeItems_WhenMessageStoresHasEntries()
+    public void Renders_TreeItems_WhenSnapshotHasRoots()
     {
-        var stores = new ConcurrentDictionary<string, MessageStore>();
-        stores["sensor"] = new MessageStore
-        {
-            Topic = "sensor",
-            Messages = new ConcurrentQueue<MqttMessage>()
-        };
-        _mockMsgStore.MessageStores.Returns(stores);
+        _fixture.SetSnapshot(TopicBrowserTestTrees.Node("sensor"));
 
         var cut = Render<TopicBrowser>();
 
@@ -58,13 +52,7 @@ public class TopicBrowserTests : BunitTestContext
     [Test]
     public async Task DisposeAsync_AfterTimerHasFired_DoesNotThrow()
     {
-        var stores = new ConcurrentDictionary<string, MessageStore>();
-        stores["sensor"] = new MessageStore
-        {
-            Topic = "sensor",
-            Messages = new ConcurrentQueue<MqttMessage>()
-        };
-        _mockMsgStore.MessageStores.Returns(stores);
+        _fixture.SetSnapshot(TopicBrowserTestTrees.Node("sensor"));
 
         var cut = Render<TopicBrowser>();
         await Task.Delay(50); // let the immediate timer tick dispatch a render
@@ -77,14 +65,7 @@ public class TopicBrowserTests : BunitTestContext
     [Test]
     public void DoesNotTriggerStateHasChanged_WhenVersionUnchanged()
     {
-        var stores = new ConcurrentDictionary<string, MessageStore>();
-        stores["sensor"] = new MessageStore
-        {
-            Topic = "sensor",
-            Messages = new ConcurrentQueue<MqttMessage>()
-        };
-        _mockMsgStore.MessageStores.Returns(stores);
-        _mockMsgStore.GetVersion().Returns(100L);
+        _fixture.SetSnapshot(TopicBrowserTestTrees.Node("sensor"));
 
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
@@ -102,20 +83,12 @@ public class TopicBrowserTests : BunitTestContext
     [Test]
     public void TriggersStateHasChanged_WhenVersionIncrements()
     {
-        _mockMsgStore.GetVersion().Returns(100L, 101L);
-
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
         cut.Markup.Should().Contain("No messages received");
 
         // Add a store so the re-render produces different markup.
-        var stores = new ConcurrentDictionary<string, MessageStore>();
-        stores["sensor"] = new MessageStore
-        {
-            Topic = "sensor",
-            Messages = new ConcurrentQueue<MqttMessage>()
-        };
-        _mockMsgStore.MessageStores.Returns(stores);
+        _fixture.SetSnapshot(TopicBrowserTestTrees.Node("sensor"));
 
         // The timer at t=0 already fired with version 100L.
         // Advance once more: GetVersion() returns 101L → counts computed → re-render.
@@ -129,65 +102,23 @@ public class TopicBrowserTests : BunitTestContext
 public class TopicBrowserVirtualizedTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
+    private TopicBrowserTestFixture _fixture = null!;
 
     [SetUp]
     public void SetupMocks()
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>());
-        _mockMsgStore.MaxTopicNodes.Returns(10000);
-        _mockMsgStore.GetVersion().Returns(0L);
+        _fixture = new TopicBrowserTestFixture(_mockMsgStore);
+        _fixture.Configure();
         Services.AddSingleton(_mockMsgStore);
     }
 
-    internal static MessageStore BuildTree()
-    {
-        var sensors = new MessageStore { Topic = "sensors", FullTopic = "sensors" };
-        var temp = new MessageStore { Topic = "temp", FullTopic = "sensors/temp", Parent = sensors };
-        var room1 = new MessageStore { Topic = "room1", FullTopic = "sensors/temp/room1", Parent = temp };
-        var humidity = new MessageStore { Topic = "humidity", FullTopic = "sensors/humidity", Parent = sensors };
-
-        // room1: 2 messages
-        room1.Messages = new ConcurrentQueue<MqttMessage>();
-        room1.Messages.Enqueue(new MqttMessage("r1-1", "sensors/temp/room1", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce));
-        room1.Messages.Enqueue(new MqttMessage("r1-2", "sensors/temp/room1", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce));
-
-        // temp: 1 message (aggregate = 1 + 2 from room1 = 3)
-        temp.Messages = new ConcurrentQueue<MqttMessage>();
-        temp.Messages.Enqueue(new MqttMessage("t-1", "sensors/temp", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce));
-
-        // humidity: 2 messages
-        humidity.Messages = new ConcurrentQueue<MqttMessage>();
-        humidity.Messages.Enqueue(new MqttMessage("h-1", "sensors/humidity", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce));
-        humidity.Messages.Enqueue(new MqttMessage("h-2", "sensors/humidity", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce));
-
-        sensors.Messages = new ConcurrentQueue<MqttMessage>();
-
-        temp.SubTopics = new ConcurrentDictionary<string, MessageStore> { ["room1"] = room1 };
-        room1.SubTopics = new ConcurrentDictionary<string, MessageStore>();
-        sensors.SubTopics = new ConcurrentDictionary<string, MessageStore> { ["temp"] = temp, ["humidity"] = humidity };
-        humidity.SubTopics = new ConcurrentDictionary<string, MessageStore>();
-
-        // Set maintained aggregate counts (as MessageStoreManager would maintain them).
-        // TopicCount: total descendant topics in subtree.
-        // MessageCount: total messages in subtree (own + all descendants).
-        room1.TopicCount = 0;
-        room1.MessageCount = 2;
-        temp.TopicCount = 1;      // room1
-        temp.MessageCount = 3;    // 1 own + 2 from room1
-        humidity.TopicCount = 0;
-        humidity.MessageCount = 2;
-        sensors.TopicCount = 3;   // temp + room1 + humidity
-        sensors.MessageCount = 5; // 3 from temp subtree + 2 from humidity
-
-        return sensors;
-    }
+    internal static TopicNodeSnapshot BuildTree() => TopicBrowserTestTrees.BuildTree();
 
     [Test]
     public void RendersRootNodes_WhenDataExists()
     {
-        var stores = new ConcurrentDictionary<string, MessageStore> { ["sensors"] = BuildTree() };
-        _mockMsgStore.MessageStores.Returns(stores);
+        _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
 
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
@@ -198,8 +129,7 @@ public class TopicBrowserVirtualizedTests : BunitTestContext
     [Test]
     public void CollapsedRoot_DoesNotRenderChildren()
     {
-        var stores = new ConcurrentDictionary<string, MessageStore> { ["sensors"] = BuildTree() };
-        _mockMsgStore.MessageStores.Returns(stores);
+        _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
 
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
@@ -211,8 +141,7 @@ public class TopicBrowserVirtualizedTests : BunitTestContext
     [Test]
     public void ShowCounts_ForRootNode()
     {
-        var stores = new ConcurrentDictionary<string, MessageStore> { ["sensors"] = BuildTree() };
-        _mockMsgStore.MessageStores.Returns(stores);
+        _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
 
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
@@ -225,25 +154,27 @@ public class TopicBrowserVirtualizedTests : BunitTestContext
 public class TopicBrowserInteractionTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
+    private TopicBrowserTestFixture _fixture = null!;
+
+    private sealed record SnapshotReadGate(TaskCompletionSource<bool> Started, ManualResetEventSlim Release);
 
     [SetUp]
     public void SetupMocks()
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>());
-        _mockMsgStore.MaxTopicNodes.Returns(10000);
-        _mockMsgStore.GetVersion().Returns(0L);
+        _fixture = new TopicBrowserTestFixture(_mockMsgStore);
+        _fixture.Configure();
         Services.AddSingleton(_mockMsgStore);
     }
 
-    private IRenderedComponent<TopicBrowser> RenderWithTree()
+    private IRenderedComponent<TopicBrowser> RenderWithTree(Func<SelectedTopicState, Task>? onSelected = null)
     {
-        var stores = new ConcurrentDictionary<string, MessageStore>
+        _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
+        var cut = Render<TopicBrowser>(parameters =>
         {
-            ["sensors"] = TopicBrowserVirtualizedTests.BuildTree()
-        };
-        _mockMsgStore.MessageStores.Returns(stores);
-        var cut = Render<TopicBrowser>();
+            if (onSelected is not null)
+                parameters.Add(component => component.OnSelectedChanged, onSelected);
+        });
         EnsureMudProviders();
         return cut;
     }
@@ -262,14 +193,48 @@ public class TopicBrowserInteractionTests : BunitTestContext
     }
 
     [Test]
-    public void ClickingRow_SetsSelectedMessageStore()
+    public void ClickingRow_RequestsManagerOwnedSelection()
     {
         var cut = RenderWithTree();
 
         cut.Find(".topic-tree-row").Click();
 
-        _mockMsgStore.Received().SelectedMessageStore =
-            Arg.Is<MessageStore>(s => s!.FullTopic == "sensors");
+        _mockMsgStore.Received().SelectTopic("sensors");
+    }
+
+    [Test]
+    public void ClickingRow_PublishesManagerSelectionAfterSelectingPath()
+    {
+        SelectedTopicState? callbackState = null;
+        var cut = RenderWithTree(state =>
+        {
+            callbackState = state;
+            return Task.CompletedTask;
+        });
+
+        cut.Find(".topic-tree-row").Click();
+
+        callbackState.Should().NotBeNull();
+        callbackState!.FullTopic.Should().Be("sensors");
+        callbackState.Token.Generation.Should().BeGreaterThan(0);
+        _mockMsgStore.Received().SelectTopic("sensors");
+    }
+
+    [Test]
+    public void ClickingPurgedRow_DoesNotPublishPreviousSelection()
+    {
+        SelectedTopicState? callbackState = null;
+        var cut = RenderWithTree(state =>
+        {
+            callbackState = state;
+            return Task.CompletedTask;
+        });
+        _fixture.SetSnapshot();
+
+        cut.Find(".topic-tree-row").Click();
+
+        callbackState.Should().BeNull();
+        _mockMsgStore.Received().SelectTopic("sensors");
     }
 
     [Test]
@@ -356,6 +321,59 @@ public class TopicBrowserInteractionTests : BunitTestContext
     }
 
     [Test]
+    public async Task DirtySnapshotRefresh_IsSerializedWithCollapse_AndUnchangedPollKeepsLatestState()
+    {
+        var tree = TopicBrowserTestTrees.BuildTree();
+        _fixture.SetSnapshot(tree);
+        var snapshot = new TopicTreeSnapshot(20, System.Collections.Immutable.ImmutableArray.Create(tree));
+        var nextReadStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        SnapshotReadGate? nextGate = null;
+        using var releaseSnapshotRead = new ManualResetEventSlim();
+        _mockMsgStore.GetTopicTreeSnapshot().Returns(_ =>
+        {
+            var gate = Interlocked.Exchange(ref nextGate, null);
+            if (gate is not null)
+            {
+                gate.Started.TrySetResult(true);
+                if (!gate.Release.Wait(TimeSpan.FromSeconds(10)))
+                    throw new TimeoutException("The coordinated snapshot read was not released.");
+            }
+
+            Interlocked.Exchange(ref nextReadStarted, null)?.TrySetResult(true);
+            return snapshot;
+        });
+
+        var cut = Render<TopicBrowser>();
+        EnsureMudProviders();
+        await cut.InvokeAsync(() => cut.Find(".topic-tree-row button").Click());
+        cut.FindAll(".topic-tree-row").Should().HaveCount(3);
+
+        snapshot = snapshot with { Version = 21 };
+        var dirtyRefreshStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Interlocked.Exchange(ref nextGate, new SnapshotReadGate(dirtyRefreshStarted, releaseSnapshotRead));
+        await dirtyRefreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var collapse = cut.InvokeAsync(() => cut.Find(".topic-tree-row button").Click());
+        try
+        {
+            collapse.IsCompleted.Should().BeFalse("the refresh owns the renderer until its snapshot poll completes");
+        }
+        finally
+        {
+            releaseSnapshotRead.Set();
+        }
+
+        await collapse.WaitAsync(TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row").Should().ContainSingle());
+
+        var unchangedPollStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Interlocked.Exchange(ref nextReadStarted, unchangedPollStarted);
+        await unchangedPollStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await cut.InvokeAsync(() => Task.CompletedTask);
+        cut.FindAll(".topic-tree-row").Should().ContainSingle();
+        cut.Find(".topic-tree-row").TextContent.Should().Contain("sensors");
+    }
+
+    [Test]
     public void Filter_RevealsMatchingDescendants()
     {
         var cut = RenderWithTree();
@@ -411,7 +429,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
         });
 
         // Manager selection should also be cleared
-        _mockMsgStore.Received().SelectedMessageStore = null;
+        _mockMsgStore.Received().SelectTopic(null);
     }
 
     [Test]
@@ -424,7 +442,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
         cut.Find(".topic-tree-row").ClassName.Should().Contain("topic-tree-row--selected");
 
         // Simulate external clear (e.g., ClearAllMessages)
-        _mockMsgStore.SelectedMessageStore = null;
+        _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(Guid.NewGuid(), 2, 0), null, 0));
 
         // Trigger a rebuild via expand — BuildVisibleRows syncs from manager
         cut.Find(".topic-tree-row button").Click();
@@ -441,11 +459,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
     {
         // BuildTree() has humidity with 2 messages (value-bearing leaf).
         // sensors has empty Messages queue (structural-only).
-        var stores = new ConcurrentDictionary<string, MessageStore>
-        {
-            ["sensors"] = TopicBrowserVirtualizedTests.BuildTree()
-        };
-        _mockMsgStore.MessageStores.Returns(stores);
+        _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
 
@@ -467,11 +481,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
     [Test]
     public void StructuralNode_RendersFolderIcon()
     {
-        var stores = new ConcurrentDictionary<string, MessageStore>
-        {
-            ["sensors"] = TopicBrowserVirtualizedTests.BuildTree()
-        };
-        _mockMsgStore.MessageStores.Returns(stores);
+        _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
 

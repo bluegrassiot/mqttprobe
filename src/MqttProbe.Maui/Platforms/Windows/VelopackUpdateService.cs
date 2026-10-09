@@ -56,6 +56,7 @@ public sealed class VelopackUpdateService : IUpdateService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Update download/apply failed.");
+            throw;
         }
     }
 }

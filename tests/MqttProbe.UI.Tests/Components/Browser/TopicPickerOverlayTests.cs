@@ -1,6 +1,4 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
-using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Tests.TestHelpers;
 
@@ -15,7 +13,7 @@ public class TopicPickerOverlayTests : BunitTestContext
     public void SetupMocks()
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>());
+        _mockMsgStore.RootTopicCount.Returns(0);
         Services.AddSingleton(_mockMsgStore);
 
         ComponentFactories.AddStub<TopicBrowser>();

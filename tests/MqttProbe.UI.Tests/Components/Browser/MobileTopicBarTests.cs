@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
@@ -11,11 +10,14 @@ public class MobileTopicBarTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
 
+    private static SelectedTopicState Selection(string? topic, int messageCount = 0) =>
+        new(new SelectedTopicToken(Guid.NewGuid(), 1, 0), topic, messageCount);
+
     [SetUp]
     public void SetupMocks()
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
-        _mockMsgStore.MessageStores.Returns(new ConcurrentDictionary<string, MessageStore>());
+        _mockMsgStore.GetSelectedTopicState().Returns(Selection(null));
         Services.AddSingleton(_mockMsgStore);
         EnsureMudProviders();
     }
@@ -23,7 +25,7 @@ public class MobileTopicBarTests : BunitTestContext
     [Test]
     public void Renders_ChooseTopic_WhenNoTopicSelected()
     {
-        _mockMsgStore.SelectedMessageStore.Returns((MessageStore?)null);
+        _mockMsgStore.GetSelectedTopicState().Returns(Selection(null));
 
         var cut = Render<MobileTopicBar>();
 
@@ -33,8 +35,7 @@ public class MobileTopicBarTests : BunitTestContext
     [Test]
     public void Renders_SelectedTopicName_WhenTopicSelected()
     {
-        var store = new MessageStore { Topic = "sensor/temp", FullTopic = "sensor/temp", MessageCount = 5 };
-        _mockMsgStore.SelectedMessageStore.Returns(store);
+        _mockMsgStore.GetSelectedTopicState().Returns(Selection("sensor/temp", 5));
 
         var cut = Render<MobileTopicBar>();
 
@@ -44,8 +45,7 @@ public class MobileTopicBarTests : BunitTestContext
     [Test]
     public void Renders_MessageCount_WhenTopicHasMessages()
     {
-        var store = new MessageStore { Topic = "sensor/temp", FullTopic = "sensor/temp", MessageCount = 42 };
-        _mockMsgStore.SelectedMessageStore.Returns(store);
+        _mockMsgStore.GetSelectedTopicState().Returns(Selection("sensor/temp", 42));
 
         var cut = Render<MobileTopicBar>();
 
@@ -55,7 +55,7 @@ public class MobileTopicBarTests : BunitTestContext
     [Test]
     public void TopicsButton_WhenNoTopics_IsDisabled()
     {
-        _mockMsgStore.SelectedMessageStore.Returns((MessageStore?)null);
+        _mockMsgStore.GetSelectedTopicState().Returns(Selection(null));
 
         var cut = Render<MobileTopicBar>(p => p.Add(x => x.HasTopics, false));
 
@@ -66,7 +66,7 @@ public class MobileTopicBarTests : BunitTestContext
     [Test]
     public void TopicsButton_WhenHasTopics_IsEnabled()
     {
-        _mockMsgStore.SelectedMessageStore.Returns((MessageStore?)null);
+        _mockMsgStore.GetSelectedTopicState().Returns(Selection(null));
 
         var cut = Render<MobileTopicBar>(p => p.Add(x => x.HasTopics, true));
 
@@ -78,7 +78,7 @@ public class MobileTopicBarTests : BunitTestContext
     public async Task ClickingTopicsButton_InvokesOnOpenPicker()
     {
         var opened = false;
-        _mockMsgStore.SelectedMessageStore.Returns((MessageStore?)null);
+        _mockMsgStore.GetSelectedTopicState().Returns(Selection(null));
 
         var cut = Render<MobileTopicBar>(
             p => p.Add(x => x.HasTopics, true)
@@ -94,8 +94,7 @@ public class MobileTopicBarTests : BunitTestContext
     public async Task ClickingInfoArea_WhenHasTopics_InvokesOnOpenPicker()
     {
         var opened = false;
-        var store = new MessageStore { Topic = "sensor/temp", FullTopic = "sensor/temp", MessageCount = 1 };
-        _mockMsgStore.SelectedMessageStore.Returns(store);
+        _mockMsgStore.GetSelectedTopicState().Returns(Selection("sensor/temp", 1));
 
         var cut = Render<MobileTopicBar>(
             p => p.Add(x => x.HasTopics, true)
@@ -111,7 +110,7 @@ public class MobileTopicBarTests : BunitTestContext
     public async Task ClickingInfoArea_WhenNoTopics_DoesNotInvokeOnOpenPicker()
     {
         var opened = false;
-        _mockMsgStore.SelectedMessageStore.Returns((MessageStore?)null);
+        _mockMsgStore.GetSelectedTopicState().Returns(Selection(null));
 
         var cut = Render<MobileTopicBar>(
             p => p.Add(x => x.HasTopics, false)

@@ -80,7 +80,21 @@ internal static class Program
     private static void ConfigureServices(PhotinoBlazorAppBuilder builder)
     {
         builder.Services.AddSingleton<IAppInfoService, DesktopAppInfoService>();
+#if DEBUG
+        if (string.Equals(
+                Environment.GetEnvironmentVariable("MQTTPROBE_DESKTOP_UPDATE_SIMULATION"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            builder.Services.AddSingleton<IUpdateService, SimulatedUpdateService>();
+        }
+        else
+        {
+            builder.Services.AddSingleton<IUpdateService, DesktopVelopackUpdateService>();
+        }
+#else
         builder.Services.AddSingleton<IUpdateService, DesktopVelopackUpdateService>();
+#endif
         builder.Services.AddAuthorizationCore();
         builder.Services.AddCascadingAuthenticationState();
         builder.Services.AddScoped<AuthenticationStateProvider, DesktopUnauthenticatedStateProvider>();
@@ -164,6 +178,22 @@ internal static class Program
         builder.Services.AddSingleton<IPluginInputCapability, DesktopPluginInputCapability>();
         builder.Services.AddMqttProbePlugins();
     }
+
+#if DEBUG
+    internal sealed class SimulatedUpdateService : IUpdateService
+    {
+        public bool IsSupported => true;
+
+        public Task<string?> CheckForUpdateAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult<string?>("999.0.0-simulation");
+        }
+
+        public Task DownloadAndApplyAsync(CancellationToken cancellationToken = default)
+            => Task.Delay(Timeout.Infinite, cancellationToken);
+    }
+#endif
 
     private static void InitializeStorage(PhotinoBlazorApp app)
     {

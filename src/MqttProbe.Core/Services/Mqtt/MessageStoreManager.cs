@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
@@ -55,13 +54,16 @@ public class MessageStoreManager : IMessageStoreManager
         }
     }
 
-    public ConcurrentDictionary<string, MessageStore> MessageStores => _store.MessageStores;
+    public int RootTopicCount => _store.RootTopicCount;
 
-    public MessageStore? SelectedMessageStore
-    {
-        get => _store.SelectedMessageStore;
-        set => _store.SelectedMessageStore = value;
-    }
+    public TopicTreeSnapshot GetTopicTreeSnapshot() => _store.GetTopicTreeSnapshot();
+
+    public SelectedTopicState GetSelectedTopicState() => _store.GetSelectedTopicState();
+
+    public void SelectTopic(string? fullTopic) => _store.SelectTopic(fullTopic);
+
+    public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit) =>
+        Task.FromResult(_store.GetSelectedMessages(expectedSelection, limit));
 
     public bool IsListening { get; private set; }
 
@@ -143,15 +145,7 @@ public class MessageStoreManager : IMessageStoreManager
         return Task.CompletedTask;
     }
 
-    public Task<IEnumerable<MqttMessage>> GetMessagesForSelectedTopic() =>
-        Task.FromResult(_store.GetMessagesForSelectedTopic());
-
-    public Task<IReadOnlyList<MqttMessage>> GetRecentMessagesAsync(string topic, int limit) =>
-        Task.FromResult(_store.GetRecentMessages(topic, limit));
-
     public long GetVersion() => _store.Version;
-
-    public long GetSelectedTopicVersion() => _store.SelectedTopicVersion;
 
     public Task ClearAllMessages()
     {

@@ -13,7 +13,7 @@
     <div class="mt-2">
         <AppSecondaryButton data-testid="check-updates-button"
                             Size="Size.Small"
-                            Disabled="@_checkingForUpdate"
+                            Disabled="@(_checkingForUpdate || _applyingUpdate)"
                             OnClick="CheckForUpdatesAsync">
             Check for updates
         </AppSecondaryButton>
@@ -21,9 +21,21 @@
         {
             <AppPrimaryButton data-testid="apply-update-button"
                               Class="ml-2" Size="Size.Small"
-                              OnClick="ApplyUpdateAsync">
-                Update to @_availableUpdateVersion and restart
+                              Disabled="@_applyingUpdate" OnClick="ApplyUpdateAsync">
+                @if (_applyingUpdate)
+                {
+                    <MudProgressCircular Indeterminate Size="Size.Small" Class="mr-2" />
+                    <span>Updating and restarting…</span>
+                }
+                else
+                {
+                    <span>Update to @_availableUpdateVersion and restart</span>
+                }
             </AppPrimaryButton>
+            @if (_updateError)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Error" Class="mt-1" data-testid="update-error">The update couldn't be started. Please try again.</MudText>
+            }
         }
         else if (_updateCheckCompleted)
         {
@@ -35,6 +47,8 @@
 @code {
     private string _version = string.Empty;
     private bool _checkingForUpdate;
+    private bool _applyingUpdate;
+    private bool _updateError;
     private bool _updateCheckCompleted;
     private string? _availableUpdateVersion;
 
@@ -51,5 +65,24 @@
         _checkingForUpdate = false;
     }
 
-    private Task ApplyUpdateAsync() => UpdateService.DownloadAndApplyAsync();
+    private async Task ApplyUpdateAsync()
+    {
+        if (_applyingUpdate)
+            return;
+
+        _applyingUpdate = true;
+        _updateError = false;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await UpdateService.DownloadAndApplyAsync();
+        }
+        catch
+        {
+            _applyingUpdate = false;
+            _updateError = true;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 }

@@ -75,4 +75,52 @@ public class AboutSectionTests : BunitTestContext
 
         await _updateService.Received(1).DownloadAndApplyAsync(Arg.Any<CancellationToken>());
     }
+
+    [Test]
+    public async Task ApplyButton_ShowsProgressAndPreventsRepeatDispatch_WhileUpdateIsPending()
+    {
+        _updateService.IsSupported.Returns(true);
+        _updateService.CheckForUpdateAsync(Arg.Any<CancellationToken>()).Returns("1.2.0");
+        var pendingUpdate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _updateService.DownloadAndApplyAsync(Arg.Any<CancellationToken>()).Returns(pendingUpdate.Task);
+
+        var cut = Render<AboutSection>();
+        cut.Find("[data-testid=check-updates-button]").Click();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        var applyButton = cut.Find("[data-testid=apply-update-button]");
+        var clickTask = applyButton.ClickAsync();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        applyButton.TextContent.Should().Contain("Updating and restarting");
+        applyButton.HasAttribute("disabled").Should().BeTrue();
+        cut.Find("[data-testid=check-updates-button]").HasAttribute("disabled").Should().BeTrue();
+
+        await applyButton.ClickAsync();
+        await _updateService.Received(1).DownloadAndApplyAsync(Arg.Any<CancellationToken>());
+
+        pendingUpdate.SetResult();
+        await clickTask;
+        cut.Find("[data-testid=apply-update-button]").TextContent.Should().Contain("Updating and restarting");
+    }
+
+    [Test]
+    public async Task ApplyButton_RestoresControlsAndShowsError_WhenUpdateFails()
+    {
+        _updateService.IsSupported.Returns(true);
+        _updateService.CheckForUpdateAsync(Arg.Any<CancellationToken>()).Returns("1.2.0");
+        _updateService.DownloadAndApplyAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromException(new InvalidOperationException("Update failed")));
+
+        var cut = Render<AboutSection>();
+        cut.Find("[data-testid=check-updates-button]").Click();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+        await cut.Find("[data-testid=apply-update-button]").ClickAsync();
+
+        cut.Find("[data-testid=update-error]").TextContent.Should().Contain("Please try again");
+        var applyButton = cut.Find("[data-testid=apply-update-button]");
+        applyButton.TextContent.Should().Contain("Update to 1.2.0");
+        applyButton.HasAttribute("disabled").Should().BeFalse();
+        cut.Find("[data-testid=check-updates-button]").HasAttribute("disabled").Should().BeFalse();
+    }
 }

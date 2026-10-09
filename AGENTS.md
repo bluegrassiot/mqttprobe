@@ -1,5 +1,11 @@
 # Agent Instructions
 
+## Repository setup
+
+- After cloning or creating a worktree, run `git submodule update --init --recursive` from that checkout before building, testing, formatting, or loading the solution in Roslynk.
+- `external/SparkplugNet` is a required build dependency. Each new worktree needs its own submodule checkout, even if the original worktree already has it initialized.
+- If a check reports a missing SparkplugNet project, check `git submodule status` and initialize the submodule before treating it as a source-code failure. Use the commit pinned by the repository, not `--remote`.
+
 ## Formatting
 
 - `.editorconfig` is the source of truth for C# formatting.

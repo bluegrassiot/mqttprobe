@@ -64,20 +64,66 @@ public sealed partial class MqttLiveFlowsSmokeTests
             SetStage("configure emulator node");
             var emulationTab = page.GetByRole(AriaRole.Tab).Filter(new() { HasText = "Emulation" });
             await emulationTab.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+
+            var nodeCards = page.Locator(".emu-node-row");
+            var nodeCardCountBeforeAdd = await nodeCards.CountAsync().WaitAsync(token);
+            var existingNodeIdentities = await nodeCards.EvaluateAllAsync<string[]>(
+                "cards => cards.map(card => `${card.querySelector('.emu-node-id')?.textContent?.trim()}\\u001f${card.querySelector('.emu-node-secondary')?.textContent?.trim()}`)")
+                .WaitAsync(token);
+            Assert.That(existingNodeIdentities, Has.Length.EqualTo(nodeCardCountBeforeAdd),
+                "each existing emulator card should expose a node ID and summary");
+
             await page.Locator("button[title='Add node']").ClickAsync(
                 new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
 
-            var nodeCard = page.Locator(".emu-node-row").Last;
-            await Assertions.Expect(nodeCard).ToBeVisibleAsync(
+            await Assertions.Expect(nodeCards).ToHaveCountAsync(nodeCardCountBeforeAdd + 1,
                 new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-            await page.GetByLabel("Group ID", new() { Exact = true }).Last.FillAsync(group,
+            var nodeIdentitiesAfterAdd = await nodeCards.EvaluateAllAsync<string[]>(
+                "cards => cards.map(card => `${card.querySelector('.emu-node-id')?.textContent?.trim()}\\u001f${card.querySelector('.emu-node-secondary')?.textContent?.trim()}`)")
+                .WaitAsync(token);
+            var newCardIndexes = Enumerable.Range(0, nodeIdentitiesAfterAdd.Length)
+                .Where(index => !existingNodeIdentities.Contains(nodeIdentitiesAfterAdd[index],
+                    StringComparer.Ordinal))
+                .ToArray();
+            Assert.That(newCardIndexes, Has.Length.EqualTo(1),
+                "adding a node should introduce exactly one new node identity");
+
+            var addedCard = nodeCards.Nth(newCardIndexes[0]);
+            var defaultNodeId = (await addedCard.Locator(".emu-node-id").InnerTextAsync()
+                .WaitAsync(token)).Trim();
+            var defaultNodeSummary = (await addedCard.Locator(".emu-node-secondary").InnerTextAsync()
+                .WaitAsync(token)).Trim();
+            var nodeCard = page.Locator(
+                $".emu-node-row:has(.emu-node-id:text-is('{defaultNodeId}'))"
+                + $":has(.emu-node-secondary:text-is('{defaultNodeSummary}'))");
+            ILocator FindNodeCard(string groupId, string nodeId) => page.Locator(
+                $".emu-node-row:has(.emu-node-id:text-is('{nodeId}'))"
+                + $":has(.emu-node-secondary:has-text('{groupId}'))");
+
+            await Assertions.Expect(nodeCard).ToHaveCountAsync(1,
                 new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-            await page.GetByLabel("Node ID", new() { Exact = true }).Last.FillAsync(node,
+            var groupIdField = nodeCard.GetByLabel("Group ID", new() { Exact = true });
+            await groupIdField.FillAsync(group,
+                new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+            await groupIdField.PressAsync("Tab", new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+            nodeCard = FindNodeCard(group, defaultNodeId);
+            await Assertions.Expect(nodeCard).ToHaveCountAsync(1,
+                new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+
+            var nodeIdField = nodeCard.GetByLabel("Node ID", new() { Exact = true });
+            await nodeIdField.FillAsync(node,
+                new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+            await nodeIdField.PressAsync("Tab", new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+            nodeCard = FindNodeCard(group, node);
+            await Assertions.Expect(nodeCard).ToHaveCountAsync(1,
                 new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
 
             if (!sparkplug)
             {
-                await page.GetByLabel("Type", new() { Exact = true }).Last.ClickAsync(
+                var typeControl = nodeCard.Locator("[role='combobox'][aria-label='Type']:visible");
+                await Assertions.Expect(typeControl).ToHaveCountAsync(1,
+                    new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+                await typeControl.ClickAsync(
                     new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
                 await page.GetByText("Generic MQTT", new() { Exact = true }).ClickAsync(
                     new() { Timeout = ActionTimeoutMs }).WaitAsync(token);

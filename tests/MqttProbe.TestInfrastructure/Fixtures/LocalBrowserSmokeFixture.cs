@@ -59,6 +59,7 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Exception? cleanupFailure = null;
+        string? listenerValidationError = null;
         if (_webProcess is { } webProcess)
         {
             for (var attempt = 0; attempt < 2 && !webProcess.HasExited; attempt++)
@@ -80,6 +81,17 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
                 cleanupFailure ??= new TimeoutException();
             else
             {
+                try
+                {
+                    var owners = await GetListenerProcessIdsAsync(new Uri(BaseUrl).Port, CancellationToken.None);
+                    if (owners.Count > 0)
+                        listenerValidationError = "The Web listener remained in use after the owned process exited.";
+                }
+                catch (Exception ex)
+                {
+                    listenerValidationError = $"Web listener cleanup verification failed ({ex.GetType().Name}).";
+                }
+
                 webProcess.Dispose();
                 _webProcess = null;
             }
@@ -110,11 +122,12 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
             }
         }
 
-        if (cleanupFailure is not null)
+        if (cleanupFailure is not null || listenerValidationError is not null)
         {
             var retry = _webProcess is null ? string.Empty : " The Web process remains active; retry DisposeAsync after it exits.";
+            var validation = listenerValidationError is null ? string.Empty : $" {listenerValidationError}";
             throw new InvalidOperationException(
-                $"Local smoke fixture cleanup failed ({cleanupFailure.GetType().Name}).{retry}");
+                $"Local smoke fixture cleanup failed ({cleanupFailure?.GetType().Name ?? "listener validation"}).{validation}{retry}");
         }
     }
 
@@ -217,37 +230,53 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
 
     private async Task ProvisionLocalAccountAsync()
     {
-        using (var ownershipTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
-            await VerifyListenerOwnershipAsync(new Uri(BaseUrl).Port, ownershipTimeout.Token);
-
         Username = $"smoke-{Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant()}";
         Password = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
 
-        using var playwright = await Playwright.CreateAsync();
-        var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-        {
-            Headless = false,
-        });
+        IPlaywright? playwright = null;
+        IBrowser? browser = null;
+        IPage? page = null;
+        var stage = "listener ownership verification";
+        InvalidOperationException? setupFailure = null;
+        Exception? closeFailure = null;
         try
         {
+            using (var ownershipTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+                await VerifyListenerOwnershipAsync(new Uri(BaseUrl).Port, ownershipTimeout.Token);
+
+            stage = "Playwright initialization";
+            playwright = await Playwright.CreateAsync();
+            stage = "browser launch";
+            browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+            {
+                Headless = false,
+            });
+            stage = "browser context creation";
             var context = await browser.NewContextAsync(new BrowserNewContextOptions
             {
                 IgnoreHTTPSErrors = true,
                 ViewportSize = new ViewportSize { Width = 1280, Height = 900 },
             });
-            var page = await context.NewPageAsync();
+            stage = "page creation";
+            page = await context.NewPageAsync();
             page.SetDefaultTimeout(ActionTimeoutMs);
             page.SetDefaultNavigationTimeout(40_000);
 
+            stage = "Setup navigation";
             await page.GotoAsync($"{BaseUrl}/Setup", new PageGotoOptions
             {
                 Timeout = 40_000,
                 WaitUntil = WaitUntilState.DOMContentLoaded,
             });
+            stage = "username input";
             await page.Locator("#username").FillAsync(Username);
+            stage = "password input";
             await page.Locator("#password").FillAsync(Password);
+            stage = "password confirmation input";
             await page.Locator("#confirmPassword").FillAsync(Password);
+            stage = "Setup submit";
             await page.Locator("form button[type='submit']").ClickAsync();
+            stage = "connection dialog wait";
             await page.Locator(".connection-dialog-content").WaitForAsync(new LocatorWaitForOptions
             {
                 State = WaitForSelectorState.Visible,
@@ -256,19 +285,110 @@ public sealed class LocalBrowserSmokeFixture : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException($"Visible local account setup failed ({ex.GetType().Name}).");
+            var evidenceWritten = await TryWriteSetupFailureSnapshotAsync(page, stage);
+            var evidenceStatus = evidenceWritten ? string.Empty : " Failure evidence unavailable.";
+            setupFailure = new InvalidOperationException(
+                $"Visible local account setup failed during {stage} ({ex.GetType().Name}).{evidenceStatus}");
         }
         finally
         {
+            if (browser is not null)
+            {
+                try
+                {
+                    await browser.CloseAsync().WaitAsync(TimeSpan.FromSeconds(10));
+                }
+                catch (Exception ex)
+                {
+                    closeFailure = ex;
+                }
+            }
+
             try
             {
-                await browser.CloseAsync().WaitAsync(TimeSpan.FromSeconds(10));
+                playwright?.Dispose();
             }
-            catch (TimeoutException)
+            catch (Exception ex)
             {
-                throw new InvalidOperationException("Visible local account setup browser did not close in time.");
+                closeFailure ??= ex;
             }
         }
+
+        if (setupFailure is not null)
+        {
+            var closeStatus = closeFailure is null
+                ? string.Empty
+                : $" Browser close also failed ({closeFailure.GetType().Name}).";
+            throw new InvalidOperationException(setupFailure.Message + closeStatus, setupFailure);
+        }
+
+        if (closeFailure is TimeoutException)
+            throw new InvalidOperationException("Visible local account setup browser did not close in time.");
+        if (closeFailure is not null)
+            throw new InvalidOperationException(
+                $"Visible local account setup browser close failed ({closeFailure.GetType().Name}).");
+    }
+
+    private async Task<bool> TryWriteSetupFailureSnapshotAsync(IPage? page, string stage)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        try
+        {
+            var route = "other";
+            if (page is not null && Uri.TryCreate(page.Url, UriKind.Absolute, out var uri))
+            {
+                route = uri.AbsolutePath switch
+                {
+                    "/Setup" => "Setup",
+                    "/Login" => "Login",
+                    _ => "other",
+                };
+            }
+
+            var snapshot = page is null
+                ? new { Stage = stage, Route = route, PageAvailable = false, Controls = (object?)null }
+                : new
+                {
+                    Stage = stage,
+                    Route = route,
+                    PageAvailable = true,
+                    Controls = (object?)new
+                    {
+                        Username = await GetSelectorCountsAsync(page, "#username", timeout.Token),
+                        Password = await GetSelectorCountsAsync(page, "#password", timeout.Token),
+                        ConfirmPassword = await GetSelectorCountsAsync(page, "#confirmPassword", timeout.Token),
+                        Submit = await GetSelectorCountsAsync(page, "form button[type='submit']", timeout.Token),
+                        ValidationSummary = await GetSelectorCountsAsync(page, ".validation-summary-errors", timeout.Token),
+                        ValidationMessage = await GetSelectorCountsAsync(page, ".validation-message", timeout.Token),
+                        ConnectionDialog = await GetSelectorCountsAsync(page, ".connection-dialog-content", timeout.Token),
+                    },
+                };
+
+            var evidenceRoot = Path.GetDirectoryName(_temporaryRoot)
+                ?? throw new InvalidOperationException("Fixture temporary directory has no parent.");
+            var path = Path.Combine(evidenceRoot, $"mqttprobe-browser-smoke-{Guid.NewGuid():N}.json");
+            await File.WriteAllTextAsync(path, System.Text.Json.JsonSerializer.Serialize(snapshot), timeout.Token);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static async Task<(int Count, int VisibleCount)> GetSelectorCountsAsync(
+        IPage page, string selector, CancellationToken cancellationToken)
+    {
+        var locator = page.Locator(selector);
+        var count = await locator.CountAsync().WaitAsync(cancellationToken);
+        var visibleCount = 0;
+        for (var index = 0; index < count; index++)
+        {
+            if (await locator.Nth(index).IsVisibleAsync().WaitAsync(cancellationToken))
+                visibleCount++;
+        }
+
+        return (count, visibleCount);
     }
 
     private async Task VerifyListenerOwnershipAsync(int port, CancellationToken cancellationToken)

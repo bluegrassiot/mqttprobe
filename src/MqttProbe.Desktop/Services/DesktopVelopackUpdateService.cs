@@ -55,17 +55,28 @@ public sealed class DesktopVelopackUpdateService : IUpdateService
 
     public async Task DownloadAndApplyAsync(CancellationToken cancellationToken = default)
     {
-        if (_pendingUpdate is null || _manager is null)
+        var pendingUpdate = _pendingUpdate;
+        var manager = _manager;
+        if (pendingUpdate is null || manager is null)
             return;
 
+        await RunDownloadAndApplyAsync(async () =>
+        {
+            await manager.DownloadUpdatesAsync(pendingUpdate, cancelToken: cancellationToken);
+            manager.ApplyUpdatesAndRestart(pendingUpdate.TargetFullRelease);
+        });
+    }
+
+    internal async Task RunDownloadAndApplyAsync(Func<Task> applyUpdate)
+    {
         try
         {
-            await _manager.DownloadUpdatesAsync(_pendingUpdate, cancelToken: cancellationToken);
-            _manager.ApplyUpdatesAndRestart(_pendingUpdate.TargetFullRelease);
+            await applyUpdate();
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Update download/apply failed.");
+            throw;
         }
     }
 }

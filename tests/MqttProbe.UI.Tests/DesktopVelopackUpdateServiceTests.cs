@@ -25,6 +25,18 @@ public class DesktopVelopackUpdateServiceTests
     public void DownloadAndApplyAsync_Completes_WhenNothingPending()
         => Create().DownloadAndApplyAsync().IsCompletedSuccessfully.Should().BeTrue();
 
+    [Test]
+    public async Task RunDownloadAndApplyAsync_RethrowsFailure()
+    {
+        var service = Create();
+        var failure = new InvalidOperationException("Update failed");
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.RunDownloadAndApplyAsync(() => Task.FromException(failure)));
+
+        thrown.Should().BeSameAs(failure);
+    }
+
 #if DEBUG
     [Test]
     public void Simulation_IsSupported()

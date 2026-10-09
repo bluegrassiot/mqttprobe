@@ -60,6 +60,7 @@ public sealed class MacVelopackUpdateService : IUpdateService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Update download/apply failed.");
+            throw;
         }
     }
 }

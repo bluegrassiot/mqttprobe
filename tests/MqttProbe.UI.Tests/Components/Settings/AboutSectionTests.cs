@@ -105,12 +105,15 @@ public class AboutSectionTests : BunitTestContext
     }
 
     [Test]
-    public async Task ApplyButton_RestoresControlsAndShowsError_WhenUpdateFails()
+    public async Task ApplyButton_RestoresControlsAndCanRetry_WhenUpdateFails()
     {
         _updateService.IsSupported.Returns(true);
         _updateService.CheckForUpdateAsync(Arg.Any<CancellationToken>()).Returns("1.2.0");
+        var attempts = 0;
         _updateService.DownloadAndApplyAsync(Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromException(new InvalidOperationException("Update failed")));
+            .Returns(_ => ++attempts == 1
+                ? Task.FromException(new InvalidOperationException("Update failed"))
+                : Task.CompletedTask);
 
         var cut = Render<AboutSection>();
         cut.Find("[data-testid=check-updates-button]").Click();
@@ -122,5 +125,10 @@ public class AboutSectionTests : BunitTestContext
         applyButton.TextContent.Should().Contain("Update to 1.2.0");
         applyButton.HasAttribute("disabled").Should().BeFalse();
         cut.Find("[data-testid=check-updates-button]").HasAttribute("disabled").Should().BeFalse();
+
+        await cut.Find("[data-testid=apply-update-button]").ClickAsync();
+
+        await _updateService.Received(2).DownloadAndApplyAsync(Arg.Any<CancellationToken>());
+        cut.FindAll("[data-testid=update-error]").Should().BeEmpty();
     }
 }

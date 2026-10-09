@@ -92,7 +92,7 @@ public class AboutSectionTests : BunitTestContext
         var clickTask = applyButton.ClickAsync();
         await cut.InvokeAsync(() => Task.CompletedTask);
 
-        applyButton.TextContent.Should().Contain("Updating and restarting");
+        applyButton.TextContent.Should().Contain("Restarting…");
         applyButton.HasAttribute("disabled").Should().BeTrue();
         cut.Find("[data-testid=check-updates-button]").HasAttribute("disabled").Should().BeTrue();
 
@@ -101,7 +101,7 @@ public class AboutSectionTests : BunitTestContext
 
         pendingUpdate.SetResult();
         await clickTask;
-        cut.Find("[data-testid=apply-update-button]").TextContent.Should().Contain("Updating and restarting");
+        cut.Find("[data-testid=apply-update-button]").TextContent.Should().Contain("Restarting…");
     }
 
     [Test]

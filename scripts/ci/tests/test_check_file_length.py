@@ -6,6 +6,8 @@ Run: python -m unittest discover -s scripts/ci/tests
 
 import importlib.util
 import io
+import os
+import subprocess
 import tempfile
 import unittest
 from contextlib import contextmanager
@@ -114,6 +116,85 @@ class TestGrandfatherCeiling(unittest.TestCase):
         with _run(files, grandfather={"src/App/Legacy.cs": 600}) as (code, out):
             self.assertEqual(code, 1, out)
             self.assertIn("src/App/Legacy.cs", out)
+
+
+class TestStagedPaths(unittest.TestCase):
+    """--staged must feed the gate real paths, not Git's quoted display form.
+
+    Git C-quotes a name containing a newline (and leaves the `\\n` as two literal
+    characters) unless output is NUL-delimited. The quoted form fails is_relevant,
+    so an oversized file would be silently skipped and the gate would pass.
+    """
+
+    def _staged(self, stdout: bytes):
+        with patch.object(length_ci.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout=stdout)
+            return length_ci.get_staged_paths()
+
+    def test_nul_delimited_output_is_split_on_nul(self):
+        result = self._staged(b"src/App/Ok.cs\0src/App/Also.cs\0")
+        self.assertEqual(result, ["src/App/Ok.cs", "src/App/Also.cs"])
+
+    def test_newline_in_path_survives_intact(self):
+        result = self._staged(b"src/App/Odd\nName.cs\0")
+        self.assertEqual(result, ["src/App/Odd\nName.cs"])
+        self.assertTrue(length_ci.is_relevant(result[0]),
+                        "the intact path must still be classified as relevant")
+
+    def test_git_is_asked_for_nul_delimited_unquoted_output(self):
+        with patch.object(length_ci.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout=b"")
+            length_ci.get_staged_paths()
+        argv = run.call_args[0][0]
+        self.assertIn("-z", argv, f"git invocation must be NUL-delimited: {argv}")
+        self.assertIn("--name-only", argv)
+
+    def test_trailing_and_empty_fields_are_dropped(self):
+        self.assertEqual(self._staged(b"src/App/Ok.cs\0\0"), ["src/App/Ok.cs"])
+        self.assertEqual(self._staged(b""), [])
+
+    def test_non_ascii_path_decodes(self):
+        self.assertEqual(
+            self._staged("src/App/Ünïcode.cs".encode()), ["src/App/Ünïcode.cs"],
+        )
+
+
+@unittest.skipIf(
+    os.name == "nt", "Windows filesystems cannot hold a newline in a filename",
+)
+class TestStagedPathsAgainstRealGit(unittest.TestCase):
+    """End-to-end proof that an oversized newline-named file actually fails."""
+
+    def test_oversized_newline_named_staged_file_fails_the_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.git(root, "init", "-q")
+            self.git(root, "config", "user.email", "length-tests@example.invalid")
+            self.git(root, "config", "user.name", "Length Tests")
+            (root / "MqttProbe.slnx").touch()
+            target = root / "src" / "App"
+            target.mkdir(parents=True)
+            (target / "Odd\nName.cs").write_text(_lines(600), encoding="utf-8")
+            self.git(root, "add", "-A")
+
+            orig_root = length_ci.ROOT
+            length_ci.ROOT = root
+            buf = io.StringIO()
+            try:
+                with patch("sys.stdout", buf):
+                    code = length_ci.main(["--staged"])
+            finally:
+                length_ci.ROOT = orig_root
+
+            out = buf.getvalue()
+            self.assertEqual(code, 1, out)
+            self.assertIn("Odd\nName.cs", out)
+            self.assertIn("600 lines", out)
+            self.assertNotIn("\\n", out, "path must not appear Git-quoted")
+
+    @staticmethod
+    def git(repo: Path, *args):
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
 
 
 class TestExplicitPaths(unittest.TestCase):

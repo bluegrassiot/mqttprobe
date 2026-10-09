@@ -14,6 +14,8 @@ public sealed partial class MqttLiveFlowsSmokeTests
     private const int ScenarioBudgetSeconds = 180;
     private const int CleanupMqttSeconds = 10;
     private const int CleanupBrowserSeconds = 15;
+    // Per best-effort UI phase, so worst-case emulator cleanup is twice this.
+    private const int CleanupUiSeconds = 10;
     private const int SubscribeSettleTimeoutMs = 8_000;
     private const int SubscribeSettlePollMs = 250;
     private const int MessageWaitTimeoutMs = 15_000;
@@ -75,6 +77,56 @@ public sealed partial class MqttLiveFlowsSmokeTests
         catch { }
 
         playwright?.Dispose();
+    }
+
+    // The Web host outlives the browser context, so a scenario that fails between Start
+    // and Stop leaves the emulator publishing and the circuit retained. Each phase gets its
+    // own budget: a Stop that hangs must not leave Disconnect holding an already-cancelled
+    // token, which would skip the click entirely. Cleanup runs after the scenario token is
+    // spent, and neither phase may replace the original failure.
+    private static async Task StopEmulatorBestEffortAsync(IPage? page)
+    {
+        if (page is null || page.IsClosed)
+            return;
+
+        try
+        {
+            using var stopCts = new CancellationTokenSource(TimeSpan.FromSeconds(CleanupUiSeconds));
+            var stopToken = stopCts.Token;
+            var emulationTab = page.GetByRole(AriaRole.Tab).Filter(new() { HasText = "Emulation" });
+            if (await emulationTab.CountAsync().WaitAsync(stopToken) > 0)
+            {
+                await emulationTab.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(stopToken);
+                var stopButton = page.Locator("button[title='Stop emulation']");
+                if (await stopButton.IsVisibleAsync().WaitAsync(stopToken))
+                {
+                    await stopButton.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(stopToken);
+                    await page.Locator("button[title='Start emulation']").WaitForAsync(new()
+                    {
+                        State = WaitForSelectorState.Visible,
+                        Timeout = ActionTimeoutMs,
+                    }).WaitAsync(stopToken);
+                }
+            }
+        }
+        catch { }
+
+        try
+        {
+            using var disconnectCts = new CancellationTokenSource(TimeSpan.FromSeconds(CleanupUiSeconds));
+            var disconnectToken = disconnectCts.Token;
+            var disconnect = page.Locator(DisconnectButton);
+            if (await disconnect.IsVisibleAsync().WaitAsync(disconnectToken))
+            {
+                await disconnect.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(disconnectToken);
+                await page.Locator(DisconnectedChip).WaitForAsync(new()
+                {
+                    State = WaitForSelectorState.Visible,
+                    Timeout = ActionTimeoutMs,
+                }).WaitAsync(disconnectToken);
+            }
+        }
+        catch { }
     }
 
     // ── Login & connection ─────────────────────────────────────────────

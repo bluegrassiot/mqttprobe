@@ -33,6 +33,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
         IMqttClient? mqtt = null;
         IPlaywright? playwright = null;
         IBrowser? browser = null;
+        IPage? page = null;
         using var scenarioCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         scenarioCts.CancelAfter(TimeSpan.FromSeconds(ScenarioBudgetSeconds));
         var token = scenarioCts.Token;
@@ -40,9 +41,10 @@ public sealed partial class MqttLiveFlowsSmokeTests
         try
         {
             mqtt = await ConnectMqttClientAsync(mqttHost, mqttPort, token);
-            var (pw, br, page) = await LaunchBrowserAsync(appOrigin, token);
+            var (pw, br, launched) = await LaunchBrowserAsync(appOrigin, token);
             playwright = pw;
             browser = br;
+            page = launched;
             await LoginAsync(page, appOrigin, username, password, token);
             await ConfigureAndConnectAsync(page, mqttHost, mqttPort, connName, clientId, token);
             await WaitForConnectedAsync(page, connName, token);
@@ -194,6 +196,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
         }
         finally
         {
+            await StopEmulatorBestEffortAsync(page);
             await CleanupAsync(mqtt, browser, playwright);
         }
     }

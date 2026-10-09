@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Checks that source files do not exceed a line-count limit."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
@@ -64,11 +65,14 @@ def collect_tree_paths() -> list[str]:
 
 
 def get_staged_paths() -> list[str]:
+    # -z keeps paths NUL-delimited and unquoted: a filename may contain a newline,
+    # and without it git C-quotes such names, so both splitlines() and the staged
+    # lookup below would miss the real file.
     result = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
-        capture_output=True, text=True, cwd=ROOT,
+        ["git", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"],
+        capture_output=True, cwd=ROOT,
     )
-    return [p for p in result.stdout.splitlines() if p.strip()]
+    return [os.fsdecode(p) for p in result.stdout.split(b"\0") if p]
 
 
 def staged_blob(path_str: str) -> str:

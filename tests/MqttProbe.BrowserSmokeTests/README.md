@@ -1,6 +1,8 @@
 # Browser smoke tests (manual, opt-in)
 
-Two Playwright for .NET tests, one per local OIDC lab (Authentik or Keycloak). Each test:
+Opt-in Playwright for .NET acceptance tests. Provider tests cover the Authentik and Keycloak
+labs, while the local-login tests cover MQTT filtering, subscriptions, and the in-app
+emulators. Each test:
 
 1. signs in through the provider,
 2. checks the live app shell (top bar plus the auto-opened connection dialog),
@@ -79,14 +81,17 @@ topic-exclusion feature through the real UI: one exact filter, one wildcard. Eac
    via a plain-TCP MQTTnet client,
 4. verifies each baseline topic+payload pair in the Browser payload table (`.pb-cell-topic`
    / `.pb-cell-payload`),
-5. adds an exclude filter through the Subscriptions Excluded topics panel,
+5. adds and removes an exclude filter through the Subscriptions Excluded topics panel and
+   checks the count and list immediately, without leaving the tab,
 6. returns to Browser, verifies matching topics are absent from the payload table while
    unaffected topics remain visible,
 7. publishes blocked markers then an unaffected sentinel, waits for the sentinel, then
    asserts blocked messages stay absent across repeated DOM checks (~3 s),
 8. removes the exclude filter, publishes a fresh matching message, and verifies it resumes
    while historical baseline and blocked payloads stay purged,
-9. disconnects through the real UI button.
+9. opens the Connection dialog, visits **On Connect**, then adds and removes an exclusion
+   there and checks its count and row immediately without navigating away or reloading,
+10. disconnects through the real UI button.
 
 Each case uses a unique single-segment root (`exclude{Guid}`), explicit topic arrays for
 matches and controls, and a per-case wildcard subscribe filter. The MQTT client is bounded
@@ -96,56 +101,44 @@ Not listed in `MqttProbe.slnx`, not wired into CI. **Always pass a `--filter`.**
 
 ### Prerequisites
 
-- A separate local app instance on `https://localhost:5081` (temporary dev config). Adjust
-  `MQTTPROBE_TEST_BASE_URL` if your instance runs elsewhere.
-- A real MQTT broker reachable at `localhost:1883` (the existing local Mosquitto service).
-  Adjust `MQTTPROBE_TEST_MQTT_HOST` / `MQTTPROBE_TEST_MQTT_PORT` if it differs.
-- Chromium installed once per machine (same as the auth tests above).
-- Local login credentials in the environment.
+- Docker running and Chromium installed once per machine (same as the auth tests above).
+- A valid local HTTPS development certificate (`dotnet dev-certs https --check`).
+
+The fixture starts a separate anonymous Mosquitto container on a dynamically mapped port and
+the Web app on a dynamically selected HTTPS loopback port. It uses a unique temporary content
+root and config directory, then creates a throwaway local account through the visible `/Setup`
+page. It does not use or modify an existing app config, broker, or listener on port 1883. The
+fixture is shared with the local live-flow and emulator tests and is disposed after the suite.
 
 ### Run (Windows PowerShell 5.1)
 
 ```powershell
-$env:MQTTPROBE_TEST_USERNAME = 'your-local-user'
-$env:MQTTPROBE_TEST_PASSWORD = '<password>'
-
 dotnet test tests/MqttProbe.BrowserSmokeTests --filter FullyQualifiedName~ExclusionBrowserSmokeTests
-
-# Unset the credentials afterwards
-Remove-Item Env:MQTTPROBE_TEST_USERNAME, Env:MQTTPROBE_TEST_PASSWORD
 ```
-
-Optional environment variables:
-
-| Variable | Default | Description |
-|---|---|---|
-| `MQTTPROBE_TEST_BASE_URL` | `https://localhost:5081` | App origin (must be https loopback) |
-| `MQTTPROBE_TEST_MQTT_HOST` | `localhost` | MQTT broker host |
-| `MQTTPROBE_TEST_MQTT_PORT` | `1883` | MQTT broker port |
 
 ## Live MQTT flow smoke tests
 
-Five tests in `LiveFlows/` exercise connect, subscribe, publish, topic tree
+Five existing tests in `LiveFlows/` exercise connect, subscribe, publish, topic tree
 expand/collapse, long topic overflow, status chip transitions, and mobile viewport
-behavior against a real MQTT broker and local app instance.
+behavior against a real MQTT broker and local app instance. Two emulator cases also run the
+Generic MQTT and Sparkplug B emulators from the UI, verify live Generic JSON or decoded
+Sparkplug metrics, stop each emulator through the UI, and check Sparkplug STATE text in the
+Browser payload table. The STATE message is published by a separate MQTTnet client because
+the Sparkplug emulator does not publish STATE.
 
 Not listed in `MqttProbe.slnx`, not wired into CI. **Always pass a `--filter`.**
 
 ### Prerequisites
 
-- A local app instance on `https://localhost:5001` (or set `MQTTPROBE_TEST_BASE_URL`).
-- A real MQTT broker at `localhost:1883` (or set `MQTTPROBE_TEST_MQTT_HOST` /
-  `MQTTPROBE_TEST_MQTT_PORT`).
-- Chromium installed once per machine.
-- Local login credentials in the environment.
+The local fixture starts the app and an isolated Mosquitto container, provisions temporary
+local credentials through `/Setup`, and removes its temporary config on teardown. You need
+Docker, Chromium, and a valid local HTTPS development certificate. It does not connect to
+the existing broker on port 1883.
 
 ### Run (Windows PowerShell 5.1)
 
 ```powershell
-$env:MQTTPROBE_TEST_USERNAME = 'your-local-user'
-$env:MQTTPROBE_TEST_PASSWORD = '<password>'
-
-# All five live flow tests
+# Five existing live flow tests and the two emulator cases
 dotnet test tests/MqttProbe.BrowserSmokeTests --filter FullyQualifiedName~MqttLiveFlowsSmokeTests
 
 # Individual tests
@@ -155,21 +148,34 @@ dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~StatusChipTransition
 dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~TopicTreeExpandCollapseMultipleTopics
 dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~MobileViewportWithLiveBroker
 
-Remove-Item Env:MQTTPROBE_TEST_USERNAME, Env:MQTTPROBE_TEST_PASSWORD
+# Emulator cases only
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~GenericEmulatorPublishesVisibleData
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~SparkplugEmulatorPublishesDecodedDataAndStateText
 ```
 
-### Environment variables
+## Release acceptance run
 
-| Variable | Default | Description |
-|---|---|---|
-| `MQTTPROBE_TEST_BASE_URL` | `https://localhost:5001` | App origin (must be https loopback) |
-| `MQTTPROBE_TEST_MQTT_HOST` | `localhost` | MQTT broker host |
-| `MQTTPROBE_TEST_MQTT_PORT` | `1883` | MQTT broker port |
+For the coordinated release/v1.0.7 acceptance run, use the isolated fixture for the local
+exclusion and emulator cases. It starts its own Web app and Mosquitto instance, so no prepared
+app or broker listener is needed. Run each filter separately so failures identify the scenario:
+
+```powershell
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter FullyQualifiedName~ExclusionBrowserSmokeTests
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~GenericEmulatorPublishesVisibleData
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~SparkplugEmulatorPublishesDecodedDataAndStateText
+```
+
+The fixture generates credentials in memory, supplies them to the filtered test process, and
+restores the prior environment after each local fixture. It does not log the credentials. The
+exclusion and setup browsers are headed; live-flow and emulator browsers are headless. Every
+smoke case uses a fresh browser context, ignores the local HTTPS certificate, limits actions
+to 15 seconds and navigation to 40 seconds, and has a 180-second scenario budget. These tests
+are manual, not part of the solution or CI.
 
 ## Behaviour
 
-The browser runs headed so you can watch the flow; waits are bounded with a 180s overall
-budget. A missing variable, an unexpected origin, an undismissable dialog, a missing
+The provider tests and exclusion tests run headed; live flow and emulator tests run
+headless. Waits are bounded with a 180s overall budget. A missing variable, an unexpected origin, an undismissable dialog, a missing
 logout-endpoint response, or a stage timeout fails the test instead of skipping. Failures
 report the failing stage plus the exception type; extra facts (origins, paths) are built by
 the test itself. Credentials are read from the environment and never logged, and the tests

@@ -4,7 +4,7 @@ using MQTTnet;
 namespace MqttProbe.BrowserSmokeTests;
 
 // Tests 1-3: connect/subscribe/publish, long topic overflow, status chip transitions.
-public sealed partial class MqttLiveFlowsSmokeTests
+public sealed partial class MqttLiveFlowsSmokeTests : LocalSmokeFixtureBase
 {
     // ── Test 1: Connect, subscribe, publish, verify, disconnect ────────
 

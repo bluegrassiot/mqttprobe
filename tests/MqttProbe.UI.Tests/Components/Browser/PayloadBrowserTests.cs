@@ -986,13 +986,18 @@ public class PayloadBrowserTests : BunitTestContext
     }
 
     [Test]
-    public void NoSelectedTopic_ResetsDisplayedCountToZero()
+    public async Task NoSelectedTopic_ResetsDisplayedCountToZero()
     {
         _selection = MakeSelection(null, generation: 2, contentVersion: 0);
         EnsureMudProviders();
+        var displayedCountReset = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _mockMetrics
+            .When(metrics => metrics.SetDisplayedMessageCount(0))
+            .Do(_ => displayedCountReset.TrySetResult());
 
         var cut = Render<PayloadBrowser>();
 
+        await displayedCountReset.Task.WaitAsync(TimeSpan.FromSeconds(1));
         cut.WaitForAssertion(() =>
             _mockMetrics.Received().SetDisplayedMessageCount(0));
     }

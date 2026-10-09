@@ -2,6 +2,7 @@ using DotNet.Testcontainers.Containers;
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.Playwright;
 using MqttProbe.TestInfrastructure.Fixtures;
+using NSubstitute.Extensions;
 
 namespace MqttProbe.Core.Tests.Fixtures;
 
@@ -60,9 +61,9 @@ public sealed class LocalBrowserSmokeFixtureOwnershipTests
         {
             await harness.BeginCanceledNavigationCleanupAsync(cancellation);
 
-            Func<Task> firstDispose = harness.DisposeAndExpireBrokerDeadlineAsync;
+            Func<Task> firstDispose = () => harness.DisposeAndExpireBrokerDeadlineAsync(brokerDisposalPending: true);
             await firstDispose.Should().ThrowAsync<InvalidOperationException>();
-            Func<Task> secondDispose = harness.DisposeAndExpireBrokerDeadlineAsync;
+            Func<Task> secondDispose = () => harness.DisposeAndExpireBrokerDeadlineAsync(brokerDisposalPending: true);
             await secondDispose.Should().ThrowAsync<InvalidOperationException>();
 
             harness.BrowserCloseCount.Should().Be(1);
@@ -93,7 +94,13 @@ public sealed class LocalBrowserSmokeFixtureOwnershipTests
         var harness = new FixtureHarness(SetupStage.Navigation);
         var close = NewCompletionSource();
         var closeCalls = 0;
-        harness.Browser.CloseAsync().Returns(_ => ++closeCalls == 1 ? close.Task : Task.CompletedTask);
+        harness.Browser.Configure().CloseAsync().Returns(_ =>
+        {
+            harness.BrowserCloseStarted.TrySetResult();
+            return ++closeCalls == 1 ? close.Task : Task.CompletedTask;
+        });
+        harness.BrowserCloseStarted.Task.IsCompleted.Should().BeFalse();
+        harness.BrowserCloseCount.Should().Be(0);
         using var cancellation = new CancellationTokenSource();
 
         try
@@ -285,7 +292,7 @@ public sealed class LocalBrowserSmokeFixtureOwnershipTests
                 return ValueTask.CompletedTask;
             });
 
-            Clock = new FakeTimeProvider();
+            Clock = new RegistrationAwareTimeProvider(_cleanupTimeout);
 
             Fixture = new LocalBrowserSmokeFixture(
                 Root,
@@ -309,7 +316,7 @@ public sealed class LocalBrowserSmokeFixtureOwnershipTests
         public Func<Task<IPlaywright>> CreatePlaywright { get; }
         public Func<CancellationToken, Task> VerifyListener { get; }
         public Func<Task<string?>> WebCleanup { get; }
-        public FakeTimeProvider Clock { get; }
+        private RegistrationAwareTimeProvider Clock { get; }
         public TaskCompletionSource StageStarted { get; } = NewCompletionSource();
         public TaskCompletionSource BrowserCloseStarted { get; } = NewCompletionSource();
         public TaskCompletionSource BrokerDisposalStarted { get; } = NewCompletionSource();
@@ -334,28 +341,40 @@ public sealed class LocalBrowserSmokeFixtureOwnershipTests
 
         public void SetPendingClose(Task closeTask)
         {
-            Browser.CloseAsync().Returns(_ =>
+            Browser.Configure().CloseAsync().Returns(_ =>
             {
                 BrowserCloseStarted.TrySetResult();
                 return closeTask;
             });
+            BrowserCloseStarted.Task.IsCompleted.Should().BeFalse();
+            BrowserCloseCount.Should().Be(0);
         }
 
         public void SetPendingBrokerDisposal(Task disposalTask)
         {
-            Broker.DisposeAsync().Returns(_ =>
+            Broker.Configure().DisposeAsync().Returns(_ =>
             {
                 BrokerDisposalStarted.TrySetResult();
                 return new ValueTask(disposalTask);
             });
+            BrokerDisposalStarted.Task.IsCompleted.Should().BeFalse();
+            BrokerDisposeCount.Should().Be(0);
         }
 
-        public async Task DisposeAndExpireBrokerDeadlineAsync()
+        public Task DisposeAndExpireBrokerDeadlineAsync() =>
+            DisposeAndExpireBrokerDeadlineAsync(brokerDisposalPending: false);
+
+        public async Task DisposeAndExpireBrokerDeadlineAsync(bool brokerDisposalPending)
         {
             var dispose = Fixture.DisposeAsync().AsTask();
+            await Clock.WaitForCleanupTimerRegistrationAsync();
             Clock.Advance(_cleanupTimeout);
             await BrokerDisposalStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
-            Clock.Advance(_cleanupTimeout);
+            if (brokerDisposalPending)
+            {
+                await Clock.WaitForCleanupTimerRegistrationAsync();
+                Clock.Advance(_cleanupTimeout);
+            }
             await dispose.WaitAsync(TimeSpan.FromSeconds(2));
         }
 
@@ -398,6 +417,37 @@ public sealed class LocalBrowserSmokeFixtureOwnershipTests
         {
             StageStarted.TrySetResult();
             await pending;
+        }
+
+        private sealed class RegistrationAwareTimeProvider(TimeSpan cleanupTimeout) : TimeProvider
+        {
+            private readonly FakeTimeProvider _inner = new();
+            private readonly SemaphoreSlim _cleanupTimerRegistrations = new(0);
+
+            public override DateTimeOffset GetUtcNow() => _inner.GetUtcNow();
+
+            public override TimeZoneInfo LocalTimeZone => _inner.LocalTimeZone;
+
+            public override long TimestampFrequency => _inner.TimestampFrequency;
+
+            public override long GetTimestamp() => _inner.GetTimestamp();
+
+            public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+            {
+                var timer = _inner.CreateTimer(callback, state, dueTime, period);
+                if (dueTime == cleanupTimeout && period == Timeout.InfiniteTimeSpan)
+                    _cleanupTimerRegistrations.Release();
+
+                return timer;
+            }
+
+            public void Advance(TimeSpan amount) => _inner.Advance(amount);
+
+            public async Task WaitForCleanupTimerRegistrationAsync()
+            {
+                (await _cleanupTimerRegistrations.WaitAsync(TimeSpan.FromSeconds(2)))
+                    .Should().BeTrue("cleanup must register its deadline before fake time advances");
+            }
         }
     }
 }

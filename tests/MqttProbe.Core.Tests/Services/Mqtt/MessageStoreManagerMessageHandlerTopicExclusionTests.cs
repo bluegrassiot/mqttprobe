@@ -24,7 +24,7 @@ public partial class MessageStoreManagerMessageHandlerTests
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
 
         var session = new SessionState { SelectedConnection = new Connection() };
-        var excludes = new TopicExcludeService(
+        using var excludes = new TopicExcludeService(
             Substitute.For<ILogger<TopicExcludeService>>(),
             Substitute.For<IConnectionSettings>(), session);
         var performance = Substitute.For<IPerformanceSettings>();
@@ -74,6 +74,5 @@ public partial class MessageStoreManagerMessageHandlerTests
         refreshedMessages.Should().NotContain(message => message.Payload == "before-exclusion");
         refreshedMessages.Should().NotContain(message => message.Payload == "blocked-during-exclusion");
 
-        excludes.Dispose();
     }
 }

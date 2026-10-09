@@ -122,6 +122,10 @@ jobs:
     name: Test (Integration)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # A boolean, not the raw secrets: `if:` cannot read `secrets`, and job env
+    # would otherwise hand the credentials to every step in the job.
+    env:
+      HAS_DOCKER_HUB_CREDENTIALS: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -130,6 +134,20 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.x'
+
+      # Testcontainers reads the Docker config written by this login, so an
+      # untrusted or unauthenticated run just falls back to anonymous pulls.
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        if: >-
+          github.actor != 'dependabot[bot]' &&
+          env.HAS_DOCKER_HUB_CREDENTIALS == 'true' &&
+          (github.event_name == 'push' ||
+           (github.event_name == 'pull_request' &&
+            github.event.pull_request.head.repo.full_name == github.repository))
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Restore NuGet cache
         uses: actions/cache@v6

@@ -229,7 +229,7 @@ internal static class Program
         // .ico for the Win32 window/titlebar; .png for the Linux WM/dock.
         var iconFile = OperatingSystem.IsWindows() ? "icon.ico" : "icon.png";
         app.MainWindow
-            .SetTitle("")
+            .SetTitle("MQTTProbe")
             // Photino's Log() is binary: it prints unless LogVerbosity <= 0. Levels 1 and 2
             // behave identically (both flood stdout with SendWebMessage/RenderBatch blobs that
             // bury app logs), so 0 is the only value that silences it.

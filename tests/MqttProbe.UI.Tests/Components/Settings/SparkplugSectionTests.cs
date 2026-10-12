@@ -3,6 +3,7 @@ using MqttProbe.Core.Services.Configuration;
 using MqttProbe.UI.Components.Settings;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
+using MudBlazor.Extensions;
 
 namespace MqttProbe.UI.Tests.Components.Settings;
 
@@ -10,6 +11,8 @@ namespace MqttProbe.UI.Tests.Components.Settings;
 public class SparkplugSectionTests : BunitTestContext
 {
     private ISparkplugSettings _mockStore = null!;
+    private IUiSettings _mockUi = null!;
+    private readonly UiPreferences _preferences = new();
 
     [SetUp]
     public void Setup()
@@ -17,8 +20,49 @@ public class SparkplugSectionTests : BunitTestContext
         _mockStore = Substitute.For<ISparkplugSettings>();
         var sparkplug = new SparkplugSettings { EnrichAliasNames = true };
         _mockStore.Sparkplug.Returns(sparkplug);
+        _mockUi = SettingsSubstituteRegistration.CreateUiSettings(_preferences);
         Services.AddSparkplugSettings(_mockStore);
+        Services.AddUiSettings(_mockUi);
         EnsureMudProviders();
+    }
+
+    [Test]
+    public async Task GroupSparkplugTopics_Toggle_CallsSetter()
+    {
+        _mockUi.SetGroupSparkplugTopicsByNodeAndDeviceAsync(Arg.Any<bool>()).Returns(Task.CompletedTask);
+        var cut = Render<SparkplugSection>();
+
+        var toggle = cut.FindComponents<MudSwitch<bool>>()
+            .First(s => s.Instance.Label == "Group Sparkplug topics by node and device");
+        await cut.InvokeAsync(() => toggle.Instance.ValueChanged.InvokeAsync(true));
+
+        await _mockUi.Received(1).SetGroupSparkplugTopicsByNodeAndDeviceAsync(true);
+    }
+
+    [Test]
+    public void GroupSparkplugTopics_Toggle_ReflectsSavedPreference()
+    {
+        _preferences.GroupSparkplugTopicsByNodeAndDevice = false;
+        var rendered = Render<SparkplugSection>();
+        rendered.FindComponents<MudSwitch<bool>>()
+            .First(s => s.Instance.Label == "Group Sparkplug topics by node and device")
+            .Instance.GetState(x => x.Value).Should().BeFalse();
+
+        _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
+        var regrouped = Render<SparkplugSection>();
+        regrouped.FindComponents<MudSwitch<bool>>()
+            .First(s => s.Instance.Label == "Group Sparkplug topics by node and device")
+            .Instance.GetState(x => x.Value).Should().BeTrue();
+    }
+
+    [Test]
+    public void GroupSparkplugTopics_Caption_StatesTheDisplayOnlyScope()
+    {
+        var cut = Render<SparkplugSection>();
+
+        var caption = cut.FindAll(".settings-caption")
+            .First(p => p.TextContent.Contains("Display only", StringComparison.Ordinal));
+        caption.TextContent.Should().Contain("topics, subscriptions and payloads are unchanged");
     }
 
     [Test]

@@ -64,12 +64,55 @@
 ::deep .topic-tree-row {
     min-width: 0;
     max-width: 100%;
+    cursor: pointer;
+}
+
+/* Sparkplug grouping rows organise the tree; they are not MQTT topics. The dotted
+   label, muted colour and default cursor mark them as navigation, not selection. */
+::deep .topic-tree-row.topic-tree-row--group {
+    cursor: default;
+}
+
+::deep .topic-tree-row.topic-tree-row--group:hover {
+    background: rgba(148, 163, 184, 0.06);
+}
+
+::deep .topic-group-label {
+    color: var(--mud-palette-text-secondary);
+    border-bottom: 1px dotted rgba(148, 163, 184, 0.55);
+}
+
+/* The grouping flag must not shrink: when both it and the T/M legend cannot fit beside
+   the toolbar buttons, the legend wraps to the next line instead of the flag clipping. */
+::deep .topic-grouping-flag {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 4px;
+    min-width: 0;
+    max-width: 100%;
+    margin-left: 8px;
+    font-size: 0.68rem;
+    color: var(--mud-palette-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The grouping flag and the T/M legend do not both fit beside the toolbar buttons in a
+   narrow pane, so the row wraps instead of truncating either label. */
+.topic-tree-wrap ::deep .topic-toolbar {
+    flex-wrap: wrap;
+    row-gap: 2px;
 }
 
 ::deep .topic-tree-row .flex-grow-1 {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    /* Grouped rows show a whole topic path, so a row must stay one line: virtualized
+       rows are measured at a fixed 36px and wrapping breaks the scroll window. */
+    white-space: nowrap;
 }
 
 ::deep .topic-stat-text {

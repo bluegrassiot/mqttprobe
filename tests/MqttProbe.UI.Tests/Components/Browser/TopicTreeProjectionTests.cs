@@ -24,6 +24,14 @@ internal sealed class TopicBrowserTestFixture
     public void SetSnapshot(params TopicNodeSnapshot[] roots) =>
         _snapshot = new TopicTreeSnapshot(_snapshot.Version + 1, ImmutableArray.CreateRange(roots));
 
+    public TopicTreeSnapshot Snapshot => _snapshot;
+
+    // Empties the store while keeping the reported version, so the component keeps the frame
+    // it already rendered. That is the window a user clicks in: the row is still on screen
+    // while the topic it names is gone from the store.
+    public void PurgeHoldingRenderedFrame() =>
+        _snapshot = new TopicTreeSnapshot(_snapshot.Version, ImmutableArray<TopicNodeSnapshot>.Empty);
+
     public void SetSelection(SelectedTopicState selection) => _selection = selection;
 
     private void Select(string? fullTopic)
@@ -90,7 +98,8 @@ public sealed class TopicTreeProjectionTests
                 ])
             ]));
 
-        var rows = TopicTreeProjection.CreateRows(roots, null, new HashSet<string> { "root2", "root2/child2" });
+        var rows = TopicTreeProjection.CreateRows(
+            roots, null, new HashSet<string> { "root2", "root2/child2" }, groupSparkplugTopics: false);
 
         rows.Select(row => row.FullPath).Should().Equal(
             "root2", "root2/child2", "root2/child2/leaf2", "root2/child2/leaf10", "root2/child10", "root10");
@@ -114,7 +123,7 @@ public sealed class TopicTreeProjectionTests
             ]));
         var expanded = new HashSet<string> { "sensors/humidity" };
 
-        var rows = TopicTreeProjection.CreateRows(roots, "room1", expanded);
+        var rows = TopicTreeProjection.CreateRows(roots, "room1", expanded, groupSparkplugTopics: false);
 
         rows.Select(row => row.FullPath)
             .Should().Equal("sensors", "sensors/temperature", "sensors/temperature/room1");
@@ -122,7 +131,7 @@ public sealed class TopicTreeProjectionTests
         rows[1].IsExpanded.Should().BeTrue();
         expanded.Should().ContainSingle().Which.Should().Be("sensors/humidity");
 
-        var restoredRows = TopicTreeProjection.CreateRows(roots, null, expanded);
+        var restoredRows = TopicTreeProjection.CreateRows(roots, null, expanded, groupSparkplugTopics: false);
         restoredRows.Select(row => row.FullPath).Should().Equal("sensors");
     }
 
@@ -132,7 +141,8 @@ public sealed class TopicTreeProjectionTests
         var rows = TopicTreeProjection.CreateRows(
             [Node("root", "root", children: [Node("child", "root/child")])],
             null,
-            new HashSet<string>());
+            new HashSet<string>(),
+            groupSparkplugTopics: false);
 
         rows.Select(row => row.FullPath).Should().Equal("root");
         rows[0].HasChildren.Should().BeTrue();
@@ -141,7 +151,8 @@ public sealed class TopicTreeProjectionTests
 
     [Test]
     public void CreateRows_DefaultRootsReturnsNoRows() =>
-        TopicTreeProjection.CreateRows(default, null, new HashSet<string>()).Should().BeEmpty();
+        TopicTreeProjection.CreateRows(default, null, new HashSet<string>(), groupSparkplugTopics: false)
+            .Should().BeEmpty();
 
     private static TopicNodeSnapshot Node(
         string topic,

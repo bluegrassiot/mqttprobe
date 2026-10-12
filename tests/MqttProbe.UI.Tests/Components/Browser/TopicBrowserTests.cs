@@ -18,6 +18,7 @@ public class TopicBrowserTests : BunitTestContext
         _fixture = new TopicBrowserTestFixture(_mockMsgStore);
         _fixture.Configure();
         Services.AddSingleton(_mockMsgStore);
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
     }
 
     [Test]
@@ -111,6 +112,7 @@ public class TopicBrowserVirtualizedTests : BunitTestContext
         _fixture = new TopicBrowserTestFixture(_mockMsgStore);
         _fixture.Configure();
         Services.AddSingleton(_mockMsgStore);
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
     }
 
     internal static TopicNodeSnapshot BuildTree() => TopicBrowserTestTrees.BuildTree();
@@ -165,6 +167,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
         _fixture = new TopicBrowserTestFixture(_mockMsgStore);
         _fixture.Configure();
         Services.AddSingleton(_mockMsgStore);
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
     }
 
     private IRenderedComponent<TopicBrowser> RenderWithTree(Func<SelectedTopicState, Task>? onSelected = null)
@@ -178,6 +181,12 @@ public class TopicBrowserInteractionTests : BunitTestContext
         EnsureMudProviders();
         return cut;
     }
+
+    // The component refreshes itself from a timer, so a render can land between finding an
+    // element and dispatching its click. Looking the element up and clicking it in one
+    // dispatcher action keeps the interaction on one frame, exactly as a real browser does.
+    private static Task ClickAsync(IRenderedComponent<TopicBrowser> cut, string selector) =>
+        cut.InvokeAsync(() => cut.Find(selector).Click());
 
     [Test]
     public void ClickingRow_AppliesSelectedClass()
@@ -221,7 +230,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
     }
 
     [Test]
-    public void ClickingPurgedRow_DoesNotPublishPreviousSelection()
+    public async Task ClickingPurgedRow_DoesNotPublishPreviousSelection()
     {
         SelectedTopicState? callbackState = null;
         var cut = RenderWithTree(state =>
@@ -229,12 +238,41 @@ public class TopicBrowserInteractionTests : BunitTestContext
             callbackState = state;
             return Task.CompletedTask;
         });
-        _fixture.SetSnapshot();
+        // The store loses the topic while the row it rendered is still on screen; the
+        // version is held so the frame under test is the one the user would be clicking.
+        _fixture.PurgeHoldingRenderedFrame();
 
-        cut.Find(".topic-tree-row").Click();
+        await ClickAsync(cut, ".topic-tree-row");
 
         callbackState.Should().BeNull();
         _mockMsgStore.Received().SelectTopic("sensors");
+    }
+
+    [Test]
+    public async Task PurgedRow_IsRemovedByTheNextRefresh_AndPublishesNoSelection()
+    {
+        SelectedTopicState? callbackState = null;
+        var cut = RenderWithTree(state =>
+        {
+            callbackState = state;
+            return Task.CompletedTask;
+        });
+
+        var refreshRead = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var armed = true;
+        _fixture.SetSnapshot();
+        _mockMsgStore.GetTopicTreeSnapshot().Returns(_ =>
+        {
+            if (Interlocked.Exchange(ref armed, false))
+                refreshRead.TrySetResult(true);
+            return _fixture.Snapshot;
+        });
+
+        await refreshRead.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row").Should().BeEmpty());
+
+        callbackState.Should().BeNull();
+        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string>());
     }
 
     [Test]
@@ -433,19 +471,19 @@ public class TopicBrowserInteractionTests : BunitTestContext
     }
 
     [Test]
-    public void Selection_StaleCssCleared_WhenManagerSelectionBecomesNull()
+    public async Task Selection_StaleCssCleared_WhenManagerSelectionBecomesNull()
     {
         var cut = RenderWithTree();
 
         // Select a row
-        cut.Find(".topic-tree-row").Click();
+        await ClickAsync(cut, ".topic-tree-row");
         cut.Find(".topic-tree-row").ClassName.Should().Contain("topic-tree-row--selected");
 
         // Simulate external clear (e.g., ClearAllMessages)
         _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(Guid.NewGuid(), 2, 0), null, 0));
 
-        // Trigger a rebuild via expand — BuildVisibleRows syncs from manager
-        cut.Find(".topic-tree-row button").Click();
+        // Trigger a rebuild via expand, through the same one-frame interaction.
+        await ClickAsync(cut, ".topic-tree-row button");
 
         cut.WaitForAssertion(() =>
         {

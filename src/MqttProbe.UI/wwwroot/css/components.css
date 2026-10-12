@@ -307,3 +307,19 @@ body:has(.mud-dialog-container) .mobile-primary-nav {
     /* Keep above app bar clutter */
     z-index: 1400;
 }
+
+/* ── Topic browser panel ──────────────────────────────────────── */
+
+/* The topic browser's own root is a MudPaper, so its scoped stylesheet cannot reach it:
+   Blazor's CSS isolation only matches elements carrying that component's scope attribute
+   and there is no scoped plain-HTML ancestor above the Mud root. These rules replace what
+   used to be an inline style and keep the panel a bounded flex column that clips, so the
+   tree wrap inside stays the single scroll owner. */
+.topic-browser-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+}

@@ -29,8 +29,24 @@
 }
 
 .topic-tree-wrap {
+    /* One vertical scroll owner for the tree: the panel flexes, the wrap scrolls. */
+    flex: 1 1 auto;
+    min-height: 0;
     max-height: none;
     overflow: auto;
+}
+
+/* The panel's own root is a MudPaper, styled from the global stylesheet (see the comment
+   in wwwroot/css/components.css): this component's scoped CSS cannot reach it. The header
+   widgets below sit inside the scoped header row, so ::deep anchors them properly. */
+.topic-header-row ::deep .topic-title {
+    font-weight: 600;
+}
+
+.topic-header-row ::deep .topic-count-chip {
+    height: 20px;
+    font-size: 0.7rem;
+    padding: 0 6px;
 }
 
 /* The tree root must be able to grow wider than its container */

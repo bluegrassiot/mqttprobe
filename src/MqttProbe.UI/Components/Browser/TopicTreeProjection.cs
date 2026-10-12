@@ -305,9 +305,11 @@ internal static class TopicTreeProjection
     {
         foreach (var tip in verbNode.Children)
         {
-            // A node verb's child is the node-level topic itself: it is a supported tip only
-            // when the message landed on it, so malformed-only children stay in the residue.
-            if (!tip.HasDirectMessages)
+            // A node verb's child is the node-level topic itself. It is a supported tip when
+            // the message landed on it, and also when the store left it childless after
+            // retention emptied it: only a tip with no message and deeper segments of its own
+            // can be a malformed prefix, and that stays in the residue.
+            if (!tip.HasDirectMessages && !tip.Children.IsDefaultOrEmpty)
                 continue;
 
             groupedTips.Add(tip.FullTopic);
@@ -333,9 +335,10 @@ internal static class TopicTreeProjection
         {
             foreach (var deviceNode in nodeLevel.Children)
             {
-                // The device tip is the only supported shape here: a device with no message
-                // of its own is a malformed deeper segment and stays in the residue.
-                if (!deviceNode.HasDirectMessages)
+                // The device tip is the only supported shape here. As at the node level, a
+                // childless tip the store kept after retention is supported; a tip with no
+                // message and deeper segments is a malformed prefix and stays in the residue.
+                if (!deviceNode.HasDirectMessages && !deviceNode.Children.IsDefaultOrEmpty)
                     continue;
 
                 groupedTips.Add(deviceNode.FullTopic);

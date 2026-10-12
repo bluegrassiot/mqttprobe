@@ -5,14 +5,14 @@
 @using MqttProbe.Core.Services.Configuration
 @implements IAsyncDisposable
 
-<MudPaper Elevation="1" Class="pa-2 app-chrome-panel" Style="flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; box-sizing:border-box;">
+<MudPaper Elevation="1" Class="pa-2 app-chrome-panel topic-browser-panel">
     <div class="topic-header-row">
         <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary"/>
-        <MudText Typo="Typo.subtitle2" Style="font-weight:600">Topics</MudText>
+        <MudText Typo="Typo.subtitle2" Class="topic-title">Topics</MudText>
         @if (MessageStoreManagerService.RootTopicCount > 0)
         {
             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
-                     Style="height:20px; font-size:0.7rem; padding:0 6px;">
+                     Class="topic-count-chip">
                 @MessageStoreManagerService.RootTopicCount
             </MudChip>
         }
@@ -24,7 +24,7 @@
                       Immediate="true" Clearable="true" Variant="Variant.Outlined"
                       Margin="Margin.Dense" Class="topic-filter-field"/>
     </div>
-    <div class="topic-tree-wrap" style="flex:1 1 auto; min-height:0; overflow:auto;">
+    <div class="topic-tree-wrap">
         <MudToolBar Class="pa-0 mb-1 topic-toolbar">
             <MudIconButton Icon="@LucideIcons.Maximize2" Size="Size.Small" title="Expand all" OnClick="ExpandAll"/>
             <MudIconButton Icon="@LucideIcons.Minimize2" Size="Size.Small" title="Collapse all" OnClick="CollapseAll"/>

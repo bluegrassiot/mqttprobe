@@ -248,6 +248,35 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     }
 
     [Test]
+    public void TurningGroupingOn_KeepsTheSelectionForARetainedChildlessTip()
+    {
+        // Retention emptied this node topic, so the store kept it childless: it stays grouped
+        // and the selection on the real topic survives the switch.
+        const string keptNode = "spBv1.0/plant1/NDATA/keptnode";
+        TopicNodeSnapshot[] retained =
+        [
+            .. TopicSnapshotBuilder.Build(
+                (NodeTip, 3),
+                (keptNode, 0))
+        ];
+
+        var cut = RenderSnapshot(retained, grouped: false, keptNode);
+
+        ApplyPreference(true);
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
+
+        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _fixture.SelectedFullTopic.Should().Be(keptNode);
+        ExpandAll(cut);
+        cut.WaitForAssertion(() =>
+        {
+            var selected = cut.FindAll(".topic-tree-row--selected");
+            selected.Should().ContainSingle();
+            selected[0].TextContent.Should().Contain(keptNode);
+        });
+    }
+
+    [Test]
     public void TurningGroupingOn_WithNoSelectionDoesNotTouchTheStore()
     {
         var cut = RenderWithSelection(grouped: false, selectedPath: null);

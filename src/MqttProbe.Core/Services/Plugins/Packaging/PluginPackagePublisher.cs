@@ -141,6 +141,7 @@ internal sealed class PluginPackagePublisher(
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // Cleanup failure must not replace the install result.
         }
     }
 

@@ -199,8 +199,12 @@ class ValidateTests(ManifestFixture):
         }
         self.assertEqual(ios_privacy.validate(self.write(manifest))["declared_api_types"], 4)
 
-    def test_accepts_tracking_declared_true(self):
-        manifest = {**MAUI_TEMPLATE, "NSPrivacyTracking": True}
+    def test_accepts_tracking_declared_true_with_a_domain(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyTracking": True,
+            "NSPrivacyTrackingDomains": ["analytics.example.com"],
+        }
         self.assertIn("declared_api_types", ios_privacy.validate(self.write(manifest)))
 
     def test_rejects_missing_file(self):
@@ -240,6 +244,210 @@ class ValidateTests(ManifestFixture):
     def test_rejects_empty_manifest(self):
         with self.assertRaises(ios_privacy.ManifestError):
             ios_privacy.validate(self.write({}))
+
+
+class TrackingTests(ManifestFixture):
+    def test_rejects_tracking_true_without_domains(self):
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyTracking": True}
+        with self.assertRaises(ios_privacy.ManifestError) as raised:
+            ios_privacy.validate(self.write(manifest))
+        self.assertIn("TrackingDomains", str(raised.exception))
+
+    def test_rejects_tracking_false_with_domains(self):
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyTrackingDomains": ["example.com"]}
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_tracking_string(self):
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyTracking": "false"}
+        with self.assertRaises(ios_privacy.ManifestError) as raised:
+            ios_privacy.validate(self.write(manifest))
+        self.assertIn("boolean", str(raised.exception))
+
+    def test_rejects_tracking_integer(self):
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyTracking": 0}
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_tracking_domains_wrong_type(self):
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyTrackingDomains": "example.com"}
+        with self.assertRaises(ios_privacy.ManifestError) as raised:
+            ios_privacy.validate(self.write(manifest))
+        self.assertIn("array", str(raised.exception))
+
+    def test_rejects_tracking_domain_non_string(self):
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyTracking": True, "NSPrivacyTrackingDomains": [7]}
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_tracking_domain_with_scheme(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyTracking": True,
+            "NSPrivacyTrackingDomains": ["https://example.com"],
+        }
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_tracking_domain_with_path(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyTracking": True,
+            "NSPrivacyTrackingDomains": ["example.com/track"],
+        }
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_tracking_domain_with_query(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyTracking": True,
+            "NSPrivacyTrackingDomains": ["example.com?x=1"],
+        }
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_tracking_domain_with_port(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyTracking": True,
+            "NSPrivacyTrackingDomains": ["example.com:443"],
+        }
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_tracking_domain_with_userinfo(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyTracking": True,
+            "NSPrivacyTrackingDomains": ["user@example.com"],
+        }
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_tracking_domain_with_nonslash_scheme(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyTracking": True,
+            "NSPrivacyTrackingDomains": ["https:example.com"],
+        }
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_tracking_domain_with_trailing_slash(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyTracking": True,
+            "NSPrivacyTrackingDomains": ["example.com/"],
+        }
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_tracking_domain_with_whitespace(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyTracking": True,
+            "NSPrivacyTrackingDomains": ["exa mple.com"],
+        }
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_accepts_multiple_bare_host_domains(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyTracking": True,
+            "NSPrivacyTrackingDomains": ["example.com", "analytics.example.org"],
+        }
+        self.assertIn("declared_api_types", ios_privacy.validate(self.write(manifest)))
+
+
+VALID_COLLECTED_ENTRY = {
+    "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeEmailAddress",
+    "NSPrivacyCollectedDataTypeLinked": False,
+    "NSPrivacyCollectedDataTypeTracking": False,
+    "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+}
+
+
+class CollectedDataTests(ManifestFixture):
+    def test_accepts_a_valid_nonempty_collection(self):
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": [VALID_COLLECTED_ENTRY]}
+        self.assertIn("declared_api_types", ios_privacy.validate(self.write(manifest)))
+
+    def test_accepts_empty_purposes(self):
+        entry = {**VALID_COLLECTED_ENTRY, "NSPrivacyCollectedDataTypePurposes": []}
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": [entry]}
+        self.assertIn("declared_api_types", ios_privacy.validate(self.write(manifest)))
+
+    def test_rejects_collection_wrong_type(self):
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": "none"}
+        with self.assertRaises(ios_privacy.ManifestError) as raised:
+            ios_privacy.validate(self.write(manifest))
+        self.assertIn("array", str(raised.exception))
+
+    def test_rejects_non_dict_collection_entry(self):
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": ["x"]}
+        with self.assertRaises(ios_privacy.ManifestError) as raised:
+            ios_privacy.validate(self.write(manifest))
+        self.assertIn("dictionary", str(raised.exception))
+
+    def test_rejects_entry_missing_a_key(self):
+        entry = {
+            name: value
+            for name, value in VALID_COLLECTED_ENTRY.items()
+            if name != "NSPrivacyCollectedDataTypeTracking"
+        }
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": [entry]}
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_entry_with_an_extra_key(self):
+        entry = {**VALID_COLLECTED_ENTRY, "NSPrivacyCollectedDataTypeExtra": 1}
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": [entry]}
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_empty_data_type_string(self):
+        entry = {**VALID_COLLECTED_ENTRY, "NSPrivacyCollectedDataType": ""}
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": [entry]}
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_non_string_data_type(self):
+        entry = {**VALID_COLLECTED_ENTRY, "NSPrivacyCollectedDataType": 42}
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": [entry]}
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_non_boolean_linked(self):
+        entry = {**VALID_COLLECTED_ENTRY, "NSPrivacyCollectedDataTypeLinked": "true"}
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": [entry]}
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_non_boolean_tracking(self):
+        entry = {**VALID_COLLECTED_ENTRY, "NSPrivacyCollectedDataTypeTracking": 1}
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": [entry]}
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_purposes_wrong_type(self):
+        entry = {**VALID_COLLECTED_ENTRY, "NSPrivacyCollectedDataTypePurposes": "purpose"}
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": [entry]}
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_non_string_purpose(self):
+        entry = {**VALID_COLLECTED_ENTRY, "NSPrivacyCollectedDataTypePurposes": [7]}
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": [entry]}
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_empty_purpose_string(self):
+        entry = {**VALID_COLLECTED_ENTRY, "NSPrivacyCollectedDataTypePurposes": [""]}
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyCollectedDataTypes": [entry]}
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
 
 
 class CliTests(ManifestFixture):

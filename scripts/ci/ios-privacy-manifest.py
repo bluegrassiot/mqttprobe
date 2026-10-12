@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 """Validates a PrivacyInfo.xcprivacy inside a built iOS app bundle.
 
-App Store Connect rejects an upload without one (ITMS-91053 for a missing
-manifest, ITMS-91061 for missing required-reason declarations), so this fails
-closed on absence, on an unparseable plist, a missing top-level key, and on a
-missing or malformed .NET BCL required-reason baseline.
+Checks the bundled declarations this app needs; passing is not App Store Connect approval.
 """
 
 from __future__ import annotations
@@ -14,7 +11,7 @@ import plistlib
 import sys
 from pathlib import Path
 
-# Apple requires all three top-level keys to be present in a privacy manifest.
+# Bundle gate requires explicit declarations.
 REQUIRED_KEYS = (
     "NSPrivacyTracking",
     "NSPrivacyTrackingDomains",
@@ -40,9 +37,79 @@ REQUIRED_REASON_PAIRS = {
     "NSPrivacyAccessedAPICategoryDiskSpace": "E174.1",
 }
 
+COLLECTED_DATA_KEYS = frozenset(
+    {
+        "NSPrivacyCollectedDataType",
+        "NSPrivacyCollectedDataTypeLinked",
+        "NSPrivacyCollectedDataTypeTracking",
+        "NSPrivacyCollectedDataTypePurposes",
+    }
+)
+
 
 class ManifestError(ValueError):
     pass
+
+
+def _check_tracking(manifest: dict) -> None:
+    tracking = manifest["NSPrivacyTracking"]
+    if not isinstance(tracking, bool):
+        raise ManifestError(
+            "NSPrivacyTracking must be a boolean true or false, not a number or string."
+        )
+
+    domains = manifest["NSPrivacyTrackingDomains"]
+    if not isinstance(domains, list):
+        raise ManifestError("NSPrivacyTrackingDomains must be an array.")
+    for domain in domains:
+        if not isinstance(domain, str) or not domain:
+            raise ManifestError("NSPrivacyTrackingDomains entries must be non-empty strings.")
+        if any(character in domain for character in "/?#:@") or any(
+            character.isspace() for character in domain
+        ):
+            raise ManifestError(
+                f"Tracking domain '{domain}' must be a bare host: no scheme, userinfo, port, "
+                "path, query or trailing slash."
+            )
+
+    if tracking and not domains:
+        raise ManifestError(
+            "NSPrivacyTracking is true but NSPrivacyTrackingDomains is empty; a tracking app "
+            "must name at least one domain."
+        )
+    if not tracking and domains:
+        raise ManifestError(
+            "NSPrivacyTracking is false but NSPrivacyTrackingDomains is not empty; TN3181 "
+            "treats that combination as invalid."
+        )
+
+
+def _check_collected_data(manifest: dict) -> None:
+    collected = manifest["NSPrivacyCollectedDataTypes"]
+    if not isinstance(collected, list):
+        raise ManifestError("NSPrivacyCollectedDataTypes must be an array.")
+
+    for entry in collected:
+        if not isinstance(entry, dict):
+            raise ManifestError("Every NSPrivacyCollectedDataTypes entry must be a dictionary.")
+        if set(entry) != COLLECTED_DATA_KEYS:
+            raise ManifestError(
+                "A NSPrivacyCollectedDataTypes entry must carry exactly these keys: "
+                f"{', '.join(sorted(COLLECTED_DATA_KEYS))}."
+            )
+        data_type = entry["NSPrivacyCollectedDataType"]
+        if not isinstance(data_type, str) or not data_type:
+            raise ManifestError("NSPrivacyCollectedDataType must be a non-empty string.")
+        for flag in ("NSPrivacyCollectedDataTypeLinked", "NSPrivacyCollectedDataTypeTracking"):
+            if not isinstance(entry[flag], bool):
+                raise ManifestError(f"{flag} must be a boolean true or false.")
+        purposes = entry["NSPrivacyCollectedDataTypePurposes"]
+        if not isinstance(purposes, list):
+            raise ManifestError("NSPrivacyCollectedDataTypePurposes must be an array.")
+        if any(not isinstance(purpose, str) or not purpose for purpose in purposes):
+            raise ManifestError(
+                "NSPrivacyCollectedDataTypePurposes entries must be non-empty strings."
+            )
 
 
 def validate(path: Path) -> dict[str, int]:
@@ -62,9 +129,12 @@ def validate(path: Path) -> dict[str, int]:
     missing = [key for key in REQUIRED_KEYS if key not in manifest]
     if missing:
         raise ManifestError(
-            f"{path.name} is missing required key(s): {', '.join(missing)}. Apple rejects a "
-            "manifest that omits any of the three top-level keys."
+            f"{path.name} is missing required key(s): {', '.join(missing)}. This bundle gate "
+            "requires all three top-level keys."
         )
+
+    _check_tracking(manifest)
+    _check_collected_data(manifest)
 
     if "NSPrivacyAccessedAPITypes" not in manifest:
         raise ManifestError(

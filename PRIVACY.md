@@ -88,8 +88,8 @@ Everything the app remembers lives inside its own sandbox on your device:
   unpacks it into its app-data folder under "plugins/protobuf/<package id>". What stays
   there is the package content: the .proto definitions, the JSON file that maps MQTT
   topics to message types, and the package manifest holding its name, version, and author.
-  No message traffic is written there. Removing the package deletes that folder straight
-  away, and a schema change takes effect without restarting the app.
+  No message traffic is written there. Schema changes do not require a restart. See
+  "Deleting your data" below for removal and cleanup behavior.
 - **Messages, in memory only.** Received messages, their topics, and their payloads are
   held in memory while the app is open. The app does not write them to disk, and they are
   gone when the app closes. How many are kept is capped by a limit you can change in
@@ -117,9 +117,12 @@ outside the picker. It does not use the microphone, camera, or location.
 
 The plugin package picker works the same way: it grants access to the one archive you
 choose. On iOS the app accepts protobuf schema packages, which are data rather than
-executable code, and refuses any package that carries a plugin DLL. Once the import
-finishes, the copy of the archive you selected is deleted and only the unpacked package
-described above remains.
+executable code, and refuses any package that carries a plugin DLL.
+
+The app creates temporary copies of the archive and unpacked files in a staging folder
+inside its sandbox. It tries to delete these copies when the import finishes. If cleanup
+fails, they can remain until you delete the app. The original file you selected is only
+read, never changed or moved.
 
 ## Backups, updates, and other devices
 
@@ -142,8 +145,9 @@ mechanism, and on iOS it does not download or run new code at runtime.
 Deleting a connection removes its saved settings, removes the password the app stored for
 it, and deletes any client certificate attached to it.
 
-Removing an imported schema package deletes its folder from the app-data folder immediately.
-Deleting the app removes any remaining schema package folders too.
+Removing an imported schema package attempts to delete its folder immediately, without a
+restart. If deletion fails, the app reports that it could not remove the package. Deleting
+the app removes its schema package folders and any leftover staging copies.
 
 Deleting the app removes the files it wrote, including the settings file and the stored
 certificate files. Keychain entries are a separate case and are worth being precise about.

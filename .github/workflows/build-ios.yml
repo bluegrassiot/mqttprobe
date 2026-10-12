@@ -36,6 +36,12 @@ jobs:
     # rejects uploads built with an Xcode below 26.
     runs-on: macos-26
     timeout-minutes: 45
+    # The distribution secrets live in the ios-signing environment; its required
+    # reviewers and deployment branch rule are the real gate. The ref test is
+    # defense in depth, not a boundary: only repository settings can configure the
+    # environment, and a run before that setup auto-creates it unprotected.
+    environment: ios-signing
+    if: github.ref == 'refs/heads/release/v1.0.8'
     permissions:
       contents: read
     steps:

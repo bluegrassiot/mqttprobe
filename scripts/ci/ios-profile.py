@@ -4,9 +4,10 @@
 Apple distinguishes the distribution channels by profile keys: App Store has no
 ProvisionedDevices, no ProvisionsAllDevices, and get-task-allow false; Ad Hoc has
 ProvisionedDevices; Development has get-task-allow true; Enterprise has
-ProvisionsAllDevices. Only App Store is accepted here, and every check fails
-closed, since a wrong profile surfaces as an upload rejection rather than a
-build failure.
+ProvisionsAllDevices. The Platform list must also cover iOS, or a tvOS, watchOS
+or macOS profile for the same team and bundle id signs nothing useful. Only App
+Store is accepted here, and every check fails closed, since a wrong profile
+surfaces as an upload rejection rather than a build failure.
 
 Read with plistlib rather than a shell reader: the expiry is a plist <date> and
 the device list is a real array, so comparing them as text is how an expired
@@ -85,6 +86,23 @@ def check(
         raise ProfileError(
             f"Profile covers '{app_id}', not '{expected_app_id}'. An App Store profile must "
             "name this bundle id exactly; a wildcard profile is rejected."
+        )
+
+    platform = profile.get("Platform")
+    if not isinstance(platform, list) or not platform:
+        raise ProfileError(
+            "Profile has no Platform list naming the platforms it covers. An App Store iOS "
+            "profile declares Platform ['iOS']; App Store Connect rejects the upload otherwise."
+        )
+    if not all(isinstance(entry, str) and entry for entry in platform):
+        raise ProfileError(
+            "Profile Platform must be a list of platform names; it contains a non-string or "
+            "empty entry."
+        )
+    if "iOS" not in platform:
+        raise ProfileError(
+            f"Profile covers platform(s) {', '.join(platform)}, not iOS. A tvOS, watchOS or "
+            "macOS App Store profile cannot sign an iOS app; App Store Connect rejects the upload."
         )
 
     if not _is_disabled(entitlements.get("get-task-allow")):

@@ -37,6 +37,7 @@ def make_profile(**overrides) -> dict:
         "Name": "MQTTProbe App Store",
         "UUID": "1a2b3c4d-0000-0000-0000-000000000000",
         "TeamIdentifier": [TEAM],
+        "Platform": ["iOS"],
         "ExpirationDate": NOW + timedelta(days=90),
         "DeveloperCertificates": [CERT_DER],
         "Entitlements": {"application-identifier": APP_ID, "get-task-allow": False},
@@ -211,6 +212,51 @@ class IdentityTests(ProfileFixture):
     def test_rejects_empty_team_identifier(self):
         with self.assertRaises(ios_profile.ProfileError):
             self.check(make_profile(TeamIdentifier=[]))
+
+
+class PlatformTests(ProfileFixture):
+    def test_accepts_ios_platform(self):
+        values = self.check(make_profile(Platform=["iOS"]))
+        self.assertEqual(values["app_id"], APP_ID)
+
+    def test_accepts_ios_among_additional_platforms(self):
+        values = self.check(make_profile(Platform=["iOS", "xrOS"]))
+        self.assertEqual(values["team"], TEAM)
+
+    def test_rejects_missing_platform(self):
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(make_profile(Platform=None))
+        self.assertIn("Platform", str(raised.exception))
+
+    def test_rejects_string_platform(self):
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(make_profile(Platform="iOS"))
+        self.assertIn("Platform", str(raised.exception))
+
+    def test_rejects_empty_platform_list(self):
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(make_profile(Platform=[]))
+        self.assertIn("Platform", str(raised.exception))
+
+    def test_rejects_non_string_platform_entry(self):
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(make_profile(Platform=["iOS", 7]))
+        self.assertIn("Platform", str(raised.exception))
+
+    def test_rejects_empty_platform_entry(self):
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(make_profile(Platform=["iOS", ""]))
+        self.assertIn("Platform", str(raised.exception))
+
+    def test_rejects_tvos_platform(self):
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(make_profile(Platform=["tvOS"]))
+        self.assertIn("tvOS", str(raised.exception))
+
+    def test_rejects_macos_platform(self):
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(make_profile(Platform=["macOS"]))
+        self.assertIn("macOS", str(raised.exception))
 
 
 class ExpiryTests(ProfileFixture):

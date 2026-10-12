@@ -19,10 +19,31 @@ IOS_PLIST = PLATFORMS / "iOS" / "Info.plist"
 CATALYST_PLIST = PLATFORMS / "MacCatalyst" / "Info.plist"
 PRIVACY_MANIFEST = PLATFORMS / "iOS" / "Resources" / "PrivacyInfo.xcprivacy"
 
+WORKFLOW = ROOT / ".github" / "workflows" / "build-ios.yml"
+SIGNING_JOB = "build-ios-archive"
+TRUSTED_REF = "refs/heads/release/v1.0.8"
+
 
 def load_plist(path):
     with path.open("rb") as handle:
         return plistlib.load(handle)
+
+
+def load_job(name):
+    """Return one top-level job block from the workflow as text.
+
+    Read as text, not YAML, and never through the GitHub API: the script tests
+    must not depend on a YAML parser the runner does not guarantee, and these
+    assert source structure rather than exercise a workflow.
+    """
+    lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
+    start = lines.index(f"  {name}:")
+    block = [lines[start]]
+    for line in lines[start + 1:]:
+        if line.startswith("  ") and not line.startswith("   "):
+            break
+        block.append(line)
+    return "\n".join(block)
 
 
 def load_privacy_validator():
@@ -155,6 +176,49 @@ class BundleSourceContractTests(unittest.TestCase):
         contents = targets.read_text(encoding="utf-8")
         self.assertNotIn("IPhoneResourcePrefix", contents)
         self.assertNotIn("xcprivacy", contents)
+
+
+class IosSigningWorkflowTests(unittest.TestCase):
+    """Source contracts for the signing gate in build-ios.yml.
+
+    A workflow file cannot configure an environment, so these check only that the
+    job references the right environment and carries the defense-in-depth ref
+    test. The environment itself is a repository setting; see the archive build
+    guide for the manual setup, which is where the real protection lives.
+    """
+
+    def setUp(self):
+        self.text = WORKFLOW.read_text(encoding="utf-8")
+        self.job = load_job(SIGNING_JOB)
+
+    def test_signing_job_references_the_ios_signing_environment(self):
+        self.assertIn("    environment: ios-signing", self.job)
+
+    def test_signing_job_is_guarded_to_the_trusted_release_branch(self):
+        # github.ref is fully qualified, so a tag named v1.0.8 or any other branch
+        # does not satisfy the guard; this is defense in depth, not the boundary.
+        self.assertIn(f"    if: github.ref == '{TRUSTED_REF}'", self.job)
+
+    def test_guard_only_targets_the_branch_not_a_tag(self):
+        # ref_name would also match a v1.0.8 tag; the guard must use github.ref.
+        self.assertIn(TRUSTED_REF, self.job)
+        self.assertNotIn("github.ref_name ==", self.job)
+
+    def test_protection_is_not_pretended_in_yaml(self):
+        # Reviewers and bypass are repository settings, not workflow keys, and
+        # deployment: false is unnecessary syntax this workflow does not need.
+        for forbidden in ("reviewers:", "required_reviewers", "deployment:"):
+            self.assertNotIn(forbidden, self.text)
+
+    def test_no_workflow_api_or_secret_management_steps(self):
+        for forbidden in ("api.github.com", "gh api", "gh secret", "gh variable"):
+            self.assertNotIn(forbidden, self.text)
+
+    def test_manual_artifact_upload_is_the_only_publish_step(self):
+        self.assertIn("uses: actions/upload-artifact@", self.job)
+        self.assertIn("name: maui-ios-archive", self.job)
+        for forbidden in ("action-gh-release", "upload-release-asset", "gh release", "altool"):
+            self.assertNotIn(forbidden, self.text)
 
 
 if __name__ == "__main__":

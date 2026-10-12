@@ -30,6 +30,30 @@
     text-align: left;
 }
 
+/* iOS local-network note: context for the connect action, not a competing alert. */
+.connection-required__lan {
+    padding: 12px 14px;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: 8px;
+    background-color: var(--mud-palette-background-gray);
+    text-align: left;
+}
+
+.connection-required__lan-title {
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.connection-required__lan ::deep .mud-button-root {
+    margin-top: 10px;
+}
+
+@media (max-width: 599px) {
+    .connection-required__lan ::deep .mud-button-root {
+        width: 100%;
+    }
+}
+
 .signal-connecting {
     animation: signal-breathe 1.8s ease-in-out infinite;
 }

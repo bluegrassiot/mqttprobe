@@ -22,6 +22,18 @@ public class AboutSectionTests : BunitTestContext
     }
 
     [Test]
+    public void Links_To_The_Privacy_Policy_As_A_Safe_External_Anchor()
+    {
+        var cut = Render<AboutSection>();
+
+        var link = cut.Find("[data-testid=privacy-policy-link]");
+        link.GetAttribute("href").Should().Be(AboutSection.PrivacyPolicyUri.ToString());
+        link.GetAttribute("target").Should().Be("_blank");
+        link.GetAttribute("rel").Should().Be("noopener noreferrer");
+        link.TextContent.Should().Contain("Privacy policy");
+    }
+
+    [Test]
     public void ShowsVersion()
     {
         _mockAppInfo.GetVersion().Returns("1.0.0-test");

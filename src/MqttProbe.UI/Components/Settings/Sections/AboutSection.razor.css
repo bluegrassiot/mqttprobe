@@ -1,0 +1,45 @@
+.about-links {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
+.about-links__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--mud-palette-primary);
+    font-weight: 500;
+    text-decoration: none;
+    /* The router does not own this href, so the visited state would leave the row
+       looking disabled after the first tap. */
+    -webkit-tap-highlight-color: transparent;
+}
+
+.about-links__link:hover .about-links__label,
+.about-links__link:focus-visible .about-links__label {
+    text-decoration: underline;
+}
+
+.about-links__link:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 3px;
+    border-radius: 4px;
+}
+
+/* Decoration only: the label carries the meaning, so it must not read as a second link. */
+.about-links__external {
+    color: var(--mud-palette-text-secondary);
+    opacity: 0.7;
+}
+
+.about-links__link:hover .about-links__external,
+.about-links__link:focus-visible .about-links__external {
+    color: var(--mud-palette-primary);
+    opacity: 1;
+}
+
+.about-links__hint {
+    display: block;
+    margin-top: 0.25rem;
+}

@@ -72,7 +72,7 @@
         new("subscriptions", "Subscriptions", LucideIcons.Layers, () => true, _subscriptions),
         new("sparkplug", "Sparkplug", LucideIcons.Radio, () => true, _sparkplug),
         new("performance", "Performance", LucideIcons.Cpu, () => true, _performance),
-        new("plugins", "Plugins", LucideIcons.Puzzle, () => true, _plugins),
+        new("plugins", "Plugins", LucideIcons.Puzzle, () => AppInfoService.SupportsPluginInstallation, _plugins),
         new("account", "Account", LucideIcons.Shield, () => AppInfoService.RequiresAuthentication, _account),
         new("about", "About", LucideIcons.Info, () => true, _about),
     ];

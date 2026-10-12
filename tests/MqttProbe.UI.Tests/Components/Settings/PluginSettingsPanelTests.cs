@@ -22,6 +22,7 @@ public class PluginSettingsPanelTests : BunitTestContext
     private IPluginPackagePicker _picker = null!;
     private IPluginInputCapability _inputCapability = null!;
     private IDialogService _dialogService = null!;
+    private IAppInfoService _appInfo = null!;
 
     [SetUp]
     public void SetUp()
@@ -76,6 +77,9 @@ public class PluginSettingsPanelTests : BunitTestContext
         var pipeline = new PayloadPipeline(registry, NullLogger<PayloadPipeline>.Instance);
         var appInfo = Substitute.For<IAppInfoService>();
         appInfo.GetVersion().Returns("1.0.3");
+        // NSubstitute answers default(bool), not the interface default.
+        appInfo.SupportsPluginInstallation.Returns(true);
+        _appInfo = appInfo;
 
         Services.AddSingleton(new PluginInventoryService(config, pipeline, _session));
         Services.AddSingleton(new PluginPackageInstaller(
@@ -83,6 +87,7 @@ public class PluginSettingsPanelTests : BunitTestContext
         Services.AddSingleton(new PluginReloadService(
             config, pipeline, _session, new PluginAssemblyCache(), NullLoggerFactory.Instance));
         Services.AddSingleton(_session);
+        Services.AddSingleton(appInfo);
     }
 
     private PluginConfig ConfigForFolder()
@@ -188,6 +193,7 @@ public class PluginSettingsPanelTests : BunitTestContext
         var pipeline = new PayloadPipeline(registry, NullLogger<PayloadPipeline>.Instance);
         var appInfo = Substitute.For<IAppInfoService>();
         appInfo.GetVersion().Returns("1.0.3");
+        appInfo.SupportsPluginInstallation.Returns(true);
 
         Services.AddSingleton(new PluginInventoryService(config, pipeline, _session));
         Services.AddSingleton(new PluginPackageInstaller(
@@ -195,12 +201,59 @@ public class PluginSettingsPanelTests : BunitTestContext
         Services.AddSingleton(new PluginReloadService(
             config, pipeline, _session, new PluginAssemblyCache(), NullLoggerFactory.Instance));
         Services.AddSingleton(_session);
+        Services.AddSingleton(appInfo);
 
         EnsureMudProviders();
 
         var cut = Render<PluginSettingsPanel>();
 
         cut.Markup.Should().Contain("Declared message type not found");
+    }
+
+    [Test]
+    public void Renders_Nothing_When_The_Build_Cannot_Install_Plugins()
+    {
+        InstallSchemaManifest("demo", "Demo Schemas", "1.0.0");
+        RegisterPluginServices(ConfigForFolder());
+        _appInfo.SupportsPluginInstallation.Returns(false);
+
+        EnsureMudProviders();
+
+        var cut = Render<PluginSettingsPanel>();
+
+        cut.Markup.Should().BeEmpty();
+    }
+
+    [Test]
+    public void Shows_No_Restriction_Message_When_The_Build_Cannot_Install_Plugins()
+    {
+        RegisterPluginServices(ConfigForFolder());
+        _appInfo.SupportsPluginInstallation.Returns(false);
+
+        EnsureMudProviders();
+
+        var cut = Render<PluginSettingsPanel>();
+
+        cut.Markup.Should().NotContain("App Store");
+        cut.Markup.Should().NotContain("cannot install plugins");
+        cut.Markup.Should().NotContain("No plugins installed");
+        cut.Markup.Should().NotContain("No writable plugin folder");
+        cut.FindAll("table").Should().BeEmpty();
+    }
+
+    [Test]
+    public void Renders_The_Usual_Panel_When_The_Build_Can_Install_Plugins()
+    {
+        InstallSchemaManifest("demo", "Demo Schemas", "1.0.0");
+        RegisterPluginServices(ConfigForFolder());
+        _appInfo.SupportsPluginInstallation.Returns(true);
+
+        EnsureMudProviders();
+
+        var cut = Render<PluginSettingsPanel>();
+
+        cut.Markup.Should().Contain("Demo Schemas");
+        cut.FindAll("[data-testid=install-plugin-button]").Should().ContainSingle();
     }
 
     [Test]

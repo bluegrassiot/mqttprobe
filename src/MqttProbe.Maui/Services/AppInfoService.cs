@@ -30,6 +30,14 @@ public class AppInfoService : IAppInfoService
     public bool IsOidcMode => false;
     public string? ProviderDisplayName => null;
 
+    // Read by the settings UI to hide plugin install affordances on hosts that cannot load
+    // user-supplied code. Config, folder defaults and the loader guard refuse independently.
+#if IOS
+    public bool SupportsPluginInstallation => false;
+#else
+    public bool SupportsPluginInstallation => true;
+#endif
+
     public string GetVersion() =>
         AppVersionResolver.Resolve(
             _appVersionProvider,

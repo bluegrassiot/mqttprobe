@@ -7,4 +7,6 @@ public interface IAppInfoService
     public bool IsNative { get; }
     public bool IsOidcMode { get; }
     public string? ProviderDisplayName { get; }
+
+    public bool SupportsPluginInstallation => true;
 }

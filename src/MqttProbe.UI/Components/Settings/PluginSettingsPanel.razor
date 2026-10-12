@@ -8,7 +8,14 @@
 @inject IPluginPackagePicker Picker
 @inject IPluginInputCapability InputCapability
 @inject IDialogService DialogService
+@inject IAppInfoService AppInfoService
 
+@if (!AppInfoService.SupportsPluginInstallation)
+{
+    // Belt and braces: Settings already omits the section, so draw no placeholder here.
+}
+else
+{
 <div class="d-flex align-center justify-end mb-3">
     @if (_writableFolder is not null)
     {
@@ -115,6 +122,7 @@
     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
         No plugins installed.
     </MudText>
+}
 }
 
 @code {

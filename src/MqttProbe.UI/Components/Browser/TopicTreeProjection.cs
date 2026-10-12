@@ -20,8 +20,20 @@ internal static class TopicTreeProjection
         if (roots.IsDefaultOrEmpty)
             return rows;
 
-        var context = new WalkContext(filter, !string.IsNullOrWhiteSpace(filter), expandedPaths);
-        foreach (var root in InDisplayOrder(BuildRoots(roots, groupSparkplugTopics)))
+        var hasFilter = !string.IsNullOrWhiteSpace(filter);
+
+        // Grouping off walks the snapshot itself: cloning a tree that is mostly collapsed
+        // would build nodes for rows the caller will never see.
+        if (!groupSparkplugTopics)
+        {
+            foreach (var root in roots.OrderBy(node => node.Topic, NaturalStringComparer.Instance))
+                AppendLiteralRows(root, 0, filter, hasFilter, expandedPaths, rows);
+
+            return rows;
+        }
+
+        var context = new WalkContext(filter, hasFilter, expandedPaths);
+        foreach (var root in InDisplayOrder(BuildRoots(roots, groupSparkplugTopics: true)))
             AppendRows(root, 0, context, rows);
 
         return rows;
@@ -35,12 +47,105 @@ internal static class TopicTreeProjection
         if (roots.IsDefaultOrEmpty)
             return;
 
-        foreach (var root in BuildRoots(roots, groupSparkplugTopics))
+        if (!groupSparkplugTopics)
+        {
+            foreach (var root in roots)
+                AddLiteralExpandablePaths(root, target);
+
+            return;
+        }
+
+        foreach (var root in BuildRoots(roots, groupSparkplugTopics: true))
             AddExpandablePaths(root, target);
+    }
+
+    // Whether the projection presents this real store path as a row, ignoring expansion and
+    // filtering: a row hidden only because its branch is collapsed or filtered out still
+    // represents the topic and must not be treated as gone.
+    public static bool RepresentsRealPath(
+        ImmutableArray<TopicNodeSnapshot> roots,
+        bool groupSparkplugTopics,
+        string? realPath)
+    {
+        if (string.IsNullOrEmpty(realPath) || roots.IsDefaultOrEmpty)
+            return false;
+
+        if (!groupSparkplugTopics)
+            return ContainsRealPath(roots, realPath);
+
+        return BuildRoots(roots, groupSparkplugTopics: true).Any(root => ContainsPath(root, realPath));
     }
 
     public static bool IsVirtualExpansionId(string id) =>
         id.StartsWith(VirtualIdPrefix, StringComparison.Ordinal);
+
+    private static void AppendLiteralRows(
+        TopicNodeSnapshot node,
+        int depth,
+        string? filter,
+        bool hasFilter,
+        IReadOnlySet<string> expandedPaths,
+        List<TopicTreeRowModel> rows)
+    {
+        var matches = hasFilter && MatchesLiteralFilter(node, filter!);
+        if (hasFilter && !matches)
+            return;
+
+        var hasChildren = !node.Children.IsDefaultOrEmpty;
+        var isExpanded = expandedPaths.Contains(node.FullTopic);
+        rows.Add(new TopicTreeRowModel(
+            FullPath: node.FullTopic,
+            DisplayName: node.Topic,
+            Depth: depth,
+            HasChildren: hasChildren,
+            TopicCount: node.TopicCount,
+            MessageCount: node.MessageCount,
+            IsExpanded: isExpanded || (hasFilter && matches),
+            IsValueBearer: node.HasDirectMessages));
+
+        if (!hasChildren || (!isExpanded && !hasFilter))
+            return;
+
+        foreach (var child in node.Children.OrderBy(item => item.Topic, NaturalStringComparer.Instance))
+            AppendLiteralRows(child, depth + 1, filter, hasFilter, expandedPaths, rows);
+    }
+
+    private static bool MatchesLiteralFilter(TopicNodeSnapshot node, string filter) =>
+        node.Topic.Contains(filter, StringComparison.OrdinalIgnoreCase)
+        || (!node.Children.IsDefaultOrEmpty
+            && node.Children.Any(child => MatchesLiteralFilter(child, filter)));
+
+    private static void AddLiteralExpandablePaths(TopicNodeSnapshot node, ISet<string> target)
+    {
+        if (node.Children.IsDefaultOrEmpty)
+            return;
+
+        target.Add(node.FullTopic);
+        foreach (var child in node.Children)
+            AddLiteralExpandablePaths(child, target);
+    }
+
+    private static bool ContainsRealPath(ImmutableArray<TopicNodeSnapshot> nodes, string realPath)
+    {
+        foreach (var node in nodes)
+        {
+            if (string.Equals(node.FullTopic, realPath, StringComparison.Ordinal))
+                return true;
+
+            if (ContainsRealPath(node.Children, realPath))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsPath(ProjectionNode node, string realPath)
+    {
+        if (string.Equals(node.Id, realPath, StringComparison.Ordinal))
+            return true;
+
+        return node.Children.Any(child => ContainsPath(child, realPath));
+    }
 
     private static void AppendRows(
         ProjectionNode node,
@@ -292,12 +397,15 @@ internal static class TopicTreeProjection
         Order = order
     };
 
-    // Birth, then death, then data - the order an operator reads a node's lifecycle.
+    // Birth, death, data, then command - the order an operator reads a node's lifecycle,
+    // with the commands that drive it last.
     private static int MessageTypeOrder(string verb) => verb switch
     {
         "NBIRTH" or "DBIRTH" => 0,
         "NDEATH" or "DDEATH" => 1,
-        _ => 2
+        "NDATA" or "DDATA" => 2,
+        "NCMD" or "DCMD" => 3,
+        _ => 4
     };
 
     private readonly record struct WalkContext(string? Filter, bool HasFilter, IReadOnlySet<string> ExpandedPaths);

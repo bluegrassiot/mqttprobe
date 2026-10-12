@@ -34,6 +34,8 @@ internal sealed class TopicBrowserTestFixture
 
     public void SetSelection(SelectedTopicState selection) => _selection = selection;
 
+    public string? SelectedFullTopic => _selection.FullTopic;
+
     private void Select(string? fullTopic)
     {
         if (fullTopic is null)
@@ -153,6 +155,37 @@ public sealed class TopicTreeProjectionTests
     public void CreateRows_DefaultRootsReturnsNoRows() =>
         TopicTreeProjection.CreateRows(default, null, new HashSet<string>(), groupSparkplugTopics: false)
             .Should().BeEmpty();
+
+    [Test]
+    public void CreateRows_GroupingOff_OnACollapsedSnapshotDoesNotWalkHiddenDescendants()
+    {
+        // 200 roots of 20 leaves each. With grouping off a collapsed tree only has to
+        // produce its root rows; cloning the store into projection nodes first would
+        // allocate for all 4,200 nodes on every refresh.
+        var topics = new List<(string Topic, int Messages)>();
+        for (var root = 0; root < 200; root++)
+        {
+            for (var leaf = 0; leaf < 20; leaf++)
+                topics.Add(($"root{root}/leaf{leaf}", 1));
+        }
+
+        var tree = TopicSnapshotBuilder.Build([.. topics]);
+        var collapsed = new HashSet<string>();
+        TopicTreeProjection.CreateRows(tree, null, collapsed, groupSparkplugTopics: false)
+            .Should().HaveCount(200);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var rows = TopicTreeProjection.CreateRows(tree, null, collapsed, groupSparkplugTopics: false);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        rows.Should().HaveCount(200);
+        rows.Should().OnlyContain(row => !row.HasChildren || !row.IsExpanded);
+        // Measured on this tree: the direct traversal allocates about 19 KB, while cloning
+        // the store first allocates about 495 KB. The bound sits between the two and well
+        // clear of both.
+        allocated.Should().BeLessThan(128 * 1024,
+            "a collapsed literal tree must not be cloned node by node");
+    }
 
     private static TopicNodeSnapshot Node(
         string topic,

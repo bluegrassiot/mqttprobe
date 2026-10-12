@@ -108,12 +108,30 @@
                 if (!grouped)
                     _expandedPaths.RemoveWhere(TopicTreeProjection.IsVirtualExpansionId);
 
+                DropSelectionTheProjectionCannotShow(grouped);
+
                 BuildVisibleRows();
                 StateHasChanged();
             });
         }
         catch (ObjectDisposedException) when (_disposed) { /* component torn down before the preference was applied */ }
         catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser preference refresh failed"); }
+    }
+
+    // A real topic the new projection has no row for would leave the payload panel showing a
+    // topic the tree cannot point at, so the selection is cleared before the rebuild. The
+    // selection callback is deliberately not raised: it closes the mobile topic picker.
+    private void DropSelectionTheProjectionCannotShow(bool grouped)
+    {
+        var selection = MessageStoreManagerService.GetSelectedTopicState();
+        if (selection.FullTopic is null)
+            return;
+
+        var roots = MessageStoreManagerService.GetTopicTreeSnapshot().Roots;
+        if (TopicTreeProjection.RepresentsRealPath(roots, grouped, selection.FullTopic))
+            return;
+
+        MessageStoreManagerService.SelectTopic(null);
     }
 
     private async Task RefreshAsync()

@@ -40,6 +40,12 @@ public class ConnectionDialogTests : BunitTestContext
     private Func<MqttClientConnectedEventArgs, Task>? _connectedHandler;
     private Func<MqttConnectingFailedEventArgs, Task>? _failedHandler;
 
+    // Exercises the pre-connect iOS note from a non-iOS host.
+    private sealed class IosConnectionDialog : ConnectionDialog
+    {
+        protected override bool IsIosHost => true;
+    }
+
     [SetUp]
     public void SetupMocks()
     {
@@ -121,6 +127,13 @@ public class ConnectionDialogTests : BunitTestContext
             await dialogService.ShowAsync<ConnectionDialog>("Connection Setup"));
     }
 
+    private async Task OpenIosDialog()
+    {
+        var dialogService = Services.GetRequiredService<IDialogService>();
+        await _dialogProvider.InvokeAsync(async () =>
+            await dialogService.ShowAsync<IosConnectionDialog>("Connection Setup"));
+    }
+
     private Task SelectConnection(Connection conn) =>
         _dialogProvider.InvokeAsync(async () =>
             await _dialogProvider.FindComponent<ConnectionDialog>().Instance.ConnectionChanged(conn));
@@ -152,6 +165,25 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.FindComponents<MudSelectItem<Connection?>>().Should().BeEmpty();
         _dialogProvider.Find("button[title='Delete connection']").GetAttribute("disabled").Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task OnIos_Shows_The_Local_Network_Note_When_Opened()
+    {
+        await OpenIosDialog();
+
+        var note = _dialogProvider.Find("[data-testid=ios-local-network-note]");
+        note.TextContent.Should().Contain("local network permission");
+        note.TextContent.Should().Contain("iOS Settings");
+        note.TextContent.Should().Contain("public internet");
+    }
+
+    [Test]
+    public async Task OffIos_Omits_The_Local_Network_Note()
+    {
+        await OpenDialog();
+
+        _dialogProvider.FindAll("[data-testid=ios-local-network-note]").Should().BeEmpty();
     }
 
     [Test]

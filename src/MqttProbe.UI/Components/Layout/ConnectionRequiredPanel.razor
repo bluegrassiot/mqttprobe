@@ -1,7 +1,6 @@
 @inject IMqttManagedClient MqttClient
 @inject IConnectionSessionLifecycle SessionLifecycle
 @inject ISnackbar Snackbar
-@inject IDialogService DialogService
 
 @if (MqttClient.IsStarted)
 {
@@ -17,6 +16,16 @@
                 Disconnected. Attempting to reconnect…
             </MudAlert>
         </div>
+        @if (IsIosHost)
+        {
+            <div class="connection-required__alert connection-required__lan"
+                 data-testid="ios-local-network-recovery">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    If you denied local network access, MQTTProbe can't reach a broker on your Wi-Fi
+                    until you turn Local Network back on in iOS Settings.
+                </MudText>
+            </div>
+        }
         <AppDestructiveButton
                    StartIcon="@LucideIcons.CircleStop"
                    OnClick="@StopReconnect">Stop</AppDestructiveButton>
@@ -38,47 +47,10 @@ else
                 </MudText>
             </MudAlert>
         </div>
-        @if (IsIosHost)
-        {
-            <div class="connection-required__alert connection-required__lan">
-                <MudText Typo="Typo.body2" Class="connection-required__lan-title">
-                    About the network permission
-                </MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    iPhone apps need permission to reach devices on your Wi-Fi, and iOS asks
-                    the first time you connect. If you decline, MQTTProbe can't reach the
-                    broker until you turn Local Network back on in iOS Settings.
-                </MudText>
-                <AppPrimaryButton data-testid="connection-required-continue"
-                                  Size="Size.Small"
-                                  StartIcon="@LucideIcons.Wifi"
-                                  OnClick="OpenConnectFormAsync">
-                    Continue
-                </AppPrimaryButton>
-            </div>
-        }
     </div>
 }
 
 @code {
-    // Opens the app bar's connect dialog so the iOS prompt leads into a real connection.
-    private async Task OpenConnectFormAsync()
-    {
-        try
-        {
-            await DialogService.ShowAsync<ConnectionDialog>("Setup Connection", new DialogOptions
-            {
-                CloseOnEscapeKey = false,
-                MaxWidth = MaxWidth.Small,
-                FullWidth = true
-            });
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't open the connection form: {ex.Message}", Severity.Error);
-        }
-    }
-
     private async Task StopReconnect()
     {
         try

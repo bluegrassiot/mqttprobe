@@ -55,6 +55,10 @@ public class PluginAssemblyCacheTests
             d.Source == "loader" &&
             d.Severity == DiagnosticSeverity.Info &&
             d.Message.Contains("not supported on this platform"));
+        result.Diagnostics[0].Message.Should().NotContain("only built-in plugins are loaded",
+            "imported protobuf schemas register too, so the message must not claim they are absent");
+        result.Diagnostics[0].Message.Should().NotContain("schema",
+            "the guard is about assemblies only and should not speak for schema packages");
         result.Diagnostics.Should().NotContain(d => d.SourcePath != null);
     }
 
@@ -129,6 +133,23 @@ public class PluginAssemblyCacheTests
         // Install-time validation stays wider than the loader guard: both mobile platforms.
         PluginAssemblyInspector.AssemblyPluginsSupported
             .Should().Be(!OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS());
+    }
+
+    [Test]
+    public void RuntimeCapability_IsTheIosOnlyLoaderGuard_NotTheWiderInspector()
+    {
+        if (OperatingSystem.IsIOS())
+        {
+            Assert.Ignore("The runtime capability is expected to be false on iOS.");
+        }
+
+        // SupportsAssemblyPlugins on the Maui host reports what the loader can run, which
+        // excludes iOS only. Widening it to the inspector would misreport Android, where
+        // bundled or configured DLLs still load even though binary archives cannot be
+        // imported. On an Android lane the two must therefore disagree.
+        PluginAssemblyInspector.AssemblyPluginsSupported
+            .Should().Be(!OperatingSystem.IsAndroid(),
+                "the inspector stays the wider gate: it refuses binary archives on Android too");
     }
 }
 

@@ -8,6 +8,7 @@ review blocker. They check structure and values, not formatting.
 Run: python -m unittest discover -s scripts/ci/tests
 """
 
+import importlib.util
 import plistlib
 import unittest
 from pathlib import Path
@@ -22,6 +23,16 @@ PRIVACY_MANIFEST = PLATFORMS / "iOS" / "Resources" / "PrivacyInfo.xcprivacy"
 def load_plist(path):
     with path.open("rb") as handle:
         return plistlib.load(handle)
+
+
+def load_privacy_validator():
+    spec = importlib.util.spec_from_file_location(
+        "ci_ios_privacy_manifest",
+        Path(__file__).resolve().parents[1] / "ios-privacy-manifest.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class IosInfoPlistTests(unittest.TestCase):
@@ -122,6 +133,12 @@ class PrivacyManifestTests(unittest.TestCase):
 
 
 class BundleSourceContractTests(unittest.TestCase):
+    def test_committed_manifest_passes_the_bundle_validator(self):
+        # The bundle copy is this file, so it must satisfy the validator that runs
+        # against the built app; drift here would fail the release lane.
+        counts = load_privacy_validator().validate(PRIVACY_MANIFEST)
+        self.assertEqual(counts["declared_api_types"], 3)
+
     def test_manifest_lives_under_ios_resources_folder(self):
         # Platforms/iOS/Resources is the single-project IPhoneResourcePrefix folder the
         # SDK glob turns into BundleResource items, which is how the file reaches the

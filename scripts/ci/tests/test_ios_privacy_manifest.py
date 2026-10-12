@@ -59,9 +59,145 @@ class ValidateTests(ManifestFixture):
         counts = ios_privacy.validate(self.write())
         self.assertEqual(counts["declared_api_types"], 3)
 
-    def test_accepts_empty_api_types_list(self):
+    def test_rejects_empty_api_types_list(self):
         manifest = {**MAUI_TEMPLATE, "NSPrivacyAccessedAPITypes": []}
-        self.assertEqual(ios_privacy.validate(self.write(manifest))["declared_api_types"], 0)
+        with self.assertRaises(ios_privacy.ManifestError) as raised:
+            ios_privacy.validate(self.write(manifest))
+        self.assertIn("baseline", str(raised.exception))
+
+    def test_rejects_missing_api_types_key(self):
+        manifest = {
+            name: value
+            for name, value in MAUI_TEMPLATE.items()
+            if name != "NSPrivacyAccessedAPITypes"
+        }
+        with self.assertRaises(ios_privacy.ManifestError) as raised:
+            ios_privacy.validate(self.write(manifest))
+        self.assertIn("NSPrivacyAccessedAPITypes", str(raised.exception))
+
+    def test_rejects_missing_baseline_category(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyAccessedAPITypes": [
+                entry
+                for entry in MAUI_TEMPLATE["NSPrivacyAccessedAPITypes"]
+                if entry["NSPrivacyAccessedAPIType"] != "NSPrivacyAccessedAPICategoryDiskSpace"
+            ],
+        }
+        with self.assertRaises(ios_privacy.ManifestError) as raised:
+            ios_privacy.validate(self.write(manifest))
+        self.assertIn("DiskSpace", str(raised.exception))
+
+    def test_rejects_wrong_baseline_reason_code(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyAccessedAPITypes": [
+                {**entry, "NSPrivacyAccessedAPITypeReasons": ["ZZZZ.1"]}
+                if entry["NSPrivacyAccessedAPIType"] == "NSPrivacyAccessedAPICategorySystemBootTime"
+                else entry
+                for entry in MAUI_TEMPLATE["NSPrivacyAccessedAPITypes"]
+            ],
+        }
+        with self.assertRaises(ios_privacy.ManifestError) as raised:
+            ios_privacy.validate(self.write(manifest))
+        self.assertIn("SystemBootTime", str(raised.exception))
+
+    def test_rejects_non_dict_api_type_entry(self):
+        manifest = {**MAUI_TEMPLATE, "NSPrivacyAccessedAPITypes": ["nope"]}
+        with self.assertRaises(ios_privacy.ManifestError) as raised:
+            ios_privacy.validate(self.write(manifest))
+        self.assertIn("dictionary", str(raised.exception))
+
+    def test_rejects_entry_without_type(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyAccessedAPITypes": [{"NSPrivacyAccessedAPITypeReasons": ["C617.1"]}],
+        }
+        with self.assertRaises(ios_privacy.ManifestError) as raised:
+            ios_privacy.validate(self.write(manifest))
+        self.assertIn("NSPrivacyAccessedAPIType", str(raised.exception))
+
+    def test_rejects_entry_without_reasons(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyAccessedAPITypes": [
+                {"NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace"}
+            ],
+        }
+        with self.assertRaises(ios_privacy.ManifestError) as raised:
+            ios_privacy.validate(self.write(manifest))
+        self.assertIn("Reasons", str(raised.exception))
+
+    def test_rejects_empty_reasons_array(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyAccessedAPITypes": [
+                {
+                    "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+                    "NSPrivacyAccessedAPITypeReasons": [],
+                }
+            ],
+        }
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_rejects_non_string_reason(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyAccessedAPITypes": [
+                {
+                    "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+                    "NSPrivacyAccessedAPITypeReasons": [1],
+                }
+            ],
+        }
+        with self.assertRaises(ios_privacy.ManifestError):
+            ios_privacy.validate(self.write(manifest))
+
+    def test_accepts_additional_reasons_and_categories(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyAccessedAPITypes": [
+                {
+                    **entry,
+                    "NSPrivacyAccessedAPITypeReasons": [*entry["NSPrivacyAccessedAPITypeReasons"], "DDA9.1"],
+                }
+                for entry in MAUI_TEMPLATE["NSPrivacyAccessedAPITypes"]
+            ]
+            + [
+                {
+                    "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+                    "NSPrivacyAccessedAPITypeReasons": ["CA92.1"],
+                }
+            ],
+        }
+        self.assertEqual(ios_privacy.validate(self.write(manifest))["declared_api_types"], 4)
+
+    def test_accepts_duplicate_category_with_merged_reasons(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyAccessedAPITypes": [
+                *MAUI_TEMPLATE["NSPrivacyAccessedAPITypes"],
+                {
+                    "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+                    "NSPrivacyAccessedAPITypeReasons": ["DDA9.1"],
+                },
+            ],
+        }
+        self.assertEqual(ios_privacy.validate(self.write(manifest))["declared_api_types"], 4)
+
+    def test_accepts_unknown_future_category_with_a_warning(self):
+        manifest = {
+            **MAUI_TEMPLATE,
+            "NSPrivacyAccessedAPITypes": [
+                *MAUI_TEMPLATE["NSPrivacyAccessedAPITypes"],
+                {
+                    "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySomethingNew",
+                    "NSPrivacyAccessedAPITypeReasons": ["ZZZZ.1"],
+                },
+            ],
+        }
+        self.assertEqual(ios_privacy.validate(self.write(manifest))["declared_api_types"], 4)
 
     def test_accepts_tracking_declared_true(self):
         manifest = {**MAUI_TEMPLATE, "NSPrivacyTracking": True}

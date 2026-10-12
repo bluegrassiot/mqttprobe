@@ -138,8 +138,19 @@ class DistributionTypeTests(ProfileFixture):
             self.check(profile)
         self.assertIn("Ad Hoc", str(raised.exception))
 
-    def test_rejects_empty_device_list_is_allowed(self):
-        self.assertIn("expires", self.check(make_profile(ProvisionedDevices=[])))
+    def test_rejects_empty_device_list(self):
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(make_profile(ProvisionedDevices=[]))
+        self.assertIn("ProvisionedDevices", str(raised.exception))
+
+    def test_rejects_malformed_device_list(self):
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(make_profile(ProvisionedDevices="not-a-list"))
+        self.assertIn("ProvisionedDevices", str(raised.exception))
+
+    def test_rejects_zero_device_count(self):
+        with self.assertRaises(ios_profile.ProfileError):
+            self.check(make_profile(ProvisionedDevices=0))
 
     def test_rejects_development_profile(self):
         profile = make_profile(Entitlements={"get-task-allow": True})

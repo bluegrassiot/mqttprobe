@@ -96,11 +96,17 @@ def check(
             "Profile sets ProvisionsAllDevices, so it is an Enterprise in-house profile. "
             "App Store Connect does not accept one."
         )
-    devices = profile.get("ProvisionedDevices")
-    if devices:
+    if "ProvisionedDevices" in profile:
+        devices = profile["ProvisionedDevices"]
+        if isinstance(devices, list) and devices:
+            raise ProfileError(
+                f"Profile lists {len(devices)} ProvisionedDevices, so it is an Ad Hoc profile. "
+                "App Store Connect does not accept one."
+            )
         raise ProfileError(
-            f"Profile lists {len(devices)} ProvisionedDevices, so it is an Ad Hoc profile. "
-            "App Store Connect does not accept one."
+            "Profile declares a ProvisionedDevices key, so it is not an App Store distribution "
+            "profile. An App Store profile omits ProvisionedDevices entirely; App Store Connect "
+            "does not accept one."
         )
 
     expiry = profile.get("ExpirationDate")

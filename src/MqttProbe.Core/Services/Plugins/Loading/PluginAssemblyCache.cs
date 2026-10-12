@@ -47,7 +47,7 @@ public sealed class PluginAssemblyCache
                     {
                         Source = "loader",
                         Severity = DiagnosticSeverity.Info,
-                        Message = "Assembly plugins are not supported on this platform; only built-in plugins are loaded."
+                        Message = "Assembly plugins are not supported on this platform; assembly loading was skipped."
                     }],
                     []);
             }

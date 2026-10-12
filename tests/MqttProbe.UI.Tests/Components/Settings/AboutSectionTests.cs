@@ -11,6 +11,17 @@ public class AboutSectionTests : BunitTestContext
     private IAppInfoService _mockAppInfo = null!;
     private IUpdateService _updateService = null!;
 
+    // Exercises the iOS branch from a non-iOS host.
+    private sealed class IosAboutSection : AboutSection
+    {
+        protected override bool IsIosHost => true;
+    }
+
+    private sealed class NonIosAboutSection : AboutSection
+    {
+        protected override bool IsIosHost => false;
+    }
+
     [SetUp]
     public void Setup()
     {
@@ -22,15 +33,24 @@ public class AboutSectionTests : BunitTestContext
     }
 
     [Test]
-    public void Links_To_The_Privacy_Policy_As_A_Safe_External_Anchor()
+    public void OnIos_Links_To_The_Privacy_Policy_As_A_Safe_External_Anchor()
     {
-        var cut = Render<AboutSection>();
+        var cut = Render<IosAboutSection>();
 
         var link = cut.Find("[data-testid=privacy-policy-link]");
         link.GetAttribute("href").Should().Be(AboutSection.PrivacyPolicyUri.ToString());
         link.GetAttribute("target").Should().Be("_blank");
         link.GetAttribute("rel").Should().Be("noopener noreferrer");
         link.TextContent.Should().Contain("Privacy policy");
+    }
+
+    [Test]
+    public void OffIos_Omits_The_Privacy_Policy_Link()
+    {
+        var cut = Render<NonIosAboutSection>();
+
+        cut.FindAll("[data-testid=privacy-policy-link]").Should().BeEmpty();
+        cut.FindAll(".about-links").Should().BeEmpty();
     }
 
     [Test]

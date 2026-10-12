@@ -47,6 +47,19 @@
                 <MudTabs @bind-ActivePanelIndex="_activeTabIndex"
                          KeepPanelsAlive="true" Elevation="0" Class="connection-tabs">
                     <MudTabPanel Text="Connection">
+                        @if (IsIosHost)
+                        {
+                            <div class="connection-dialog__lan-note" data-testid="ios-local-network-note">
+                                <MudText Typo="Typo.body2" Class="connection-dialog__lan-note-title">
+                                    Local network access
+                                </MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                    iOS asks for local network permission the first time you connect to a
+                                    broker on your Wi-Fi. If you denied it, turn Local Network back on for
+                                    MQTTProbe in iOS Settings. Brokers on the public internet don't need it.
+                                </MudText>
+                            </div>
+                        }
                         <ConnectionFields Connection="@_selectedConnection" OnConnectionEdited="UpdateActionStates" />
                     </MudTabPanel>
                     <MudTabPanel Text="Security">
@@ -128,6 +141,9 @@
     private string? _baselineStagedAssetId;
     private string? _nameCollisionError;
     private int _selectorGeneration;
+
+    // Virtual so tests can exercise the iOS branch from any host OS.
+    protected virtual bool IsIosHost => OperatingSystem.IsIOS();
 
     internal Connection SelectedConnectionForTests => _selectedConnection;
     internal Connection? SavedConnectionForSelectorTests => _savedConnectionForSelector;

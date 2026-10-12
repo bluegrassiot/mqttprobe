@@ -3,7 +3,8 @@
 
 App Store Connect rejects an upload without one (ITMS-91053 for a missing
 manifest, ITMS-91061 for missing required-reason declarations), so this fails
-closed on absence, on an unparseable plist, and on a missing top-level key.
+closed on absence, on an unparseable plist, a missing top-level key, and on a
+missing or malformed .NET BCL required-reason baseline.
 """
 
 from __future__ import annotations
@@ -31,6 +32,14 @@ KNOWN_API_TYPES = frozenset(
     }
 )
 
+# The .NET BCL required-reason baseline: every .NET iOS app links the runtime that
+# reads these, so the bundle manifest must declare each category's reason code.
+REQUIRED_REASON_PAIRS = {
+    "NSPrivacyAccessedAPICategoryFileTimestamp": "C617.1",
+    "NSPrivacyAccessedAPICategorySystemBootTime": "35F9.1",
+    "NSPrivacyAccessedAPICategoryDiskSpace": "E174.1",
+}
+
 
 class ManifestError(ValueError):
     pass
@@ -57,16 +66,49 @@ def validate(path: Path) -> dict[str, int]:
             "manifest that omits any of the three top-level keys."
         )
 
-    declared = manifest.get("NSPrivacyAccessedAPITypes", [])
+    if "NSPrivacyAccessedAPITypes" not in manifest:
+        raise ManifestError(
+            f"{path.name} declares no NSPrivacyAccessedAPITypes. The .NET runtime uses "
+            "required-reason APIs, so the bundle manifest must at least carry the BCL baseline."
+        )
+    declared = manifest["NSPrivacyAccessedAPITypes"]
     if not isinstance(declared, list):
         raise ManifestError("NSPrivacyAccessedAPITypes must be an array.")
 
-    unknown = [
-        entry.get("NSPrivacyAccessedAPIType", "?")
-        for entry in declared
-        if isinstance(entry, dict)
-        and entry.get("NSPrivacyAccessedAPIType") not in KNOWN_API_TYPES
+    reasons_by_category: dict[str, set[str]] = {}
+    for entry in declared:
+        if not isinstance(entry, dict):
+            raise ManifestError(
+                "Every NSPrivacyAccessedAPITypes entry must be a dictionary with "
+                "NSPrivacyAccessedAPIType and NSPrivacyAccessedAPITypeReasons."
+            )
+        category = entry.get("NSPrivacyAccessedAPIType")
+        if not isinstance(category, str) or not category:
+            raise ManifestError(
+                "An NSPrivacyAccessedAPITypes entry has no NSPrivacyAccessedAPIType string."
+            )
+        reasons = entry.get("NSPrivacyAccessedAPITypeReasons")
+        if not isinstance(reasons, list) or not reasons:
+            raise ManifestError(
+                f"{category} has no NSPrivacyAccessedAPITypeReasons array; every declared "
+                "category needs at least one reason code."
+            )
+        if any(not isinstance(reason, str) or not reason for reason in reasons):
+            raise ManifestError(f"{category} has a non-string or empty reason code.")
+        reasons_by_category.setdefault(category, set()).update(reasons)
+
+    missing_pairs = [
+        f"{category} ({reason})"
+        for category, reason in REQUIRED_REASON_PAIRS.items()
+        if reason not in reasons_by_category.get(category, set())
     ]
+    if missing_pairs:
+        raise ManifestError(
+            f"{path.name} does not declare the .NET BCL required-reason baseline: "
+            f"{', '.join(missing_pairs)}. App Store Connect rejects the upload with ITMS-91061."
+        )
+
+    unknown = sorted(set(reasons_by_category) - KNOWN_API_TYPES)
     if unknown:
         print(f"::warning::{path.name} declares unrecognised API types: {', '.join(unknown)}")
 

@@ -1,9 +1,12 @@
 @inject IMessageStoreManager MessageStoreManager
 
 <div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsSelected ? "topic-tree-row--selected" : "")"
-     style="padding-left: @(8 + Row.Depth * 16)px; min-height: 36px;"
      title="@(Row.IsVirtualTopic ? "Grouping row · not an MQTT topic" : null)"
      @onclick="OnRowClick">
+    @for (var level = 0; level < Row.Depth; level++)
+    {
+        <span class="topic-tree-indent" aria-hidden="true"></span>
+    }
     @if (Row.HasChildren)
     {
         <span @onclick:stopPropagation="true">
@@ -14,7 +17,7 @@
     }
     else
     {
-        <div style="width: 32px; flex-shrink: 0;"></div>
+        <div class="topic-tree-chevron-spacer" aria-hidden="true"></div>
     }
     <MudIcon Icon="@NodeIcon" Size="Size.Small" Color="@NodeColor" Class="mx-1"/>
     <span class="flex-grow-1" title="@Row.DisplayName">

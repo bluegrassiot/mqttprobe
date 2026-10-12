@@ -246,18 +246,19 @@ internal static class TopicTreeProjection
         foreach (var verbNode in groupNode.Children)
         {
             var verb = verbNode.Topic;
-            if (!CanRegroupVerb(verbNode, verb))
-            {
-                // STATE, unknown verbs and shapes that do not match the supported topic
-                // stay in the literal hierarchy rather than being forced into it.
-                built.Children.Add(BuildLiteral(verbNode, TopicTreeRowKind.Topic));
-                continue;
-            }
+            var groupedTips = new HashSet<string>(StringComparer.Ordinal);
 
             if (SparkplugTopicClassifier.IsNodeVerb(verb))
-                AddNodeMessages(nodes, groupPath, verbNode, verb);
-            else
-                AddDeviceMessages(nodes, groupPath, verbNode, verb);
+                AddNodeMessages(nodes, groupPath, verbNode, verb, groupedTips);
+            else if (SparkplugTopicClassifier.IsDeviceVerb(verb))
+                AddDeviceMessages(nodes, groupPath, verbNode, verb, groupedTips);
+
+            // Whatever is not a supported tip stays where it is: the prefix rows of that
+            // residue keep their real identity and their own source counts, so a malformed
+            // direct message on a verb or device level never hides valid descendants.
+            var residual = BuildResidual(verbNode, groupedTips);
+            if (residual is not null)
+                built.Children.Add(residual);
         }
 
         foreach (var branch in nodes.Values)
@@ -272,37 +273,44 @@ internal static class TopicTreeProjection
         return built;
     }
 
-    private static bool CanRegroupVerb(TopicNodeSnapshot verbNode, string verb)
+    // The literal remainder of a verb: every row the partition did not take, pruned of the
+    // tips that moved into it. A prefix row is dropped only when its whole representation
+    // moved: a node that carries a message of its own, or one the store left in place after
+    // retention emptied it, is still part of the hierarchy and stays visible.
+    private static ProjectionNode? BuildResidual(TopicNodeSnapshot node, HashSet<string> groupedTips)
     {
-        if (verbNode.HasDirectMessages || verbNode.Children.IsDefaultOrEmpty)
-            return false;
+        if (groupedTips.Contains(node.FullTopic))
+            return null;
 
-        if (SparkplugTopicClassifier.IsNodeVerb(verb))
+        var built = RealRow(node, TopicTreeRowKind.Topic);
+        foreach (var child in node.Children)
         {
-            // A node verb's child is the node-level topic itself. It is a supported topic
-            // only when the message landed on it: a child with no messages of its own only
-            // exists because a malformed deeper segment did, so the branch stays literal.
-            return verbNode.Children.All(node => node.HasDirectMessages);
+            var childRow = BuildResidual(child, groupedTips);
+            if (childRow is not null)
+                built.Children.Add(childRow);
         }
 
-        if (!SparkplugTopicClassifier.IsDeviceVerb(verb))
-            return false;
+        if (node.HasDirectMessages || node.Children.IsDefaultOrEmpty)
+            return built;
 
-        // Device verbs add a node level the supported shape never publishes to, and each
-        // device below it must carry the message rather than a malformed deeper segment.
-        // Deciding per verb branch keeps every topic either fully grouped or fully literal.
-        return verbNode.Children.All(node => !node.HasDirectMessages)
-            && verbNode.Children.All(node => node.Children.All(device => device.HasDirectMessages));
+        return built.Children.Count > 0 ? built : null;
     }
 
     private static void AddNodeMessages(
         Dictionary<string, NodeBranch> nodes,
         string groupPath,
         TopicNodeSnapshot verbNode,
-        string verb)
+        string verb,
+        HashSet<string> groupedTips)
     {
         foreach (var tip in verbNode.Children)
         {
+            // A node verb's child is the node-level topic itself: it is a supported tip only
+            // when the message landed on it, so malformed-only children stay in the residue.
+            if (!tip.HasDirectMessages)
+                continue;
+
+            groupedTips.Add(tip.FullTopic);
             var branch = GetOrCreateNode(nodes, groupPath, tip.Topic);
             branch.NodeMessages ??= VirtualRow(
                 $"nm:{groupPath}/{tip.Topic}", "Node messages", TopicTreeRowKind.NodeMessages, order: 0);
@@ -318,16 +326,23 @@ internal static class TopicTreeProjection
         Dictionary<string, NodeBranch> nodes,
         string groupPath,
         TopicNodeSnapshot verbNode,
-        string verb)
+        string verb,
+        HashSet<string> groupedTips)
     {
         foreach (var nodeLevel in verbNode.Children)
         {
-            var branch = GetOrCreateNode(nodes, groupPath, nodeLevel.Topic);
-            branch.Devices ??= VirtualRow(
-                $"dev:{groupPath}/{nodeLevel.Topic}", "Devices", TopicTreeRowKind.Devices, order: 1);
-
             foreach (var deviceNode in nodeLevel.Children)
             {
+                // The device tip is the only supported shape here: a device with no message
+                // of its own is a malformed deeper segment and stays in the residue.
+                if (!deviceNode.HasDirectMessages)
+                    continue;
+
+                groupedTips.Add(deviceNode.FullTopic);
+                var branch = GetOrCreateNode(nodes, groupPath, nodeLevel.Topic);
+                branch.Devices ??= VirtualRow(
+                    $"dev:{groupPath}/{nodeLevel.Topic}", "Devices", TopicTreeRowKind.Devices, order: 1);
+
                 var deviceId = deviceNode.Topic;
                 if (!branch.DeviceRows.TryGetValue(deviceId, out var deviceRow))
                 {

@@ -56,32 +56,6 @@
     border-radius: 4px;
 }
 
-::deep .topic-tree-row--selected {
-    background: rgba(249, 115, 22, 0.12);
-    border-left: 2px solid #f97316;
-}
-
-::deep .topic-tree-row {
-    min-width: 0;
-    max-width: 100%;
-    cursor: pointer;
-}
-
-/* Sparkplug grouping rows organise the tree; they are not MQTT topics. The dotted
-   label, muted colour and default cursor mark them as navigation, not selection. */
-::deep .topic-tree-row.topic-tree-row--group {
-    cursor: default;
-}
-
-::deep .topic-tree-row.topic-tree-row--group:hover {
-    background: rgba(148, 163, 184, 0.06);
-}
-
-::deep .topic-group-label {
-    color: var(--mud-palette-text-secondary);
-    border-bottom: 1px dotted rgba(148, 163, 184, 0.55);
-}
-
 /* The grouping flag must not shrink: when both it and the T/M legend cannot fit beside
    the toolbar buttons, the legend wraps to the next line instead of the flag clipping. */
 ::deep .topic-grouping-flag {
@@ -100,28 +74,12 @@
 }
 
 /* The grouping flag and the T/M legend do not both fit beside the toolbar buttons in a
-   narrow pane, so the row wraps instead of truncating either label. */
+   narrow pane, so the row wraps instead of truncating either label. Row gap stays at the
+   toolbar's own 4px: the gap shorthand below deliberately wins over the intended 2px. */
 .topic-tree-wrap ::deep .topic-toolbar {
     flex-wrap: wrap;
     row-gap: 2px;
-}
-
-::deep .topic-tree-row .flex-grow-1 {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    /* Grouped rows show a whole topic path, so a row must stay one line: virtualized
-       rows are measured at a fixed 36px and wrapping breaks the scroll window. */
-    white-space: nowrap;
-}
-
-::deep .topic-stat-text {
-    font-size: 0.7rem;
-    opacity: 0.6;
-    white-space: nowrap;
-    flex-shrink: 0;
-    margin-left: 8px;
-    cursor: default;
+    gap: 4px;
 }
 
 ::deep .topic-stat-legend {

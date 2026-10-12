@@ -1,0 +1,59 @@
+/* One row of the topic tree. Row layout belongs to the row component, so the browser panel
+   stylesheet only styles the panel's own chrome. */
+
+.topic-tree-row {
+    min-width: 0;
+    max-width: 100%;
+    min-height: 36px;
+    padding-left: 8px;
+    cursor: pointer;
+}
+
+/* Depth is drawn with fixed spacers rather than a depth class or a numeric attribute, so the
+   indent is the same 16px step at any depth. */
+.topic-tree-indent {
+    flex: 0 0 16px;
+}
+
+/* Keeps leaf rows aligned with the rows that carry a chevron button. */
+.topic-tree-chevron-spacer {
+    flex: 0 0 32px;
+}
+
+.topic-tree-row--selected {
+    background: rgba(249, 115, 22, 0.12);
+    border-left: 2px solid #f97316;
+}
+
+/* Sparkplug grouping rows organise the tree; they are not MQTT topics. The dotted label,
+   muted colour and default cursor mark them as navigation, not selection. */
+.topic-tree-row.topic-tree-row--group {
+    cursor: default;
+}
+
+.topic-tree-row.topic-tree-row--group:hover {
+    background: rgba(148, 163, 184, 0.06);
+}
+
+.topic-group-label {
+    color: var(--mud-palette-text-secondary);
+    border-bottom: 1px dotted rgba(148, 163, 184, 0.55);
+}
+
+.topic-tree-row .flex-grow-1 {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* A grouped row shows a whole topic path, so a row stays one line: virtualized rows are
+       measured at a fixed 36px and wrapping breaks the scroll window. */
+    white-space: nowrap;
+}
+
+.topic-stat-text {
+    font-size: 0.7rem;
+    opacity: 0.6;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: 8px;
+    cursor: default;
+}

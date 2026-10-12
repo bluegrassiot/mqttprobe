@@ -51,10 +51,17 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     private IRenderedComponent<TopicBrowser> RenderWithSelection(
         bool grouped,
         string? selectedPath,
+        Func<SelectedTopicState, Task>? onSelected = null) =>
+        RenderSnapshot(Tree(), grouped, selectedPath, onSelected);
+
+    private IRenderedComponent<TopicBrowser> RenderSnapshot(
+        TopicNodeSnapshot[] tree,
+        bool grouped,
+        string? selectedPath,
         Func<SelectedTopicState, Task>? onSelected = null)
     {
         _preferences.GroupSparkplugTopicsByNodeAndDevice = grouped;
-        _fixture.SetSnapshot(Tree());
+        _fixture.SetSnapshot(tree);
         if (selectedPath is not null)
             _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(_storeId, 1, 1), selectedPath, 1));
         var cut = Render<TopicBrowser>(parameters =>
@@ -178,6 +185,66 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         ExpandAll(cut);
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().NotBeEmpty());
+    }
+
+    [Test]
+    public void TurningGroupingOn_KeepsTheSelectionForARetainedFallbackAggregate()
+    {
+        // This verb keeps a valid tip and a malformed-only tip at the same time, so the verb
+        // prefix survives as a real aggregate: the selection on it stands and still names the
+        // same topic.
+        TopicNodeSnapshot[] mixed =
+        [
+            .. TopicSnapshotBuilder.Build(
+                (NodeTip, 3),
+                ("spBv1.0/plant1/NDATA/ghosttip/leaf", 1),
+                ("spBv1.0/plant1/DDATA/node1/dev1", 2))
+        ];
+
+        var cut = RenderSnapshot(mixed, grouped: false, NodeVerb);
+
+        ApplyPreference(true);
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
+
+        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _fixture.SelectedFullTopic.Should().Be(NodeVerb);
+        ExpandAll(cut);
+        cut.WaitForAssertion(() =>
+        {
+            var selected = cut.FindAll(".topic-tree-row--selected");
+            selected.Should().ContainSingle();
+            selected[0].TextContent.Should().Contain("NDATA");
+            selected[0].TextContent.Should().NotContain("ghosttip");
+        });
+        RowFor(cut, "ghosttip").ClassName.Should().NotContain("topic-tree-row--group");
+    }
+
+    [Test]
+    public void TurningGroupingOn_KeepsTheSelectionForARetainedZeroMessageTopic()
+    {
+        // The store keeps this topic after retention empties it, so the grouped view keeps its
+        // row and the selection on it stands.
+        TopicNodeSnapshot[] retained =
+        [
+            .. TopicSnapshotBuilder.Build(
+                (NodeTip, 3),
+                ("spBv1.0/plant1/STATE/zero-host", 0))
+        ];
+
+        var cut = RenderSnapshot(retained, grouped: false, "spBv1.0/plant1/STATE/zero-host");
+
+        ApplyPreference(true);
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
+
+        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _fixture.SelectedFullTopic.Should().Be("spBv1.0/plant1/STATE/zero-host");
+        ExpandAll(cut);
+        cut.WaitForAssertion(() =>
+        {
+            var selected = cut.FindAll(".topic-tree-row--selected");
+            selected.Should().ContainSingle();
+            selected[0].TextContent.Should().Contain("zero-host");
+        });
     }
 
     [Test]

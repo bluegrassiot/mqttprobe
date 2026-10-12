@@ -1,13 +1,12 @@
 #if IOS
 using System.Globalization;
-#else
-using MqttProbe.Core.Services.Plugins;
 #endif
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MqttProbe.Core.Models.Plugins;
 using MqttProbe.Core.Services.Platform;
+using MqttProbe.Core.Services.Plugins;
 using MqttProbe.Core.Services.Plugins.Packaging;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.Maui.Services;
@@ -122,16 +121,10 @@ public static class MauiProgram
         builder.Services.Configure<PluginConfig>(builder.Configuration.GetSection("Plugins"));
         builder.Services.PostConfigure<PluginConfig>(cfg =>
         {
-#if IOS
-            // No writable plugin folder and configured folders ignored: App Store guideline
-            // 2.5.2 bars iOS from loading user-supplied code. Built-in decoders still register.
-            cfg.PluginFolders.Clear();
-#else
             var userPlugins = Path.Combine(FileSystem.Current.AppDataDirectory, "plugins");
             Directory.CreateDirectory(userPlugins);
             var appPlugins = Path.Combine(AppContext.BaseDirectory, "Plugins");
             PluginFolderDefaults.Apply(cfg, FileSystem.Current.AppDataDirectory, userPlugins, appPlugins);
-#endif
         });
         builder.Services.AddSingleton<IPluginPackagePicker, MauiPluginPackagePicker>();
         builder.Services.AddSingleton<IPluginInputCapability, MauiPluginInputCapability>();

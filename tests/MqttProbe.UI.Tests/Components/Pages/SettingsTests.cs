@@ -43,6 +43,7 @@ public class SettingsTests : BunitTestContext
         _mockAppInfo.RequiresAuthentication.Returns(true);
         // NSubstitute answers default(bool), not the interface default.
         _mockAppInfo.SupportsPluginInstallation.Returns(true);
+        _mockAppInfo.SupportsAssemblyPlugins.Returns(true);
         _mockUpdateService = Substitute.For<IUpdateService>();
         Services.AddUiSettings(_mockUi);
         Services.AddPerformanceSettings(_mockPerformance);
@@ -144,6 +145,66 @@ public class SettingsTests : BunitTestContext
 
         cut.FindComponents<PluginSettingsPanel>().Should().BeEmpty();
         cut.FindComponents<MudSelect<string>>().Should().Contain(s => s.Instance.Label == "Theme");
+    }
+
+    [Test]
+    public void PluginsSection_TitleNamesProtobufSchemas_WhenAssembliesAreUnsupported()
+    {
+        _mockAppInfo.SupportsAssemblyPlugins.Returns(false);
+        Services.GetRequiredService<NavigationManager>()
+            .NavigateTo("/?tab=settings&section=plugins");
+
+        var cut = Render<MqttProbe.UI.Components.Pages.Settings>();
+
+        var nav = cut.FindAll("nav[aria-label='Settings sections'] button");
+        nav.Select(i => i.TextContent.Trim()).Should().Contain("Protobuf schemas");
+        nav.Select(i => i.TextContent.Trim()).Should().NotContain("Plugins");
+
+        var heading = cut.Find(".settings-content .mud-typography-h6");
+        heading.TextContent.Should().Contain("Protobuf schemas");
+
+        // MudSelectItem renders its label into the popover, which is closed here, so the
+        // slug is what the mobile select can be asserted on.
+        var sectionSelect = cut.FindComponents<MudSelect<string>>()
+            .First(s => s.Instance.Label == "Settings section");
+        sectionSelect.FindComponents<MudSelectItem<string>>()
+            .Select(i => i.Instance.Value).Should().Contain("plugins");
+    }
+
+    [Test]
+    public void PluginsSection_KeepsItsSlug_WhenAssembliesAreUnsupported()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/?tab=settings&section=plugins");
+
+        _mockAppInfo.SupportsAssemblyPlugins.Returns(false);
+
+        var cut = Render<MqttProbe.UI.Components.Pages.Settings>();
+
+        cut.FindComponents<PluginSettingsPanel>().Should().ContainSingle();
+    }
+
+    [Test]
+    public void PluginsSection_KeepsThePluginTitle_WhenAssembliesAreSupported()
+    {
+        var cut = Render<MqttProbe.UI.Components.Pages.Settings>();
+
+        var nav = cut.FindAll("nav[aria-label='Settings sections'] button");
+        nav.Select(i => i.TextContent.Trim()).Should().Contain("Plugins");
+        nav.Select(i => i.TextContent.Trim()).Should().NotContain("Protobuf schemas");
+    }
+
+    [Test]
+    public void PluginsSection_StaysHidden_OnAHostThatCannotInstallAnything()
+    {
+        _mockAppInfo.SupportsPluginInstallation.Returns(false);
+        _mockAppInfo.SupportsAssemblyPlugins.Returns(false);
+
+        var cut = Render<MqttProbe.UI.Components.Pages.Settings>();
+
+        var nav = cut.FindAll("nav[aria-label='Settings sections'] button");
+        nav.Select(i => i.TextContent.Trim()).Should().NotContain("Protobuf schemas");
+        nav.Select(i => i.TextContent.Trim()).Should().NotContain("Plugins");
     }
 
     [Test]

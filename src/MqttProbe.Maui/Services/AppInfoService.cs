@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using MqttProbe.Core.Services.Platform;
+using MqttProbe.Core.Services.Plugins.Packaging;
 
 namespace MqttProbe.Maui.Services;
 
@@ -30,13 +31,13 @@ public class AppInfoService : IAppInfoService
     public bool IsOidcMode => false;
     public string? ProviderDisplayName => null;
 
-    // Read by the settings UI to hide plugin install affordances on hosts that cannot load
-    // user-supplied code. Config, folder defaults and the loader guard refuse independently.
-#if IOS
-    public bool SupportsPluginInstallation => false;
-#else
+    // Read by the settings UI to hide plugin install affordances on hosts that cannot import
+    // packages at all. Config, folder defaults and the loader guard refuse independently.
     public bool SupportsPluginInstallation => true;
-#endif
+
+    // App Store guideline 2.5.2 bars downloadable code, not data: Android and iOS keep
+    // importing schema packages but never load a DLL, matching the install-time inspector.
+    public bool SupportsAssemblyPlugins => PluginAssemblyInspector.AssemblyPluginsSupported;
 
     public string GetVersion() =>
         AppVersionResolver.Resolve(

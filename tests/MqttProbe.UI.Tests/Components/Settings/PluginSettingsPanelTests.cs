@@ -71,7 +71,7 @@ public class PluginSettingsPanelTests : BunitTestContext
             """);
     }
 
-    private void RegisterPluginServices(PluginConfig config)
+    private void RegisterPluginServices(PluginConfig config, bool supportsAssemblyPlugins = true)
     {
         var registry = new PluginRegistryBuilder().Build([], []);
         var pipeline = new PayloadPipeline(registry, NullLogger<PayloadPipeline>.Instance);
@@ -79,6 +79,7 @@ public class PluginSettingsPanelTests : BunitTestContext
         appInfo.GetVersion().Returns("1.0.3");
         // NSubstitute answers default(bool), not the interface default.
         appInfo.SupportsPluginInstallation.Returns(true);
+        appInfo.SupportsAssemblyPlugins.Returns(supportsAssemblyPlugins);
         _appInfo = appInfo;
 
         Services.AddSingleton(new PluginInventoryService(config, pipeline, _session));
@@ -194,6 +195,7 @@ public class PluginSettingsPanelTests : BunitTestContext
         var appInfo = Substitute.For<IAppInfoService>();
         appInfo.GetVersion().Returns("1.0.3");
         appInfo.SupportsPluginInstallation.Returns(true);
+        appInfo.SupportsAssemblyPlugins.Returns(true);
 
         Services.AddSingleton(new PluginInventoryService(config, pipeline, _session));
         Services.AddSingleton(new PluginPackageInstaller(
@@ -266,5 +268,93 @@ public class PluginSettingsPanelTests : BunitTestContext
 
         cut.FindAll(".app-chrome-panel").Should().BeEmpty();
         cut.Markup.Should().NotContain("mud-typography-h6");
+    }
+
+    [Test]
+    public void Import_Control_Stays_Enabled_When_Only_Schemas_Are_Supported()
+    {
+        RegisterPluginServices(ConfigForFolder(), supportsAssemblyPlugins: false);
+
+        EnsureMudProviders();
+
+        var cut = Render<PluginSettingsPanel>();
+
+        var button = cut.FindAll("[data-testid=install-plugin-button]").Should().ContainSingle().Which;
+        button.TextContent.Should().Contain("Import schemas");
+        button.HasAttribute("disabled").Should().BeFalse(
+            "schemas are how a code-free host imports, so the control must stay usable");
+    }
+
+    [Test]
+    public void Schema_Only_Host_Explains_The_Package_Without_Naming_Store_Rules()
+    {
+        RegisterPluginServices(ConfigForFolder(), supportsAssemblyPlugins: false);
+
+        EnsureMudProviders();
+
+        var cut = Render<PluginSettingsPanel>();
+
+        cut.Markup.Should().Contain("protobuf .proto definitions");
+        cut.Markup.Should().Contain("No schemas imported.");
+        cut.Markup.Should().NotContain("App Store");
+        cut.Markup.Should().NotContain("Install plugin");
+    }
+
+    [Test]
+    public void Keeps_Plugin_Wording_When_Assemblies_Are_Supported()
+    {
+        InstallSchemaManifest("demo", "Demo Schemas", "1.0.0");
+        RegisterPluginServices(ConfigForFolder());
+
+        EnsureMudProviders();
+
+        var cut = Render<PluginSettingsPanel>();
+
+        var button = cut.FindAll("[data-testid=install-plugin-button]").Should().ContainSingle().Which;
+        button.TextContent.Should().Contain("Install plugin");
+        cut.Markup.Should().NotContain("Import schemas");
+        cut.Markup.Should().NotContain("No schemas imported.");
+    }
+
+    [Test]
+    public void Marks_A_Leftover_Assembly_Entry_As_Not_Runnable_And_Keeps_It_Removable()
+    {
+        InstallSchemaManifest("demo", "Demo Schemas", "1.0.0");
+        InstallAssemblyManifest("demoplugin", "Demo Plugin", "1.0.0");
+        RegisterPluginServices(ConfigForFolder(), supportsAssemblyPlugins: false);
+
+        EnsureMudProviders();
+
+        var cut = Render<PluginSettingsPanel>();
+
+        cut.Markup.Should().Contain("Code plugins cannot run on this platform.");
+        cut.FindAll("tbody button").Should().HaveCount(2);
+    }
+
+    [Test]
+    public void Still_Applies_A_Pending_Schema_Change_On_A_Schema_Only_Host()
+    {
+        InstallSchemaManifest("demo", "Demo Schemas", "1.0.0");
+        _session.Record("demo", requiresRestart: false);
+        RegisterPluginServices(ConfigForFolder(), supportsAssemblyPlugins: false);
+
+        EnsureMudProviders();
+
+        var cut = Render<PluginSettingsPanel>();
+
+        cut.FindAll("[data-testid=apply-plugins-button]").Should().ContainSingle();
+    }
+
+    [Test]
+    public void Schema_Only_Host_Words_The_Missing_Folder_Alert_For_Schemas()
+    {
+        RegisterPluginServices(new PluginConfig(), supportsAssemblyPlugins: false);
+
+        EnsureMudProviders();
+
+        var cut = Render<PluginSettingsPanel>();
+
+        cut.Markup.Should().Contain("No writable plugin folder is configured on this host, so schemas cannot be imported here.");
+        cut.FindAll("[data-testid=install-plugin-button]").Should().BeEmpty();
     }
 }

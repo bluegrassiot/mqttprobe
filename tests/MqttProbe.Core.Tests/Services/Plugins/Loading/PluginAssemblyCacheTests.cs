@@ -152,4 +152,32 @@ public class IAppInfoServicePluginCapabilityTests
 
         appInfo.SupportsPluginInstallation.Should().BeTrue();
     }
+
+    [Test]
+    public void SupportsAssemblyPlugins_DefaultsToTrue_WhenHostDoesNotOptOut()
+    {
+        IAppInfoService appInfo = new HostAppInfoService();
+
+        appInfo.SupportsAssemblyPlugins.Should().BeTrue();
+    }
+
+    [Test]
+    public void Schema_Only_Host_Keeps_Package_Import_While_Refusing_Assemblies()
+    {
+        IAppInfoService appInfo = new SchemaOnlyHostAppInfoService();
+
+        appInfo.SupportsPluginInstallation.Should().BeTrue(
+            "a schema package is data, so the import affordance stays available");
+        appInfo.SupportsAssemblyPlugins.Should().BeFalse();
+    }
+
+    private sealed class SchemaOnlyHostAppInfoService : IAppInfoService
+    {
+        public string GetVersion() => "1.2.3";
+        public bool RequiresAuthentication => false;
+        public bool IsNative => true;
+        public bool IsOidcMode => false;
+        public string? ProviderDisplayName => null;
+        public bool SupportsAssemblyPlugins => false;
+    }
 }

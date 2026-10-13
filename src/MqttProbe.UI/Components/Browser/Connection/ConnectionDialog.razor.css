@@ -127,7 +127,8 @@
     text-align: left;
 }
 
-.connection-dialog__lan-note-title {
+/* Title is on a MudText child root, which never gets this component's scope attribute. */
+.connection-dialog__lan-note ::deep .connection-dialog__lan-note-title {
     margin-bottom: 4px;
     font-weight: 600;
 }

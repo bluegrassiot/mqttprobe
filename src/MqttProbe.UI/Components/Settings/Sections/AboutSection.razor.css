@@ -27,19 +27,21 @@
     border-radius: 4px;
 }
 
-/* Decoration only: the label carries the meaning, so it must not read as a second link. */
-.about-links__external {
+/* Decoration only: the label carries the meaning, so it must not read as a second link.
+   The icon sits on a MudIcon child root, which never gets this component's scope attribute. */
+.about-links__link ::deep .about-links__external {
     color: var(--mud-palette-text-secondary);
     opacity: 0.7;
 }
 
-.about-links__link:hover .about-links__external,
-.about-links__link:focus-visible .about-links__external {
+.about-links__link:hover ::deep .about-links__external,
+.about-links__link:focus-visible ::deep .about-links__external {
     color: var(--mud-palette-primary);
     opacity: 1;
 }
 
-.about-links__hint {
+/* The hint class lands on a MudText child root, so anchor it under the owned block. */
+.about-links ::deep .about-links__hint {
     display: block;
     margin-top: 0.25rem;
 }

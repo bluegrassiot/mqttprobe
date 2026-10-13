@@ -86,6 +86,10 @@ public static class LucideIcons
     public const string Minimize2      = $"<polyline {S} points='4 14 10 14 10 20'/><polyline {S} points='20 10 14 10 14 4'/><line {S} x1='10' y1='14' x2='21' y2='3'/><line {S} x1='3' y1='21' x2='14' y2='10'/>";
     public const string Settings       = $"<path {S} d='M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z'/><circle {S} cx='12' cy='12' r='3'/>";
 
+    // External destinations
+    public const string ExternalLink   = $"<path {S} d='M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'/>";
+    public const string ShieldCheck    = $"<path {S} d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/><path {S} d='m9 12 2 2 4-4'/>";
+
     // Close / dismiss
     public const string X              = $"<path {S} d='M18 6 6 18M6 6l12 12'/>";
 

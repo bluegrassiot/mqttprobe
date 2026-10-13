@@ -8,6 +8,26 @@
 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
     Version @_version
 </MudText>
+@if (IsIosHost)
+{
+    <div class="about-links">
+        <a class="about-links__link"
+           href="@PrivacyPolicyUri"
+           target="_blank"
+           rel="noopener noreferrer"
+           aria-label="Privacy policy (opens in a new tab)"
+           data-testid="privacy-policy-link">
+            <MudIcon Icon="@LucideIcons.ShieldCheck" Size="Size.Small" aria-hidden="true" />
+            <span class="about-links__label">Privacy policy</span>
+            <MudIcon Icon="@LucideIcons.ExternalLink" Size="Size.Small" Class="about-links__external"
+                     aria-hidden="true" />
+        </a>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="about-links__hint">
+            What MQTTProbe stores and sends on your device.
+        </MudText>
+    </div>
+}
+
 @if (UpdateService.IsSupported)
 {
     <div class="mt-2">

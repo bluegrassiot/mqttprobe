@@ -72,13 +72,19 @@
         new("subscriptions", "Subscriptions", LucideIcons.Layers, () => true, _subscriptions),
         new("sparkplug", "Sparkplug", LucideIcons.Radio, () => true, _sparkplug),
         new("performance", "Performance", LucideIcons.Cpu, () => true, _performance),
-        new("plugins", "Plugins", LucideIcons.Puzzle, () => true, _plugins),
+        new("plugins", PluginSectionTitle(), LucideIcons.Puzzle, () => AppInfoService.SupportsPluginInstallation, _plugins),
         new("account", "Account", LucideIcons.Shield, () => AppInfoService.RequiresAuthentication, _account),
         new("about", "About", LucideIcons.Info, () => true, _about),
     ];
 
     private IReadOnlyList<SettingsSection> GetVisibleSections() =>
         _sections.Where(s => s.IsVisible()).ToList();
+
+    // Hosts that only take protobuf schemas say so, so the section name matches
+    // what the controls inside it actually do. The slug stays "plugins" either way,
+    // which keeps existing deep links working.
+    private string PluginSectionTitle() =>
+        AppInfoService.SupportsAssemblyPlugins ? "Plugins" : "Protobuf schemas";
 
     private SettingsSection ActiveSection
     {

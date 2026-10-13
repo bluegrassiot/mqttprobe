@@ -9,8 +9,24 @@ namespace MqttProbe.Core.Services.Plugins.Loading;
 public sealed class PluginAssemblyCache
 {
     private readonly Lock _gate = new();
+    private readonly bool _assemblyPluginsSupported;
 
     private PluginLoadResult? _result;
+
+    // Android still loads its configured or bundled DLLs, so this is narrower than
+    // PluginAssemblyInspector.AssemblyPluginsSupported, which also gates binary installs.
+    private static bool AssemblyPluginLoadingAllowed => !OperatingSystem.IsIOS();
+
+    public PluginAssemblyCache()
+        : this(AssemblyPluginLoadingAllowed)
+    {
+    }
+
+    // Test seam: the disabled path is unreachable on a desktop test host.
+    internal PluginAssemblyCache(bool assemblyPluginsSupported)
+    {
+        _assemblyPluginsSupported = assemblyPluginsSupported;
+    }
 
     public PluginLoadResult GetOrLoad(PluginConfig config, ILoggerFactory loggerFactory)
     {
@@ -18,7 +34,25 @@ public sealed class PluginAssemblyCache
         // block and receive the same result rather than racing a duplicate PluginLoader.LoadPlugins().
         lock (_gate)
         {
-            return _result ??= new PluginLoader(config, loggerFactory.CreateLogger<PluginLoader>())
+            if (_result is not null)
+            {
+                return _result;
+            }
+
+            if (!_assemblyPluginsSupported)
+            {
+                return _result = new PluginLoadResult(
+                    [],
+                    [new PluginDiagnosticEntry
+                    {
+                        Source = "loader",
+                        Severity = DiagnosticSeverity.Info,
+                        Message = "Assembly plugins are not supported on this platform; assembly loading was skipped."
+                    }],
+                    []);
+            }
+
+            return _result = new PluginLoader(config, loggerFactory.CreateLogger<PluginLoader>())
                 .LoadPlugins();
         }
     }

@@ -5,8 +5,11 @@ using MQTTnet;
 using MqttProbe.Core.Models.Plugins;
 using MqttProbe.Core.Services.Platform;
 using MqttProbe.Core.Services.Plugins;
+using MqttProbe.Core.Services.Plugins.Loading;
 using MqttProbe.Core.Services.Plugins.Packaging;
 using MqttProbe.Core.Services.Plugins.Protobuf;
+using MqttProbe.PluginContracts;
+using static MqttProbe.Core.Tests.Services.Plugins.Packaging.PluginPackageTestData;
 
 namespace MqttProbe.Core.Tests.Services.Plugins.Protobuf;
 
@@ -170,6 +173,70 @@ public class ProtobufChirpStackEndToEndTests
 
         envelope.IsFailure.Should().BeFalse(envelope.FailureReason);
 
+        Directory.Delete(pluginFolder, recursive: true);
+    }
+
+    private static PluginConfig SchemaOnlyHostConfig(string pluginFolder, IAppInfoService appInfo)
+    {
+        appInfo.SupportsPluginInstallation.Returns(true);
+        appInfo.SupportsAssemblyPlugins.Returns(false);
+
+        var config = new PluginConfig { AllowBinaryPackages = false };
+        config.PluginFolders.Add(pluginFolder);
+        return config;
+    }
+
+    [Test]
+    public async Task Schema_Only_Host_Installs_The_Sample_And_Registers_Its_Decoder()
+    {
+        var pluginFolder = Path.Combine(Path.GetTempPath(), "mqttprobe-schemaonly-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(pluginFolder);
+
+        var appInfo = Substitute.For<IAppInfoService>();
+        appInfo.GetVersion().Returns("1.0.3");
+        var config = SchemaOnlyHostConfig(pluginFolder, appInfo);
+
+        var installer = new PluginPackageInstaller(
+            config, appInfo, new PluginInstallSession(), new PluginArchiveLimits(), NullLoggerFactory.Instance);
+
+        var outcome = await installer.InstallAsync(PackSampleAsPackage(), CancellationToken.None);
+        outcome.Succeeded.Should().BeTrue(outcome.Error);
+
+        var registry = MqttProbePluginStartup.BuildPluginRegistry(
+            config, NullLoggerFactory.Instance, new PluginAssemblyCache(false));
+
+        registry.FindDecoder("protobuf").Should().NotBeNull(
+            "schema packages are data, so the assembly guard must not block them");
+        registry.Diagnostics.Should().Contain(d => d.Message.Contains("not supported on this platform"));
+
+        var envelope = registry.FindDecoder("protobuf")!
+            .Decode(MakeArgs("application/1/device/0102030405060708/event/up", SamplePayload()));
+
+        envelope.IsFailure.Should().BeFalse(envelope.FailureReason);
+
+        Directory.Delete(pluginFolder, recursive: true);
+    }
+
+    [Test]
+    public async Task Schema_Only_Host_Still_Rejects_An_Assembly_Package()
+    {
+        var pluginFolder = Path.Combine(Path.GetTempPath(), "mqttprobe-schemaonly-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(pluginFolder);
+
+        var appInfo = Substitute.For<IAppInfoService>();
+        appInfo.GetVersion().Returns("1.0.3");
+        var config = SchemaOnlyHostConfig(pluginFolder, appInfo);
+
+        var installer = new PluginPackageInstaller(
+            config, appInfo, new PluginInstallSession(), new PluginArchiveLimits(), NullLoggerFactory.Instance);
+
+        var package = AssemblyPackage(
+            "demoplugin", typeof(IMqttProbePlugin).Assembly.Location);
+
+        var outcome = await installer.InstallAsync(package, CancellationToken.None);
+
+        outcome.Succeeded.Should().BeFalse();
+        outcome.Error.Should().Contain("AllowBinaryPackages");
         Directory.Delete(pluginFolder, recursive: true);
     }
 }

@@ -1,5 +1,6 @@
 @namespace MqttProbe.UI.Components.Plugins
 @using Microsoft.AspNetCore.Components.Forms
+@using MqttProbe.Core.Models.Plugins
 @using MqttProbe.Core.Services.Plugins.Packaging
 @inject PluginInventoryService Inventory
 @inject PluginPackageInstaller Installer
@@ -8,6 +9,21 @@
 @inject IPluginPackagePicker Picker
 @inject IPluginInputCapability InputCapability
 @inject IDialogService DialogService
+@inject IAppInfoService AppInfoService
+
+@if (!AppInfoService.SupportsPluginInstallation)
+{
+    // Belt and braces: Settings already omits the section, so draw no placeholder here.
+}
+else
+{
+@if (_schemaOnly)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        A schema package holds protobuf .proto definitions used to decode payloads.
+        Schema changes apply without a restart.
+    </MudText>
+}
 
 <div class="d-flex align-center justify-end mb-3">
     @if (_writableFolder is not null)
@@ -21,7 +37,7 @@
                                         StartIcon="@LucideIcons.Upload"
                                         Disabled="@_busy"
                                         OnClick="@(() => context.OpenFilePickerAsync())">
-                        Install plugin
+                        @ImportLabel
                     </AppSecondaryButton>
                 </CustomContent>
             </MudFileUpload>
@@ -32,7 +48,7 @@
                                 StartIcon="@LucideIcons.Upload"
                                 Disabled="@_busy"
                                 OnClick="PickAndInstallAsync">
-                Install plugin
+                @ImportLabel
             </AppSecondaryButton>
         }
     }
@@ -41,7 +57,7 @@
 @if (_writableFolder is null)
 {
     <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-        No writable plugin folder is configured on this host, so plugins cannot be installed here.
+        @NoWritableFolderMessage
     </MudAlert>
 }
 
@@ -88,7 +104,15 @@
         <MudTd DataLabel="Name">@context.Manifest.Name</MudTd>
         <MudTd DataLabel="Id">@context.Manifest.Id</MudTd>
         <MudTd DataLabel="Version">@context.Manifest.Version</MudTd>
-        <MudTd DataLabel="Kind">@context.Manifest.Kind</MudTd>
+        <MudTd DataLabel="Kind">
+            @context.Manifest.Kind
+            @if (_schemaOnly && context.Manifest.Kind == PluginPackageKinds.Assembly)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                    Code plugins cannot run on this platform.
+                </MudText>
+            }
+        </MudTd>
         <MudTd DataLabel="Status">
             <MudChip T="string" Size="Size.Small" Color="@StatusColour(context.Status)">
                 @StatusLabel(context.Status)
@@ -113,8 +137,9 @@
 @if (_plugins.Count == 0)
 {
     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
-        No plugins installed.
+        @EmptyStateMessage
     </MudText>
+}
 }
 
 @code {
@@ -123,6 +148,20 @@
     private string? _error;
     private bool _busy;
     private MudFileUpload<IBrowserFile>? _upload;
+
+    // A host can accept packages without being able to run the code ones, so the
+    // controls are worded for what it can actually do: import protobuf schemas.
+    private bool _schemaOnly => !AppInfoService.SupportsAssemblyPlugins;
+
+    private string ImportLabel => _schemaOnly ? "Import schemas" : "Install plugin";
+
+    private string EmptyStateMessage => _schemaOnly
+        ? "No schemas imported."
+        : "No plugins installed.";
+
+    private string NoWritableFolderMessage => _schemaOnly
+        ? "No writable plugin folder is configured on this host, so schemas cannot be imported here."
+        : "No writable plugin folder is configured on this host, so plugins cannot be installed here.";
 
     protected override void OnInitialized() => Refresh();
 
@@ -175,7 +214,8 @@
 
     private async Task PickAndInstallAsync()
     {
-        var bytes = await Picker.PickPackageAsync("Select a plugin package", [".zip"], 33_554_432);
+        var title = _schemaOnly ? "Select a schema package" : "Select a plugin package";
+        var bytes = await Picker.PickPackageAsync(title, [".zip"], 33_554_432);
 
         if (bytes is null)
         {

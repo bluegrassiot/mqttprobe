@@ -13,17 +13,74 @@ public class ConnectionRequiredPanelTests : BunitTestContext
     private IConnectionSessionLifecycle _lifecycle = null!;
     private IRenderedComponent<MudSnackbarProvider> _snackbarProvider = null!;
 
+    // Exercises the iOS branch from a non-iOS host.
+    private sealed class IosConnectionRequiredPanel : ConnectionRequiredPanel
+    {
+        protected override bool IsIosHost => true;
+    }
+
     [SetUp]
     public void Setup()
     {
         _mqtt = Substitute.For<IMqttManagedClient>();
         _lifecycle = Substitute.For<IConnectionSessionLifecycle>();
         _lifecycle.StopActiveConnectionAsync().Returns(Task.CompletedTask);
-
         Services.AddSingleton(_mqtt);
         Services.AddSingleton(_lifecycle);
         EnsureMudProviders();
         _snackbarProvider = Render<MudSnackbarProvider>();
+    }
+
+    [Test]
+    public void WhenNotStarted_OnIos_Keeps_The_Plain_Connect_Prompt()
+    {
+        _mqtt.IsConnected.Returns(false);
+        _mqtt.IsStarted.Returns(false);
+
+        var cut = Render<IosConnectionRequiredPanel>();
+
+        // The connect dialog owns the network explanation, so the idle panel stays plain.
+        cut.FindAll(".connection-required__lan").Should().BeEmpty();
+        cut.FindAll("[data-testid=ios-local-network-recovery]").Should().BeEmpty();
+        cut.Markup.Should().Contain("Use Connect in the app bar.");
+    }
+
+    [Test]
+    public void WhenNotStarted_OffIos_Omits_The_Local_Network_Note()
+    {
+        _mqtt.IsConnected.Returns(false);
+        _mqtt.IsStarted.Returns(false);
+
+        var cut = Render<ConnectionRequiredPanel>();
+
+        cut.FindAll(".connection-required__lan").Should().BeEmpty();
+        cut.FindAll("[data-testid=ios-local-network-recovery]").Should().BeEmpty();
+    }
+
+    [Test]
+    public void WhileReconnecting_OnIos_Shows_The_Local_Network_Recovery_Note()
+    {
+        _mqtt.IsConnected.Returns(false);
+        _mqtt.IsStarted.Returns(true);
+
+        var cut = Render<IosConnectionRequiredPanel>();
+
+        // TN3179: iOS blocks rather than warns, so the stalled-reconnect state must say how to
+        // recover. The cause is never asserted, so the copy stays conditional.
+        var note = cut.Find("[data-testid=ios-local-network-recovery]");
+        note.TextContent.Should().Contain("If you denied local network access");
+        note.TextContent.Should().Contain("iOS Settings");
+    }
+
+    [Test]
+    public void WhileReconnecting_OffIos_Omits_The_Local_Network_Recovery_Note()
+    {
+        _mqtt.IsConnected.Returns(false);
+        _mqtt.IsStarted.Returns(true);
+
+        var cut = Render<ConnectionRequiredPanel>();
+
+        cut.FindAll("[data-testid=ios-local-network-recovery]").Should().BeEmpty();
     }
 
     [Test]

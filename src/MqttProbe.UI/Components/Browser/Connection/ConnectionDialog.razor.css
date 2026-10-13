@@ -116,3 +116,25 @@
         display: none;
     }
 }
+
+/* iOS local-network note: pre-connect context, worded the same as the reconnect panel. */
+.connection-dialog__lan-note {
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: 8px;
+    background-color: var(--mud-palette-background-gray);
+    text-align: left;
+}
+
+/* Title is on a MudText child root, which never gets this component's scope attribute. */
+.connection-dialog__lan-note ::deep .connection-dialog__lan-note-title {
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+@media (max-width: 599px) {
+    .connection-dialog__lan-note {
+        padding: 10px 12px;
+    }
+}

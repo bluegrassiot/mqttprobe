@@ -141,7 +141,7 @@ internal sealed class PluginPackagePublisher(
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Best-effort cleanup is retried by the next install sweep.
+            // Cleanup failure must not replace the install result.
         }
     }
 

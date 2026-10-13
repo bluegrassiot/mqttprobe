@@ -124,6 +124,9 @@ inside its sandbox. It tries to delete these copies when the import finishes. If
 fails, they can remain until you delete the app. The original file you selected is only
 read, never changed or moved.
 
+Failed cleanup during a schema upgrade can also leave a backup of the previous version
+inside the sandbox until you delete the app.
+
 ## Backups, updates, and other devices
 
 Two caveats, stated plainly rather than promised away.

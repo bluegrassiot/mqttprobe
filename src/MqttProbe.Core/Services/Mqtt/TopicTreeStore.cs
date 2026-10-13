@@ -272,9 +272,14 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         return true;
     }
 
+    // Observed history counts as node content. A purge prunes a node only once its messages, its
+    // subtopics and its recorded raw names are all gone, so unmatched raw history is discarded
+    // by a prune only after an exclude has actually retired it. Counters still count messages,
+    // so retaining a node here deliberately costs a node slot without inventing one.
     private static bool IsEmpty(MessageStore store) =>
         (store.Messages is null || store.Messages.IsEmpty)
-        && (store.SubTopics is null || store.SubTopics.IsEmpty);
+        && (store.SubTopics is null || store.SubTopics.IsEmpty)
+        && !store.HasObservedDirectTopic;
 
     private void RecalculateCounters()
     {

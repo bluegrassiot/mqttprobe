@@ -96,7 +96,7 @@ class BuildNumberTests(unittest.TestCase):
         with self.assertRaises(ios_version.VersionError):
             ios_version.validate_build_number("0")
 
-    def test_rejects_five_digits(self):
+    def test_rejects_oversized_run_number(self):
         with self.assertRaises(ios_version.VersionError):
             ios_version.validate_build_number("1000800001")
 

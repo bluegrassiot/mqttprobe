@@ -164,7 +164,7 @@ class DistributionTypeTests(ProfileFixture):
             self.check(make_profile(ProvisionsAllDevices=True))
         self.assertIn("Enterprise", str(raised.exception))
 
-    def test_rejects_explicit_false_provisions_all_devices_is_allowed(self):
+    def test_accepts_explicit_false_provisions_all_devices(self):
         self.assertIn("expires", self.check(make_profile(ProvisionsAllDevices=False)))
 
 

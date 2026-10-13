@@ -35,6 +35,9 @@
         </array>
         <key>XSAppIconAssets</key>
         <string>Assets.xcassets/appicon.appiconset</string>
+        <!-- macOS 15+ gates direct LAN connections, Mac Catalyst included. -->
+        <key>NSLocalNetworkUsageDescription</key>
+        <string>MQTTProbe connects to the MQTT broker you specify, which is typically on your local network.</string>
         <!-- ws:// to LAN brokers only; raw MQTT over TCP is a BSD socket outside ATS.
              Remote hosts keep full TLS enforcement. Verify ws:// on a real device. -->
         <key>NSAppTransportSecurity</key>

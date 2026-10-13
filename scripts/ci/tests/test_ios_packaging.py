@@ -99,6 +99,11 @@ class MacCatalystInfoPlistTests(unittest.TestCase):
     def setUp(self):
         self.plist = load_plist(CATALYST_PLIST)
 
+    def test_local_network_description_matches_ios(self):
+        description = self.plist["NSLocalNetworkUsageDescription"]
+        self.assertTrue(description.strip())
+        self.assertEqual(description, load_plist(IOS_PLIST)["NSLocalNetworkUsageDescription"])
+
     def test_ats_allows_local_networking_only(self):
         ats = self.plist["NSAppTransportSecurity"]
         self.assertIs(ats["NSAllowsLocalNetworking"], True)

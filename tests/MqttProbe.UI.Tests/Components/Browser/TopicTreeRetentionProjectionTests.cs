@@ -216,6 +216,157 @@ public sealed class TopicTreeRetentionProjectionTests
             .Should().NotContain("spBv1.0/g/NDATA/n1");
     }
 
+    [Test]
+    public void GroupingOn_KeepsARetainedNodeTipGroupedWhileItsMalformedDescendantStays()
+    {
+        // The direct message on the tip was evicted, but the tip was an accepted endpoint and a
+        // malformed deeper segment still has a message: the tip groups and the descendant stays
+        // literal under it.
+        var tree = TopicSnapshotBuilder.Build(("spBv1.0/g/NDATA/n1", 0), ("spBv1.0/g/NDATA/n1/extra", 1));
+
+        var rows = Rows(tree);
+
+        rows.Select(row => (row.DisplayName, row.Depth, row.Kind)).Should().Equal(
+            ("spBv1.0", 0, TopicTreeRowKind.SparkplugNamespace),
+            ("g", 1, TopicTreeRowKind.SparkplugGroup),
+            ("n1", 2, TopicTreeRowKind.SparkplugNode),
+            ("Node messages", 3, TopicTreeRowKind.NodeMessages),
+            ("NDATA", 4, TopicTreeRowKind.MessageType),
+            ("spBv1.0/g/NDATA/n1", 5, TopicTreeRowKind.Topic),
+            ("extra", 6, TopicTreeRowKind.Topic));
+
+        var tip = rows.Single(row => row.FullPath == "spBv1.0/g/NDATA/n1");
+        tip.IsVirtualTopic.Should().BeFalse();
+        tip.IsValueBearer.Should().BeFalse("the store reports no direct message of its own");
+        tip.TopicCount.Should().Be(1);
+        tip.MessageCount.Should().Be(1, "the descendant's message still counts in the store totals");
+        rows.Count(row => row.FullPath == "spBv1.0/g/NDATA/n1").Should().Be(1);
+        rows.Select(row => row.FullPath).Should().NotContain("spBv1.0/g/NDATA",
+            "nothing is left for a residual prefix");
+        rows.Single(row => row.FullPath == "spBv1.0/g/NDATA/n1/extra").MessageCount.Should().Be(1);
+    }
+
+    [Test]
+    public void GroupingOn_KeepsARetainedDeviceTipGroupedWhileItsMalformedDescendantStays()
+    {
+        var tree = TopicSnapshotBuilder.Build(
+            ("spBv1.0/g/DDATA/n1/dev1", 0),
+            ("spBv1.0/g/DDATA/n1/dev1/extra", 1));
+
+        var rows = Rows(tree);
+
+        rows.Select(row => (row.DisplayName, row.Depth, row.Kind)).Should().Equal(
+            ("spBv1.0", 0, TopicTreeRowKind.SparkplugNamespace),
+            ("g", 1, TopicTreeRowKind.SparkplugGroup),
+            ("n1", 2, TopicTreeRowKind.SparkplugNode),
+            ("Devices", 3, TopicTreeRowKind.Devices),
+            ("dev1", 4, TopicTreeRowKind.SparkplugDevice),
+            ("DDATA", 5, TopicTreeRowKind.MessageType),
+            ("spBv1.0/g/DDATA/n1/dev1", 6, TopicTreeRowKind.Topic),
+            ("extra", 7, TopicTreeRowKind.Topic));
+
+        rows.Single(row => row.FullPath == "spBv1.0/g/DDATA/n1/dev1").IsValueBearer.Should().BeFalse();
+        rows.Single(row => row.FullPath == "spBv1.0/g/DDATA/n1/dev1").MessageCount.Should().Be(1);
+        rows.Select(row => row.FullPath).Should().NotContain("spBv1.0/g/DDATA");
+    }
+
+    [TestCase("NBIRTH")]
+    [TestCase("NDEATH")]
+    [TestCase("NDATA")]
+    [TestCase("NCMD")]
+    public void GroupingOn_KeepsRetainedNodeTipsWithDescendantsForEveryNodeVerb(string verb)
+    {
+        var tree = TopicSnapshotBuilder.Build(
+            ($"spBv1.0/g/{verb}/n1", 0),
+            ($"spBv1.0/g/{verb}/n1/extra", 1));
+
+        var rows = Rows(tree);
+
+        rows.Should().Contain(row => row.Kind == TopicTreeRowKind.MessageType && row.DisplayName == verb);
+        rows.Should().Contain(row => row.FullPath == $"spBv1.0/g/{verb}/n1" && !row.IsVirtualTopic);
+        rows.Should().Contain(row => row.FullPath == $"spBv1.0/g/{verb}/n1/extra");
+    }
+
+    [TestCase("DBIRTH")]
+    [TestCase("DDEATH")]
+    [TestCase("DDATA")]
+    [TestCase("DCMD")]
+    public void GroupingOn_KeepsRetainedDeviceTipsWithDescendantsForEveryDeviceVerb(string verb)
+    {
+        var tree = TopicSnapshotBuilder.Build(
+            ($"spBv1.0/g/{verb}/n1/dev1", 0),
+            ($"spBv1.0/g/{verb}/n1/dev1/extra", 1));
+
+        var rows = Rows(tree);
+
+        rows.Should().Contain(row => row.Kind == TopicTreeRowKind.MessageType && row.DisplayName == verb);
+        rows.Should().Contain(row => row.FullPath == $"spBv1.0/g/{verb}/n1/dev1" && !row.IsVirtualTopic);
+        rows.Should().Contain(row => row.FullPath == $"spBv1.0/g/{verb}/n1/dev1/extra");
+    }
+
+    [Test]
+    public void GroupingOn_StructuralPrefixWithAMessageBearingDescendantStaysLiteral()
+    {
+        // The message landed a segment deeper, so the tip-shaped node was never an endpoint: it
+        // is structural and stays literal even though its descendant carries a message.
+        var tree = TopicSnapshotBuilder.Build(("spBv1.0/g/NDATA/ghostnode/ghostleaf", 1));
+
+        var rows = Rows(tree);
+
+        rows.Should().OnlyContain(row => !row.IsVirtualTopic);
+        rows.Select(row => row.FullPath).Should().Equal(
+            "spBv1.0",
+            "spBv1.0/g",
+            "spBv1.0/g/NDATA",
+            "spBv1.0/g/NDATA/ghostnode",
+            "spBv1.0/g/NDATA/ghostnode/ghostleaf");
+    }
+
+    [Test]
+    public void GroupingOn_ClearedEndpointHistoryWithDescendantsReclassifiesTheTipAsLiteral()
+    {
+        // An exact purge clears the observed marker while the descendants stay, so the same
+        // node presents as a structural prefix again.
+        var tree = TopicSnapshotBuilder.Build(
+            ("spBv1.0/g/NDATA/n1", 0, false),
+            ("spBv1.0/g/NDATA/n1/extra", 1, true));
+
+        var rows = Rows(tree);
+
+        rows.Should().OnlyContain(row => !row.IsVirtualTopic);
+        rows.Select(row => row.FullPath).Should().Equal(
+            "spBv1.0",
+            "spBv1.0/g",
+            "spBv1.0/g/NDATA",
+            "spBv1.0/g/NDATA/n1",
+            "spBv1.0/g/NDATA/n1/extra");
+
+        TopicTreeProjection.RepresentsRealPath(tree, groupSparkplugTopics: true, "spBv1.0/g/NDATA/n1")
+            .Should().BeTrue("the residual row still represents the path");
+    }
+
+    [Test]
+    public void GroupingOn_ClearedEndpointThatKeepsADirectMessageStaysLiteralWithItsMessage()
+    {
+        // The snapshot is explicitly overridden here: the marker says unobserved while a direct
+        // message survives, pinning the projection's treatment of the flag independently of how
+        // the store decides it. The node presents literally and its message stays visible.
+        var tree = TopicSnapshotBuilder.Build(("spBv1.0/g/NDATA/n1", 2, false));
+
+        var rows = Rows(tree);
+
+        rows.Should().OnlyContain(row => !row.IsVirtualTopic);
+        rows.Select(row => row.FullPath).Should().Equal(
+            "spBv1.0",
+            "spBv1.0/g",
+            "spBv1.0/g/NDATA",
+            "spBv1.0/g/NDATA/n1");
+
+        var literal = rows.Single(row => row.FullPath == "spBv1.0/g/NDATA/n1");
+        literal.IsValueBearer.Should().BeTrue("the store still holds its direct message");
+        literal.MessageCount.Should().Be(2);
+    }
+
     private static List<TopicTreeRowModel> Subtree(List<TopicTreeRowModel> rows, string fullPath)
     {
         var index = rows.FindIndex(row => row.FullPath == fullPath);

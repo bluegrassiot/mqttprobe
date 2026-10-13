@@ -295,9 +295,9 @@ internal static class TopicTreeProjection
     }
 
     // The literal remainder of a verb: every row the partition did not take, pruned of the
-    // tips that moved into it. A prefix row is dropped only when its whole representation
-    // moved: a node that carries a message of its own, or one the store left in place after
-    // retention emptied it, is still part of the hierarchy and stays visible.
+    // tips that moved into it. A row is dropped only when it is a structural prefix whose
+    // whole representation moved: a node that was ever an accepted endpoint stays visible,
+    // and so does one the store left in place after retention emptied it.
     private static ProjectionNode? BuildResidual(TopicNodeSnapshot node, HashSet<string> groupedTips)
     {
         if (groupedTips.Contains(node.FullTopic))
@@ -311,7 +311,7 @@ internal static class TopicTreeProjection
                 built.Children.Add(childRow);
         }
 
-        if (node.HasDirectMessages || node.Children.IsDefaultOrEmpty)
+        if (node.HasDirectMessages || node.HasObservedDirectTopic || node.Children.IsDefaultOrEmpty)
             return built;
 
         return built.Children.Count > 0 ? built : null;
@@ -326,11 +326,11 @@ internal static class TopicTreeProjection
     {
         foreach (var tip in verbNode.Children)
         {
-            // A node verb's child is the node-level topic itself. It is a supported tip when
-            // the message landed on it, and also when the store left it childless after
-            // retention emptied it: only a tip with no message and deeper segments of its own
-            // can be a malformed prefix, and that stays in the residue.
-            if (!tip.HasDirectMessages && !tip.Children.IsDefaultOrEmpty)
+            // A node verb's child is the node-level topic itself. It is a supported tip when a
+            // message was ever accepted at that exact path: retention can evict that message
+            // while a malformed descendant stays, and the tip still groups. A child that was
+            // never an endpoint is a structural prefix and stays in the residue.
+            if (!tip.HasObservedDirectTopic)
                 continue;
 
             groupedTips.Add(tip.FullTopic);
@@ -356,10 +356,10 @@ internal static class TopicTreeProjection
         {
             foreach (var deviceNode in nodeLevel.Children)
             {
-                // The device tip is the only supported shape here. As at the node level, a
-                // childless tip the store kept after retention is supported; a tip with no
-                // message and deeper segments is a malformed prefix and stays in the residue.
-                if (!deviceNode.HasDirectMessages && !deviceNode.Children.IsDefaultOrEmpty)
+                // The device tip is the only supported shape here. As at the node level it is
+                // classified by the observed endpoint marker, not by its current messages, so a
+                // device emptied by retention with a malformed descendant still groups.
+                if (!deviceNode.HasObservedDirectTopic)
                     continue;
 
                 groupedTips.Add(deviceNode.FullTopic);

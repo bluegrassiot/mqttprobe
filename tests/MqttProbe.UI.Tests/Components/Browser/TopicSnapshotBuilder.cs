@@ -5,13 +5,20 @@ namespace MqttProbe.UI.Tests.Components.Browser;
 
 // Builds snapshot trees with the same conventions as TopicTreeStore: TopicCount is the
 // number of descendant nodes, MessageCount is the subtree aggregate including the node.
+// A listed topic is an accepted endpoint, so it carries the observed marker even when
+// retention has since emptied it; intermediate segments are structural prefixes.
 internal static class TopicSnapshotBuilder
 {
-    public static ImmutableArray<TopicNodeSnapshot> Build(params (string Topic, int Messages)[] topics)
+    public static ImmutableArray<TopicNodeSnapshot> Build(params (string Topic, int Messages)[] topics) =>
+        Build([.. topics.Select(topic => (topic.Topic, topic.Messages, Observed: true))]);
+
+    // For fixtures that model history: a topic whose accepted-endpoint marker was cleared (an
+    // exact purge) while its descendants stay, so it is structural again.
+    public static ImmutableArray<TopicNodeSnapshot> Build(params (string Topic, int Messages, bool Observed)[] topics)
     {
         var root = new Node(string.Empty, string.Empty);
-        foreach (var (topic, messages) in topics)
-            root.Add(topic, messages);
+        foreach (var (topic, messages, observed) in topics)
+            root.Add(topic, messages, observed);
 
         return root.SnapshotChildren();
     }
@@ -20,8 +27,9 @@ internal static class TopicSnapshotBuilder
     {
         private readonly SortedDictionary<string, Node> _children = new(StringComparer.Ordinal);
         private int _messages;
+        private bool _observed;
 
-        public void Add(string topic, int messages)
+        public void Add(string topic, int messages, bool observed)
         {
             var current = this;
             var path = string.Empty;
@@ -38,6 +46,7 @@ internal static class TopicSnapshotBuilder
             }
 
             current._messages += messages;
+            current._observed |= observed;
         }
 
         public ImmutableArray<TopicNodeSnapshot> SnapshotChildren()
@@ -60,7 +69,10 @@ internal static class TopicSnapshotBuilder
                 messageCount += child.MessageCount;
             }
 
-            return new TopicNodeSnapshot(topic, fullTopic, topicCount, messageCount, _messages > 0, children);
+            return new TopicNodeSnapshot(topic, fullTopic, topicCount, messageCount, _messages > 0, children)
+            {
+                HasObservedDirectTopic = _observed
+            };
         }
     }
 }

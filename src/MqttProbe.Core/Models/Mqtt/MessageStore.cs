@@ -11,4 +11,5 @@ internal class MessageStore
     public int TopicCount { get; set; }
     public int MessageCount { get; set; }
     public ConcurrentQueue<MqttMessage>? Messages { get; set; }
+    public bool HasObservedDirectTopic { get; set; }
 }

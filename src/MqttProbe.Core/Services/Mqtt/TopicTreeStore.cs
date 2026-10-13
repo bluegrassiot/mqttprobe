@@ -181,6 +181,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
     private void StoreMessage(MessageStore store, MqttMessage message)
     {
+        store.HasObservedDirectTopic = true;
         store.Messages ??= new ConcurrentQueue<MqttMessage>();
         store.Messages.Enqueue(message);
         _retentionOrder.Enqueue(store);
@@ -211,7 +212,8 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
     private static bool PurgeNode(MessageStore node, string filter, out bool nodeRemoved)
     {
-        var changed = TopicExcludeService.Matches(node.FullTopic ?? string.Empty, filter);
+        var pathMatched = TopicExcludeService.Matches(node.FullTopic ?? string.Empty, filter);
+        var changed = pathMatched;
         if (node.SubTopics is not null)
         {
             foreach (var (key, child) in node.SubTopics.ToArray())
@@ -228,19 +230,29 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
                 node.SubTopics = null;
         }
 
+        var removedDirect = false;
         if (node.Messages is { IsEmpty: false })
         {
             var remaining = new ConcurrentQueue<MqttMessage>();
             while (node.Messages.TryDequeue(out var message))
             {
                 if (TopicExcludeService.Matches(message.Topic ?? node.FullTopic ?? string.Empty, filter))
+                {
                     changed = true;
+                    removedDirect = true;
+                }
                 else
                     remaining.Enqueue(message);
             }
 
             node.Messages = remaining.IsEmpty ? null : remaining;
         }
+
+        // Direct history is retired only once no direct message survives on this node. An exact
+        // endpoint exclude retires it even when the node is already empty; a raw alias that
+        // matches while a normalized sibling survives leaves it standing.
+        if ((node.Messages is null || node.Messages.IsEmpty) && (pathMatched || removedDirect))
+            node.HasObservedDirectTopic = false;
 
         nodeRemoved = changed && IsEmpty(node);
 

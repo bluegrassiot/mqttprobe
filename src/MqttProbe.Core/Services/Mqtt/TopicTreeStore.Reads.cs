@@ -117,7 +117,10 @@ internal sealed partial class TopicTreeStore
             node.TopicCount,
             node.MessageCount,
             node.Messages is { IsEmpty: false },
-            children);
+            children)
+        {
+            HasObservedDirectTopic = node.HasObservedDirectTopic
+        };
     }
 
     private void InvalidateTopicTree() => _cachedTopicTree = null;

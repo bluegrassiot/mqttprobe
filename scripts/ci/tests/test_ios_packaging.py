@@ -183,6 +183,69 @@ class BundleSourceContractTests(unittest.TestCase):
         self.assertNotIn("xcprivacy", contents)
 
 
+MAUI_APP_INFO_SERVICE = ROOT / "src" / "MqttProbe.Maui" / "Services" / "AppInfoService.cs"
+PLUGIN_ASSEMBLY_CACHE = (
+    ROOT / "src" / "MqttProbe.Core" / "Services" / "Plugins" / "Loading" / "PluginAssemblyCache.cs"
+)
+
+MAUI_CAPABILITY = "public bool SupportsAssemblyPlugins"
+LOADER_GUARD = "private static bool AssemblyPluginLoadingAllowed"
+IOS_ONLY_GUARD = "!OperatingSystem.IsIOS();"
+INSPECTOR_SUBSTITUTE = "PluginAssemblyInspector.AssemblyPluginsSupported;"
+ANDROID_EXCLUDING_GUARD = "!OperatingSystem.IsIOS() && !OperatingSystem.IsAndroid();"
+
+
+def guard_expression(source, member):
+    """Return what an expression-bodied `member => ...;` property is initialized from.
+
+    Text, not reflection: these checks run without a build, and the point is to pin
+    the declaration that ships rather than a compiled copy of it.
+    """
+    marker = f"{member} =>"
+    for line in source.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(marker):
+            return stripped.split("=>", 1)[1].strip()
+    raise AssertionError(f"{member} is not declared as an expression-bodied property")
+
+
+def is_ios_only_guard(expression):
+    """True only for the iOS guard. The inspector constant also refuses Android, and any
+    expression naming Android is an exclusion this app never wanted: Android keeps its
+    configured and bundled DLL loading."""
+    return expression == IOS_ONLY_GUARD
+
+
+class AssemblyPluginGuardSourceContractTests(unittest.TestCase):
+    """Pin the shipped iOS-only assembly-plugin guards in both hosts.
+
+    Source-level contract on the real declarations, not runtime proof: no Android,
+    iOS or device execution is claimed here.
+    """
+
+    def setUp(self):
+        self.maui = MAUI_APP_INFO_SERVICE.read_text(encoding="utf-8")
+        self.loader = PLUGIN_ASSEMBLY_CACHE.read_text(encoding="utf-8")
+
+    def test_maui_capability_is_ios_only(self):
+        self.assertTrue(MAUI_APP_INFO_SERVICE.is_file())
+        self.assertTrue(is_ios_only_guard(guard_expression(self.maui, MAUI_CAPABILITY)))
+
+    def test_loader_guard_is_ios_only(self):
+        self.assertTrue(PLUGIN_ASSEMBLY_CACHE.is_file())
+        self.assertTrue(is_ios_only_guard(guard_expression(self.loader, LOADER_GUARD)))
+
+    def test_inspector_substitution_breaks_the_maui_contract(self):
+        mutated = self.maui.replace(IOS_ONLY_GUARD, INSPECTOR_SUBSTITUTE, 1)
+        self.assertNotEqual(mutated, self.maui)
+        self.assertFalse(is_ios_only_guard(guard_expression(mutated, MAUI_CAPABILITY)))
+
+    def test_android_exclusion_breaks_the_loader_contract(self):
+        mutated = self.loader.replace(IOS_ONLY_GUARD, ANDROID_EXCLUDING_GUARD, 1)
+        self.assertNotEqual(mutated, self.loader)
+        self.assertFalse(is_ios_only_guard(guard_expression(mutated, LOADER_GUARD)))
+
+
 class IosSigningWorkflowTests(unittest.TestCase):
     """Source contracts for the signing gate in build-ios.yml.
 

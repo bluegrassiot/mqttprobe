@@ -70,6 +70,22 @@ internal sealed partial class TopicTreeStore
         }
     }
 
+    public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection)
+    {
+        lock (_storeSync)
+        {
+            if (Interlocked.Read(ref _globalVersion) != treeVersion
+                || expectedSelection.Token.StoreId != _storeId
+                || expectedSelection.Token.Generation != _selectionGeneration
+                || _selectedMessageStore is null
+                || !string.Equals(_selectedMessageStore.FullTopic, expectedSelection.FullTopic, StringComparison.Ordinal))
+                return false;
+
+            InvalidateSelection();
+            return true;
+        }
+    }
+
     public SelectedMessagesSnapshot? GetSelectedMessages(SelectedTopicToken expectedSelection, int limit)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(limit);

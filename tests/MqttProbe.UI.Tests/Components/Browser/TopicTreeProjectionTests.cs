@@ -19,6 +19,8 @@ internal sealed class TopicBrowserTestFixture
         _manager.GetTopicTreeSnapshot().Returns(_ => _snapshot);
         _manager.GetSelectedTopicState().Returns(_ => _selection);
         _manager.When(m => m.SelectTopic(Arg.Any<string?>())).Do(call => Select(call.Arg<string?>()));
+        _manager.TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>())
+            .Returns(call => TryClearSelection(call.Arg<long>(), call.Arg<SelectedTopicState>()));
     }
 
     public void SetSnapshot(params TopicNodeSnapshot[] roots) =>
@@ -30,6 +32,28 @@ internal sealed class TopicBrowserTestFixture
     // already rendered: the row is on screen while the topic it names has left the store.
     public void PurgeHoldingRenderedFrame() =>
         _snapshot = new TopicTreeSnapshot(_snapshot.Version, ImmutableArray<TopicNodeSnapshot>.Empty);
+
+    // Runs just before the conditional clear is evaluated, so a test can move the store on
+    // between the component's verdict and the clear without a race.
+    public Action? BeforeConditionalClear { get; set; }
+
+    // Mirrors TopicTreeStore.TryClearSelection so the component never meets a substitute's
+    // default false, and a stale verdict comes from the store rather than from the mock.
+    public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection)
+    {
+        BeforeConditionalClear?.Invoke();
+
+        if (_snapshot.Version != treeVersion
+            || expectedSelection.Token.StoreId != _selection.Token.StoreId
+            || expectedSelection.Token.Generation != _selection.Token.Generation
+            || _selection.FullTopic is null
+            || !string.Equals(_selection.FullTopic, expectedSelection.FullTopic, StringComparison.Ordinal))
+            return false;
+
+        _generation = Math.Max(_generation, _selection.Token.Generation);
+        _selection = new SelectedTopicState(new SelectedTopicToken(_storeId, ++_generation, 0), null, 0);
+        return true;
+    }
 
     public void SetSelection(SelectedTopicState selection) => _selection = selection;
 

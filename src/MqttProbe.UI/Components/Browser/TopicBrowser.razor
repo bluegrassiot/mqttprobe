@@ -132,16 +132,11 @@
 
         if (selection.FullTopic is not null && !selectionRepresented)
         {
-            if (!StillCurrent(snapshot, selection))
-            {
-                // Snapshot and selection were read separately, so a purge plus fresh traffic can
-                // have recreated the row. Defer on a stale verdict; the next refresh rebuilds.
+            // One conditional clear under the store's own lock; a purge that fresh traffic undid
+            // rejects it, so the next ordinary refresh rebuilds rather than clearing a live row.
+            if (!MessageStoreManagerService.TryClearSelection(snapshot.Version, selection))
                 return;
-            }
 
-            // No selection callback: it closes the mobile picker and the payload panel reads the
-            // manager directly. Re-reading the state unmarks the stale row.
-            MessageStoreManagerService.SelectTopic(null);
             selection = MessageStoreManagerService.GetSelectedTopicState();
         }
 
@@ -149,18 +144,6 @@
         _lastSelectionStoreId = selection.Token.StoreId;
         _lastSelectionGeneration = selection.Token.Generation;
         _selectedFullPath = selection.FullTopic;
-    }
-
-    // Re-read to close the window between verdict and clear; the manager has no combined read.
-    private bool StillCurrent(TopicTreeSnapshot snapshot, SelectedTopicState selection)
-    {
-        var currentTree = MessageStoreManagerService.GetTopicTreeSnapshot();
-        var currentSelection = MessageStoreManagerService.GetSelectedTopicState();
-
-        return currentTree.Version == snapshot.Version
-            && currentSelection.Token.StoreId == selection.Token.StoreId
-            && currentSelection.Token.Generation == selection.Token.Generation
-            && string.Equals(currentSelection.FullTopic, selection.FullTopic, StringComparison.Ordinal);
     }
 
     private async Task RefreshAsync()

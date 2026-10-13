@@ -86,8 +86,10 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
 
         await RefreshAfterAsync(cut, WithoutResidue(), timeout.Token);
 
-        cut.WaitForAssertion(() => _mockMsgStore.Received(1).SelectTopic(null!));
+        cut.WaitForAssertion(() => _mockMsgStore.Received(1)
+            .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().BeEmpty());
+        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _fixture.SelectedFullTopic.Should().BeNull("the clear reached the manager");
         cut.Markup.Should().Contain("spBv1.0/plant1/NDATA/node1",
             "the valid tip under the same verb stays grouped");
@@ -103,6 +105,7 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
 
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
         _fixture.SelectedFullTopic.Should().Be(Tip);
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
@@ -123,6 +126,7 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
 
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
         _fixture.SelectedFullTopic.Should().Be(Aggregate);
     }
 
@@ -141,61 +145,64 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
 
         cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Node messages"));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
         _fixture.SelectedFullTopic.Should().Be(Tip);
     }
 
     [Test]
-    public void StaleVerdict_WhenTheResidueComesBackBeforeClearing_KeepsTheSelection()
+    public void StaleVerdict_WhenTheStoreMovesUnderTheClear_KeepsTheSelectionForTheNextRefresh()
     {
-        // Deterministic interleaving: the verdict sees the residue purged, but the guard's very
-        // next read sees a newer tree with it back. The selection must survive and the deferred
-        // rebuild must not be recorded as fresh.
-        _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
-        var initial = new TopicTreeSnapshot(1, WithResidue());
-        var purged = new TopicTreeSnapshot(2, WithoutResidue());
-        var recreated = new TopicTreeSnapshot(3, WithResidue());
-        var snapshotReads = 0;
-        _mockMsgStore.GetTopicTreeSnapshot().Returns(_ => Interlocked.Increment(ref snapshotReads) switch
-        {
-            1 => initial,
-            2 => purged,
-            _ => recreated
-        });
-        _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(_storeId, 1, 1), Aggregate, 1));
+        // The verdict sees an emptied store, but the topic returns at the instant of the clear.
+        // The conditional clear must reject, and the next ordinary refresh, with no ExpandAll,
+        // must render the row it never cleared.
+        _preferences.GroupSparkplugTopicsByNodeAndDevice = false;
+        _fixture.SetSnapshot();
+        _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(_storeId, 1, 1), "sensors", 3));
+        _fixture.BeforeConditionalClear =
+            () => _fixture.SetSnapshot([.. TopicSnapshotBuilder.Build(("sensors/temp", 2))]);
 
-        var cut = Render<TopicBrowser>();
+        SelectedTopicState? callbackState = null;
+        var cut = Render<TopicBrowser>(parameters => parameters.Add(
+            component => component.OnSelectedChanged, state =>
+            {
+                callbackState = state;
+                return Task.CompletedTask;
+            }));
         EnsureMudProviders();
-        ExpandAll(cut);
 
-        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().ContainSingle());
+        cut.WaitForAssertion(() => _mockMsgStore.Received(1)
+            .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        Interlocked.CompareExchange(ref snapshotReads, 0, 0).Should().BeGreaterThanOrEqualTo(3,
-            "the guard re-read the tree before deciding");
+        callbackState.Should().BeNull("a rejected clear must not raise the selection callback");
+        _fixture.SelectedFullTopic.Should().Be("sensors");
+
+        cut.WaitForAssertion(() =>
+        {
+            var selected = cut.FindAll(".topic-tree-row--selected");
+            selected.Should().ContainSingle();
+            selected[0].TextContent.Should().Contain("sensors");
+        }, TimeSpan.FromSeconds(10));
     }
 
     [Test]
-    public void StaleVerdict_WhenTheSelectionChangesBeforeClearing_DoesNotClear()
+    public void StaleVerdict_WhenTheSelectionMovesUnderTheClear_KeepsTheNewSelection()
     {
-        // Same interleaving on the selection: the tree stays purged, but the guard reads a
-        // selection other than the one the verdict was decided for.
+        // The tree stays purged, but a new selection arrives before the clear is evaluated, so
+        // the captured token no longer matches and the clear must leave the live selection alone.
         _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
-        var initial = new TopicTreeSnapshot(1, WithResidue());
-        var purged = new TopicTreeSnapshot(2, WithoutResidue());
-        var snapshotReads = 0;
-        _mockMsgStore.GetTopicTreeSnapshot().Returns(_ => Interlocked.Increment(ref snapshotReads) == 1 ? initial : purged);
-        var selectionReads = 0;
-        _mockMsgStore.GetSelectedTopicState().Returns(_ =>
-            Interlocked.Increment(ref selectionReads) <= 2
-                ? new SelectedTopicState(new SelectedTopicToken(_storeId, 1, 1), Aggregate, 1)
-                : new SelectedTopicState(new SelectedTopicToken(_storeId, 5, 5), Tip, 3));
+        _fixture.SetSnapshot([.. WithoutResidue()]);
+        _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(_storeId, 1, 1), Aggregate, 1));
+        _fixture.BeforeConditionalClear = () => _fixture.SetSelection(
+            new SelectedTopicState(new SelectedTopicToken(_storeId, 9, 9), Tip, 3));
 
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
         ExpandAll(cut);
 
-        cut.WaitForAssertion(() => Interlocked.CompareExchange(ref selectionReads, 0, 0)
-            .Should().BeGreaterThanOrEqualTo(3));
+        cut.WaitForAssertion(() => _mockMsgStore.Received(1)
+            .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _fixture.SelectedFullTopic.Should().Be(Tip);
         cut.WaitForAssertion(() =>
         {
             var selected = cut.FindAll(".topic-tree-row--selected");
@@ -213,6 +220,7 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
 
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().ContainSingle());
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
         _fixture.SelectedFullTopic.Should().Be(Tip);
     }
 
@@ -225,6 +233,7 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
         await RefreshAfterAsync(cut, WithResidue(), timeout.Token);
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
     }
 
     [Test]
@@ -239,5 +248,6 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
 
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().ContainSingle());
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
     }
 }

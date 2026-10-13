@@ -8,6 +8,7 @@ public interface IMessageStoreManager : IDisposable
     public TopicTreeSnapshot GetTopicTreeSnapshot();
     public SelectedTopicState GetSelectedTopicState();
     public void SelectTopic(string? fullTopic);
+    public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection);
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit);
     public bool IsListening { get; }
     public int MaxStoredMessages { get; }

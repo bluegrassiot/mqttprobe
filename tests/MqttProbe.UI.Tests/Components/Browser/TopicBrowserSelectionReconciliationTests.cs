@@ -99,7 +99,9 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
 
         ApplyPreference(true);
 
-        cut.WaitForAssertion(() => _mockMsgStore.Received(1).SelectTopic(null));
+        cut.WaitForAssertion(() => _mockMsgStore.Received(1)
+            .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
+        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         callbackState.Should().BeNull("the preference change must not raise the selection callback");
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().BeEmpty());
     }
@@ -112,7 +114,9 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
 
         ApplyPreference(true);
 
-        cut.WaitForAssertion(() => _mockMsgStore.Received(1).SelectTopic(null));
+        cut.WaitForAssertion(() => _mockMsgStore.Received(1)
+            .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
+        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         cut.FindAll(".topic-tree-row--selected").Should().BeEmpty();
     }
 
@@ -130,6 +134,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
         ExpandAll(cut);
         cut.WaitForAssertion(() => RowFor(cut, NodeTip).ClassName.Should().Contain("topic-tree-row--selected"));
     }
@@ -151,6 +156,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
         _fixture.SelectedFullTopic.Should().Be(NodeTip);
     }
 
@@ -168,6 +174,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
     }
 
     [Test]
@@ -179,6 +186,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().NotContain(GroupedMarker));
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
         ExpandAll(cut);
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().NotBeEmpty());
     }
@@ -200,6 +208,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
         _fixture.SelectedFullTopic.Should().Be(NodeVerb);
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
@@ -228,6 +237,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
         _fixture.SelectedFullTopic.Should().Be("spBv1.0/plant1/STATE/zero-host");
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
@@ -255,6 +265,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
         _fixture.SelectedFullTopic.Should().Be(keptNode);
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
@@ -274,5 +285,6 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
     }
 }

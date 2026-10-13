@@ -137,13 +137,13 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
 
         // The filter clears the selection by design, so it is set again behind the filter.
         cut.Find(".topic-filter-field input").Input("industrial");
-        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Node messages"));
+        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("NDATA"));
         _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(_storeId, 2, 2), Tip, 3));
         _mockMsgStore.ClearReceivedCalls();
 
         cut.FindAll(".mud-toolbar button")[1].Click(); // collapse all
 
-        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Node messages"));
+        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("NDATA"));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
         _fixture.SelectedFullTopic.Should().Be(Tip);

@@ -161,7 +161,7 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
 
         var cut = RenderGrouped();
 
-        Labels(cut).Should().Contain("Node messages");
+        Labels(cut).Should().Contain("NDATA");
         cut.FindAll(".topic-tree-row--group").Should().NotBeEmpty();
         cut.FindAll(".topic-tree-row .flex-grow-1")
             .Count(element => element.TextContent.Trim() == CanonicalNodeTip)

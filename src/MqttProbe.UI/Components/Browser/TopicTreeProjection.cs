@@ -263,7 +263,7 @@ internal static class TopicTreeProjection
             var groupedTips = new HashSet<string>(StringComparer.Ordinal);
 
             if (SparkplugTopicClassifier.IsNodeVerb(verb))
-                AddNodeMessages(nodes, groupPath, verbNode, verb, groupedTips);
+                AddNodeMessageTypes(nodes, groupPath, verbNode, verb, groupedTips);
             else if (SparkplugTopicClassifier.IsDeviceVerb(verb))
                 AddDeviceMessages(nodes, groupPath, verbNode, verb, groupedTips);
 
@@ -276,8 +276,6 @@ internal static class TopicTreeProjection
 
         foreach (var branch in nodes.Values)
         {
-            if (branch.NodeMessages is not null)
-                branch.Node.Children.Add(branch.NodeMessages);
             if (branch.Devices is not null)
                 branch.Node.Children.Add(branch.Devices);
             built.Children.Add(branch.Node);
@@ -307,7 +305,7 @@ internal static class TopicTreeProjection
         return built.Children.Count > 0 ? built : null;
     }
 
-    private static void AddNodeMessages(
+    private static void AddNodeMessageTypes(
         Dictionary<string, NodeBranch> nodes,
         string groupPath,
         TopicNodeSnapshot verbNode,
@@ -325,13 +323,11 @@ internal static class TopicTreeProjection
 
             groupedTips.Add(tip.FullTopic);
             var branch = GetOrCreateNode(nodes, groupPath, tip.Topic);
-            branch.NodeMessages ??= VirtualRow(
-                $"nm:{groupPath}/{tip.Topic}", "Node messages", TopicTreeRowKind.NodeMessages, order: 0);
 
             var typeRow = VirtualRow(
                 $"nm:{groupPath}/{tip.Topic}/{verb}", verb, TopicTreeRowKind.MessageType, MessageTypeOrder(verb));
             typeRow.Children.Add(GroupedTip(tip));
-            branch.NodeMessages.Children.Add(typeRow);
+            branch.Node.Children.Add(typeRow);
         }
     }
 
@@ -355,7 +351,7 @@ internal static class TopicTreeProjection
                 groupedTips.Add(deviceNode.FullTopic);
                 var branch = GetOrCreateNode(nodes, groupPath, nodeLevel.Topic);
                 branch.Devices ??= VirtualRow(
-                    $"dev:{groupPath}/{nodeLevel.Topic}", "Devices", TopicTreeRowKind.Devices, order: 1);
+                    $"dev:{groupPath}/{nodeLevel.Topic}", "Devices", TopicTreeRowKind.Devices, order: DeviceGroupOrder);
 
                 var deviceId = deviceNode.Topic;
                 if (!branch.DeviceRows.TryGetValue(deviceId, out var deviceRow))
@@ -426,6 +422,10 @@ internal static class TopicTreeProjection
         Order = order
     };
 
+    // Node message types sort by lifecycle ahead of the Devices group, the node branch's only
+    // other sibling.
+    private const int DeviceGroupOrder = 10;
+
     // Birth, death, data, then command: the order an operator reads a node's lifecycle.
     private static int MessageTypeOrder(string verb) => verb switch
     {
@@ -441,8 +441,6 @@ internal static class TopicTreeProjection
     private sealed class NodeBranch
     {
         public required ProjectionNode Node { get; init; }
-
-        public ProjectionNode? NodeMessages { get; set; }
 
         public ProjectionNode? Devices { get; set; }
 

@@ -58,11 +58,10 @@ public sealed class TopicTreeGroupingProjectionTests
             ("spBv1.0", 0, TopicTreeRowKind.SparkplugNamespace),
             ("plant1", 1, TopicTreeRowKind.SparkplugGroup),
             ("node1", 2, TopicTreeRowKind.SparkplugNode),
-            ("Node messages", 3, TopicTreeRowKind.NodeMessages),
-            ("NBIRTH", 4, TopicTreeRowKind.MessageType),
-            ("spBv1.0/plant1/NBIRTH/node1", 5, TopicTreeRowKind.Topic),
-            ("NDATA", 4, TopicTreeRowKind.MessageType),
-            ("spBv1.0/plant1/NDATA/node1", 5, TopicTreeRowKind.Topic),
+            ("NBIRTH", 3, TopicTreeRowKind.MessageType),
+            ("spBv1.0/plant1/NBIRTH/node1", 4, TopicTreeRowKind.Topic),
+            ("NDATA", 3, TopicTreeRowKind.MessageType),
+            ("spBv1.0/plant1/NDATA/node1", 4, TopicTreeRowKind.Topic),
             ("Devices", 3, TopicTreeRowKind.Devices),
             ("dev1", 4, TopicTreeRowKind.SparkplugDevice),
             ("DDATA", 5, TopicTreeRowKind.MessageType),
@@ -94,7 +93,6 @@ public sealed class TopicTreeGroupingProjectionTests
             .Should().BeEquivalentTo(new List<TopicTreeRowKind>
             {
                 TopicTreeRowKind.SparkplugNode,
-                TopicTreeRowKind.NodeMessages,
                 TopicTreeRowKind.Devices,
                 TopicTreeRowKind.SparkplugDevice,
                 TopicTreeRowKind.MessageType
@@ -128,7 +126,6 @@ public sealed class TopicTreeGroupingProjectionTests
         var namespaceRow = rows[0];
         var groupRow = rows.Single(row => row.Kind == TopicTreeRowKind.SparkplugGroup);
         var nodeRow = rows.Single(row => row.Kind == TopicTreeRowKind.SparkplugNode);
-        var nodeMessages = rows.Single(row => row.Kind == TopicTreeRowKind.NodeMessages);
         var devices = rows.Single(row => row.Kind == TopicTreeRowKind.Devices);
         var device = rows.Single(row => row.Kind == TopicTreeRowKind.SparkplugDevice);
 
@@ -139,16 +136,17 @@ public sealed class TopicTreeGroupingProjectionTests
 
         nodeRow.TopicCount.Should().Be(3);
         nodeRow.MessageCount.Should().Be(8);
-        nodeMessages.TopicCount.Should().Be(2);
-        nodeMessages.MessageCount.Should().Be(4);
         devices.TopicCount.Should().Be(1);
         devices.MessageCount.Should().Be(4);
         device.TopicCount.Should().Be(1);
         device.MessageCount.Should().Be(4);
 
-        nodeRow.MessageCount.Should().Be(nodeMessages.MessageCount + devices.MessageCount);
-        nodeMessages.MessageCount.Should().Be(rows.Where(row => row.Depth == 5 && !row.IsVirtualTopic)
-            .Take(2).Sum(row => row.MessageCount));
+        var nodeTypes = rows.Where(row => row.Kind == TopicTreeRowKind.MessageType
+            && row.Depth == nodeRow.Depth + 1).ToList();
+        nodeTypes.Select(row => row.DisplayName).Should().Equal("NBIRTH", "NDATA");
+        nodeTypes.Sum(row => row.TopicCount).Should().Be(2);
+        nodeTypes.Sum(row => row.MessageCount).Should().Be(4);
+        nodeRow.MessageCount.Should().Be(nodeTypes.Sum(row => row.MessageCount) + devices.MessageCount);
     }
 
     [Test]
@@ -203,7 +201,7 @@ public sealed class TopicTreeGroupingProjectionTests
             ("scada", 3),
             ("FOO", 2),
             ("node9", 3),
-            ("extra", 6),
+            ("extra", 5),
             ("STATE", 1),
             ("scada-host", 2),
             ("spBv2.0", 0),             // a different namespace is never regrouped
@@ -282,9 +280,8 @@ public sealed class TopicTreeGroupingProjectionTests
             ("spBv1.0", 0, TopicTreeRowKind.SparkplugNamespace),
             ("g", 1, TopicTreeRowKind.SparkplugGroup),
             ("n1", 2, TopicTreeRowKind.SparkplugNode),
-            ("Node messages", 3, TopicTreeRowKind.NodeMessages),
-            ("NDATA", 4, TopicTreeRowKind.MessageType),
-            ("spBv1.0/g/NDATA/n1", 5, TopicTreeRowKind.Topic),
+            ("NDATA", 3, TopicTreeRowKind.MessageType),
+            ("spBv1.0/g/NDATA/n1", 4, TopicTreeRowKind.Topic),
             ("NDATA", 2, TopicTreeRowKind.Topic),
             ("n2", 3, TopicTreeRowKind.Topic),
             ("extra", 4, TopicTreeRowKind.Topic));
@@ -368,9 +365,8 @@ public sealed class TopicTreeGroupingProjectionTests
             ("spBv1.0", 0),
             ("plant1", 1),
             ("node1", 2),
-            ("Node messages", 3),
-            ("NDATA", 4),
-            ("spBv1.0/plant1/NDATA/node1", 5));
+            ("NDATA", 3),
+            ("spBv1.0/plant1/NDATA/node1", 4));
     }
 
     [Test]
@@ -382,9 +378,8 @@ public sealed class TopicTreeGroupingProjectionTests
             ("spBv1.0", 0),
             ("plant1", 1),
             ("node1", 2),
-            ("Node messages", 3),
-            ("NDATA", 4),
-            ("spBv1.0/plant1/NDATA/node1", 5));
+            ("NDATA", 3),
+            ("spBv1.0/plant1/NDATA/node1", 4));
     }
 
     [Test]
@@ -451,17 +446,17 @@ public sealed class TopicTreeGroupingProjectionTests
         var rows = Rows(MixedTree(), "node7");
 
         rows.Select(row => row.DisplayName).Should().Equal(
-            "spBv1.0", "plant2", "node7", "Node messages", "NDATA", "spBv1.0/plant2/NDATA/node7");
+            "spBv1.0", "plant2", "node7", "NDATA", "spBv1.0/plant2/NDATA/node7");
         rows.Should().OnlyContain(row => row.IsExpanded);
     }
 
     [Test]
     public void GroupingOn_FilterMatchesGroupingLabels()
     {
-        var rows = Rows(MixedTree(), "Node messages");
+        var rows = Rows(MixedTree(), "Devices");
 
         rows.Select(row => row.DisplayName).Should().Equal(
-            "spBv1.0", "plant1", "node1", "Node messages", "plant2", "node7", "Node messages");
+            "spBv1.0", "plant1", "node1", "Devices");
     }
 
     [Test]
@@ -528,7 +523,7 @@ public sealed class TopicTreeGroupingProjectionTests
             SupportedTree(), null, onIds, groupSparkplugTopics: true);
 
         onIds.Should().Contain(id => TopicTreeProjection.IsVirtualExpansionId(id));
-        rows.Should().HaveCount(12);
+        rows.Should().HaveCount(11);
         rows.Should().OnlyContain(row => !row.HasChildren || row.IsExpanded);
     }
 

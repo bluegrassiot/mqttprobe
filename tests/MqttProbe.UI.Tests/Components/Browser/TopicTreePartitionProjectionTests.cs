@@ -69,9 +69,8 @@ public sealed class TopicTreePartitionProjectionTests
             ("spBv1.0", 0, TopicTreeRowKind.SparkplugNamespace),
             ("g", 1, TopicTreeRowKind.SparkplugGroup),
             ("n1", 2, TopicTreeRowKind.SparkplugNode),
-            ("Node messages", 3, TopicTreeRowKind.NodeMessages),
-            ("NDATA", 4, TopicTreeRowKind.MessageType),
-            ("spBv1.0/g/NDATA/n1", 5, TopicTreeRowKind.Topic),
+            ("NDATA", 3, TopicTreeRowKind.MessageType),
+            ("spBv1.0/g/NDATA/n1", 4, TopicTreeRowKind.Topic),
             ("NDATA", 2, TopicTreeRowKind.Topic));
 
         var residual = rows.Single(row => row.FullPath == "spBv1.0/g/NDATA");
@@ -179,8 +178,8 @@ public sealed class TopicTreePartitionProjectionTests
         nodeRow.TopicCount.Should().Be(ownedTips.Length);
         nodeRow.MessageCount.Should().Be(ownedTips.Sum(tip => tip.MessageCount));
 
-        var nodeMessages = rows.Single(row => row.Kind == TopicTreeRowKind.NodeMessages);
-        nodeMessages.MessageCount.Should().Be(Snapshot(tree, "spBv1.0/g/NDATA/n1").MessageCount);
+        var nodeData = rows.Single(row => row is { Kind: TopicTreeRowKind.MessageType, DisplayName: "NDATA" });
+        nodeData.MessageCount.Should().Be(Snapshot(tree, "spBv1.0/g/NDATA/n1").MessageCount);
         var devices = rows.Single(row => row.Kind == TopicTreeRowKind.Devices);
         devices.MessageCount.Should().Be(Snapshot(tree, "spBv1.0/g/DDATA/n1/dev1").MessageCount);
         devices.MessageCount.Should().NotBe(Snapshot(tree, "spBv1.0/g/DDATA").MessageCount,

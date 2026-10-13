@@ -116,9 +116,8 @@ public sealed class TopicTreeRetentionProjectionTests
             ("spBv1.0", 0, TopicTreeRowKind.SparkplugNamespace),
             ("g", 1, TopicTreeRowKind.SparkplugGroup),
             ("n1", 2, TopicTreeRowKind.SparkplugNode),
-            ("Node messages", 3, TopicTreeRowKind.NodeMessages),
-            ("NDATA", 4, TopicTreeRowKind.MessageType),
-            ("spBv1.0/g/NDATA/n1", 5, TopicTreeRowKind.Topic));
+            ("NDATA", 3, TopicTreeRowKind.MessageType),
+            ("spBv1.0/g/NDATA/n1", 4, TopicTreeRowKind.Topic));
 
         var tip = rows[^1];
         tip.FullPath.Should().Be("spBv1.0/g/NDATA/n1");
@@ -169,8 +168,9 @@ public sealed class TopicTreeRetentionProjectionTests
 
         var rows = Rows(tree);
 
-        rows.Should().Contain(row => row.Kind == TopicTreeRowKind.NodeMessages);
-        rows.Should().Contain(row => row.Kind == TopicTreeRowKind.MessageType && row.DisplayName == verb);
+        var nodeRow = rows.Single(row => row.Kind == TopicTreeRowKind.SparkplugNode);
+        var typeRow = rows.Single(row => row.Kind == TopicTreeRowKind.MessageType && row.DisplayName == verb);
+        typeRow.Depth.Should().Be(nodeRow.Depth + 1, "the message-type group sits directly beneath the node");
         rows.Should().Contain(row => row.FullPath == $"spBv1.0/g/{verb}/n1" && !row.IsVirtualTopic);
     }
 
@@ -221,10 +221,9 @@ public sealed class TopicTreeRetentionProjectionTests
             ("spBv1.0", 0, TopicTreeRowKind.SparkplugNamespace),
             ("g", 1, TopicTreeRowKind.SparkplugGroup),
             ("n1", 2, TopicTreeRowKind.SparkplugNode),
-            ("Node messages", 3, TopicTreeRowKind.NodeMessages),
-            ("NDATA", 4, TopicTreeRowKind.MessageType),
-            ("spBv1.0/g/NDATA/n1", 5, TopicTreeRowKind.Topic),
-            ("extra", 6, TopicTreeRowKind.Topic));
+            ("NDATA", 3, TopicTreeRowKind.MessageType),
+            ("spBv1.0/g/NDATA/n1", 4, TopicTreeRowKind.Topic),
+            ("extra", 5, TopicTreeRowKind.Topic));
 
         var tip = rows.Single(row => row.FullPath == "spBv1.0/g/NDATA/n1");
         tip.IsVirtualTopic.Should().BeFalse();

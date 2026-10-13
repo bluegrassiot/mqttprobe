@@ -6,7 +6,6 @@ public enum TopicTreeRowKind
     SparkplugNamespace,
     SparkplugGroup,
     SparkplugNode,
-    NodeMessages,
     Devices,
     SparkplugDevice,
     MessageType

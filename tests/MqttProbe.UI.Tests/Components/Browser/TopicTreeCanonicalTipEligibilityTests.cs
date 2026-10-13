@@ -173,7 +173,6 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
             ("spBv1.0", TopicTreeRowKind.SparkplugNamespace),
             ("g", TopicTreeRowKind.SparkplugGroup),
             ("n1", TopicTreeRowKind.SparkplugNode),
-            ("Node messages", TopicTreeRowKind.NodeMessages),
             ("NDATA", TopicTreeRowKind.MessageType),
             ("spBv1.0/g/NDATA/n1", TopicTreeRowKind.Topic),
             ("extra", TopicTreeRowKind.Topic));

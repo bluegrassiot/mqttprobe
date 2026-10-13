@@ -26,7 +26,7 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
     private static SelectedTopicState Selection(string? topic) =>
         new(new SelectedTopicToken(Guid.NewGuid(), 1, 0), topic, 0);
 
-    private static TopicTreeRowModel Row(int depth, TopicTreeRowKind kind = TopicTreeRowKind.NodeMessages) =>
+    private static TopicTreeRowModel Row(int depth, TopicTreeRowKind kind = TopicTreeRowKind.Devices) =>
         new($"spBv1.0/plant1/{depth}", $"level-{depth}", depth, HasChildren: true,
             TopicCount: 3, MessageCount: 42, IsExpanded: true, IsValueBearer: false, Kind: kind);
 

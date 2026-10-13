@@ -27,9 +27,8 @@ public sealed class TopicTreeCommandProjectionTests
             ("spBv1.0", 0, TopicTreeRowKind.SparkplugNamespace),
             ("plant1", 1, TopicTreeRowKind.SparkplugGroup),
             ("node1", 2, TopicTreeRowKind.SparkplugNode),
-            ("Node messages", 3, TopicTreeRowKind.NodeMessages),
-            ("NCMD", 4, TopicTreeRowKind.MessageType),
-            ("spBv1.0/plant1/NCMD/node1", 5, TopicTreeRowKind.Topic));
+            ("NCMD", 3, TopicTreeRowKind.MessageType),
+            ("spBv1.0/plant1/NCMD/node1", 4, TopicTreeRowKind.Topic));
 
         var command = rows[^1];
         command.FullPath.Should().Be("spBv1.0/plant1/NCMD/node1");
@@ -90,11 +89,12 @@ public sealed class TopicTreeCommandProjectionTests
         var rows = Rows(tree);
 
         rows.Count(row => row.Kind == TopicTreeRowKind.SparkplugNode).Should().Be(1);
-        rows.Count(row => row.Kind == TopicTreeRowKind.NodeMessages).Should().Be(1);
         rows.Where(row => row.Kind == TopicTreeRowKind.MessageType).Select(row => row.DisplayName)
             .Should().Equal("NDATA", "NCMD");
 
         var nodeRow = rows.Single(row => row.Kind == TopicTreeRowKind.SparkplugNode);
+        rows.Count(row => row.Kind == TopicTreeRowKind.MessageType && row.Depth == nodeRow.Depth + 1)
+            .Should().Be(2, "both message-type groups sit directly beneath the node");
         nodeRow.TopicCount.Should().Be(2);
         nodeRow.MessageCount.Should().Be(3);
     }

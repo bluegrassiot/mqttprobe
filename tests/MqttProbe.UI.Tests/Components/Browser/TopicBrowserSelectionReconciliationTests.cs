@@ -147,7 +147,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         // The filter clears selections by design, so this one is set behind the filter and the
         // toggle must leave it alone.
         cut.Find(".topic-filter-field input").Input("sensors");
-        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Node messages"));
+        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("NDATA"));
         _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(_storeId, 2, 2), NodeTip, 3));
         _mockMsgStore.ClearReceivedCalls();
 

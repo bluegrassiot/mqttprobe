@@ -73,7 +73,7 @@ public class TopicBrowserGroupingTests : BunitTestContext
         var cut = RenderGrouped(grouped: true);
 
         cut.Markup.Should().Contain("Grouped by node and device");
-        cut.Markup.Should().Contain("Node messages");
+        cut.FindAll(".topic-tree-row--group").Should().NotBeEmpty();
         cut.Markup.Should().Contain("Devices");
         cut.Markup.Should().Contain("plant1");
         cut.Markup.Should().Contain("node1");
@@ -100,7 +100,7 @@ public class TopicBrowserGroupingTests : BunitTestContext
         var cut = RenderGrouped(grouped: false);
 
         cut.Markup.Should().NotContain("Grouped by node and device");
-        cut.Markup.Should().NotContain("Node messages");
+        cut.FindAll(".topic-tree-row--group").Should().BeEmpty();
         cut.Markup.Should().NotContain("Devices");
         cut.Markup.Should().Contain("NDATA");
         cut.Markup.Should().Contain("DDATA");
@@ -150,7 +150,7 @@ public class TopicBrowserGroupingTests : BunitTestContext
         var cut = RenderGrouped(grouped: true);
         cut.Markup.Should().Contain("NDATA");
 
-        RowWith(cut, "Node messages").Click();
+        RowWith(cut, "node1").Click();
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string>());
         cut.WaitForAssertion(() => cut.Markup.Should().NotContain("NDATA"));
@@ -177,13 +177,13 @@ public class TopicBrowserGroupingTests : BunitTestContext
     public void TurningGroupingOff_RebuildsTheTreeAndDropsGroupingExpansion()
     {
         var cut = RenderGrouped(grouped: true);
-        cut.Markup.Should().Contain("Node messages");
+        cut.FindAll(".topic-tree-row--group").Should().NotBeEmpty();
 
         ApplyPreference(false);
 
         cut.WaitForAssertion(() =>
         {
-            cut.Markup.Should().NotContain("Node messages");
+            cut.FindAll(".topic-tree-row--group").Should().BeEmpty();
             cut.Markup.Should().Contain("NDATA");
         });
 
@@ -192,7 +192,8 @@ public class TopicBrowserGroupingTests : BunitTestContext
         cut.WaitForAssertion(() =>
         {
             cut.Markup.Should().Contain("node1");
-            cut.Markup.Should().NotContain("Node messages");
+            cut.FindAll(".topic-tree-row--group").Should().NotBeEmpty();
+            cut.Markup.Should().NotContain(NodeTip);
         });
     }
 
@@ -220,7 +221,7 @@ public class TopicBrowserGroupingTests : BunitTestContext
         {
             cut.FindAll(".topic-tree-row").Select(row => row.TextContent)
                 .Should().OnlyContain(text => text.Contains("spBv1.0") || text.Contains("sensors"));
-            cut.Markup.Should().NotContain("Node messages");
+            cut.Markup.Should().NotContain("NDATA");
         });
     }
 
@@ -250,7 +251,7 @@ public class TopicBrowserGroupingTests : BunitTestContext
 
         cut.WaitForAssertion(() =>
         {
-            cut.Markup.Should().Contain("Node messages");
+            cut.Markup.Should().Contain("NDATA");
             cut.Markup.Should().Contain(NodeTip);
             cut.Markup.Should().NotContain("Devices");
             cut.Markup.Should().NotContain("scada");
@@ -266,7 +267,7 @@ public class TopicBrowserGroupingTests : BunitTestContext
 
         cut.WaitForAssertion(() =>
         {
-            cut.Markup.Should().Contain("Node messages");
+            cut.Markup.Should().Contain("NDATA");
             cut.Markup.Should().Contain(NodeTip);
             cut.Markup.Should().NotContain(DeviceTip);
         });

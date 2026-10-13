@@ -181,7 +181,8 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
     private void StoreMessage(MessageStore store, MqttMessage message)
     {
-        store.HasObservedDirectTopic = true;
+        (store.ObservedRawTopics ??= new HashSet<string>(StringComparer.Ordinal))
+            .Add(message.Topic ?? store.FullTopic ?? string.Empty);
         store.Messages ??= new ConcurrentQueue<MqttMessage>();
         store.Messages.Enqueue(message);
         _retentionOrder.Enqueue(store);
@@ -230,17 +231,13 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
                 node.SubTopics = null;
         }
 
-        var removedDirect = false;
         if (node.Messages is { IsEmpty: false })
         {
             var remaining = new ConcurrentQueue<MqttMessage>();
             while (node.Messages.TryDequeue(out var message))
             {
                 if (TopicExcludeService.Matches(message.Topic ?? node.FullTopic ?? string.Empty, filter))
-                {
                     changed = true;
-                    removedDirect = true;
-                }
                 else
                     remaining.Enqueue(message);
             }
@@ -248,15 +245,31 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             node.Messages = remaining.IsEmpty ? null : remaining;
         }
 
-        // Direct history is retired only once no direct message survives on this node. An exact
-        // endpoint exclude retires it even when the node is already empty; a raw alias that
-        // matches while a normalized sibling survives leaves it standing.
-        if ((node.Messages is null || node.Messages.IsEmpty) && (pathMatched || removedDirect))
-            node.HasObservedDirectTopic = false;
+        // Direct history is retired by the raw names it was observed under, so a purge keeps
+        // aliases the filter does not match and a matching alias retires its history even when
+        // no message survives on the node. Normalized FullTopic matching never retires history.
+        if (RetireExcludedObservedTopics(node, filter))
+            changed = true;
 
         nodeRemoved = changed && IsEmpty(node);
 
         return changed;
+    }
+
+    private static bool RetireExcludedObservedTopics(MessageStore node, string filter)
+    {
+        var observed = node.ObservedRawTopics;
+        if (observed is null)
+            return false;
+
+        var retired = observed.RemoveWhere(raw => TopicExcludeService.Matches(raw, filter));
+        if (retired == 0)
+            return false;
+
+        if (observed.Count == 0)
+            node.ObservedRawTopics = null;
+
+        return true;
     }
 
     private static bool IsEmpty(MessageStore store) =>

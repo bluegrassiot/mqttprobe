@@ -3,10 +3,7 @@
 <div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsSelected ? "topic-tree-row--selected" : "")"
      title="@(Row.IsVirtualTopic ? "Grouping row · not an MQTT topic" : null)"
      @onclick="OnRowClick">
-    @for (var level = 0; level < Row.Depth; level++)
-    {
-        <span class="topic-tree-indent" aria-hidden="true"></span>
-    }
+    <svg class="topic-tree-indent" width="@IndentWidth" height="1" aria-hidden="true" focusable="false"></svg>
     @if (Row.HasChildren)
     {
         <span @onclick:stopPropagation="true">
@@ -40,6 +37,13 @@
     [Parameter] public bool IsSelected { get; set; }
     [Parameter] public EventCallback<string> OnExpandToggled { get; set; }
     [Parameter] public EventCallback<string> OnSelected { get; set; }
+
+    private const int IndentStepWidth = 16;
+
+    // The indent is one SVG whose width attribute is the whole depth, rather than one spacer per
+    // level, so a row costs the same DOM at depth 1000 as at depth 0. The attribute is a real SVG
+    // geometry width, which avoids both an inline style and a depth-keyed set of classes.
+    private int IndentWidth => Row.Depth * IndentStepWidth;
 
     private string NodeIcon => Row.Kind switch
     {

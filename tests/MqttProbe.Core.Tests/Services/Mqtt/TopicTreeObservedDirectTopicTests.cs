@@ -151,6 +151,115 @@ public sealed class TopicTreeObservedDirectTopicTests
     }
 
     [Test]
+    public void EvictedRawAlias_ExactRawPurgeRetiresHistoryButKeepsUnmatchedDescendants()
+    {
+        var store = CreateStore(maxMessages: 2);
+        store.Add("root//tip", Message("alias", 1, "root//tip"));
+        store.Add("root/tip/kept", Message("kept", 2, "root/tip/kept"));
+        store.Add("other", Message("other", 3, "other"));
+
+        var before = store.GetTopicTreeSnapshot();
+        var tipBefore = before.Roots.Single(node => node.FullTopic == "root").Children.Single();
+        tipBefore.FullTopic.Should().Be("root/tip");
+        tipBefore.HasDirectMessages.Should().BeFalse("the alias message was evicted, not excluded");
+        tipBefore.HasObservedDirectTopic.Should().BeTrue("the raw alias was observed before eviction");
+
+        store.RemoveMatchingTopic("root//tip");
+        var after = store.GetTopicTreeSnapshot();
+
+        // History is the only thing that changed, so the purge still advances the version.
+        after.Should().NotBeSameAs(before);
+        after.Version.Should().BeGreaterThan(before.Version);
+
+        var tip = after.Roots.Single(node => node.FullTopic == "root").Children.Single();
+        tip.FullTopic.Should().Be("root/tip");
+        tip.HasDirectMessages.Should().BeFalse();
+        tip.HasObservedDirectTopic.Should().BeFalse(
+            "the filter matches the raw alias the history was recorded under");
+        tip.Children.Single().FullTopic.Should().Be("root/tip/kept");
+        tip.Children.Single().HasObservedDirectTopic.Should().BeTrue();
+        after.Roots.Should().ContainSingle(node => node.FullTopic == "root");
+    }
+
+    [Test]
+    public void EvictedRawAlias_PurgeOfOneRawNameKeepsAnotherRecordedHistory()
+    {
+        var store = CreateStore(maxMessages: 2);
+        store.Add("root//tip", Message("alias", 1, "root//tip"));
+        store.Add("root/tip", Message("canonical", 2, "root/tip"));
+        store.Add("root///tip", Message("other-alias", 3, "root///tip"));
+        store.Add("other", Message("other", 4, "other"));
+
+        var tip = store.GetTopicTreeSnapshot().Roots.Single(node => node.FullTopic == "root")
+            .Children.Single();
+        tip.MessageCount.Should().Be(1, "only the third alias survived retention");
+        tip.HasObservedDirectTopic.Should().BeTrue();
+
+        store.RemoveMatchingTopic("root//tip");
+
+        tip = store.GetTopicTreeSnapshot().Roots.Single(node => node.FullTopic == "root")
+            .Children.Single();
+        tip.MessageCount.Should().Be(1);
+        tip.HasObservedDirectTopic.Should().BeTrue(
+            "the canonical history recorded under its own raw name survives the alias purge");
+
+        store.RemoveMatchingTopic("root/tip");
+
+        var retired = store.GetTopicTreeSnapshot().Roots.Single(node => node.FullTopic == "root")
+            .Children.Single();
+        retired.MessageCount.Should().Be(1, "the surviving alias does not match the canonical filter");
+        retired.HasObservedDirectTopic.Should().BeTrue(
+            "the canonical name retired, but a third raw name is still recorded");
+
+        store.RemoveMatchingTopic("root///tip");
+
+        store.GetTopicTreeSnapshot().Roots.Should().NotContain(node => node.FullTopic == "root",
+            "the last recorded raw name retired, so the emptied node is pruned");
+    }
+
+    [Test]
+    public void CanonicalPurge_KeepsUnmatchedRawAliasHistoryOnASurvivingNode()
+    {
+        var store = CreateStore(maxMessages: 2);
+        store.Add("root//tip", Message("alias", 1, "root//tip"));
+        store.Add("root/tip/kept", Message("kept", 2, "root/tip/kept"));
+        store.Add("other", Message("other", 3, "other"));
+
+        store.RemoveMatchingTopic("root/tip");
+
+        var tip = store.GetTopicTreeSnapshot().Roots.Single(node => node.FullTopic == "root")
+            .Children.Single();
+        tip.FullTopic.Should().Be("root/tip");
+        tip.HasDirectMessages.Should().BeFalse();
+        tip.HasObservedDirectTopic.Should().BeTrue(
+            "the normalized path matched, but the recorded raw alias did not");
+        tip.Children.Single().FullTopic.Should().Be("root/tip/kept");
+    }
+
+    [Test]
+    public void NullTopicMessage_RecordsTheNodePathAndIsExcludedByIt()
+    {
+        var store = CreateStore(maxMessages: 1);
+        store.Add("root/child", new MqttMessage
+        {
+            Payload = "null-topic",
+            DateTimeReceived = DateTime.UnixEpoch.AddSeconds(1)
+        });
+        store.Add("other", Message("other", 2, "other"));
+        store.Add("last", Message("last", 3, "last"));
+
+        var child = store.GetTopicTreeSnapshot().Roots.Single(node => node.FullTopic == "root")
+            .Children.Single();
+        child.HasDirectMessages.Should().BeFalse("the topic-less message was evicted");
+        child.HasObservedDirectTopic.Should().BeTrue();
+
+        store.RemoveMatchingTopic("root/child");
+
+        store.GetTopicTreeSnapshot().Roots.Should().NotContain(node => node.FullTopic == "root",
+            "a topic-less message is excluded by the node path it was recorded under");
+    }
+
+    [Test]
     public void PurgedPath_StartsFreshWhenRecreated()
     {
         var store = CreateStore();

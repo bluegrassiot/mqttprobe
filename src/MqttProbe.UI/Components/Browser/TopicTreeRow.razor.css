@@ -9,10 +9,13 @@
     cursor: pointer;
 }
 
-/* Depth is drawn with fixed spacers rather than a depth class or a numeric attribute, so the
-   indent is the same 16px step at any depth. */
+/* Depth is drawn with a single empty SVG sized by its width attribute, so the indent is the same
+   16px step at any depth and the row keeps a constant element count. flex-basis:auto lets that
+   attribute drive the flex base size, and flex-shrink:0 stops a narrow row from squeezing it
+   back to nothing. The SVG paints nothing, so pointer events are left to the row beneath. */
 .topic-tree-indent {
-    flex: 0 0 16px;
+    flex: 0 0 auto;
+    pointer-events: none;
 }
 
 /* Keeps leaf rows aligned with the rows that carry a chevron button. */

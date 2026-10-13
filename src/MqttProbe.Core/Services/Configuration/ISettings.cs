@@ -45,6 +45,7 @@ public interface IUiSettings
     public Task SetThemeAsync(string theme);
     public Task SetFontProfileAsync(string fontProfile);
     public Task SetAutoResubscribeAsync(bool autoResubscribe);
+    public Task SetGroupSparkplugTopicsByNodeAndDeviceAsync(bool value);
     public Task DismissHintAsync(string hintId);
     public bool IsHintDismissed(string hintId);
 }

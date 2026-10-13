@@ -19,12 +19,45 @@ internal sealed class TopicBrowserTestFixture
         _manager.GetTopicTreeSnapshot().Returns(_ => _snapshot);
         _manager.GetSelectedTopicState().Returns(_ => _selection);
         _manager.When(m => m.SelectTopic(Arg.Any<string?>())).Do(call => Select(call.Arg<string?>()));
+        _manager.TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>())
+            .Returns(call => TryClearSelection(call.Arg<long>(), call.Arg<SelectedTopicState>()));
     }
 
     public void SetSnapshot(params TopicNodeSnapshot[] roots) =>
         _snapshot = new TopicTreeSnapshot(_snapshot.Version + 1, ImmutableArray.CreateRange(roots));
 
+    public TopicTreeSnapshot Snapshot => _snapshot;
+
+    // Empties the store but keeps the reported version, so the component keeps the frame it
+    // already rendered: the row is on screen while the topic it names has left the store.
+    public void PurgeHoldingRenderedFrame() =>
+        _snapshot = new TopicTreeSnapshot(_snapshot.Version, ImmutableArray<TopicNodeSnapshot>.Empty);
+
+    // Runs just before the conditional clear is evaluated, so a test can move the store on
+    // between the component's verdict and the clear without a race.
+    public Action? BeforeConditionalClear { get; set; }
+
+    // Mirrors TopicTreeStore.TryClearSelection so the component never meets a substitute's
+    // default false, and a stale verdict comes from the store rather than from the mock.
+    public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection)
+    {
+        BeforeConditionalClear?.Invoke();
+
+        if (_snapshot.Version != treeVersion
+            || expectedSelection.Token.StoreId != _selection.Token.StoreId
+            || expectedSelection.Token.Generation != _selection.Token.Generation
+            || _selection.FullTopic is null
+            || !string.Equals(_selection.FullTopic, expectedSelection.FullTopic, StringComparison.Ordinal))
+            return false;
+
+        _generation = Math.Max(_generation, _selection.Token.Generation);
+        _selection = new SelectedTopicState(new SelectedTopicToken(_storeId, ++_generation, 0), null, 0);
+        return true;
+    }
+
     public void SetSelection(SelectedTopicState selection) => _selection = selection;
+
+    public string? SelectedFullTopic => _selection.FullTopic;
 
     private void Select(string? fullTopic)
     {
@@ -90,7 +123,8 @@ public sealed class TopicTreeProjectionTests
                 ])
             ]));
 
-        var rows = TopicTreeProjection.CreateRows(roots, null, new HashSet<string> { "root2", "root2/child2" });
+        var rows = TopicTreeProjection.CreateRows(
+            roots, null, new HashSet<string> { "root2", "root2/child2" }, groupSparkplugTopics: false);
 
         rows.Select(row => row.FullPath).Should().Equal(
             "root2", "root2/child2", "root2/child2/leaf2", "root2/child2/leaf10", "root2/child10", "root10");
@@ -114,7 +148,7 @@ public sealed class TopicTreeProjectionTests
             ]));
         var expanded = new HashSet<string> { "sensors/humidity" };
 
-        var rows = TopicTreeProjection.CreateRows(roots, "room1", expanded);
+        var rows = TopicTreeProjection.CreateRows(roots, "room1", expanded, groupSparkplugTopics: false);
 
         rows.Select(row => row.FullPath)
             .Should().Equal("sensors", "sensors/temperature", "sensors/temperature/room1");
@@ -122,7 +156,7 @@ public sealed class TopicTreeProjectionTests
         rows[1].IsExpanded.Should().BeTrue();
         expanded.Should().ContainSingle().Which.Should().Be("sensors/humidity");
 
-        var restoredRows = TopicTreeProjection.CreateRows(roots, null, expanded);
+        var restoredRows = TopicTreeProjection.CreateRows(roots, null, expanded, groupSparkplugTopics: false);
         restoredRows.Select(row => row.FullPath).Should().Equal("sensors");
     }
 
@@ -132,7 +166,8 @@ public sealed class TopicTreeProjectionTests
         var rows = TopicTreeProjection.CreateRows(
             [Node("root", "root", children: [Node("child", "root/child")])],
             null,
-            new HashSet<string>());
+            new HashSet<string>(),
+            groupSparkplugTopics: false);
 
         rows.Select(row => row.FullPath).Should().Equal("root");
         rows[0].HasChildren.Should().BeTrue();
@@ -141,7 +176,37 @@ public sealed class TopicTreeProjectionTests
 
     [Test]
     public void CreateRows_DefaultRootsReturnsNoRows() =>
-        TopicTreeProjection.CreateRows(default, null, new HashSet<string>()).Should().BeEmpty();
+        TopicTreeProjection.CreateRows(default, null, new HashSet<string>(), groupSparkplugTopics: false)
+            .Should().BeEmpty();
+
+    [Test]
+    public void CreateRows_GroupingOff_OnACollapsedSnapshotDoesNotWalkHiddenDescendants()
+    {
+        // 200 roots of 20 leaves. A collapsed tree only needs its root rows, so cloning the
+        // store into projection nodes first would allocate for all 4,200 nodes every refresh.
+        var topics = new List<(string Topic, int Messages)>();
+        for (var root = 0; root < 200; root++)
+        {
+            for (var leaf = 0; leaf < 20; leaf++)
+                topics.Add(($"root{root}/leaf{leaf}", 1));
+        }
+
+        var tree = TopicSnapshotBuilder.Build([.. topics]);
+        var collapsed = new HashSet<string>();
+        TopicTreeProjection.CreateRows(tree, null, collapsed, groupSparkplugTopics: false)
+            .Should().HaveCount(200);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var rows = TopicTreeProjection.CreateRows(tree, null, collapsed, groupSparkplugTopics: false);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        rows.Should().HaveCount(200);
+        rows.Should().OnlyContain(row => !row.HasChildren || !row.IsExpanded);
+        // Measured here: the direct traversal allocates about 19 KB against about 495 KB for
+        // cloning the store first, so the bound sits between them.
+        allocated.Should().BeLessThan(128 * 1024,
+            "a collapsed literal tree must not be cloned node by node");
+    }
 
     private static TopicNodeSnapshot Node(
         string topic,

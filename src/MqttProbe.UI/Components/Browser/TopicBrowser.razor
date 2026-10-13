@@ -1,16 +1,18 @@
 @inject IMessageStoreManager MessageStoreManagerService
+@inject IUiSettings UiSettings
 @inject ILogger<TopicBrowser> Logger
 @using Microsoft.Extensions.Logging
+@using MqttProbe.Core.Services.Configuration
 @implements IAsyncDisposable
 
-<MudPaper Elevation="1" Class="pa-2 app-chrome-panel" Style="flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; box-sizing:border-box;">
+<MudPaper Elevation="1" Class="pa-2 app-chrome-panel topic-browser-panel">
     <div class="topic-header-row">
         <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary"/>
-        <MudText Typo="Typo.subtitle2" Style="font-weight:600">Topics</MudText>
+        <MudText Typo="Typo.subtitle2" Class="topic-title">Topics</MudText>
         @if (MessageStoreManagerService.RootTopicCount > 0)
         {
             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
-                     Style="height:20px; font-size:0.7rem; padding:0 6px;">
+                     Class="topic-count-chip">
                 @MessageStoreManagerService.RootTopicCount
             </MudChip>
         }
@@ -22,16 +24,24 @@
                       Immediate="true" Clearable="true" Variant="Variant.Outlined"
                       Margin="Margin.Dense" Class="topic-filter-field"/>
     </div>
-    <div class="topic-tree-wrap" style="flex:1 1 auto; min-height:0; overflow:auto;">
-        <MudToolBar Class="pa-0 mb-1" Style="gap:4px;">
+    <div class="topic-tree-wrap">
+        <MudToolBar Class="pa-0 mb-1 topic-toolbar">
             <MudIconButton Icon="@LucideIcons.Maximize2" Size="Size.Small" title="Expand all" OnClick="ExpandAll"/>
             <MudIconButton Icon="@LucideIcons.Minimize2" Size="Size.Small" title="Collapse all" OnClick="CollapseAll"/>
+            @if (_groupSparkplugTopics)
+            {
+                <span class="topic-grouping-flag"
+                      title="Grouped by node and device. Change this in Settings, under Sparkplug.">
+                    <MudIcon Icon="@LucideIcons.Zap" Size="Size.Small"/>
+                    Grouped by node and device
+                </span>
+            }
             <span class="topic-stat-legend">T = topics · M = messages</span>
         </MudToolBar>
         @if (_visibleRows.Count > 0)
         {
             <Virtualize Items="@_visibleRows" Context="row" ItemSize="36">
-                <TopicTreeRow Row="row" IsSelected="@(row.FullPath == _selectedFullPath)" OnExpandToggled="ToggleExpand" OnSelected="OnRowSelected"/>
+                <TopicTreeRow Row="row" IsSelected="@IsRowSelected(row)" OnExpandToggled="ToggleExpand" OnSelected="OnRowSelected"/>
             </Virtualize>
         }
         else if (MessageStoreManagerService.RootTopicCount > 0)
@@ -55,6 +65,7 @@
     private string? _searchFilter;
     private Timer? _updateTimer;
     private bool _disposed;
+    private bool _groupSparkplugTopics;
     private long _lastTreeVersion;
     private Guid _lastSelectionStoreId;
     private long _lastSelectionGeneration;
@@ -66,7 +77,9 @@
 
     protected override void OnInitialized()
     {
+        _groupSparkplugTopics = UiSettings.Ui.GroupSparkplugTopicsByNodeAndDevice;
         BuildVisibleRows();
+        UiSettings.UiPreferencesChanged += OnUiPreferencesChanged;
         _updateTimer = new Timer(_ =>
         {
             // Timer callbacks cannot await; the refresh marshals its work to the renderer.
@@ -74,6 +87,63 @@
             RefreshAsync();
 #pragma warning restore CS4014
         }, null, 0, 1_000);
+    }
+
+    // Only the grouping flag alters the tree, and it applies at once rather than on the next tick.
+    private void OnUiPreferencesChanged() => _ = ApplyGroupingPreferenceAsync();
+
+    private async Task ApplyGroupingPreferenceAsync()
+    {
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                if (_disposed) return;
+
+                var grouped = UiSettings.Ui.GroupSparkplugTopicsByNodeAndDevice;
+                if (grouped == _groupSparkplugTopics) return;
+
+                _groupSparkplugTopics = grouped;
+                if (!grouped)
+                    _expandedPaths.RemoveWhere(TopicTreeProjection.IsVirtualExpansionId);
+
+                BuildVisibleRows();
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException) when (_disposed) { /* component torn down before the preference was applied */ }
+        catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser preference refresh failed"); }
+    }
+
+    private void BuildVisibleRows()
+    {
+        var snapshot = MessageStoreManagerService.GetTopicTreeSnapshot();
+        var selection = MessageStoreManagerService.GetSelectedTopicState();
+        BuildVisibleRows(snapshot, selection);
+    }
+
+    // One projection pass builds the rows and reports whether the selected real topic still has
+    // one, ignoring filter and expansion, so a purge cannot leave a selection without a row.
+    private void BuildVisibleRows(TopicTreeSnapshot snapshot, SelectedTopicState selection)
+    {
+        _visibleRows = TopicTreeProjection.CreateRows(
+            snapshot.Roots, _searchFilter, _expandedPaths, _groupSparkplugTopics,
+            selection.FullTopic, out var selectionRepresented);
+
+        if (selection.FullTopic is not null && !selectionRepresented)
+        {
+            // One conditional clear under the store's own lock; a purge that fresh traffic undid
+            // rejects it, so the next ordinary refresh rebuilds rather than clearing a live row.
+            if (!MessageStoreManagerService.TryClearSelection(snapshot.Version, selection))
+                return;
+
+            selection = MessageStoreManagerService.GetSelectedTopicState();
+        }
+
+        _lastTreeVersion = snapshot.Version;
+        _lastSelectionStoreId = selection.Token.StoreId;
+        _lastSelectionGeneration = selection.Token.Generation;
+        _selectedFullPath = selection.FullTopic;
     }
 
     private async Task RefreshAsync()
@@ -99,21 +169,8 @@
         catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser refresh render failed"); }
     }
 
-    private void BuildVisibleRows()
-    {
-        var snapshot = MessageStoreManagerService.GetTopicTreeSnapshot();
-        var selection = MessageStoreManagerService.GetSelectedTopicState();
-        BuildVisibleRows(snapshot, selection);
-    }
-
-    private void BuildVisibleRows(TopicTreeSnapshot snapshot, SelectedTopicState selection)
-    {
-        _lastTreeVersion = snapshot.Version;
-        _lastSelectionStoreId = selection.Token.StoreId;
-        _lastSelectionGeneration = selection.Token.Generation;
-        _selectedFullPath = selection.FullTopic;
-        _visibleRows = TopicTreeProjection.CreateRows(snapshot.Roots, _searchFilter, _expandedPaths);
-    }
+    private bool IsRowSelected(TopicTreeRowModel row) =>
+        !row.IsVirtualTopic && string.Equals(row.FullPath, _selectedFullPath, StringComparison.Ordinal);
 
     private void OnSearchChanged()
     {
@@ -144,18 +201,10 @@
 
     private void ExpandAll()
     {
-        foreach (var root in MessageStoreManagerService.GetTopicTreeSnapshot().Roots)
-            ExpandAllDescendants(root);
+        TopicTreeProjection.AddExpandablePaths(
+            MessageStoreManagerService.GetTopicTreeSnapshot().Roots, _groupSparkplugTopics, _expandedPaths);
         BuildVisibleRows();
         StateHasChanged();
-    }
-
-    private void ExpandAllDescendants(TopicNodeSnapshot node)
-    {
-        _expandedPaths.Add(node.FullTopic);
-        if (!node.Children.IsDefaultOrEmpty)
-            foreach (var child in node.Children)
-                ExpandAllDescendants(child);
     }
 
     private void CollapseAll()
@@ -168,6 +217,7 @@
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        UiSettings.UiPreferencesChanged -= OnUiPreferencesChanged;
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();
     }

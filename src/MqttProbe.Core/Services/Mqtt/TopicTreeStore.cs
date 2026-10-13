@@ -181,6 +181,8 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
     private void StoreMessage(MessageStore store, MqttMessage message)
     {
+        (store.ObservedRawTopics ??= new HashSet<string>(StringComparer.Ordinal))
+            .Add(message.Topic ?? store.FullTopic ?? string.Empty);
         store.Messages ??= new ConcurrentQueue<MqttMessage>();
         store.Messages.Enqueue(message);
         _retentionOrder.Enqueue(store);
@@ -211,7 +213,8 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
     private static bool PurgeNode(MessageStore node, string filter, out bool nodeRemoved)
     {
-        var changed = TopicExcludeService.Matches(node.FullTopic ?? string.Empty, filter);
+        var pathMatched = TopicExcludeService.Matches(node.FullTopic ?? string.Empty, filter);
+        var changed = pathMatched;
         if (node.SubTopics is not null)
         {
             foreach (var (key, child) in node.SubTopics.ToArray())
@@ -242,14 +245,38 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             node.Messages = remaining.IsEmpty ? null : remaining;
         }
 
+        // History is retired by the raw names it was observed under, never by normalized
+        // FullTopic matching, so a matching alias retires history even with no message left.
+        if (RetireExcludedObservedTopics(node, filter))
+            changed = true;
+
         nodeRemoved = changed && IsEmpty(node);
 
         return changed;
     }
 
+    private static bool RetireExcludedObservedTopics(MessageStore node, string filter)
+    {
+        var observed = node.ObservedRawTopics;
+        if (observed is null)
+            return false;
+
+        var retired = observed.RemoveWhere(raw => TopicExcludeService.Matches(raw, filter));
+        if (retired == 0)
+            return false;
+
+        if (observed.Count == 0)
+            node.ObservedRawTopics = null;
+
+        return true;
+    }
+
+    // Observed history counts as node content: a node is pruned only once its messages,
+    // subtopics and raw names are all gone, so unmatched history keeps the node alive.
     private static bool IsEmpty(MessageStore store) =>
         (store.Messages is null || store.Messages.IsEmpty)
-        && (store.SubTopics is null || store.SubTopics.IsEmpty);
+        && (store.SubTopics is null || store.SubTopics.IsEmpty)
+        && !store.HasObservedDirectTopic;
 
     private void RecalculateCounters()
     {

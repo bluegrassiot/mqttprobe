@@ -307,3 +307,17 @@ body:has(.mud-dialog-container) .mobile-primary-nav {
     /* Keep above app bar clutter */
     z-index: 1400;
 }
+
+/* ── Topic browser panel ──────────────────────────────────────── */
+
+/* The topic browser's root is a MudPaper with no scoped ancestor above it, so its scoped
+   stylesheet cannot reach it. This keeps the panel a bounded flex column that clips, leaving
+   the tree wrap inside as the single scroll owner. */
+.topic-browser-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+}

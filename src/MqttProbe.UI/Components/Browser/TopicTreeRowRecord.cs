@@ -1,5 +1,16 @@
 namespace MqttProbe.UI.Components.Browser;
 
+public enum TopicTreeRowKind
+{
+    Topic,
+    SparkplugNamespace,
+    SparkplugGroup,
+    SparkplugNode,
+    Devices,
+    SparkplugDevice,
+    MessageType
+}
+
 public sealed record TopicTreeRowModel(
     string FullPath,
     string DisplayName,
@@ -8,5 +19,12 @@ public sealed record TopicTreeRowModel(
     int TopicCount,
     int MessageCount,
     bool IsExpanded,
-    bool IsValueBearer
-);
+    bool IsValueBearer,
+    TopicTreeRowKind Kind = TopicTreeRowKind.Topic
+)
+{
+    // Grouping rows only organise the view; namespace and group rows are real store nodes.
+    public bool IsVirtualTopic => Kind is not (TopicTreeRowKind.Topic
+        or TopicTreeRowKind.SparkplugNamespace
+        or TopicTreeRowKind.SparkplugGroup);
+}

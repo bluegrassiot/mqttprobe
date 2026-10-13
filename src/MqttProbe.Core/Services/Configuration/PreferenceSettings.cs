@@ -24,6 +24,9 @@ internal sealed class PreferenceSettings(ISettingsDocument document)
     public Task SetAutoResubscribeAsync(bool autoResubscribe) =>
         SetUiAsync(ui => ui.AutoResubscribe = autoResubscribe);
 
+    public Task SetGroupSparkplugTopicsByNodeAndDeviceAsync(bool value) =>
+        SetUiAsync(ui => ui.GroupSparkplugTopicsByNodeAndDevice = value);
+
     public Task DismissHintAsync(string hintId) =>
         IsHintDismissed(hintId)
             ? Task.CompletedTask

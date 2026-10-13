@@ -329,8 +329,11 @@ internal static class TopicTreeProjection
             // A node verb's child is the node-level topic itself. It is a supported tip when a
             // message was ever accepted at that exact path: retention can evict that message
             // while a malformed descendant stays, and the tip still groups. A child that was
-            // never an endpoint is a structural prefix and stays in the residue.
-            if (!tip.HasObservedDirectTopic)
+            // never an endpoint is a structural prefix and stays in the residue. Only a
+            // message published at the canonical spelling qualifies: "spBv1.0/g/NDATA//n1"
+            // normalizes onto the supported shape but is not itself a supported Sparkplug
+            // endpoint, so it stays a prefix to group under rather than a node with messages.
+            if (!tip.HasObservedCanonicalTopic)
                 continue;
 
             groupedTips.Add(tip.FullTopic);
@@ -357,9 +360,10 @@ internal static class TopicTreeProjection
             foreach (var deviceNode in nodeLevel.Children)
             {
                 // The device tip is the only supported shape here. As at the node level it is
-                // classified by the observed endpoint marker, not by its current messages, so a
-                // device emptied by retention with a malformed descendant still groups.
-                if (!deviceNode.HasObservedDirectTopic)
+                // classified by the canonical observed endpoint marker, not by its current
+                // messages, so a device emptied by retention with a malformed descendant still
+                // groups, while one reached only through an alias spelling does not.
+                if (!deviceNode.HasObservedCanonicalTopic)
                     continue;
 
                 groupedTips.Add(deviceNode.FullTopic);

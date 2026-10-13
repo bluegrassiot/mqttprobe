@@ -119,7 +119,9 @@ internal sealed partial class TopicTreeStore
             node.Messages is { IsEmpty: false },
             children)
         {
-            HasObservedDirectTopic = node.HasObservedDirectTopic
+            HasObservedDirectTopic = node.HasObservedDirectTopic,
+            HasObservedCanonicalTopic =
+                node.ObservedRawTopics?.Contains(node.FullTopic ?? string.Empty) == true
         };
     }
 

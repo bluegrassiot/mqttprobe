@@ -14,9 +14,23 @@ internal static class TopicTreeProjection
         ImmutableArray<TopicNodeSnapshot> roots,
         string? filter,
         IReadOnlySet<string> expandedPaths,
-        bool groupSparkplugTopics)
+        bool groupSparkplugTopics) =>
+        CreateRows(roots, filter, expandedPaths, groupSparkplugTopics, selectionPath: null, out _);
+
+    // One pass builds the rows and reports whether the selected real path still has a row in
+    // the complete projection, ignoring filter and expansion: a row hidden only because its
+    // branch is collapsed or filtered out still represents the topic. The verdict costs no
+    // extra build, so a refresh never walks the grouped store twice.
+    public static List<TopicTreeRowModel> CreateRows(
+        ImmutableArray<TopicNodeSnapshot> roots,
+        string? filter,
+        IReadOnlySet<string> expandedPaths,
+        bool groupSparkplugTopics,
+        string? selectionPath,
+        out bool selectionRepresented)
     {
         var rows = new List<TopicTreeRowModel>();
+        selectionRepresented = false;
         if (roots.IsDefaultOrEmpty)
             return rows;
 
@@ -26,14 +40,18 @@ internal static class TopicTreeProjection
         // would build nodes for rows the caller will never see.
         if (!groupSparkplugTopics)
         {
+            selectionRepresented = selectionPath is null || ContainsRealPath(roots, selectionPath);
             foreach (var root in roots.OrderBy(node => node.Topic, NaturalStringComparer.Instance))
                 AppendLiteralRows(root, 0, filter, hasFilter, expandedPaths, rows);
 
             return rows;
         }
 
+        var built = BuildRoots(roots, groupSparkplugTopics: true);
+        selectionRepresented = selectionPath is null || built.Any(root => ContainsPath(root, selectionPath));
+
         var context = new WalkContext(filter, hasFilter, expandedPaths);
-        foreach (var root in InDisplayOrder(BuildRoots(roots, groupSparkplugTopics: true)))
+        foreach (var root in InDisplayOrder(built))
             AppendRows(root, 0, context, rows);
 
         return rows;
@@ -127,13 +145,16 @@ internal static class TopicTreeProjection
 
     private static bool ContainsRealPath(ImmutableArray<TopicNodeSnapshot> nodes, string realPath)
     {
+        var separator = realPath.IndexOf('/', StringComparison.Ordinal);
+        var segment = separator < 0 ? realPath : realPath[..separator];
+
         foreach (var node in nodes)
         {
-            if (string.Equals(node.FullTopic, realPath, StringComparison.Ordinal))
-                return true;
+            if (!string.Equals(node.Topic, segment, StringComparison.Ordinal))
+                continue;
 
-            if (ContainsRealPath(node.Children, realPath))
-                return true;
+            return separator < 0
+                || ContainsRealPath(node.Children, realPath[(separator + 1)..]);
         }
 
         return false;

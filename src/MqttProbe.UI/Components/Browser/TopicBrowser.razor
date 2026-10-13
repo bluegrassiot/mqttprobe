@@ -108,8 +108,6 @@
                 if (!grouped)
                     _expandedPaths.RemoveWhere(TopicTreeProjection.IsVirtualExpansionId);
 
-                DropSelectionTheProjectionCannotShow(grouped);
-
                 BuildVisibleRows();
                 StateHasChanged();
             });
@@ -118,20 +116,58 @@
         catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser preference refresh failed"); }
     }
 
-    // A real topic the new projection has no row for would leave the payload panel showing a
-    // topic the tree cannot point at, so the selection is cleared before the rebuild. The
-    // selection callback is deliberately not raised: it closes the mobile topic picker.
-    private void DropSelectionTheProjectionCannotShow(bool grouped)
+    private void BuildVisibleRows()
     {
+        var snapshot = MessageStoreManagerService.GetTopicTreeSnapshot();
         var selection = MessageStoreManagerService.GetSelectedTopicState();
-        if (selection.FullTopic is null)
-            return;
+        BuildVisibleRows(snapshot, selection);
+    }
 
-        var roots = MessageStoreManagerService.GetTopicTreeSnapshot().Roots;
-        if (TopicTreeProjection.RepresentsRealPath(roots, grouped, selection.FullTopic))
-            return;
+    // Rebuilds the tree from a single projection pass. That pass also reports whether the
+    // selected real topic still has a row in the complete projection (ignoring filter and
+    // expansion): a purge can take the last row under a prefix the tree was showing, and a
+    // selection must not outlive the row it belongs to.
+    private void BuildVisibleRows(TopicTreeSnapshot snapshot, SelectedTopicState selection)
+    {
+        _visibleRows = TopicTreeProjection.CreateRows(
+            snapshot.Roots, _searchFilter, _expandedPaths, _groupSparkplugTopics,
+            selection.FullTopic, out var selectionRepresented);
 
-        MessageStoreManagerService.SelectTopic(null);
+        if (selection.FullTopic is not null && !selectionRepresented)
+        {
+            if (!StillCurrent(snapshot, selection))
+            {
+                // The snapshot and the selection were read separately, so both may have moved
+                // on by the time the verdict lands: a purge followed by fresh traffic can
+                // recreate the row the verdict called gone. Defer instead of acting on a stale
+                // answer, and leave the recorded state alone so the next refresh rebuilds.
+                return;
+            }
+
+            // The selection callback is deliberately not raised: it closes the mobile topic
+            // picker, and the payload panel reads the manager directly. Re-reading the state
+            // keeps a stale row from staying marked.
+            MessageStoreManagerService.SelectTopic(null);
+            selection = MessageStoreManagerService.GetSelectedTopicState();
+        }
+
+        _lastTreeVersion = snapshot.Version;
+        _lastSelectionStoreId = selection.Token.StoreId;
+        _lastSelectionGeneration = selection.Token.Generation;
+        _selectedFullPath = selection.FullTopic;
+    }
+
+    // Only consulted before clearing, so a preserved selection costs nothing. There is still
+    // a window between this check and the clear: the manager exposes no combined read.
+    private bool StillCurrent(TopicTreeSnapshot snapshot, SelectedTopicState selection)
+    {
+        var currentTree = MessageStoreManagerService.GetTopicTreeSnapshot();
+        var currentSelection = MessageStoreManagerService.GetSelectedTopicState();
+
+        return currentTree.Version == snapshot.Version
+            && currentSelection.Token.StoreId == selection.Token.StoreId
+            && currentSelection.Token.Generation == selection.Token.Generation
+            && string.Equals(currentSelection.FullTopic, selection.FullTopic, StringComparison.Ordinal);
     }
 
     private async Task RefreshAsync()
@@ -155,23 +191,6 @@
         }
         catch (ObjectDisposedException) when (_disposed) { /* component torn down mid-refresh; nothing left to render */ }
         catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser refresh render failed"); }
-    }
-
-    private void BuildVisibleRows()
-    {
-        var snapshot = MessageStoreManagerService.GetTopicTreeSnapshot();
-        var selection = MessageStoreManagerService.GetSelectedTopicState();
-        BuildVisibleRows(snapshot, selection);
-    }
-
-    private void BuildVisibleRows(TopicTreeSnapshot snapshot, SelectedTopicState selection)
-    {
-        _lastTreeVersion = snapshot.Version;
-        _lastSelectionStoreId = selection.Token.StoreId;
-        _lastSelectionGeneration = selection.Token.Generation;
-        _selectedFullPath = selection.FullTopic;
-        _visibleRows = TopicTreeProjection.CreateRows(
-            snapshot.Roots, _searchFilter, _expandedPaths, _groupSparkplugTopics);
     }
 
     private bool IsRowSelected(TopicTreeRowModel row) =>

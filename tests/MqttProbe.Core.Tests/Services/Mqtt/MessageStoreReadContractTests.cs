@@ -396,9 +396,11 @@ public sealed class MessageStoreReadContractTests
         return new TopicTreeStore(settings, Substitute.For<ILogger>());
     }
 
-    private static MqttMessage Message(string payload, int second, string topic = "topic") => new(payload, topic, false,
-        MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce)
+    private static MqttMessage Message(string payload, int second, string? topic = null) => new()
     {
-        DateTimeReceived = DateTime.UnixEpoch.AddSeconds(second)
+        Payload = payload,
+        Topic = topic,
+        DateTimeReceived = DateTime.UnixEpoch.AddSeconds(second),
+        QualityOfServiceLevel = MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce
     };
 }

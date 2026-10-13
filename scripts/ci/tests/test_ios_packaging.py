@@ -21,7 +21,7 @@ PRIVACY_MANIFEST = PLATFORMS / "iOS" / "Resources" / "PrivacyInfo.xcprivacy"
 
 WORKFLOW = ROOT / ".github" / "workflows" / "build-ios.yml"
 SIGNING_JOB = "build-ios-archive"
-TRUSTED_REF = "refs/heads/release/v1.0.8"
+TRUSTED_REF = "refs/heads/main"
 
 
 def load_plist(path):
@@ -262,13 +262,13 @@ class IosSigningWorkflowTests(unittest.TestCase):
     def test_signing_job_references_the_ios_signing_environment(self):
         self.assertIn("    environment: ios-signing", self.job)
 
-    def test_signing_job_is_guarded_to_the_trusted_release_branch(self):
-        # github.ref is fully qualified, so a tag named v1.0.8 or any other branch
+    def test_signing_job_is_guarded_to_the_trusted_branch(self):
+        # github.ref is fully qualified, so a tag named main or any other branch
         # does not satisfy the guard; this is defense in depth, not the boundary.
         self.assertIn(f"    if: github.ref == '{TRUSTED_REF}'", self.job)
 
     def test_guard_only_targets_the_branch_not_a_tag(self):
-        # ref_name would also match a v1.0.8 tag; the guard must use github.ref.
+        # ref_name would also match a tag named main; the guard must use github.ref.
         self.assertIn(TRUSTED_REF, self.job)
         self.assertNotIn("github.ref_name ==", self.job)
 

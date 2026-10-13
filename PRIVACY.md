@@ -86,10 +86,12 @@ Everything the app remembers lives inside its own sandbox on your device:
   part of the settings file described above.
 - **Protobuf schema packages you import.** When you import a plugin package, the app
   unpacks it into its app-data folder under "plugins/protobuf/<package id>". What stays
-  there is the package content: the .proto definitions, the JSON file that maps MQTT
-  topics to message types, and the package manifest holding its name, version, and author.
-  No message traffic is written there. Schema changes do not require a restart. See
-  "Deleting your data" below for removal and cleanup behavior.
+  there is everything the package contains, and the app accepts a package only when every
+  file in it is a .proto, .json, .md, or .txt file. That can include the .proto
+  definitions, the JSON files that map MQTT topics to message types, the package manifest
+  holding its name, version, and author, and any Markdown or plain text notes shipped
+  alongside them. No message traffic is written there. Schema changes do not require a
+  restart. See "Deleting your data" below for removal and cleanup behavior.
 - **Messages, in memory only.** Received messages, their topics, and their payloads are
   held in memory while the app is open. The app does not write them to disk, and they are
   gone when the app closes. How many are kept is capped by a limit you can change in

@@ -41,7 +41,7 @@ jobs:
     # defense in depth, not a boundary: only repository settings can configure the
     # environment, and a run before that setup auto-creates it unprotected.
     environment: ios-signing
-    if: github.ref == 'refs/heads/release/v1.0.8'
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
     steps:

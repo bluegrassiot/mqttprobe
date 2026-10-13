@@ -13,7 +13,8 @@ internal class MessageStore
     public ConcurrentQueue<MqttMessage>? Messages { get; set; }
 
     // Raw names of every direct message ever accepted here, kept after eviction so an exclude
-    // retires an alias by its own spelling; unbounded on purpose, only a match drops a name.
+    // retires an alias by its own spelling. Admission of new spellings is bounded upstream;
+    // only a match drops a name from here.
     public HashSet<string>? ObservedRawTopics { get; set; }
 
     public bool HasObservedDirectTopic => ObservedRawTopics is { Count: > 0 };

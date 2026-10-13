@@ -182,9 +182,8 @@ public class TopicBrowserInteractionTests : BunitTestContext
         return cut;
     }
 
-    // The component refreshes itself from a timer, so a render can land between finding an
-    // element and dispatching its click. Looking the element up and clicking it in one
-    // dispatcher action keeps the interaction on one frame, exactly as a real browser does.
+    // The component refreshes on a timer, so a render can land between finding an element and
+    // clicking it. Look-up and click share one dispatcher action to keep it on one frame.
     private static Task ClickAsync(IRenderedComponent<TopicBrowser> cut, string selector) =>
         cut.InvokeAsync(() => cut.Find(selector).Click());
 
@@ -238,8 +237,8 @@ public class TopicBrowserInteractionTests : BunitTestContext
             callbackState = state;
             return Task.CompletedTask;
         });
-        // The store loses the topic while the row it rendered is still on screen; the
-        // version is held so the frame under test is the one the user would be clicking.
+        // The store loses the topic while the rendered row is still on screen; holding the
+        // version keeps that the frame under test.
         _fixture.PurgeHoldingRenderedFrame();
 
         await ClickAsync(cut, ".topic-tree-row");
@@ -482,7 +481,6 @@ public class TopicBrowserInteractionTests : BunitTestContext
         // Simulate external clear (e.g., ClearAllMessages)
         _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(Guid.NewGuid(), 2, 0), null, 0));
 
-        // Trigger a rebuild via expand, through the same one-frame interaction.
         await ClickAsync(cut, ".topic-tree-row button");
 
         cut.WaitForAssertion(() =>

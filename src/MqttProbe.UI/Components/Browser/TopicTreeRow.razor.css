@@ -1,5 +1,4 @@
-/* One row of the topic tree. Row layout belongs to the row component, so the browser panel
-   stylesheet only styles the panel's own chrome. */
+/* Row layout lives here; the browser panel stylesheet only styles the panel's own chrome. */
 
 .topic-tree-row {
     min-width: 0;
@@ -9,16 +8,13 @@
     cursor: pointer;
 }
 
-/* Depth is drawn with a single empty SVG sized by its width attribute, so the indent is the same
-   16px step at any depth and the row keeps a constant element count. flex-basis:auto lets that
-   attribute drive the flex base size, and flex-shrink:0 stops a narrow row from squeezing it
-   back to nothing. The SVG paints nothing, so pointer events are left to the row beneath. */
+/* The indent SVG paints nothing, so pointer events fall through to the row. flex-basis:auto
+   lets its width attribute drive the flex base size; flex-shrink:0 keeps it from collapsing. */
 .topic-tree-indent {
     flex: 0 0 auto;
     pointer-events: none;
 }
 
-/* Keeps leaf rows aligned with the rows that carry a chevron button. */
 .topic-tree-chevron-spacer {
     flex: 0 0 32px;
 }
@@ -28,8 +24,7 @@
     border-left: 2px solid #f97316;
 }
 
-/* Sparkplug grouping rows organise the tree; they are not MQTT topics. The dotted label,
-   muted colour and default cursor mark them as navigation, not selection. */
+/* Grouping rows are navigation, not topics, so they get a default cursor. */
 .topic-tree-row.topic-tree-row--group {
     cursor: default;
 }
@@ -47,8 +42,8 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    /* A grouped row shows a whole topic path, so a row stays one line: virtualized rows are
-       measured at a fixed 36px and wrapping breaks the scroll window. */
+    /* A grouped row shows a whole topic path, and virtualized rows are measured at a fixed
+       36px, so wrapping would break the scroll window. */
     white-space: nowrap;
 }
 

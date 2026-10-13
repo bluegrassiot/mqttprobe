@@ -245,9 +245,8 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             node.Messages = remaining.IsEmpty ? null : remaining;
         }
 
-        // Direct history is retired by the raw names it was observed under, so a purge keeps
-        // aliases the filter does not match and a matching alias retires its history even when
-        // no message survives on the node. Normalized FullTopic matching never retires history.
+        // History is retired by the raw names it was observed under, never by normalized
+        // FullTopic matching, so a matching alias retires history even with no message left.
         if (RetireExcludedObservedTopics(node, filter))
             changed = true;
 
@@ -272,10 +271,8 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         return true;
     }
 
-    // Observed history counts as node content. A purge prunes a node only once its messages, its
-    // subtopics and its recorded raw names are all gone, so unmatched raw history is discarded
-    // by a prune only after an exclude has actually retired it. Counters still count messages,
-    // so retaining a node here deliberately costs a node slot without inventing one.
+    // Observed history counts as node content: a node is pruned only once its messages,
+    // subtopics and raw names are all gone, so unmatched history keeps the node alive.
     private static bool IsEmpty(MessageStore store) =>
         (store.Messages is null || store.Messages.IsEmpty)
         && (store.SubTopics is null || store.SubTopics.IsEmpty)

@@ -10,11 +10,6 @@ using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Core.Tests.Services.Mqtt;
 
-// A node coalesces every spelling that normalizes onto its path, so the tree cannot tell by itself
-// whether the published spelling is the supported Sparkplug endpoint shape or only an alias that
-// normalizes onto it. HasObservedCanonicalTopic
-// narrows HasObservedDirectTopic to the node's own normalized path; a node observed only through a
-// malformed alias is a grouping prefix, not a topic an endpoint sits at.
 [TestFixture]
 public sealed class TopicTreeObservedCanonicalTopicTests
 {
@@ -161,8 +156,8 @@ public sealed class TopicTreeObservedCanonicalTopicTests
         using var harness = await Harness.StartAsync();
         await harness.PublishAsync("root/tip", "canonical");
 
-        // MQTTnet refuses to build a wire message without a topic, so the topic-less fallback is
-        // driven through the manager's own add path rather than through a hand-built fixture.
+        // MQTTnet will not build a wire message without a topic, so the null-topic fallback goes
+        // through the manager's own add path instead of a hand-built fixture.
         harness.Manager.AddMessage("root/child", new MqttMessage
         {
             Payload = "topic-less",

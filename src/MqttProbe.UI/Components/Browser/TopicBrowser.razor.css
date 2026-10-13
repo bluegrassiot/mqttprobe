@@ -36,9 +36,8 @@
     overflow: auto;
 }
 
-/* The panel's own root is a MudPaper, styled from the global stylesheet (see the comment
-   in wwwroot/css/components.css): this component's scoped CSS cannot reach it. The header
-   widgets below sit inside the scoped header row, so ::deep anchors them properly. */
+/* The panel root is a MudPaper, so scoped CSS cannot reach it: those rules live in
+   wwwroot/css/components.css. The header widgets below need ::deep to anchor properly. */
 .topic-header-row ::deep .topic-title {
     font-weight: 600;
 }
@@ -72,8 +71,8 @@
     border-radius: 4px;
 }
 
-/* The grouping flag must not shrink: when both it and the T/M legend cannot fit beside
-   the toolbar buttons, the legend wraps to the next line instead of the flag clipping. */
+/* The grouping flag must not shrink: when it and the T/M legend cannot both fit beside the
+   toolbar buttons, the legend wraps to the next line instead of the flag clipping. */
 ::deep .topic-grouping-flag {
     display: inline-flex;
     align-items: center;
@@ -89,9 +88,8 @@
     text-overflow: ellipsis;
 }
 
-/* The grouping flag and the T/M legend do not both fit beside the toolbar buttons in a
-   narrow pane, so the row wraps instead of truncating either label. Row gap stays at the
-   toolbar's own 4px: the gap shorthand below deliberately wins over the intended 2px. */
+/* Narrow pane: the row wraps rather than truncating either label. The 4px gap below
+   deliberately overrides the row-gap 2px it precedes. */
 .topic-tree-wrap ::deep .topic-toolbar {
     flex-wrap: wrap;
     row-gap: 2px;

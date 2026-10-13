@@ -8,9 +8,6 @@ using MqttProbe.UI.Tests.TestHelpers;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
-// Switching the grouping preference changes which real store paths have a row. A selection
-// the new projection cannot show must be cleared, in step with the rebuild; a selection it
-// can show stays, even while expansion or filtering hides the row.
 [TestFixture]
 public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
 {
@@ -124,7 +121,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     {
         var cut = RenderWithSelection(grouped: true, NodeTip);
 
-        // Collapse everything: the row is off screen, but the topic is still represented.
+        // Collapsed: the row is off screen, but the topic is still represented.
         CollapseAll(cut);
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row").Should().HaveCount(2));
 
@@ -142,8 +139,8 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     {
         var cut = RenderWithSelection(grouped: true, selectedPath: null);
 
-        // The filter clears any selection by design, so the selection under test is set once
-        // the filter is in place: the toggle must then leave it alone.
+        // The filter clears selections by design, so this one is set behind the filter and the
+        // toggle must leave it alone.
         cut.Find(".topic-filter-field input").Input("sensors");
         cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Node messages"));
         _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(_storeId, 2, 2), NodeTip, 3));
@@ -153,7 +150,6 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         ApplyPreference(true);
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
-        // The rebuild ran and the topic still has a grouped row, so the selection stands.
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _fixture.SelectedFullTopic.Should().Be(NodeTip);
     }
@@ -190,9 +186,6 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     [Test]
     public void TurningGroupingOn_KeepsTheSelectionForARetainedFallbackAggregate()
     {
-        // This verb keeps a valid tip and a malformed-only tip at the same time, so the verb
-        // prefix survives as a real aggregate: the selection on it stands and still names the
-        // same topic.
         TopicNodeSnapshot[] mixed =
         [
             .. TopicSnapshotBuilder.Build(
@@ -222,8 +215,6 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     [Test]
     public void TurningGroupingOn_KeepsTheSelectionForARetainedZeroMessageTopic()
     {
-        // The store keeps this topic after retention empties it, so the grouped view keeps its
-        // row and the selection on it stands.
         TopicNodeSnapshot[] retained =
         [
             .. TopicSnapshotBuilder.Build(
@@ -250,8 +241,6 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     [Test]
     public void TurningGroupingOn_KeepsTheSelectionForARetainedChildlessTip()
     {
-        // Retention emptied this node topic, so the store kept it childless: it stays grouped
-        // and the selection on the real topic survives the switch.
         const string keptNode = "spBv1.0/plant1/NDATA/keptnode";
         TopicNodeSnapshot[] retained =
         [

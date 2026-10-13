@@ -8,9 +8,6 @@ using MqttProbe.UI.Tests.TestHelpers;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
-// A purge (a topic exclude, or a cleared store) can remove the last row under a prefix the
-// tree was showing. The selection must not outlive its row: every rebuild reconciles the
-// selected real path against the complete projection, not just a grouping mode change.
 [TestFixture]
 public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
 {
@@ -150,10 +147,9 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
     [Test]
     public void StaleVerdict_WhenTheResidueComesBackBeforeClearing_KeepsTheSelection()
     {
-        // Deterministic interleaving, configured before the component starts: the snapshot the
-        // verdict is decided on has the residue purged, but the very next read (the guard) sees
-        // a newer tree in which the residue is back. The selection must survive, and the
-        // deferred rebuild must not have been recorded as fresh.
+        // Deterministic interleaving: the verdict sees the residue purged, but the guard's very
+        // next read sees a newer tree with it back. The selection must survive and the deferred
+        // rebuild must not be recorded as fresh.
         _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
         var initial = new TopicTreeSnapshot(1, WithResidue());
         var purged = new TopicTreeSnapshot(2, WithoutResidue());
@@ -180,8 +176,8 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
     [Test]
     public void StaleVerdict_WhenTheSelectionChangesBeforeClearing_DoesNotClear()
     {
-        // Same interleaving on the selection instead: the tree stays purged, but the selection
-        // the guard reads is no longer the one the verdict was decided for.
+        // Same interleaving on the selection: the tree stays purged, but the guard reads a
+        // selection other than the one the verdict was decided for.
         _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
         var initial = new TopicTreeSnapshot(1, WithResidue());
         var purged = new TopicTreeSnapshot(2, WithoutResidue());

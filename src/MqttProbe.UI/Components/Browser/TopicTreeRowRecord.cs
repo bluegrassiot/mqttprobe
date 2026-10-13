@@ -24,8 +24,7 @@ public sealed record TopicTreeRowModel(
     TopicTreeRowKind Kind = TopicTreeRowKind.Topic
 )
 {
-    // Grouping rows exist only to organise the view. Namespace and group rows are real
-    // store nodes with their own messages, so they keep real-topic behaviour.
+    // Grouping rows only organise the view; namespace and group rows are real store nodes.
     public bool IsVirtualTopic => Kind is not (TopicTreeRowKind.Topic
         or TopicTreeRowKind.SparkplugNamespace
         or TopicTreeRowKind.SparkplugGroup);

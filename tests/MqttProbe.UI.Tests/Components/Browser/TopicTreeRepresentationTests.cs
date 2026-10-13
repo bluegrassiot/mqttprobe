@@ -3,7 +3,6 @@ using MqttProbe.Core.Models.Mqtt;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
-// What the projection presents as a row decides whether a selection survives a mode switch.
 // The answer must ignore expansion and filtering: a topic hidden only because its branch is
 // collapsed or filtered out is still represented.
 [TestFixture]
@@ -71,7 +70,6 @@ public sealed class TopicTreeRepresentationTests
     {
         var tree = Tree();
 
-        // These are real store nodes, but the grouped view folds them into a grouping row.
         foreach (var path in new[]
                  {
                      "spBv1.0/plant1/NDATA", "spBv1.0/plant1/NBIRTH",

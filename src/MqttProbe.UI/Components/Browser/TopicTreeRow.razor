@@ -40,9 +40,8 @@
 
     private const int IndentStepWidth = 16;
 
-    // The indent is one SVG whose width attribute is the whole depth, rather than one spacer per
-    // level, so a row costs the same DOM at depth 1000 as at depth 0. The attribute is a real SVG
-    // geometry width, which avoids both an inline style and a depth-keyed set of classes.
+    // One SVG sized by its width attribute carries the whole indent, so a row costs the same DOM
+    // at depth 1000 as at depth 0, with no inline style and no depth-keyed classes.
     private int IndentWidth => Row.Depth * IndentStepWidth;
 
     private string NodeIcon => Row.Kind switch
@@ -82,8 +81,8 @@
 
     private async Task OnRowClick()
     {
-        // Grouping rows only navigate the view; they must never supply a fabricated topic
-        // to the message store, which would select a topic that does not exist.
+        // Grouping rows only navigate; a fabricated topic here would select something that
+        // does not exist in the store.
         if (Row.IsVirtualTopic)
         {
             await OnExpandToggled.InvokeAsync(Row.FullPath);

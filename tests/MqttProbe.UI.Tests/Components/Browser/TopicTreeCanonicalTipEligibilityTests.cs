@@ -4,10 +4,8 @@ using MqttProbe.Core.Models.Mqtt;
 namespace MqttProbe.UI.Tests.Components.Browser;
 
 // A node or device tip groups only when a message was published at its own normalized path.
-// The store normalizes before it files a topic, so "spBv1.0/g/NDATA//n1" lands on the same node
-// as "spBv1.0/g/NDATA/n1" and looks supported, but it was an alias spelling: the node is a
-// prefix to group under, not an endpoint. These tests pin that the narrower canonical marker,
-// not the general observed marker, decides grouping.
+// "spBv1.0/g/NDATA//n1" lands on the same node as "spBv1.0/g/NDATA/n1" but was an alias
+// spelling, so the canonical marker rather than the general observed one decides grouping.
 [TestFixture]
 public sealed class TopicTreeCanonicalTipEligibilityTests
 {
@@ -51,7 +49,6 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
         return null;
     }
 
-    // Replaces one node in a tree, keeping the rest of the snapshot exactly as built.
     private static ImmutableArray<TopicNodeSnapshot> Replace(
         ImmutableArray<TopicNodeSnapshot> roots,
         string fullPath,
@@ -97,8 +94,6 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
     [Test]
     public void AliasSpellingOfANodeTipStaysLiteral()
     {
-        // "spBv1.0/g/NDATA//n1" normalizes onto the supported node shape but was never published
-        // in it, so nothing may be regrouped: the tree stays the literal hierarchy.
         var tree = TopicSnapshotBuilder.Build(("spBv1.0/g/NDATA//n1", 2, true, false));
 
         var rows = Rows(tree);
@@ -133,8 +128,6 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
     [TestCase("spBv1.0/g/NDATA///n1")]
     public void LeadingTrailingAndRepeatedSeparatorsAllStayLiteral(string alias)
     {
-        // The separator spelling only decides which node the message lands on, never whether the
-        // node is an endpoint, so every alias of the same node reaches the same literal shape.
         var tree = TopicSnapshotBuilder.Build((alias, 1, true, false));
 
         var rows = Rows(tree);
@@ -170,8 +163,6 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
     [Test]
     public void CanonicalTipWithAMalformedDescendantStillGroups()
     {
-        // Retention can empty a canonical tip while a deeper malformed segment keeps the node
-        // alive. It was published in its own path, so it still groups.
         var tree = TopicSnapshotBuilder.Build(
             ("spBv1.0/g/NDATA/n1", 0, true, true),
             ("spBv1.0/g/NDATA/n1/extra", 1, true, true));
@@ -209,9 +200,6 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
     [Test]
     public void ANodeObservedBothCanonicallyAndByAliasGroupsOnceAndKeepsTheStoreCounts()
     {
-        // Both spellings file under the same node. The canonical one makes it a supported tip,
-        // so the node groups exactly once and the mixed messages are reported as the store
-        // totals them. Nothing here partitions messages per raw spelling.
         var tree = TopicSnapshotBuilder.Build(
             ("spBv1.0/g/NDATA/n1", 2, true, true),
             ("spBv1.0/g/NDATA//n1", 3, true, false));
@@ -238,9 +226,6 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
     [Test]
     public void RetiringTheCanonicalHistoryReclassifiesTheAliasNodeAsLiteral()
     {
-        // The general marker stays true after the canonical history is retired, so residual
-        // visibility is unchanged; only the grouping decision moves, and the tip falls back to
-        // the literal hierarchy on its own normalized path.
         const string Tip = "spBv1.0/g/NDATA/n1";
         var tree = TopicSnapshotBuilder.Build(
             ("spBv1.0/g/NDATA/n1", 2, true, true),
@@ -250,8 +235,6 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
         tip.HasObservedDirectTopic.Should().BeTrue("the alias history is still observed");
         tip.HasObservedCanonicalTopic.Should().BeTrue("the canonical history is still observed");
 
-        // Retiring the canonical raw name clears only the narrower marker: the alias history the
-        // general flag reports is what keeps the node from being pruned, and what keeps its row.
         var retired = Replace(tree, Tip, tip with { HasObservedCanonicalTopic = false });
         var retiredTip = Node(retired, Tip);
         retiredTip.HasObservedDirectTopic.Should().BeTrue("retiring the canonical part keeps the general marker");
@@ -266,8 +249,6 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
     [Test]
     public void RetiringTheCanonicalHistoryKeepsTheResidualTipVisible()
     {
-        // A residual node is pruned only when its general history is gone too, so a tip whose
-        // canonical part was retired still keeps its row rather than disappearing.
         const string Tip = "spBv1.0/g/NDATA/n1";
         var tree = TopicSnapshotBuilder.Build(
             ("spBv1.0/g/NDATA/n1", 0, true, true),
@@ -276,8 +257,6 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
         Node(tree, Tip).HasObservedCanonicalTopic.Should().BeTrue(
             "both spellings were published at this node");
 
-        // Neither spelling has a message left, so only the observed markers are holding the
-        // node. Retiring the canonical part still leaves a row: the tip is a real endpoint.
         var tip = Node(tree, Tip);
         var rows = Rows(Replace(tree, Tip, tip with { HasObservedCanonicalTopic = false }));
 

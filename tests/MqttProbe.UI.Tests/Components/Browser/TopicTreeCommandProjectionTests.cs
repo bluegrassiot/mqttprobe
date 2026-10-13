@@ -3,8 +3,6 @@ using MqttProbe.Core.Models.Mqtt;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
-// Node and device commands (NCMD/DCMD) follow the same topic shapes as birth, death and
-// data, so the grouped view has to present them with their real identity too.
 [TestFixture]
 public sealed class TopicTreeCommandProjectionTests
 {
@@ -104,8 +102,6 @@ public sealed class TopicTreeCommandProjectionTests
     [Test]
     public void GroupingOn_MalformedCommandsStayLiteral()
     {
-        // Nothing here matches a supported command shape: a command at the wrong depth, a
-        // device command with no device, and a command with a deeper malformed segment.
         var tree = TopicSnapshotBuilder.Build(
             ("spBv1.0/g/NCMD/n/extra", 1),
             ("spBv1.0/g2/NCMD", 1),

@@ -17,10 +17,8 @@ internal static class TopicTreeProjection
         bool groupSparkplugTopics) =>
         CreateRows(roots, filter, expandedPaths, groupSparkplugTopics, selectionPath: null, out _);
 
-    // One pass builds the rows and reports whether the selected real path still has a row in
-    // the complete projection, ignoring filter and expansion: a row hidden only because its
-    // branch is collapsed or filtered out still represents the topic. The verdict costs no
-    // extra build, so a refresh never walks the grouped store twice.
+    // One pass builds the rows and reports whether the selected real path still has one,
+    // ignoring filter and expansion, so a refresh never walks the store twice.
     public static List<TopicTreeRowModel> CreateRows(
         ImmutableArray<TopicNodeSnapshot> roots,
         string? filter,
@@ -36,8 +34,7 @@ internal static class TopicTreeProjection
 
         var hasFilter = !string.IsNullOrWhiteSpace(filter);
 
-        // Grouping off walks the snapshot itself: cloning a tree that is mostly collapsed
-        // would build nodes for rows the caller will never see.
+        // Grouping off walks the snapshot: cloning a mostly collapsed tree builds unseen rows.
         if (!groupSparkplugTopics)
         {
             selectionRepresented = selectionPath is null || ContainsRealPath(roots, selectionPath);
@@ -77,9 +74,7 @@ internal static class TopicTreeProjection
             AddExpandablePaths(root, target);
     }
 
-    // Whether the projection presents this real store path as a row, ignoring expansion and
-    // filtering: a row hidden only because its branch is collapsed or filtered out still
-    // represents the topic and must not be treated as gone.
+    // Ignores expansion and filtering: a collapsed or filtered row still represents its topic.
     public static bool RepresentsRealPath(
         ImmutableArray<TopicNodeSnapshot> roots,
         bool groupSparkplugTopics,
@@ -209,10 +204,8 @@ internal static class TopicTreeProjection
             AddExpandablePaths(child, target);
     }
 
-    // Matching follows the literal view: a row matches on the text it shows, and an
-    // ancestor is kept for a matching descendant. A literal row shows its own path
-    // segment, while a grouped real row shows the whole topic path, so a grouped leaf can
-    // also be found by the topic or path fragment the user can actually read.
+    // Matching follows the literal view: a row matches on the text it shows and keeps the
+    // ancestors of a match, so a grouped leaf is findable by the whole topic path it shows.
     private static bool Matches(ProjectionNode node, string filter)
     {
         if (node.Label.Contains(filter, StringComparison.OrdinalIgnoreCase))
@@ -274,9 +267,8 @@ internal static class TopicTreeProjection
             else if (SparkplugTopicClassifier.IsDeviceVerb(verb))
                 AddDeviceMessages(nodes, groupPath, verbNode, verb, groupedTips);
 
-            // Whatever is not a supported tip stays where it is: the prefix rows of that
-            // residue keep their real identity and their own source counts, so a malformed
-            // direct message on a verb or device level never hides valid descendants.
+            // Residue stays literal, keeping its real identity and source counts, so a malformed
+            // message at a verb or device level never hides valid descendants.
             var residual = BuildResidual(verbNode, groupedTips);
             if (residual is not null)
                 built.Children.Add(residual);
@@ -294,10 +286,8 @@ internal static class TopicTreeProjection
         return built;
     }
 
-    // The literal remainder of a verb: every row the partition did not take, pruned of the
-    // tips that moved into it. A row is dropped only when it is a structural prefix whose
-    // whole representation moved: a node that was ever an accepted endpoint stays visible,
-    // and so does one the store left in place after retention emptied it.
+    // Every row the partition did not take, minus the tips that moved into it: a structural
+    // prefix survives, while a node that was ever an accepted endpoint always stays visible.
     private static ProjectionNode? BuildResidual(TopicNodeSnapshot node, HashSet<string> groupedTips)
     {
         if (groupedTips.Contains(node.FullTopic))
@@ -326,13 +316,10 @@ internal static class TopicTreeProjection
     {
         foreach (var tip in verbNode.Children)
         {
-            // A node verb's child is the node-level topic itself. It is a supported tip when a
-            // message was ever accepted at that exact path: retention can evict that message
-            // while a malformed descendant stays, and the tip still groups. A child that was
-            // never an endpoint is a structural prefix and stays in the residue. Only a
-            // message published at the canonical spelling qualifies: "spBv1.0/g/NDATA//n1"
-            // normalizes onto the supported shape but is not itself a supported Sparkplug
-            // endpoint, so it stays a prefix to group under rather than a node with messages.
+            // The child of a node verb is the node topic itself, supported whenever a message was
+            // ever accepted at that exact path. Only the canonical spelling counts:
+            // "spBv1.0/g/NDATA//n1" normalizes onto the shape but is not itself an endpoint, so
+            // it stays a prefix to group under rather than a node with messages.
             if (!tip.HasObservedCanonicalTopic)
                 continue;
 
@@ -359,10 +346,9 @@ internal static class TopicTreeProjection
         {
             foreach (var deviceNode in nodeLevel.Children)
             {
-                // The device tip is the only supported shape here. As at the node level it is
-                // classified by the canonical observed endpoint marker, not by its current
-                // messages, so a device emptied by retention with a malformed descendant still
-                // groups, while one reached only through an alias spelling does not.
+                // As at the node level the device tip classifies by the canonical observed marker
+                // rather than its current messages, so a retention-emptied tip still groups and
+                // one reached only through an alias spelling does not.
                 if (!deviceNode.HasObservedCanonicalTopic)
                     continue;
 
@@ -414,8 +400,8 @@ internal static class TopicTreeProjection
         Source = node
     };
 
-    // A grouped leaf shows the real topic rather than its bare last segment: the grouping
-    // path is reordered, so the row itself has to carry the topic the message arrived on.
+    // A grouped leaf shows the real topic rather than its bare last segment, because the
+    // grouping path is reordered.
     private static ProjectionNode GroupedTip(TopicNodeSnapshot tip)
     {
         var built = new ProjectionNode
@@ -440,8 +426,7 @@ internal static class TopicTreeProjection
         Order = order
     };
 
-    // Birth, death, data, then command - the order an operator reads a node's lifecycle,
-    // with the commands that drive it last.
+    // Birth, death, data, then command: the order an operator reads a node's lifecycle.
     private static int MessageTypeOrder(string verb) => verb switch
     {
         "NBIRTH" or "DBIRTH" => 0,

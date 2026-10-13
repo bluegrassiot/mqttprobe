@@ -12,9 +12,6 @@ using MqttProbe.UI.Tests.TestHelpers;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
-// The purge path a topic exclude drives: the real MessageStoreManager drops the matching
-// topic nodes and leaves the surviving parent in place, so the browser must reconcile a
-// selection on that parent while it refreshes, not only when the grouping mode changes.
 [TestFixture]
 public sealed class TopicBrowserExcludePurgeReconciliationTests : BunitTestContext
 {

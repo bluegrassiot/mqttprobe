@@ -3,8 +3,7 @@ using MqttProbe.Core.Models.Mqtt;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
-// Core retention drops messages and leaves the topic nodes in place, so the tree can hold
-// nodes with no messages of their own and no children. Grouping must keep them: only the
+// Core retention leaves emptied topic nodes in place, so grouping must keep them: only a
 // representation that actually moved into the grouped partition may disappear.
 [TestFixture]
 public sealed class TopicTreeRetentionProjectionTests
@@ -80,7 +79,6 @@ public sealed class TopicTreeRetentionProjectionTests
 
         var rows = Rows(tree);
 
-        // The valid tip groups; the zero-message residue keeps the verb prefix in the tree.
         rows.Should().Contain(row => row.DisplayName == "spBv1.0/g/NDATA/n1");
         rows.Select(row => row.FullPath).Should().Contain(
             "spBv1.0/g/NDATA",
@@ -96,7 +94,6 @@ public sealed class TopicTreeRetentionProjectionTests
     [Test]
     public void GroupingOn_RemovesAPrefixWhoseWholeRepresentationMoved()
     {
-        // Every tip here is supported and moves, so nothing is left for the prefix rows.
         var tree = TopicSnapshotBuilder.Build(("spBv1.0/g/NDATA/n1", 2));
 
         var rows = Rows(tree);
@@ -111,8 +108,6 @@ public sealed class TopicTreeRetentionProjectionTests
     [Test]
     public void GroupingOn_KeepsAChildlessRetainedNodeTipGrouped()
     {
-        // Retention can empty the topic the tip names, leaving a childless node. By shape it
-        // is still the supported node topic, so it groups with the store's own zero counts.
         var tree = TopicSnapshotBuilder.Build(("spBv1.0/g/NDATA/n1", 0));
 
         var rows = Rows(tree);
@@ -203,7 +198,6 @@ public sealed class TopicTreeRetentionProjectionTests
 
         var rows = Rows(tree);
 
-        // The childless tip is grouped; the malformed prefix stays literal under the verb.
         rows.Should().Contain(row => row.FullPath == "spBv1.0/g/NDATA/n1" && !row.IsVirtualTopic);
         rows.Count(row => row.FullPath == "spBv1.0/g/NDATA/n1").Should().Be(1);
         var prefix = rows.Single(row => row.FullPath == "spBv1.0/g/NDATA");
@@ -219,9 +213,6 @@ public sealed class TopicTreeRetentionProjectionTests
     [Test]
     public void GroupingOn_KeepsARetainedNodeTipGroupedWhileItsMalformedDescendantStays()
     {
-        // The direct message on the tip was evicted, but the tip was an accepted endpoint and a
-        // malformed deeper segment still has a message: the tip groups and the descendant stays
-        // literal under it.
         var tree = TopicSnapshotBuilder.Build(("spBv1.0/g/NDATA/n1", 0), ("spBv1.0/g/NDATA/n1/extra", 1));
 
         var rows = Rows(tree);
@@ -307,8 +298,6 @@ public sealed class TopicTreeRetentionProjectionTests
     [Test]
     public void GroupingOn_StructuralPrefixWithAMessageBearingDescendantStaysLiteral()
     {
-        // The message landed a segment deeper, so the tip-shaped node was never an endpoint: it
-        // is structural and stays literal even though its descendant carries a message.
         var tree = TopicSnapshotBuilder.Build(("spBv1.0/g/NDATA/ghostnode/ghostleaf", 1));
 
         var rows = Rows(tree);
@@ -325,8 +314,6 @@ public sealed class TopicTreeRetentionProjectionTests
     [Test]
     public void GroupingOn_ClearedEndpointHistoryWithDescendantsReclassifiesTheTipAsLiteral()
     {
-        // An exact purge clears the observed marker while the descendants stay, so the same
-        // node presents as a structural prefix again.
         var tree = TopicSnapshotBuilder.Build(
             ("spBv1.0/g/NDATA/n1", 0, false),
             ("spBv1.0/g/NDATA/n1/extra", 1, true));
@@ -348,9 +335,8 @@ public sealed class TopicTreeRetentionProjectionTests
     [Test]
     public void GroupingOn_ClearedEndpointThatKeepsADirectMessageStaysLiteralWithItsMessage()
     {
-        // The snapshot is explicitly overridden here: the marker says unobserved while a direct
-        // message survives, pinning the projection's treatment of the flag independently of how
-        // the store decides it. The node presents literally and its message stays visible.
+        // Deliberately inconsistent snapshot: the marker says unobserved while a direct message
+        // survives, pinning the projection's treatment of the flag independently of the store.
         var tree = TopicSnapshotBuilder.Build(("spBv1.0/g/NDATA/n1", 2, false));
 
         var rows = Rows(tree);

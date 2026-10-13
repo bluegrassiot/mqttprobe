@@ -6,9 +6,6 @@ using MqttProbe.Core.Services.Mqtt;
 
 namespace MqttProbe.Core.Tests.Services.Mqtt;
 
-// A node whose only remaining content is unmatched raw history is not empty, so a purge must keep
-// it. Only an exclude that matches the recorded raw name may retire that content, and pruning the
-// node afterwards drops the empty ancestry.
 [TestFixture]
 public sealed class TopicTreeObservedHistoryPruningTests
 {

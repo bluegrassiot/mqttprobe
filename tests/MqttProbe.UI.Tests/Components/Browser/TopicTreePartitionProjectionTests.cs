@@ -3,9 +3,6 @@ using MqttProbe.Core.Models.Mqtt;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
-// Grouping partitions per supported tip: a bad message on a verb or device level, or a
-// malformed tip, must not stop valid descendants from grouping, and the residue around them
-// keeps its real identity.
 [TestFixture]
 public sealed class TopicTreePartitionProjectionTests
 {
@@ -161,8 +158,6 @@ public sealed class TopicTreePartitionProjectionTests
 
         var rows = Rows(tree);
 
-        // Real rows: namespace, group, residual prefix and tips all report what the store
-        // says, so the residual total still counts the topic moved into the grouped view.
         foreach (var path in new[]
                  {
                      "spBv1.0", "spBv1.0/g", "spBv1.0/g/NDATA", "spBv1.0/g/NDATA/n2",
@@ -175,7 +170,6 @@ public sealed class TopicTreePartitionProjectionTests
             row.MessageCount.Should().Be(source.MessageCount, path);
         }
 
-        // Virtual rows own their partition only: no residual row is counted into them.
         var nodeRow = rows.Single(row => row.Kind == TopicTreeRowKind.SparkplugNode);
         var ownedTips = new[]
         {
@@ -202,7 +196,6 @@ public sealed class TopicTreePartitionProjectionTests
             ("spBv1.0/g/DDATA/n1/dev1", 2),
             ("spBv1.0/g/DDATA/n1/dev2/extra", 1));
 
-        // Retained residue: the prefix edges have a row of their own.
         TopicTreeProjection.RepresentsRealPath(mixed, groupSparkplugTopics: true, "spBv1.0/g/NDATA")
             .Should().BeTrue();
         TopicTreeProjection.RepresentsRealPath(mixed, groupSparkplugTopics: true, "spBv1.0/g/NDATA/n2")

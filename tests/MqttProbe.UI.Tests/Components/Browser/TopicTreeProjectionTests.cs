@@ -26,9 +26,8 @@ internal sealed class TopicBrowserTestFixture
 
     public TopicTreeSnapshot Snapshot => _snapshot;
 
-    // Empties the store while keeping the reported version, so the component keeps the frame
-    // it already rendered. That is the window a user clicks in: the row is still on screen
-    // while the topic it names is gone from the store.
+    // Empties the store but keeps the reported version, so the component keeps the frame it
+    // already rendered: the row is on screen while the topic it names has left the store.
     public void PurgeHoldingRenderedFrame() =>
         _snapshot = new TopicTreeSnapshot(_snapshot.Version, ImmutableArray<TopicNodeSnapshot>.Empty);
 
@@ -159,9 +158,8 @@ public sealed class TopicTreeProjectionTests
     [Test]
     public void CreateRows_GroupingOff_OnACollapsedSnapshotDoesNotWalkHiddenDescendants()
     {
-        // 200 roots of 20 leaves each. With grouping off a collapsed tree only has to
-        // produce its root rows; cloning the store into projection nodes first would
-        // allocate for all 4,200 nodes on every refresh.
+        // 200 roots of 20 leaves. A collapsed tree only needs its root rows, so cloning the
+        // store into projection nodes first would allocate for all 4,200 nodes every refresh.
         var topics = new List<(string Topic, int Messages)>();
         for (var root = 0; root < 200; root++)
         {
@@ -180,9 +178,8 @@ public sealed class TopicTreeProjectionTests
 
         rows.Should().HaveCount(200);
         rows.Should().OnlyContain(row => !row.HasChildren || !row.IsExpanded);
-        // Measured on this tree: the direct traversal allocates about 19 KB, while cloning
-        // the store first allocates about 495 KB. The bound sits between the two and well
-        // clear of both.
+        // Measured here: the direct traversal allocates about 19 KB against about 495 KB for
+        // cloning the store first, so the bound sits between them.
         allocated.Should().BeLessThan(128 * 1024,
             "a collapsed literal tree must not be cloned node by node");
     }

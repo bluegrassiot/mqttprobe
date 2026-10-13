@@ -7,9 +7,8 @@ using MqttProbe.UI.Tests.TestHelpers;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
-// A row draws its whole indent with one SVG, so its element count must not grow with depth. The
-// previous spacer-per-level markup cost one element per level, which a deeply grouped Sparkplug
-// topic turned into thousands of nodes per row inside an already virtualized list.
+// A row draws its whole indent with one SVG, so its element count must not grow with depth: the
+// old spacer-per-level markup cost thousands of nodes per row on a deep topic.
 [TestFixture]
 public class TopicTreeRowIndentRenderingTests : BunitTestContext
 {

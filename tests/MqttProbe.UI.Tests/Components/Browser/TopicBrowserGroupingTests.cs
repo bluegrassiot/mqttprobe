@@ -88,8 +88,7 @@ public class TopicBrowserGroupingTests : BunitTestContext
     {
         var cut = RenderGrouped(grouped: true);
 
-        // The Sparkplug STATE topic stays literal: a real namespace row, a real group row
-        // and a real leaf, so the topic is still readable and selectable.
+        // STATE is a real Sparkplug topic, not a grouping verb, so it stays literal.
         cut.Markup.Should().Contain("scada");
         cut.Markup.Should().Contain("STATE");
         cut.Markup.Should().Contain("sensors");

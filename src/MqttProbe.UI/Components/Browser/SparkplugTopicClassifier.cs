@@ -1,8 +1,7 @@
 namespace MqttProbe.UI.Components.Browser;
 
-// Classification for the topic-tree grouping view. Derived from the shape the Core
-// topology extractor understands (spBv1.0/<group>/<verb>/<node>[/<device>]) but kept in
-// the UI: grouping is a presentation concern and Core exposes no shared classifier.
+// Kept in the UI rather than Core: grouping is a presentation concern and Core exposes no
+// shared classifier for the spBv1.0/<group>/<verb>/<node>[/<device>] shape.
 internal static class SparkplugTopicClassifier
 {
     public const string Namespace = "spBv1.0";

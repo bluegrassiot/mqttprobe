@@ -36,7 +36,6 @@ public sealed class TopicTreeGroupingProjectionTests
         bool group = true) =>
         TopicTreeProjection.CreateRows(roots, filter, expanded ?? Expanded(roots, group), group);
 
-    // The rows that hang under a row, found by depth in the flattened row list.
     private static List<TopicTreeRowModel> Subtree(List<TopicTreeRowModel> rows, string fullPath)
     {
         var index = rows.FindIndex(row => row.FullPath == fullPath);
@@ -133,13 +132,11 @@ public sealed class TopicTreeGroupingProjectionTests
         var devices = rows.Single(row => row.Kind == TopicTreeRowKind.Devices);
         var device = rows.Single(row => row.Kind == TopicTreeRowKind.SparkplugDevice);
 
-        // Eight descendant store nodes, eight stored messages across the tree.
         namespaceRow.TopicCount.Should().Be(8);
         namespaceRow.MessageCount.Should().Be(8);
         groupRow.TopicCount.Should().Be(7);
         groupRow.MessageCount.Should().Be(8);
 
-        // Three real topics sit under the grouped node: two node messages and one device topic.
         nodeRow.TopicCount.Should().Be(3);
         nodeRow.MessageCount.Should().Be(8);
         nodeMessages.TopicCount.Should().Be(2);
@@ -149,7 +146,6 @@ public sealed class TopicTreeGroupingProjectionTests
         device.TopicCount.Should().Be(1);
         device.MessageCount.Should().Be(4);
 
-        // Counts roll up exactly once: no topic or message is counted twice.
         nodeRow.MessageCount.Should().Be(nodeMessages.MessageCount + devices.MessageCount);
         nodeMessages.MessageCount.Should().Be(rows.Where(row => row.Depth == 5 && !row.IsVirtualTopic)
             .Take(2).Sum(row => row.MessageCount));
@@ -203,19 +199,18 @@ public sealed class TopicTreeGroupingProjectionTests
 
         rows.Select(row => (row.DisplayName, row.Depth)).Should().Contain(new (string, int)[]
         {
-            ("STATE", 2),               // unsupported verb under a group
+            ("STATE", 2),
             ("scada", 3),
-            ("FOO", 2),                 // unknown verb
+            ("FOO", 2),
             ("node9", 3),
-            ("extra", 6),               // malformed segment below a supported topic
-            ("STATE", 1),               // the Sparkplug STATE namespace stays literal
+            ("extra", 6),
+            ("STATE", 1),
             ("scada-host", 2),
-            ("spBv2.0", 0),             // a different namespace is not regrouped
+            ("spBv2.0", 0),             // a different namespace is never regrouped
             ("plant9", 1),
             ("sensors", 0)
         });
 
-        // The supported topics are grouped, the rest keep real store paths.
         rows.Where(row => row.IsVirtualTopic).Select(row => row.DisplayName)
             .Should().NotContain("scada").And.NotContain("node9").And.NotContain("extra");
         rows.Where(row => !row.IsVirtualTopic && row.DisplayName == "scada")
@@ -240,8 +235,6 @@ public sealed class TopicTreeGroupingProjectionTests
     [Test]
     public void GroupingOn_StandaloneMalformedNodePathStaysLiteral()
     {
-        // Nothing under this path is a supported Sparkplug topic, so no grouping rows may
-        // be invented for it: it is the literal hierarchy, segment by segment.
         var tree = TopicSnapshotBuilder.Build(("spBv1.0/plant1/NDATA/ghost/extra", 2));
 
         var rows = Rows(tree);
@@ -279,8 +272,6 @@ public sealed class TopicTreeGroupingProjectionTests
     [Test]
     public void GroupingOn_MalformedNodeTipStaysLiteralBesideAValidGroupedTip()
     {
-        // Per-tip partitioning: n1 carries its own message and is grouped; n2 only exists
-        // because a malformed deeper segment did, so it stays under a residual prefix.
         var tree = TopicSnapshotBuilder.Build(
             ("spBv1.0/g/NDATA/n1", 2),
             ("spBv1.0/g/NDATA/n2/extra", 1));
@@ -298,14 +289,11 @@ public sealed class TopicTreeGroupingProjectionTests
             ("n2", 3, TopicTreeRowKind.Topic),
             ("extra", 4, TopicTreeRowKind.Topic));
 
-        // The residual prefix keeps its real identity and its own source counts, which still
-        // include the topic that moved into the grouped partition.
         var residual = rows.Single(row => row.FullPath == "spBv1.0/g/NDATA");
         residual.IsVirtualTopic.Should().BeFalse();
         residual.TopicCount.Should().Be(3);
         residual.MessageCount.Should().Be(3);
 
-        // The grouped tip is presented once, never beneath the residual branch.
         rows.Count(row => row.FullPath == "spBv1.0/g/NDATA/n1").Should().Be(1);
         Subtree(rows, "spBv1.0/g/NDATA").Select(row => row.FullPath)
             .Should().NotContain("spBv1.0/g/NDATA/n1");
@@ -321,8 +309,6 @@ public sealed class TopicTreeGroupingProjectionTests
 
         var rows = Rows(tree);
 
-        // The device residue keeps the real prefix chain DDATA > n; dev1 is grouped and is
-        // not repeated there.
         var residualPrefix = rows.Single(row => row.FullPath == "spBv1.0/g/DDATA");
         var residualNode = rows.Single(row => row.FullPath == "spBv1.0/g/DDATA/n");
         rows.Select(row => row.FullPath).Should().Contain(
@@ -337,7 +323,6 @@ public sealed class TopicTreeGroupingProjectionTests
         residualPrefix.MessageCount.Should().Be(3);
         residualNode.TopicCount.Should().Be(3);
 
-        // The node still groups its valid topics, from both verbs.
         var nodeRow = rows.Single(row => row.Kind == TopicTreeRowKind.SparkplugNode);
         nodeRow.DisplayName.Should().Be("n");
         nodeRow.TopicCount.Should().Be(2);
@@ -349,7 +334,6 @@ public sealed class TopicTreeGroupingProjectionTests
     [Test]
     public void GroupingOn_DeviceVerbWithNodeLevelMessagesStaysLiteral()
     {
-        // spBv1.0/g/DDATA/n is not the supported device shape, so the verb is not regrouped.
         var tree = TopicSnapshotBuilder.Build(("spBv1.0/g/DDATA/n", 2));
 
         var rows = Rows(tree);
@@ -361,8 +345,6 @@ public sealed class TopicTreeGroupingProjectionTests
     [Test]
     public void GroupingOn_DeviceTipWithMalformedDescendantStaysGrouped()
     {
-        // The device topic itself is supported, so it is grouped; the deeper malformed
-        // segment stays literal underneath it.
         var tree = TopicSnapshotBuilder.Build(
             ("spBv1.0/g/DDATA/n/dev", 2),
             ("spBv1.0/g/DDATA/n/dev/extra", 1));
@@ -417,8 +399,6 @@ public sealed class TopicTreeGroupingProjectionTests
     [Test]
     public void GroupingOff_FullTopicPathFilterStillMatchesNothing()
     {
-        // Literal rows show one segment each, so a multi-segment filter keeps behaving as
-        // it did before grouping existed.
         var tree = SupportedTree();
 
         var rows = TopicTreeProjection.CreateRows(

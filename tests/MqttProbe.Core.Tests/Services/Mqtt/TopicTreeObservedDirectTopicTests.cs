@@ -9,9 +9,6 @@ using MqttProbe.Tests.Utilities;
 
 namespace MqttProbe.Core.Tests.Services.Mqtt;
 
-// HasObservedDirectTopic separates a real topic that a direct message once reached from a
-// structural prefix that only exists because a deeper topic did. Retention keeps the history;
-// exclusion and reset retire it.
 [TestFixture]
 public sealed class TopicTreeObservedDirectTopicTests
 {
@@ -120,8 +117,6 @@ public sealed class TopicTreeObservedDirectTopicTests
         store.RemoveMatchingTopic("root");
         var after = store.GetTopicTreeSnapshot();
 
-        // Only the history flag changed, so the purge must still advance the version and drop
-        // the cached snapshot.
         after.Should().NotBeSameAs(before);
         after.Version.Should().BeGreaterThan(before.Version);
 
@@ -167,7 +162,6 @@ public sealed class TopicTreeObservedDirectTopicTests
         store.RemoveMatchingTopic("root//tip");
         var after = store.GetTopicTreeSnapshot();
 
-        // History is the only thing that changed, so the purge still advances the version.
         after.Should().NotBeSameAs(before);
         after.Version.Should().BeGreaterThan(before.Version);
 

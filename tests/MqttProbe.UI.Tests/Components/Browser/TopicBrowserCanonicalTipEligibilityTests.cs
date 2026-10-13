@@ -13,11 +13,6 @@ using MqttProbe.UI.Tests.TestHelpers;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
-// The grouping decision driven by the real store rather than a hand-built snapshot: a raw
-// published spelling is normalized before it is filed, so "spBv1.0/g/NDATA//n1" reaches the
-// browser as the supported shape. What tells the two apart is the provenance the store keeps,
-// and these cases drive the browser through the real MessageStoreManager to prove the
-// projection reads it the way the store records it.
 [TestFixture]
 public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
 {
@@ -126,7 +121,6 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
 
         var snapshot = _manager.GetTopicTreeSnapshot();
         snapshot.Roots.Should().ContainSingle();
-        // The store files the message on the normalized path, which is the shape grouping reads.
         var normalizedTip = FindNode(snapshot.Roots.Single(), "spBv1.0/plant1/NDATA/node1");
         normalizedTip.HasObservedDirectTopic.Should().BeTrue("a message was accepted at this node");
         normalizedTip.HasObservedCanonicalTopic.Should().BeFalse(
@@ -134,7 +128,6 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
 
         var cut = RenderGrouped();
 
-        // The row exists on its own real path, and nothing was regrouped under it.
         Labels(cut).Should().Contain(text => text.Contains("node1", StringComparison.Ordinal));
         cut.FindAll(".topic-tree-row--group").Should().BeEmpty("no grouping row is invented for an alias tip");
         cut.FindAll(".topic-grouping-flag").Should().NotBeEmpty();
@@ -170,12 +163,10 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
 
         Labels(cut).Should().Contain("Node messages");
         cut.FindAll(".topic-tree-row--group").Should().NotBeEmpty();
-        // One row for the tip, whichever spelling the messages arrived on.
         cut.FindAll(".topic-tree-row .flex-grow-1")
             .Count(element => element.TextContent.Trim() == CanonicalNodeTip)
             .Should().Be(1, "one row for the tip, whichever spelling the messages arrived on");
 
-        // The store's own totals are what the grouped row reports, not a per-spelling split.
         var tipRow = cut.FindAll(".topic-tree-row")
             .Single(row => row.QuerySelector(".flex-grow-1")?.TextContent.Trim() == CanonicalNodeTip);
         tipRow.TextContent.Should().Contain("M 2");

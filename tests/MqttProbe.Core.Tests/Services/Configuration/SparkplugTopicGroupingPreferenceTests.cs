@@ -28,21 +28,58 @@ public class SparkplugTopicGroupingPreferenceTests
     }
 
     [Test]
-    public void UiPreferences_GroupingDefaultsOff()
+    public void UiPreferences_GroupingDefaultsOn()
     {
-        new UiPreferences().GroupSparkplugTopicsByNodeAndDevice.Should().BeFalse();
+        new UiPreferences().GroupSparkplugTopicsByNodeAndDevice.Should().BeTrue();
     }
 
     [Test]
-    public async Task LoadAsync_LeavesGroupingOff_WhenUiKeyAbsent()
+    public async Task LoadAsync_DefaultsGroupingOn_WhenUiKeyAbsent()
     {
         await File.WriteAllTextAsync(_configPath, """{"connections":[],"ui":{"theme":"light"}}""");
 
         using var reloaded = new SettingsDocument(_configPath);
         await new SettingsLoader(reloaded, new ConnectionSecrets(null, null), false, null).LoadAsync();
 
-        reloaded.Config.Ui.GroupSparkplugTopicsByNodeAndDevice.Should().BeFalse();
+        reloaded.Config.Ui.GroupSparkplugTopicsByNodeAndDevice.Should().BeTrue();
         reloaded.Config.Ui.Theme.Should().Be("light");
+    }
+
+    [Test]
+    public async Task LoadAsync_DefaultsGroupingOn_WhenUiObjectAbsent()
+    {
+        await File.WriteAllTextAsync(_configPath, """{"connections":[]}""");
+
+        using var reloaded = new SettingsDocument(_configPath);
+        await new SettingsLoader(reloaded, new ConnectionSecrets(null, null), false, null).LoadAsync();
+
+        reloaded.Config.Ui.GroupSparkplugTopicsByNodeAndDevice.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task LoadAsync_DefaultsGroupingOn_WhenConfigFileAbsent()
+    {
+        using var fresh = new SettingsDocument(_configPath);
+
+        var created = await new SettingsLoader(fresh, new ConnectionSecrets(null, null), false, null).LoadAsync();
+
+        created.Should().BeFalse("the loader created a fresh config");
+        fresh.Config.Ui.GroupSparkplugTopicsByNodeAndDevice.Should().BeTrue();
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task LoadAsync_PreservesExplicitGroupingValue(bool value)
+    {
+        var json = "{\"connections\":[],\"ui\":{\"groupSparkplugTopicsByNodeAndDevice\":"
+            + (value ? "true" : "false")
+            + "}}";
+        await File.WriteAllTextAsync(_configPath, json);
+
+        using var reloaded = new SettingsDocument(_configPath);
+        await new SettingsLoader(reloaded, new ConnectionSecrets(null, null), false, null).LoadAsync();
+
+        reloaded.Config.Ui.GroupSparkplugTopicsByNodeAndDevice.Should().Be(value);
     }
 
     [Test]

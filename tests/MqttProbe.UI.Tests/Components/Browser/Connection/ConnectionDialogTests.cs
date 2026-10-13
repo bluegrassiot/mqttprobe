@@ -168,14 +168,91 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task OnIos_Shows_The_Local_Network_Note_When_Opened()
+    public async Task OnIos_Shows_A_Collapsed_Local_Network_Hint_With_A_Neutral_Label()
     {
         await OpenIosDialog();
 
         var note = _dialogProvider.Find("[data-testid=ios-local-network-note]");
-        note.TextContent.Should().Contain("local network permission");
-        note.TextContent.Should().Contain("iOS Settings");
-        note.TextContent.Should().Contain("public internet");
+        var toggle = note.QuerySelector(".connection-dialog__lan-note-toggle");
+        toggle.Should().NotBeNull();
+        toggle!.TextContent.Should().Contain("Local network access");
+        toggle.TextContent.Should().NotContain("Enable").And.NotContain("Allow");
+        toggle.GetAttribute("aria-expanded").Should().Be("false");
+
+        // The explanation stays in the DOM but hidden until the user asks for it.
+        note.QuerySelector("#ios-local-network-note-details")!
+            .HasAttribute("hidden").Should().BeTrue();
+    }
+
+    [Test]
+    public async Task OnIos_Local_Network_Hint_Reveals_The_Explanation_When_Toggled()
+    {
+        await OpenIosDialog();
+
+        _dialogProvider.Find(".connection-dialog__lan-note-toggle").Click();
+
+        var note = _dialogProvider.Find("[data-testid=ios-local-network-note]");
+        note.QuerySelector(".connection-dialog__lan-note-toggle")!
+            .GetAttribute("aria-expanded").Should().Be("true");
+
+        var body = note.QuerySelector("#ios-local-network-note-details");
+        body.Should().NotBeNull();
+        body!.HasAttribute("hidden").Should().BeFalse();
+        body.TextContent.Should().Contain("local network permission");
+        body.TextContent.Should().Contain("iOS Settings");
+        body.TextContent.Should().Contain("public internet");
+    }
+
+    [Test]
+    public async Task OnIos_Local_Network_Hint_Toggle_Is_A_Safe_Disclosure_Button()
+    {
+        await OpenIosDialog();
+
+        var note = _dialogProvider.Find("[data-testid=ios-local-network-note]");
+        var toggle = note.QuerySelector(".connection-dialog__lan-note-toggle")!;
+
+        // The toggle lives inside the dialog's MudForm, so it must never submit it.
+        toggle.GetAttribute("type").Should().Be("button");
+        toggle.GetAttribute("aria-controls").Should().Be("ios-local-network-note-details");
+        note.QuerySelectorAll(".connection-dialog__lan-note-icon")
+            .Should().HaveCount(1, "the row carries an info icon");
+        note.QuerySelectorAll(".connection-dialog__lan-note-chevron")
+            .Should().HaveCount(1, "the row carries a disclosure chevron");
+    }
+
+    [Test]
+    public void Local_Network_Hint_Row_Keeps_Its_Height_In_The_Scrollable_Tab_Panel()
+    {
+        // The hint sits in the active tab panel, a scrollable flex column. Declaring
+        // overflow: hidden on it resolves its automatic minimum size to 0, so without
+        // flex-shrink: 0 the panel's negative free space collapses the row to its
+        // borders, hiding the label and the icons and making the row untappable.
+        var note = ReadCssRule(".connection-dialog__lan-note");
+        note.Should().Contain("flex-shrink: 0");
+        note.Should().Contain("overflow: hidden");
+
+        ReadCssRule(".connection-dialog__lan-note-toggle")
+            .Should().Contain("min-height: 44px",
+                "the compact row still needs a full tap target");
+    }
+
+    private static string ReadCssRule(string selector)
+    {
+        var cssPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..",
+            "src", "MqttProbe.UI", "Components", "Browser", "Connection",
+            "ConnectionDialog.razor.css"));
+
+        File.Exists(cssPath).Should().BeTrue(
+            $"expected the scoped stylesheet at '{cssPath}' to exist so the test can verify its rules");
+
+        var css = File.ReadAllText(cssPath);
+        var start = css.IndexOf($"{selector} {{", StringComparison.Ordinal);
+        start.Should().BeGreaterThanOrEqualTo(0, $"'{selector}' must be declared in the scoped stylesheet");
+
+        var end = css.IndexOf('}', start);
+        return css[start..(end + 1)];
     }
 
     [Test]

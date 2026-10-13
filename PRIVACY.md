@@ -70,8 +70,8 @@ services, which this policy does not cover.
 Everything the app remembers lives inside its own sandbox on your device:
 
 - **Connection settings.** Names, hosts, ports, protocol versions, TLS flags, client
-  IDs, and your subscriptions are written to a JSON settings file inside the app's
-  private app-data folder.
+  IDs, MQTT usernames, your subscriptions, and topic exclusion filters are written to a
+  JSON settings file inside the app's private app-data folder.
 - **Broker passwords.** Passwords are stripped out of that settings file before it is
   written. They are kept in the iOS Keychain under a key derived from the connection
   name, so the plaintext password is not sitting in a file you could copy off the
@@ -109,8 +109,10 @@ That is worth keeping in mind before copying a payload that contains something s
 
 If you import a client certificate, the app reads the file you select through the system
 document picker. That picker grants access to the one file you choose. The app keeps a
-copy inside its sandbox under the protections described above, and it deletes its copy
-when you remove the certificate or delete the connection.
+copy inside its sandbox under the protections described above, and it tries to delete
+its copy when you remove the certificate or delete the connection. If that deletion
+does not succeed, the encrypted certificate file can remain in the sandbox until you
+delete the app.
 
 The app does not scan your photo library, contacts, calendars, health data, or files
 outside the picker. It does not use the microphone, camera, or location.
@@ -146,7 +148,9 @@ mechanism, and on iOS it does not download or run new code at runtime.
 ## Deleting your data
 
 Deleting a connection removes its saved settings, removes the password the app stored for
-it, and deletes any client certificate attached to it.
+it, and attempts to delete any client certificate attached to it. If that deletion does
+not succeed, the encrypted certificate file can remain in the sandbox until you delete
+the app.
 
 Removing an imported schema package attempts to delete its folder immediately, without a
 restart. If deletion fails, the app reports that it could not remove the package. Deleting

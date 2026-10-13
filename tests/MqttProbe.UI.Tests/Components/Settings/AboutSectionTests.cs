@@ -41,6 +41,7 @@ public class AboutSectionTests : BunitTestContext
         link.GetAttribute("href").Should().Be(AboutSection.PrivacyPolicyUri.ToString());
         link.GetAttribute("target").Should().Be("_blank");
         link.GetAttribute("rel").Should().Be("noopener noreferrer");
+        link.GetAttribute("aria-label").Should().Be("Privacy policy (opens in a new tab)");
         link.TextContent.Should().Contain("Privacy policy");
     }
 

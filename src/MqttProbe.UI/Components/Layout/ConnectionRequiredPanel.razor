@@ -16,6 +16,16 @@
                 Disconnected. Attempting to reconnect…
             </MudAlert>
         </div>
+        @if (IsIosHost)
+        {
+            <div class="connection-required__alert connection-required__lan"
+                 data-testid="ios-local-network-recovery">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    If you denied local network access, MQTTProbe can't reach a broker on your Wi-Fi
+                    until you turn Local Network back on in iOS Settings.
+                </MudText>
+            </div>
+        }
         <AppDestructiveButton
                    StartIcon="@LucideIcons.CircleStop"
                    OnClick="@StopReconnect">Stop</AppDestructiveButton>

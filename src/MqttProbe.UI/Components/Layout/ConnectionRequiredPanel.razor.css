@@ -30,6 +30,15 @@
     text-align: left;
 }
 
+/* iOS recovery note: context for a stalled reconnect, not a competing alert. */
+.connection-required__lan {
+    padding: 12px 14px;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: 8px;
+    background-color: var(--mud-palette-background-gray);
+    text-align: left;
+}
+
 .signal-connecting {
     animation: signal-breathe 1.8s ease-in-out infinite;
 }

@@ -1,0 +1,292 @@
+name: Build iOS (App Store archive)
+
+# Manual-only by design. Produces a signed .ipa for a person to upload with
+# Transporter. The IPA stays out of the GitHub Release assets: iOS installs come
+# from the App Store, so a public download link is not an install route.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag to stamp, e.g. v1.0.9 (the same tag used for the other platform builds)'
+        required: true
+        type: string
+      build_number:
+        description: 'Build number, a whole number 1-9999, higher than any build already uploaded for this version'
+        required: true
+        type: string
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  # Certificate common name, as `security find-identity -v` prints it. Not a
+  # secret: it is embedded in every signed binary.
+  SIGN_APP_IDENTITY: "Apple Distribution: Bluegrass IOT LLC (XVKMB6CQ72)"
+  APPLE_TEAM_ID: "XVKMB6CQ72"
+  # Must match MqttProbe.Maui.csproj and the App ID registered in the portal.
+  IOS_BUNDLE_ID: "com.bluegrassiot.mqttprobe"
+  # What -p:CodesignProvision matches on, verified against the installed profile.
+  IOS_PROVISION_PROFILE_NAME: "MQTTProbe App Store"
+
+jobs:
+  build-ios-archive:
+    name: Build (iOS archive)
+    # Same runner and Xcode pin as build-macos.yml. macOS 15's default Xcode 16.4
+    # cannot build net10.0 Apple targets, and since 2026-04-28 App Store Connect
+    # rejects uploads built with an Xcode below 26.
+    runs-on: macos-26
+    timeout-minutes: 45
+    # The distribution secrets live in the ios-signing environment; its required
+    # reviewers and deployment branch rule are the real gate. The ref test is
+    # defense in depth, not a boundary: only repository settings can configure the
+    # environment, and a run before that setup auto-creates it unprotected.
+    environment: ios-signing
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.x'
+
+      - name: Install MAUI iOS workload
+        run: dotnet workload install maui-ios --source https://api.nuget.org/v3/index.json
+
+      - name: Validate version and build number
+        id: version
+        env:
+          RAW_VERSION: ${{ inputs.version }}
+          RAW_BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          python3 -I scripts/ci/ios-version.py \
+            --version "$RAW_VERSION" \
+            --build-number "$RAW_BUILD_NUMBER" \
+            --github-output "$GITHUB_OUTPUT"
+          echo "Stamping marketing version $(grep '^marketing=' "$GITHUB_OUTPUT" | cut -d= -f2), build number $(grep '^build=' "$GITHUB_OUTPUT" | cut -d= -f2)"
+
+      - name: Import distribution certificate into temporary keychain
+        env:
+          CERT_P12_B64: ${{ secrets.IOS_DIST_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+        run: |
+          [ -n "$CERT_P12_B64" ] || { echo "::error::IOS_DIST_CERT_P12 secret is not set"; exit 1; }
+          [ -n "$CERT_PASSWORD" ] || { echo "::error::IOS_DIST_CERT_PASSWORD secret is not set"; exit 1; }
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          echo "$KEYCHAIN_PASSWORD" > "$RUNNER_TEMP/keychain-password"
+          chmod 600 "$RUNNER_TEMP/keychain-password"
+          echo "$CERT_P12_B64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # No -A: that grants any application access without confirmation.
+          security import "$RUNNER_TEMP/dist.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/dist.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain
+
+      - name: Verify signing identity is an Apple Distribution certificate
+        id: identity
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          echo "Identities present in the CI keychain:"
+          security find-identity -v "$KEYCHAIN"
+          security find-identity -v "$KEYCHAIN" | grep -qF "$SIGN_APP_IDENTITY" || {
+            echo "::error::Apple Distribution identity not found: $SIGN_APP_IDENTITY - compare it against the list above and correct SIGN_APP_IDENTITY in this workflow's env block."
+            exit 1
+          }
+          security find-identity -v "$KEYCHAIN" | grep -qF "Apple Distribution" || {
+            echo "::error::No Apple Distribution identity in the keychain. A Development certificate produces an IPA App Store Connect rejects."
+            exit 1
+          }
+          # `find-certificate -c` matches on a substring of the common name, so exactly
+          # one certificate must come back: more would leave the choice ambiguous.
+          CERT_PEM="$RUNNER_TEMP/dist-cert.pem"
+          security find-certificate -a -c "$SIGN_APP_IDENTITY" -p "$KEYCHAIN" > "$CERT_PEM"
+          CERT_COUNT=$(grep -c -- "-----BEGIN CERTIFICATE-----" "$CERT_PEM" || true)
+          if [ "$CERT_COUNT" != "1" ]; then
+            echo "::error::Expected exactly one certificate matching '$SIGN_APP_IDENTITY' in the build keychain, found $CERT_COUNT. An ambiguous or missing certificate must not be signed with."
+            exit 1
+          fi
+          # The helper compares the decoded common name exactly and digests the
+          # DER bytes; RFC2253 subject text is unusable here because it escapes
+          # commas and does not put CN first.
+          CERT_SHA256=$(python3 -I scripts/ci/ios-certificate.py "$CERT_PEM" \
+            --common-name "$SIGN_APP_IDENTITY")
+          echo "$CERT_SHA256" > "$RUNNER_TEMP/cert-sha256.txt"
+          rm -f "$CERT_PEM"
+
+      - name: Install and verify provisioning profile
+        id: profile
+        env:
+          PROFILE_B64: ${{ secrets.IOS_PROVISION_PROFILE }}
+        run: |
+          [ -n "$PROFILE_B64" ] || { echo "::error::IOS_PROVISION_PROFILE secret is not set"; exit 1; }
+          echo "$PROFILE_B64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+
+          # -I: this directory holds an inspect.py that shadows the stdlib module
+          # and crashes argparse on Python 3.14 runners.
+          python3 -I scripts/ci/ios-profile.py "$RUNNER_TEMP/profile.plist" \
+            --team "$APPLE_TEAM_ID" \
+            --bundle-id "$IOS_BUNDLE_ID" \
+            --name "$IOS_PROVISION_PROFILE_NAME" \
+            --certificate-sha256 "$(cat "$RUNNER_TEMP/cert-sha256.txt")" \
+            --github-output "$GITHUB_OUTPUT"
+
+          # The .NET iOS resolver looks for name + ".mobileprovision", the extension
+          # GetFileExtension returns for iOS; ".provisionprofile" is macOS only.
+          # Both directories are written because Xcode 16+ prefers UserData.
+          PROFILE_UUID=$(grep '^uuid=' "$GITHUB_OUTPUT" | cut -d= -f2)
+          for PROFILE_DIR in \
+            "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" \
+            "$HOME/Library/MobileDevice/Provisioning Profiles"; do
+            mkdir -p "$PROFILE_DIR"
+            cp "$RUNNER_TEMP/profile.mobileprovision" \
+               "$PROFILE_DIR/$PROFILE_UUID.mobileprovision"
+          done
+          echo "Installed provisioning profile $PROFILE_UUID.mobileprovision"
+
+      - name: Build signed archive
+        timeout-minutes: 35
+        run: >-
+          dotnet publish src/MqttProbe.Maui/MqttProbe.Maui.csproj
+          -f:net10.0-ios
+          -p:MqttProbeMauiMacTargetFrameworksOverride=net10.0-ios
+          -c:Release
+          -r:ios-arm64
+          -p:ArchiveOnBuild=true
+          -p:CodesignKey="${{ env.SIGN_APP_IDENTITY }}"
+          -p:CodesignProvision="${{ env.IOS_PROVISION_PROFILE_NAME }}"
+          -p:ApplicationDisplayVersion=${{ steps.version.outputs.marketing }}
+          -p:ApplicationVersion=${{ steps.version.outputs.build }}
+
+      - name: Collect the IPA
+        id: collect
+        # The RID folder varies by SDK version, so search rather than hardcode it.
+        env:
+          MARKETING_VERSION: ${{ steps.version.outputs.marketing }}
+          BUILD_NUMBER: ${{ steps.version.outputs.build }}
+        run: |
+          IPA=$(find src/MqttProbe.Maui/bin/Release/net10.0-ios -name '*.ipa' -print -quit)
+          test -n "$IPA" || { echo "::error::No .ipa produced under src/MqttProbe.Maui/bin/Release/net10.0-ios"; exit 1; }
+          mkdir -p publish/ios
+          cp "$IPA" "publish/ios/MqttProbe-$MARKETING_VERSION-$BUILD_NUMBER.ipa"
+          ls -la publish/ios
+          echo "IPA_PATH=publish/ios/MqttProbe-$MARKETING_VERSION-$BUILD_NUMBER.ipa" >> "$GITHUB_OUTPUT"
+
+      - name: Verify archive metadata and signature
+        env:
+          IPA_PATH: ${{ steps.collect.outputs.IPA_PATH }}
+          EXPECTED_MARKETING: ${{ steps.version.outputs.marketing }}
+          EXPECTED_BUILD: ${{ steps.version.outputs.build }}
+        run: |
+          UNPACK="$RUNNER_TEMP/ios-archive"
+          rm -rf "$UNPACK"
+          mkdir -p "$UNPACK"
+          ditto -x -k "$IPA_PATH" "$UNPACK"
+          APP=$(find "$UNPACK/Payload" -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$APP" || { echo "::error::No .app inside $IPA_PATH"; exit 1; }
+          echo "App bundle: $APP"
+
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          SHORT_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")
+          BUNDLE_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")
+          echo "CFBundleIdentifier=$BUNDLE_ID CFBundleShortVersionString=$SHORT_VERSION CFBundleVersion=$BUNDLE_VERSION"
+          [ "$BUNDLE_ID" = "$IOS_BUNDLE_ID" ] || { echo "::error::Bundle id '$BUNDLE_ID' is not $IOS_BUNDLE_ID"; exit 1; }
+          [ "$SHORT_VERSION" = "$EXPECTED_MARKETING" ] || { echo "::error::CFBundleShortVersionString '$SHORT_VERSION' is not $EXPECTED_MARKETING"; exit 1; }
+          [ "$BUNDLE_VERSION" = "$EXPECTED_BUILD" ] || { echo "::error::CFBundleVersion '$BUNDLE_VERSION' is not $EXPECTED_BUILD"; exit 1; }
+          # Apple caps the first CFBundleVersion integer at four digits.
+          [ "$BUNDLE_VERSION" -le 9999 ] 2>/dev/null || { echo "::error::CFBundleVersion '$BUNDLE_VERSION' exceeds Apple's four-digit limit for the first integer."; exit 1; }
+
+          codesign -dv --verbose=2 "$APP" 2>&1 | sed -n 's/^/  /p'
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -d --entitlements :- "$APP" > "$RUNNER_TEMP/entitlements.plist" 2>/dev/null || true
+          SIGNED_APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$RUNNER_TEMP/entitlements.plist" 2>/dev/null || echo "")
+          SIGNED_TEAM=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.team-identifier' "$RUNNER_TEMP/entitlements.plist" 2>/dev/null || echo "")
+          echo "Signed application-identifier: $SIGNED_APP_ID"
+          [ "$SIGNED_APP_ID" = "$APPLE_TEAM_ID.$IOS_BUNDLE_ID" ] || {
+            echo "::error::Signed application-identifier '$SIGNED_APP_ID' does not match $APPLE_TEAM_ID.$IOS_BUNDLE_ID"
+            exit 1
+          }
+          [ "$SIGNED_TEAM" = "$APPLE_TEAM_ID" ] || { echo "::error::Signed team identifier '$SIGNED_TEAM' is not $APPLE_TEAM_ID"; exit 1; }
+
+          # Validate the profile baked into the app, not just the installed one.
+          EMBEDDED="$APP/embedded.mobileprovision"
+          test -f "$EMBEDDED" || { echo "::error::No embedded.mobileprovision in the app bundle"; exit 1; }
+          security cms -D -i "$EMBEDDED" > "$RUNNER_TEMP/embedded.plist"
+          python3 -I scripts/ci/ios-profile.py "$RUNNER_TEMP/embedded.plist" \
+            --team "$APPLE_TEAM_ID" \
+            --bundle-id "$IOS_BUNDLE_ID" \
+            --name "$IOS_PROVISION_PROFILE_NAME" \
+            --certificate-sha256 "$(cat "$RUNNER_TEMP/cert-sha256.txt")" \
+            > /dev/null
+          echo "Embedded profile matches the validated distribution profile and certificate."
+
+      - name: Verify privacy manifest
+        # App Store Connect rejects the upload without one (ITMS-91053/ITMS-91061).
+        run: |
+          UNPACK="$RUNNER_TEMP/ios-archive"
+          APP=$(find "$UNPACK/Payload" -maxdepth 1 -name '*.app' -print -quit)
+          MANIFEST="$APP/PrivacyInfo.xcprivacy"
+          test -f "$MANIFEST" || {
+            echo "::error::No PrivacyInfo.xcprivacy in the app bundle. App Store Connect rejects this upload with ITMS-91053/ITMS-91061. The manifest must be committed under Platforms/iOS/Resources before an archive is shippable."
+            exit 1
+          }
+          python3 -I scripts/ci/ios-privacy-manifest.py "$MANIFEST"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: maui-ios-archive
+          path: ${{ steps.collect.outputs.IPA_PATH }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Summarize
+        if: always()
+        env:
+          MARKETING_VERSION: ${{ steps.version.outputs.marketing }}
+          BUILD_NUMBER: ${{ steps.version.outputs.build }}
+        run: |
+          {
+            echo "### iOS archive"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Marketing version | \`${MARKETING_VERSION:-not derived}\` |"
+            echo "| Build number | \`${BUILD_NUMBER:-not derived}\` |"
+            echo "| Bundle id | \`${IOS_BUNDLE_ID}\` |"
+            echo
+            echo "Upload the artifact with Transporter, then submit the build for review in App Store Connect. This workflow does not upload, submit, tag, or push anything."
+            echo "To rebuild after a rejected upload, pick a higher build number; Apple requires it to increase for a given version."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean up signing material
+        if: always()
+        env:
+          PROFILE_UUID: ${{ steps.profile.outputs.uuid }}
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          # Only the files this run installed; the directories are shared runner state.
+          if [ -n "$PROFILE_UUID" ]; then
+            rm -f "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$PROFILE_UUID.mobileprovision" \
+                  "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          fi
+          rm -f "$RUNNER_TEMP/keychain-password" \
+                "$RUNNER_TEMP/dist.p12" \
+                "$RUNNER_TEMP/dist-cert.pem" \
+                "$RUNNER_TEMP/cert-sha256.txt" \
+                "$RUNNER_TEMP/profile.mobileprovision" \
+                "$RUNNER_TEMP/profile.plist" \
+                "$RUNNER_TEMP/embedded.plist" \
+                "$RUNNER_TEMP/entitlements.plist"

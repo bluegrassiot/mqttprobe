@@ -47,6 +47,7 @@ public class UiPreferences
     public string FontProfile { get; set; } = FontProfiles.Standard;
     public string Theme { get; set; } = "dark";
     public bool AutoResubscribe { get; set; } = true;
+    public bool GroupSparkplugTopicsByNodeAndDevice { get; set; } = true;
 
     public List<string> DismissedHints { get; set; } = [];
 }

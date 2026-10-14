@@ -1,0 +1,57 @@
+/* Row layout lives here; the browser panel stylesheet only styles the panel's own chrome. */
+
+.topic-tree-row {
+    min-width: 0;
+    max-width: 100%;
+    min-height: 36px;
+    padding-left: 8px;
+    cursor: pointer;
+}
+
+/* The indent SVG paints nothing, so pointer events fall through to the row. flex-basis:auto
+   lets its width attribute drive the flex base size; flex-shrink:0 keeps it from collapsing. */
+.topic-tree-indent {
+    flex: 0 0 auto;
+    pointer-events: none;
+}
+
+.topic-tree-chevron-spacer {
+    flex: 0 0 32px;
+}
+
+.topic-tree-row--selected {
+    background: rgba(249, 115, 22, 0.12);
+    border-left: 2px solid #f97316;
+}
+
+/* Grouping rows are navigation, not topics, so they get a default cursor. */
+.topic-tree-row.topic-tree-row--group {
+    cursor: default;
+}
+
+.topic-tree-row.topic-tree-row--group:hover {
+    background: rgba(148, 163, 184, 0.06);
+}
+
+.topic-group-label {
+    color: var(--mud-palette-text-secondary);
+    border-bottom: 1px dotted rgba(148, 163, 184, 0.55);
+}
+
+.topic-tree-row .flex-grow-1 {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* A grouped row shows a whole topic path, and virtualized rows are measured at a fixed
+       36px, so wrapping would break the scroll window. */
+    white-space: nowrap;
+}
+
+.topic-stat-text {
+    font-size: 0.7rem;
+    opacity: 0.6;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: 8px;
+    cursor: default;
+}

@@ -116,3 +116,78 @@
         display: none;
     }
 }
+
+/* iOS local-network note: a compact disclosure so the explanation is one tap away
+   without pushing the form down. Worded the same as the reconnect panel. */
+/* A direct flex item of the active tab panel, which is a scrollable flex column.
+   flex-shrink: 0 is load-bearing: overflow: hidden resolves the note's automatic
+   minimum size to 0 instead of its content, so without it the panel's negative
+   free space collapses the row to its borders and clips the toggle. */
+.connection-dialog__lan-note {
+    flex-shrink: 0;
+    margin-bottom: 12px;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: 8px;
+    background-color: var(--mud-palette-background-gray);
+    overflow: hidden;
+}
+
+.connection-dialog__lan-note-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    /* Full 44px tap target on the compact single-line row. */
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 0;
+    background: transparent;
+    color: var(--mud-palette-text-primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 150ms ease-out;
+}
+
+.connection-dialog__lan-note-toggle:hover {
+    background-color: var(--mud-palette-action-default-hover);
+}
+
+.connection-dialog__lan-note-toggle:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+.connection-dialog__lan-note-icon,
+.connection-dialog__lan-note-chevron {
+    flex-shrink: 0;
+    color: var(--mud-palette-text-secondary);
+}
+
+.connection-dialog__lan-note-label {
+    flex: 1;
+}
+
+.connection-dialog__lan-note-chevron {
+    transition: transform 150ms ease-out;
+}
+
+.connection-dialog__lan-note-chevron--open {
+    transform: rotate(180deg);
+}
+
+.connection-dialog__lan-note-body {
+    padding: 0 12px 10px;
+    text-align: left;
+}
+
+@media (max-width: 599px) {
+    .connection-dialog__lan-note-toggle {
+        padding: 8px 10px;
+    }
+
+    .connection-dialog__lan-note-body {
+        padding: 0 10px 10px;
+    }
+}

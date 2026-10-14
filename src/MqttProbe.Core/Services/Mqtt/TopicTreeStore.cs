@@ -7,13 +7,21 @@ namespace MqttProbe.Core.Services.Mqtt;
 
 internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSettings, ILogger logger)
 {
+    // Alias history is not bounded by the message or node limits, so a spray of distinct
+    // noncanonical spellings is capped on its own: one entry per node budget plus a fixed
+    // aggregate character budget. Canonical names and already-recorded spellings stay admissible.
+    private const int MaxAliasCharacters = 4 * 1024 * 1024;
+
     private readonly Lock _storeSync = new();
     private readonly Queue<MessageStore> _retentionOrder = new();
+    private readonly HashSet<string> _aliasSpellings = new(StringComparer.Ordinal);
 
     private int _totalNodeCount;
     private int _totalMessageCount;
     private int _rootTopicCount;
+    private int _aliasCharacterCount;
     private bool _nodeLimitLogged;
+    private bool _aliasLimitLogged;
     private long _globalVersion;
 
     private readonly ConcurrentDictionary<string, MessageStore> _messageStores = new(StringComparer.Ordinal);
@@ -31,12 +39,37 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
     public long Version => Interlocked.Read(ref _globalVersion);
 
+    internal int AliasEntryCount
+    {
+        get { lock (_storeSync) { return _aliasSpellings.Count; } }
+    }
+
+    internal int AliasCharacterCount
+    {
+        get { lock (_storeSync) { return _aliasCharacterCount; } }
+    }
+
     public void Add(string fullTopic, MqttMessage message)
     {
         lock (_storeSync)
         {
             var normalized = Normalize(fullTopic);
             if (normalized is null) return;
+
+            var rawTopic = message.Topic;
+            var hasOwnTopic = rawTopic is not null;
+            rawTopic ??= normalized;
+
+            // A message may carry its own topic only when that topic resolves to the same node;
+            // otherwise one raw spelling could sit in two nodes while the budget counted it once.
+            if (hasOwnTopic && !string.Equals(Normalize(rawTopic), normalized, StringComparison.Ordinal))
+                return;
+
+            if (IsUnseenAlias(rawTopic, normalized) && AliasBudgetExhausted(rawTopic.Length))
+            {
+                LogAliasLimit();
+                return;
+            }
 
             var firstSlash = normalized.IndexOf('/', StringComparison.Ordinal);
             var rootKey = firstSlash >= 0 ? normalized[..firstSlash] : normalized;
@@ -61,9 +94,9 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             }
 
             if (firstSlash >= 0)
-                AddData(normalized, firstSlash + 1, messageStore, message);
+                AddData(normalized, firstSlash + 1, messageStore, message, rawTopic);
             else
-                StoreMessage(messageStore, message);
+                StoreMessage(messageStore, message, rawTopic);
         }
     }
 
@@ -78,6 +111,9 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             _totalMessageCount = 0;
             _retentionOrder.Clear();
             _nodeLimitLogged = false;
+            _aliasSpellings.Clear();
+            _aliasCharacterCount = 0;
+            _aliasLimitLogged = false;
             Interlocked.Increment(ref _globalVersion);
             InvalidateTopicTree();
         }
@@ -141,7 +177,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         return current;
     }
 
-    private void AddData(string fullTopic, int startIndex, MessageStore parent, MqttMessage message)
+    private void AddData(string fullTopic, int startIndex, MessageStore parent, MqttMessage message, string rawTopic)
     {
         var nextSlash = fullTopic.IndexOf('/', startIndex);
         var hasChildren = nextSlash >= 0;
@@ -174,13 +210,17 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         }
 
         if (hasChildren)
-            AddData(fullTopic, nextSlash + 1, child, message);
+            AddData(fullTopic, nextSlash + 1, child, message, rawTopic);
         else
-            StoreMessage(child, message);
+            StoreMessage(child, message, rawTopic);
     }
 
-    private void StoreMessage(MessageStore store, MqttMessage message)
+    private void StoreMessage(MessageStore store, MqttMessage message, string rawTopic)
     {
+        (store.ObservedRawTopics ??= new HashSet<string>(StringComparer.Ordinal)).Add(rawTopic);
+        if (!string.Equals(rawTopic, store.FullTopic, StringComparison.Ordinal)
+            && _aliasSpellings.Add(rawTopic))
+            _aliasCharacterCount += rawTopic.Length;
         store.Messages ??= new ConcurrentQueue<MqttMessage>();
         store.Messages.Enqueue(message);
         _retentionOrder.Enqueue(store);
@@ -209,9 +249,10 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         }
     }
 
-    private static bool PurgeNode(MessageStore node, string filter, out bool nodeRemoved)
+    private bool PurgeNode(MessageStore node, string filter, out bool nodeRemoved)
     {
-        var changed = TopicExcludeService.Matches(node.FullTopic ?? string.Empty, filter);
+        var pathMatched = TopicExcludeService.Matches(node.FullTopic ?? string.Empty, filter);
+        var changed = pathMatched;
         if (node.SubTopics is not null)
         {
             foreach (var (key, child) in node.SubTopics.ToArray())
@@ -242,14 +283,52 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             node.Messages = remaining.IsEmpty ? null : remaining;
         }
 
+        // History is retired by the raw names it was observed under, never by normalized
+        // FullTopic matching, so a matching alias retires history even with no message left.
+        if (RetireExcludedObservedTopics(node, filter))
+            changed = true;
+
         nodeRemoved = changed && IsEmpty(node);
 
         return changed;
     }
 
+    private bool RetireExcludedObservedTopics(MessageStore node, string filter)
+    {
+        var observed = node.ObservedRawTopics;
+        if (observed is null)
+            return false;
+
+        var retired = 0;
+        foreach (var raw in observed.ToArray())
+        {
+            if (!TopicExcludeService.Matches(raw, filter))
+                continue;
+
+            observed.Remove(raw);
+            retired++;
+            if (string.Equals(raw, node.FullTopic, StringComparison.Ordinal)
+                || !_aliasSpellings.Remove(raw))
+                continue;
+
+            _aliasCharacterCount -= raw.Length;
+        }
+
+        if (retired == 0)
+            return false;
+
+        if (observed.Count == 0)
+            node.ObservedRawTopics = null;
+
+        return true;
+    }
+
+    // Observed history counts as node content: a node is pruned only once its messages,
+    // subtopics and raw names are all gone, so unmatched history keeps the node alive.
     private static bool IsEmpty(MessageStore store) =>
         (store.Messages is null || store.Messages.IsEmpty)
-        && (store.SubTopics is null || store.SubTopics.IsEmpty);
+        && (store.SubTopics is null || store.SubTopics.IsEmpty)
+        && !store.HasObservedDirectTopic;
 
     private void RecalculateCounters()
     {
@@ -354,10 +433,25 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             node.MessageCount--;
     }
 
+    private bool IsUnseenAlias(string rawTopic, string normalized) =>
+        !string.Equals(rawTopic, normalized, StringComparison.Ordinal)
+        && !_aliasSpellings.Contains(rawTopic);
+
+    private bool AliasBudgetExhausted(int aliasLength) =>
+        _aliasSpellings.Count >= MaxTopicNodes
+        || _aliasCharacterCount > MaxAliasCharacters - aliasLength;
+
     private void LogNodeLimit()
     {
         if (_nodeLimitLogged) return;
         _nodeLimitLogged = true;
         logger.LogWarning("Topic-tree node limit ({Limit}) reached; new topics will be dropped.", MaxTopicNodes);
+    }
+
+    private void LogAliasLimit()
+    {
+        if (_aliasLimitLogged) return;
+        _aliasLimitLogged = true;
+        logger.LogWarning("Topic alias limit reached; new alias spellings will be dropped.");
     }
 }

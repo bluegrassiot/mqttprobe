@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Services.Configuration;
 
 namespace MqttProbe.UI.Tests.TestHelpers;
@@ -9,6 +10,15 @@ namespace MqttProbe.UI.Tests.TestHelpers;
 // or assertions pass for the wrong reason.
 public static class SettingsSubstituteRegistration
 {
+    // UiSettings reads and notifies on one shared UiPreferences instance, so the substitute
+    // has to be backed by a real preference object rather than return a nested substitute.
+    public static IUiSettings CreateUiSettings(UiPreferences? preferences = null)
+    {
+        var ui = Substitute.For<IUiSettings>();
+        ui.Ui.Returns(preferences ?? new UiPreferences());
+        return ui;
+    }
+
     public static IServiceCollection AddUiSettings(this IServiceCollection services, IUiSettings ui) =>
         services.AddSingleton(ui);
 

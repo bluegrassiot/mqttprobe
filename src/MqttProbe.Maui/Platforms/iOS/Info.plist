@@ -7,7 +7,6 @@
 	<key>UIDeviceFamily</key>
 	<array>
 		<integer>1</integer>
-		<integer>2</integer>
 	</array>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
@@ -19,40 +18,24 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
 	<key>XSAppIconAssets</key>
 	<string>Assets.xcassets/appicon.appiconset</string>
+	<!-- No NSBonjourServices: brokers are user-entered, never discovered. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>MQTTProbe connects to the MQTT broker you specify, which is typically on your local network.</string>
+	<!-- ws:// to LAN brokers only; raw MQTT over TCP is a BSD socket outside ATS.
+	     Remote hosts keep full TLS enforcement. Verify ws:// on a real device. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<key>NSAllowsArbitraryLoads</key>
+		<key>NSAllowsLocalNetworking</key>
 		<true/>
-	</dict>
-	<key>NSExceptionDomains</key>
-	<dict>
-		<key>local</key>
-		<dict>
-			<key>NSExceptionAllowsInsecureHTTPLoads</key>
-			<true/>
-			<key>NSIncludesSubdomains</key>
-			<true/>
-		</dict>
-		<key>localhost</key>
-		<dict>
-			<key>NSExceptionAllowsInsecureHTTPLoads</key>
-			<true/>
-			<key>NSIncludesSubdomains</key>
-			<true/>
-		</dict>
 	</dict>
 	<!-- CFBundleShortVersionString/CFBundleVersion are deliberately absent: the build sets
 	     them from ApplicationDisplayVersion/ApplicationVersion, but only via SetIfNotPresent,
 	     so a value here would win and pin every release to it. -->
+	<!-- Export compliance: TLS/mTLS to brokers and AES-256-GCM at rest in the client-certificate
+	     store are standard platform APIs. Matches MacCatalyst; technical description, not a
+	     legal determination. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

@@ -29,8 +29,23 @@
 }
 
 .topic-tree-wrap {
+    /* One vertical scroll owner for the tree: the panel flexes, the wrap scrolls. */
+    flex: 1 1 auto;
+    min-height: 0;
     max-height: none;
     overflow: auto;
+}
+
+/* The panel root is a MudPaper, so scoped CSS cannot reach it: those rules live in
+   wwwroot/css/components.css. The header widgets below need ::deep to anchor properly. */
+.topic-header-row ::deep .topic-title {
+    font-weight: 600;
+}
+
+.topic-header-row ::deep .topic-count-chip {
+    height: 20px;
+    font-size: 0.7rem;
+    padding: 0 6px;
 }
 
 /* The tree root must be able to grow wider than its container */
@@ -56,29 +71,29 @@
     border-radius: 4px;
 }
 
-::deep .topic-tree-row--selected {
-    background: rgba(249, 115, 22, 0.12);
-    border-left: 2px solid #f97316;
-}
-
-::deep .topic-tree-row {
+/* The grouping flag must not shrink: when it and the T/M legend cannot both fit beside the
+   toolbar buttons, the legend wraps to the next line instead of the flag clipping. */
+::deep .topic-grouping-flag {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 4px;
     min-width: 0;
     max-width: 100%;
-}
-
-::deep .topic-tree-row .flex-grow-1 {
-    min-width: 0;
+    margin-left: 8px;
+    font-size: 0.68rem;
+    color: var(--mud-palette-text-secondary);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-::deep .topic-stat-text {
-    font-size: 0.7rem;
-    opacity: 0.6;
-    white-space: nowrap;
-    flex-shrink: 0;
-    margin-left: 8px;
-    cursor: default;
+/* Narrow pane: the row wraps rather than truncating either label. The 4px gap below
+   deliberately overrides the row-gap 2px it precedes. */
+.topic-tree-wrap ::deep .topic-toolbar {
+    flex-wrap: wrap;
+    row-gap: 2px;
+    gap: 4px;
 }
 
 ::deep .topic-stat-legend {

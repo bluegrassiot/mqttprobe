@@ -1,6 +1,17 @@
 @namespace MqttProbe.UI.Components.Settings
 @using MqttProbe.Core.Services.Configuration
 @inject ISparkplugSettings SparkplugSettings
+@inject IUiSettings UiSettings
+
+<div class="settings-field">
+    <MudSwitch T="bool" Value="@UiSettings.Ui.GroupSparkplugTopicsByNodeAndDevice"
+               ValueChanged="@OnGroupSparkplugTopicsChanged"
+               Color="Color.Primary"
+               Label="Group Sparkplug topics by node and device" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Groups the topic tree by node and device. Display only: topics, subscriptions and payloads are unchanged.
+    </MudText>
+</div>
 
 <div class="settings-field">
     <MudSwitch T="bool" Value="@SparkplugSettings.Sparkplug.EnrichAliasNames"
@@ -44,6 +55,11 @@
 </div>
 
 @code {
+    private async Task OnGroupSparkplugTopicsChanged(bool value)
+    {
+        await UiSettings.SetGroupSparkplugTopicsByNodeAndDeviceAsync(value);
+    }
+
     private async Task OnEnrichAliasNamesChanged(bool value)
     {
         await SparkplugSettings.SetEnrichAliasNamesAsync(value);

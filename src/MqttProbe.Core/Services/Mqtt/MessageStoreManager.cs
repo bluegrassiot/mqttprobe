@@ -61,6 +61,8 @@ public class MessageStoreManager : IMessageStoreManager
     public SelectedTopicState GetSelectedTopicState() => _store.GetSelectedTopicState();
 
     public void SelectTopic(string? fullTopic) => _store.SelectTopic(fullTopic);
+    public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection) =>
+        _store.TryClearSelection(treeVersion, expectedSelection);
 
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit) =>
         Task.FromResult(_store.GetSelectedMessages(expectedSelection, limit));

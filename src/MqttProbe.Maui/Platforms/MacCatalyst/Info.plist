@@ -3,7 +3,8 @@
 <plist version="1.0">
     <dict>
         <!-- Only exempt encryption: TLS/mTLS to brokers and AES-256-GCM at rest for the
-             client-certificate store, both standard algorithms via platform APIs. -->
+             client-certificate store, both standard algorithms via platform APIs. Technical
+             description, not a legal determination. -->
         <key>ITSAppUsesNonExemptEncryption</key>
         <false/>
 
@@ -34,27 +35,15 @@
         </array>
         <key>XSAppIconAssets</key>
         <string>Assets.xcassets/appicon.appiconset</string>
+        <!-- macOS 15+ gates direct LAN connections, Mac Catalyst included. -->
+        <key>NSLocalNetworkUsageDescription</key>
+        <string>MQTTProbe connects to the MQTT broker you specify, which is typically on your local network.</string>
+        <!-- ws:// to LAN brokers only; raw MQTT over TCP is a BSD socket outside ATS.
+             Remote hosts keep full TLS enforcement. Verify ws:// on a real device. -->
         <key>NSAppTransportSecurity</key>
         <dict>
-            <key>NSAllowsArbitraryLoads</key>
+            <key>NSAllowsLocalNetworking</key>
             <true/>
-        </dict>
-        <key>NSExceptionDomains</key>
-        <dict>
-            <key>local</key>
-            <dict>
-                <key>NSExceptionAllowsInsecureHTTPLoads</key>
-                <true/>
-                <key>NSIncludesSubdomains</key>
-                <true/>
-            </dict>
-            <key>localhost</key>
-            <dict>
-                <key>NSExceptionAllowsInsecureHTTPLoads</key>
-                <true/>
-                <key>NSIncludesSubdomains</key>
-                <true/>
-            </dict>
         </dict>
     </dict>
 </plist>

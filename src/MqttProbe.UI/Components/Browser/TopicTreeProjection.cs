@@ -186,7 +186,8 @@ internal static class TopicTreeProjection
             IsExpanded: isExpanded,
             IsValueBearer: node.IsRealTopic && node.Source!.HasDirectMessages,
             Kind: node.Kind,
-            SelectionTopics: node.SelectionTopics()));
+            SelectionTopics: node.SelectionTopics(),
+            Scope: node.Scope));
 
         if (!hasChildren || (!isExpanded && !context.HasFilter))
             return;
@@ -352,14 +353,16 @@ internal static class TopicTreeProjection
                 groupedTips.Add(deviceNode.FullTopic);
                 var branch = GetOrCreateNode(nodes, groupPath, nodeLevel.Topic);
                 branch.Devices ??= VirtualRow(
-                    $"dev:{groupPath}/{nodeLevel.Topic}", "Devices", TopicTreeRowKind.Devices, order: DeviceGroupOrder);
+                    $"dev:{groupPath}/{nodeLevel.Topic}", "Devices", TopicTreeRowKind.Devices, order: DeviceGroupOrder,
+                    scope: new SparkplugSelectionScope(SparkplugSelectionKind.Devices, groupPath, nodeLevel.Topic));
 
                 var deviceId = deviceNode.Topic;
                 if (!branch.DeviceRows.TryGetValue(deviceId, out var deviceRow))
                 {
                     deviceRow = VirtualRow(
                         $"device:{groupPath}/{nodeLevel.Topic}/{deviceId}",
-                        deviceId, TopicTreeRowKind.SparkplugDevice, order: 0);
+                        deviceId, TopicTreeRowKind.SparkplugDevice, order: 0,
+                        scope: new SparkplugSelectionScope(SparkplugSelectionKind.Device, groupPath, nodeLevel.Topic, deviceId));
                     branch.DeviceRows[deviceId] = deviceRow;
                     branch.Devices.Children.Add(deviceRow);
                 }
@@ -383,7 +386,8 @@ internal static class TopicTreeProjection
 
         var branch = new NodeBranch
         {
-            Node = VirtualRow($"node:{groupPath}/{nodeId}", nodeId, TopicTreeRowKind.SparkplugNode, order: 0)
+            Node = VirtualRow($"node:{groupPath}/{nodeId}", nodeId, TopicTreeRowKind.SparkplugNode, order: 0,
+                scope: new SparkplugSelectionScope(SparkplugSelectionKind.Node, groupPath, nodeId))
         };
         nodes[nodeId] = branch;
         return branch;
@@ -415,13 +419,15 @@ internal static class TopicTreeProjection
         return built;
     }
 
-    private static ProjectionNode VirtualRow(string id, string label, TopicTreeRowKind kind, int order) => new()
-    {
-        Id = VirtualIdPrefix + id,
-        Label = label,
-        Kind = kind,
-        Order = order
-    };
+    private static ProjectionNode VirtualRow(
+        string id, string label, TopicTreeRowKind kind, int order, SparkplugSelectionScope? scope = null) => new()
+        {
+            Id = VirtualIdPrefix + id,
+            Label = label,
+            Kind = kind,
+            Order = order,
+            Scope = scope
+        };
 
     // Node message types sort by lifecycle ahead of the Devices group, the node branch's only
     // other sibling.
@@ -457,6 +463,8 @@ internal static class TopicTreeProjection
         public int Order { get; init; }
 
         public TopicTreeRowKind Kind { get; init; }
+
+        public SparkplugSelectionScope? Scope { get; init; }
 
         public TopicNodeSnapshot? Source { get; init; }
 

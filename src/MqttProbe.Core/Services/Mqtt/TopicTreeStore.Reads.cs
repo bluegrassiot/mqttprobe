@@ -9,6 +9,7 @@ internal sealed partial class TopicTreeStore
     private MessageStore[] _selectedStores = [];
     private string? _selectionKey;
     private string? _selectionLabel;
+    private SparkplugSelectionScope? _selectionScope;
     private long _selectionGeneration;
     private long _selectionContentVersion;
     private TopicTreeSnapshot? _cachedTopicTree;
@@ -43,9 +44,7 @@ internal sealed partial class TopicTreeStore
             return CaptureSelectedTopicState();
     }
 
-    // A grouped row covers several real topics that are siblings under the store, so it selects a
-    // set rather than one path. Paths that do not resolve are dropped; a selection that resolves
-    // to nothing is refused, so a stale row cannot clear a live selection.
+    // A selection that resolves to nothing is refused, so a stale row cannot clear a live one.
     public void SelectTopics(TopicSelection? selection)
     {
         lock (_storeSync)
@@ -58,31 +57,20 @@ internal sealed partial class TopicTreeStore
                 return;
             }
 
-            var resolved = new List<MessageStore>(selection.Topics.Length);
-            foreach (var topic in selection.Topics)
-            {
-                var normalized = Normalize(topic);
-                if (normalized is null)
-                    continue;
-
-                var node = FindNode(normalized);
-                // A path under one already selected is already covered, and counting it twice
-                // would double the messages and the displayed count.
-                if (node is null || resolved.Any(other => IsPathOrDescendant(node.FullTopic!, other.FullTopic!)))
-                    continue;
-
-                resolved.Add(node);
-            }
+            var resolved = selection.Scope is { } scope
+                ? ResolveScope(scope)
+                : ResolvePaths(selection.Topics);
 
             if (resolved.Count == 0)
                 return;
 
-            if (SameSelection(resolved, selection.Key))
+            if (SameSelection(resolved, selection.Key, selection.Scope))
                 return;
 
             _selectedStores = [.. resolved];
             _selectionKey = selection.Key;
             _selectionLabel = selection.Label;
+            _selectionScope = selection.Scope;
             _selectionGeneration++;
             _selectionContentVersion++;
         }
@@ -158,15 +146,89 @@ internal sealed partial class TopicTreeStore
         _selectedStores.Sum(store => store.MessageCount),
         _selectionLabel);
 
-    // Re-selecting the same row must not look like a change, or a click that landed on the row
-    // already selected would restart the message list and its own scroll position.
-    private bool SameSelection(List<MessageStore> resolved, string key)
+    private List<MessageStore> ResolvePaths(ImmutableArray<string> topics)
+    {
+        var resolved = new List<MessageStore>(topics.Length);
+        foreach (var topic in topics)
+        {
+            var normalized = Normalize(topic);
+            if (normalized is null)
+                continue;
+
+            if (FindNode(normalized) is { } node)
+                AddCovered(resolved, node);
+        }
+
+        return resolved;
+    }
+
+    private List<MessageStore> ResolveScope(SparkplugSelectionScope scope)
+    {
+        var resolved = new List<MessageStore>();
+        if (FindNode(scope.GroupPath) is not { SubTopics: { } verbs })
+            return resolved;
+
+        foreach (var verbNode in verbs.Values)
+        {
+            var verb = verbNode.Topic ?? string.Empty;
+            if (scope.Kind == SparkplugSelectionKind.Node && SparkplugTopicClassifier.IsNodeVerb(verb))
+            {
+                AddEndpoint(resolved, ChildOf(verbNode, scope.NodeId));
+                continue;
+            }
+
+            if (!SparkplugTopicClassifier.IsDeviceVerb(verb) || ChildOf(verbNode, scope.NodeId) is not { SubTopics: { } devices })
+                continue;
+
+            foreach (var device in devices.Values)
+            {
+                if (scope.DeviceId is not null
+                    && !string.Equals(device.Topic, scope.DeviceId, StringComparison.Ordinal))
+                    continue;
+
+                AddEndpoint(resolved, device);
+            }
+        }
+
+        return resolved;
+    }
+
+    // The projection groups a tip only once a message arrived at its canonical path, so a scope
+    // admits no endpoint that was ever reached only through an alias spelling.
+    private static void AddEndpoint(List<MessageStore> resolved, MessageStore? endpoint)
+    {
+        if (endpoint?.FullTopic is not { } path || endpoint.ObservedRawTopics?.Contains(path) != true)
+            return;
+
+        AddCovered(resolved, endpoint);
+    }
+
+    private static void AddCovered(List<MessageStore> resolved, MessageStore node)
+    {
+        var path = node.FullTopic;
+        foreach (var retained in resolved)
+        {
+            if (path is not null && retained.FullTopic is { } retainedPath
+                && IsPathOrDescendant(path, retainedPath))
+                return;
+        }
+
+        resolved.RemoveAll(retained => ReferenceEquals(retained, node)
+            || (path is not null && retained.FullTopic is { } retainedPath && IsDescendantPath(retainedPath, path)));
+        resolved.Add(node);
+    }
+
+    // Re-selecting the same row must not look like a change, so a click on the already-selected
+    // row does not restart the message list. Store order is not meaningful, so compare as a set.
+    private bool SameSelection(List<MessageStore> resolved, string key, SparkplugSelectionScope? scope)
     {
         if (!string.Equals(_selectionKey, key, StringComparison.Ordinal)
+            || !Equals(_selectionScope, scope)
             || resolved.Count != _selectedStores.Length)
             return false;
 
-        return !resolved.Where((store, index) => !ReferenceEquals(store, _selectedStores[index])).Any();
+        var retained = new HashSet<MessageStore>(_selectedStores);
+        return resolved.All(retained.Contains);
     }
 
     private TopicNodeSnapshot CreateNodeSnapshot(MessageStore node)
@@ -196,6 +258,7 @@ internal sealed partial class TopicTreeStore
         _selectedStores = [];
         _selectionKey = null;
         _selectionLabel = null;
+        _selectionScope = null;
         _selectionGeneration++;
         _selectionContentVersion++;
     }
@@ -223,9 +286,49 @@ internal sealed partial class TopicTreeStore
         return false;
     }
 
+    // A scoped selection holds endpoints, so a device or verb whose first canonical message
+    // arrives after the click is not under any selected store yet. Append it here, where the
+    // spelling has just been recorded, rather than rescanning the tree for every message.
+    private void AppendToScopedSelection(MessageStore store)
+    {
+        if (_selectionScope is not { } scope || !IsScopeEndpoint(store, scope) || _selectedStores.Contains(store))
+            return;
+
+        _selectedStores = [.. _selectedStores, store];
+    }
+
+    private static bool IsScopeEndpoint(MessageStore store, SparkplugSelectionScope scope)
+    {
+        if (store.FullTopic is not { } path || store.ObservedRawTopics?.Contains(path) != true)
+            return false;
+
+        var prefix = scope.GroupPath + "/";
+        if (!path.StartsWith(prefix, StringComparison.Ordinal))
+            return false;
+
+        var segments = path[prefix.Length..].Split('/');
+        if (segments.Length == 2)
+        {
+            return scope.Kind == SparkplugSelectionKind.Node
+                && SparkplugTopicClassifier.IsNodeVerb(segments[0])
+                && string.Equals(segments[1], scope.NodeId, StringComparison.Ordinal);
+        }
+
+        return segments.Length == 3
+            && SparkplugTopicClassifier.IsDeviceVerb(segments[0])
+            && string.Equals(segments[1], scope.NodeId, StringComparison.Ordinal)
+            && (scope.DeviceId is null || string.Equals(segments[2], scope.DeviceId, StringComparison.Ordinal));
+    }
+
+    private static MessageStore? ChildOf(MessageStore parent, string key) =>
+        parent.SubTopics is not null && parent.SubTopics.TryGetValue(key, out var child) ? child : null;
+
     private static bool IsPathOrDescendant(string path, string ancestor) =>
         path.Equals(ancestor, StringComparison.Ordinal)
-        || (path.StartsWith(ancestor, StringComparison.Ordinal)
-            && path.Length > ancestor.Length
-            && path[ancestor.Length] == '/');
+        || IsDescendantPath(path, ancestor);
+
+    private static bool IsDescendantPath(string path, string ancestor) =>
+        path.Length > ancestor.Length
+        && path.StartsWith(ancestor, StringComparison.Ordinal)
+        && path[ancestor.Length] == '/';
 }

@@ -48,7 +48,6 @@ public class MobileTopicBarTests : BunitTestContext
     [Test]
     public void Renders_TheGroupingLabel_WhenAGroupedRowIsSelected()
     {
-        // A grouping row's key is an internal projection id, so the label is what the bar shows.
         _mockMsgStore.GetSelectedTopicState()
             .Returns(Selection("\0spb:node:spBv1.0/plant1/node1", 7, "node1"));
 

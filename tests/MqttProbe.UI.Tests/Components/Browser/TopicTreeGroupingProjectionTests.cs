@@ -75,12 +75,31 @@ public sealed class TopicTreeGroupingProjectionTests
     }
 
     [Test]
-    public void SelectionLabelNamesOneTopicAndCountsTheRest()
+    public void SelectionLabel_NamesTheRowRatherThanItsSnapshot()
     {
         var rows = Rows(SupportedTree());
 
         Row(rows, "NDATA").SelectionLabel.Should().Be("spBv1.0/plant1/NDATA/node1");
-        Row(rows, "node1").SelectionLabel.Should().Be("spBv1.0/plant1/NBIRTH/node1 and 2 more");
+        Row(rows, "node1").SelectionLabel.Should().Be("spBv1.0/plant1/node1");
+        Row(rows, "Devices").SelectionLabel.Should().Be("spBv1.0/plant1/node1/Devices");
+        Row(rows, "dev1").SelectionLabel.Should().Be("spBv1.0/plant1/node1/dev1");
+    }
+
+    [Test]
+    public void GroupedRows_CarryTheScopeThatResolvesThemAgainstTheStore()
+    {
+        var rows = Rows(SupportedTree());
+
+        Row(rows, "node1").ToSelection().Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"));
+        Row(rows, "Devices").ToSelection().Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Devices, "spBv1.0/plant1", "node1"));
+        Row(rows, "dev1").ToSelection().Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Device, "spBv1.0/plant1", "node1", "dev1"));
+
+        Row(rows, "NDATA").ToSelection().Scope.Should().BeNull();
+        Row(rows, "plant1").ToSelection().Scope.Should().BeNull();
+        Row(rows, "spBv1.0").ToSelection().Scope.Should().BeNull();
     }
 
     [Test]
@@ -88,8 +107,6 @@ public sealed class TopicTreeGroupingProjectionTests
     {
         var rows = Rows(MixedTree(), group: false);
 
-        // "node1" appears under more than one verb in the literal shape, so this names the
-        // intermediate prefix that only appears once.
         var prefix = rows.Find(row => row.FullPath == "spBv1.0/plant1/NDATA");
         prefix.Should().NotBeNull();
         prefix!.SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/NDATA"]);

@@ -9,8 +9,6 @@ public interface IMessageStoreManager : IDisposable
     public SelectedTopicState GetSelectedTopicState();
     public void SelectTopic(string? fullTopic);
 
-    // A grouped tree row such as a node or a device group has no topic of its own, so it selects
-    // the set of real topics it stands for. SelectTopic is the single-topic form of this call.
     public void SelectTopics(TopicSelection? selection);
     public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection);
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit);

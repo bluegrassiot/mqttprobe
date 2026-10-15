@@ -226,6 +226,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         _retentionOrder.Enqueue(store);
         _totalMessageCount++;
         IncrementMessageCounts(store);
+        AppendToScopedSelection(store);
         Interlocked.Increment(ref _globalVersion);
         InvalidateTopicTree();
         if (SelectionIncludes(store))
@@ -338,10 +339,30 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         foreach (var store in _messageStores.Values)
             RecalculateNode(store);
 
-        // One dropped path is enough: a selection covering several topics only survives while
-        // every one of them is still in the tree.
-        if (_selectedStores.Any(selected => !ContainsStore(selected)))
+        if (!SelectionStillCovered())
             InvalidateSelection();
+    }
+
+    // A selection survives a purge only while every path it covers is still in the tree, and a
+    // scoped endpoint also keeps the canonical spelling the projection grouped it by: a purge
+    // that retires that spelling while an alias or descendant keeps the node alive still drops
+    // the row, so the store and the projection agree on what is selected.
+    private bool SelectionStillCovered()
+    {
+        if (_selectedStores.Length == 0)
+            return true;
+
+        foreach (var selected in _selectedStores)
+        {
+            if (!ContainsStore(selected))
+                return false;
+
+            if (_selectionScope is not null
+                && selected.ObservedRawTopics?.Contains(selected.FullTopic ?? string.Empty) != true)
+                return false;
+        }
+
+        return true;
     }
 
     private void RecalculateNode(MessageStore node)

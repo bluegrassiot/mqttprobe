@@ -79,16 +79,12 @@
         }
     }
 
-    // A grouping row is not a topic, so the tooltip says what selecting it will show instead of
-    // naming a topic that does not exist.
     private string? Title => Row.IsVirtualTopic
         ? $"Grouping row · selects {Row.SelectedTopics.Length} topic(s) beneath it"
         : null;
 
     private async Task OnRowClick()
     {
-        // Every row selects what it stands for, including a grouping row, which stands for the
-        // real topics beneath it. Expansion belongs to the chevron alone.
         MessageStoreManager.SelectTopics(Row.ToSelection());
         var selection = MessageStoreManager.GetSelectedTopicState();
         if (!string.Equals(selection.Key, Row.FullPath, StringComparison.Ordinal))

@@ -157,8 +157,6 @@ public class TopicBrowserGroupingTests : BunitTestContext
 
         RowWith(cut, "node1").Click();
 
-        // The node row stands for its own message types and its devices, so selecting it shows
-        // every message type under the node.
         _fixture.Selections.Should().ContainSingle();
         _fixture.Selections[0].Topics.Should().BeEquivalentTo(
         [

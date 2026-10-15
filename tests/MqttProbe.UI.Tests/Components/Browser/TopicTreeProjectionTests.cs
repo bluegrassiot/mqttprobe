@@ -73,8 +73,6 @@ internal sealed class TopicBrowserTestFixture
             return;
         }
 
-        // A grouping row carries its own key, which no topic can match, so the topics it stands
-        // for resolve the selection and the key only names it.
         var nodes = selection.Topics
             .Select(topic => Find(_snapshot.Roots, topic))
             .OfType<TopicNodeSnapshot>()

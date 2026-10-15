@@ -24,24 +24,31 @@ public sealed record TopicTreeRowModel(
     bool IsExpanded,
     bool IsValueBearer,
     TopicTreeRowKind Kind = TopicTreeRowKind.Topic,
-    ImmutableArray<string> SelectionTopics = default)
+    ImmutableArray<string> SelectionTopics = default,
+    SparkplugSelectionScope? Scope = null)
 {
-    // Grouping rows only organise the view; namespace and group rows are real store nodes.
     public bool IsVirtualTopic => Kind is not (TopicTreeRowKind.Topic
         or TopicTreeRowKind.SparkplugNamespace
         or TopicTreeRowKind.SparkplugGroup);
 
-    // A grouping row has no topic of its own, so it selects every real topic it stands for.
-    // A row that names one topic is the degenerate case and keeps the same shape.
     public ImmutableArray<string> SelectedTopics => SelectionTopics.IsDefaultOrEmpty
         ? [FullPath]
         : SelectionTopics;
 
-    // The name a caller shows for the selection. With several topics covered, naming them all
-    // would be unreadable, so the first is named and the rest counted.
-    public string SelectionLabel => SelectedTopics.Length == 1
+    // A scoped row's coverage grows as the store does, so its name is fixed; an unscoped row
+    // names its first topic and counts the rest.
+    public string SelectionLabel => Scope is { } scope ? ScopedLabel(scope) : UnscopedLabel();
+
+    public TopicSelection ToSelection() => new(FullPath, SelectionLabel, SelectedTopics, Scope);
+
+    private string UnscopedLabel() => SelectedTopics.Length == 1
         ? SelectedTopics[0]
         : $"{SelectedTopics[0]} and {SelectedTopics.Length - 1} more";
 
-    public TopicSelection ToSelection() => new(FullPath, SelectionLabel, SelectedTopics);
+    private static string ScopedLabel(SparkplugSelectionScope scope) => scope.Kind switch
+    {
+        SparkplugSelectionKind.Device => $"{scope.GroupPath}/{scope.NodeId}/{scope.DeviceId}",
+        SparkplugSelectionKind.Devices => $"{scope.GroupPath}/{scope.NodeId}/Devices",
+        _ => $"{scope.GroupPath}/{scope.NodeId}"
+    };
 }

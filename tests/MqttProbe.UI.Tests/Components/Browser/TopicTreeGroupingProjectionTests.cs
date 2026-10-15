@@ -49,6 +49,56 @@ public sealed class TopicTreeGroupingProjectionTests
         return subtree;
     }
 
+    private static TopicTreeRowModel Row(List<TopicTreeRowModel> rows, string displayName)
+    {
+        var row = rows.Find(candidate => candidate.DisplayName == displayName);
+        row.Should().NotBeNull(displayName + " is present");
+        return row!;
+    }
+
+    [Test]
+    public void EveryRowKind_ReportsTheTopicsSelectingItWouldShow()
+    {
+        var rows = Rows(SupportedTree());
+
+        Row(rows, "node1").SelectedTopics.Should().BeEquivalentTo(
+        [
+            "spBv1.0/plant1/NBIRTH/node1",
+            "spBv1.0/plant1/NDATA/node1",
+            "spBv1.0/plant1/DDATA/node1/dev1"
+        ], "a node shows every message type under it");
+        Row(rows, "Devices").SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/DDATA/node1/dev1"]);
+        Row(rows, "dev1").SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/DDATA/node1/dev1"]);
+        Row(rows, "DDATA").SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/DDATA/node1/dev1"]);
+        Row(rows, "plant1").SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1"]);
+        Row(rows, "spBv1.0").SelectedTopics.Should().BeEquivalentTo(["spBv1.0"]);
+    }
+
+    [Test]
+    public void SelectionLabelNamesOneTopicAndCountsTheRest()
+    {
+        var rows = Rows(SupportedTree());
+
+        Row(rows, "NDATA").SelectionLabel.Should().Be("spBv1.0/plant1/NDATA/node1");
+        Row(rows, "node1").SelectionLabel.Should().Be("spBv1.0/plant1/NBIRTH/node1 and 2 more");
+    }
+
+    [Test]
+    public void ALiteralRowSelectsItsOwnTopic()
+    {
+        var rows = Rows(MixedTree(), group: false);
+
+        // "node1" appears under more than one verb in the literal shape, so this names the
+        // intermediate prefix that only appears once.
+        var prefix = rows.Find(row => row.FullPath == "spBv1.0/plant1/NDATA");
+        prefix.Should().NotBeNull();
+        prefix!.SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/NDATA"]);
+        prefix.SelectionLabel.Should().Be("spBv1.0/plant1/NDATA");
+
+        var leaf = rows.Find(row => row.FullPath == "spBv1.0/plant1/NDATA/node1");
+        leaf!.SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/NDATA/node1"]);
+    }
+
     [Test]
     public void GroupingOn_ProjectsSupportedTopicsByNodeAndDevice()
     {

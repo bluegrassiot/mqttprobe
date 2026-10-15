@@ -185,7 +185,8 @@ internal static class TopicTreeProjection
             MessageCount: node.MessageCount,
             IsExpanded: isExpanded,
             IsValueBearer: node.IsRealTopic && node.Source!.HasDirectMessages,
-            Kind: node.Kind));
+            Kind: node.Kind,
+            SelectionTopics: node.SelectionTopics()));
 
         if (!hasChildren || (!isExpanded && !context.HasFilter))
             return;
@@ -462,6 +463,12 @@ internal static class TopicTreeProjection
         public List<ProjectionNode> Children { get; } = [];
 
         public bool IsRealTopic => Source is not null;
+
+        // A virtual node covers the real topics beneath it, so selecting the node row selects
+        // each of them; a real node covers only itself, and the store reads its subtree.
+        public ImmutableArray<string> SelectionTopics() => IsRealTopic
+            ? [Id]
+            : [.. Children.SelectMany(child => child.SelectionTopics())];
 
         public int RealTopicCount => IsRealTopic
             ? Source!.TopicCount + 1

@@ -41,7 +41,7 @@ public sealed class MessageStoreReadContractTests
         store.SelectTopic("/Root// Child /Leaf/");
 
         var state = store.GetSelectedTopicState();
-        state.FullTopic.Should().Be("Root/ Child /Leaf");
+        state.Key.Should().Be("Root/ Child /Leaf");
         state.MessageCount.Should().Be(1);
     }
 
@@ -124,7 +124,7 @@ public sealed class MessageStoreReadContractTests
         var initial = store.GetSelectedTopicState();
 
         store.Clear();
-        store.GetSelectedTopicState().FullTopic.Should().BeNull();
+        store.GetSelectedTopicState().Key.Should().BeNull();
         store.GetSelectedMessages(initial.Token, 10).Should().BeNull();
 
         store.Add("root/child", Message("after-clear", 2));
@@ -133,7 +133,7 @@ public sealed class MessageStoreReadContractTests
         recreated.Token.Generation.Should().BeGreaterThan(initial.Token.Generation);
 
         store.RemoveMatchingTopic("#");
-        store.GetSelectedTopicState().FullTopic.Should().BeNull();
+        store.GetSelectedTopicState().Key.Should().BeNull();
         store.GetSelectedMessages(recreated.Token, 10).Should().BeNull();
 
         store.Add("root/child", Message("after-purge", 3));
@@ -295,11 +295,150 @@ public sealed class MessageStoreReadContractTests
         var partialSelection = partialStore.GetSelectedTopicState();
         partialStore.RemoveMatchingTopic("root/remove");
         var afterPartialPurge = partialStore.GetSelectedTopicState();
-        afterPartialPurge.FullTopic.Should().Be("root");
+        afterPartialPurge.Key.Should().Be("root");
         afterPartialPurge.Token.Generation.Should().Be(partialSelection.Token.Generation);
         afterPartialPurge.Token.ContentVersion.Should().BeGreaterThan(partialSelection.Token.ContentVersion);
         partialStore.GetSelectedMessages(partialSelection.Token, 10)!.Messages
             .Should().ContainSingle().Which.Payload.Should().Be("keep");
+    }
+
+    [Test]
+    public void SelectTopics_CoversEveryPathAndSumsTheirMessages()
+    {
+        var store = CreateStore();
+        store.Add("spBv1.0/plant1/NDATA/node1", Message("node-data", 1));
+        store.Add("spBv1.0/plant1/DDATA/node1/dev1", Message("dev1-data", 2));
+        store.Add("spBv1.0/plant1/DDATA/node1/dev2", Message("dev2-data", 3));
+        store.Add("sensors/temp", Message("unrelated", 4));
+
+        store.SelectTopics(new TopicSelection(
+            "\0spb:node:spBv1.0/plant1/node1",
+            "node1",
+            ["spBv1.0/plant1/NDATA/node1", "spBv1.0/plant1/DDATA/node1/dev1", "spBv1.0/plant1/DDATA/node1/dev2"]));
+
+        var state = store.GetSelectedTopicState();
+        state.Key.Should().Be("\0spb:node:spBv1.0/plant1/node1");
+        state.Label.Should().Be("node1");
+        state.MessageCount.Should().Be(3, "the grouping row shows the total under it");
+
+        var snapshot = store.GetSelectedMessages(state.Token, 10);
+        snapshot!.Messages.Select(message => message.Payload)
+            .Should().BeEquivalentTo(["node-data", "dev1-data", "dev2-data"]);
+    }
+
+    [Test]
+    public void SelectTopics_DropsUnresolvablePathsButRefusesASelectionThatResolvesToNothing()
+    {
+        var store = CreateStore();
+        store.Add("spBv1.0/plant1/DDATA/node1/dev1", Message("dev1-data", 1));
+        store.SelectTopic("spBv1.0/plant1/DDATA/node1/dev1");
+
+        store.SelectTopics(new TopicSelection(
+            "group",
+            "group",
+            ["spBv1.0/plant1/DDATA/node1/dev1", "spBv1.0/plant1/DDATA/node1/dev2"]));
+
+        var partial = store.GetSelectedTopicState();
+        partial.Key.Should().Be("group");
+        partial.MessageCount.Should().Be(1);
+
+        store.SelectTopics(new TopicSelection("gone", "gone", ["spBv1.0/plant1/DDATA/node1/dev2"]));
+
+        store.GetSelectedTopicState().Key.Should().Be("group", "a stale row cannot clear a live selection");
+    }
+
+    [Test]
+    public void SelectTopics_CoveringAnAncestorOnceCountsItsMessagesOnce()
+    {
+        var store = CreateStore();
+        store.Add("spBv1.0/plant1/DDATA/node1/dev1", Message("dev1-data", 1));
+        store.Add("spBv1.0/plant1/DDATA/node1/dev1/deeper", Message("deeper-data", 2));
+
+        store.SelectTopics(new TopicSelection(
+            "group",
+            "group",
+            ["spBv1.0/plant1/DDATA/node1/dev1", "spBv1.0/plant1/DDATA/node1/dev1/deeper"]));
+
+        var state = store.GetSelectedTopicState();
+        state.MessageCount.Should().Be(2);
+        store.GetSelectedMessages(state.Token, 10)!.Messages
+            .Should().HaveCount(2, "a topic already covered by its ancestor is not counted twice");
+    }
+
+    [Test]
+    public void SelectTopics_ReselectingTheSameRowDoesNotMoveTheSelection()
+    {
+        var store = CreateStore();
+        store.Add("spBv1.0/plant1/DDATA/node1/dev1", Message("dev1-data", 1));
+        var selection = new TopicSelection(
+            "group", "group", ["spBv1.0/plant1/DDATA/node1/dev1"]);
+
+        store.SelectTopics(selection);
+        var first = store.GetSelectedTopicState();
+        store.SelectTopics(selection);
+        var repeated = store.GetSelectedTopicState();
+
+        repeated.Token.Generation.Should().Be(first.Token.Generation);
+        repeated.Token.ContentVersion.Should().Be(first.Token.ContentVersion);
+    }
+
+    [Test]
+    public void GroupedSelectionContentVersionAdvancesForTrafficUnderASelectedPath()
+    {
+        var store = CreateStore();
+        store.Add("spBv1.0/plant1/DDATA/node1/dev1", Message("dev1-data", 1));
+        store.Add("spBv1.0/plant1/DDATA/node1/dev2", Message("dev2-data", 2));
+        store.SelectTopics(new TopicSelection(
+            "group",
+            "group",
+            ["spBv1.0/plant1/DDATA/node1/dev1", "spBv1.0/plant1/DDATA/node1/dev2"]));
+        var selected = store.GetSelectedTopicState();
+
+        store.Add("spBv1.0/plant1/DDATA/node1/dev1", Message("dev1-more", 3));
+        store.Add("spBv1.0/plant1/NDATA/node1", Message("node-data", 4));
+
+        var after = store.GetSelectedTopicState();
+        after.Token.Generation.Should().Be(selected.Token.Generation);
+        after.Token.ContentVersion.Should().BeGreaterThan(selected.Token.ContentVersion);
+        store.GetSelectedMessages(selected.Token, 10)!.Messages
+            .Select(message => message.Payload)
+            .Should().BeEquivalentTo(["dev1-data", "dev2-data", "dev1-more"],
+                "traffic on the node's own verbs is not under a devices selection");
+    }
+
+    [Test]
+    public void APurgeThatDropsOneSelectedPathClearsTheWholeSelection()
+    {
+        var store = CreateStore();
+        store.Add("spBv1.0/plant1/DDATA/node1/dev1", Message("dev1-data", 1));
+        store.Add("spBv1.0/plant1/DDATA/node1/dev2", Message("dev2-data", 2));
+        store.SelectTopics(new TopicSelection(
+            "group",
+            "group",
+            ["spBv1.0/plant1/DDATA/node1/dev1", "spBv1.0/plant1/DDATA/node1/dev2"]));
+        var selected = store.GetSelectedTopicState();
+
+        store.RemoveMatchingTopic("spBv1.0/plant1/DDATA/node1/dev1");
+
+        store.GetSelectedTopicState().Key.Should().BeNull();
+        store.GetSelectedMessages(selected.Token, 10).Should().BeNull();
+    }
+
+    [Test]
+    public void TryClearSelection_RejectsAStaleKeyAndAcceptsTheCurrentOne()
+    {
+        var store = CreateStore();
+        store.Add("spBv1.0/plant1/DDATA/node1/dev1", Message("dev1-data", 1));
+        store.SelectTopics(new TopicSelection(
+            "\0spb:dev:spBv1.0/plant1/node1", "Devices", ["spBv1.0/plant1/DDATA/node1/dev1"]));
+        var current = store.GetSelectedTopicState();
+
+        store.TryClearSelection(store.Version, current with { Key = "some-other-row" })
+            .Should().BeFalse();
+        store.GetSelectedTopicState().Key.Should().Be("\0spb:dev:spBv1.0/plant1/node1");
+
+        store.TryClearSelection(store.Version, current).Should().BeTrue();
+        store.GetSelectedTopicState().Key.Should().BeNull();
     }
 
     [Test]
@@ -375,7 +514,7 @@ public sealed class MessageStoreReadContractTests
                 continue;
 
             result.State.Token.Generation.Should().Be(selected.Token.Generation);
-            result.State.FullTopic.Should().Be("root/child");
+            result.State.Key.Should().Be("root/child");
             result.State.MessageCount.Should().Be(1);
             result.Messages.Should().ContainSingle().Which.Should().BeSameAs(original);
         }

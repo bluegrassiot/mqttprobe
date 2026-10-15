@@ -40,11 +40,15 @@ public class TopicBrowserGroupingTests : BunitTestContext
             ("sensors/temp", 4))
     ];
 
-    private IRenderedComponent<TopicBrowser> RenderGrouped(bool grouped, bool expandAll = true)
+    private IRenderedComponent<TopicBrowser> RenderGrouped(
+        bool grouped,
+        bool expandAll = true,
+        Func<SelectedTopicState, Task>? onSelected = null)
     {
         _preferences.GroupSparkplugTopicsByNodeAndDevice = grouped;
         _fixture.SetSnapshot(SparkplugTree());
-        var cut = Render<TopicBrowser>();
+        var cut = Render<TopicBrowser>(parameters => parameters
+            .Add(component => component.OnSelectedChanged, state => onSelected?.Invoke(state) ?? Task.CompletedTask));
         EnsureMudProviders();
         if (expandAll)
             ExpandAll(cut);
@@ -107,7 +111,7 @@ public class TopicBrowserGroupingTests : BunitTestContext
     }
 
     [Test]
-    public void GroupingRows_AreMarkedAsGroupingRowsAndNeverAsSelected()
+    public void GroupingRows_AreMarkedAndOnlyTheSelectedRowIsHighlighted()
     {
         _fixture.SetSelection(new SelectedTopicState(
             new SelectedTopicToken(Guid.NewGuid(), 1, 1), NodeTip, 3));
@@ -126,34 +130,77 @@ public class TopicBrowserGroupingTests : BunitTestContext
     public void ClickingRealTopicRow_SelectsThatTopicAndPublishesIt()
     {
         SelectedTopicState? callbackState = null;
-        _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
-        _fixture.SetSnapshot(SparkplugTree());
-        var cut = Render<TopicBrowser>(parameters =>
-            parameters.Add(component => component.OnSelectedChanged, state =>
-            {
-                callbackState = state;
-                return Task.CompletedTask;
-            }));
-        EnsureMudProviders();
-        ExpandAll(cut);
+        var cut = RenderGrouped(grouped: true, onSelected: state =>
+        {
+            callbackState = state;
+            return Task.CompletedTask;
+        });
 
         RowWith(cut, NodeTip).Click();
 
-        _mockMsgStore.Received(1).SelectTopic(NodeTip);
+        _mockMsgStore.Received(1).SelectTopics(Arg.Is<TopicSelection>(selection =>
+            selection.Key == NodeTip && selection.Topics.SequenceEqual(new[] { NodeTip })));
         callbackState.Should().NotBeNull();
-        callbackState!.FullTopic.Should().Be(NodeTip);
+        callbackState!.Key.Should().Be(NodeTip);
     }
 
     [Test]
-    public void ClickingGroupingRow_TogglesExpansionWithoutSelectingATopic()
+    public void ClickingNodeRow_SelectsEveryTopicUnderTheNodeWithoutTogglingExpansion()
     {
-        var cut = RenderGrouped(grouped: true);
+        SelectedTopicState? callbackState = null;
+        var cut = RenderGrouped(grouped: true, onSelected: state =>
+        {
+            callbackState = state;
+            return Task.CompletedTask;
+        });
         cut.Markup.Should().Contain("NDATA");
 
         RowWith(cut, "node1").Click();
 
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string>());
-        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("NDATA"));
+        // The node row stands for its own message types and its devices, so selecting it shows
+        // every message type under the node.
+        _fixture.Selections.Should().ContainSingle();
+        _fixture.Selections[0].Topics.Should().BeEquivalentTo(
+        [
+            NodeTip,
+            "spBv1.0/plant1/NBIRTH/node1",
+            DeviceTip
+        ]);
+        callbackState.Should().NotBeNull();
+        cut.Markup.Should().Contain("NDATA", "the click selected rather than collapsed");
+    }
+
+    [Test]
+    public void ClickingDevicesRow_SelectsOnlyDeviceTopics()
+    {
+        var cut = RenderGrouped(grouped: true);
+
+        RowWith(cut, "Devices").Click();
+
+        _fixture.Selections.Should().ContainSingle();
+        _fixture.Selections[0].Topics.Should().BeEquivalentTo([DeviceTip]);
+    }
+
+    [Test]
+    public void ClickingDeviceRow_SelectsThatDevicesTopics()
+    {
+        var cut = RenderGrouped(grouped: true);
+
+        RowWith(cut, "dev1").Click();
+
+        _fixture.Selections.Should().ContainSingle();
+        _fixture.Selections[0].Topics.Should().BeEquivalentTo([DeviceTip]);
+    }
+
+    [Test]
+    public void ClickingMessageTypeRow_SelectsTheTopicUnderIt()
+    {
+        var cut = RenderGrouped(grouped: true);
+
+        RowWith(cut, "NBIRTH").Click();
+
+        _fixture.Selections.Should().ContainSingle();
+        _fixture.Selections[0].Topics.Should().BeEquivalentTo(["spBv1.0/plant1/NBIRTH/node1"]);
     }
 
     [Test]

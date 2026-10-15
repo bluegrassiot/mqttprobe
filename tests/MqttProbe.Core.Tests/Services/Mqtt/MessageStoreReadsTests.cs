@@ -93,7 +93,7 @@ public sealed class MessageStoreReadsTests
     }
 
     private static SelectedTopicState State(string topic) =>
-        new(new SelectedTopicToken(Guid.NewGuid(), 1, 1), topic, 1);
+        new(new SelectedTopicToken(Guid.NewGuid(), 1, 1), topic, 1, topic);
 
     private static SelectedMessagesSnapshot Snapshot(SelectedTopicState state, params MqttMessage[] messages) =>
         new(state, 10, messages.ToImmutableArray());

@@ -144,7 +144,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
             RecalculateCounters();
             RebuildRetentionOrder();
-            if (_selectedMessageStore is not null)
+            if (_selectedStores.Length > 0)
                 _selectionContentVersion++;
             Interlocked.Increment(ref _globalVersion);
             InvalidateTopicTree();
@@ -338,7 +338,9 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         foreach (var store in _messageStores.Values)
             RecalculateNode(store);
 
-        if (_selectedMessageStore is not null && !ContainsStore(_selectedMessageStore))
+        // One dropped path is enough: a selection covering several topics only survives while
+        // every one of them is still in the tree.
+        if (_selectedStores.Any(selected => !ContainsStore(selected)))
             InvalidateSelection();
     }
 

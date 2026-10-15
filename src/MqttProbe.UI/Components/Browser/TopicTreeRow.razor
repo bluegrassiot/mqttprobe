@@ -1,7 +1,7 @@
 @inject IMessageStoreManager MessageStoreManager
 
 <div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsSelected ? "topic-tree-row--selected" : "")"
-     title="@(Row.IsVirtualTopic ? "Grouping row · not an MQTT topic" : null)"
+     title="@Title"
      @onclick="OnRowClick">
     <svg class="topic-tree-indent" width="@IndentWidth" height="1" aria-hidden="true" focusable="false"></svg>
     @if (Row.HasChildren)
@@ -79,19 +79,19 @@
         }
     }
 
+    // A grouping row is not a topic, so the tooltip says what selecting it will show instead of
+    // naming a topic that does not exist.
+    private string? Title => Row.IsVirtualTopic
+        ? $"Grouping row · selects {Row.SelectedTopics.Length} topic(s) beneath it"
+        : null;
+
     private async Task OnRowClick()
     {
-        // Grouping rows only navigate; a fabricated topic here would select something that
-        // does not exist in the store.
-        if (Row.IsVirtualTopic)
-        {
-            await OnExpandToggled.InvokeAsync(Row.FullPath);
-            return;
-        }
-
-        MessageStoreManager.SelectTopic(Row.FullPath);
+        // Every row selects what it stands for, including a grouping row, which stands for the
+        // real topics beneath it. Expansion belongs to the chevron alone.
+        MessageStoreManager.SelectTopics(Row.ToSelection());
         var selection = MessageStoreManager.GetSelectedTopicState();
-        if (!string.Equals(selection.FullTopic, Row.FullPath, StringComparison.Ordinal))
+        if (!string.Equals(selection.Key, Row.FullPath, StringComparison.Ordinal))
             return;
 
         await OnSelected.InvokeAsync(Row.FullPath);

@@ -184,7 +184,7 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
         await cut.InvokeAsync(() => tipRow.Click());
 
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().ContainSingle());
-        _manager.GetSelectedTopicState().FullTopic.Should().Be(CanonicalNodeTip,
+        _manager.GetSelectedTopicState().Key.Should().Be(CanonicalNodeTip,
             "the selection is the normalized path, not the alias spelling");
         var selected = cut.Find(".topic-tree-row--selected");
         RowLabel(selected).Should().Be(CanonicalNodeTip,

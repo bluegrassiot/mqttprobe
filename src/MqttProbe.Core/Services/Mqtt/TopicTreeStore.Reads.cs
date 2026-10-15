@@ -6,7 +6,9 @@ namespace MqttProbe.Core.Services.Mqtt;
 internal sealed partial class TopicTreeStore
 {
     private readonly Guid _storeId = Guid.NewGuid();
-    private MessageStore? _selectedMessageStore;
+    private MessageStore[] _selectedStores = [];
+    private string? _selectionKey;
+    private string? _selectionLabel;
     private long _selectionGeneration;
     private long _selectionContentVersion;
     private TopicTreeSnapshot? _cachedTopicTree;
@@ -41,33 +43,66 @@ internal sealed partial class TopicTreeStore
             return CaptureSelectedTopicState();
     }
 
-    public void SelectTopic(string? fullTopic)
+    // A grouped row covers several real topics that are siblings under the store, so it selects a
+    // set rather than one path. Paths that do not resolve are dropped; a selection that resolves
+    // to nothing is refused, so a stale row cannot clear a live selection.
+    public void SelectTopics(TopicSelection? selection)
     {
         lock (_storeSync)
         {
-            if (fullTopic is null)
+            if (selection is null)
             {
-                if (_selectedMessageStore is not null)
+                if (_selectedStores.Length > 0)
                     InvalidateSelection();
 
                 return;
             }
 
-            var normalized = Normalize(fullTopic);
-            if (normalized is null)
-                return;
-
-            var selected = FindNode(normalized);
-            if (selected is null)
-                return;
-
-            if (!ReferenceEquals(selected, _selectedMessageStore))
+            var resolved = new List<MessageStore>(selection.Topics.Length);
+            foreach (var topic in selection.Topics)
             {
-                _selectedMessageStore = selected;
-                _selectionGeneration++;
-                _selectionContentVersion++;
+                var normalized = Normalize(topic);
+                if (normalized is null)
+                    continue;
+
+                var node = FindNode(normalized);
+                // A path under one already selected is already covered, and counting it twice
+                // would double the messages and the displayed count.
+                if (node is null || resolved.Any(other => IsPathOrDescendant(node.FullTopic!, other.FullTopic!)))
+                    continue;
+
+                resolved.Add(node);
             }
+
+            if (resolved.Count == 0)
+                return;
+
+            if (SameSelection(resolved, selection.Key))
+                return;
+
+            _selectedStores = [.. resolved];
+            _selectionKey = selection.Key;
+            _selectionLabel = selection.Label;
+            _selectionGeneration++;
+            _selectionContentVersion++;
         }
+    }
+
+    // The single-topic form keeps its own identity: the resolved node's path, not the caller's
+    // spelling, so callers still see the normalized topic they selected.
+    public void SelectTopic(string? fullTopic)
+    {
+        if (fullTopic is null)
+        {
+            SelectTopics(null);
+            return;
+        }
+
+        var normalized = Normalize(fullTopic);
+        if (normalized is null)
+            return;
+
+        SelectTopics(TopicSelection.ForTopic(normalized));
     }
 
     public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection)
@@ -77,8 +112,8 @@ internal sealed partial class TopicTreeStore
             if (Interlocked.Read(ref _globalVersion) != treeVersion
                 || expectedSelection.Token.StoreId != _storeId
                 || expectedSelection.Token.Generation != _selectionGeneration
-                || _selectedMessageStore is null
-                || !string.Equals(_selectedMessageStore.FullTopic, expectedSelection.FullTopic, StringComparison.Ordinal))
+                || _selectionKey is null
+                || !string.Equals(_selectionKey, expectedSelection.Key, StringComparison.Ordinal))
                 return false;
 
             InvalidateSelection();
@@ -99,12 +134,13 @@ internal sealed partial class TopicTreeStore
                 return null;
 
             state = CaptureSelectedTopicState();
-            if (_selectedMessageStore is null || limit == 0)
+            if (_selectedStores.Length == 0 || limit == 0)
                 messages = [];
             else
             {
                 var collected = new List<MqttMessage>();
-                CollectMessages(_selectedMessageStore, collected);
+                foreach (var store in _selectedStores)
+                    CollectMessages(store, collected);
                 messages = collected.ToArray();
             }
         }
@@ -118,8 +154,20 @@ internal sealed partial class TopicTreeStore
 
     private SelectedTopicState CaptureSelectedTopicState() => new(
         new SelectedTopicToken(_storeId, _selectionGeneration, _selectionContentVersion),
-        _selectedMessageStore?.FullTopic,
-        _selectedMessageStore?.MessageCount ?? 0);
+        _selectionKey,
+        _selectedStores.Sum(store => store.MessageCount),
+        _selectionLabel);
+
+    // Re-selecting the same row must not look like a change, or a click that landed on the row
+    // already selected would restart the message list and its own scroll position.
+    private bool SameSelection(List<MessageStore> resolved, string key)
+    {
+        if (!string.Equals(_selectionKey, key, StringComparison.Ordinal)
+            || resolved.Count != _selectedStores.Length)
+            return false;
+
+        return !resolved.Where((store, index) => !ReferenceEquals(store, _selectedStores[index])).Any();
+    }
 
     private TopicNodeSnapshot CreateNodeSnapshot(MessageStore node)
     {
@@ -145,25 +193,34 @@ internal sealed partial class TopicTreeStore
 
     private void InvalidateSelection()
     {
-        _selectedMessageStore = null;
+        _selectedStores = [];
+        _selectionKey = null;
+        _selectionLabel = null;
         _selectionGeneration++;
         _selectionContentVersion++;
     }
 
     private bool SelectionIncludes(MessageStore store)
     {
-        var selected = _selectedMessageStore;
-        if (selected is null)
+        if (_selectedStores.Length == 0)
             return false;
 
-        var selectedPath = selected.FullTopic;
         var storePath = store.FullTopic;
-        if (selectedPath is null || storePath is null)
-            return ReferenceEquals(selected, store);
+        foreach (var selected in _selectedStores)
+        {
+            if (ReferenceEquals(selected, store))
+                return true;
 
-        return ReferenceEquals(selected, store)
-            || IsPathOrDescendant(storePath, selectedPath)
-            || IsPathOrDescendant(selectedPath, storePath);
+            var selectedPath = selected.FullTopic;
+            if (selectedPath is null || storePath is null)
+                continue;
+
+            if (IsPathOrDescendant(storePath, selectedPath)
+                || IsPathOrDescendant(selectedPath, storePath))
+                return true;
+        }
+
+        return false;
     }
 
     private static bool IsPathOrDescendant(string path, string ancestor) =>

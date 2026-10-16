@@ -36,9 +36,12 @@
 
 ## Comments
 
-- Prefer few comments. Explain non-obvious *why*, not restate *what*.
-- Do not add routine XML doc comments to hand-written code; `python scripts/ci/check-comments.py` gates it.
-- Acceptable where they clarify messy CSS/Razor markup, complex regex, or hard-to-name structure. `CONTRIBUTING.md` (Code Style) works through examples.
+- Keep comments VERY minimal. The default is no new comment, in production code and tests alike.
+- Add a comment only when necessary to explain a non-obvious reason, constraint, or invariant that clear naming and structure cannot express. Keep it short.
+- Do not add section banners, narrated steps, Arrange/Act/Assert labels, summaries of obvious behavior, or comments that restate the code.
+- Do not add routine XML doc comments to hand-written code; `python scripts/ci/check-comments.py` gates it. Passing this gate does not make other unnecessary comments acceptable.
+- Short explanations of genuinely unclear CSS/Razor markup or complex regex are acceptable. Prefer clearer code over explanatory comments. `CONTRIBUTING.md` (Code Style) works through examples.
+- Apply these rules to every delegated task. Before accepting specialist work, review added comments in the diff and remove those that do not meet this standard.
 
 ## Styling and layout
 

@@ -11,6 +11,7 @@ internal sealed partial class TopicTreeStore
     private string? _selectionKey;
     private string? _selectionLabel;
     private SparkplugSelectionScope? _selectionScope;
+    private bool _selectionRequiresCanonical;
     private long _selectionGeneration;
     private long _selectionContentVersion;
     private TopicTreeSnapshot? _cachedTopicTree;
@@ -58,6 +59,7 @@ internal sealed partial class TopicTreeStore
                 return;
             }
 
+            var requiresCanonical = selection.RequireCanonicalTopics || selection.Scope is not null;
             var resolved = selection.Scope is { } scope
                 ? ResolveScope(scope)
                 : ResolvePaths(selection.Topics);
@@ -65,10 +67,13 @@ internal sealed partial class TopicTreeStore
             if (resolved.Count == 0)
                 return;
 
-            if (SameSelection(resolved, selection.Key, selection.Scope))
+            if (requiresCanonical && resolved.Any(store => !IsCanonicallyObserved(store)))
                 return;
 
-            ReplaceSelection(resolved, selection.Key, selection.Label, selection.Scope);
+            if (SameSelection(resolved, selection.Key, selection.Scope, requiresCanonical))
+                return;
+
+            ReplaceSelection(resolved, selection.Key, selection.Label, selection.Scope, requiresCanonical);
         }
     }
 
@@ -193,11 +198,12 @@ internal sealed partial class TopicTreeStore
     // construction, so they need no overlap normalization.
     private static void AddEndpoint(List<MessageStore> resolved, MessageStore? endpoint)
     {
-        if (endpoint?.FullTopic is not { } path || endpoint.ObservedRawTopics?.Contains(path) != true)
-            return;
-
-        resolved.Add(endpoint);
+        if (endpoint is not null && IsCanonicallyObserved(endpoint))
+            resolved.Add(endpoint);
     }
+
+    private static bool IsCanonicallyObserved(MessageStore store) =>
+        store.FullTopic is { } path && store.ObservedRawTopics?.Contains(path) == true;
 
     private static void AddCovered(List<MessageStore> resolved, MessageStore node)
     {
@@ -216,12 +222,15 @@ internal sealed partial class TopicTreeStore
 
     // Re-selecting the same row must not look like a change, so a click on the already-selected
     // row does not restart the message list.
-    private bool SameSelection(List<MessageStore> resolved, string key, SparkplugSelectionScope? scope) =>
+    private bool SameSelection(
+        List<MessageStore> resolved, string key, SparkplugSelectionScope? scope, bool requiresCanonical) =>
         string.Equals(_selectionKey, key, StringComparison.Ordinal)
         && Equals(_selectionScope, scope)
+        && _selectionRequiresCanonical == requiresCanonical
         && _selectedRoots.SetEquals(resolved);
 
-    private void ReplaceSelection(List<MessageStore> resolved, string key, string? label, SparkplugSelectionScope? scope)
+    private void ReplaceSelection(
+        List<MessageStore> resolved, string key, string? label, SparkplugSelectionScope? scope, bool requiresCanonical)
     {
         _selectedRoots.Clear();
         _selectedAncestors.Clear();
@@ -234,6 +243,7 @@ internal sealed partial class TopicTreeStore
         _selectionKey = key;
         _selectionLabel = label;
         _selectionScope = scope;
+        _selectionRequiresCanonical = requiresCanonical;
         _selectionGeneration++;
         _selectionContentVersion++;
     }
@@ -267,6 +277,7 @@ internal sealed partial class TopicTreeStore
         _selectionKey = null;
         _selectionLabel = null;
         _selectionScope = null;
+        _selectionRequiresCanonical = false;
         _selectionGeneration++;
         _selectionContentVersion++;
     }

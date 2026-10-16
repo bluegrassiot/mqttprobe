@@ -344,9 +344,9 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
     }
 
     // A selection survives a purge only while every path it covers is still in the tree, and a
-    // scoped endpoint also keeps the canonical spelling the projection grouped it by: a purge
-    // that retires that spelling while an alias or descendant keeps the node alive still drops
-    // the row, so the store and the projection agree on what is selected.
+    // selection that requires canonical topics keeps each one's observed spelling: a purge that
+    // retires that spelling while an alias or descendant keeps the node alive still drops the
+    // selection, so the store and the projection agree on what is selected.
     private bool SelectionStillCovered()
     {
         if (_selectedRoots.Count == 0)
@@ -357,8 +357,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             if (selected.FullTopic is not { } path || !ReferenceEquals(FindNode(path), selected))
                 return false;
 
-            if (_selectionScope is not null
-                && selected.ObservedRawTopics?.Contains(path) != true)
+            if (_selectionRequiresCanonical && !IsCanonicallyObserved(selected))
                 return false;
         }
 

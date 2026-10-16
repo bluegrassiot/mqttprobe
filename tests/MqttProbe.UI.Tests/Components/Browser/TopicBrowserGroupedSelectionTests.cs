@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using MQTTnet;
 using MqttProbe.Core.Models.Configuration;
+using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
@@ -23,6 +24,7 @@ public sealed class TopicBrowserGroupedSelectionTests : BunitTestContext
     private IMqttManagedClient _client = null!;
     private Func<MqttApplicationMessageReceivedEventArgs, Task>? _handler;
     private readonly UiPreferences _preferences = new();
+    private ITopicExcludeService _excludes = null!;
 
     [SetUp]
     public async Task SetupStore()
@@ -40,9 +42,10 @@ public sealed class TopicBrowserGroupedSelectionTests : BunitTestContext
         var builder = new PluginRegistryBuilder();
         BuiltInPluginRegistration.RegisterBuiltIns(builder);
         var pipeline = new PayloadPipeline(builder.Build(), NullLogger<PayloadPipeline>.Instance);
+        _excludes = Substitute.For<ITopicExcludeService>();
 
         _manager = new MessageStoreManager(_client, NullLogger<MessageStoreManager>.Instance, performance,
-            Substitute.For<IUxMetricsService>(), pipeline, sparkplug);
+            Substitute.For<IUxMetricsService>(), pipeline, sparkplug, topicExcludeService: _excludes);
         await _manager.Start();
 
         _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
@@ -141,6 +144,34 @@ public sealed class TopicBrowserGroupedSelectionTests : BunitTestContext
             "clicking the already-selected row must not restart the message list");
     }
 
+    [Test]
+    public async Task AStaleMessageTypeRow_CannotReplaceOrPublishAnotherSelection()
+    {
+        await PublishAsync("spBv1.0/plant1/NBIRTH/node1", "birth");
+        await PublishAsync("spBv1.0/plant1/NBIRTH/node1/extra", "residue");
+        await PublishAsync("sensors/temp", "sensors");
+        SelectedTopicState? published = null;
+        var cut = await RenderExpandedAsync(state =>
+        {
+            published = state;
+            return Task.CompletedTask;
+        });
+
+        _manager.SelectTopic("sensors/temp");
+        var live = _manager.GetSelectedTopicState();
+
+        await cut.InvokeAsync(() =>
+        {
+            _excludes.PurgeExcludedTopic += Raise.Event<Action<string>>("spBv1.0/plant1/NBIRTH/node1");
+            RowWith(cut, "NBIRTH").Click();
+        });
+
+        var after = _manager.GetSelectedTopicState();
+        after.Key.Should().Be("sensors/temp", "the stale row's canonical marker is gone");
+        after.Token.Generation.Should().Be(live.Token.Generation, "a refused request cannot replace the selection");
+        published.Should().BeNull("a refused row must not be published");
+    }
+
     private async Task PublishAsync(string topic, string payload)
     {
         var message = new MqttApplicationMessageBuilder().WithTopic(topic).WithPayload(payload).Build();
@@ -148,9 +179,11 @@ public sealed class TopicBrowserGroupedSelectionTests : BunitTestContext
         await _handler!(new MqttApplicationMessageReceivedEventArgs("test-client", message, packet, null));
     }
 
-    private async Task<IRenderedComponent<TopicBrowser>> RenderExpandedAsync()
+    private async Task<IRenderedComponent<TopicBrowser>> RenderExpandedAsync(
+        Func<SelectedTopicState, Task>? onSelected = null)
     {
-        var cut = Render<TopicBrowser>();
+        var cut = Render<TopicBrowser>(parameters => parameters
+            .Add(component => component.OnSelectedChanged, state => onSelected?.Invoke(state) ?? Task.CompletedTask));
         EnsureMudProviders();
         await cut.InvokeAsync(() => cut.FindAll(".mud-toolbar button")[0].Click());
         return cut;

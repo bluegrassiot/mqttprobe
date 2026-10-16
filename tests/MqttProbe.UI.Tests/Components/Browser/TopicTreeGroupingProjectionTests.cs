@@ -103,6 +103,17 @@ public sealed class TopicTreeGroupingProjectionTests
     }
 
     [Test]
+    public void OnlyMessageTypeRows_RequireCanonicalTopics()
+    {
+        var rows = Rows(SupportedTree());
+
+        rows.Where(row => row.Kind == TopicTreeRowKind.MessageType)
+            .Should().OnlyContain(row => row.ToSelection().RequireCanonicalTopics);
+        rows.Where(row => row.Kind != TopicTreeRowKind.MessageType)
+            .Should().OnlyContain(row => !row.ToSelection().RequireCanonicalTopics);
+    }
+
+    [Test]
     public void ALiteralRowSelectsItsOwnTopic()
     {
         var rows = Rows(MixedTree(), group: false);

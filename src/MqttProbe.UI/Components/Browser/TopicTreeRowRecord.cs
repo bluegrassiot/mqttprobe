@@ -39,7 +39,8 @@ public sealed record TopicTreeRowModel(
     // names its first topic and counts the rest.
     public string SelectionLabel => Scope is { } scope ? ScopedLabel(scope) : UnscopedLabel();
 
-    public TopicSelection ToSelection() => new(FullPath, SelectionLabel, SelectedTopics, Scope);
+    public TopicSelection ToSelection() => new(FullPath, SelectionLabel, SelectedTopics, Scope,
+        RequireCanonicalTopics: Kind is TopicTreeRowKind.MessageType);
 
     private string UnscopedLabel() => SelectedTopics.Length == 1
         ? SelectedTopics[0]

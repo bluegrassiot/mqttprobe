@@ -631,6 +631,40 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
+    public async Task Connect_SelectorChangedDuringStartup_RecordsAttemptedConnection()
+    {
+        var connA = new Connection { Name = "Broker A", Host = "a.local", Port = 1883 };
+        var connB = new Connection { Name = "Broker B", Host = "b.local", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [connA, connB] };
+        await OpenDialog(cfg);
+        await SelectConnection(connA);
+
+        var resetGate = new TaskCompletionSource();
+        _mockCoordinator.ResetIfBrokerChangedAsync(Arg.Any<Connection>()).Returns(resetGate.Task);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        await _mockCoordinator.Received(1).ResetIfBrokerChangedAsync(
+            Arg.Is<Connection>(c => c!.Id == connA.Id));
+
+        await SelectConnection(connB);
+
+        resetGate.SetResult();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _mockClient.Received(1).StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>()));
+        await _mockOptionsBuilder.Received(1).BuildAsync(
+            Arg.Is<Connection>(c => c!.Id == connA.Id), Arg.Any<CertificateSessionResource>());
+
+        await SucceedPendingAttemptAsync();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("a successful connect closes the dialog"));
+
+        _mockSessionState.Received(1).LastSuccessfulConnectionId = connA.Id;
+        _mockSessionState.DidNotReceive().LastSuccessfulConnectionId = connB.Id;
+        _mockSessionState.Received(1).LastSuccessfulConnectionSnapshot = Arg.Is<Connection>(
+            c => c!.Id == connA.Id && c.Host == "a.local");
+    }
+
+    [Test]
     public async Task CaptureStartFailure_MessageStore_RecoversStateAndDoesNotStartMqtt()
     {
         _mockMsgStore.Start().Returns(Task.FromException(new InvalidOperationException("capture boom")));

@@ -25,6 +25,8 @@ public partial class ConnectionDialog
 
         public bool AttemptStarted => !AttemptId.IsNone;
 
+        public MqttProbe.Core.Models.Mqtt.Connection? SavedSelector { get; set; }
+
         public CertificateSessionResource? Certificate { get; set; }
 
         public Task? Teardown { get; set; }
@@ -181,6 +183,7 @@ public partial class ConnectionDialog
 
     private async Task<MqttProbe.Core.Models.Mqtt.Connection?> PrepareConnectionForAttemptAsync(ConnectOperation operation)
     {
+        operation.SavedSelector = _savedConnectionForSelector;
         var connection = _selectedConnection.Clone();
         if (_certSection is not null && _certSection.HasStagedBytes)
         {
@@ -226,7 +229,7 @@ public partial class ConnectionDialog
             return;
 
         _pendingAttemptConnection = connection.Clone();
-        _pendingAttemptSavedSelector = _savedConnectionForSelector;
+        _pendingAttemptSavedSelector = operation.SavedSelector;
         SessionState.SelectedConnection = connection;
 
         MqttConnectAttempt attempt;

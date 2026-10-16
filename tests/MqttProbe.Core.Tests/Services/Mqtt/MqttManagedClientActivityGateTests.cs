@@ -537,7 +537,7 @@ public class MqttManagedClientActivityGateTests
                 gate.Revoke();
                 await gate.RevocationCompletion.WaitAsync(TimeSpan.FromSeconds(10));
                 ct.ThrowIfCancellationRequested();
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         await sut.StartAsync(BuildOptions());

@@ -36,7 +36,7 @@ public class MqttManagedClientCancellationTests
             {
                 started.TrySetResult();
                 await Task.Delay(Timeout.Infinite, ci.ArgAt<CancellationToken>(1));
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory();
@@ -82,7 +82,7 @@ public class MqttManagedClientCancellationTests
                     throw new InvalidOperationException("wrapped cancellation", oce);
                 }
 
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory();
@@ -115,7 +115,7 @@ public class MqttManagedClientCancellationTests
             {
                 started.TrySetResult();
                 await finish.Task;
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory();
@@ -162,7 +162,7 @@ public class MqttManagedClientCancellationTests
             {
                 bStarted.TrySetResult();
                 await bFinish.Task;
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory();
@@ -209,11 +209,13 @@ public class MqttManagedClientCancellationTests
             {
                 aStarted.TrySetResult();
                 await Task.Delay(Timeout.Infinite, ci.ArgAt<CancellationToken>(1));
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var clientB = Substitute.For<IMqttClient>();
         clientB.IsConnected.Returns(true);
+        clientB.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
 
         var factory = new QueueClientFactory();
         factory.Enqueue(clientA);
@@ -247,7 +249,7 @@ public class MqttManagedClientCancellationTests
             {
                 started.TrySetResult();
                 await Task.Delay(Timeout.Infinite, ci.ArgAt<CancellationToken>(1));
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory();
@@ -274,7 +276,7 @@ public class MqttManagedClientCancellationTests
             {
                 started.TrySetResult();
                 await Task.Delay(Timeout.Infinite, ci.ArgAt<CancellationToken>(1));
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory();
@@ -297,7 +299,7 @@ public class MqttManagedClientCancellationTests
         client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
             .Returns(
                 _ => Task.FromException<MqttClientConnectResult>(boom),
-                _ => Task.FromResult(new MqttClientConnectResult()));
+                _ => Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
 
         var factory = new QueueClientFactory();
         factory.Enqueue(client);
@@ -319,6 +321,8 @@ public class MqttManagedClientCancellationTests
     public async Task Attempt_id_is_correlated_on_success()
     {
         var client = Substitute.For<IMqttClient>();
+        client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
         var factory = new QueueClientFactory();
         factory.Enqueue(client);
         await using var sut = new MqttManagedClient(factory, null);

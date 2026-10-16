@@ -63,7 +63,7 @@ public class MqttManagedClientTests
         client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
             .Returns(
                 _ => Task.FromException<MqttClientConnectResult>(new Exception("boom")),
-                _ => Task.FromResult(new MqttClientConnectResult()));
+                _ => Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
 
         await using var sut = new MqttManagedClient(client);
 

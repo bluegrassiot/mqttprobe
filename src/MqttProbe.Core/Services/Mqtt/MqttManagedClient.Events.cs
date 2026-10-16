@@ -37,49 +37,67 @@ public sealed partial class MqttManagedClient
                 return;
 
             _logger?.LogError(ex, "Failed to restore {Count} subscription(s) after connect", filters.Count);
-            await RaiseAsync(SynchronizingSubscriptionsFailedAsync, new MqttManagedProcessFailedEventArgs(ex),
-                nameof(SynchronizingSubscriptionsFailedAsync)).ConfigureAwait(false);
+            _ = RaiseWhileEligibleAsync(SynchronizingSubscriptionsFailedAsync, new MqttManagedProcessFailedEventArgs(ex),
+                nameof(SynchronizingSubscriptionsFailedAsync), generation);
         }
     }
 
     private async Task DrainPendingAsync(Generation generation)
     {
-        while (true)
+        try
         {
-            if (!IsOwnedForWork(generation) || !_activityGate.IsActive)
-                return;
+            await _drainSemaphore.WaitAsync(generation.Cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
 
-            MqttApplicationMessage? message;
-            lock (_sync)
+        try
+        {
+            while (true)
             {
-                if (_pending.Count == 0)
+                if (!IsOwnedForWork(generation) || !_activityGate.IsActive)
                     return;
-                message = _pending.Peek();
-            }
 
-            try
-            {
-                await generation.Client.PublishAsync(message, generation.Cts.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "Failed to publish queued message for topic {Topic}; will retry on next connect", message.Topic);
-                return;
-            }
+                MqttApplicationMessage message;
+                long headRevision;
+                lock (_sync)
+                {
+                    if (_pending.Count == 0)
+                        return;
+                    message = _pending.Peek();
+                    headRevision = _pendingHeadRevision;
+                }
 
-            lock (_sync)
-            {
-                // A blocked publish resuming after a Stop or cancel must not consume another
-                // generation's queued message.
-                if (!IsOwnedForWorkLocked(generation))
+                try
+                {
+                    await generation.Client.PublishAsync(message, generation.Cts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
                     return;
-                if (_pending.Count > 0 && ReferenceEquals(_pending.Peek(), message))
-                    _pending.Dequeue();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to publish queued message for topic {Topic}; will retry on next connect", message.Topic);
+                    return;
+                }
+
+                lock (_sync)
+                {
+                    // Revision match pins the exact queue-head occurrence across clears and evictions.
+                    if (_pendingHeadRevision == headRevision && _pending.Count > 0)
+                    {
+                        _pending.Dequeue();
+                        _pendingHeadRevision++;
+                    }
+                }
             }
+        }
+        finally
+        {
+            _drainSemaphore.Release();
         }
     }
 
@@ -104,14 +122,14 @@ public sealed partial class MqttManagedClient
     // Stops between subscribers once the generation is no longer eligible, so a subscriber
     // that awaits Stop does not let later subscribers or trailing notifications run stale.
     private async Task RaiseWhileEligibleAsync<TArgs>(
-        Func<TArgs, Task>? handler, TArgs args, string eventName, Generation generation)
+        Func<TArgs, Task>? handler, TArgs args, string eventName, Generation generation, bool requireActiveGate = true)
     {
         if (handler is null)
             return;
 
         foreach (var subscriber in handler.GetInvocationList())
         {
-            if (!IsEligibleForWork(generation))
+            if (!IsOwnedForWork(generation) || (requireActiveGate && !_activityGate.IsActive))
                 return;
 
             try

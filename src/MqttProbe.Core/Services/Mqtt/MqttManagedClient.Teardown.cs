@@ -25,15 +25,15 @@ public sealed partial class MqttManagedClient
     private static MqttClientDisconnectedEventArgs StopDisconnectedArgs() =>
         new(true, null!, MqttClientDisconnectReason.NormalDisconnection, null!, null!, null!);
 
-    private static void CancelQuietly(CancellationTokenSource cts)
+    private void CancelQuietly(CancellationTokenSource cts)
     {
         try
         {
             cts.Cancel();
         }
-        catch (ObjectDisposedException)
+        catch (ObjectDisposedException ex)
         {
-            // Already torn down; nothing left to cancel.
+            _logger?.LogDebug(ex, "Cancellation token source already disposed during teardown");
         }
     }
 

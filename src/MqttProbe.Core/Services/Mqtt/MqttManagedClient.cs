@@ -19,9 +19,11 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
     private readonly Queue<MqttApplicationMessage> _pending = new();
     private readonly HashSet<Generation> _generations = [];
     private readonly SemaphoreSlim _stopSemaphore = new(1, 1);
+    private readonly SemaphoreSlim _drainSemaphore = new(1, 1);
 
     private Generation? _current;
     private long _nextAttemptId;
+    private long _pendingHeadRevision;
     private int _adoptedGenerationsUsed;
     private bool _adoptedClientDisposed;
     private bool _disposed;
@@ -112,6 +114,7 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
             {
                 generations = _generations.ToArray();
                 _pending.Clear();
+                _pendingHeadRevision++;
             }
 
             foreach (var generation in generations)
@@ -199,6 +202,7 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
             if (_pending.Count >= MaxPendingMessages)
             {
                 _pending.Dequeue();
+                _pendingHeadRevision++;
                 _logger?.LogWarning(
                     "Pending publish queue full ({Max}); dropped oldest message for topic {Topic}",
                     MaxPendingMessages, applicationMessage.Topic);

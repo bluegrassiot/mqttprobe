@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using MQTTnet;
+using MQTTnet.Exceptions;
 
 namespace MqttProbe.Core.Services.Mqtt;
 
@@ -138,7 +139,9 @@ public sealed partial class MqttManagedClient
         {
             try
             {
-                await generation.Client.ConnectAsync(generation.Options.ClientOptions, linked.Token).ConfigureAwait(false);
+                var result = await generation.Client.ConnectAsync(generation.Options.ClientOptions, linked.Token)
+                    .ConfigureAwait(false);
+                EnsureConnectAccepted(result);
                 outcome = CompleteSuccess(generation);
             }
             catch (Exception ex)
@@ -388,8 +391,9 @@ public sealed partial class MqttManagedClient
 
             try
             {
-                await generation.Client.ConnectAsync(generation.Options.ClientOptions, cancellationToken)
+                var result = await generation.Client.ConnectAsync(generation.Options.ClientOptions, cancellationToken)
                     .ConfigureAwait(false);
+                EnsureConnectAccepted(result);
                 return;
             }
             catch (OperationCanceledException)
@@ -404,6 +408,12 @@ public sealed partial class MqttManagedClient
                 _ = NotifyReconnectFailureAsync(generation, ex);
             }
         }
+    }
+
+    private static void EnsureConnectAccepted(MqttClientConnectResult result)
+    {
+        if (result.ResultCode != MqttClientConnectResultCode.Success)
+            throw new MqttCommunicationException($"MQTT connection rejected: {result.ResultCode}.");
     }
 
     private async Task OnGenerationConnectedAsync(Generation generation, MqttClientConnectedEventArgs args)
@@ -445,8 +455,10 @@ public sealed partial class MqttManagedClient
         if (_activityGate.IsActive)
             StartReconnectLoop(generation);
 
-        await RaiseAsync(DisconnectedAsync, args, nameof(DisconnectedAsync)).ConfigureAwait(false);
-        await RaiseConnectionStateChangedAsync().ConfigureAwait(false);
+        await RaiseWhileEligibleAsync(DisconnectedAsync, args, nameof(DisconnectedAsync), generation, requireActiveGate: false)
+            .ConfigureAwait(false);
+        await RaiseWhileEligibleAsync(ConnectionStateChangedAsync, EventArgs.Empty, nameof(ConnectionStateChangedAsync),
+            generation, requireActiveGate: false).ConfigureAwait(false);
     }
 
     private Task OnGenerationApplicationMessageReceivedAsync(

@@ -38,7 +38,7 @@ public class MqttManagedClientLifecycleTests
             {
                 started.TrySetResult();
                 await release.Task;
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory(ownsClients: true);
@@ -72,7 +72,7 @@ public class MqttManagedClientLifecycleTests
             {
                 started.TrySetResult();
                 await release.Task;
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory(ownsClients: true);
@@ -143,7 +143,7 @@ public class MqttManagedClientLifecycleTests
 
         var clientA = Substitute.For<IMqttClient>();
         clientA.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new MqttClientConnectResult()));
+            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
         clientA.PublishAsync(Arg.Any<MqttApplicationMessage>(), Arg.Any<CancellationToken>())
             .Returns(async ci =>
             {
@@ -155,7 +155,7 @@ public class MqttManagedClientLifecycleTests
 
         var clientB = Substitute.For<IMqttClient>();
         clientB.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new MqttClientConnectResult()));
+            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
 
         var factory = new QueueClientFactory();
         factory.Enqueue(clientA);
@@ -235,7 +235,7 @@ public class MqttManagedClientLifecycleTests
             .Returns(_ =>
             {
                 gate.Revoke();
-                return Task.FromResult(new MqttClientConnectResult());
+                return Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success });
             });
 
         await using var sut = new MqttManagedClient(client, gate: gate);
@@ -281,7 +281,7 @@ public class MqttManagedClientLifecycleTests
             {
                 started.TrySetResult();
                 await finish.Task;
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory();
@@ -347,7 +347,7 @@ public class MqttManagedClientLifecycleTests
             {
                 client.IsConnected.Returns(true);
                 client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
-                return Task.FromResult(new MqttClientConnectResult());
+                return Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success });
             });
 
         var factory = new QueueClientFactory();
@@ -376,6 +376,8 @@ public class MqttManagedClientLifecycleTests
     {
         var client = Substitute.For<IMqttClient>();
         client.IsConnected.Returns(true);
+        client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
         await using var sut = new MqttManagedClient(client);
 
         var disconnected = 0;
@@ -401,7 +403,7 @@ public class MqttManagedClientLifecycleTests
             {
                 started.TrySetResult();
                 await release.Task;
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory();
@@ -432,7 +434,7 @@ public class MqttManagedClientLifecycleTests
             {
                 started.TrySetResult();
                 await Task.Delay(Timeout.Infinite, ci.ArgAt<CancellationToken>(1));
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory();
@@ -481,18 +483,20 @@ public class MqttManagedClientLifecycleTests
         var clientA = Substitute.For<IMqttClient>();
         clientA.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
             .Returns(ci => Interlocked.Increment(ref connectCalls) == 1
-                ? Task.FromResult(new MqttClientConnectResult())
+                ? Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success })
                 : ReconnectAttemptAsync());
 
         async Task<MqttClientConnectResult> ReconnectAttemptAsync()
         {
             reconnectInFlight.TrySetResult();
             await releaseReconnect.Task;
-            return new MqttClientConnectResult();
+            return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
         }
 
         var clientB = Substitute.For<IMqttClient>();
         clientB.IsConnected.Returns(true);
+        clientB.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
 
         var factory = new QueueClientFactory();
         factory.Enqueue(clientA);
@@ -533,6 +537,8 @@ public class MqttManagedClientLifecycleTests
     {
         var client = Substitute.For<IMqttClient>();
         client.IsConnected.Returns(true);
+        client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
         await using var sut = new MqttManagedClient(client);
         await sut.StartAsync(BuildOptions());
 
@@ -591,7 +597,7 @@ public class MqttManagedClientLifecycleTests
 
                 client.IsConnected.Returns(true);
                 client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
-                return Task.FromResult(new MqttClientConnectResult());
+                return Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success });
             });
 
         var factory = new QueueClientFactory();
@@ -629,7 +635,7 @@ public class MqttManagedClientLifecycleTests
                     client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
                 }
 
-                return Task.FromResult(new MqttClientConnectResult());
+                return Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success });
             });
         client.SubscribeAsync(Arg.Any<MqttClientSubscribeOptions>(), Arg.Any<CancellationToken>())
             .Returns(async _ =>
@@ -673,7 +679,7 @@ public class MqttManagedClientLifecycleTests
             {
                 client.IsConnected.Returns(true);
                 client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
-                return Task.FromResult(new MqttClientConnectResult());
+                return Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success });
             });
 
         var factory = new QueueClientFactory();
@@ -707,7 +713,7 @@ public class MqttManagedClientLifecycleTests
             {
                 started.TrySetResult();
                 await release.Task;
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory();
@@ -738,7 +744,7 @@ public class MqttManagedClientLifecycleTests
             {
                 started.TrySetResult();
                 await release.Task;
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var factory = new QueueClientFactory();
@@ -786,7 +792,7 @@ public class MqttManagedClientLifecycleTests
             {
                 started.TrySetResult();
                 await release.Task;
-                return new MqttClientConnectResult();
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
             });
 
         var sut = new MqttManagedClient(client, ownsClient: true);

@@ -12,6 +12,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
     private const string GroupingRowSelector = ".topic-tree-row--group";
     private const string SelectedRowSelector = ".topic-tree-row--selected";
     private const string GroupLabelSelector = ".topic-group-label";
+    private const string StatTextSelector = ".topic-stat-text";
     private const string GroupingFlagSelector = ".topic-grouping-flag";
 
     private const string DesktopPayloadRowSelector =
@@ -21,6 +22,9 @@ public sealed partial class MqttLiveFlowsSmokeTests
     private const string MobileTopicNameSelector = ".mobile-topic-bar__name";
     private const string MobileCountChipSelector = ".mobile-topic-bar__count-chip";
     private const string PickerOverlaySelector = ".topic-picker-overlay";
+
+    private const int StabilityWindowMs = 1_500;
+    private const int StabilitySampleIntervalMs = 100;
 
     private const string GroupToggleLabel = "Group Sparkplug topics by node and device";
 
@@ -68,6 +72,43 @@ public sealed partial class MqttLiveFlowsSmokeTests
 
     private static async Task<int> TreeRowCountAsync(IPage page, CancellationToken token) =>
         await page.Locator(TopicRowSelector).CountAsync().WaitAsync(token);
+
+    // Desktop Browser row stat cell: one visible grouping row matched by its exact label.
+    private static ILocator NodeStatLocator(IPage page, string label) =>
+        page.Locator($".browser-split-wrap:not(.browser-split-wrap--mobile):visible "
+            + $"{TopicRowSelector}:visible:has({GroupLabelSelector}:text-is('{label}')) > {StatTextSelector}");
+
+    private static async Task<string> NodeStatTextAsync(IPage page, string label, CancellationToken token)
+    {
+        var stat = NodeStatLocator(page, label);
+        await Assertions.Expect(stat).ToHaveCountAsync(1, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        return (await stat.InnerTextAsync().WaitAsync(token)).Trim();
+    }
+
+    private static async Task ExpectNodeStatChangedAsync(
+        IPage page, string label, string previous, CancellationToken token) =>
+        await Assertions.Expect(NodeStatLocator(page, label))
+            .Not.ToHaveTextAsync(previous, new() { Timeout = MessageWaitTimeoutMs }).WaitAsync(token);
+
+    // This observes stability, not a server timer tick.
+    private static async Task ObserveNoSelectionAndEmptyListStableAsync(
+        IPage page, TimeSpan window, CancellationToken token)
+    {
+        var deadline = DateTime.UtcNow + window;
+        while (true)
+        {
+            if (await page.Locator(SelectedRowSelector).CountAsync().WaitAsync(token) > 0)
+                Assert.Fail("a topic-tree row became selected during the stability window");
+
+            if (await page.Locator(DesktopPayloadRowSelector).CountAsync().WaitAsync(token) > 0)
+                Assert.Fail("a payload row appeared during the stability window");
+
+            if (DateTime.UtcNow >= deadline)
+                return;
+
+            await Task.Delay(StabilitySampleIntervalMs, token);
+        }
+    }
 
     // Expand all only expands rows that already exist, so wait for the first row before
     // clicking: a click against an empty tree expands nothing and the branch stays collapsed.

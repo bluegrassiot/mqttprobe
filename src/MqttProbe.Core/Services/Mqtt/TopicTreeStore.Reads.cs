@@ -6,7 +6,8 @@ namespace MqttProbe.Core.Services.Mqtt;
 internal sealed partial class TopicTreeStore
 {
     private readonly Guid _storeId = Guid.NewGuid();
-    private MessageStore[] _selectedStores = [];
+    private readonly HashSet<MessageStore> _selectedRoots = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<MessageStore> _selectedAncestors = new(ReferenceEqualityComparer.Instance);
     private string? _selectionKey;
     private string? _selectionLabel;
     private SparkplugSelectionScope? _selectionScope;
@@ -51,7 +52,7 @@ internal sealed partial class TopicTreeStore
         {
             if (selection is null)
             {
-                if (_selectedStores.Length > 0)
+                if (_selectedRoots.Count > 0)
                     InvalidateSelection();
 
                 return;
@@ -67,12 +68,7 @@ internal sealed partial class TopicTreeStore
             if (SameSelection(resolved, selection.Key, selection.Scope))
                 return;
 
-            _selectedStores = [.. resolved];
-            _selectionKey = selection.Key;
-            _selectionLabel = selection.Label;
-            _selectionScope = selection.Scope;
-            _selectionGeneration++;
-            _selectionContentVersion++;
+            ReplaceSelection(resolved, selection.Key, selection.Label, selection.Scope);
         }
     }
 
@@ -122,12 +118,12 @@ internal sealed partial class TopicTreeStore
                 return null;
 
             state = CaptureSelectedTopicState();
-            if (_selectedStores.Length == 0 || limit == 0)
+            if (_selectedRoots.Count == 0 || limit == 0)
                 messages = [];
             else
             {
                 var collected = new List<MqttMessage>();
-                foreach (var store in _selectedStores)
+                foreach (var store in _selectedRoots)
                     CollectMessages(store, collected);
                 messages = collected.ToArray();
             }
@@ -143,7 +139,7 @@ internal sealed partial class TopicTreeStore
     private SelectedTopicState CaptureSelectedTopicState() => new(
         new SelectedTopicToken(_storeId, _selectionGeneration, _selectionContentVersion),
         _selectionKey,
-        _selectedStores.Sum(store => store.MessageCount),
+        _selectedRoots.Sum(store => store.MessageCount),
         _selectionLabel);
 
     private List<MessageStore> ResolvePaths(ImmutableArray<string> topics)
@@ -193,14 +189,14 @@ internal sealed partial class TopicTreeStore
         return resolved;
     }
 
-    // The projection groups a tip only once a message arrived at its canonical path, so a scope
-    // admits no endpoint that was ever reached only through an alias spelling.
+    // A scope admits only endpoints observed at their canonical path, and they are disjoint by
+    // construction, so they need no overlap normalization.
     private static void AddEndpoint(List<MessageStore> resolved, MessageStore? endpoint)
     {
         if (endpoint?.FullTopic is not { } path || endpoint.ObservedRawTopics?.Contains(path) != true)
             return;
 
-        AddCovered(resolved, endpoint);
+        resolved.Add(endpoint);
     }
 
     private static void AddCovered(List<MessageStore> resolved, MessageStore node)
@@ -219,16 +215,27 @@ internal sealed partial class TopicTreeStore
     }
 
     // Re-selecting the same row must not look like a change, so a click on the already-selected
-    // row does not restart the message list. Store order is not meaningful, so compare as a set.
-    private bool SameSelection(List<MessageStore> resolved, string key, SparkplugSelectionScope? scope)
-    {
-        if (!string.Equals(_selectionKey, key, StringComparison.Ordinal)
-            || !Equals(_selectionScope, scope)
-            || resolved.Count != _selectedStores.Length)
-            return false;
+    // row does not restart the message list.
+    private bool SameSelection(List<MessageStore> resolved, string key, SparkplugSelectionScope? scope) =>
+        string.Equals(_selectionKey, key, StringComparison.Ordinal)
+        && Equals(_selectionScope, scope)
+        && _selectedRoots.SetEquals(resolved);
 
-        var retained = new HashSet<MessageStore>(_selectedStores);
-        return resolved.All(retained.Contains);
+    private void ReplaceSelection(List<MessageStore> resolved, string key, string? label, SparkplugSelectionScope? scope)
+    {
+        _selectedRoots.Clear();
+        _selectedAncestors.Clear();
+        foreach (var store in resolved)
+        {
+            _selectedRoots.Add(store);
+            IndexAncestors(store);
+        }
+
+        _selectionKey = key;
+        _selectionLabel = label;
+        _selectionScope = scope;
+        _selectionGeneration++;
+        _selectionContentVersion++;
     }
 
     private TopicNodeSnapshot CreateNodeSnapshot(MessageStore node)
@@ -255,7 +262,8 @@ internal sealed partial class TopicTreeStore
 
     private void InvalidateSelection()
     {
-        _selectedStores = [];
+        _selectedRoots.Clear();
+        _selectedAncestors.Clear();
         _selectionKey = null;
         _selectionLabel = null;
         _selectionScope = null;
@@ -263,38 +271,45 @@ internal sealed partial class TopicTreeStore
         _selectionContentVersion++;
     }
 
+    // A changed store belongs to the selection when it is a selected root, a descendant of one, or
+    // a strict ancestor of one. Only a direct ancestor-set hit counts; the walk up tests the root
+    // set, or a sibling under a shared ancestor would match and invalidate unrelated traffic.
     private bool SelectionIncludes(MessageStore store)
     {
-        if (_selectedStores.Length == 0)
+        if (_selectedRoots.Count == 0)
             return false;
 
-        var storePath = store.FullTopic;
-        foreach (var selected in _selectedStores)
+        if (_selectedAncestors.Contains(store))
+            return true;
+
+        for (var node = store; node is not null; node = node.Parent)
         {
-            if (ReferenceEquals(selected, store))
-                return true;
-
-            var selectedPath = selected.FullTopic;
-            if (selectedPath is null || storePath is null)
-                continue;
-
-            if (IsPathOrDescendant(storePath, selectedPath)
-                || IsPathOrDescendant(selectedPath, storePath))
+            if (_selectedRoots.Contains(node))
                 return true;
         }
 
         return false;
     }
 
-    // A scoped selection holds endpoints, so a device or verb whose first canonical message
-    // arrives after the click is not under any selected store yet. Append it here, where the
-    // spelling has just been recorded, rather than rescanning the tree for every message.
+    // A scoped selection holds endpoints, so an endpoint whose first canonical message arrives
+    // after the click is not in the set yet; add it where the spelling was just recorded.
     private void AppendToScopedSelection(MessageStore store)
     {
-        if (_selectionScope is not { } scope || !IsScopeEndpoint(store, scope) || _selectedStores.Contains(store))
+        if (_selectionScope is not { } scope || !IsScopeEndpoint(store, scope) || !_selectedRoots.Add(store))
             return;
 
-        _selectedStores = [.. _selectedStores, store];
+        IndexAncestors(store);
+    }
+
+    // Walk up only until an ancestor is already indexed: that node's whole chain was indexed with
+    // it, because an ancestor is always added together with every ancestor above it.
+    private void IndexAncestors(MessageStore store)
+    {
+        for (var node = store.Parent; node is not null; node = node.Parent)
+        {
+            if (!_selectedAncestors.Add(node))
+                break;
+        }
     }
 
     private static bool IsScopeEndpoint(MessageStore store, SparkplugSelectionScope scope)

@@ -144,7 +144,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
             RecalculateCounters();
             RebuildRetentionOrder();
-            if (_selectedStores.Length > 0)
+            if (_selectedRoots.Count > 0)
                 _selectionContentVersion++;
             Interlocked.Increment(ref _globalVersion);
             InvalidateTopicTree();
@@ -349,16 +349,16 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
     // the row, so the store and the projection agree on what is selected.
     private bool SelectionStillCovered()
     {
-        if (_selectedStores.Length == 0)
+        if (_selectedRoots.Count == 0)
             return true;
 
-        foreach (var selected in _selectedStores)
+        foreach (var selected in _selectedRoots)
         {
-            if (!ContainsStore(selected))
+            if (selected.FullTopic is not { } path || !ReferenceEquals(FindNode(path), selected))
                 return false;
 
             if (_selectionScope is not null
-                && selected.ObservedRawTopics?.Contains(selected.FullTopic ?? string.Empty) != true)
+                && selected.ObservedRawTopics?.Contains(path) != true)
                 return false;
         }
 
@@ -382,19 +382,6 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             node.TopicCount += child.TopicCount + 1;
             node.MessageCount += child.MessageCount;
         }
-    }
-
-    private bool ContainsStore(MessageStore selected)
-    {
-        return _messageStores.Values.Any(root => ContainsStore(root, selected));
-    }
-
-    private static bool ContainsStore(MessageStore current, MessageStore selected)
-    {
-        if (ReferenceEquals(current, selected))
-            return true;
-
-        return current.SubTopics?.Values.Any(child => ContainsStore(child, selected)) == true;
     }
 
     private void RebuildRetentionOrder()

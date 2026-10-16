@@ -26,12 +26,14 @@ public sealed partial class MqttLiveFlowsSmokeTests
         var node = $"n{id[..6]}";
         var device1 = $"d{id.Substring(6, 4)}";
         var device2 = $"d{id.Substring(10, 4)}";
+        var device3 = $"d{id.Substring(14, 4)}";
         var connName = $"smoke-{group}";
         var clientId = $"smoke-{id}"[..22];
 
         var dbirth1 = DeviceTopic(group, "DBIRTH", node, device1);
         var ddata1 = DeviceTopic(group, "DDATA", node, device1);
         var ddata2 = DeviceTopic(group, "DDATA", node, device2);
+        var ddata3 = DeviceTopic(group, "DDATA", node, device3);
 
         var otherGroup = $"o{id[..8]}";
         var otherNode = $"x{id[..6]}";
@@ -82,9 +84,15 @@ public sealed partial class MqttLiveFlowsSmokeTests
             SetStage("unrelated traffic does not join the selection");
             var membership = await DesktopPayloadRowCountAsync(page, token);
             await PublishAsync(mqtt, otherData, "unrelated", token);
+
+            await WaitForTreeRowLabelAsync(page, otherGroup, token);
+
+            // Wait for an in-scope sentinel before checking exclusion.
+            await PublishAsync(mqtt, ddata3, "device-3", token);
+            await ExpectDesktopPayloadTopicAsync(page, ddata3, token);
             await ExpectNoDesktopPayloadTopicAsync(page, otherData, token);
-            Assert.That(await DesktopPayloadRowCountAsync(page, token), Is.EqualTo(membership),
-                "unrelated traffic must not change the selected row's membership");
+            Assert.That(await DesktopPayloadRowCountAsync(page, token), Is.EqualTo(membership + 1),
+                "only the in-scope sentinel may join the selected row's membership");
 
             SetStage("disconnect");
             await page.Locator(DisconnectButton).ClickAsync(
@@ -255,23 +263,27 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await ExpectDesktopPayloadTopicAsync(page, ndata, token);
 
             SetStage("purge one selected member through an exclude filter");
+            var statBeforePurge = await NodeStatTextAsync(page, node, token);
             await AddExcludeFilterAsync(page, ndata, token);
+            await NavigateToTab(page, "Browser", token);
 
             SetStage("purging one member clears the whole selection and list");
-            await NavigateToTab(page, "Browser", token);
+            await ExpectNodeStatChangedAsync(page, node, statBeforePurge, token);
             await Assertions.Expect(page.Locator(SelectedRowSelector))
-                .ToHaveCountAsync(0, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+                .ToHaveCountAsync(0, new() { Timeout = MessageWaitTimeoutMs }).WaitAsync(token);
             await Assertions.Expect(page.Locator(DesktopPayloadRowSelector))
-                .ToHaveCountAsync(0, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+                .ToHaveCountAsync(0, new() { Timeout = MessageWaitTimeoutMs }).WaitAsync(token);
+            await ObserveNoSelectionAndEmptyListStableAsync(
+                page, TimeSpan.FromMilliseconds(StabilityWindowMs), token);
 
             SetStage("fresh traffic on the purged path does not resurrect the selection");
             await RemoveExcludeFilterAsync(page, token);
             await NavigateToTab(page, "Browser", token);
             await PublishAsync(mqtt, ndata, "fresh-data", token);
-            await Assertions.Expect(page.Locator(SelectedRowSelector))
-                .ToHaveCountAsync(0, new() { Timeout = MessageWaitTimeoutMs }).WaitAsync(token);
-            await Assertions.Expect(page.Locator(DesktopPayloadRowSelector))
-                .ToHaveCountAsync(0, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+            await ExpandAllTreeAsync(page, token);
+            await WaitForTreeRowLabelAsync(page, ndata, token);
+            await ObserveNoSelectionAndEmptyListStableAsync(
+                page, TimeSpan.FromMilliseconds(StabilityWindowMs), token);
 
             SetStage("disconnect");
             await page.Locator(DisconnectButton).ClickAsync(

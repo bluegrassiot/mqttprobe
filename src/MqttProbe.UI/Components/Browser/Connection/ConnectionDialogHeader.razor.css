@@ -7,11 +7,12 @@
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
-.header-label {
+/* Scoped rules only match elements this component writes, so MudText and MudSelect need ::deep. */
+.connection-dialog-header ::deep .header-label {
     flex-shrink: 0;
 }
 
-.header-select {
+.connection-dialog-header ::deep .mud-select {
     flex: 1;
 }
 
@@ -24,13 +25,23 @@
 
 @media (max-width: 599px) {
     .connection-dialog-header {
-        flex-direction: column;
-        align-items: stretch;
+        flex-wrap: wrap;
+        align-items: center;
         gap: 8px;
+        padding: 8px 12px;
     }
 
-    /* Buttons stay inline as a single row under the selector */
+    .connection-dialog-header ::deep .header-label {
+        flex-shrink: 0;
+    }
+
+    .connection-dialog-header ::deep .mud-select {
+        flex: 1 1 8rem;
+        min-width: 0;
+    }
+
     .connection-dialog-actions {
-        align-self: flex-end;
+        flex: 1 1 100%;
+        justify-content: flex-end;
     }
 }

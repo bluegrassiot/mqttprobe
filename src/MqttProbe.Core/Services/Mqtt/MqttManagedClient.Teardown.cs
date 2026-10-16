@@ -10,7 +10,11 @@ public sealed partial class MqttManagedClient
         bool notify;
         lock (_sync)
         {
-            notify = generation.WasConnected && !generation.StopNotified;
+            // A canceled outcome never reported success, so it has no established session to close:
+            // the raw connect handler may have run before the failure, but that is not a session.
+            notify = generation.WasConnected
+                && generation.SettledOutcome?.Status != MqttConnectStatus.Canceled
+                && !generation.StopNotified;
             if (notify)
                 generation.StopNotified = true;
         }

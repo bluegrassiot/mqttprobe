@@ -240,6 +240,131 @@ public class MqttManagedClientCancellationNotificationTests
             return [.. journal];
     }
 
+    [Test]
+    public async Task Canceled_exception_after_a_raw_connect_reports_no_managed_notifications()
+    {
+        var rawConnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var isConnected = false;
+        var client = Substitute.For<IMqttClient>();
+        var connected = CaptureConnected(client);
+        client.IsConnected.Returns(_ => isConnected);
+        client.DisconnectAsync(Arg.Any<MqttClientDisconnectOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                isConnected = false;
+                return Task.CompletedTask;
+            });
+        client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(async ci =>
+            {
+                isConnected = true;
+                await connected.Handler!(ConnectedArgs());
+                rawConnected.TrySetResult();
+                await Task.Delay(Timeout.Infinite, ci.ArgAt<CancellationToken>(1));
+                return Success();
+            });
+
+        var factory = new QueueClientFactory();
+        factory.Enqueue(client);
+        await using var sut = new MqttManagedClient(factory, null);
+
+        var connectedCount = 0;
+        var connectingFailed = 0;
+        var disconnected = 0;
+        var stateChanged = 0;
+        sut.ConnectedAsync += _ => { Interlocked.Increment(ref connectedCount); return Task.CompletedTask; };
+        sut.ConnectingFailedAsync += _ => { Interlocked.Increment(ref connectingFailed); return Task.CompletedTask; };
+        sut.DisconnectedAsync += _ => { Interlocked.Increment(ref disconnected); return Task.CompletedTask; };
+        sut.ConnectionStateChangedAsync += _ => { Interlocked.Increment(ref stateChanged); return Task.CompletedTask; };
+
+        using var cts = new CancellationTokenSource();
+        var attempt = sut.StartAttempt(BuildOptions(), cts.Token);
+        await rawConnected.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cts.Cancel();
+
+        (await attempt.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Canceled);
+        await WaitUntilAsync(() => DisconnectCount(client) >= 1);
+        await Task.Delay(200);
+
+        DisconnectCount(client).Should().BeGreaterThanOrEqualTo(1, "the late-connected raw client is still cleaned up");
+        ConnectCount(client).Should().Be(1, "a canceled attempt must not retry");
+        Volatile.Read(ref connectedCount).Should().Be(0);
+        Volatile.Read(ref connectingFailed).Should().Be(0);
+        Volatile.Read(ref disconnected).Should().Be(0, "an attempt that never reported success has no session to close");
+        Volatile.Read(ref stateChanged).Should().Be(0);
+    }
+
+    [Test]
+    public async Task Wrapped_canceled_exception_after_a_raw_connect_reports_no_managed_notifications()
+    {
+        var rawConnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var isConnected = false;
+        var client = Substitute.For<IMqttClient>();
+        var connected = CaptureConnected(client);
+        client.IsConnected.Returns(_ => isConnected);
+        client.DisconnectAsync(Arg.Any<MqttClientDisconnectOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                isConnected = false;
+                return Task.CompletedTask;
+            });
+        client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(async ci =>
+            {
+                isConnected = true;
+                await connected.Handler!(ConnectedArgs());
+                rawConnected.TrySetResult();
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, ci.ArgAt<CancellationToken>(1));
+                }
+                catch (OperationCanceledException oce)
+                {
+                    throw new InvalidOperationException("wrapped cancellation", oce);
+                }
+
+                return Success();
+            });
+
+        var factory = new QueueClientFactory();
+        factory.Enqueue(client);
+        await using var sut = new MqttManagedClient(factory, null);
+
+        var connectedCount = 0;
+        var connectingFailed = 0;
+        var disconnected = 0;
+        var stateChanged = 0;
+        sut.ConnectedAsync += _ => { Interlocked.Increment(ref connectedCount); return Task.CompletedTask; };
+        sut.ConnectingFailedAsync += _ => { Interlocked.Increment(ref connectingFailed); return Task.CompletedTask; };
+        sut.DisconnectedAsync += _ => { Interlocked.Increment(ref disconnected); return Task.CompletedTask; };
+        sut.ConnectionStateChangedAsync += _ => { Interlocked.Increment(ref stateChanged); return Task.CompletedTask; };
+
+        using var cts = new CancellationTokenSource();
+        var attempt = sut.StartAttempt(BuildOptions(), cts.Token);
+        await rawConnected.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cts.Cancel();
+
+        (await attempt.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Canceled);
+        await WaitUntilAsync(() => DisconnectCount(client) >= 1);
+        await Task.Delay(200);
+
+        DisconnectCount(client).Should().BeGreaterThanOrEqualTo(1, "the late-connected raw client is still cleaned up");
+        ConnectCount(client).Should().Be(1, "a canceled attempt must not retry");
+        Volatile.Read(ref connectedCount).Should().Be(0);
+        Volatile.Read(ref connectingFailed).Should().Be(0);
+        Volatile.Read(ref disconnected).Should().Be(0,
+            "a wrapped canceled failure never reported success, so it has no session to close");
+        Volatile.Read(ref stateChanged).Should().Be(0);
+    }
+
+    private static int ConnectCount(IMqttClient client) =>
+        client.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IMqttClient.ConnectAsync));
+
+    private static int DisconnectCount(IMqttClient client) =>
+        client.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IMqttClient.DisconnectAsync));
+
     private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 3000)
     {
         var waited = 0;

@@ -138,6 +138,22 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
             await NotifyDeliberateStopAsync(stopped).ConfigureAwait(false);
     }
 
+    public async Task StopAttemptAsync(MqttConnectAttemptId attemptId, CancellationToken cancellationToken = default)
+    {
+        Generation? target;
+        lock (_sync)
+        {
+            target = _generations.FirstOrDefault(generation => generation.AttemptId == attemptId);
+        }
+
+        if (target is null)
+            return;
+
+        RetireGeneration(target);
+        await target.CleanupCompleted.Task.ConfigureAwait(false);
+        await NotifyDeliberateStopAsync(target).ConfigureAwait(false);
+    }
+
     public async Task SubscribeAsync(IEnumerable<MqttTopicFilter> topicFilters, CancellationToken cancellationToken = default)
     {
         _activityGate.EnsureActive();

@@ -29,6 +29,9 @@ public partial class ConnectionDialog
 
         public CertificateSessionResource? Certificate { get; set; }
 
+        // Non-owning identity of the certificate handed to the session; release must not dispose it.
+        public CertificateSessionResource? PublishedCertificate { get; set; }
+
         public Task? Teardown { get; set; }
     }
 
@@ -50,11 +53,11 @@ public partial class ConnectionDialog
         operation.Cancellation.Dispose();
     }
 
-    private async Task StopOwnedConnectionAsync()
+    private async Task StopOwnedConnectionAsync(ConnectOperation operation)
     {
         try
         {
-            await SessionLifecycle.StopActiveConnectionAsync();
+            await SessionLifecycle.StopAttemptAsync(operation.AttemptId, operation.PublishedCertificate);
         }
         catch (Exception ex)
         {
@@ -250,6 +253,7 @@ public partial class ConnectionDialog
 
         if (operation.Certificate is not null)
         {
+            operation.PublishedCertificate = operation.Certificate;
             SessionState.ActiveCertificateResource = operation.Certificate;
             operation.Certificate = null;
         }
@@ -418,7 +422,7 @@ public partial class ConnectionDialog
         if (!operation.AttemptStarted)
             return;
 
-        operation.Teardown ??= StopOwnedConnectionAsync();
+        operation.Teardown ??= StopOwnedConnectionAsync(operation);
         await operation.Teardown;
         ReleaseOperation(operation);
     }

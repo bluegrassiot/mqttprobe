@@ -171,6 +171,42 @@ public class ConnectCancellationIntegrationTests
         await sut.StopAsync();
     }
 
+    [Test]
+    public async Task Stopping_a_superseded_attempt_leaves_the_current_session_publishing()
+    {
+        using var sut = new MqttManagedClient();
+
+        var topic = $"cancel/scoped-stop/{Guid.NewGuid():N}";
+        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        sut.ApplicationMessageReceivedAsync += args =>
+        {
+            if (args.ApplicationMessage.Topic == topic)
+                received.TrySetResult(args.ApplicationMessage.ConvertPayloadToString() ?? string.Empty);
+            return Task.CompletedTask;
+        };
+
+        var first = sut.StartAttempt(BuildTlsConnectOptions("stop-target"));
+        (await first.Completion.WaitAsync(TimeSpan.FromSeconds(15))).Status.Should().Be(MqttConnectStatus.Connected);
+
+        var second = sut.StartAttempt(BuildTlsConnectOptions("stop-survivor"));
+        (await second.Completion.WaitAsync(TimeSpan.FromSeconds(15))).Status.Should().Be(MqttConnectStatus.Connected);
+
+        await sut.StopAttemptAsync(first.Id).WaitAsync(TimeSpan.FromSeconds(15));
+
+        sut.IsStarted.Should().BeTrue("a scoped stop of a superseded attempt must not stop the current generation");
+        sut.IsConnected.Should().BeTrue();
+
+        await sut.SubscribeAsync([new MqttTopicFilterBuilder()
+            .WithTopic(topic)
+            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+            .Build()]);
+        await PublishAsync(topic, "after-scoped-stop");
+
+        (await received.Task.WaitAsync(TimeSpan.FromSeconds(10))).Should().Be("after-scoped-stop");
+
+        await sut.StopAsync();
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
     {
         var waited = 0;

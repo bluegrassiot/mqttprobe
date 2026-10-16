@@ -322,7 +322,7 @@
         {
             if (operation.AttemptStarted)
             {
-                operation.Teardown ??= StopOwnedConnectionAsync();
+                operation.Teardown ??= StopOwnedConnectionAsync(operation);
                 await operation.Teardown;
                 ReleaseOperation(operation);
             }

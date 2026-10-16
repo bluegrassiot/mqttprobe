@@ -211,6 +211,9 @@ public class FirstConnectRetainedMessageRaceTests
         public Task StopAsync(CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
+        public Task StopAttemptAsync(MqttConnectAttemptId attemptId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
         public void Dispose() { }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

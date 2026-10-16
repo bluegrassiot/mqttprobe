@@ -113,6 +113,8 @@ public class ConnectionDialogTests : BunitTestContext
         Services.AddSingleton(_mockUxMetrics);
         _mockSessionLifecycle = Substitute.For<IConnectionSessionLifecycle>();
         _mockSessionLifecycle.StopActiveConnectionAsync().Returns(Task.CompletedTask);
+        _mockSessionLifecycle.StopAttemptAsync(
+            Arg.Any<MqttConnectAttemptId>(), Arg.Any<CertificateSessionResource?>()).Returns(Task.CompletedTask);
         Services.AddSingleton(_mockSessionLifecycle);
         Services.AddSingleton(_mockCertStore);
         Services.AddSingleton(_mockFilePicker);
@@ -187,6 +189,11 @@ public class ConnectionDialogTests : BunitTestContext
 
     // The attempt completion continuation is posted to the dispatcher; flush it before asserting.
     private Task FlushDispatcherAsync() => _dialogProvider.InvokeAsync(() => { });
+
+    private List<CertificateSessionResource> CertificateResources() =>
+        _mockOptionsBuilder.ReceivedCalls()
+            .Select(call => call.GetArguments().OfType<CertificateSessionResource>().Single())
+            .ToList();
 
     private static MqttManagedClientOptions TestOptions() => new()
     {
@@ -451,7 +458,9 @@ public class ConnectionDialogTests : BunitTestContext
         _capturedStartToken.Should().NotBeNull("the pending attempt passed a cancellable token");
         _capturedStartToken!.Value.IsCancellationRequested.Should().BeTrue(
             "cancelling the attempt must cancel the token handed to StartAttempt");
-        await _mockSessionLifecycle.Received(1).StopActiveConnectionAsync();
+        await _mockSessionLifecycle.Received(1).StopAttemptAsync(
+            _attemptId, Arg.Any<CertificateSessionResource?>());
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
         _dialogProvider.FindAll(".mud-dialog").Should().NotBeEmpty("Cancel keeps the dialog open");
         _dialogProvider.FindAll("button[title='Connect']").Should().HaveCount(1,
             "Connect is offered again so the user can retry or edit");
@@ -713,9 +722,8 @@ public class ConnectionDialogTests : BunitTestContext
     public async Task Cancel_KeepsRetryDisabledUntilTeardownCompletes()
     {
         var stopGate = new TaskCompletionSource();
-        var stopCalls = 0;
-        _mockSessionLifecycle.StopActiveConnectionAsync().Returns(_ =>
-            Interlocked.Increment(ref stopCalls) == 1 ? Task.CompletedTask : stopGate.Task);
+        _mockSessionLifecycle.StopAttemptAsync(
+            Arg.Any<MqttConnectAttemptId>(), Arg.Any<CertificateSessionResource?>()).Returns(stopGate.Task);
 
         var cfg = new AppConfiguration
         {
@@ -771,6 +779,8 @@ public class ConnectionDialogTests : BunitTestContext
         await _dialogProvider.InvokeAsync(queuedCancel);
 
         await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+        await _mockSessionLifecycle.DidNotReceive().StopAttemptAsync(
+            Arg.Any<MqttConnectAttemptId>(), Arg.Any<CertificateSessionResource?>());
 
         finalizeGate.SetResult();
         await FlushDispatcherAsync();
@@ -1027,7 +1037,9 @@ public class ConnectionDialogTests : BunitTestContext
         _capturedStartToken.Should().NotBeNull();
         _capturedStartToken!.Value.IsCancellationRequested.Should().BeTrue(
             "closing the dialog cancels the pending attempt token");
-        await _mockSessionLifecycle.Received(1).StopActiveConnectionAsync();
+        await _mockSessionLifecycle.Received(1).StopAttemptAsync(
+            _attemptId, Arg.Any<CertificateSessionResource?>());
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
     }
 
     [Test]
@@ -1047,6 +1059,8 @@ public class ConnectionDialogTests : BunitTestContext
             _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("a successful connect closes the dialog"));
 
         await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+        await _mockSessionLifecycle.DidNotReceive().StopAttemptAsync(
+            Arg.Any<MqttConnectAttemptId>(), Arg.Any<CertificateSessionResource?>());
     }
 
     [TestCase(MqttConnectStatus.Connected)]
@@ -1082,8 +1096,64 @@ public class ConnectionDialogTests : BunitTestContext
 
         _capturedStartToken!.Value.IsCancellationRequested.Should().BeTrue(
             "an attempt that lands while the dialog closes is still cancelled");
-        await _mockSessionLifecycle.Received(1).StopActiveConnectionAsync();
+        await _mockSessionLifecycle.Received(1).StopAttemptAsync(
+            _attemptId, Arg.Any<CertificateSessionResource?>());
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
         _mockUxMetrics.DidNotReceive().RecordConnectSuccess();
+    }
+
+    [Test]
+    public async Task Dispose_WhileASupersedingAttemptStarts_StopsOnlyItsOwnAttempt()
+    {
+        var module = JSInterop.SetupModule("./_content/MqttProbe.UI/js/connection-dialog-viewport.js");
+        module.Setup<int?>("attach", _ => true).SetResult(7);
+        var detach = module.SetupVoid("detach", _ => true);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ConnectSavedConnectionAndWaitForPending();
+        var dialogA = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var aCompletion = _attemptCompletion!;
+        var aAttemptId = _attemptId;
+        var aResource = CertificateResources().Single();
+
+        var disposeA = _dialogProvider.InvokeAsync(async () => await dialogA.DisposeAsync());
+        await FlushDispatcherAsync();
+        disposeA.IsCompleted.Should().BeFalse("A is still releasing its viewport module");
+
+        await _dialogProvider.InvokeAsync(() =>
+            aCompletion.TrySetResult(new MqttConnectOutcome(aAttemptId, MqttConnectStatus.Connected)));
+        await FlushDispatcherAsync();
+
+        var dialogService = Services.GetRequiredService<IDialogService>();
+        await _dialogProvider.InvokeAsync(async () =>
+            await dialogService.ShowAsync<ConnectionDialog>("Connection Setup"));
+        var dialogB = _dialogProvider.FindComponents<ConnectionDialog>()
+            .Single(rendered => !ReferenceEquals(rendered.Instance, dialogA));
+        await dialogB.InvokeAsync(async () => await dialogB.Instance.ConnectionChanged(cfg.Connections[0]));
+        dialogB.Find("button[title='Connect']").Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            dialogB.Instance.IsConnectingForTests.Should().BeTrue("the replacement attempt is pending"));
+        var bAttemptId = _attemptId;
+        var bResource = CertificateResources().Last();
+        bAttemptId.Should().NotBe(aAttemptId, "the replacement attempt is its own generation");
+        bResource.Should().NotBeSameAs(aResource, "the replacement attempt owns its own certificate resource");
+
+        _mockSessionLifecycle.ClearReceivedCalls();
+        detach.SetVoidResult();
+        await disposeA;
+        await FlushDispatcherAsync();
+
+        await _mockSessionLifecycle.Received(1).StopAttemptAsync(aAttemptId, aResource);
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+        _mockSessionState.ActiveCertificateResource.Should().BeSameAs(bResource,
+            "A's teardown must leave the replacement attempt's certificate published");
+        Assert.DoesNotThrow(() => bResource.Set(TestCertFactory.CreateRsaCert()),
+            "A's teardown must not dispose the replacement attempt's certificate");
     }
 
     [Test]

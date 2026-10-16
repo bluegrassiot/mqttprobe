@@ -14,6 +14,8 @@ public interface IMqttManagedClient : IAsyncDisposable, IDisposable
 
     public Task StopAsync(CancellationToken cancellationToken = default);
 
+    public Task StopAttemptAsync(MqttConnectAttemptId attemptId, CancellationToken cancellationToken = default);
+
     public Task SubscribeAsync(IEnumerable<MqttTopicFilter> topicFilters, CancellationToken cancellationToken = default);
     public Task UnsubscribeAsync(IEnumerable<string> topics, CancellationToken cancellationToken = default);
 

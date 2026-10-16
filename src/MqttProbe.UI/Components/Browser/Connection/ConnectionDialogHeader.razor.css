@@ -7,11 +7,13 @@
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
-.header-label {
+/* Scoped rules only match elements this component writes, so MudText and MudSelect need
+   ::deep; MudSelect's own root is the flex item, not the element its Class parameter reaches. */
+.connection-dialog-header ::deep .header-label {
     flex-shrink: 0;
 }
 
-.header-select {
+.connection-dialog-header ::deep .mud-select {
     flex: 1;
 }
 
@@ -30,11 +32,11 @@
         padding: 8px 12px;
     }
 
-    .header-label {
+    .connection-dialog-header ::deep .header-label {
         flex-shrink: 0;
     }
 
-    .header-select {
+    .connection-dialog-header ::deep .mud-select {
         flex: 1 1 8rem;
         min-width: 0;
     }

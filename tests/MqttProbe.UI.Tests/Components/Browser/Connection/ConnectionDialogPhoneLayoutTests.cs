@@ -16,6 +16,7 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
 {
     private const string ComponentsCss = "src/MqttProbe.UI/wwwroot/css/components.css";
     private const string DialogCss = "src/MqttProbe.UI/Components/Browser/Connection/ConnectionDialog.razor.css";
+    private const string HeaderCss = "src/MqttProbe.UI/Components/Browser/Connection/ConnectionDialogHeader.razor.css";
     private const string DialogMarkup = "src/MqttProbe.UI/Components/Browser/Connection/ConnectionDialog.razor";
     private const string InteropClass = "src/MqttProbe.UI/Components/Browser/Connection/ConnectionDialogViewportInterop.cs";
     private const string ViewportScript = "src/MqttProbe.UI/wwwroot/js/connection-dialog-viewport.js";
@@ -106,6 +107,34 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     public void StepSelector_LabelDoesNotWrapOnTheNarrowestPhone()
     {
         ReadCssRule(DialogCss, ".step-btn").Should().Contain("white-space: nowrap");
+    }
+
+    [Test]
+    public void HeaderSelector_SizesTheElementMudSelectRenders_NotTheClassItIsGiven()
+    {
+        // A scoped rule only carries the isolation attribute on elements this component
+        // writes, and MudSelect puts the class it is given on the input control inside its
+        // own root, so a bare ".header-select" rule can never match; the header reaches the
+        // flex item instead. Without it the selector cannot shrink to share the label's row.
+        ReadRepositoryFile(HeaderCss).Should().NotContain(".header-select");
+
+        ReadCssRule(HeaderCss, ".connection-dialog-header ::deep .header-label")
+            .Should().Contain("flex-shrink: 0");
+        ReadCssRule(HeaderCss, ".connection-dialog-header ::deep .mud-select")
+            .Should().Contain("flex: 1");
+
+        var phoneSelector = ReadPhoneMediaBlockContaining(
+            HeaderCss, ".connection-dialog-header ::deep .mud-select {");
+        phoneSelector.Should().Contain("flex: 1 1 8rem");
+        phoneSelector.Should().Contain("min-width: 0");
+
+        var cut = Render<ConnectionDialogHeader>(p => p
+            .Add(x => x.Connections, new List<Connection> { new Connection { Name = "one" } }));
+
+        var flexItem = cut.FindAll("div.connection-dialog-header > *")
+            .Single(element => element.ClassList.Contains("mud-select"));
+        flexItem.Children.Should().Contain(element => element.ClassList.Contains("mud-input-control"),
+            "the class MudSelect is given lands one level into its root");
     }
 
     [Test]
@@ -334,15 +363,29 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
         var user = FindInputForLabel(cut, "User");
         user.GetAttribute("autocapitalize").Should().Be("none");
         user.GetAttribute("autocorrect").Should().Be("off");
+
+        // A stored site login must not be filled in, and the field must not read as a
+        // username to a browser's autofill heuristics.
+        user.GetAttribute("autocomplete").Should().Be("off");
+        user.GetAttribute("name").Should().Be("mqtt-user");
+
+        // The broker password is not a site login either: offered as a new secret rather
+        // than the account's current password.
+        FindInputForLabel(cut, "Password").GetAttribute("autocomplete").Should().Be("new-password");
     }
 
     [Test]
-    public void ConnectionFields_WebSocketBasePath_UsesTheUrlKeyboard()
+    public void ConnectionFields_WebSocketBasePath_UsesTheUrlKeyboardAndCasingHints()
     {
         var cut = Render<ConnectionFields>(p =>
             p.Add(x => x.Connection, new Connection { Protocol = Protocol.WebSocket }));
 
-        FindInputForLabel(cut, "WebSocket Base Path").GetAttribute("inputmode").Should().Be("url");
+        // MQTT paths are case-sensitive, so a base path must not be auto-capitalised or
+        // auto-corrected either.
+        var basePath = FindInputForLabel(cut, "WebSocket Base Path");
+        basePath.GetAttribute("inputmode").Should().Be("url");
+        basePath.GetAttribute("autocapitalize").Should().Be("none");
+        basePath.GetAttribute("autocorrect").Should().Be("off");
     }
 
     [Test]

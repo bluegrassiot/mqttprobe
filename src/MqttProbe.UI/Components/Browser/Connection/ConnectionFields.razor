@@ -43,6 +43,7 @@
         <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.User"
                       For="@(() => Connection.User)" Immediate="true" Label="User"
                       autocapitalize="none" autocorrect="off"
+                      autocomplete="off" name="mqtt-user"
                       Margin="Margin.Dense" />
     </MudItem>
     <MudItem xs="12" sm="6">
@@ -53,7 +54,7 @@
         <MudItem xs="12">
             <MudTextField Variant="Variant.Outlined" @bind-Value="Connection.WebsocketBasePath"
                           Immediate="true" Label="WebSocket Base Path"
-                          InputMode="InputMode.url"
+                          InputMode="InputMode.url" autocapitalize="none" autocorrect="off"
                           HelperText="Use the broker WebSocket endpoint path (for example /mqtt)."
                           Margin="Margin.Dense" />
         </MudItem>

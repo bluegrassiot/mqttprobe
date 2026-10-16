@@ -52,10 +52,16 @@ public class MqttManagedClientLifecycleTests
 
         var stop = sut.StopAsync();
         await Task.Delay(150);
-        stop.IsCompleted.Should().BeFalse("Stop must await the in-flight connect teardown");
-        client.DidNotReceive().Dispose();
+        try
+        {
+            stop.IsCompleted.Should().BeFalse("Stop must await the in-flight connect teardown");
+            client.DidNotReceive().Dispose();
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
 
-        release.TrySetResult();
         await stop.WaitAsync(TimeSpan.FromSeconds(5));
         (await attempt.Completion).Status.Should().Be(MqttConnectStatus.Canceled);
         client.Received(1).Dispose();
@@ -96,10 +102,16 @@ public class MqttManagedClientLifecycleTests
 
         var stop = lifecycle.StopActiveConnectionAsync();
         await Task.Delay(150);
-        stop.IsCompleted.Should().BeFalse("Stop must not return while the connect cleanup is still running");
-        resource.Certificate.Should().NotBeNull("the certificate must survive until the connect cleanup finishes");
+        try
+        {
+            stop.IsCompleted.Should().BeFalse("Stop must not return while the connect cleanup is still running");
+            resource.Certificate.Should().NotBeNull("the certificate must survive until the connect cleanup finishes");
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
 
-        release.TrySetResult();
         await stop.WaitAsync(TimeSpan.FromSeconds(5));
         resource.Certificate.Should().BeNull("the certificate is disposed only after Stop completes");
         sessionState.CertificateSessionFaulted.Should().BeFalse();

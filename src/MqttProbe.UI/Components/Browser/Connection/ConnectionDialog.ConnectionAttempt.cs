@@ -43,6 +43,8 @@ public partial class ConnectionDialog
         operation.Completed = true;
         if (ReferenceEquals(_operation, operation))
             _operation = null;
+        if (_connectionState == ConnectionState.Connecting)
+            _connectionState = ConnectionState.Disconnected;
         operation.Certificate?.Dispose();
         operation.Certificate = null;
         operation.Cancellation.Dispose();
@@ -89,8 +91,6 @@ public partial class ConnectionDialog
                     await teardown;
                 if (!operation.Completed)
                 {
-                    if (_connectionState == ConnectionState.Connecting)
-                        _connectionState = ConnectionState.Disconnected;
                     ReleaseOperation(operation);
                     if (!_disposed)
                         StateHasChanged();
@@ -107,11 +107,12 @@ public partial class ConnectionDialog
         if (!IsCurrent(operation)) return null;
         if (!await PromptSaveIfUnsavedChangesAsync()) return null;
         if (!IsCurrent(operation)) return null;
-        if (!await StopActiveConnectionGracefullyAsync()) return null;
-        if (!IsCurrent(operation)) return null;
 
         _connectionState = ConnectionState.Connecting;
         StateHasChanged();
+
+        if (!await StopActiveConnectionGracefullyAsync()) return null;
+        if (!IsCurrent(operation)) return null;
 
         var connection = await PrepareConnectionForAttemptAsync(operation);
         if (!IsCurrent(operation) || connection is null)

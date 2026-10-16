@@ -108,7 +108,7 @@ public sealed partial class MqttManagedClient
     {
         CancellationTokenRegistration registration = default;
         if (callerToken.CanBeCanceled)
-            registration = callerToken.Register(() => RetireGeneration(generation));
+            registration = callerToken.Register(() => OnCallerCancellation(generation));
 
         try
         {
@@ -122,6 +122,18 @@ public sealed partial class MqttManagedClient
             generation.ConnectCompleted.TrySetResult();
             generation.OperationCompleted.TrySetResult();
         }
+    }
+
+    private void OnCallerCancellation(Generation generation)
+    {
+        RetireGeneration(generation);
+        _ = NotifyCallerCancellationAsync(generation);
+    }
+
+    private async Task NotifyCallerCancellationAsync(Generation generation)
+    {
+        await generation.CleanupCompleted.Task.ConfigureAwait(false);
+        await NotifyDeliberateStopAsync(generation).ConfigureAwait(false);
     }
 
     private async Task RunConnectOperationAsync(

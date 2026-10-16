@@ -856,6 +856,62 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
+    public async Task Cancel_DuringBlockedGracefulShutdown_CancelsStartupInPlace()
+    {
+        var shutdownGate = new TaskCompletionSource();
+        _mockSessionLifecycle.StopActiveConnectionAsync().Returns(_ => shutdownGate.Task);
+
+        var connA = new Connection { Name = "Broker A", Host = "a.local", Port = 1883 };
+        var connB = new Connection { Name = "Broker B", Host = "b.local", Port = 1883 };
+        await OpenDialog(new AppConfiguration { Connections = [connA, connB] });
+        await SelectConnection(connA);
+
+        DirtyNameField("Broker B");
+        _dialogProvider.Markup.Should().Contain("already exists");
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        try
+        {
+            await _mockSessionLifecycle.Received(1).StopActiveConnectionAsync();
+            await FlushDispatcherAsync();
+
+            _dialogProvider.FindAll("[data-testid=cancel-connect]").Should().NotBeEmpty(
+                "the connecting footer owns Cancel while startup waits on the previous shutdown");
+
+            _dialogProvider.Find("[data-testid=cancel-connect]").Click();
+
+            var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+            dialog.IsConnectingForTests.Should().BeFalse("cancelling the startup clears the connecting state");
+            _dialogProvider.FindAll(".mud-dialog").Should().NotBeEmpty(
+                "cancelling the startup keeps the dialog open");
+            _dialogProvider.Markup.Should().NotContain("will be discarded",
+                "cancelling the startup must not raise the unsaved-changes discard prompt");
+            _dialogProvider.FindComponents<MudTextField<string>>().First(f => f.Instance.Label == "Name")
+                .Find("input").GetAttribute("value").Should().Be("Broker B");
+            _dialogProvider.FindComponents<MudTextField<string>>().First(f => f.Instance.Label == "Host")
+                .Find("input").GetAttribute("value").Should().Be("a.local");
+
+            await _mockSessionLifecycle.Received(1).StopActiveConnectionAsync();
+            _mockUxMetrics.DidNotReceive().RecordConnectAttempt();
+            _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+            await _mockCoordinator.DidNotReceive().ResetIfBrokerChangedAsync(Arg.Any<Connection>());
+        }
+        finally
+        {
+            shutdownGate.TrySetResult();
+        }
+
+        await FlushDispatcherAsync();
+
+        _dialogProvider.WaitForAssertion(() =>
+            _dialogProvider.Find("button[title='Connect']").GetAttribute("disabled").Should().BeNull(
+                "the cancelled startup is retired so the user can retry"),
+            TimeSpan.FromSeconds(2));
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task Dispose_WhileSaveAndConnectPending_DoesNotStopActiveConnection()
     {
         var saveGate = new TaskCompletionSource();

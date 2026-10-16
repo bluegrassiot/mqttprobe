@@ -24,11 +24,8 @@ public sealed partial class MqttManagedClient
             .ConfigureAwait(false);
     }
 
-    private bool HasNewerAttempt(Generation generation)
-    {
-        var current = Volatile.Read(ref _current);
-        return current is not null && current.AttemptId.Value > generation.AttemptId.Value;
-    }
+    private bool HasNewerAttempt(Generation generation) =>
+        Volatile.Read(ref _nextAttemptId) > generation.AttemptId.Value;
 
     private async Task RaiseUnlessSupersededAsync<TArgs>(
         Func<TArgs, Task>? handler, TArgs args, string eventName, Generation generation)

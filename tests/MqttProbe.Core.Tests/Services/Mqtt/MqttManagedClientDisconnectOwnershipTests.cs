@@ -241,6 +241,62 @@ public class MqttManagedClientDisconnectOwnershipTests
     }
 
     [Test]
+    public async Task Supersession_survives_the_newer_attempt_retiring_mid_deliberate_stop()
+    {
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var bStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseB = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var clientA = Substitute.For<IMqttClient>();
+        clientA.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Success()));
+
+        var clientB = Substitute.For<IMqttClient>();
+        clientB.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                bStarted.TrySetResult();
+                await releaseB.Task;
+                return Success();
+            });
+
+        var factory = new QueueClientFactory();
+        factory.Enqueue(clientA);
+        factory.Enqueue(clientB);
+        await using var sut = new MqttManagedClient(factory, null);
+
+        var secondDisconnected = 0;
+        var stateCount = 0;
+        sut.DisconnectedAsync += async _ =>
+        {
+            firstEntered.TrySetResult();
+            await releaseFirst.Task;
+        };
+        sut.DisconnectedAsync += _ => { Interlocked.Increment(ref secondDisconnected); return Task.CompletedTask; };
+        sut.ConnectionStateChangedAsync += _ => { Interlocked.Increment(ref stateCount); return Task.CompletedTask; };
+
+        var attemptA = sut.StartAttempt(BuildOptions());
+        (await attemptA.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
+
+        var stop = sut.StopAsync();
+        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        using var bCts = new CancellationTokenSource();
+        var attemptB = sut.StartAttempt(BuildOptions(), bCts.Token);
+        await bStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        bCts.Cancel();
+        releaseB.TrySetResult();
+        (await attemptB.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Canceled);
+
+        releaseFirst.TrySetResult();
+        await stop.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Volatile.Read(ref secondDisconnected).Should().Be(0, "supersession must outlive the newer attempt's retirement");
+        Volatile.Read(ref stateCount).Should().Be(0, "a superseded generation must not emit trailing deliberate-stop state");
+    }
+
+    [Test]
     public async Task Connected_state_subscriber_replacing_the_generation_skips_the_second_state_subscriber()
     {
         var clientA = Substitute.For<IMqttClient>();

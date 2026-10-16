@@ -828,6 +828,34 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
+    public async Task Dispose_DuringBlockedGracefulShutdown_DoesNotResetBrokerOrStartAttempt()
+    {
+        var shutdownGate = new TaskCompletionSource();
+        _mockSessionLifecycle.StopActiveConnectionAsync().Returns(_ => shutdownGate.Task);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        await _mockSessionLifecycle.Received(1).StopActiveConnectionAsync();
+
+        await _dialogProvider.InvokeAsync(async () => await dialog.DisposeAsync());
+
+        shutdownGate.SetResult();
+        await FlushDispatcherAsync();
+
+        await _mockCoordinator.DidNotReceive().ResetIfBrokerChangedAsync(Arg.Any<Connection>());
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+        dialog.IsConnectingForTests.Should().BeFalse(
+            "a startup that outlives the dialog must not flip the connection state");
+    }
+
+    [Test]
     public async Task SuccessWhileCleanupBlocked_CloseKeepsNewStagedAsset()
     {
         var priorOwnerId = Guid.NewGuid();

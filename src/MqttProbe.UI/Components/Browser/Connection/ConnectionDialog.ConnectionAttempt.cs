@@ -106,6 +106,7 @@ public partial class ConnectionDialog
         if (!await ValidateForm()) return null;
         if (!await PromptSaveIfUnsavedChangesAsync()) return null;
         if (!await StopActiveConnectionGracefullyAsync()) return null;
+        if (!IsCurrent(operation)) return null;
 
         _connectionState = ConnectionState.Connecting;
         StateHasChanged();

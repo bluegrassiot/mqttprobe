@@ -321,3 +321,95 @@ body:has(.mud-dialog-container) .mobile-primary-nav {
     overflow: hidden;
     box-sizing: border-box;
 }
+
+/* ── Setup Connection dialog ───────────────────────────────────────────────
+   The dialog renders through MudBlazor's portal, outside every component's CSS
+   isolation, so the paper and the slots MudBlazor puts between it and the component's
+   own markup can only be bounded from here. */
+.mud-dialog.connection-dialog-paper {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Those slots are display:block, so a percentage height would collapse at each of them. */
+.mud-dialog.connection-dialog-paper > div:not(.mud-dialog-title),
+.mud-dialog.connection-dialog-paper .mud-focus-trap-child-container,
+.mud-dialog.connection-dialog-paper .mud-dialog-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.mud-dialog.connection-dialog-paper .mud-dialog-content {
+    overflow: hidden;
+}
+
+.mud-dialog.connection-dialog-paper > .mud-dialog-title {
+    flex: 0 0 auto;
+}
+
+/* Phone sheet presentation: width only, with no keyboard or safe-area concerns.
+   Mirrors MudBlazor's own .mud-dialog-fullscreen, which is unusable here because
+   DialogOptions.FullScreen applies at every viewport. */
+@media (max-width: 599px) {
+    .mud-dialog.connection-dialog-paper {
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: none;
+        margin: 0;
+        border-radius: 0;
+    }
+
+    .mud-dialog.connection-dialog-paper .mud-dialog-content {
+        padding: 0;
+    }
+
+    .mud-dialog.connection-dialog-paper > .mud-dialog-title {
+        padding: 10px 16px;
+    }
+}
+
+/* Where a software keyboard can appear — a viewport narrow enough for the sheet, or a
+   touch-primary pointer at any width — device insets stay padding on the card, and the
+   measured strips are spent on the container, which places the card in the band that is
+   actually visible and bounds it there. */
+@media (max-width: 599px), (pointer: coarse) {
+    .mud-dialog.connection-dialog-paper {
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        padding-left: env(safe-area-inset-left, 0px);
+        padding-right: env(safe-area-inset-right, 0px);
+    }
+
+    .mud-dialog-container.connection-dialog-container--keyboard {
+        /* stretch, so the card's height is the container's content box — the band the
+           strips leave — instead of a percentage MudBlazor resolves against its padding. */
+        align-items: stretch;
+        padding-top: calc(
+            env(safe-area-inset-top, 0px)
+            + var(--connection-dialog-viewport-top-inset, 0px)
+        );
+        padding-bottom: calc(
+            env(safe-area-inset-bottom, 0px)
+            + var(--connection-dialog-keyboard-inset, 0px)
+        );
+        padding-left: env(safe-area-inset-left, 0px);
+        padding-right: env(safe-area-inset-right, 0px);
+    }
+
+    /* The modal does not need to reserve space for the app bar. */
+    .mud-dialog-container.connection-dialog-container--keyboard .connection-dialog-paper {
+        height: auto;
+        max-height: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .mud-dialog-container.connection-dialog-container--keyboard .mud-dialog-content {
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+}

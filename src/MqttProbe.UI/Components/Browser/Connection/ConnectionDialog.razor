@@ -1,4 +1,5 @@
 @using Microsoft.Extensions.Logging
+@using Microsoft.JSInterop
 @using MudBlazor.Utilities
 @using MqttProbe.Core.Services.Configuration
 @using MqttProbe.Core.Services.Security
@@ -19,9 +20,10 @@
 @inject IConnectionSessionLifecycle SessionLifecycle
 @inject ICertificateAssetStore CertStore
 @inject ISnackbar Snackbar
-<MudDialog OnBackdropClick="OnBackdropClickAsync">
+@inject IJSRuntime JS
+<MudDialog Class="connection-dialog-paper" OnBackdropClick="OnBackdropClickAsync">
     <DialogContent>
-        <div class="connection-dialog-content" @onkeydown="HandleDialogKeyDown" tabindex="-1">
+        <div class="connection-dialog-content" @onkeydown="HandleDialogKeyDown" tabindex="-1" @ref="_dialogContent">
             <ConnectionDialogHeader Connections="@ConnectionSettings.Connections"
                                      Selected="@_savedConnectionForSelector"
                                      SelectedChanged="ConnectionChanged!"
@@ -94,38 +96,44 @@
                                                 OnExcludeRemove="HandleOnConnectExcludeRemove" />
                     </MudTabPanel>
                 </MudTabs>
-                <div class="connection-actions-footer">
-                    @if (_nameCollisionError is not null)
-                    {
-                        <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined" Class="mb-1">
-                            @_nameCollisionError
-                        </MudAlert>
-                    }
-                    @if (_connectionState == ConnectionState.Connecting)
-                    {
-                        <div class="d-flex align-center gap-2">
-                            <img class="signal-connecting-sm" width="26" height="26" src="/_content/MqttProbe.UI/img/signal-motif.svg" alt="" />
-                            <MudText Typo="Typo.subtitle1">Connecting...</MudText>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="connection-actions-footer-cta">
-                            <MudButton Variant="Variant.Text" OnClick="@(async () => await RequestClose())"
-                                       Class="mr-2">Cancel</MudButton>
-                            <AppPrimaryButton title="Connect" MinWidth="true"
-                                        StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect)"
-                                        OnClick="@(async () => await Connect())">Connect</AppPrimaryButton>
-                        </div>
-                    }
-                    @if (_connectionState == ConnectionState.Failed)
-                    {
-                        <MudAlert Class="mt-2" Severity="Severity.Error" Variant="Variant.Outlined">
-                            Connection failed. Verify broker, credentials, and transport settings.
-                        </MudAlert>
-                    }
-                </div>
             </MudForm>
+            <div class="connection-dialog-notices">
+                @* Feedback, not actions: it scrolls with the form, so a long alert on a short
+                   card takes room from the form instead of from the fields above the actions. *@
+                @if (_nameCollisionError is not null)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined">
+                        @_nameCollisionError
+                    </MudAlert>
+                }
+                @if (_connectionState == ConnectionState.Failed)
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        Connection failed. Verify broker, credentials, and transport settings.
+                    </MudAlert>
+                }
+            </div>
+            @* A sibling of the form, not a child of it: the compact card is the scroll
+               owner there and a sticky footer is clamped to its containing block. *@
+            <div class="connection-actions-footer">
+                @if (_connectionState == ConnectionState.Connecting)
+                {
+                    <div class="d-flex align-center gap-2">
+                        <img class="signal-connecting-sm" width="26" height="26" src="/_content/MqttProbe.UI/img/signal-motif.svg" alt="" />
+                        <MudText Typo="Typo.subtitle1">Connecting...</MudText>
+                    </div>
+                }
+                else
+                {
+                    <div class="connection-actions-footer-cta">
+                        <MudButton Variant="Variant.Text" OnClick="@(async () => await RequestClose())"
+                                   Class="mr-2">Cancel</MudButton>
+                        <AppPrimaryButton title="Connect" MinWidth="true"
+                                    StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect)"
+                                    OnClick="@(async () => await Connect())">Connect</AppPrimaryButton>
+                    </div>
+                }
+            </div>
         </div>
     </DialogContent>
 </MudDialog>
@@ -135,6 +143,9 @@
     [Parameter] public EventCallback<bool> OnComplete { get; set; }
 
     private MudForm _form = new();
+    private ElementReference _dialogContent;
+    private ConnectionDialogViewportInterop? _viewport;
+    private bool _disposed;
     private readonly ConnectionValidator _connectionValidator = new();
     private ConnectionState _connectionState;
     private Connection? _savedConnectionForSelector;
@@ -249,6 +260,13 @@
             _preselectionCertInitialized = true;
             await InitializePreselectedCert();
         }
+
+        if (firstRender && !_disposed)
+        {
+            _viewport = new ConnectionDialogViewportInterop(JS);
+            await _viewport.AttachAsync(_dialogContent);
+        }
+
         await base.OnAfterRenderAsync(firstRender);
     }
 
@@ -283,6 +301,9 @@
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
+        if (_viewport is not null)
+            await _viewport.DisposeAsync();
         ManagedMqttClient.ConnectingFailedAsync -= OnConnectingFailed;
         ManagedMqttClient.ConnectedAsync -= OnConnected;
         if (_activeCertResource is not null)

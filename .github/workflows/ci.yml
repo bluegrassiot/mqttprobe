@@ -234,7 +234,8 @@ jobs:
         id: tag
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "value=latest" >> "$GITHUB_OUTPUT"
+            # latest is the multiarch release image; CI here is amd64-only, so it gets its own tag
+            echo "value=main" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "value=pr-${{ github.event.number }}" >> "$GITHUB_OUTPUT"
           else

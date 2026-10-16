@@ -144,7 +144,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
             RecalculateCounters();
             RebuildRetentionOrder();
-            if (_selectedMessageStore is not null)
+            if (_selectedRoots.Count > 0)
                 _selectionContentVersion++;
             Interlocked.Increment(ref _globalVersion);
             InvalidateTopicTree();
@@ -226,6 +226,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         _retentionOrder.Enqueue(store);
         _totalMessageCount++;
         IncrementMessageCounts(store);
+        AppendToScopedSelection(store);
         Interlocked.Increment(ref _globalVersion);
         InvalidateTopicTree();
         if (SelectionIncludes(store))
@@ -338,8 +339,28 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         foreach (var store in _messageStores.Values)
             RecalculateNode(store);
 
-        if (_selectedMessageStore is not null && !ContainsStore(_selectedMessageStore))
+        if (!SelectionStillCovered())
             InvalidateSelection();
+    }
+
+    // A selection survives a purge only while every path it covers stays in the tree, and a
+    // canonical selection is dropped when a purge retires an observed spelling, even if an
+    // alias or descendant keeps the node alive.
+    private bool SelectionStillCovered()
+    {
+        if (_selectedRoots.Count == 0)
+            return true;
+
+        foreach (var selected in _selectedRoots)
+        {
+            if (selected.FullTopic is not { } path || !ReferenceEquals(FindNode(path), selected))
+                return false;
+
+            if (_selectionRequiresCanonical && !IsCanonicallyObserved(selected))
+                return false;
+        }
+
+        return true;
     }
 
     private void RecalculateNode(MessageStore node)
@@ -359,19 +380,6 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             node.TopicCount += child.TopicCount + 1;
             node.MessageCount += child.MessageCount;
         }
-    }
-
-    private bool ContainsStore(MessageStore selected)
-    {
-        return _messageStores.Values.Any(root => ContainsStore(root, selected));
-    }
-
-    private static bool ContainsStore(MessageStore current, MessageStore selected)
-    {
-        if (ReferenceEquals(current, selected))
-            return true;
-
-        return current.SubTopics?.Values.Any(child => ContainsStore(child, selected)) == true;
     }
 
     private void RebuildRetentionOrder()

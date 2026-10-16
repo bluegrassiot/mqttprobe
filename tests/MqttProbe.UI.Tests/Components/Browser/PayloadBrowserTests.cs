@@ -73,7 +73,7 @@ public class PayloadBrowserTests : BunitTestContext
 
     private static SelectedMessagesSnapshot Snapshot(SelectedTopicState state, int limit, string payload) =>
         new(state, limit,
-            System.Collections.Immutable.ImmutableArray.Create(new MqttMessage { Topic = state.FullTopic, Payload = payload }));
+            System.Collections.Immutable.ImmutableArray.Create(new MqttMessage { Topic = state.Key, Payload = payload }));
 
     private void ReturnResponses(params Task<SelectedMessagesSnapshot?>[] responses)
     {

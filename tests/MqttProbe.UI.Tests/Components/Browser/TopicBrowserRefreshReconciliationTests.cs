@@ -90,7 +90,7 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
             .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().BeEmpty());
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        _fixture.SelectedFullTopic.Should().BeNull("the clear reached the manager");
+        _fixture.SelectedKey.Should().BeNull("the clear reached the manager");
         cut.Markup.Should().Contain("spBv1.0/plant1/NDATA/node1",
             "the valid tip under the same verb stays grouped");
     }
@@ -106,7 +106,7 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedFullTopic.Should().Be(Tip);
+        _fixture.SelectedKey.Should().Be(Tip);
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
         {
@@ -127,7 +127,7 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedFullTopic.Should().Be(Aggregate);
+        _fixture.SelectedKey.Should().Be(Aggregate);
     }
 
     [Test]
@@ -146,7 +146,7 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().NotContain("NDATA"));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedFullTopic.Should().Be(Tip);
+        _fixture.SelectedKey.Should().Be(Tip);
     }
 
     [Test]
@@ -174,7 +174,7 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
             .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         callbackState.Should().BeNull("a rejected clear must not raise the selection callback");
-        _fixture.SelectedFullTopic.Should().Be("sensors");
+        _fixture.SelectedKey.Should().Be("sensors");
 
         cut.WaitForAssertion(() =>
         {
@@ -202,7 +202,7 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => _mockMsgStore.Received(1)
             .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        _fixture.SelectedFullTopic.Should().Be(Tip);
+        _fixture.SelectedKey.Should().Be(Tip);
         cut.WaitForAssertion(() =>
         {
             var selected = cut.FindAll(".topic-tree-row--selected");
@@ -221,7 +221,7 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().ContainSingle());
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedFullTopic.Should().Be(Tip);
+        _fixture.SelectedKey.Should().Be(Tip);
     }
 
     [Test]

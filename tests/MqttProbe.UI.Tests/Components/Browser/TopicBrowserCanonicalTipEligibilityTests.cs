@@ -68,12 +68,12 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
         await _handler!(new MqttApplicationMessageReceivedEventArgs("test-client", message, packet, null));
     }
 
-    private IRenderedComponent<TopicBrowser> RenderGrouped()
+    private async Task<IRenderedComponent<TopicBrowser>> RenderGrouped()
     {
         _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
-        cut.InvokeAsync(() => cut.FindAll(".mud-toolbar button")[0].Click());
+        await cut.InvokeAsync(() => cut.FindAll(".mud-toolbar button")[0].Click());
         return cut;
     }
 
@@ -126,7 +126,7 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
         normalizedTip.HasObservedCanonicalTopic.Should().BeFalse(
             "the published spelling was an alias, not the node's own path");
 
-        var cut = RenderGrouped();
+        var cut = await RenderGrouped();
 
         Labels(cut).Should().Contain(text => text.Contains("node1", StringComparison.Ordinal));
         cut.FindAll(".topic-tree-row--group").Should().BeEmpty("no grouping row is invented for an alias tip");
@@ -142,7 +142,7 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
         FindNode(snapshot.Roots.Single(), "spBv1.0/plant1/DDATA/node1/dev1")
             .HasObservedCanonicalTopic.Should().BeFalse();
 
-        var cut = RenderGrouped();
+        var cut = await RenderGrouped();
 
         cut.FindAll(".topic-tree-row--group").Should().BeEmpty();
         Labels(cut).Should().Contain(text => text.Contains("dev1", StringComparison.Ordinal));
@@ -159,7 +159,7 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
         tip.HasObservedDirectTopic.Should().BeTrue();
         tip.HasObservedCanonicalTopic.Should().BeTrue("the second publication used the node's own path");
 
-        var cut = RenderGrouped();
+        var cut = await RenderGrouped();
 
         Labels(cut).Should().Contain("NDATA");
         cut.FindAll(".topic-tree-row--group").Should().NotBeEmpty();
@@ -178,13 +178,13 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
         await PublishAsync(AliasNodeTip, "alias-node-value");
         await PublishAsync(CanonicalNodeTip, "canonical-node-value");
 
-        var cut = RenderGrouped();
+        var cut = await RenderGrouped();
         var tipRow = cut.FindAll(".topic-tree-row")
             .Single(row => row.QuerySelector(".flex-grow-1")?.TextContent.Trim() == CanonicalNodeTip);
         await cut.InvokeAsync(() => tipRow.Click());
 
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().ContainSingle());
-        _manager.GetSelectedTopicState().FullTopic.Should().Be(CanonicalNodeTip,
+        _manager.GetSelectedTopicState().Key.Should().Be(CanonicalNodeTip,
             "the selection is the normalized path, not the alias spelling");
         var selected = cut.Find(".topic-tree-row--selected");
         RowLabel(selected).Should().Be(CanonicalNodeTip,

@@ -207,7 +207,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
 
         cut.Find(".topic-tree-row").Click();
 
-        _mockMsgStore.Received().SelectTopic("sensors");
+        _mockMsgStore.Received().SelectTopics(Arg.Is<TopicSelection>(selection => selection.Key == "sensors"));
     }
 
     [Test]
@@ -223,9 +223,9 @@ public class TopicBrowserInteractionTests : BunitTestContext
         cut.Find(".topic-tree-row").Click();
 
         callbackState.Should().NotBeNull();
-        callbackState!.FullTopic.Should().Be("sensors");
+        callbackState!.Key.Should().Be("sensors");
         callbackState.Token.Generation.Should().BeGreaterThan(0);
-        _mockMsgStore.Received().SelectTopic("sensors");
+        _mockMsgStore.Received().SelectTopics(Arg.Is<TopicSelection>(selection => selection.Key == "sensors"));
     }
 
     [Test]
@@ -244,7 +244,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
         await ClickAsync(cut, ".topic-tree-row");
 
         callbackState.Should().BeNull();
-        _mockMsgStore.Received().SelectTopic("sensors");
+        _mockMsgStore.Received().SelectTopics(Arg.Is<TopicSelection>(selection => selection.Key == "sensors"));
     }
 
     [Test]
@@ -271,7 +271,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row").Should().BeEmpty());
 
         callbackState.Should().BeNull();
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string>());
+        _mockMsgStore.DidNotReceive().SelectTopics(Arg.Any<TopicSelection>());
     }
 
     [Test]
@@ -466,7 +466,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
         });
 
         // Manager selection should also be cleared
-        _mockMsgStore.Received().SelectTopic(null);
+        _mockMsgStore.Received().SelectTopics(null);
     }
 
     [Test]

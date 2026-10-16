@@ -11,6 +11,8 @@ internal sealed class TopicBrowserTestFixture
     private TopicTreeSnapshot _snapshot = new(0, ImmutableArray<TopicNodeSnapshot>.Empty);
     private SelectedTopicState _selection = new(default, null, 0);
 
+    public List<TopicSelection> Selections { get; } = [];
+
     public TopicBrowserTestFixture(MqttProbe.Core.Services.Mqtt.IMessageStoreManager manager) => _manager = manager;
 
     public void Configure()
@@ -18,7 +20,8 @@ internal sealed class TopicBrowserTestFixture
         _manager.RootTopicCount.Returns(_ => _snapshot.Roots.IsDefault ? 0 : _snapshot.Roots.Length);
         _manager.GetTopicTreeSnapshot().Returns(_ => _snapshot);
         _manager.GetSelectedTopicState().Returns(_ => _selection);
-        _manager.When(m => m.SelectTopic(Arg.Any<string?>())).Do(call => Select(call.Arg<string?>()));
+        _manager.When(m => m.SelectTopics(Arg.Any<TopicSelection?>()))
+            .Do(call => Select(call.Arg<TopicSelection?>()));
         _manager.TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>())
             .Returns(call => TryClearSelection(call.Arg<long>(), call.Arg<SelectedTopicState>()));
     }
@@ -46,8 +49,8 @@ internal sealed class TopicBrowserTestFixture
         if (_snapshot.Version != treeVersion
             || expectedSelection.Token.StoreId != _selection.Token.StoreId
             || expectedSelection.Token.Generation != _selection.Token.Generation
-            || _selection.FullTopic is null
-            || !string.Equals(_selection.FullTopic, expectedSelection.FullTopic, StringComparison.Ordinal))
+            || _selection.Key is null
+            || !string.Equals(_selection.Key, expectedSelection.Key, StringComparison.Ordinal))
             return false;
 
         _generation = Math.Max(_generation, _selection.Token.Generation);
@@ -57,21 +60,34 @@ internal sealed class TopicBrowserTestFixture
 
     public void SetSelection(SelectedTopicState selection) => _selection = selection;
 
-    public string? SelectedFullTopic => _selection.FullTopic;
+    public string? SelectedKey => _selection.Key;
 
-    private void Select(string? fullTopic)
+    private void Select(TopicSelection? selection)
     {
-        if (fullTopic is null)
+        Selections.Add(selection!);
+
+        if (selection is null)
         {
             _selection = new SelectedTopicState(new SelectedTopicToken(_storeId, ++_generation, 0), null, 0);
             return;
         }
 
-        var node = Find(_snapshot.Roots, fullTopic);
-        if (node is null)
+        var nodes = selection.Topics
+            .Select(topic => Find(_snapshot.Roots, topic))
+            .OfType<TopicNodeSnapshot>()
+            .ToArray();
+
+        if (nodes.Length == 0)
             return;
-        if (_selection.FullTopic != fullTopic)
-            _selection = new SelectedTopicState(new SelectedTopicToken(_storeId, ++_generation, 0), fullTopic, node.MessageCount);
+
+        if (_selection.Key != selection.Key)
+        {
+            _selection = new SelectedTopicState(
+                new SelectedTopicToken(_storeId, ++_generation, 0),
+                selection.Key,
+                nodes.Sum(node => node.MessageCount),
+                selection.Label);
+        }
     }
 
     private static TopicNodeSnapshot? Find(ImmutableArray<TopicNodeSnapshot> nodes, string fullTopic)

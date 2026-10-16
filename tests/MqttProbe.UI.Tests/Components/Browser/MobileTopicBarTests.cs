@@ -10,8 +10,11 @@ public class MobileTopicBarTests : BunitTestContext
 {
     private IMessageStoreManager _mockMsgStore = null!;
 
-    private static SelectedTopicState Selection(string? topic, int messageCount = 0) =>
-        new(new SelectedTopicToken(Guid.NewGuid(), 1, 0), topic, messageCount);
+    private static SelectedTopicState Selection(
+        string? topic,
+        int messageCount = 0,
+        string? label = null) =>
+        new(new SelectedTopicToken(Guid.NewGuid(), 1, 0), topic, messageCount, label);
 
     [SetUp]
     public void SetupMocks()
@@ -40,6 +43,19 @@ public class MobileTopicBarTests : BunitTestContext
         var cut = Render<MobileTopicBar>();
 
         cut.Markup.Should().Contain("sensor/temp");
+    }
+
+    [Test]
+    public void Renders_TheGroupingLabel_WhenAGroupedRowIsSelected()
+    {
+        _mockMsgStore.GetSelectedTopicState()
+            .Returns(Selection("\0spb:node:spBv1.0/plant1/node1", 7, "node1"));
+
+        var cut = Render<MobileTopicBar>();
+
+        cut.Markup.Should().Contain("node1");
+        cut.Markup.Should().NotContain("spb:");
+        cut.Markup.Should().Contain("7");
     }
 
     [Test]

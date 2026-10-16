@@ -49,7 +49,7 @@ public partial class PayloadBrowser
             if (Disposed)
                 return;
 
-            if (string.IsNullOrEmpty(selection.FullTopic))
+            if (string.IsNullOrEmpty(selection.Key))
             {
                 await InvokeAsync(ClearIfNoSelection);
                 return;
@@ -73,7 +73,7 @@ public partial class PayloadBrowser
 
     private void ClearIfNoSelection()
     {
-        if (Disposed || !string.IsNullOrEmpty(MessageStoreManager.GetSelectedTopicState().FullTopic))
+        if (Disposed || !string.IsNullOrEmpty(MessageStoreManager.GetSelectedTopicState().Key))
             return;
 
         var needsRefresh = _messageList.Count > 0 || _selectedMessage is not null;
@@ -96,7 +96,7 @@ public partial class PayloadBrowser
             return;
 
         var currentSelection = MessageStoreManager.GetSelectedTopicState();
-        if (string.IsNullOrEmpty(currentSelection.FullTopic))
+        if (string.IsNullOrEmpty(currentSelection.Key))
         {
             ClearIfNoSelection();
             return;

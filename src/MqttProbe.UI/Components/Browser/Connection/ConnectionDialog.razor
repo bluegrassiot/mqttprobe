@@ -98,8 +98,7 @@
                 </MudTabs>
             </MudForm>
             <div class="connection-dialog-notices">
-                @* Feedback, not actions: it scrolls with the form, so a long alert on a short
-                   card takes room from the form instead of from the fields above the actions. *@
+                @* Feedback, not actions: it scrolls with the form, so a long alert takes room from the form rather than the fields. *@
                 @if (_nameCollisionError is not null)
                 {
                     <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined">
@@ -113,8 +112,7 @@
                     </MudAlert>
                 }
             </div>
-            @* A sibling of the form, not a child of it: the compact card is the scroll
-               owner there and a sticky footer is clamped to its containing block. *@
+            @* A sibling of the form: the compact card scrolls, and a sticky footer is clamped to its containing block. *@
             <div class="connection-actions-footer">
                 @if (_connectionState == ConnectionState.Connecting)
                 {

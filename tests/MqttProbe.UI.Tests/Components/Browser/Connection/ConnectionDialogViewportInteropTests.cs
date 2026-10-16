@@ -3,9 +3,7 @@ using MqttProbe.UI.Components.Browser.Connection;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
-// A dialog can close while its module is still importing, and two dialogs can briefly
-// coexist. The import task is completed by hand, and one module's state is shared by every
-// proxy the browser hands out for the same URL.
+// The import is completed by hand: a dialog can close mid-import, and every proxy for one URL shares the module's state.
 [TestFixture]
 public class ConnectionDialogViewportInteropTests
 {

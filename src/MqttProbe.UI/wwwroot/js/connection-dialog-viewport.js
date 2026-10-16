@@ -1,9 +1,4 @@
-// Keyboard-aware framing for the Setup Connection dialog.
-//
-// iOS keeps the layout viewport at full height while the software keyboard is open, so
-// neither dvh nor env(safe-area-inset-bottom) can size the dialog against what is
-// actually visible. The strips its visual viewport leaves behind are measured here and
-// published as custom properties on the dialog paper; the layout fit comes from the DOM.
+// iOS keeps the layout viewport at full height while the keyboard is open, so the strips its visual viewport leaves are measured and published as custom properties.
 
 const BOTTOM_INSET_VARIABLE = '--connection-dialog-keyboard-inset';
 const TOP_INSET_VARIABLE = '--connection-dialog-viewport-top-inset';
@@ -11,8 +6,6 @@ const FOOTER_HEIGHT_VARIABLE = '--connection-dialog-footer-height';
 const NARROW_MEDIA_QUERY = '(max-width: 599px)';
 const COARSE_POINTER_MEDIA_QUERY = '(pointer: coarse)';
 
-// The content element carries the scoped chain rules; the container carries the band the
-// card is placed in. Both follow from the one decision below.
 const COMPACT_CLASS = 'connection-dialog-content--compact';
 const CONTAINER_KEYBOARD_CLASS = 'connection-dialog-container--keyboard';
 
@@ -29,8 +22,7 @@ export function attach(contentElement) {
     }
 
     const paper = contentElement.closest('.mud-dialog') ?? contentElement;
-    // Custom properties inherit downwards, so the strips have to be published on the
-    // container the band is spent on, not on the card inside it.
+    // Custom properties inherit downwards, so the strips are published on the container the band is spent on.
     const container = paper.closest('.mud-dialog-container') ?? paper;
     const viewport = window.visualViewport;
     const narrow = window.matchMedia(NARROW_MEDIA_QUERY);
@@ -39,8 +31,7 @@ export function attach(contentElement) {
 
     const keyboardCanAppear = () => narrow.matches || coarsePointer.matches;
 
-    // The visual viewport is a window onto the layout viewport: the strip above it is
-    // the pan iOS applies to reveal a focused field, the strip below it is the keyboard.
+    // Above the visual viewport is iOS's pan to reveal the focused field; below it is the keyboard.
     const measureHiddenStrips = () => {
         if (!viewport || viewport.scale > ZOOM_SCALE_THRESHOLD) {
             return { top: 0, bottom: 0 };
@@ -58,10 +49,7 @@ export function attach(contentElement) {
         container.style.removeProperty(BOTTOM_INSET_VARIABLE);
     };
 
-    // What the panel would get, from the card's own bounded box and the layout heights of
-    // the wrapper padding and the title, header, step selector, tab bar and footer around
-    // it. client/offset sizes are layout values, so MudBlazor's opening transform cannot
-    // scale them, and none of them change because the fallback applied.
+    // client/offset sizes are layout values, so MudBlazor's opening transform cannot scale them.
     const panelHeight = () => {
         const paperStyle = getComputedStyle(paper);
         const wrapper = paper.querySelector('.mud-dialog-content');
@@ -89,8 +77,7 @@ export function attach(contentElement) {
         element instanceof HTMLElement
         && element.matches('input, textarea, select, [contenteditable="true"]');
 
-    // The card scrolls the form in the fallback, the panel does otherwise: chosen by mode,
-    // not by whichever candidate happens to report overflow while the other is resizing.
+    // Mode picks the scroll owner, so a transient overflow reading cannot flip it.
     const scrollOwner = () => {
         if (contentElement.classList.contains(COMPACT_CLASS)) {
             return contentElement.scrollHeight > contentElement.clientHeight + 1 ? contentElement : null;
@@ -100,8 +87,7 @@ export function attach(contentElement) {
         return panel && panel.scrollHeight > panel.clientHeight + 1 ? panel : null;
     };
 
-    // The footer is stuck over the bottom of the card in the fallback, so the band a
-    // control may land in stops at the footer rather than at the scroll owner's box.
+    // The stuck footer ends the band a control may land in, not the scroll owner's box.
     const revealFocusedField = () => {
         const active = document.activeElement;
         if (!active || !contentElement.contains(active) || !isTextControl(active)) {
@@ -113,8 +99,7 @@ export function attach(contentElement) {
             return;
         }
 
-        // The dialog scales in while it opens, which scales every measured rect with it;
-        // the ratio of the paper's painted width to its layout width takes that back out.
+        // The opening scale multiplies every rect, so divide it back out to keep the scroll in layout pixels.
         const paperBox = paper.getBoundingClientRect();
         const scale = paper.offsetWidth > 0 ? paperBox.width / paper.offsetWidth : 1;
         const scrollerBox = scroller.getBoundingClientRect();
@@ -136,8 +121,7 @@ export function attach(contentElement) {
             return;
         }
 
-        // A control taller than the band cannot be shown whole; flush to the band's top
-        // shows the most of it, where aligning its bottom pushes its top out of the card.
+        // A control taller than the band shows the most of itself flush to the band's top.
         const tallerThanBand = fieldBox.height > visibleBottom - visibleTop;
         const delta = tallerThanBand || fieldBox.top < visibleTop
             ? fieldBox.top - visibleTop
@@ -161,12 +145,10 @@ export function attach(contentElement) {
             clearInsets();
         }
 
-        // The container, not the card, carries the band: a card taken out of flow is painted
-        // under the provider's backdrop and swallows the taps that reach it.
+        // The container carries the band, not the card: a card out of flow paints under the backdrop and swallows taps.
         container.classList.toggle(CONTAINER_KEYBOARD_CLASS, hidden);
 
-        // A stuck footer is where a scroll container's overflow stops counting, so the card
-        // reserves its height as trailing space and the last control can still clear it.
+        // The card reserves the stuck footer's height as trailing space so the last control can clear it.
         const footer = contentElement.querySelector('.connection-actions-footer');
         container.style.setProperty(FOOTER_HEIGHT_VARIABLE, `${footer ? footer.offsetHeight : 0}px`);
 
@@ -189,9 +171,7 @@ export function attach(contentElement) {
         });
     };
 
-    // A footer alert (a name collision, a failed connection) or a growing panel changes what
-    // the panel has left with no viewport or focus event behind it. apply() only toggles
-    // classes and custom properties, so a settled dialog cannot feed this back.
+    // An alert or a growing panel resizes the chrome with no viewport event; apply() only toggles classes, so it cannot feed back.
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
     observer?.observe(paper);
     observer?.observe(contentElement);

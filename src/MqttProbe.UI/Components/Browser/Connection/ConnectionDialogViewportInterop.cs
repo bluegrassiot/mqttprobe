@@ -3,10 +3,7 @@ using Microsoft.JSInterop;
 
 namespace MqttProbe.UI.Components.Browser.Connection;
 
-// Owns the connection dialog's viewport module: imports once, attaches to the dialog's
-// content element, and keeps a dialog that closes while the import is still in flight
-// safe. Cleanup is attachment-scoped, so a module that never attached can never release
-// a newer dialog's attachment.
+// Owns the dialog's viewport module; releases are attachment-scoped, so a module that never attached cannot detach a newer dialog's.
 internal sealed class ConnectionDialogViewportInterop(IJSRuntime js) : IAsyncDisposable
 {
     private const string ModulePath = "./_content/MqttProbe.UI/js/connection-dialog-viewport.js";
@@ -27,9 +24,7 @@ internal sealed class ConnectionDialogViewportInterop(IJSRuntime js) : IAsyncDis
             return;
         }
 
-        // The module stays locally owned while attach round-trips: publishing it first
-        // would let DisposeAsync release the reference a moment before the token arrives,
-        // leaking the browser-side attachment together with its listeners.
+        // The module stays locally owned until attach returns, so a concurrent Dispose cannot leak the browser-side attachment.
         int? attachment;
         try
         {

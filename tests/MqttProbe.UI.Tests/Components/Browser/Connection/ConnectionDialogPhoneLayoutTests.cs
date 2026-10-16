@@ -4,13 +4,9 @@ using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.UI.Components.Browser.Connection;
 using MqttProbe.UI.Tests.TestHelpers;
 
-// Deliberately not "...Browser.Connection": a namespace segment named Connection
-// would shadow the Connection model for the tests already in ...Components.Browser.
+// Not "...Browser.Connection": a Connection namespace segment would shadow the Connection model for the existing tests.
 namespace MqttProbe.UI.Tests.Components.Browser;
 
-// Layout is proven in the browser, not here (see AGENTS.md); these tests pin the
-// contracts a phone layout depends on so a later edit cannot silently drop one.
-// ConnectionDialogTests is grandfathered over the file-length ceiling.
 [TestFixture]
 public class ConnectionDialogPhoneLayoutTests : BunitTestContext
 {
@@ -112,10 +108,7 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     [Test]
     public void HeaderSelector_SizesTheElementMudSelectRenders_NotTheClassItIsGiven()
     {
-        // A scoped rule only carries the isolation attribute on elements this component
-        // writes, and MudSelect puts the class it is given on the input control inside its
-        // own root, so a bare ".header-select" rule can never match; the header reaches the
-        // flex item instead. Without it the selector cannot shrink to share the label's row.
+        // A bare ".header-select" rule can never match: MudSelect puts the class it is given on the input inside its own root.
         ReadRepositoryFile(HeaderCss).Should().NotContain(".header-select");
 
         ReadCssRule(HeaderCss, ".connection-dialog-header ::deep .header-label")
@@ -167,9 +160,6 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
         var reveal = ExtractBracedBlockFromFirstBrace(
             script[script.IndexOf("const revealFocusedField = () => {", StringComparison.Ordinal)..]);
 
-        // The footer is stuck over the bottom of the card in the fallback, so the band a
-        // control may land in stops at the footer, and the opening transform is divided out
-        // so the scroll amount stays in layout pixels.
         script.Should().Contain("const REVEAL_MARGIN = 8");
         script.Should().Contain("const scrollOwner = () =>");
         reveal.Should().Contain("Math.min(footer.getBoundingClientRect().top, scrollerBox.bottom)");
@@ -183,8 +173,6 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     {
         var script = ReadRepositoryFile(ViewportScript);
 
-        // A footer alert (a name collision, a failed connection) or a growing panel takes
-        // room from the panel with no viewport or focus event behind it.
         script.Should().Contain("new ResizeObserver(schedule)");
         script.Should().Contain("observer?.observe(paper)");
         script.Should().Contain("observer?.observe(contentElement)");
@@ -200,9 +188,6 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
         var fit = ExtractBracedBlockFromFirstBrace(
             script[script.IndexOf("const panelHeight = () => {", StringComparison.Ordinal)..]);
 
-        // A transform (MudBlazor's opening animation) scales every rect, and the fallback
-        // itself changes which element scrolls, so the fit reads the card's bounded box and
-        // the chrome's layout heights instead.
         fit.Should().Contain("paper.clientHeight");
         fit.Should().Contain("element.offsetHeight");
         fit.Should().NotContain("getBoundingClientRect");
@@ -242,8 +227,6 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     {
         var script = ReadRepositoryFile(ViewportScript);
 
-        // One module is shared by every dialog, so a closing dialog must be able to
-        // release its own registration and nothing else.
         script.Should().Contain("activeAttachments.set(attachment, teardown)");
         script.Should().Contain("activeAttachments.get(attachment)");
         script.Should().NotContain("activeAttachments.clear()",
@@ -255,8 +238,6 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     {
         var script = ReadRepositoryFile(ViewportScript);
 
-        // The top strip is visualViewport.offsetTop; the bottom one is what is left
-        // between the panned viewport and the bottom of the layout viewport.
         script.Should().Contain("top: Math.max(0, Math.round(viewport.offsetTop))");
         script.Should().Contain("window.innerHeight - (viewport.height + viewport.offsetTop)");
     }
@@ -326,8 +307,6 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
         wrapperPadding.Should().Contain("padding-top: 0");
         wrapperPadding.Should().Contain("padding-bottom: 0");
 
-        // The strips are inherited state, so they have to be published on the container the
-        // band is spent on rather than on the card inside it.
         var script = ReadRepositoryFile(ViewportScript);
         script.Should().Contain("container.style.setProperty(TOP_INSET_VARIABLE");
         script.Should().Contain("container.style.setProperty(BOTTOM_INSET_VARIABLE");
@@ -364,13 +343,11 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
         user.GetAttribute("autocapitalize").Should().Be("none");
         user.GetAttribute("autocorrect").Should().Be("off");
 
-        // A stored site login must not be filled in, and the field must not read as a
-        // username to a browser's autofill heuristics.
+        // A stored site login must not be filled in, and the field must not read as a username to autofill.
         user.GetAttribute("autocomplete").Should().Be("off");
         user.GetAttribute("name").Should().Be("mqtt-user");
 
-        // The broker password is not a site login either: offered as a new secret rather
-        // than the account's current password.
+        // The broker password is a new secret, not the site's account password.
         FindInputForLabel(cut, "Password").GetAttribute("autocomplete").Should().Be("new-password");
     }
 
@@ -380,8 +357,7 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
         var cut = Render<ConnectionFields>(p =>
             p.Add(x => x.Connection, new Connection { Protocol = Protocol.WebSocket }));
 
-        // MQTT paths are case-sensitive, so a base path must not be auto-capitalised or
-        // auto-corrected either.
+        // MQTT paths are case-sensitive, so the base path must not be auto-capitalised or corrected.
         var basePath = FindInputForLabel(cut, "WebSocket Base Path");
         basePath.GetAttribute("inputmode").Should().Be("url");
         basePath.GetAttribute("autocapitalize").Should().Be("none");
@@ -477,8 +453,6 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
         var failure = markup.IndexOf("@if (_connectionState == ConnectionState.Failed)", StringComparison.Ordinal);
         var actions = markup.IndexOf("class=\"connection-actions-footer\"", StringComparison.Ordinal);
 
-        // A host that only exists while an alert does would leave the layout observer with
-        // nothing to watch, and the fit would stay where the shorter chrome put it.
         host.Should().BeGreaterThanOrEqualTo(0);
         collision.Should().BeGreaterThan(host, "the alerts belong inside the host");
         failure.Should().BeGreaterThan(host, "the alerts belong inside the host");
@@ -544,8 +518,7 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     private static string ReadMediaBlockContaining(string cssFilePath, string mediaQuery, string anchor)
     {
         var css = ReadRepositoryFile(cssFilePath);
-        // Media queries can share a prefix — "(max-width: 599px)" also opens the
-        // capability query — so the header has to be matched whole.
+        // Media queries can share a prefix, so the header has to be matched whole.
         var header = mediaQuery + " {";
 
         var start = 0;

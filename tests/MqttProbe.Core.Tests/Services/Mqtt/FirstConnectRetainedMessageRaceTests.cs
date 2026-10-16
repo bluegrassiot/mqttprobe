@@ -154,6 +154,16 @@ public class FirstConnectRetainedMessageRaceTests
             remove { }
         }
 
+        public event Func<MqttConnectOutcome, Task>? ConnectAttemptCompletedAsync
+        {
+            add { }
+            remove { }
+        }
+
+        public MqttConnectAttempt StartAttempt(MqttManagedClientOptions options, CancellationToken cancellationToken = default) =>
+            new(MqttConnectAttemptId.None,
+                Task.FromResult(new MqttConnectOutcome(MqttConnectAttemptId.None, MqttConnectStatus.Canceled)));
+
         public int SubscribeAsyncCallCount { get; private set; }
 
         public List<Func<MqttApplicationMessageReceivedEventArgs, Task>> ApplicationMessageReceivedHandlers =>

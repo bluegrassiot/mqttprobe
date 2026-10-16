@@ -9,6 +9,9 @@ public interface IMqttManagedClient : IAsyncDisposable, IDisposable
     public bool IsStarted { get; }
 
     public Task StartAsync(MqttManagedClientOptions options, CancellationToken cancellationToken = default);
+
+    public MqttConnectAttempt StartAttempt(MqttManagedClientOptions options, CancellationToken cancellationToken = default);
+
     public Task StopAsync(CancellationToken cancellationToken = default);
 
     public Task SubscribeAsync(IEnumerable<MqttTopicFilter> topicFilters, CancellationToken cancellationToken = default);
@@ -22,4 +25,5 @@ public interface IMqttManagedClient : IAsyncDisposable, IDisposable
     public event Func<EventArgs, Task>? ConnectionStateChangedAsync;
     public event Func<MqttApplicationMessageReceivedEventArgs, Task>? ApplicationMessageReceivedAsync;
     public event Func<MqttManagedProcessFailedEventArgs, Task>? SynchronizingSubscriptionsFailedAsync;
+    public event Func<MqttConnectOutcome, Task>? ConnectAttemptCompletedAsync;
 }

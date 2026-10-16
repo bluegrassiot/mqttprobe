@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using MQTTnet;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Security;
@@ -9,104 +8,127 @@ namespace MqttProbe.UI.Components.Browser.Connection;
 
 public partial class ConnectionDialog
 {
-    private async Task OnConnectingFailed(MqttConnectingFailedEventArgs args)
+    // Owns one connect flow from before its first await until it is released.
+    private sealed class ConnectOperation
     {
-        _connectionState = ConnectionState.Failed;
-        _pendingAttemptConnection = null;
-        _pendingAttemptSavedSelector = null;
-        UxMetrics?.RecordConnectFailure();
-        Logger.LogError(args.Exception,
-            "Connecting to broker {Host}:{Port} failed. ResultCode={ResultCode}",
-            _selectedConnection.Host, _selectedConnection.Port,
-            args.ConnectResult?.ResultCode);
-        await InvokeAsync(StateHasChanged);
+        public CancellationTokenSource Cancellation { get; } = new();
+
+        public bool Cancelled { get; set; }
+
+        public bool Building { get; set; }
+
+        public bool Finalizing { get; set; }
+
+        public bool Completed { get; set; }
+
+        public MqttConnectAttemptId AttemptId { get; set; }
+
+        public bool AttemptStarted => !AttemptId.IsNone;
+
+        public CertificateSessionResource? Certificate { get; set; }
+
+        public Task? Teardown { get; set; }
     }
 
-    private async Task OnConnected(MqttClientConnectedEventArgs _)
+    private bool IsCurrent(ConnectOperation operation) =>
+        !_disposed && !operation.Cancelled && ReferenceEquals(_operation, operation);
+
+    private void ReleaseOperation(ConnectOperation operation)
     {
-        if (_pendingAttemptConnection is null)
+        if (operation.Completed)
             return;
 
-        _connectionState = ConnectionState.Connected;
-        UxMetrics?.RecordConnectSuccess();
-        Logger.LogInformation("Connected to broker {Host}:{Port}", _pendingAttemptConnection.Host, _pendingAttemptConnection.Port);
-
-        if (_pendingAttemptSavedSelector is { Id: var savedId })
-        {
-            SessionState.LastSuccessfulConnectionId = savedId;
-            // Saved connection: clean any prior retained unsaved asset if unreferenced
-            await CleanupPriorRetainedAssetIfNeeded(savedId);
-        }
-        else
-        {
-            SessionState.LastSuccessfulConnectionId = null;
-            // Unsaved attempt: clean prior retained asset if new snapshot no longer references it
-            // (covers both certificate-free unsaved success and cert-carrying unsaved success)
-            var newSnapshotCertId = _pendingAttemptConnection.ClientCertificateAssetId;
-            if (SessionState.RetainedUnsavedAssetId is { } priorAssetId
-                && priorAssetId != newSnapshotCertId)
-            {
-                try { await CertStore.DeleteAsync(SessionState.RetainedUnsavedAssetOwnerId, priorAssetId); } catch { /* best-effort */ }
-                SessionState.RetainedUnsavedAssetId = null;
-                SessionState.RetainedUnsavedAssetOwnerId = Guid.Empty;
-            }
-            // Retain staged asset in session memory so dialog disposal does not delete it
-            if (_stagedAssetId is not null)
-            {
-                SessionState.RetainedUnsavedAssetId = _stagedAssetId;
-                SessionState.RetainedUnsavedAssetOwnerId = _stagedAssetOwnerId;
-                _stagedAssetId = null;
-            }
-        }
-        SessionState.LastSuccessfulConnectionSnapshot = _pendingAttemptConnection.Clone();
-
-        _pendingAttemptConnection = null;
-        _pendingAttemptSavedSelector = null;
-
-        await MessageStoreManagerService.Start();
-        await ChartDataService.StartAsync();
-        await InvokeAsync(() => MudDialog.Close(DialogResult.Ok(true)));
+        operation.Completed = true;
+        if (ReferenceEquals(_operation, operation))
+            _operation = null;
+        operation.Certificate?.Dispose();
+        operation.Certificate = null;
+        operation.Cancellation.Dispose();
     }
 
-    private async Task CleanupPriorRetainedAssetIfNeeded(Guid? savedConnectionId)
+    private async Task StopOwnedConnectionAsync()
     {
-        if (SessionState.RetainedUnsavedAssetId is not { } priorAssetId)
-            return;
-        // If a saved connection references this asset, keep it
-        if (savedConnectionId is { } sid)
+        try
         {
-            var saved = ConnectionSettings.Connections.FirstOrDefault(c => c.Id == sid);
-            if (saved is not null && saved.ClientCertificateAssetId == priorAssetId)
-                return;
+            await SessionLifecycle.StopActiveConnectionAsync();
         }
-        try { await CertStore.DeleteAsync(SessionState.RetainedUnsavedAssetOwnerId, priorAssetId); } catch { /* best-effort */ }
-        SessionState.RetainedUnsavedAssetId = null;
-        SessionState.RetainedUnsavedAssetOwnerId = Guid.Empty;
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to stop a cancelled connection attempt");
+        }
     }
 
     private async Task Connect()
     {
-        if (!ValidateCertificateState()) return;
-        if (!await ValidateForm()) return;
-        if (!await PromptSaveIfUnsavedChangesAsync()) return;
-        if (!await StopActiveConnectionGracefullyAsync()) return;
+        if (_operation is not null)
+            return;
 
-        var connection = await PrepareConnectionForAttemptAsync();
-        if (connection is null) return;
+        var operation = new ConnectOperation();
+        _operation = operation;
 
-        _activeCertResource = new CertificateSessionResource();
-        MqttManagedClientOptions builtOptions;
-        try { builtOptions = await MqttOptionsBuilder.BuildAsync(connection, _activeCertResource); }
+        try
+        {
+            var prepared = await PrepareStartupAsync(operation);
+            if (prepared is null || !IsCurrent(operation))
+                return;
+
+            await ExecuteConnectionAttemptAsync(operation, prepared.Value.Connection, prepared.Value.Options);
+        }
         catch (Exception ex)
         {
-            _activeCertResource.Dispose();
-            _activeCertResource = null;
-            _certSection?.SetError(ex.Message);
-            StateHasChanged();
-            return;
+            Logger.LogError(ex, "Failed to start the connection.");
+            AbortStartup(operation);
         }
+        finally
+        {
+            if (ReferenceEquals(_operation, operation))
+            {
+                if (operation.Teardown is { } teardown)
+                    await teardown;
+                if (!operation.Completed)
+                {
+                    if (_connectionState == ConnectionState.Connecting)
+                        _connectionState = ConnectionState.Disconnected;
+                    ReleaseOperation(operation);
+                    if (!_disposed)
+                        StateHasChanged();
+                }
+            }
+        }
+    }
 
-        await ExecuteConnectionAttemptAsync(connection, builtOptions);
+    private async Task<(MqttProbe.Core.Models.Mqtt.Connection Connection, MqttManagedClientOptions Options)?> PrepareStartupAsync(
+        ConnectOperation operation)
+    {
+        if (!ValidateCertificateState()) return null;
+        if (!await ValidateForm()) return null;
+        if (!await PromptSaveIfUnsavedChangesAsync()) return null;
+        if (!await StopActiveConnectionGracefullyAsync()) return null;
+
+        _connectionState = ConnectionState.Connecting;
+        StateHasChanged();
+
+        var connection = await PrepareConnectionForAttemptAsync(operation);
+        if (!IsCurrent(operation) || connection is null)
+            return null;
+
+        operation.Certificate = new CertificateSessionResource();
+        operation.Building = true;
+        try
+        {
+            var builtOptions = await MqttOptionsBuilder.BuildAsync(connection, operation.Certificate);
+            return (connection, builtOptions);
+        }
+        catch (Exception ex)
+        {
+            if (IsCurrent(operation))
+                _certSection?.SetError(ex.Message);
+            return null;
+        }
+        finally
+        {
+            operation.Building = false;
+        }
     }
 
     private bool ValidateCertificateState()
@@ -154,17 +176,26 @@ public partial class ConnectionDialog
             StateHasChanged();
             return false;
         }
-        finally { _activeCertResource = null; }
         return true;
     }
 
-    private async Task<MqttProbe.Core.Models.Mqtt.Connection?> PrepareConnectionForAttemptAsync()
+    private async Task<MqttProbe.Core.Models.Mqtt.Connection?> PrepareConnectionForAttemptAsync(ConnectOperation operation)
     {
         var connection = _selectedConnection.Clone();
         if (_certSection is not null && _certSection.HasStagedBytes)
         {
             var stagedId = await _certSection.TryImportStagedAsync(connection.Id, _stagedAssetId);
-            if (stagedId is null) { StateHasChanged(); return null; }
+            if (stagedId is null)
+            {
+                if (IsCurrent(operation))
+                    StateHasChanged();
+                return null;
+            }
+            if (!IsCurrent(operation))
+            {
+                try { await CertStore.DeleteAsync(connection.Id, stagedId); } catch { /* best-effort */ }
+                return null;
+            }
             connection.ClientCertificateAssetId = stagedId;
             _stagedAssetId = stagedId;
             _stagedAssetOwnerId = connection.Id;
@@ -174,34 +205,221 @@ public partial class ConnectionDialog
         return connection;
     }
 
-    private async Task ExecuteConnectionAttemptAsync(MqttProbe.Core.Models.Mqtt.Connection connection, MqttManagedClientOptions builtOptions)
+    private async Task ExecuteConnectionAttemptAsync(
+        ConnectOperation operation, MqttProbe.Core.Models.Mqtt.Connection connection, MqttManagedClientOptions builtOptions)
     {
+        UxMetrics?.RecordConnectAttempt();
+
         try
         {
-            UxMetrics?.RecordConnectAttempt();
-            _connectionState = ConnectionState.Connecting;
-            _pendingAttemptConnection = connection.Clone();
-            _pendingAttemptSavedSelector = _savedConnectionForSelector;
-            SessionState.SelectedConnection = connection;
-            if (_activeCertResource is not null)
-            {
-                SessionState.ActiveCertificateResource = _activeCertResource;
-                _activeCertResource = null;
-            }
-            // Start capture before StartAsync so handlers are listening when retained messages arrive.
             await MessageStoreManagerService.Start();
             await ChartDataService.StartAsync();
-            await ManagedMqttClient.StartAsync(builtOptions);
         }
         catch (Exception ex)
         {
-            _connectionState = ConnectionState.Failed;
-            _pendingAttemptConnection = null;
-            _pendingAttemptSavedSelector = null;
-            Logger.LogError(ex, "Failed to connect.");
-            try { await SessionLifecycle.StopActiveConnectionAsync(); }
-            catch (Exception stopEx) { Logger.LogError(stopEx, "StopActiveConnectionAsync also failed after StartAsync failure"); }
+            Logger.LogError(ex, "Failed to start message capture for the connection attempt.");
+            AbortStartup(operation);
+            return;
         }
+
+        if (!IsCurrent(operation))
+            return;
+
+        _pendingAttemptConnection = connection.Clone();
+        _pendingAttemptSavedSelector = _savedConnectionForSelector;
+        SessionState.SelectedConnection = connection;
+
+        MqttConnectAttempt attempt;
+        try
+        {
+            attempt = ManagedMqttClient.StartAttempt(builtOptions, operation.Cancellation.Token);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to start the connection attempt.");
+            AbortStartup(operation);
+            return;
+        }
+
+        if (operation.Certificate is not null)
+        {
+            SessionState.ActiveCertificateResource = operation.Certificate;
+            operation.Certificate = null;
+        }
+        operation.AttemptId = attempt.Id;
+
+        MqttConnectOutcome outcome;
+        try
+        {
+            outcome = await attempt.Completion;
+        }
+        catch (Exception ex)
+        {
+            outcome = new MqttConnectOutcome(attempt.Id, MqttConnectStatus.Failed, ex);
+        }
+
+        if (!_disposed)
+            await InvokeAsync(() => HandleAttemptOutcomeAsync(operation, outcome));
+    }
+
+    private void AbortStartup(ConnectOperation operation)
+    {
+        if (!IsCurrent(operation))
+            return;
+
+        _connectionState = ConnectionState.Failed;
+        _pendingAttemptConnection = null;
+        _pendingAttemptSavedSelector = null;
+        UxMetrics?.RecordConnectFailure();
+    }
+
+    private async Task HandleAttemptOutcomeAsync(ConnectOperation operation, MqttConnectOutcome outcome)
+    {
+        _handledOutcomeCount++;
+        if (!IsCurrent(operation))
+            return;
+
+        switch (outcome.Status)
+        {
+            case MqttConnectStatus.Connected:
+                await HandleConnectedAttemptAsync(operation);
+                break;
+            case MqttConnectStatus.Failed:
+                HandleFailedAttempt(operation, outcome);
+                break;
+            default:
+                HandleCanceledAttempt(operation);
+                break;
+        }
+    }
+
+    private async Task HandleConnectedAttemptAsync(ConnectOperation operation)
+    {
+        if (_pendingAttemptConnection is not { } connected)
+            return;
+
+        operation.Finalizing = true;
+        _connectionState = ConnectionState.Connected;
+
+        var savedSelector = _pendingAttemptSavedSelector;
+        var stagedAssetId = _stagedAssetId;
+        var stagedAssetOwnerId = _stagedAssetOwnerId;
+        var priorRetainedId = SessionState.RetainedUnsavedAssetId;
+        var priorRetainedOwnerId = SessionState.RetainedUnsavedAssetOwnerId;
+
+        _stagedAssetId = null;
+        _pendingAttemptConnection = null;
+        _pendingAttemptSavedSelector = null;
+
+        SessionState.LastSuccessfulConnectionSnapshot = connected.Clone();
+        if (savedSelector is { Id: var savedId })
+        {
+            SessionState.LastSuccessfulConnectionId = savedId;
+        }
+        else
+        {
+            SessionState.LastSuccessfulConnectionId = null;
+            if (stagedAssetId is not null)
+            {
+                SessionState.RetainedUnsavedAssetId = stagedAssetId;
+                SessionState.RetainedUnsavedAssetOwnerId = stagedAssetOwnerId;
+            }
+        }
+
+        UxMetrics?.RecordConnectSuccess();
+        Logger.LogInformation("Connected to broker {Host}:{Port}", connected.Host, connected.Port);
         StateHasChanged();
+
+        if (savedSelector is { Id: var savedSelectorId })
+        {
+            if (stagedAssetId is not null)
+            {
+                try { await CertStore.DeleteAsync(stagedAssetOwnerId, stagedAssetId); } catch { /* best-effort */ }
+            }
+            await CleanupPriorRetainedAssetAsync(savedSelectorId, priorRetainedId, priorRetainedOwnerId);
+        }
+        else if (priorRetainedId is not null && priorRetainedId != connected.ClientCertificateAssetId)
+        {
+            await CleanupPriorRetainedAssetAsync(null, priorRetainedId, priorRetainedOwnerId);
+        }
+
+        await MessageStoreManagerService.Start();
+        await ChartDataService.StartAsync();
+
+        if (!_disposed)
+            await InvokeAsync(() => MudDialog.Close(DialogResult.Ok(true)));
+
+        ReleaseOperation(operation);
+    }
+
+    private async Task CleanupPriorRetainedAssetAsync(Guid? savedConnectionId, string? priorAssetId, Guid priorOwnerId)
+    {
+        if (priorAssetId is null)
+            return;
+        if (savedConnectionId is { } sid)
+        {
+            var saved = ConnectionSettings.Connections.FirstOrDefault(c => c.Id == sid);
+            if (saved is not null && saved.ClientCertificateAssetId == priorAssetId)
+                return;
+        }
+
+        try { await CertStore.DeleteAsync(priorOwnerId, priorAssetId); } catch { /* best-effort */ }
+        if (SessionState.RetainedUnsavedAssetId == priorAssetId)
+        {
+            SessionState.RetainedUnsavedAssetId = null;
+            SessionState.RetainedUnsavedAssetOwnerId = Guid.Empty;
+        }
+    }
+
+    private void HandleFailedAttempt(ConnectOperation operation, MqttConnectOutcome outcome)
+    {
+        _connectionState = ConnectionState.Failed;
+        _pendingAttemptConnection = null;
+        _pendingAttemptSavedSelector = null;
+        UxMetrics?.RecordConnectFailure();
+        Logger.LogError(outcome.Exception,
+            "Connecting to broker {Host}:{Port} failed. ResultCode={ResultCode}",
+            _selectedConnection.Host, _selectedConnection.Port,
+            outcome.ConnectResult?.ResultCode);
+        ReleaseOperation(operation);
+    }
+
+    private void HandleCanceledAttempt(ConnectOperation operation)
+    {
+        _connectionState = ConnectionState.Disconnected;
+        _pendingAttemptConnection = null;
+        _pendingAttemptSavedSelector = null;
+        ReleaseOperation(operation);
+    }
+
+    private async Task CancelOperationAsync()
+    {
+        var operation = _operation;
+        if (operation is null || operation.Cancelled || operation.Finalizing)
+            return;
+
+        operation.Cancelled = true;
+        _pendingAttemptConnection = null;
+        _pendingAttemptSavedSelector = null;
+        _connectionState = ConnectionState.Disconnected;
+
+        // Synchronous cancel retires the core generation before the stop below reads the active client.
+#pragma warning disable S6966 // Deliberate synchronous cancel: the ordering here is load-bearing.
+        operation.Cancellation.Cancel();
+#pragma warning restore S6966
+
+        if (!operation.AttemptStarted)
+            return;
+
+        operation.Teardown ??= StopOwnedConnectionAsync();
+        await operation.Teardown;
+        ReleaseOperation(operation);
+    }
+
+    internal async Task CancelConnect()
+    {
+        await CancelOperationAsync();
+        if (!_disposed)
+            StateHasChanged();
     }
 }

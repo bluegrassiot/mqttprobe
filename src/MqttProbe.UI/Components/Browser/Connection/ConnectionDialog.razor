@@ -103,9 +103,13 @@
                     }
                     @if (_connectionState == ConnectionState.Connecting)
                     {
-                        <div class="d-flex align-center gap-2">
-                            <img class="signal-connecting-sm" width="26" height="26" src="/_content/MqttProbe.UI/img/signal-motif.svg" alt="" />
-                            <MudText Typo="Typo.subtitle1">Connecting...</MudText>
+                        <div class="connection-connecting-row" data-testid="connection-connecting-row">
+                            <div class="connection-connecting-indicator">
+                                <img class="signal-connecting-sm" width="26" height="26" src="/_content/MqttProbe.UI/img/signal-motif.svg" alt="" />
+                                <MudText Typo="Typo.subtitle1">Connecting...</MudText>
+                            </div>
+                            <MudButton Variant="Variant.Text" Class="mr-2" data-testid="cancel-connect"
+                                       OnClick="@(async () => await CancelConnect())">Cancel</MudButton>
                         </div>
                     }
                     else
@@ -114,7 +118,7 @@
                             <MudButton Variant="Variant.Text" OnClick="@(async () => await RequestClose())"
                                        Class="mr-2">Cancel</MudButton>
                             <AppPrimaryButton title="Connect" MinWidth="true"
-                                        StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect)"
+                                        StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect || _operation is not null)"
                                         OnClick="@(async () => await Connect())">Connect</AppPrimaryButton>
                         </div>
                     }
@@ -141,13 +145,15 @@
     private Connection _selectedConnection = new();
     private bool _canConnect, _canSave, _canDelete, _isFormValid, _formReportsValid = true;
     private int _activeTabIndex;
-    private CertificateSessionResource? _activeCertResource;
     private string? _stagedAssetId;
     private Guid _stagedAssetOwnerId;
     private ConnectionCertificateSection? _certSection;
 
     private Connection? _pendingAttemptConnection;
     private Connection? _pendingAttemptSavedSelector;
+    private ConnectOperation? _operation;
+    private int _handledOutcomeCount;
+    private bool _disposed;
 
     private Connection _baselineConnection = new();
     private bool _baselineCertHadPendingChange;
@@ -165,6 +171,8 @@
     internal Connection? SavedConnectionForSelectorTests => _savedConnectionForSelector;
     internal int ActiveTabIndexForTests => _activeTabIndex;
     internal string? NameCollisionErrorForTests => _nameCollisionError;
+    internal bool IsConnectingForTests => _connectionState == ConnectionState.Connecting;
+    internal int HandledOutcomeCountForTests => _handledOutcomeCount;
 
     internal void SetStagedCertificate(byte[]? pfxBytes, byte[]? pemCertBytes, byte[]? pemKeyBytes, string password)
     {
@@ -185,9 +193,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        ManagedMqttClient.ConnectingFailedAsync += OnConnectingFailed;
-        ManagedMqttClient.ConnectedAsync += OnConnected;
-
         var preselected = false;
         if (SessionState.LastSuccessfulConnectionId is { } lastId)
         {
@@ -283,13 +288,24 @@
 
     public async ValueTask DisposeAsync()
     {
-        ManagedMqttClient.ConnectingFailedAsync -= OnConnectingFailed;
-        ManagedMqttClient.ConnectedAsync -= OnConnected;
-        if (_activeCertResource is not null)
+        _disposed = true;
+
+        if (_operation is { } operation && !operation.Finalizing)
         {
-            _activeCertResource.Dispose();
-            _activeCertResource = null;
+            operation.Cancelled = true;
+            await operation.Cancellation.CancelAsync();
+            if (operation.AttemptStarted)
+            {
+                operation.Teardown ??= StopOwnedConnectionAsync();
+                await operation.Teardown;
+                ReleaseOperation(operation);
+            }
+            else if (!operation.Building)
+            {
+                ReleaseOperation(operation);
+            }
         }
+
         if (_stagedAssetId is not null)
         {
             try { await CertStore.DeleteAsync(_stagedAssetOwnerId, _stagedAssetId); } catch { /* unreferenced staged asset */ }

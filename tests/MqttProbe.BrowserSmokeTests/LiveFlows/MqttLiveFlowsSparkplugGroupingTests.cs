@@ -74,7 +74,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
 
             SetStage("row body selects without toggling expansion");
             var rowsBefore = await TreeRowCountAsync(page, token);
-            await ClickRowBodyAsync(GroupRow(page, node), token);
+            await ClickRowBodyAsync(DesktopVirtualRow(page, node), token);
             await Assertions.Expect(page.Locator(SelectedRowSelector))
                 .ToHaveCountAsync(1, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
             Assert.That(await TreeRowCountAsync(page, token), Is.EqualTo(rowsBefore),
@@ -82,7 +82,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
 
             SetStage("chevron collapses the selected row without moving the selection");
             await ClickGroupChevronAsync(page, node, token);
-            await Assertions.Expect(GroupRow(page, "NDATA"))
+            await Assertions.Expect(DesktopVirtualRow(page, "NDATA"))
                 .ToHaveCountAsync(0, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
             await Assertions.Expect(page.Locator(
                     $"{SelectedRowSelector}:has({GroupLabelSelector}:text-is('{node}'))"))
@@ -90,7 +90,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await ClickGroupChevronAsync(page, node, token);
 
             SetStage("Devices selects device topics only");
-            await ClickRowBodyAsync(GroupRow(page, "Devices"), token);
+            await ClickRowBodyAsync(DesktopVirtualRow(page, "Devices"), token);
             await ExpectDesktopPayloadTopicAsync(page, dbirth, token);
             await ExpectDesktopPayloadTopicAsync(page, ddata, token);
             await ExpectNoDesktopPayloadTopicAsync(page, nbirth, token);
@@ -99,8 +99,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             SetStage("disconnect");
             await page.Locator(DisconnectButton).ClickAsync(
                 new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-            await page.Locator(DisconnectedChip).First.WaitForAsync(
-                new() { State = WaitForSelectorState.Visible, Timeout = ActionTimeoutMs }).WaitAsync(token);
+            await WaitForDisconnectedAsync(page, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -163,7 +162,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await AwaitSeedReceiptAsync(page, token, (nbirth, "birth"));
             await ExpandAllTreeAsync(page, token);
             await WaitForGroupRowAsync(page, node, token);
-            await ClickRowBodyAsync(GroupRow(page, node), token);
+            await ClickRowBodyAsync(DesktopVirtualRow(page, node), token);
             await ExpectDesktopPayloadTopicAsync(page, nbirth, token);
 
             SetStage("first NDATA joins the selected node");
@@ -181,7 +180,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await WaitForGroupRowAsync(page, "Devices", token);
             await ClickGroupChevronAsync(page, "Devices", token);
             await WaitForGroupRowAsync(page, device, token);
-            await ClickRowBodyAsync(GroupRow(page, device), token);
+            await ClickRowBodyAsync(DesktopVirtualRow(page, device), token);
             await ExpectDesktopPayloadTopicAsync(page, ddata, token);
             await ExpectNoDesktopPayloadTopicAsync(page, nbirth, token);
             await PublishAsync(mqtt, dbirth, "device-birth", token);
@@ -190,8 +189,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             SetStage("disconnect");
             await page.Locator(DisconnectButton).ClickAsync(
                 new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-            await page.Locator(DisconnectedChip).First.WaitForAsync(
-                new() { State = WaitForSelectorState.Visible, Timeout = ActionTimeoutMs }).WaitAsync(token);
+            await WaitForDisconnectedAsync(page, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -252,7 +250,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await AwaitSeedReceiptAsync(page, token, (ddata1, "device-1"));
             await ExpandAllTreeAsync(page, token);
             await WaitForGroupRowAsync(page, "Devices", token);
-            await ClickRowBodyAsync(GroupRow(page, "Devices"), token);
+            await ClickRowBodyAsync(DesktopVirtualRow(page, "Devices"), token);
             await ExpectDesktopPayloadTopicAsync(page, ddata1, token);
             var beforeDevice2 = await DesktopPayloadRowCountAsync(page, token);
 
@@ -265,8 +263,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             SetStage("disconnect");
             await page.Locator(DisconnectButton).ClickAsync(
                 new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-            await page.Locator(DisconnectedChip).First.WaitForAsync(
-                new() { State = WaitForSelectorState.Visible, Timeout = ActionTimeoutMs }).WaitAsync(token);
+            await WaitForDisconnectedAsync(page, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {

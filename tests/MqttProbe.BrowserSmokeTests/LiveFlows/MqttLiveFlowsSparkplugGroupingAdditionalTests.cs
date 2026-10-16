@@ -62,14 +62,14 @@ public sealed partial class MqttLiveFlowsSmokeTests
             SetStage("one device present, Devices selected with an open detail");
             await PublishAsync(mqtt, dbirth1, "device-birth", token);
             await PublishAsync(mqtt, ddata1, "device-1", token);
-            await AwaitSeedReceiptAsync(page, token, (dbirth1, "device-birth"), (ddata1, "device-1"));
+            await AwaitNamespaceMessageCountAsync(page, 2, token);
             await ExpandAllTreeAsync(page, token);
             await WaitForGroupRowAsync(page, "Devices", token);
-            await ClickRowBodyAsync(GroupRow(page, "Devices"), token);
+            await ClickRowBodyAsync(DesktopVirtualRow(page, "Devices"), token);
             await OpenDesktopDetailAsync(page, ddata1, token);
 
             SetStage("re-clicking the same group keeps the selected message detail");
-            await ClickRowBodyAsync(GroupRow(page, "Devices"), token);
+            await ClickRowBodyAsync(DesktopVirtualRow(page, "Devices"), token);
             Assert.That(await DetailTopicTextAsync(page, token), Is.EqualTo(ddata1),
                 "re-selecting the same grouping row must not move the selection or drop the detail");
             await CloseDesktopDetailAsync(page, token);
@@ -94,8 +94,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             SetStage("disconnect");
             await page.Locator(DisconnectButton).ClickAsync(
                 new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-            await page.Locator(DisconnectedChip).First.WaitForAsync(
-                new() { State = WaitForSelectorState.Visible, Timeout = ActionTimeoutMs }).WaitAsync(token);
+            await WaitForDisconnectedAsync(page, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -179,7 +178,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await ExpectMobilePayloadTopicAsync(page, ndeath, token);
 
             if (countBefore is int before)
-                await Assertions.Expect(page.Locator(MobileCountChipSelector).First)
+                await Assertions.Expect(await UniqueAsync(page.Locator(MobileCountChipSelector), token))
                     .ToHaveTextAsync((before + 1).ToString(CultureInfo.InvariantCulture),
                         new() { Timeout = ActionTimeoutMs })
                     .WaitAsync(token);
@@ -255,7 +254,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
                 (nbirth, "birth"), (ndata, "data"), (ddata, "device-data"));
             await ExpandAllTreeAsync(page, token);
             await WaitForGroupRowAsync(page, node, token);
-            await ClickRowBodyAsync(GroupRow(page, node), token);
+            await ClickRowBodyAsync(DesktopVirtualRow(page, node), token);
             await ExpectDesktopPayloadTopicAsync(page, nbirth, token);
             await ExpectDesktopPayloadTopicAsync(page, ndata, token);
 
@@ -286,8 +285,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             SetStage("disconnect");
             await page.Locator(DisconnectButton).ClickAsync(
                 new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-            await page.Locator(DisconnectedChip).First.WaitForAsync(
-                new() { State = WaitForSelectorState.Visible, Timeout = ActionTimeoutMs }).WaitAsync(token);
+            await WaitForDisconnectedAsync(page, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {

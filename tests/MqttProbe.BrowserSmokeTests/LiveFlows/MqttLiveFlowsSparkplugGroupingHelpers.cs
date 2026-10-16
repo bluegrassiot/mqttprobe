@@ -37,67 +37,13 @@ public sealed partial class MqttLiveFlowsSmokeTests
     private static string DeviceTopic(string group, string verb, string node, string device) =>
         $"{SparkplugNamespace}/{group}/{verb}/{node}/{device}";
 
-    private static ILocator GroupRow(IPage page, string label) =>
-        page.Locator($"{TopicRowSelector}:has({GroupLabelSelector}:text-is('{label}'))").First;
-
-    private static async Task WaitForGroupRowAsync(IPage page, string label, CancellationToken token)
-    {
-        await GroupRow(page, label).WaitForAsync(
-            new() { State = WaitForSelectorState.Visible, Timeout = MessageWaitTimeoutMs }).WaitAsync(token);
-    }
-
-    // A virtual row renders .topic-group-label, a real namespace or group row a plain span.
-    private static async Task WaitForTreeRowLabelAsync(IPage page, string label, CancellationToken token)
-    {
-        await page.Locator($"{TopicRowSelector}:has(span:text-is('{label}'))").First
-            .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = MessageWaitTimeoutMs })
-            .WaitAsync(token);
-    }
-
-    // The chevron is the only expander; the row body selects.
-    private static async Task ClickGroupChevronAsync(IPage page, string label, CancellationToken token)
-    {
-        await GroupRow(page, label).Locator("button").First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-    }
-
-    private static async Task ClickRowBodyAsync(ILocator row, CancellationToken token)
-    {
-        await row.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-    }
-
-    private static async Task<int> TreeRowCountAsync(IPage page, CancellationToken token) =>
-        await page.Locator(TopicRowSelector).CountAsync().WaitAsync(token);
-
-    private static ILocator NodeStatLocator(IPage page, string label) =>
-        page.Locator($".browser-split-wrap:not(.browser-split-wrap--mobile):visible "
-            + $"{TopicRowSelector}:visible:has({GroupLabelSelector}:text-is('{label}')) > {StatTextSelector}");
-
-    private static async Task<string> NodeStatTextAsync(IPage page, string label, CancellationToken token)
-    {
-        var stat = NodeStatLocator(page, label);
-        await Assertions.Expect(stat).ToHaveCountAsync(1, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-        return (await stat.InnerTextAsync().WaitAsync(token)).Trim();
-    }
-
-    private static async Task ExpectNodeStatChangedAsync(
-        IPage page, string label, string previous, CancellationToken token) =>
-        await Assertions.Expect(NodeStatLocator(page, label))
-            .Not.ToHaveTextAsync(previous, new() { Timeout = MessageWaitTimeoutMs }).WaitAsync(token);
-
-    private static ILocator DesktopRowByLabel(IPage page, string label) =>
-        page.Locator($".browser-split-wrap:not(.browser-split-wrap--mobile):visible "
-            + $"{TopicRowSelector}:visible:has(span:text-is('{label}'))");
-
     // Seed receipt: selecting the namespace root and awaiting each topic and payload proves the
     // store holds every endpoint before the caller expands.
     private async Task AwaitSeedReceiptAsync(
         IPage page, CancellationToken token, params (string Topic, string Payload)[] expected)
     {
         SetStage("await seed receipt");
-        var namespaceRow = DesktopRowByLabel(page, SparkplugNamespace);
-        await Assertions.Expect(namespaceRow).ToHaveCountAsync(1, new() { Timeout = ActionTimeoutMs })
-            .WaitAsync(token);
+        var namespaceRow = await UniqueAsync(DesktopRowByLabel(page, SparkplugNamespace), token);
         await namespaceRow.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
 
         foreach (var (topic, payload) in expected)
@@ -112,8 +58,8 @@ public sealed partial class MqttLiveFlowsSmokeTests
     private async Task AwaitNamespaceMessageCountAsync(IPage page, int expectedMessages, CancellationToken token)
     {
         SetStage("await namespace message count");
-        var stat = DesktopRowByLabel(page, SparkplugNamespace).Locator(StatTextSelector);
-        await Assertions.Expect(stat).ToHaveCountAsync(1, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var stat = await UniqueAsync(
+            DesktopRowByLabel(page, SparkplugNamespace).Locator(StatTextSelector), token);
 
         var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(MessageWaitTimeoutMs);
         while (true)
@@ -162,15 +108,12 @@ public sealed partial class MqttLiveFlowsSmokeTests
         }
     }
 
-    // Expand all only expands existing rows, so wait for the first row: clicking an empty tree
-    // expands nothing and the branch stays collapsed.
+    // Expand all snapshots the store, so the seed receipt has already proved every endpoint is stored.
     private static async Task ExpandAllTreeAsync(IPage page, CancellationToken token)
     {
-        await page.Locator(TopicRowSelector).First
-            .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = MessageWaitTimeoutMs })
-            .WaitAsync(token);
-        await page.Locator("button[title='Expand all']").First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var expandAll = await UniqueAsync(
+            DesktopTreeRegion(page).Locator("button[title='Expand all']"), token);
+        await expandAll.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
 
     private static ILocator DesktopPayloadTopicRow(IPage page, string topic) =>
@@ -204,21 +147,25 @@ public sealed partial class MqttLiveFlowsSmokeTests
 
     private static async Task OpenDesktopDetailAsync(IPage page, string topic, CancellationToken token)
     {
-        await page.Locator($".browser-split-wrap:not(.browser-split-wrap--mobile) "
-                + $"tr:has(td.pb-cell-topic:text-is('{topic}')) td.pb-cell-topic").First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var cell = await UniqueAsync(page.Locator($".browser-split-wrap:not(.browser-split-wrap--mobile) "
+            + $"tr:has(td.pb-cell-topic:text-is('{topic}')) td.pb-cell-topic"), token);
+        await cell.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
 
-        await Assertions.Expect(page.Locator(DetailTopicSelector).First)
-            .ToHaveTextAsync(topic, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var detail = await UniqueAsync(page.Locator(DetailTopicSelector), token);
+        await Assertions.Expect(detail).ToHaveTextAsync(topic, new() { Timeout = ActionTimeoutMs })
+            .WaitAsync(token);
     }
 
-    private static async Task<string> DetailTopicTextAsync(IPage page, CancellationToken token) =>
-        (await page.Locator(DetailTopicSelector).First.InnerTextAsync().WaitAsync(token)).Trim();
+    private static async Task<string> DetailTopicTextAsync(IPage page, CancellationToken token)
+    {
+        var detail = await UniqueAsync(page.Locator(DetailTopicSelector), token);
+        return (await detail.InnerTextAsync().WaitAsync(token)).Trim();
+    }
 
     private static async Task CloseDesktopDetailAsync(IPage page, CancellationToken token)
     {
-        await page.Locator("button[title='Back to message list']").First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var back = await UniqueAsync(page.Locator("button[title='Back to message list']"), token);
+        await back.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
         await Assertions.Expect(page.Locator(DetailTopicSelector))
             .ToHaveCountAsync(0, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
@@ -228,7 +175,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
     private static async Task<string> MobileSelectionLabelAsync(
         IPage page, string expectedPart, CancellationToken token)
     {
-        var name = page.Locator(MobileTopicNameSelector).First;
+        var name = await UniqueAsync(page.Locator(MobileTopicNameSelector), token);
         var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(ActionTimeoutMs);
         while (true)
         {
@@ -245,7 +192,11 @@ public sealed partial class MqttLiveFlowsSmokeTests
 
     private static async Task<int?> MobileCountChipAsync(IPage page, CancellationToken token)
     {
-        var chip = page.Locator(MobileCountChipSelector).First;
+        var chips = page.Locator(MobileCountChipSelector);
+        if (await chips.CountAsync().WaitAsync(token) == 0)
+            return null;
+
+        var chip = await UniqueAsync(chips, token);
         if (!await chip.IsVisibleAsync().WaitAsync(token))
             return null;
 
@@ -258,22 +209,25 @@ public sealed partial class MqttLiveFlowsSmokeTests
     private async Task EnsureSparkplugGroupingAsync(IPage page, CancellationToken token)
     {
         await NavigateToTab(page, "Browser", token);
-        if (await page.Locator(GroupingFlagSelector).First.IsVisibleAsync().WaitAsync(token))
+        var flag = page.Locator(GroupingFlagSelector);
+        if (await flag.CountAsync().WaitAsync(token) == 1
+            && await flag.IsVisibleAsync().WaitAsync(token))
             return;
 
         SetStage("open Settings tab");
         await NavigateToTab(page, "Settings", token);
 
         SetStage("open Sparkplug settings section");
-        await page.Locator(".settings-nav-item").Filter(new() { HasText = "Sparkplug" }).First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var settingsNav = await UniqueAsync(
+            page.Locator(".settings-nav-item").Filter(new() { HasText = "Sparkplug" }), token);
+        await settingsNav.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
 
         SetStage("enable Sparkplug grouping");
-        var field = page.Locator(".settings-field").Filter(new() { HasText = GroupToggleLabel }).First;
-        await field.WaitForAsync(
-            new() { State = WaitForSelectorState.Visible, Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var field = await UniqueAsync(
+            page.Locator(".settings-field").Filter(new() { HasText = GroupToggleLabel }), token);
+        await Assertions.Expect(field).ToBeVisibleAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
 
-        var toggle = field.Locator("input[type='checkbox']").First;
+        var toggle = await UniqueAsync(field.Locator("input[type='checkbox']"), token);
         if (!await toggle.IsCheckedAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token))
         {
             try
@@ -283,8 +237,8 @@ public sealed partial class MqttLiveFlowsSmokeTests
             catch (PlaywrightException)
             {
                 // MudBlazor draws a styled label around the input; clicking the label toggles it.
-                await field.Locator("label, .mud-switch").First
-                    .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+                var label = await UniqueAsync(field.Locator("label, .mud-switch"), token);
+                await label.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
             }
         }
 
@@ -293,7 +247,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
 
         SetStage("return to Browser with grouping on");
         await NavigateToTab(page, "Browser", token);
-        await Assertions.Expect(page.Locator(GroupingFlagSelector).First)
+        await Assertions.Expect(await UniqueAsync(page.Locator(GroupingFlagSelector), token))
             .ToBeVisibleAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
 
@@ -302,60 +256,67 @@ public sealed partial class MqttLiveFlowsSmokeTests
     private async Task ClearAllStoredMessagesAsync(IPage page, CancellationToken token)
     {
         SetStage("clear all stored messages");
-        var clear = page.Locator(".app-tabpanel-header__actions button:has-text('Clear')").First;
+        var clearButtons = page.Locator(".app-tabpanel-header__actions button:has-text('Clear')");
+        if (await clearButtons.CountAsync().WaitAsync(token) == 0)
+            return;
+
+        var clear = await UniqueAsync(clearButtons, token);
         if (!await clear.IsVisibleAsync().WaitAsync(token)
             || !await clear.IsEnabledAsync().WaitAsync(token))
             return;
 
         await clear.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-        var confirm = page.Locator(".mud-dialog-container button:has-text('Clear all')").First;
-        await confirm.WaitForAsync(
-            new() { State = WaitForSelectorState.Visible, Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var confirm = await UniqueAsync(page.Locator(".mud-dialog-container button:has-text('Clear all')"), token);
+        await Assertions.Expect(confirm).ToBeVisibleAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
         await confirm.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-        await confirm.WaitForAsync(
-            new() { State = WaitForSelectorState.Hidden, Timeout = ActionTimeoutMs }).WaitAsync(token);
+        await Assertions.Expect(confirm).ToBeHiddenAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
 
     private async Task SubscribeAsync(IPage page, string filter, CancellationToken token)
     {
         SetStage("subscribe to the scenario filter");
         await NavigateToTab(page, "Subscriptions", token);
-        await page.Locator(".subscription-editor-topic input").First
-            .FillAsync(filter, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-        await page.Locator("button[title='Add subscription']").First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var topicInput = await UniqueAsync(page.Locator(".subscription-editor-topic input"), token);
+        await topicInput.FillAsync(filter, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var add = await UniqueAsync(page.Locator("button[title='Add subscription']"), token);
+        await add.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
-
-    private static ILocator ExcludeEditor(IPage page) => page.Locator(".exclude-editor").First;
 
     // The panel renders its body only while expanded, and expansion is not preserved across
     // tab navigation, so open it when the add row is absent.
     private static async Task EnsureExcludeEditorExpandedAsync(ILocator editor, CancellationToken token)
     {
-        var addRow = editor.Locator(".exclude-editor-add-row");
-        if (await addRow.CountAsync().WaitAsync(token) == 0
-            || !await addRow.First.IsVisibleAsync().WaitAsync(token))
+        var addRows = editor.Locator(".exclude-editor-add-row");
+        if (await addRows.CountAsync().WaitAsync(token) == 0)
         {
-            await editor.Locator(".mud-expand-panel .mud-expand-panel-header").First
-                .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+            await ClickExcludePanelHeaderAsync(editor, token);
+            return;
         }
+
+        var addRow = await UniqueAsync(addRows, token);
+        if (!await addRow.IsVisibleAsync().WaitAsync(token))
+            await ClickExcludePanelHeaderAsync(editor, token);
+    }
+
+    private static async Task ClickExcludePanelHeaderAsync(ILocator editor, CancellationToken token)
+    {
+        var header = await UniqueAsync(editor.Locator(".mud-expand-panel .mud-expand-panel-header"), token);
+        await header.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
 
     private async Task AddExcludeFilterAsync(IPage page, string filter, CancellationToken token)
     {
         SetStage("add an exclude filter to purge one selected member");
         await NavigateToTab(page, "Subscriptions", token);
-        var editor = ExcludeEditor(page);
-        await editor.WaitForAsync(
-            new() { State = WaitForSelectorState.Visible, Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var editor = await UniqueAsync(page.Locator(".exclude-editor"), token);
         await EnsureExcludeEditorExpandedAsync(editor, token);
 
-        await editor.Locator(".exclude-editor-topic input").First
-            .FillAsync(filter, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-        await editor.Locator("button[title='Add exclude topic']").First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var topicInput = await UniqueAsync(editor.Locator(".exclude-editor-topic input"), token);
+        await topicInput.FillAsync(filter, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var add = await UniqueAsync(editor.Locator("button[title='Add exclude topic']"), token);
+        await add.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
 
-        await Assertions.Expect(editor.Locator(".count-chip").First)
+        await Assertions.Expect(await UniqueAsync(editor.Locator(".count-chip"), token))
             .ToHaveTextAsync("1", new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
 
@@ -363,15 +324,16 @@ public sealed partial class MqttLiveFlowsSmokeTests
     {
         SetStage("remove the exclude filter");
         await NavigateToTab(page, "Subscriptions", token);
-        var editor = ExcludeEditor(page);
+        var editor = await UniqueAsync(page.Locator(".exclude-editor"), token);
         await EnsureExcludeEditorExpandedAsync(editor, token);
 
-        await editor.Locator(".exclude-editor-table-wrap .mud-table-body label.mud-checkbox").First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-        await editor.Locator("button[title='Remove']").First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var checkbox = await UniqueAsync(
+            editor.Locator(".exclude-editor-table-wrap .mud-table-body label.mud-checkbox"), token);
+        await checkbox.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var remove = await UniqueAsync(editor.Locator("button[title='Remove']"), token);
+        await remove.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
 
-        await Assertions.Expect(editor.Locator(".count-chip").First)
+        await Assertions.Expect(await UniqueAsync(editor.Locator(".count-chip"), token))
             .ToHaveTextAsync("0", new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
 
@@ -386,32 +348,30 @@ public sealed partial class MqttLiveFlowsSmokeTests
     // compact actions menu the same way the existing mobile smoke case does.
     private static async Task DisconnectAtMobileAsync(IPage page, CancellationToken token)
     {
-        await page.Locator(".app-actions-compact .mud-menu").First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-        await page.Locator(".mud-menu-item:has-text('Disconnect')").First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-        await page.Locator(DisconnectedChip).First.WaitForAsync(
-            new() { State = WaitForSelectorState.Visible, Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var menu = await UniqueAsync(page.Locator(".app-actions-compact .mud-menu"), token);
+        await menu.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var disconnect = await UniqueAsync(page.Locator(".mud-menu-item:has-text('Disconnect')"), token);
+        await disconnect.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        await WaitForDisconnectedAsync(page, token);
     }
 
     private static async Task OpenMobilePickerAndSelectAsync(
         IPage page, string groupLabel, CancellationToken token)
     {
-        await page.Locator(".mobile-topic-bar__btn").First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var topicsButton = await UniqueAsync(page.Locator(".mobile-topic-bar__btn"), token);
+        await topicsButton.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
 
-        var overlay = page.Locator(PickerOverlaySelector);
-        await Assertions.Expect(overlay).ToBeVisibleAsync(
-            new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var overlay = await UniqueAsync(PickerRegion(page), token);
 
         // The picker hosts its own TopicBrowser, which starts collapsed, so reveal the group
         // hierarchy before selecting a nested grouping row.
-        await overlay.Locator("button[title='Expand all']").First
-            .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+        var pickerExpandAll = await UniqueAsync(overlay.Locator("button[title='Expand all']"), token);
+        await pickerExpandAll.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
 
-        var row = overlay.Locator($"{TopicRowSelector}:has({GroupLabelSelector}:text-is('{groupLabel}'))").First;
-        await row.WaitForAsync(
-            new() { State = WaitForSelectorState.Visible, Timeout = MessageWaitTimeoutMs }).WaitAsync(token);
+        var row = await UniqueAsync(
+            overlay.Locator($"{TopicRowSelector}:visible:has({GroupLabelSelector}:text-is('{groupLabel}'))"), token);
+        await Assertions.Expect(row).ToBeVisibleAsync(
+            new() { Timeout = MessageWaitTimeoutMs }).WaitAsync(token);
         await row.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
 
         await Assertions.Expect(overlay).ToBeHiddenAsync(

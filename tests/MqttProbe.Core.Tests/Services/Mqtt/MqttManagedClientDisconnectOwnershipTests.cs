@@ -59,14 +59,14 @@ public class MqttManagedClientDisconnectOwnershipTests
         var attemptA = sut.StartAttempt(BuildOptions());
         (await attemptA.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
 
-        var dispatchA = disconnectedA.Handler!(DisconnectedArgs());
-        await firstEntered.Task;
+        _ = disconnectedA.Handler!(DisconnectedArgs());
+        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         var attemptB = sut.StartAttempt(BuildOptions());
         (await attemptB.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
 
         releaseFirst.TrySetResult();
-        await dispatchA.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(() => Volatile.Read(ref secondRan) > 0 || Volatile.Read(ref stateCount) > 0, 250);
 
         Volatile.Read(ref secondRan).Should().Be(0, "a replaced generation must not reach its later disconnect subscribers");
         Volatile.Read(ref stateCount).Should().Be(0, "a replaced generation must not emit trailing connection state");
@@ -103,10 +103,10 @@ public class MqttManagedClientDisconnectOwnershipTests
 
         gate.Revoke();
 
-        var dispatch = disconnected.Handler!(DisconnectedArgs());
-        await firstEntered.Task;
+        _ = disconnected.Handler!(DisconnectedArgs());
+        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         releaseFirst.TrySetResult();
-        await dispatch.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(() => Volatile.Read(ref secondRan) == 1 && Volatile.Read(ref stateCount) == 1);
 
         Volatile.Read(ref secondRan).Should().Be(1, "a revoked but still-owned session still delivers disconnect");
         Volatile.Read(ref stateCount).Should().Be(1, "trailing connection state is delivered even after revocation");
@@ -143,7 +143,9 @@ public class MqttManagedClientDisconnectOwnershipTests
         var attemptA = sut.StartAttempt(BuildOptions());
         (await attemptA.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
 
-        await disconnectedA.Handler!(DisconnectedArgs()).WaitAsync(TimeSpan.FromSeconds(5));
+        _ = disconnectedA.Handler!(DisconnectedArgs());
+        await WaitUntilAsync(() => Volatile.Read(ref firstState) == 1);
+        await WaitUntilAsync(() => Volatile.Read(ref secondState) > 0, 250);
 
         Volatile.Read(ref firstState).Should().Be(1);
         Volatile.Read(ref secondState).Should().Be(0, "a state subscriber that replaced the generation must halt the rest");
@@ -332,6 +334,91 @@ public class MqttManagedClientDisconnectOwnershipTests
 
         Volatile.Read(ref firstState).Should().Be(1);
         Volatile.Read(ref secondState).Should().Be(0, "a connected-state subscriber that replaced the generation must halt the rest");
+    }
+
+    [Test]
+    public async Task Raw_disconnect_during_connect_does_not_deadlock_when_a_subscriber_awaits_stop()
+    {
+        var stopCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var client = Substitute.For<IMqttClient>();
+        var disconnected = CaptureDisconnected(client);
+        client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                await disconnected.Handler!(DisconnectedArgs());
+                return Success();
+            });
+
+        var factory = new QueueClientFactory();
+        factory.Enqueue(client);
+        var sut = new MqttManagedClient(factory, null);
+
+        sut.DisconnectedAsync += async _ =>
+        {
+            await sut.StopAsync();
+            stopCompleted.TrySetResult();
+        };
+
+        try
+        {
+            _ = sut.StartAttempt(BuildOptions());
+            await stopCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            sut.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task Raw_disconnect_during_reconnect_does_not_deadlock_when_a_subscriber_awaits_stop()
+    {
+        var stopCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+
+        var client = Substitute.For<IMqttClient>();
+        var disconnected = CaptureDisconnected(client);
+        client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Interlocked.Increment(ref calls) == 1
+                ? Task.FromException<MqttClientConnectResult>(new InvalidOperationException("initial"))
+                : ReconnectAsync());
+
+        async Task<MqttClientConnectResult> ReconnectAsync()
+        {
+            await disconnected.Handler!(DisconnectedArgs());
+            return Success();
+        }
+
+        var factory = new QueueClientFactory();
+        factory.Enqueue(client);
+        var sut = new MqttManagedClient(factory, null);
+
+        sut.DisconnectedAsync += async _ =>
+        {
+            await sut.StopAsync();
+            stopCompleted.TrySetResult();
+        };
+
+        try
+        {
+            _ = sut.StartAttempt(BuildOptions(TimeSpan.FromMilliseconds(20)));
+            await stopCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            sut.Dispose();
+        }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 3000)
+    {
+        var waited = 0;
+        while (!condition() && waited < timeoutMs)
+        {
+            await Task.Delay(20);
+            waited += 20;
+        }
     }
 
     private static HandlerCapture<MqttClientDisconnectedEventArgs> CaptureDisconnected(IMqttClient client)

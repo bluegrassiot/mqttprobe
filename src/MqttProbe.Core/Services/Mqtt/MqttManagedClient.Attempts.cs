@@ -449,14 +449,20 @@ public sealed partial class MqttManagedClient
             generation.ConnectedArgs = args;
     }
 
-    private async Task OnGenerationDisconnectedAsync(Generation generation, MqttClientDisconnectedEventArgs args)
+    private Task OnGenerationDisconnectedAsync(Generation generation, MqttClientDisconnectedEventArgs args)
     {
         if (!IsOwnedForWork(generation))
-            return;
+            return Task.CompletedTask;
 
         if (_activityGate.IsActive)
             StartReconnectLoop(generation);
 
+        _ = NotifyDisconnectedAsync(generation, args);
+        return Task.CompletedTask;
+    }
+
+    private async Task NotifyDisconnectedAsync(Generation generation, MqttClientDisconnectedEventArgs args)
+    {
         await RaiseWhileEligibleAsync(DisconnectedAsync, args, nameof(DisconnectedAsync), generation, requireActiveGate: false)
             .ConfigureAwait(false);
         await RaiseWhileEligibleAsync(ConnectionStateChangedAsync, EventArgs.Empty, nameof(ConnectionStateChangedAsync),

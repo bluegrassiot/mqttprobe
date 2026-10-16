@@ -17,7 +17,6 @@ internal sealed class MqttNetClientFactory : IMqttClientFactory
     public bool OwnsClients => true;
 }
 
-// One instance backs every generation, so the manager never disposes it.
 internal sealed class AdoptedClientFactory(IMqttClient client) : IMqttClientFactory
 {
     public IMqttClient CreateClient() => client;

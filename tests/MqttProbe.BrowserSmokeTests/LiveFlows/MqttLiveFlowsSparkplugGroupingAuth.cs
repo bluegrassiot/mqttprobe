@@ -2,14 +2,13 @@ using Microsoft.Playwright;
 
 namespace MqttProbe.BrowserSmokeTests;
 
-// Grouping-only auth: one visible sign-in per fixture run, then in-memory cookie reuse. Each case
-// still gets a fresh browser context and nothing is persisted to disk.
+// Grouping-only auth: one sign-in per fixture run reused in memory; each case gets a fresh
+// browser context and nothing is written to disk.
 public sealed partial class MqttLiveFlowsSmokeTests
 {
     // Default ASP.NET Core cookie-auth name plus numeric chunk suffixes; the app does not rename it.
     private const string AuthCookieName = ".AspNetCore.Cookies";
 
-    // Fixture-scoped in-memory session; cleared at fixture teardown.
     private GroupingAuthSession? _groupingAuthSession;
 
     private sealed record GroupingAuthSession(string Origin, IReadOnlyList<Cookie> Cookies);
@@ -17,9 +16,8 @@ public sealed partial class MqttLiveFlowsSmokeTests
     [OneTimeTearDown]
     public void ClearGroupingAuthSession() => _groupingAuthSession = null;
 
-    // The first grouping case signs in through the real controls and caches the cookies; later
-    // cases restore them into a fresh context. A restore that does not reach the authenticated
-    // shell fails instead of signing in again silently.
+    // The first case signs in through the real controls and caches cookies; later cases restore
+    // them. A restore that does not reach the authenticated shell fails rather than signing in again.
     private async Task LoginForGroupingAsync(
         IPage page, string appOrigin, string username, string password, CancellationToken token)
     {
@@ -136,7 +134,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
         await Assertions.Expect(dialog).ToBeVisibleAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
 
-    // Only the configured auth cookie and its numeric chunk suffixes (C1, C2, ...).
     private static bool IsAuthCookie(BrowserContextCookiesResult cookie)
     {
         if (!cookie.Name.StartsWith(AuthCookieName, StringComparison.Ordinal))

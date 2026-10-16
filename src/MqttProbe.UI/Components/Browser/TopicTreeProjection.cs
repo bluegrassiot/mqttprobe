@@ -472,8 +472,6 @@ internal static class TopicTreeProjection
 
         public bool IsRealTopic => Source is not null;
 
-        // A virtual node covers the real topics beneath it, so selecting the node row selects
-        // each of them; a real node covers only itself, and the store reads its subtree.
         public ImmutableArray<string> SelectionTopics() => IsRealTopic
             ? [Id]
             : [.. Children.SelectMany(child => child.SelectionTopics())];

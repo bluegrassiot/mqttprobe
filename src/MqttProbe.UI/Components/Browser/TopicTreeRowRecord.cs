@@ -35,8 +35,6 @@ public sealed record TopicTreeRowModel(
         ? [FullPath]
         : SelectionTopics;
 
-    // A scoped row's coverage grows as the store does, so its name is fixed; an unscoped row
-    // names its first topic and counts the rest.
     public string SelectionLabel => Scope is { } scope ? ScopedLabel(scope) : UnscopedLabel();
 
     public TopicSelection ToSelection() => new(FullPath, SelectionLabel, SelectedTopics, Scope,

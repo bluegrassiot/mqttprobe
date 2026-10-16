@@ -343,10 +343,9 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             InvalidateSelection();
     }
 
-    // A selection survives a purge only while every path it covers is still in the tree, and a
-    // selection that requires canonical topics keeps each one's observed spelling: a purge that
-    // retires that spelling while an alias or descendant keeps the node alive still drops the
-    // selection, so the store and the projection agree on what is selected.
+    // A selection survives a purge only while every path it covers stays in the tree, and a
+    // canonical selection is dropped when a purge retires an observed spelling, even if an
+    // alias or descendant keeps the node alive.
     private bool SelectionStillCovered()
     {
         if (_selectedRoots.Count == 0)

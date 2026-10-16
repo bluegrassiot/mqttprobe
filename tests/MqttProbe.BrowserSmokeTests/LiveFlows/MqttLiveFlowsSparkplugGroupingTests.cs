@@ -3,12 +3,8 @@ using MQTTnet;
 
 namespace MqttProbe.BrowserSmokeTests;
 
-// Grouped Sparkplug selection: desktop selection semantics. Selectors and harness live in
-// MqttLiveFlowsSparkplugGroupingHelpers; reconciliation, mobile and purge cases live in
-// MqttLiveFlowsSparkplugGroupingAdditionalTests.
 public sealed partial class MqttLiveFlowsSmokeTests
 {
-    // ── Test: grouped tree shape, body vs chevron, Devices scope ───────
 
     [Test]
     [Category("SparkplugGrouping")]
@@ -62,6 +58,9 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await PublishAsync(mqtt, dbirth, "device-birth", token);
             await PublishAsync(mqtt, ddata, "device-data", token);
 
+            await AwaitSeedReceiptAsync(page, token,
+                (nbirth, "birth"), (ndata, "data"), (dbirth, "device-birth"), (ddata, "device-data"));
+
             SetStage("expand the grouped tree");
             await ExpandAllTreeAsync(page, token);
             await WaitForTreeRowLabelAsync(page, group, token);
@@ -113,8 +112,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
         }
     }
 
-    // ── Test: a selected node gains its first new message type ─────────
-
     [Test]
     [Category("SparkplugGrouping")]
     [CancelAfter(ScenarioBudgetSeconds * 1000)]
@@ -163,6 +160,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
 
             SetStage("node is born only, then selected");
             await PublishAsync(mqtt, nbirth, "birth", token);
+            await AwaitSeedReceiptAsync(page, token, (nbirth, "birth"));
             await ExpandAllTreeAsync(page, token);
             await WaitForGroupRowAsync(page, node, token);
             await ClickRowBodyAsync(GroupRow(page, node), token);
@@ -204,8 +202,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await CleanupAsync(mqtt, browser, playwright);
         }
     }
-
-    // ── Test: selected Devices gains its first new device ──────────────
 
     [Test]
     [Category("SparkplugGrouping")]
@@ -253,6 +249,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
 
             SetStage("one device present, Devices selected");
             await PublishAsync(mqtt, ddata1, "device-1", token);
+            await AwaitSeedReceiptAsync(page, token, (ddata1, "device-1"));
             await ExpandAllTreeAsync(page, token);
             await WaitForGroupRowAsync(page, "Devices", token);
             await ClickRowBodyAsync(GroupRow(page, "Devices"), token);

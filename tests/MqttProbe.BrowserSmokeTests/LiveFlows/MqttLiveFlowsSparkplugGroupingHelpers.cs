@@ -3,7 +3,6 @@ using Microsoft.Playwright;
 
 namespace MqttProbe.BrowserSmokeTests;
 
-// Grouping-specific plumbing and selectors for the Sparkplug grouped-selection smoke tests.
 public sealed partial class MqttLiveFlowsSmokeTests
 {
     private const string SparkplugNamespace = "spBv1.0";
@@ -38,8 +37,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
     private static string DeviceTopic(string group, string verb, string node, string device) =>
         $"{SparkplugNamespace}/{group}/{verb}/{node}/{device}";
 
-    // â”€â”€ Grouped tree rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
     private static ILocator GroupRow(IPage page, string label) =>
         page.Locator($"{TopicRowSelector}:has({GroupLabelSelector}:text-is('{label}'))").First;
 
@@ -49,8 +46,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             new() { State = WaitForSelectorState.Visible, Timeout = MessageWaitTimeoutMs }).WaitAsync(token);
     }
 
-    // A virtual row labels itself with .topic-group-label, but a namespace or group row is a real
-    // node and renders a plain span, so match either by the text the row shows.
+    // A virtual row renders .topic-group-label, a real namespace or group row a plain span.
     private static async Task WaitForTreeRowLabelAsync(IPage page, string label, CancellationToken token)
     {
         await page.Locator($"{TopicRowSelector}:has(span:text-is('{label}'))").First
@@ -73,7 +69,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
     private static async Task<int> TreeRowCountAsync(IPage page, CancellationToken token) =>
         await page.Locator(TopicRowSelector).CountAsync().WaitAsync(token);
 
-    // Desktop Browser row stat cell: one visible grouping row matched by its exact label.
     private static ILocator NodeStatLocator(IPage page, string label) =>
         page.Locator($".browser-split-wrap:not(.browser-split-wrap--mobile):visible "
             + $"{TopicRowSelector}:visible:has({GroupLabelSelector}:text-is('{label}')) > {StatTextSelector}");
@@ -89,6 +84,63 @@ public sealed partial class MqttLiveFlowsSmokeTests
         IPage page, string label, string previous, CancellationToken token) =>
         await Assertions.Expect(NodeStatLocator(page, label))
             .Not.ToHaveTextAsync(previous, new() { Timeout = MessageWaitTimeoutMs }).WaitAsync(token);
+
+    private static ILocator DesktopRowByLabel(IPage page, string label) =>
+        page.Locator($".browser-split-wrap:not(.browser-split-wrap--mobile):visible "
+            + $"{TopicRowSelector}:visible:has(span:text-is('{label}'))");
+
+    // Seed receipt: selecting the namespace root and awaiting each topic and payload proves the
+    // store holds every endpoint before the caller expands.
+    private async Task AwaitSeedReceiptAsync(
+        IPage page, CancellationToken token, params (string Topic, string Payload)[] expected)
+    {
+        SetStage("await seed receipt");
+        var namespaceRow = DesktopRowByLabel(page, SparkplugNamespace);
+        await Assertions.Expect(namespaceRow).ToHaveCountAsync(1, new() { Timeout = ActionTimeoutMs })
+            .WaitAsync(token);
+        await namespaceRow.ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+
+        foreach (var (topic, payload) in expected)
+        {
+            await Assertions.Expect(PayloadRow(page, topic, payload))
+                .ToBeVisibleAsync(new() { Timeout = MessageWaitTimeoutMs }).WaitAsync(token);
+        }
+    }
+
+    // Receipt for steps that must not select: the namespace row's message count only grows, so
+    // reaching the expected total proves every seed message is stored.
+    private async Task AwaitNamespaceMessageCountAsync(IPage page, int expectedMessages, CancellationToken token)
+    {
+        SetStage("await namespace message count");
+        var stat = DesktopRowByLabel(page, SparkplugNamespace).Locator(StatTextSelector);
+        await Assertions.Expect(stat).ToHaveCountAsync(1, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(MessageWaitTimeoutMs);
+        while (true)
+        {
+            var text = (await stat.InnerTextAsync().WaitAsync(token)).Trim();
+            if (MessageCountFrom(text) == expectedMessages)
+                return;
+
+            if (DateTime.UtcNow >= deadline)
+            {
+                Assert.Fail("namespace message count did not reach "
+                    + expectedMessages.ToString(CultureInfo.InvariantCulture) + $": '{text}'");
+            }
+
+            await Task.Delay(StabilitySampleIntervalMs, token);
+        }
+    }
+
+    private static int? MessageCountFrom(string statText)
+    {
+        var marker = statText.IndexOf("M ", StringComparison.Ordinal);
+        if (marker < 0)
+            return null;
+
+        var digits = new string(statText[(marker + 2)..].Where(char.IsAsciiDigit).ToArray());
+        return int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var value) ? value : null;
+    }
 
     // This observes stability, not a server timer tick.
     private static async Task ObserveNoSelectionAndEmptyListStableAsync(
@@ -110,8 +162,8 @@ public sealed partial class MqttLiveFlowsSmokeTests
         }
     }
 
-    // Expand all only expands rows that already exist, so wait for the first row before
-    // clicking: a click against an empty tree expands nothing and the branch stays collapsed.
+    // Expand all only expands existing rows, so wait for the first row: clicking an empty tree
+    // expands nothing and the branch stays collapsed.
     private static async Task ExpandAllTreeAsync(IPage page, CancellationToken token)
     {
         await page.Locator(TopicRowSelector).First
@@ -120,8 +172,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
         await page.Locator("button[title='Expand all']").First
             .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
-
-    // â”€â”€ Payload list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private static ILocator DesktopPayloadTopicRow(IPage page, string topic) =>
         page.Locator($".browser-split-wrap:not(.browser-split-wrap--mobile) "
@@ -165,7 +215,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
     private static async Task<string> DetailTopicTextAsync(IPage page, CancellationToken token) =>
         (await page.Locator(DetailTopicSelector).First.InnerTextAsync().WaitAsync(token)).Trim();
 
-    // The detail view replaces the message list, so close it before asserting list rows again.
     private static async Task CloseDesktopDetailAsync(IPage page, CancellationToken token)
     {
         await page.Locator("button[title='Back to message list']").First
@@ -174,14 +223,24 @@ public sealed partial class MqttLiveFlowsSmokeTests
             .ToHaveCountAsync(0, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
 
-    // The mobile bar refreshes on its own one-second timer, so wait for it to leave the empty
-    // placeholder before reading the label.
-    private static async Task<string> MobileSelectionLabelAsync(IPage page, CancellationToken token)
+    // The mobile bar refreshes on its own one-second timer, so wait for the expected node before
+    // reading the label: a pre-existing label from an earlier selection must not satisfy the read.
+    private static async Task<string> MobileSelectionLabelAsync(
+        IPage page, string expectedPart, CancellationToken token)
     {
         var name = page.Locator(MobileTopicNameSelector).First;
-        await Assertions.Expect(name).Not.ToHaveTextAsync("Choose a topic",
-            new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
-        return (await name.InnerTextAsync().WaitAsync(token)).Trim();
+        var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(ActionTimeoutMs);
+        while (true)
+        {
+            var text = (await name.InnerTextAsync().WaitAsync(token)).Trim();
+            if (text.Contains(expectedPart, StringComparison.Ordinal))
+                return text;
+
+            if (DateTime.UtcNow >= deadline)
+                Assert.Fail($"mobile selection label never showed '{expectedPart}': '{text}'");
+
+            await Task.Delay(StabilitySampleIntervalMs, token);
+        }
     }
 
     private static async Task<int?> MobileCountChipAsync(IPage page, CancellationToken token)
@@ -195,8 +254,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
             ? value
             : null;
     }
-
-    // â”€â”€ Settings: enable grouping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private async Task EnsureSparkplugGroupingAsync(IPage page, CancellationToken token)
     {
@@ -269,8 +326,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
             .ClickAsync(new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
 
-    // â”€â”€ Exclusion editor (used to purge one selected member) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
     private static ILocator ExcludeEditor(IPage page) => page.Locator(".exclude-editor").First;
 
     // The panel renders its body only while expanded, and expansion is not preserved across
@@ -319,8 +374,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
         await Assertions.Expect(editor.Locator(".count-chip").First)
             .ToHaveTextAsync("0", new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
     }
-
-    // â”€â”€ Mobile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private static async Task ResizeToMobileAsync(IPage page, CancellationToken token)
     {

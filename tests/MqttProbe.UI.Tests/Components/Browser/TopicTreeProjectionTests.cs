@@ -11,7 +11,6 @@ internal sealed class TopicBrowserTestFixture
     private TopicTreeSnapshot _snapshot = new(0, ImmutableArray<TopicNodeSnapshot>.Empty);
     private SelectedTopicState _selection = new(default, null, 0);
 
-    // Every selection the component asked for, in order, including refused ones.
     public List<TopicSelection> Selections { get; } = [];
 
     public TopicBrowserTestFixture(MqttProbe.Core.Services.Mqtt.IMessageStoreManager manager) => _manager = manager;

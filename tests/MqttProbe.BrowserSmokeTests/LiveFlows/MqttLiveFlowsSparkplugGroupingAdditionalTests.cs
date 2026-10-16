@@ -4,11 +4,8 @@ using MQTTnet;
 
 namespace MqttProbe.BrowserSmokeTests;
 
-// Grouped Sparkplug selection: reconciliation, the mobile viewport and purging a selected
-// member. Sibling of MqttLiveFlowsSparkplugGroupingTests.
 public sealed partial class MqttLiveFlowsSmokeTests
 {
-    // ── Test: collapsed selected group still updates; re-click keeps detail ──
 
     [Test]
     [Category("SparkplugGrouping")]
@@ -65,6 +62,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             SetStage("one device present, Devices selected with an open detail");
             await PublishAsync(mqtt, dbirth1, "device-birth", token);
             await PublishAsync(mqtt, ddata1, "device-1", token);
+            await AwaitSeedReceiptAsync(page, token, (dbirth1, "device-birth"), (ddata1, "device-1"));
             await ExpandAllTreeAsync(page, token);
             await WaitForGroupRowAsync(page, "Devices", token);
             await ClickRowBodyAsync(GroupRow(page, "Devices"), token);
@@ -87,7 +85,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
 
             await WaitForTreeRowLabelAsync(page, otherGroup, token);
 
-            // Wait for an in-scope sentinel before checking exclusion.
             await PublishAsync(mqtt, ddata3, "device-3", token);
             await ExpectDesktopPayloadTopicAsync(page, ddata3, token);
             await ExpectNoDesktopPayloadTopicAsync(page, otherData, token);
@@ -109,8 +106,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await CleanupAsync(mqtt, browser, playwright);
         }
     }
-
-    // ── Test: mobile picker selection stays live, label readable ───────
 
     [Test]
     [Category("SparkplugGrouping")]
@@ -160,6 +155,8 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await PublishAsync(mqtt, nbirth, "birth", token);
             await PublishAsync(mqtt, ndata, "data", token);
 
+            await AwaitSeedReceiptAsync(page, token, (nbirth, "birth"), (ndata, "data"));
+
             SetStage("switch to the mobile viewport");
             await ResizeToMobileAsync(page, token);
 
@@ -167,7 +164,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await OpenMobilePickerAndSelectAsync(page, node, token);
 
             SetStage("the mobile label is readable and leaks no internal key");
-            var label = await MobileSelectionLabelAsync(page, token);
+            var label = await MobileSelectionLabelAsync(page, node, token);
             Assert.That(label, Is.Not.Empty, "the mobile topic bar should show a selection label");
             Assert.That(label.Contains(InternalKeyMarker, StringComparison.Ordinal), Is.False,
                 "the mobile label must not expose the internal grouping key");
@@ -188,7 +185,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
                     .WaitAsync(token);
 
             SetStage("label still readable after fresh traffic");
-            var labelAfter = await MobileSelectionLabelAsync(page, token);
+            var labelAfter = await MobileSelectionLabelAsync(page, node, token);
             Assert.That(labelAfter.Contains(InternalKeyMarker, StringComparison.Ordinal), Is.False);
             Assert.That(labelAfter.Contains(NullCharacter, StringComparison.Ordinal), Is.False);
 
@@ -204,8 +201,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await CleanupAsync(mqtt, browser, playwright);
         }
     }
-
-    // ── Test: purging one selected member clears and stays cleared ─────
 
     [Test]
     [Category("SparkplugGrouping")]
@@ -256,6 +251,8 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await PublishAsync(mqtt, nbirth, "birth", token);
             await PublishAsync(mqtt, ndata, "data", token);
             await PublishAsync(mqtt, ddata, "device-data", token);
+            await AwaitSeedReceiptAsync(page, token,
+                (nbirth, "birth"), (ndata, "data"), (ddata, "device-data"));
             await ExpandAllTreeAsync(page, token);
             await WaitForGroupRowAsync(page, node, token);
             await ClickRowBodyAsync(GroupRow(page, node), token);
@@ -280,6 +277,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await RemoveExcludeFilterAsync(page, token);
             await NavigateToTab(page, "Browser", token);
             await PublishAsync(mqtt, ndata, "fresh-data", token);
+            await AwaitNamespaceMessageCountAsync(page, 3, token);
             await ExpandAllTreeAsync(page, token);
             await WaitForTreeRowLabelAsync(page, ndata, token);
             await ObserveNoSelectionAndEmptyListStableAsync(

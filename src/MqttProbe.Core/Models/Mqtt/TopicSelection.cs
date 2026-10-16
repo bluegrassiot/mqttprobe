@@ -15,9 +15,6 @@ public sealed record SparkplugSelectionScope(
     string NodeId,
     string? DeviceId = null);
 
-// Key names the row and Topics are its real paths; a Scope supersedes that snapshot by resolving
-// the row against the store as it is now, and RequireCanonicalTopics requires a canonical
-// observation for every topic.
 public sealed record TopicSelection(
     string Key,
     string Label,

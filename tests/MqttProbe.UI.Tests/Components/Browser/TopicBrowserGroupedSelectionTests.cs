@@ -14,9 +14,6 @@ using MqttProbe.UI.Tests.TestHelpers;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
-// Exercises the real store through a real manager, because the scoped membership rules only exist
-// in that pairing: the mocked fixture cannot show what the store does with traffic that arrives
-// after a grouping row was clicked.
 [TestFixture]
 public sealed class TopicBrowserGroupedSelectionTests : BunitTestContext
 {
@@ -104,7 +101,6 @@ public sealed class TopicBrowserGroupedSelectionTests : BunitTestContext
         var selected = _manager.GetSelectedTopicState();
         selected.MessageCount.Should().Be(1);
 
-        // Collapse the node so its children are not rendered; the selection keeps updating anyway.
         var chevron = RowWith(cut, "node1").QuerySelector("button");
         chevron.Should().NotBeNull();
         await cut.InvokeAsync(() => chevron!.Click());

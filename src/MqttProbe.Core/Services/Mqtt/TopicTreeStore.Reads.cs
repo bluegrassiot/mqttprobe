@@ -62,7 +62,7 @@ internal sealed partial class TopicTreeStore
             var requiresCanonical = selection.RequireCanonicalTopics || selection.Scope is not null;
             var resolved = selection.Scope is { } scope
                 ? ResolveScope(scope)
-                : ResolvePaths(selection.Topics);
+                : ResolvePaths(selection.Topics, requiresCanonical);
 
             if (resolved.Count == 0)
                 return;
@@ -77,8 +77,6 @@ internal sealed partial class TopicTreeStore
         }
     }
 
-    // The single-topic form keeps its own identity: the resolved node's path, not the caller's
-    // spelling, so callers still see the normalized topic they selected.
     public void SelectTopic(string? fullTopic)
     {
         if (fullTopic is null)
@@ -147,17 +145,35 @@ internal sealed partial class TopicTreeStore
         _selectedRoots.Sum(store => store.MessageCount),
         _selectionLabel);
 
-    private List<MessageStore> ResolvePaths(ImmutableArray<string> topics)
+    // A canonical request is validated per input topic before overlap normalization, so a missing,
+    // invalid or non-canonical topic refuses the request even when an ancestor would cover it.
+    private List<MessageStore> ResolvePaths(ImmutableArray<string> topics, bool requiresCanonical)
     {
         var resolved = new List<MessageStore>(topics.Length);
         foreach (var topic in topics)
         {
             var normalized = Normalize(topic);
             if (normalized is null)
-                continue;
+            {
+                if (requiresCanonical)
+                    return [];
 
-            if (FindNode(normalized) is { } node)
-                AddCovered(resolved, node);
+                continue;
+            }
+
+            var node = FindNode(normalized);
+            if (node is null)
+            {
+                if (requiresCanonical)
+                    return [];
+
+                continue;
+            }
+
+            if (requiresCanonical && !IsCanonicallyObserved(node))
+                return [];
+
+            AddCovered(resolved, node);
         }
 
         return resolved;
@@ -220,8 +236,6 @@ internal sealed partial class TopicTreeStore
         resolved.Add(node);
     }
 
-    // Re-selecting the same row must not look like a change, so a click on the already-selected
-    // row does not restart the message list.
     private bool SameSelection(
         List<MessageStore> resolved, string key, SparkplugSelectionScope? scope, bool requiresCanonical) =>
         string.Equals(_selectionKey, key, StringComparison.Ordinal)
@@ -282,9 +296,8 @@ internal sealed partial class TopicTreeStore
         _selectionContentVersion++;
     }
 
-    // A changed store belongs to the selection when it is a selected root, a descendant of one, or
-    // a strict ancestor of one. Only a direct ancestor-set hit counts; the walk up tests the root
-    // set, or a sibling under a shared ancestor would match and invalidate unrelated traffic.
+    // The walk up tests the root set, not the ancestor set: an ancestor-set hit would match a
+    // sibling under a shared ancestor and invalidate unrelated traffic.
     private bool SelectionIncludes(MessageStore store)
     {
         if (_selectedRoots.Count == 0)
@@ -302,8 +315,8 @@ internal sealed partial class TopicTreeStore
         return false;
     }
 
-    // A scoped selection holds endpoints, so an endpoint whose first canonical message arrives
-    // after the click is not in the set yet; add it where the spelling was just recorded.
+    // A scoped selection holds endpoints, so one first observed after the click is not in the
+    // set yet; add it as its spelling is recorded.
     private void AppendToScopedSelection(MessageStore store)
     {
         if (_selectionScope is not { } scope || !IsScopeEndpoint(store, scope) || !_selectedRoots.Add(store))
@@ -312,8 +325,7 @@ internal sealed partial class TopicTreeStore
         IndexAncestors(store);
     }
 
-    // Walk up only until an ancestor is already indexed: that node's whole chain was indexed with
-    // it, because an ancestor is always added together with every ancestor above it.
+    // Break once an ancestor is already indexed: its whole chain was indexed with it.
     private void IndexAncestors(MessageStore store)
     {
         for (var node = store.Parent; node is not null; node = node.Parent)

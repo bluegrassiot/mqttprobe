@@ -1,7 +1,5 @@
 namespace MqttProbe.Core.Models.Mqtt;
 
-// The spBv1.0/<group>/<verb>/<node>[/<device>] shape: the projection groups by these verbs and
-// the store resolves a grouped selection by them, so both read the same table.
 internal static class SparkplugTopicClassifier
 {
     public const string Namespace = "spBv1.0";

@@ -147,8 +147,112 @@ public sealed class TopicTreeStoreCanonicalSelectionTests
         store.GetSelectedTopicState().Token.Generation.Should().Be(required.Token.Generation + 1);
     }
 
+    [TestCase(NodeEndpoint)]
+    [TestCase(DeviceEndpoint)]
+    public void ConstrainedRequest_WithACanonicalAndAMissingTopic_IsRefusedInEitherOrder(string endpoint)
+    {
+        var store = CreateStore();
+        AddCanonical(store, endpoint, "value", 1);
+        AddCanonical(store, "sensors/temp", "sensors", 2);
+        store.SelectTopic("sensors/temp");
+        var live = store.GetSelectedTopicState();
+        var missing = endpoint + "/missing";
+
+        store.SelectTopics(CanonicalRequest(endpoint, missing));
+        store.GetSelectedTopicState().Should().Be(live, "a requested topic that does not resolve refuses the request");
+
+        store.SelectTopics(CanonicalRequest(missing, endpoint));
+        store.GetSelectedTopicState().Should().Be(live);
+    }
+
+    [TestCase(NodeEndpoint)]
+    [TestCase(DeviceEndpoint)]
+    public void ConstrainedRequest_WithACanonicalAncestorAndANonCanonicalDescendant_IsRefusedInEitherOrder(string endpoint)
+    {
+        var store = CreateStore();
+        AddCanonical(store, endpoint, "value", 1);
+        var descendant = endpoint + "/extra";
+        store.Add(descendant, Message("aliased", 2, Alias(descendant)));
+        AddCanonical(store, "sensors/temp", "sensors", 3);
+        store.SelectTopic("sensors/temp");
+        var live = store.GetSelectedTopicState();
+
+        store.SelectTopics(CanonicalRequest(endpoint, descendant));
+        store.GetSelectedTopicState().Should().Be(live,
+            "a covered descendant is still a requested topic and must be checked");
+
+        store.SelectTopics(CanonicalRequest(descendant, endpoint));
+        store.GetSelectedTopicState().Should().Be(live);
+    }
+
+    [Test]
+    public void ConstrainedRequest_WithAnInvalidPath_IsRefusedInEitherOrder()
+    {
+        var store = CreateStore();
+        AddCanonical(store, NodeEndpoint, "node", 1);
+        AddCanonical(store, "sensors/temp", "sensors", 2);
+        store.SelectTopic("sensors/temp");
+        var live = store.GetSelectedTopicState();
+
+        store.SelectTopics(CanonicalRequest(NodeEndpoint, "///"));
+        store.GetSelectedTopicState().Should().Be(live);
+
+        store.SelectTopics(CanonicalRequest("///", NodeEndpoint));
+        store.GetSelectedTopicState().Should().Be(live);
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void ConstrainedRequest_WithACanonicalOverlap_Deduplicates(bool ancestorFirst)
+    {
+        var store = CreateStore();
+        const string ancestor = "spBv1.0/plant1/NBIRTH/node1";
+        const string descendant = "spBv1.0/plant1/NBIRTH/node1/extra";
+        AddCanonical(store, ancestor, "node", 1);
+        AddCanonical(store, descendant, "extra", 2);
+
+        store.SelectTopics(CanonicalRequest(
+            ancestorFirst ? [ancestor, descendant] : [descendant, ancestor]));
+
+        var state = store.GetSelectedTopicState();
+        state.MessageCount.Should().Be(2, "the covered descendant is not counted twice");
+        store.GetSelectedMessages(state.Token, 10)!.Messages.Should().HaveCount(2);
+    }
+
+    [Test]
+    public void ScopedRequest_ResolvesTheCurrentCoverageAndIgnoresStaleTopics()
+    {
+        var store = CreateStore();
+        AddCanonical(store, "spBv1.0/plant1/NDATA/node1", "node", 1);
+        AddCanonical(store, "spBv1.0/plant1/DDATA/node1/dev1", "dev1", 2);
+
+        store.SelectTopics(new TopicSelection(
+            "\0spb:node:spBv1.0/plant1/node1", "spBv1.0/plant1/node1",
+            ["spBv1.0/plant1/gone", "spBv1.0/plant1//NDATA/node1"],
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1")));
+
+        var state = store.GetSelectedTopicState();
+        state.MessageCount.Should().Be(2, "a scope is resolved from the store, not the click-time topics");
+    }
+
+    [Test]
+    public void UnconstrainedRequest_KeepsTheResolvablePartAndDropsTheMissing()
+    {
+        var store = CreateStore();
+        AddCanonical(store, NodeEndpoint, "node", 1);
+
+        store.SelectTopics(new TopicSelection("group", "group", [NodeEndpoint, "spBv1.0/plant1/gone"]));
+
+        var state = store.GetSelectedTopicState();
+        state.Key.Should().Be("group");
+        state.MessageCount.Should().Be(1);
+    }
+
     private static TopicSelection Canonical(string topic) =>
         new(topic, topic, [topic], RequireCanonicalTopics: true);
+
+    private static TopicSelection CanonicalRequest(params string[] topics) =>
+        new(string.Join('|', topics), string.Join('|', topics), [.. topics], RequireCanonicalTopics: true);
 
     private static string Alias(string endpoint) => endpoint.Replace("/plant1/", "/plant1//", StringComparison.Ordinal);
 

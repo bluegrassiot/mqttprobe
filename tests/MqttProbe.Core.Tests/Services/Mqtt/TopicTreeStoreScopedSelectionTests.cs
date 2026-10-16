@@ -255,8 +255,6 @@ public sealed class TopicTreeStoreScopedSelectionTests
         store.SelectTopics(NodeScope("node1"));
         store.GetSelectedTopicState().Key.Should().NotBeNull();
 
-        // The endpoint's child keeps the node alive, but the spelling the projection grouped it by
-        // is gone, so the row and the selection must agree that it is no longer selected.
         store.RemoveMatchingTopic("spBv1.0/plant1/NDATA/node1");
 
         store.GetSelectedTopicState().Key.Should().BeNull();

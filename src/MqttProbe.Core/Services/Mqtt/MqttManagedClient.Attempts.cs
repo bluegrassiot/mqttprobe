@@ -53,8 +53,8 @@ public sealed partial class MqttManagedClient
             set => _retired = value;
         }
 
-        // Live from the caller's cancellation registration until it is disposed, so a token
-        // cancellation revokes ownership even while its callback is still queued.
+        // Live from the caller's cancellation registration until it is disposed or the generation
+        // retires, so a token cancellation revokes ownership even while its callback is queued.
         public bool CallerRegistrationActive
         {
             get => _callerRegistrationActive;
@@ -154,7 +154,6 @@ public sealed partial class MqttManagedClient
     {
         try
         {
-            using var registration = callerRegistration;
             using var linked = LinkToken(callerToken, generation.Cts.Token);
 
             MqttConnectOutcome outcome;
@@ -185,12 +184,34 @@ public sealed partial class MqttManagedClient
                 StartReconnectLoop(generation);
 
             await NotifyOutcomeAsync(generation, outcome).ConfigureAwait(false);
-            generation.OperationCompleted.TrySetResult();
         }
         finally
         {
-            generation.CallerRegistrationActive = false;
+            // Never under _sync: disposal waits for a callback that is already running, and that
+            // callback takes the lock. Disposal can also drop a callback still queued behind one.
+            await callerRegistration.DisposeAsync().ConfigureAwait(false);
+            ReconcileCallerCancellation(generation);
+            generation.OperationCompleted.TrySetResult();
         }
+    }
+
+    // The originating token is re-read after the registration is gone, because disposal can drop a
+    // queued retire callback: a cancellation requested while it lived is settled here instead, via
+    // the same detached notification path that callback uses. The window stays open until
+    // RetireGeneration closes it, so nothing is owned between the two.
+    private void ReconcileCallerCancellation(Generation generation)
+    {
+        lock (_sync)
+        {
+            if (!generation.CallerToken.IsCancellationRequested)
+            {
+                generation.CallerRegistrationActive = false;
+                return;
+            }
+        }
+
+        RetireGeneration(generation);
+        _ = NotifyCallerCancellationAsync(generation);
     }
 
     private MqttConnectOutcome CompleteSuccess(Generation generation, CancellationToken callerToken)
@@ -289,6 +310,8 @@ public sealed partial class MqttManagedClient
                 if (ReferenceEquals(_current, generation))
                     _current = null;
             }
+
+            generation.CallerRegistrationActive = false;
 
             if (!generation.CleanupStarted)
             {

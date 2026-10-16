@@ -142,7 +142,4 @@ public sealed partial class MqttManagedClient
             }
         }
     }
-
-    private Task RaiseConnectionStateChangedAsync() =>
-        RaiseAsync(ConnectionStateChangedAsync, EventArgs.Empty, nameof(ConnectionStateChangedAsync));
 }

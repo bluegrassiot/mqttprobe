@@ -107,12 +107,14 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         Generation[] generations;
+        Generation? stopped;
         await _stopSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             lock (_sync)
             {
                 generations = _generations.ToArray();
+                stopped = _current;
                 _pending.Clear();
                 _pendingHeadRevision++;
             }
@@ -132,8 +134,8 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
         }
 
         // Emitted after releasing the semaphore: a Disconnected subscriber may itself call Stop.
-        foreach (var generation in generations)
-            await NotifyDeliberateStopAsync(generation).ConfigureAwait(false);
+        if (stopped is not null)
+            await NotifyDeliberateStopAsync(stopped).ConfigureAwait(false);
     }
 
     public async Task SubscribeAsync(IEnumerable<MqttTopicFilter> topicFilters, CancellationToken cancellationToken = default)

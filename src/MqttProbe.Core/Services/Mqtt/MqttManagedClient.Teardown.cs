@@ -18,8 +18,38 @@ public sealed partial class MqttManagedClient
         if (!notify)
             return;
 
-        await RaiseAsync(DisconnectedAsync, StopDisconnectedArgs(), nameof(DisconnectedAsync)).ConfigureAwait(false);
-        await RaiseConnectionStateChangedAsync().ConfigureAwait(false);
+        await RaiseUnlessSupersededAsync(DisconnectedAsync, StopDisconnectedArgs(), nameof(DisconnectedAsync), generation)
+            .ConfigureAwait(false);
+        await RaiseUnlessSupersededAsync(ConnectionStateChangedAsync, EventArgs.Empty, nameof(ConnectionStateChangedAsync), generation)
+            .ConfigureAwait(false);
+    }
+
+    private bool HasNewerAttempt(Generation generation)
+    {
+        var current = Volatile.Read(ref _current);
+        return current is not null && current.AttemptId.Value > generation.AttemptId.Value;
+    }
+
+    private async Task RaiseUnlessSupersededAsync<TArgs>(
+        Func<TArgs, Task>? handler, TArgs args, string eventName, Generation generation)
+    {
+        if (handler is null)
+            return;
+
+        foreach (var subscriber in handler.GetInvocationList())
+        {
+            if (HasNewerAttempt(generation))
+                return;
+
+            try
+            {
+                await ((Func<TArgs, Task>)subscriber)(args).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "A {EventName} subscriber threw; continuing", eventName);
+            }
+        }
     }
 
     private static MqttClientDisconnectedEventArgs StopDisconnectedArgs() =>

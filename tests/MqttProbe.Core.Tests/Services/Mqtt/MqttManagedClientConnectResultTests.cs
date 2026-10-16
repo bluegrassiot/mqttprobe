@@ -121,6 +121,61 @@ public class MqttManagedClientConnectResultTests
         ConnectCount(client).Should().Be(1, "a canceled attempt must not retry");
     }
 
+    [Test]
+    public async Task Successful_connect_after_a_caller_cancel_is_settled_canceled()
+    {
+        var connectStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseConnect = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelCallbackEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancelCallbackRelease = new ManualResetEventSlim(false);
+
+        var client = Substitute.For<IMqttClient>();
+        client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                connectStarted.TrySetResult();
+                await releaseConnect.Task;
+                return Success();
+            });
+
+        var factory = new QueueClientFactory();
+        factory.Enqueue(client);
+        await using var sut = new MqttManagedClient(factory, null);
+
+        var connected = 0;
+        sut.ConnectedAsync += _ => { Interlocked.Increment(ref connected); return Task.CompletedTask; };
+
+        using var cts = new CancellationTokenSource();
+        var start = sut.StartAsync(BuildOptions(), cts.Token);
+        await connectStarted.Task;
+
+        // Registered after the retire callback, so LIFO ordering holds the cancel thread and exposes the caller-token window.
+        using var registration = cts.Token.Register(() =>
+        {
+            cancelCallbackEntered.SetResult();
+            cancelCallbackRelease.Wait();
+        });
+
+        var cancel = Task.Run(cts.Cancel);
+        await cancelCallbackEntered.Task;
+
+        releaseConnect.TrySetResult();
+
+        try
+        {
+            var act = async () => await start;
+            await act.Should().ThrowAsync<OperationCanceledException>()
+                .Where(e => e.CancellationToken == cts.Token);
+        }
+        finally
+        {
+            cancelCallbackRelease.Set();
+            await cancel.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        Volatile.Read(ref connected).Should().Be(0, "a caller-canceled connect must not surface success");
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 3000)
     {
         var waited = 0;

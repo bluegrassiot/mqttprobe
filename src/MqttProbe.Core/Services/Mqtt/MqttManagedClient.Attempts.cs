@@ -142,7 +142,7 @@ public sealed partial class MqttManagedClient
                 var result = await generation.Client.ConnectAsync(generation.Options.ClientOptions, linked.Token)
                     .ConfigureAwait(false);
                 EnsureConnectAccepted(result);
-                outcome = CompleteSuccess(generation);
+                outcome = CompleteSuccess(generation, callerToken);
             }
             catch (Exception ex)
             {
@@ -161,7 +161,7 @@ public sealed partial class MqttManagedClient
         generation.OperationCompleted.TrySetResult();
     }
 
-    private MqttConnectOutcome CompleteSuccess(Generation generation)
+    private MqttConnectOutcome CompleteSuccess(Generation generation, CancellationToken callerToken)
     {
         lock (_sync)
         {
@@ -174,6 +174,7 @@ public sealed partial class MqttManagedClient
             var canceled = generation.Retired
                 || !ReferenceEquals(_current, generation)
                 || generation.Cts.IsCancellationRequested
+                || callerToken.IsCancellationRequested
                 || !_activityGate.IsActive;
 
             generation.WasConnected = !canceled;
@@ -260,7 +261,8 @@ public sealed partial class MqttManagedClient
         if (!IsEligibleForWork(generation))
             return;
 
-        await RaiseConnectionStateChangedAsync().ConfigureAwait(false);
+        await RaiseWhileEligibleAsync(ConnectionStateChangedAsync, EventArgs.Empty, nameof(ConnectionStateChangedAsync), generation)
+            .ConfigureAwait(false);
     }
 
     private async Task NotifyReconnectFailureAsync(Generation generation, Exception exception)

@@ -142,4 +142,59 @@ public sealed partial class MqttManagedClient
             }
         }
     }
+
+    private async Task NotifyOutcomeAsync(Generation generation, MqttConnectOutcome outcome)
+    {
+        await RaiseAsync(ConnectAttemptCompletedAsync, outcome, nameof(ConnectAttemptCompletedAsync))
+            .ConfigureAwait(false);
+
+        switch (outcome.Status)
+        {
+            case MqttConnectStatus.Connected:
+                if (generation.ConnectedArgs is { } args && IsEligibleForWork(generation))
+                    await NotifyConnectedAsync(generation, args).ConfigureAwait(false);
+                break;
+
+            case MqttConnectStatus.Failed:
+                // Revalidated after the awaited outcome notification: a subscriber may have
+                // retired the generation, and a retired attempt must not report a failure.
+                if (IsEligibleForWork(generation))
+                {
+                    await RaiseWhileEligibleAsync(ConnectingFailedAsync, new MqttConnectingFailedEventArgs(outcome.Exception),
+                        nameof(ConnectingFailedAsync), generation).ConfigureAwait(false);
+                }
+                break;
+        }
+    }
+
+    private async Task NotifyConnectedAsync(Generation generation, MqttClientConnectedEventArgs args)
+    {
+        if (!IsEligibleForWork(generation))
+            return;
+
+        await RaiseWhileEligibleAsync(ConnectedAsync, args, nameof(ConnectedAsync), generation).ConfigureAwait(false);
+
+        if (!IsEligibleForWork(generation))
+            return;
+
+        await RaiseWhileEligibleAsync(ConnectionStateChangedAsync, EventArgs.Empty, nameof(ConnectionStateChangedAsync), generation)
+            .ConfigureAwait(false);
+    }
+
+    private async Task NotifyReconnectFailureAsync(Generation generation, Exception exception)
+    {
+        if (!IsEligibleForWork(generation))
+            return;
+
+        await RaiseWhileEligibleAsync(ConnectingFailedAsync, new MqttConnectingFailedEventArgs(exception),
+            nameof(ConnectingFailedAsync), generation).ConfigureAwait(false);
+    }
+
+    private async Task NotifyDisconnectedAsync(Generation generation, MqttClientDisconnectedEventArgs args)
+    {
+        await RaiseWhileEligibleAsync(DisconnectedAsync, args, nameof(DisconnectedAsync), generation, requireActiveGate: false)
+            .ConfigureAwait(false);
+        await RaiseWhileEligibleAsync(ConnectionStateChangedAsync, EventArgs.Empty, nameof(ConnectionStateChangedAsync),
+            generation, requireActiveGate: false).ConfigureAwait(false);
+    }
 }

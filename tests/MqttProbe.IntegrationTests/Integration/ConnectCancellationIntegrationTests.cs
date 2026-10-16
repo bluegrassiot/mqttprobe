@@ -115,6 +115,72 @@ public class ConnectCancellationIntegrationTests
         await sut.StopAsync();
     }
 
+    [Test]
+    public async Task Established_caller_cancel_reports_one_managed_disconnect_then_a_fresh_attempt_is_live()
+    {
+        using var sut = new MqttManagedClient();
+
+        var connectedStateEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseConnectedState = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disconnected = 0;
+
+        sut.ConnectionStateChangedAsync += async _ =>
+        {
+            connectedStateEntered.TrySetResult();
+            await releaseConnectedState.Task;
+        };
+        sut.DisconnectedAsync += _ => { Interlocked.Increment(ref disconnected); return Task.CompletedTask; };
+
+        using var cts = new CancellationTokenSource();
+        var established = sut.StartAttempt(BuildTlsConnectOptions("established-cancel"), cts.Token);
+        await connectedStateEntered.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        sut.IsConnected.Should().BeTrue("the caller cancels an attempt that is established on the broker");
+
+        cts.Cancel();
+        releaseConnectedState.TrySetResult();
+
+        await WaitUntilAsync(() => Volatile.Read(ref disconnected) == 1);
+        Volatile.Read(ref disconnected).Should().Be(1,
+            "cancelling an established attempt reports one managed disconnect, not a duplicate");
+        (await established.Completion.WaitAsync(TimeSpan.FromSeconds(15))).Status.Should().Be(MqttConnectStatus.Connected,
+            "a caller cancel must not overturn an already settled success");
+        await WaitUntilAsync(() => !sut.IsConnected);
+        sut.IsConnected.Should().BeFalse("the cancelled generation tore its raw client down");
+
+        var topic = $"cancel/established/{Guid.NewGuid():N}";
+        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        sut.ApplicationMessageReceivedAsync += args =>
+        {
+            if (args.ApplicationMessage.Topic == topic)
+                received.TrySetResult(args.ApplicationMessage.ConvertPayloadToString() ?? string.Empty);
+            return Task.CompletedTask;
+        };
+
+        var fresh = sut.StartAttempt(BuildTlsConnectOptions("after-established-cancel"));
+        (await fresh.Completion.WaitAsync(TimeSpan.FromSeconds(15))).Status.Should().Be(MqttConnectStatus.Connected);
+
+        await sut.SubscribeAsync([new MqttTopicFilterBuilder()
+            .WithTopic(topic)
+            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+            .Build()]);
+        await PublishAsync(topic, "after-established-cancel");
+
+        (await received.Task.WaitAsync(TimeSpan.FromSeconds(10))).Should().Be("after-established-cancel");
+        Volatile.Read(ref disconnected).Should().Be(1, "the fresh generation adds no further disconnect");
+
+        await sut.StopAsync();
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
+    {
+        var waited = 0;
+        while (!condition() && waited < timeoutMs)
+        {
+            await Task.Delay(25);
+            waited += 25;
+        }
+    }
+
     private static async Task AcceptAndHoldAsync(
         TcpListener listener, List<TcpClient> accepted, TaskCompletionSource acceptedSignal, CancellationToken cancellationToken)
     {

@@ -406,7 +406,7 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task ConnectingFooter_ShowsCancelBesideIndicator_AndHidesConnect()
+    public async Task ConnectingFooter_ShowsStopBesideIndicator_AndHidesConnect()
     {
         var cfg = new AppConfiguration
         {
@@ -419,11 +419,17 @@ public class ConnectionDialogTests : BunitTestContext
 
         var row = _dialogProvider.Find("[data-testid=connection-connecting-row]");
         row.TextContent.Should().Contain("Connecting...");
-        var cancel = row.QuerySelector("[data-testid=cancel-connect]");
-        cancel.Should().NotBeNull("Cancel stays visible beside the connecting indicator");
-        cancel!.GetAttribute("type").Should().Be("button");
+        var stop = row.QuerySelector("[data-testid=cancel-connect]");
+        stop.Should().NotBeNull("the stop action stays visible beside the connecting indicator");
+        stop!.TextContent.Trim().Should().Be("Stop",
+            "the connecting action carries the emulation Stop label");
+        stop.GetAttribute("type").Should().Be("button");
+        stop.ClassList.Should().Contain("mud-button-filled");
+        stop.ClassList.Should().Contain("mud-button-filled-error");
+        stop.QuerySelectorAll("svg").Should().HaveCount(1,
+            "StartIcon renders the emulation Stop button's square glyph");
         _dialogProvider.FindAll("button[title='Connect']").Should().BeEmpty(
-            "Connect is replaced by Cancel while an attempt is pending");
+            "Connect is replaced by Stop while an attempt is pending");
     }
 
     [Test]
@@ -1041,6 +1047,43 @@ public class ConnectionDialogTests : BunitTestContext
             _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("a successful connect closes the dialog"));
 
         await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+    }
+
+    [TestCase(MqttConnectStatus.Connected)]
+    [TestCase(MqttConnectStatus.Failed)]
+    public async Task Dispose_WhileTheAttemptLandsDuringViewportRelease_StillStopsPendingAttempt(MqttConnectStatus outcome)
+    {
+        var module = JSInterop.SetupModule("./_content/MqttProbe.UI/js/connection-dialog-viewport.js");
+        module.Setup<int?>("attach", _ => true).SetResult(7);
+        var detach = module.SetupVoid("detach", _ => true);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ConnectSavedConnectionAndWaitForPending();
+        _mockSessionLifecycle.ClearReceivedCalls();
+
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var dispose = _dialogProvider.InvokeAsync(async () => await dialog.DisposeAsync());
+        await FlushDispatcherAsync();
+        dispose.IsCompleted.Should().BeFalse(
+            "the dialog is still releasing its viewport module, so the pending attempt can land in that window");
+
+        await _dialogProvider.InvokeAsync(() =>
+            _attemptCompletion!.TrySetResult(new MqttConnectOutcome(_attemptId, outcome)));
+        await FlushDispatcherAsync();
+
+        detach.SetVoidResult();
+        await dispose;
+        await FlushDispatcherAsync();
+
+        _capturedStartToken!.Value.IsCancellationRequested.Should().BeTrue(
+            "an attempt that lands while the dialog closes is still cancelled");
+        await _mockSessionLifecycle.Received(1).StopActiveConnectionAsync();
+        _mockUxMetrics.DidNotReceive().RecordConnectSuccess();
     }
 
     [Test]

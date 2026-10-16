@@ -121,8 +121,9 @@
                             <img class="signal-connecting-sm" width="26" height="26" src="/_content/MqttProbe.UI/img/signal-motif.svg" alt="" />
                             <MudText Typo="Typo.subtitle1">Connecting...</MudText>
                         </div>
-                        <MudButton Variant="Variant.Text" Class="mr-2" data-testid="cancel-connect"
-                                   OnClick="@(async () => await CancelConnect())">Cancel</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@LucideIcons.Square"
+                                   Class="mr-2" data-testid="cancel-connect"
+                                   OnClick="@(async () => await CancelConnect())">Stop</MudButton>
                     </div>
                 }
                 else
@@ -305,20 +306,27 @@
     {
         _disposed = true;
 
-        if (_viewport is not null)
-            await _viewport.DisposeAsync();
-
-        if (_operation is { } operation && !operation.Finalizing)
+        // Captured before the first await: the attempt's own completion retires the operation,
+        // so reading the field afterwards would leave that started connection running.
+        var operation = _operation;
+        if (operation is not null && !operation.Finalizing && !operation.Completed)
         {
             operation.Cancelled = true;
             await operation.Cancellation.CancelAsync();
+        }
+
+        if (_viewport is not null)
+            await _viewport.DisposeAsync();
+
+        if (operation is not null && !operation.Finalizing)
+        {
             if (operation.AttemptStarted)
             {
                 operation.Teardown ??= StopOwnedConnectionAsync();
                 await operation.Teardown;
                 ReleaseOperation(operation);
             }
-            else if (!operation.Building)
+            else if (!operation.Completed && !operation.Building)
             {
                 ReleaseOperation(operation);
             }

@@ -856,6 +856,58 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
+    public async Task Dispose_WhileSaveAndConnectPending_DoesNotStopActiveConnection()
+    {
+        var saveGate = new TaskCompletionSource();
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(saveGate.Task);
+
+        await OpenDialog(new AppConfiguration());
+        FillNewConnection();
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Save & Connect")).Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _mockConnections.Received(1).AddConnectionAsync(Arg.Any<Connection>()));
+
+        await _dialogProvider.InvokeAsync(async () => await dialog.DisposeAsync());
+
+        saveGate.SetResult();
+        await FlushDispatcherAsync();
+
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+        await _mockCoordinator.DidNotReceive().ResetIfBrokerChangedAsync(Arg.Any<Connection>());
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+        dialog.IsConnectingForTests.Should().BeFalse(
+            "a startup that outlives the dialog must not flip the connection state");
+    }
+
+    [Test]
+    public async Task Dispose_WhileUnsavedPromptPending_DoesNotStopActiveConnection()
+    {
+        await OpenDialog(new AppConfiguration());
+        FillNewConnection();
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+
+        await _dialogProvider.InvokeAsync(async () => await dialog.DisposeAsync());
+
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Connect anyway")).Click();
+        await FlushDispatcherAsync();
+
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+        await _mockCoordinator.DidNotReceive().ResetIfBrokerChangedAsync(Arg.Any<Connection>());
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+        dialog.IsConnectingForTests.Should().BeFalse(
+            "a startup that outlives the dialog must not flip the connection state");
+    }
+
+    [Test]
     public async Task SuccessWhileCleanupBlocked_CloseKeepsNewStagedAsset()
     {
         var priorOwnerId = Guid.NewGuid();

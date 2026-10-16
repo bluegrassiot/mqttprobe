@@ -104,7 +104,9 @@ public partial class ConnectionDialog
     {
         if (!ValidateCertificateState()) return null;
         if (!await ValidateForm()) return null;
+        if (!IsCurrent(operation)) return null;
         if (!await PromptSaveIfUnsavedChangesAsync()) return null;
+        if (!IsCurrent(operation)) return null;
         if (!await StopActiveConnectionGracefullyAsync()) return null;
         if (!IsCurrent(operation)) return null;
 

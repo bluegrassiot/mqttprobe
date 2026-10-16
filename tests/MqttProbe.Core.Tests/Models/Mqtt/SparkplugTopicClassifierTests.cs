@@ -1,4 +1,6 @@
-namespace MqttProbe.UI.Tests.Components.Browser;
+using MqttProbe.Core.Models.Mqtt;
+
+namespace MqttProbe.Core.Tests.Models.Mqtt;
 
 [TestFixture]
 public sealed class SparkplugTopicClassifierTests

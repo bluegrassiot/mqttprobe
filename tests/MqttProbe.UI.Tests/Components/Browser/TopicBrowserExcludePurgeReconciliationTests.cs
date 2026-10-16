@@ -76,7 +76,7 @@ public sealed class TopicBrowserExcludePurgeReconciliationTests : BunitTestConte
         _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
 
         _manager.SelectTopic(Aggregate);
-        _manager.GetSelectedTopicState().FullTopic.Should().Be(Aggregate,
+        _manager.GetSelectedTopicState().Key.Should().Be(Aggregate,
             "the residual prefix has a row while the malformed tip exists");
 
         var cut = Render<TopicBrowser>();
@@ -89,7 +89,7 @@ public sealed class TopicBrowserExcludePurgeReconciliationTests : BunitTestConte
 
         // The refresh is timer-driven (one tick per second), so bound both waits above that period.
         var refreshBound = TimeSpan.FromSeconds(10);
-        cut.WaitForAssertion(() => _manager.GetSelectedTopicState().FullTopic.Should().BeNull(), refreshBound);
+        cut.WaitForAssertion(() => _manager.GetSelectedTopicState().Key.Should().BeNull(), refreshBound);
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().BeEmpty(), refreshBound);
         _manager.GetTopicTreeSnapshot().Roots.Should().NotBeEmpty();
         cut.Markup.Should().Contain("spBv1.0/plant1/NDATA/node1",
@@ -104,7 +104,7 @@ public sealed class TopicBrowserExcludePurgeReconciliationTests : BunitTestConte
         _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
         _manager.SelectTopic(Aggregate);
         var before = _manager.GetSelectedTopicState();
-        before.FullTopic.Should().Be(Aggregate,
+        before.Key.Should().Be(Aggregate,
             "the residual prefix has a row while the malformed tip exists");
 
         // The exclude purge the component must react to, and then the malformed tip back in the
@@ -124,7 +124,7 @@ public sealed class TopicBrowserExcludePurgeReconciliationTests : BunitTestConte
             "the component asks once, then the restored residue is always represented"));
         forwarding.Cleared.Should().Be(0, "the tree version no longer matched the verdict");
         var after = _manager.GetSelectedTopicState();
-        after.FullTopic.Should().Be(Aggregate, "the rejected clear left the selection alone");
+        after.Key.Should().Be(Aggregate, "the rejected clear left the selection alone");
         after.Token.StoreId.Should().Be(before.Token.StoreId);
         after.Token.Generation.Should().Be(before.Token.Generation,
             "a rejected clear must not move the selection on");
@@ -170,6 +170,8 @@ public sealed class TopicBrowserExcludePurgeReconciliationTests : BunitTestConte
         public SelectedTopicState GetSelectedTopicState() => inner.GetSelectedTopicState();
 
         public void SelectTopic(string? fullTopic) => inner.SelectTopic(fullTopic);
+
+        public void SelectTopics(TopicSelection? selection) => inner.SelectTopics(selection);
 
         public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(
             SelectedTopicToken expectedSelection, int limit) =>

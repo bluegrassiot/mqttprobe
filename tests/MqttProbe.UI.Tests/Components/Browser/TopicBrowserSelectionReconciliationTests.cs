@@ -157,7 +157,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedFullTopic.Should().Be(NodeTip);
+        _fixture.SelectedKey.Should().Be(NodeTip);
     }
 
     [TestCase("spBv1.0")]
@@ -209,7 +209,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedFullTopic.Should().Be(NodeVerb);
+        _fixture.SelectedKey.Should().Be(NodeVerb);
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
         {
@@ -238,7 +238,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedFullTopic.Should().Be("spBv1.0/plant1/STATE/zero-host");
+        _fixture.SelectedKey.Should().Be("spBv1.0/plant1/STATE/zero-host");
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
         {
@@ -266,7 +266,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedFullTopic.Should().Be(keptNode);
+        _fixture.SelectedKey.Should().Be(keptNode);
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
         {

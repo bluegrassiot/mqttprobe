@@ -65,7 +65,7 @@
     private void SyncFromManager()
     {
         var state = MessageStoreManager.GetSelectedTopicState();
-        _selectedTopic = state.FullTopic;
+        _selectedTopic = state.Label ?? state.Key;
         _messageCount = state.MessageCount;
     }
 

@@ -6,7 +6,12 @@ namespace MqttProbe.Core.Services.Mqtt;
 internal sealed partial class TopicTreeStore
 {
     private readonly Guid _storeId = Guid.NewGuid();
-    private MessageStore? _selectedMessageStore;
+    private readonly HashSet<MessageStore> _selectedRoots = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<MessageStore> _selectedAncestors = new(ReferenceEqualityComparer.Instance);
+    private string? _selectionKey;
+    private string? _selectionLabel;
+    private SparkplugSelectionScope? _selectionScope;
+    private bool _selectionRequiresCanonical;
     private long _selectionGeneration;
     private long _selectionContentVersion;
     private TopicTreeSnapshot? _cachedTopicTree;
@@ -41,33 +46,50 @@ internal sealed partial class TopicTreeStore
             return CaptureSelectedTopicState();
     }
 
-    public void SelectTopic(string? fullTopic)
+    // A selection that resolves to nothing is refused, so a stale row cannot clear a live one.
+    public void SelectTopics(TopicSelection? selection)
     {
         lock (_storeSync)
         {
-            if (fullTopic is null)
+            if (selection is null)
             {
-                if (_selectedMessageStore is not null)
+                if (_selectedRoots.Count > 0)
                     InvalidateSelection();
 
                 return;
             }
 
-            var normalized = Normalize(fullTopic);
-            if (normalized is null)
+            var requiresCanonical = selection.RequireCanonicalTopics || selection.Scope is not null;
+            var resolved = selection.Scope is { } scope
+                ? ResolveScope(scope)
+                : ResolvePaths(selection.Topics, requiresCanonical);
+
+            if (resolved.Count == 0)
                 return;
 
-            var selected = FindNode(normalized);
-            if (selected is null)
+            if (requiresCanonical && resolved.Any(store => !IsCanonicallyObserved(store)))
                 return;
 
-            if (!ReferenceEquals(selected, _selectedMessageStore))
-            {
-                _selectedMessageStore = selected;
-                _selectionGeneration++;
-                _selectionContentVersion++;
-            }
+            if (SameSelection(resolved, selection.Key, selection.Scope, requiresCanonical))
+                return;
+
+            ReplaceSelection(resolved, selection.Key, selection.Label, selection.Scope, requiresCanonical);
         }
+    }
+
+    public void SelectTopic(string? fullTopic)
+    {
+        if (fullTopic is null)
+        {
+            SelectTopics(null);
+            return;
+        }
+
+        var normalized = Normalize(fullTopic);
+        if (normalized is null)
+            return;
+
+        SelectTopics(TopicSelection.ForTopic(normalized));
     }
 
     public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection)
@@ -77,8 +99,8 @@ internal sealed partial class TopicTreeStore
             if (Interlocked.Read(ref _globalVersion) != treeVersion
                 || expectedSelection.Token.StoreId != _storeId
                 || expectedSelection.Token.Generation != _selectionGeneration
-                || _selectedMessageStore is null
-                || !string.Equals(_selectedMessageStore.FullTopic, expectedSelection.FullTopic, StringComparison.Ordinal))
+                || _selectionKey is null
+                || !string.Equals(_selectionKey, expectedSelection.Key, StringComparison.Ordinal))
                 return false;
 
             InvalidateSelection();
@@ -99,12 +121,13 @@ internal sealed partial class TopicTreeStore
                 return null;
 
             state = CaptureSelectedTopicState();
-            if (_selectedMessageStore is null || limit == 0)
+            if (_selectedRoots.Count == 0 || limit == 0)
                 messages = [];
             else
             {
                 var collected = new List<MqttMessage>();
-                CollectMessages(_selectedMessageStore, collected);
+                foreach (var store in _selectedRoots)
+                    CollectMessages(store, collected);
                 messages = collected.ToArray();
             }
         }
@@ -118,8 +141,126 @@ internal sealed partial class TopicTreeStore
 
     private SelectedTopicState CaptureSelectedTopicState() => new(
         new SelectedTopicToken(_storeId, _selectionGeneration, _selectionContentVersion),
-        _selectedMessageStore?.FullTopic,
-        _selectedMessageStore?.MessageCount ?? 0);
+        _selectionKey,
+        _selectedRoots.Sum(store => store.MessageCount),
+        _selectionLabel);
+
+    // A canonical request is validated per input topic before overlap normalization, so a missing,
+    // invalid or non-canonical topic refuses the request even when an ancestor would cover it.
+    private List<MessageStore> ResolvePaths(ImmutableArray<string> topics, bool requiresCanonical)
+    {
+        var resolved = new List<MessageStore>(topics.Length);
+        foreach (var topic in topics)
+        {
+            var normalized = Normalize(topic);
+            if (normalized is null)
+            {
+                if (requiresCanonical)
+                    return [];
+
+                continue;
+            }
+
+            var node = FindNode(normalized);
+            if (node is null)
+            {
+                if (requiresCanonical)
+                    return [];
+
+                continue;
+            }
+
+            if (requiresCanonical && !IsCanonicallyObserved(node))
+                return [];
+
+            AddCovered(resolved, node);
+        }
+
+        return resolved;
+    }
+
+    private List<MessageStore> ResolveScope(SparkplugSelectionScope scope)
+    {
+        var resolved = new List<MessageStore>();
+        if (FindNode(scope.GroupPath) is not { SubTopics: { } verbs })
+            return resolved;
+
+        foreach (var verbNode in verbs.Values)
+        {
+            var verb = verbNode.Topic ?? string.Empty;
+            if (scope.Kind == SparkplugSelectionKind.Node && SparkplugTopicClassifier.IsNodeVerb(verb))
+            {
+                AddEndpoint(resolved, ChildOf(verbNode, scope.NodeId));
+                continue;
+            }
+
+            if (!SparkplugTopicClassifier.IsDeviceVerb(verb) || ChildOf(verbNode, scope.NodeId) is not { SubTopics: { } devices })
+                continue;
+
+            foreach (var device in devices.Values)
+            {
+                if (scope.DeviceId is not null
+                    && !string.Equals(device.Topic, scope.DeviceId, StringComparison.Ordinal))
+                    continue;
+
+                AddEndpoint(resolved, device);
+            }
+        }
+
+        return resolved;
+    }
+
+    // A scope admits only endpoints observed at their canonical path, and they are disjoint by
+    // construction, so they need no overlap normalization.
+    private static void AddEndpoint(List<MessageStore> resolved, MessageStore? endpoint)
+    {
+        if (endpoint is not null && IsCanonicallyObserved(endpoint))
+            resolved.Add(endpoint);
+    }
+
+    private static bool IsCanonicallyObserved(MessageStore store) =>
+        store.FullTopic is { } path && store.ObservedRawTopics?.Contains(path) == true;
+
+    private static void AddCovered(List<MessageStore> resolved, MessageStore node)
+    {
+        var path = node.FullTopic;
+        foreach (var retained in resolved)
+        {
+            if (path is not null && retained.FullTopic is { } retainedPath
+                && IsPathOrDescendant(path, retainedPath))
+                return;
+        }
+
+        resolved.RemoveAll(retained => ReferenceEquals(retained, node)
+            || (path is not null && retained.FullTopic is { } retainedPath && IsDescendantPath(retainedPath, path)));
+        resolved.Add(node);
+    }
+
+    private bool SameSelection(
+        List<MessageStore> resolved, string key, SparkplugSelectionScope? scope, bool requiresCanonical) =>
+        string.Equals(_selectionKey, key, StringComparison.Ordinal)
+        && Equals(_selectionScope, scope)
+        && _selectionRequiresCanonical == requiresCanonical
+        && _selectedRoots.SetEquals(resolved);
+
+    private void ReplaceSelection(
+        List<MessageStore> resolved, string key, string? label, SparkplugSelectionScope? scope, bool requiresCanonical)
+    {
+        _selectedRoots.Clear();
+        _selectedAncestors.Clear();
+        foreach (var store in resolved)
+        {
+            _selectedRoots.Add(store);
+            IndexAncestors(store);
+        }
+
+        _selectionKey = key;
+        _selectionLabel = label;
+        _selectionScope = scope;
+        _selectionRequiresCanonical = requiresCanonical;
+        _selectionGeneration++;
+        _selectionContentVersion++;
+    }
 
     private TopicNodeSnapshot CreateNodeSnapshot(MessageStore node)
     {
@@ -145,30 +286,87 @@ internal sealed partial class TopicTreeStore
 
     private void InvalidateSelection()
     {
-        _selectedMessageStore = null;
+        _selectedRoots.Clear();
+        _selectedAncestors.Clear();
+        _selectionKey = null;
+        _selectionLabel = null;
+        _selectionScope = null;
+        _selectionRequiresCanonical = false;
         _selectionGeneration++;
         _selectionContentVersion++;
     }
 
+    // The walk up tests the root set, not the ancestor set: an ancestor-set hit would match a
+    // sibling under a shared ancestor and invalidate unrelated traffic.
     private bool SelectionIncludes(MessageStore store)
     {
-        var selected = _selectedMessageStore;
-        if (selected is null)
+        if (_selectedRoots.Count == 0)
             return false;
 
-        var selectedPath = selected.FullTopic;
-        var storePath = store.FullTopic;
-        if (selectedPath is null || storePath is null)
-            return ReferenceEquals(selected, store);
+        if (_selectedAncestors.Contains(store))
+            return true;
 
-        return ReferenceEquals(selected, store)
-            || IsPathOrDescendant(storePath, selectedPath)
-            || IsPathOrDescendant(selectedPath, storePath);
+        for (var node = store; node is not null; node = node.Parent)
+        {
+            if (_selectedRoots.Contains(node))
+                return true;
+        }
+
+        return false;
     }
+
+    // A scoped selection holds endpoints, so one first observed after the click is not in the
+    // set yet; add it as its spelling is recorded.
+    private void AppendToScopedSelection(MessageStore store)
+    {
+        if (_selectionScope is not { } scope || !IsScopeEndpoint(store, scope) || !_selectedRoots.Add(store))
+            return;
+
+        IndexAncestors(store);
+    }
+
+    // Break once an ancestor is already indexed: its whole chain was indexed with it.
+    private void IndexAncestors(MessageStore store)
+    {
+        for (var node = store.Parent; node is not null; node = node.Parent)
+        {
+            if (!_selectedAncestors.Add(node))
+                break;
+        }
+    }
+
+    private static bool IsScopeEndpoint(MessageStore store, SparkplugSelectionScope scope)
+    {
+        if (store.FullTopic is not { } path || store.ObservedRawTopics?.Contains(path) != true)
+            return false;
+
+        var prefix = scope.GroupPath + "/";
+        if (!path.StartsWith(prefix, StringComparison.Ordinal))
+            return false;
+
+        var segments = path[prefix.Length..].Split('/');
+        if (segments.Length == 2)
+        {
+            return scope.Kind == SparkplugSelectionKind.Node
+                && SparkplugTopicClassifier.IsNodeVerb(segments[0])
+                && string.Equals(segments[1], scope.NodeId, StringComparison.Ordinal);
+        }
+
+        return segments.Length == 3
+            && SparkplugTopicClassifier.IsDeviceVerb(segments[0])
+            && string.Equals(segments[1], scope.NodeId, StringComparison.Ordinal)
+            && (scope.DeviceId is null || string.Equals(segments[2], scope.DeviceId, StringComparison.Ordinal));
+    }
+
+    private static MessageStore? ChildOf(MessageStore parent, string key) =>
+        parent.SubTopics is not null && parent.SubTopics.TryGetValue(key, out var child) ? child : null;
 
     private static bool IsPathOrDescendant(string path, string ancestor) =>
         path.Equals(ancestor, StringComparison.Ordinal)
-        || (path.StartsWith(ancestor, StringComparison.Ordinal)
-            && path.Length > ancestor.Length
-            && path[ancestor.Length] == '/');
+        || IsDescendantPath(path, ancestor);
+
+    private static bool IsDescendantPath(string path, string ancestor) =>
+        path.Length > ancestor.Length
+        && path.StartsWith(ancestor, StringComparison.Ordinal)
+        && path[ancestor.Length] == '/';
 }

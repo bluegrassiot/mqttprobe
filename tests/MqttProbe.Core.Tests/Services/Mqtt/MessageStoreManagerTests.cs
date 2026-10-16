@@ -43,7 +43,7 @@ public class MessageStoreManagerTests
     {
         _messageStoreManager.Should().NotBeNull();
         _messageStoreManager.RootTopicCount.Should().Be(0);
-        _messageStoreManager.GetSelectedTopicState().FullTopic.Should().BeNull();
+        _messageStoreManager.GetSelectedTopicState().Key.Should().BeNull();
         _messageStoreManager.IsListening.Should().BeFalse();
     }
 
@@ -139,7 +139,7 @@ public class MessageStoreManagerTests
         await _messageStoreManager.ClearAllMessages();
 
         _messageStoreManager.RootTopicCount.Should().Be(0);
-        _messageStoreManager.GetSelectedTopicState().FullTopic.Should().BeNull();
+        _messageStoreManager.GetSelectedTopicState().Key.Should().BeNull();
         (await _messageStoreManager.GetSelectedMessagesAsync(selection.Token, 10)).Should().BeNull();
     }
 

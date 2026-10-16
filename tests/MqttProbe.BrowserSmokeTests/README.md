@@ -156,6 +156,56 @@ dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~GenericEmulatorPubli
 dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~SparkplugEmulatorPublishesDecodedDataAndStateText
 ```
 
+## Sparkplug grouped-selection smoke tests
+
+`LiveFlows/MqttLiveFlowsSparkplugGroupingTests.cs` and
+`LiveFlows/MqttLiveFlowsSparkplugGroupingAdditionalTests.cs` (with helpers in
+`LiveFlows/MqttLiveFlowsSparkplugGroupingHelpers.cs`) drive the grouped Sparkplug topic tree
+through the real UI against the shared local fixture. The grouping preference is enabled through
+Settings, Sparkplug, "Group Sparkplug topics by node and device"; each case subscribes to its own
+`spBv1.0/<group>/#` filter, publishes canonical `NBIRTH`/`NDATA`/`NDEATH`/`DBIRTH`/`DDATA` topics
+from a plain MQTTnet client, and clears all stored messages first so its group owns the tree and
+its `Devices` row is unambiguous. Six cases:
+
+1. grouped tree shape: grouping rows are marked, the row body selects without expanding or
+   collapsing, the chevron collapses the selected row without moving the selection, and the
+   `Devices` row selects device topics only (no node `NBIRTH`/`NDATA`);
+2. a selected node gains its first new message type, gains a device that appears under it, and a
+   selected device gains its first new verb;
+3. a selected `Devices` row gains the first message from a new device, joining the list and count;
+4. a collapsed selected group still updates, re-clicking the same row keeps the selected message
+   detail, and unrelated traffic does not change the selection's membership;
+5. on the mobile viewport a picker-closed selection stays live, and the mobile label is readable
+   and never exposes the internal grouping key;
+6. purging one selected member through an exclude filter clears the whole selection and list, and
+   fresh traffic on the purged path does not resurrect it.
+
+Auth is fixture-local and in memory: the first grouping case signs in through the visible login
+form and caches only the app-origin auth cookies for the rest of the fixture run; every case still
+uses a fresh browser context and nothing is written to disk (no profile, storage state, HAR or
+trace). The signed-in login POST must be answered with a success redirect; the suite does not
+retry a failed sign-in.
+
+Requires the repaired grouped-selection production behavior; run it only once the production fix
+has landed. Docker, Chromium, and a valid local HTTPS development certificate are required. The
+fixture starts its own app and Mosquitto instance and provisions temporary credentials, so no
+broker listener or credential variables are needed. The cases carry
+`[Category("SparkplugGrouping")]`; note the class is `MqttLiveFlowsSmokeTests`, so filter by
+category rather than by the file name.
+
+```powershell
+# All six grouping cases
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter TestCategory=SparkplugGrouping
+
+# Individual cases
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~GroupedTreeRowBodySelectsDevicesExcludeNodeTraffic
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~SelectedNodeGainsFirstNewMessageTypeAndDeviceVerb
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~SelectedDevicesGainsFirstNewDevice
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~CollapsedSelectedGroupUpdatesAndReclickKeepsDetail
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~MobilePickerSelectionStaysLiveAndLabelIsReadable
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~PurgingOneSelectedMemberClearsSelectionAndFreshTrafficDoesNotResurrect
+```
+
 ## Release acceptance run
 
 For the coordinated release/v1.0.7 acceptance run, use the isolated fixture for the local

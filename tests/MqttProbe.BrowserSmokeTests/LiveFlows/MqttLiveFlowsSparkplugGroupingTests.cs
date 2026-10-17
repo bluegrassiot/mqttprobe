@@ -65,8 +65,16 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await ExpandAllTreeAsync(page, token);
             await WaitForTreeRowLabelAsync(page, group, token);
             await WaitForGroupRowAsync(page, node, token);
-            await WaitForGroupRowAsync(page, "Devices", token);
             await WaitForGroupRowAsync(page, device, token);
+            Assert.That(await DesktopVirtualRow(page, "Devices").CountAsync().WaitAsync(token),
+                Is.Zero, "the flat Sparkplug hierarchy must not contain a Devices wrapper row");
+            var nodeIndent = await DesktopVirtualRow(page, node).Locator(".topic-tree-indent")
+                .GetAttributeAsync("width").WaitAsync(token);
+            var deviceIndent = await DesktopVirtualRow(page, device).Locator(".topic-tree-indent")
+                .GetAttributeAsync("width").WaitAsync(token);
+            Assert.That(int.Parse(deviceIndent!, System.Globalization.CultureInfo.InvariantCulture),
+                Is.EqualTo(int.Parse(nodeIndent!, System.Globalization.CultureInfo.InvariantCulture) + 16),
+                "the device row must be directly beneath its node");
 
             SetStage("virtual grouping rows are marked");
             Assert.That(await page.Locator(GroupingRowSelector).CountAsync().WaitAsync(token),
@@ -89,8 +97,8 @@ public sealed partial class MqttLiveFlowsSmokeTests
                 .ToHaveCountAsync(1, new() { Timeout = ActionTimeoutMs }).WaitAsync(token);
             await ClickGroupChevronAsync(page, node, token);
 
-            SetStage("Devices selects device topics only");
-            await ClickRowBodyAsync(DesktopVirtualRow(page, "Devices"), token);
+            SetStage("device selects its topics only");
+            await ClickRowBodyAsync(DesktopVirtualRow(page, device), token);
             await ExpectDesktopPayloadTopicAsync(page, dbirth, token);
             await ExpectDesktopPayloadTopicAsync(page, ddata, token);
             await ExpectNoDesktopPayloadTopicAsync(page, nbirth, token);
@@ -177,8 +185,6 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await ExpectDesktopPayloadTopicAsync(page, ddata, token);
 
             SetStage("selected device gains its first new verb");
-            await WaitForGroupRowAsync(page, "Devices", token);
-            await ClickGroupChevronAsync(page, "Devices", token);
             await WaitForGroupRowAsync(page, device, token);
             await ClickRowBodyAsync(DesktopVirtualRow(page, device), token);
             await ExpectDesktopPayloadTopicAsync(page, ddata, token);
@@ -204,7 +210,7 @@ public sealed partial class MqttLiveFlowsSmokeTests
     [Test]
     [Category("SparkplugGrouping")]
     [CancelAfter(ScenarioBudgetSeconds * 1000)]
-    public async Task SelectedDevicesGainsFirstNewDevice(CancellationToken cancellationToken)
+    public async Task SelectedDeviceDoesNotGainOtherDeviceMessages(CancellationToken cancellationToken)
     {
         ValidateHostPort(out var mqttHost, out var mqttPort);
         var appOrigin = ResolveBaseUrl();
@@ -245,20 +251,20 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await EnsureSparkplugGroupingAsync(page, token);
             await ClearAllStoredMessagesAsync(page, token);
 
-            SetStage("one device present, Devices selected");
+            SetStage("one device present, actual device row selected");
             await PublishAsync(mqtt, ddata1, "device-1", token);
             await AwaitSeedReceiptAsync(page, token, (ddata1, "device-1"));
             await ExpandAllTreeAsync(page, token);
-            await WaitForGroupRowAsync(page, "Devices", token);
-            await ClickRowBodyAsync(DesktopVirtualRow(page, "Devices"), token);
+            await WaitForGroupRowAsync(page, device1, token);
+            await ClickRowBodyAsync(DesktopVirtualRow(page, device1), token);
             await ExpectDesktopPayloadTopicAsync(page, ddata1, token);
             var beforeDevice2 = await DesktopPayloadRowCountAsync(page, token);
 
-            SetStage("first message from a second device joins the list and count");
+            SetStage("message from a different device remains outside the selection");
             await PublishAsync(mqtt, ddata2, "device-2", token);
-            await ExpectDesktopPayloadTopicAsync(page, ddata2, token);
-            Assert.That(await DesktopPayloadRowCountAsync(page, token), Is.EqualTo(beforeDevice2 + 1),
-                "a first message from a new device must join the selected Devices list");
+            await ExpectNoDesktopPayloadTopicAsync(page, ddata2, token);
+            Assert.That(await DesktopPayloadRowCountAsync(page, token), Is.EqualTo(beforeDevice2),
+                "a different device's message must not join the selected device's list");
 
             SetStage("disconnect");
             await page.Locator(DisconnectButton).ClickAsync(

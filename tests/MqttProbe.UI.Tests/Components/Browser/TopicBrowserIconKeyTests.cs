@@ -74,12 +74,16 @@ public sealed class TopicBrowserIconKeyTests : BunitTestContext
     private static string KeyGlyph(IRenderedComponent<TopicBrowser> cut, string hook, int index = 0) =>
         TopicIconShape.Of(cut.FindAll($"[data-icon-key='{hook}'] .topic-node-icon")[index]);
 
+    // The panel id belongs to the component instance, so a toggle is checked against the id it
+    // actually rendered rather than a fixed literal.
+    private static string KeyId(IRenderedComponent<TopicBrowser> cut) => cut.Find(".topic-icon-key").Id ?? string.Empty;
+
     [Test]
     public void IconKeyStaysClosedUntilItsControlIsUsed()
     {
         var cut = RenderTopics(PlainTree());
 
-        cut.FindAll("#topic-icon-key").Should().BeEmpty();
+        cut.FindAll(".topic-icon-key").Should().BeEmpty();
 
         var toggle = cut.Find(".topic-icon-key-toggle");
         toggle.GetAttribute("aria-expanded").Should().Be("false");
@@ -88,9 +92,9 @@ public sealed class TopicBrowserIconKeyTests : BunitTestContext
 
         OpenIconKey(cut);
 
-        cut.FindAll("#topic-icon-key").Should().ContainSingle();
+        cut.FindAll(".topic-icon-key").Should().ContainSingle();
         cut.Find(".topic-icon-key-toggle").GetAttribute("aria-expanded").Should().Be("true");
-        cut.Find(".topic-icon-key-toggle").GetAttribute("aria-controls").Should().Be("topic-icon-key");
+        cut.Find(".topic-icon-key-toggle").GetAttribute("aria-controls").Should().Be(KeyId(cut));
     }
 
     [Test]
@@ -218,12 +222,12 @@ public sealed class TopicBrowserIconKeyTests : BunitTestContext
         var cut = RenderTopics(PlainTree());
         OpenIconKey(cut);
 
-        var close = cut.Find("#topic-icon-key .mud-icon-button");
+        var close = cut.Find(".topic-icon-key .mud-icon-button");
         close.GetAttribute("aria-label").Should().Be("Close icon key");
 
         close.Click();
 
-        cut.FindAll("#topic-icon-key").Should().BeEmpty();
+        cut.FindAll(".topic-icon-key").Should().BeEmpty();
         cut.Find(".topic-icon-key-toggle").GetAttribute("aria-expanded").Should().Be("false");
     }
 
@@ -261,5 +265,47 @@ public sealed class TopicBrowserIconKeyTests : BunitTestContext
             cut.FindAll(".topic-tree-row").Should().HaveCount(rowsBefore);
             cut.FindAll(".topic-tree-row--selected").Should().ContainSingle();
         }
+    }
+
+    [Test]
+    public void TwoMountedBrowsersGiveEachIconKeyItsOwnId()
+    {
+        var first = RenderTopics(PlainTree());
+        // The provider render is per test, so mounting the second browser directly avoids a
+        // second MudBlazor section outlet for the same scope.
+        var second = Render<TopicBrowser>();
+
+        OpenIconKey(first);
+        OpenIconKey(second);
+
+        var firstId = KeyId(first);
+        var secondId = KeyId(second);
+
+        firstId.Should().NotBeNullOrWhiteSpace();
+        firstId.Should().NotBe(secondId, "two mounted browsers must never share one DOM id");
+        first.Find(".topic-icon-key-toggle").GetAttribute("aria-controls").Should().Be(firstId);
+        second.Find(".topic-icon-key-toggle").GetAttribute("aria-controls").Should().Be(secondId);
+        first.FindAll($"[id='{firstId}']").Should().ContainSingle();
+        second.FindAll($"[id='{secondId}']").Should().ContainSingle();
+    }
+
+    [Test]
+    public void TheIconKeyIdSurvivesCloseReopenAndRerender()
+    {
+        var cut = RenderTopics(PlainTree());
+
+        OpenIconKey(cut);
+        var openedId = KeyId(cut);
+
+        cut.Find(".topic-icon-key .mud-icon-button").Click();
+        cut.FindAll(".topic-icon-key").Should().BeEmpty();
+
+        OpenIconKey(cut);
+        KeyId(cut).Should().Be(openedId, "the id belongs to the instance, not to one open state");
+
+        cut.FindAll(".topic-tree-row")[1].Click();
+
+        KeyId(cut).Should().Be(openedId);
+        cut.FindAll($"[id='{openedId}']").Should().ContainSingle("a rerender must not add a second node with the same id");
     }
 }

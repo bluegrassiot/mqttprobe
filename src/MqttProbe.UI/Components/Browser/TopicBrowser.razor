@@ -46,7 +46,7 @@
         </MudToolBar>
         @if (_iconKeyOpen)
         {
-            <div class="topic-icon-key" id="topic-icon-key" role="group" aria-label="Icon key">
+            <div class="topic-icon-key" id="@_iconKeyId" role="group" aria-label="Icon key">
                 <div class="topic-icon-key-header">
                     <span class="topic-icon-key-title">Icon key</span>
                     <MudIconButton Icon="@LucideIcons.X" Size="Size.Small"
@@ -144,6 +144,10 @@
     private bool _disposed;
     private bool _groupSparkplugTopics;
     private bool _iconKeyOpen;
+
+    // A responsive layout can mount two browsers at once, so the panel id must belong to this
+    // instance. It is generated once, which keeps aria-controls stable across renders.
+    private readonly string _iconKeyId = $"topic-icon-key-{Guid.NewGuid():N}";
     private long _lastTreeVersion;
     private Guid _lastSelectionStoreId;
     private long _lastSelectionGeneration;
@@ -166,7 +170,7 @@
     [Parameter] public EventCallback<SelectedTopicState> OnSelectedChanged { get; set; }
 
     // Points the toggle at the panel only while the panel is on the page.
-    private string? IconKeyControls => _iconKeyOpen ? "topic-icon-key" : null;
+    private string? IconKeyControls => _iconKeyOpen ? _iconKeyId : null;
 
     // The app opens in dark mode, so a bare instance or a unit test that cannot cascade still
     // gets the dark tones rather than light tones on a dark surface.

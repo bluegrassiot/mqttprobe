@@ -68,6 +68,19 @@ public sealed partial class MqttManagedClient
         }
     }
 
+    private async Task RunReconnectLoopAsync(Generation generation, TaskCompletionSource completion)
+    {
+        try
+        {
+            await ReconnectLoopAsync(generation).ConfigureAwait(false);
+            completion.TrySetResult();
+        }
+        catch (Exception ex)
+        {
+            completion.TrySetException(ex);
+        }
+    }
+
     private static async Task AwaitQuietlyAsync(Task? task)
     {
         if (task is null)

@@ -376,6 +376,7 @@ public sealed partial class MqttManagedClient
 
     private void StartReconnectLoop(Generation generation)
     {
+        TaskCompletionSource completion;
         lock (_sync)
         {
             if (!IsOwnedForWorkLocked(generation))
@@ -383,8 +384,14 @@ public sealed partial class MqttManagedClient
             if (!generation.ReconnectTask.IsCompleted)
                 return;
 
-            generation.ReconnectTask = ReconnectLoopAsync(generation);
+            // Published before the loop is launched: its synchronous prefix can reach the raw
+            // connect handler, and a teardown started there must wait for this task, not the
+            // completed one it replaced.
+            completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            generation.ReconnectTask = completion.Task;
         }
+
+        _ = RunReconnectLoopAsync(generation, completion);
     }
 
     private async Task ReconnectLoopAsync(Generation generation)

@@ -78,27 +78,35 @@ public class MqttManagedClientScopedStopTests
         await using var sut = new MqttManagedClient(factory, null);
 
         var attemptA = sut.StartAttempt(BuildOptions());
-        (await attemptA.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
 
-        var attemptB = sut.StartAttempt(BuildOptions());
-        (await attemptB.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
-        await cleanupEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            (await attemptA.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
 
-        var stop = sut.StopAttemptAsync(attemptA.Id);
-        await Task.Delay(100);
+            var attemptB = sut.StartAttempt(BuildOptions());
+            (await attemptB.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
+            await cleanupEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        stop.IsCompleted.Should().BeFalse("the scoped stop waits for the targeted attempt's cleanup");
-        sut.IsConnected.Should().BeTrue("the replacement generation stays current and connected");
-        DisconnectCount(clientB).Should().Be(0, "a scoped stop must never stop the replacement connection");
-        ConnectCount(clientB).Should().Be(1);
-        DisconnectCount(clientA).Should().Be(1);
+            var stop = sut.StopAttemptAsync(attemptA.Id);
+            await Task.Delay(100);
 
-        releaseCleanup.TrySetResult();
-        await stop.WaitAsync(TimeSpan.FromSeconds(5));
+            stop.IsCompleted.Should().BeFalse("the scoped stop waits for the targeted attempt's cleanup");
+            sut.IsConnected.Should().BeTrue("the replacement generation stays current and connected");
+            DisconnectCount(clientB).Should().Be(0, "a scoped stop must never stop the replacement connection");
+            ConnectCount(clientB).Should().Be(1);
+            DisconnectCount(clientA).Should().Be(1);
 
-        sut.IsConnected.Should().BeTrue();
-        DisconnectCount(clientB).Should().Be(0);
-        ConnectCount(clientB).Should().Be(1);
+            releaseCleanup.TrySetResult();
+            await stop.WaitAsync(TimeSpan.FromSeconds(5));
+
+            sut.IsConnected.Should().BeTrue();
+            DisconnectCount(clientB).Should().Be(0);
+            ConnectCount(clientB).Should().Be(1);
+        }
+        finally
+        {
+            releaseCleanup.TrySetResult();
+        }
     }
 
     [Test]
@@ -217,24 +225,32 @@ public class MqttManagedClientScopedStopTests
         sut.ConnectionStateChangedAsync += _ => { Interlocked.Increment(ref stateChanged); return Task.CompletedTask; };
 
         var attemptA = sut.StartAttempt(BuildOptions());
-        (await attemptA.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
-        await WaitUntilAsync(() => Volatile.Read(ref stateChanged) == 1);
-        Volatile.Write(ref disconnected, 0);
-        Volatile.Write(ref stateChanged, 0);
 
-        var attemptB = sut.StartAttempt(BuildOptions());
-        (await attemptB.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
-        await cleanupEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            (await attemptA.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
+            await WaitUntilAsync(() => Volatile.Read(ref stateChanged) == 1);
+            Volatile.Write(ref disconnected, 0);
+            Volatile.Write(ref stateChanged, 0);
 
-        var stop = sut.StopAttemptAsync(attemptA.Id);
-        await Task.Delay(100);
-        releaseCleanup.TrySetResult();
-        await stop.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Delay(100);
+            var attemptB = sut.StartAttempt(BuildOptions());
+            (await attemptB.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
+            await cleanupEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        Volatile.Read(ref disconnected).Should().Be(0, "a superseded attempt reports no deliberate disconnect");
-        Volatile.Read(ref stateChanged).Should().Be(0);
-        sut.IsConnected.Should().BeTrue();
+            var stop = sut.StopAttemptAsync(attemptA.Id);
+            await Task.Delay(100);
+            releaseCleanup.TrySetResult();
+            await stop.WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Delay(100);
+
+            Volatile.Read(ref disconnected).Should().Be(0, "a superseded attempt reports no deliberate disconnect");
+            Volatile.Read(ref stateChanged).Should().Be(0);
+            sut.IsConnected.Should().BeTrue();
+        }
+        finally
+        {
+            releaseCleanup.TrySetResult();
+        }
     }
 
     [Test]

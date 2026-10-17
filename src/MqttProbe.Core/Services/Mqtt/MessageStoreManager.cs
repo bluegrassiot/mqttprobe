@@ -207,7 +207,7 @@ public class MessageStoreManager : IMessageStoreManager
                 if (result.TopologyEvents.Count > 0)
                     await ApplyTopologyEventsAsync(result.TopologyEvents);
 
-                var aliasNames = _aliasEnricher.Resolve(topic, arg, result);
+                var aliasNames = _aliasEnricher.Resolve(topic, result);
 
                 message = new MqttMessage(payloadText, topic,
                     arg.ApplicationMessage.Retain, arg.ApplicationMessage.QualityOfServiceLevel)

@@ -19,15 +19,13 @@ public sealed class PayloadPipeline(PluginRegistry registry, ILogger<PayloadPipe
         var activeRegistry = _registry;
         var diagnostics = new List<string>();
         var topic = e.ApplicationMessage.Topic;
-        var segment = e.ApplicationMessage.GetPayloadSegment();
-        var rawPayload = segment.Array is null ? [] : segment.ToArray();
 
         var candidates = activeRegistry.FindMatchingDetectors(e).ToList();
 
         if (candidates.Count == 0)
         {
             diagnostics.Add("No detector matched for incoming message.");
-            return PipelineDecodeResult.Failure("unknown", topic, rawPayload, diagnostics);
+            return PipelineDecodeResult.Failure("unknown", topic, ReadRawPayload(e), diagnostics);
         }
 
         DecodedPayloadEnvelope? firstFailure = null;
@@ -48,7 +46,7 @@ public sealed class PayloadPipeline(PluginRegistry registry, ILogger<PayloadPipe
 
             if (!TryDecode(decoder, e, formatId, diagnostics, out var envelope, out var throwMessage))
             {
-                firstFailure ??= DecodedPayloadEnvelope.CreateFailure(formatId, topic, rawPayload, throwMessage!);
+                firstFailure ??= DecodedPayloadEnvelope.CreateFailure(formatId, topic, ReadRawPayload(e), throwMessage!);
                 continue;
             }
 
@@ -72,7 +70,14 @@ public sealed class PayloadPipeline(PluginRegistry registry, ILogger<PayloadPipe
             return BuildDecodeResult(firstFailure, [], diagnostics);
         }
 
-        return PipelineDecodeResult.Failure(candidates[0].FormatId, topic, rawPayload, diagnostics);
+        return PipelineDecodeResult.Failure(candidates[0].FormatId, topic, ReadRawPayload(e), diagnostics);
+    }
+
+    // Deferred: only failure paths need it, so a successful decode skips a second payload read.
+    private static byte[] ReadRawPayload(MqttApplicationMessageReceivedEventArgs e)
+    {
+        var segment = e.ApplicationMessage.GetPayloadSegment();
+        return segment.Array is null ? [] : segment.ToArray();
     }
 
     private bool TryDecode(

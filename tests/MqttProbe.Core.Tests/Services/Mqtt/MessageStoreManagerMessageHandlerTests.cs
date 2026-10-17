@@ -615,6 +615,18 @@ public partial class MessageStoreManagerMessageHandlerTests
         return payload.ToByteArray();
     }
 
+    private static byte[] AliasOnlyDataPayload()
+    {
+        var payload = new Payload { Timestamp = 2 };
+        payload.Metrics.Add(new Payload.Types.Metric
+        {
+            Alias = 7,
+            Datatype = 10,
+            DoubleValue = 24.5
+        });
+        return payload.ToByteArray();
+    }
+
     private static MqttApplicationMessageReceivedEventArgs MakeBinaryArgs(string topic, byte[] payload)
     {
         var appMsg = new MqttApplicationMessageBuilder()
@@ -683,6 +695,76 @@ public partial class MessageStoreManagerMessageHandlerTests
             topology.ApplyTopologyEventsAsync(Arg.Any<IReadOnlyList<TopologyEvent>>());
             _ = topology.Groups;
         });
+    }
+
+    [Test]
+    public async Task MessageHandler_AliasOnlyNData_EnrichesAliasNamesFromDecodedPayload()
+    {
+        var topology = new SparkplugTopologyService();
+        var built = BuildManagerWithTopology(Substitute.For<IUxMetricsService>(), topology);
+        using var manager = built.Manager;
+        MqttMessage? received = null;
+        manager.MessageReceived += msg => { received = msg; return Task.CompletedTask; };
+
+        await built.Fire(MakeBinaryArgs("spBv1.0/g/NBIRTH/n1", SparkplugPayload()));
+        await built.Fire(MakeBinaryArgs("spBv1.0/g/NDATA/n1", AliasOnlyDataPayload()));
+
+        received.Should().NotBeNull();
+        received!.AliasNames.Should().NotBeNull();
+        received.AliasNames![7].Should().Be("temperature");
+    }
+
+    [Test]
+    public async Task MessageHandler_PluginDecoderNullTypedPayload_StillEnrichesAliasNames()
+    {
+        await AssertPluginTypedPayloadFallbackEnrichesAliases(null);
+    }
+
+    [Test]
+    public async Task MessageHandler_PluginDecoderForeignTypedPayload_StillEnrichesAliasNames()
+    {
+        await AssertPluginTypedPayloadFallbackEnrichesAliases(new object());
+    }
+
+    private static async Task AssertPluginTypedPayloadFallbackEnrichesAliases(object? typedPayload)
+    {
+        var topology = new SparkplugTopologyService();
+        await topology.ApplyTopologyEventsAsync(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n1",
+                GroupId = "g",
+                NodeId = "n1",
+                Metrics = [new MetricSnapshot { Name = "temperature", DataType = "double", Value = "1.0000", Alias = 7 }]
+            }
+        ]);
+
+        var client = Substitute.For<IMqttManagedClient>();
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+              .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        var performance = Substitute.For<IPerformanceSettings>();
+        performance.Performance.Returns(new AppConfiguration().Performance);
+        var sparkplug = Substitute.For<ISparkplugSettings>();
+        sparkplug.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
+
+        var pipeline = TestPipelineHelper.BuildPipelineWithDecoderOverride(
+            new TestPipelineHelper.WrappedTypedPayloadSparkplugDecoder(typedPayload));
+
+        using var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
+            performance, Substitute.For<IUxMetricsService>(), pipeline, sparkplug, topology);
+        MqttMessage? received = null;
+        manager.MessageReceived += msg => { received = msg; return Task.CompletedTask; };
+        await manager.Start();
+
+        await handler!(MakeBinaryArgs("spBv1.0/g/NDATA/n1", AliasOnlyDataPayload()));
+
+        received.Should().NotBeNull();
+        received!.AliasNames.Should().NotBeNull();
+        received.AliasNames![7].Should().Be("temperature");
     }
 
     [Test]

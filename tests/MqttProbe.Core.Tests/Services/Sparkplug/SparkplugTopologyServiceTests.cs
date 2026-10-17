@@ -1329,4 +1329,129 @@ public class SparkplugTopologyServiceTests
         resolved.Should().NotBeNull();
         resolved[42].Should().Be("Flow Rate");
     }
+
+    private Task ApplyNodeDataAsync(params MetricSnapshot[] metrics) =>
+        _service.ApplyTopologyEventsAsync(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDATA/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = metrics
+            }
+        ]);
+
+    private async Task SeedNodeAsync(params MetricSnapshot[] metrics) =>
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = metrics
+            }
+        ]);
+
+    private IReadOnlyList<SpbMetricSnapshot> NodeMetrics() => _service.Groups["g"].Nodes["n"].Metrics;
+
+    [Test]
+    public async Task NodeData_ReplacesExistingMetricInPlace_PreservingOrder()
+    {
+        await SeedNodeAsync(Ms("A", "double", "1.0000"), Ms("B", "double", "2.0000"), Ms("C", "double", "3.0000"));
+
+        await ApplyNodeDataAsync(Ms("B", "double", "20.0000"));
+
+        NodeMetrics().Select(m => m.Name).Should().Equal("A", "B", "C");
+        NodeMetrics().Single(m => m.Name == "B").Value.Should().Be("20.0000");
+    }
+
+    [Test]
+    public async Task NodeData_AppendsNewMetricsAfterExistingOnes()
+    {
+        await SeedNodeAsync(Ms("A", "double", "1.0000"));
+
+        await ApplyNodeDataAsync(Ms("B", "double", "2.0000"), Ms("C", "double", "3.0000"));
+
+        NodeMetrics().Select(m => m.Name).Should().Equal("A", "B", "C");
+    }
+
+    [Test]
+    public async Task NodeData_DuplicateIncomingName_UpdatesTheSameSlotTwice()
+    {
+        await SeedNodeAsync(Ms("A", "double", "1.0000"), Ms("B", "double", "2.0000"));
+
+        await ApplyNodeDataAsync(Ms("A", "double", "10.0000"), Ms("A", "double", "11.0000"));
+
+        NodeMetrics().Should().HaveCount(2);
+        NodeMetrics().Select(m => m.Name).Should().Equal("A", "B");
+        NodeMetrics().Single(m => m.Name == "A").Value.Should().Be("11.0000");
+    }
+
+    [Test]
+    public async Task NodeData_OrderMixedUpdateAndAppend_MatchesLinearScanResult()
+    {
+        await SeedNodeAsync(Ms("A"), Ms("B"), Ms("C"));
+
+        await ApplyNodeDataAsync(Ms("C", "double", "30.0000"), Ms("D"), Ms("A", "double", "10.0000"));
+
+        NodeMetrics().Select(m => m.Name).Should().Equal("A", "B", "C", "D");
+        NodeMetrics().Single(m => m.Name == "C").Value.Should().Be("30.0000");
+        NodeMetrics().Single(m => m.Name == "A").Value.Should().Be("10.0000");
+    }
+
+    [Test]
+    public async Task DeviceData_ReplacesExistingMetricInPlace_PreservingOrder()
+    {
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("A", "double", "1.0000"), Ms("B", "double", "2.0000")]
+            }
+        ]);
+
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new DeviceDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DDATA/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("B", "double", "20.0000"), Ms("C", "double", "3.0000")]
+            }
+        ]);
+
+        var metrics = _service.Groups["g"].Nodes["n"].Devices["d1"].Metrics;
+        metrics.Select(m => m.Name).Should().Equal("A", "B", "C");
+        metrics.Single(m => m.Name == "B").Value.Should().Be("20.0000");
+    }
+
+    [Test]
+    public async Task ConcurrentNodeData_MergesEveryDistinctMetricWithoutLoss()
+    {
+        await SeedNodeAsync();
+
+        const int count = 64;
+        var updates = Enumerable.Range(0, count)
+            .Select(i => Task.Run(() => ApplyNodeDataAsync(Ms($"m{i}", "double", $"{i}.0000"))))
+            .ToArray();
+
+        await Task.WhenAll(updates);
+
+        var metrics = NodeMetrics();
+        metrics.Should().HaveCount(count);
+        for (var i = 0; i < count; i++)
+            metrics.Single(m => m.Name == $"m{i}").Value.Should().Be($"{i}.0000");
+    }
 }

@@ -175,7 +175,7 @@ public class BrowserPanelTests : BunitTestContext
         _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask)
             .AndDoes(_ => rootCount = 0);
 
-        var cut = Render<BrowserPanel>();
+        var cut = Render<BrowserPanelWithoutUpdateTimer>();
 
         cut.FindAll("button").First(b => b.TextContent.Contains("Clear"))
             .HasAttribute("disabled").Should().BeFalse();
@@ -258,5 +258,10 @@ public class BrowserPanelTests : BunitTestContext
         cut.Render();
 
         cut.Markup.Should().NotContain("topic-picker-overlay__panel");
+    }
+
+    private sealed class BrowserPanelWithoutUpdateTimer : BrowserPanel
+    {
+        protected override System.Threading.Timer? CreateUpdateTimer() => null;
     }
 }

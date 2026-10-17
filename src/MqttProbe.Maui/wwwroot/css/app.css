@@ -1,5 +1,14 @@
 html, body {
     font-family: var(--font-ui);
+    margin: 0;
+}
+
+html, body, #app {
+    background-color: var(--mud-palette-background, #1E293B);
+}
+
+#app {
+    min-height: 100vh;
 }
 
 

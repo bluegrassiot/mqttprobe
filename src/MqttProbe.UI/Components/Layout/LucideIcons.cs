@@ -71,6 +71,7 @@ public static class LucideIcons
     public const string EyeOff         = $"<path {S} d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22'/>";
     public const string Inbox          = $"<path {S} d='M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/>";
     public const string Folder         = $"<path {S} d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/>";
+    public const string FolderOpen     = $"<path {S} d='M6 14l1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2'/>";
     public const string Circle         = $"<circle {S} cx='12' cy='12' r='10'/>";
     public const string Database       = $"<ellipse {S} cx='12' cy='5' rx='9' ry='3'/><path {S} d='M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5'/><path {S} d='M3 12c0 1.66 4 3 9 3s9-1.34 9-3'/>";
     public const string CheckCircle    = $"<path {S} d='M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3'/>";
@@ -78,6 +79,7 @@ public static class LucideIcons
     public const string Cpu            = $"<rect {S} x='9' y='9' width='6' height='6'/><path {S} d='M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18M3 9h18M3 15h18M15 3v6M15 15v6'/>";
     public const string Puzzle         = $"<path {S} d='M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z'/>";
     public const string Network        = $"<rect {S} x='9' y='2' width='6' height='6'/><rect {S} x='2' y='16' width='6' height='6'/><rect {S} x='16' y='16' width='6' height='6'/><path {S} d='M12 8v4M8 19H5a3 3 0 0 1 0-6h14a3 3 0 0 1 0 6h-3'/>";
+    public const string Router         = $"<rect {S} x='2' y='14' width='20' height='8' rx='2'/><path {S} d='M6.01 18H6'/><path {S} d='M10.01 18H10'/><path {S} d='M15 10v4'/><path {S} d='M17.84 7.17a4 4 0 0 0-5.66 0'/><path {S} d='M20.66 4.34a8 8 0 0 0-11.31 0'/>";
     public const string Clock          = $"<circle {S} cx='12' cy='12' r='10'/><path {S} d='M12 6v6l4 2'/>";
     public const string Zap            = $"<path {S} d='M13 2L3 14h9l-1 8 10-12h-9l1-8z'/>";
     public const string Maximize2      = $"<polyline {S} points='15 3 21 3 21 9'/><polyline {S} points='9 21 3 21 3 15'/><line {S} x1='21' y1='3' x2='14' y2='10'/><line {S} x1='3' y1='21' x2='10' y2='14'/>";

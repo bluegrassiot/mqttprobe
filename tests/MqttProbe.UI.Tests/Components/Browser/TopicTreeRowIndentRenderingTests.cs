@@ -142,7 +142,8 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
         cut.Find(".topic-tree-row").TextContent.Should().Contain("level-1000");
         cut.Find(".topic-tree-row").TextContent.Should().Contain("T 3 · M 42");
         cut.Find(".topic-tree-row .flex-grow-1").GetAttribute("title").Should().Be("level-1000");
-        cut.Find(".topic-stat-text").GetAttribute("title").Should().Be("3 topics, 42 messages");
+        cut.Find(".topic-stat-text").GetAttribute("title")
+            .Should().Be("3 topics below, 42 messages in the topics below it");
     }
 
     [Test]
@@ -154,17 +155,18 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
         });
 
         cut.Find(".topic-tree-row").GetAttribute("title")
-            .Should().Be("Grouping row · selects 2 topic(s) beneath it");
+            .Should().Be("Sparkplug devices · grouping row, not a real MQTT topic · selects 2 topics beneath it");
         cut.Find(".topic-tree-row").ClassName.Should().Contain("topic-tree-row--group");
         cut.Find(".topic-group-label").TextContent.Should().Be("level-1000");
     }
 
     [Test]
-    public void RealRowCarriesNoGroupingTooltip()
+    public void PlainTopicRowCarriesNoRoleTooltip()
     {
         var cut = RenderRow(Row(1000, TopicTreeRowKind.Topic));
 
-        cut.Find(".topic-tree-row").HasAttribute("title").Should().BeFalse();
+        cut.Find(".topic-tree-row").HasAttribute("title").Should().BeFalse(
+            "an ordinary topic row has no Sparkplug role to state");
     }
 
     [Test]

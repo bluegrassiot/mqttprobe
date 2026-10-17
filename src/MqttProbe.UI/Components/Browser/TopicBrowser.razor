@@ -16,6 +16,10 @@
                 @MessageStoreManagerService.RootTopicCount
             </MudChip>
         }
+        <MudIconButton Icon="@LucideIcons.Info" Size="Size.Small" Class="topic-icon-key-toggle"
+                       title="Icon key" aria-label="Icon key"
+                       aria-expanded="@(_iconKeyOpen ? "true" : "false")" aria-controls="@IconKeyControls"
+                       OnClick="ToggleIconKey"/>
     </div>
     <div class="topic-filter-wrap">
         <MudTextField @bind-Value="_searchFilter" @bind-Value:after="OnSearchChanged"
@@ -24,10 +28,12 @@
                       Immediate="true" Clearable="true" Variant="Variant.Outlined"
                       Margin="Margin.Dense" Class="topic-filter-field"/>
     </div>
-    <div class="topic-tree-wrap">
+    <div class="topic-tree-wrap @TreeThemeClass">
         <MudToolBar Class="pa-0 mb-1 topic-toolbar">
-            <MudIconButton Icon="@LucideIcons.Maximize2" Size="Size.Small" title="Expand all" OnClick="ExpandAll"/>
-            <MudIconButton Icon="@LucideIcons.Minimize2" Size="Size.Small" title="Collapse all" OnClick="CollapseAll"/>
+            <MudIconButton Icon="@LucideIcons.Maximize2" Size="Size.Small"
+                           title="Expand all" aria-label="Expand all" OnClick="ExpandAll"/>
+            <MudIconButton Icon="@LucideIcons.Minimize2" Size="Size.Small"
+                           title="Collapse all" aria-label="Collapse all" OnClick="CollapseAll"/>
             @if (_groupSparkplugTopics)
             {
                 <span class="topic-grouping-flag"
@@ -38,6 +44,76 @@
             }
             <span class="topic-stat-legend">T = topics · M = messages</span>
         </MudToolBar>
+        @if (_iconKeyOpen)
+        {
+            <div class="topic-icon-key" id="topic-icon-key" role="group" aria-label="Icon key">
+                <div class="topic-icon-key-header">
+                    <span class="topic-icon-key-title">Icon key</span>
+                    <MudIconButton Icon="@LucideIcons.X" Size="Size.Small"
+                                   title="Close icon key" aria-label="Close icon key" OnClick="CloseIconKey"/>
+                </div>
+                <div class="topic-icon-key-columns">
+                    <div class="topic-icon-key-column">
+                        <span class="topic-icon-key-heading">Topic rows</span>
+                        <ul class="topic-icon-key-list">
+                            <li data-icon-key="branch">
+                                <span class="topic-icon-key-glyphs">
+                                    <MudIcon Icon="@TopicTreeIconLanguage.BranchGlyph(isExpanded: false)" Size="Size.Small"
+                                             Class="topic-node-icon topic-role--branch"/>
+                                    <MudIcon Icon="@TopicTreeIconLanguage.BranchGlyph(isExpanded: true)" Size="Size.Small"
+                                             Class="topic-node-icon topic-role--branch"/>
+                                </span>
+                                <span class="topic-icon-key-text">Topic with subtopics (folder)</span>
+                            </li>
+                            <li data-icon-key="leaf">
+                                <span class="topic-icon-key-glyphs">
+                                    <MudIcon Icon="@TopicTreeIconLanguage.LeafGlyph" Size="Size.Small"
+                                             Class="topic-node-icon topic-role--leaf"/>
+                                </span>
+                                <span class="topic-icon-key-text">Topic with no subtopics (green circle, not health or message presence)</span>
+                            </li>
+                            <li data-icon-key="counts">
+                                <span class="topic-icon-key-glyphs">
+                                    <span class="topic-icon-key-sample">T 3 · M 42</span>
+                                </span>
+                                <span class="topic-icon-key-text">Topics below; messages there and below</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="topic-icon-key-column">
+                        <span class="topic-icon-key-heading">Sparkplug grouping</span>
+                        <ul class="topic-icon-key-list">
+                            @foreach (var role in SparkplugRoles)
+                            {
+                                <li data-icon-key="@role.Hook">
+                                    <span class="topic-icon-key-glyphs">
+                                        <MudIcon Icon="@TopicTreeIconLanguage.RoleGlyph(role.Kind)" Size="Size.Small"
+                                                 Class="@($"topic-node-icon {TopicTreeIconLanguage.RoleClass(role.Kind)}")"/>
+                                    </span>
+                                    <span class="topic-icon-key-text">@role.Explanation</span>
+                                </li>
+                            }
+                            <li data-icon-key="message-type">
+                                <span class="topic-icon-key-glyphs">
+                                    <MudIcon Icon="@TopicTreeIconLanguage.MessageTypeGlyph" Size="Size.Small"
+                                             Class="topic-node-icon topic-role--node"/>
+                                    <MudIcon Icon="@TopicTreeIconLanguage.MessageTypeGlyph" Size="Size.Small"
+                                             Class="topic-node-icon topic-role--device"/>
+                                </span>
+                                <span class="topic-icon-key-text">Message type, such as NDATA or NCMD: violet under a node, amber under a device</span>
+                            </li>
+                            <li data-icon-key="grouping-row">
+                                <span class="topic-icon-key-glyphs">
+                                    <span class="topic-icon-key-sample topic-icon-key-sample--group">grouping</span>
+                                </span>
+                                <span class="topic-icon-key-text">Grouping row: not a real MQTT topic</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <p class="topic-icon-key-note">Shape and colour name the category. Labels and tooltips carry the same meaning without relying on colour.</p>
+            </div>
+        }
         @if (_visibleRows.Count > 0)
         {
             <Virtualize Items="@_visibleRows" Context="row" ItemSize="36">
@@ -63,9 +139,11 @@
 
 @code {
     private string? _searchFilter;
+    [CascadingParameter(Name = "IsDarkMode")] private bool? DarkMode { get; set; }
     private Timer? _updateTimer;
     private bool _disposed;
     private bool _groupSparkplugTopics;
+    private bool _iconKeyOpen;
     private long _lastTreeVersion;
     private Guid _lastSelectionStoreId;
     private long _lastSelectionGeneration;
@@ -73,7 +151,30 @@
     private readonly HashSet<string> _expandedPaths = [];
     private string? _selectedKey;
 
+    // The key explains the glyphs of both tree modes from one place, so it names every Sparkplug
+    // role the grouping view can show. A message type keeps its own hue from its owner rather than
+    // a colour of its own, so the node and device lines are joined by one explicit message-type
+    // line that shows both owner tones.
+    private static readonly (TopicTreeRowKind Kind, string Hook, string Explanation)[] SparkplugRoles =
+    [
+        (TopicTreeRowKind.SparkplugNamespace, "namespace", "Sparkplug namespace (spBv1.0)"),
+        (TopicTreeRowKind.SparkplugGroup, "group", "Sparkplug group id"),
+        (TopicTreeRowKind.SparkplugNode, "node", "Node or gateway that published"),
+        (TopicTreeRowKind.SparkplugDevice, "device", "Device under that node")
+    ];
+
     [Parameter] public EventCallback<SelectedTopicState> OnSelectedChanged { get; set; }
+
+    // Points the toggle at the panel only while the panel is on the page.
+    private string? IconKeyControls => _iconKeyOpen ? "topic-icon-key" : null;
+
+    // The app opens in dark mode, so a bare instance or a unit test that cannot cascade still
+    // gets the dark tones rather than light tones on a dark surface.
+    private string TreeThemeClass => (DarkMode ?? true) ? "topic-tree--dark" : "topic-tree--light";
+
+    private void ToggleIconKey() => _iconKeyOpen = !_iconKeyOpen;
+
+    private void CloseIconKey() => _iconKeyOpen = false;
 
     protected override void OnInitialized()
     {

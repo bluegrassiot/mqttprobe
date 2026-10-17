@@ -14,6 +14,13 @@ public enum TopicTreeRowKind
     MessageType
 }
 
+// A node or device owns the message-type rows grouped beneath it and shares its colour with them.
+public enum TopicTreeOwner
+{
+    Node,
+    Device
+}
+
 public sealed record TopicTreeRowModel(
     string FullPath,
     string DisplayName,
@@ -25,7 +32,8 @@ public sealed record TopicTreeRowModel(
     bool IsValueBearer,
     TopicTreeRowKind Kind = TopicTreeRowKind.Topic,
     ImmutableArray<string> SelectionTopics = default,
-    SparkplugSelectionScope? Scope = null)
+    SparkplugSelectionScope? Scope = null,
+    TopicTreeOwner? Owner = null)
 {
     public bool IsVirtualTopic => Kind is not (TopicTreeRowKind.Topic
         or TopicTreeRowKind.SparkplugNamespace

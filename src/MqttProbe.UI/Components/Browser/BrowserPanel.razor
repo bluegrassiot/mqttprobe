@@ -138,6 +138,7 @@
             return;
 
         await MessageStoreManager.ClearAllMessages();
+        _lastCount = MessageStoreManager.RootTopicCount;
         Snackbar.Add("All stored messages cleared.", Severity.Success);
     }
 

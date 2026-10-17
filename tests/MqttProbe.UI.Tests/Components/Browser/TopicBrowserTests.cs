@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
+using MqttProbe.UI.Components.Layout;
 using MqttProbe.UI.Tests.TestHelpers;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
@@ -491,10 +492,10 @@ public class TopicBrowserInteractionTests : BunitTestContext
     }
 
     [Test]
-    public void ValueBearerLeaf_RendersDatabaseIcon()
+    public void ValueBearerLeaf_IsAGreenCircleWithoutASeparateMarker()
     {
-        // BuildTree() has humidity with 2 messages (value-bearing leaf).
-        // sensors has empty Messages queue (structural-only).
+        // BuildTree() has humidity with 2 messages (a leaf holding messages of its own) while
+        // sensors is structural only.
         _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
@@ -505,12 +506,13 @@ public class TopicBrowserInteractionTests : BunitTestContext
         cut.WaitForAssertion(() =>
         {
             var rows = cut.FindAll(".topic-tree-row");
-            // Find the humidity row (has messages, value-bearing leaf)
-            var humidityRow = rows.FirstOrDefault(r => r.TextContent.Contains("humidity"));
+            var humidityRow = rows.FirstOrDefault(r => r.TextContent.Contains("humidity", StringComparison.Ordinal));
             humidityRow.Should().NotBeNull();
-            // Value-bearing nodes should render with success color after Task 6.
-            // MudBlazor MudIcon with Color.Success renders class "mud-success-text".
-            humidityRow!.InnerHtml.Should().Contain("mud-success-text");
+            humidityRow!.QuerySelector(".topic-node-icon.topic-role--leaf").Should().NotBeNull(
+                "an ordinary topic stays a green circle whether or not it holds messages");
+            humidityRow.QuerySelector(".topic-direct-badge").Should().BeNull(
+                "the separate message-presence marker is removed");
+            humidityRow.InnerHtml.Should().NotContain(LucideIcons.Database);
         });
     }
 

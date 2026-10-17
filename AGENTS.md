@@ -2,6 +2,8 @@
 
 ## Repository setup
 
+- Create new worktrees under `.worktrees/<task-name>` in the main repository root, not in tool-managed storage, sibling folders, or temporary directories. When already in a worktree, use the main repository's `.worktrees` directory rather than nesting another `.worktrees` inside the current worktree.
+- Use a worktree creation method that supports this location. If a tool chooses its own location and cannot target the repository's `.worktrees` directory, do not use it to create worktrees. Existing worktrees stay where they are unless the user explicitly asks to move them.
 - After cloning or creating a worktree, run `git submodule update --init --recursive` from that checkout before building, testing, formatting, or loading the solution in Roslynk.
 - `external/SparkplugNet` is a required build dependency. Each new worktree needs its own submodule checkout, even if the original worktree already has it initialized.
 - If a check reports a missing SparkplugNet project, check `git submodule status` and initialize the submodule before treating it as a source-code failure. Use the commit pinned by the repository, not `--remote`.

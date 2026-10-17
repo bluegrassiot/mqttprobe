@@ -19,9 +19,33 @@
     flex: 0 0 32px;
 }
 
+/* The expand and collapse chevron is the tree's brand orange in both themes, so orange is not
+   reserved for selection. It keeps its shape and its place on the left, well apart from the
+   small green dot after the label. Scoped to the row chevrons only. */
+.topic-tree-row ::deep .topic-role--brand { color: var(--topic-role-brand, #F97316); }
+
+.topic-tree-row ::deep .topic-chevron:hover {
+    color: var(--topic-role-brand, #F97316);
+    background-color: rgba(249, 115, 22, 0.14);
+}
+
+/* One glyph per row: shape says structure or endpoint, colour says which category it belongs to.
+   MudIcon's own element carries no scope attribute, hence ::deep for both glyph and tone. */
+.topic-tree-row ::deep .topic-node-icon {
+    flex: 0 0 auto;
+    margin: 0 4px;
+}
+
+.topic-tree-row ::deep .topic-role--branch { color: var(--topic-role-branch, #38BDF8); }
+.topic-tree-row ::deep .topic-role--leaf { color: var(--topic-role-leaf, #22C55E); }
+.topic-tree-row ::deep .topic-role--namespace { color: var(--topic-role-brand, #F97316); }
+.topic-tree-row ::deep .topic-role--group { color: var(--topic-role-group, #F472B6); }
+.topic-tree-row ::deep .topic-role--node { color: var(--topic-role-node, #A78BFA); }
+.topic-tree-row ::deep .topic-role--device { color: var(--topic-role-device, #FBBF24); }
+
 .topic-tree-row--selected {
     background: rgba(249, 115, 22, 0.12);
-    border-left: 2px solid #f97316;
+    border-left: 2px solid var(--topic-role-brand, #f97316);
 }
 
 /* Grouping rows are navigation, not topics, so they get a default cursor. */
@@ -38,7 +62,15 @@
     border-bottom: 1px dotted rgba(148, 163, 184, 0.55);
 }
 
-.topic-tree-row .flex-grow-1 {
+/* The name cell grows; only the name itself truncates, so a long value ellipsizes without
+   pushing the subtree totals or leaving a gap where a marker used to sit. */
+.topic-tree-row .flex-grow-1.topic-name-cell {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.topic-tree-row .topic-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

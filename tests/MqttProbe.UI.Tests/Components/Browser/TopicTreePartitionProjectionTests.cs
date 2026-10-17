@@ -94,10 +94,9 @@ public sealed class TopicTreePartitionProjectionTests
             ("DDATA", 2, TopicTreeRowKind.Topic),
             ("n", 3, TopicTreeRowKind.Topic),
             ("n", 2, TopicTreeRowKind.SparkplugNode),
-            ("Devices", 3, TopicTreeRowKind.Devices),
-            ("dev1", 4, TopicTreeRowKind.SparkplugDevice),
-            ("DDATA", 5, TopicTreeRowKind.MessageType),
-            ("spBv1.0/g/DDATA/n/dev1", 6, TopicTreeRowKind.Topic));
+            ("dev1", 3, TopicTreeRowKind.SparkplugDevice),
+            ("DDATA", 4, TopicTreeRowKind.MessageType),
+            ("spBv1.0/g/DDATA/n/dev1", 5, TopicTreeRowKind.Topic));
 
         rows.Single(row => row.FullPath == "spBv1.0/g/DDATA").MessageCount.Should().Be(3);
         rows.Single(row => row.FullPath == "spBv1.0/g/DDATA/n")
@@ -180,9 +179,9 @@ public sealed class TopicTreePartitionProjectionTests
 
         var nodeData = rows.Single(row => row is { Kind: TopicTreeRowKind.MessageType, DisplayName: "NDATA" });
         nodeData.MessageCount.Should().Be(Snapshot(tree, "spBv1.0/g/NDATA/n1").MessageCount);
-        var devices = rows.Single(row => row.Kind == TopicTreeRowKind.Devices);
-        devices.MessageCount.Should().Be(Snapshot(tree, "spBv1.0/g/DDATA/n1/dev1").MessageCount);
-        devices.MessageCount.Should().NotBe(Snapshot(tree, "spBv1.0/g/DDATA").MessageCount,
+        var device1 = rows.Single(row => row is { Kind: TopicTreeRowKind.SparkplugDevice, DisplayName: "dev1" });
+        device1.MessageCount.Should().Be(Snapshot(tree, "spBv1.0/g/DDATA/n1/dev1").MessageCount);
+        device1.MessageCount.Should().NotBe(Snapshot(tree, "spBv1.0/g/DDATA").MessageCount,
             "the residual prefix total is not used for a virtual partition");
     }
 

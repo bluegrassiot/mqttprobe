@@ -50,10 +50,9 @@ public sealed class TopicTreeCommandProjectionTests
             ("spBv1.0", 0, TopicTreeRowKind.SparkplugNamespace),
             ("plant1", 1, TopicTreeRowKind.SparkplugGroup),
             ("node1", 2, TopicTreeRowKind.SparkplugNode),
-            ("Devices", 3, TopicTreeRowKind.Devices),
-            ("dev1", 4, TopicTreeRowKind.SparkplugDevice),
-            ("DCMD", 5, TopicTreeRowKind.MessageType),
-            ("spBv1.0/plant1/DCMD/node1/dev1", 6, TopicTreeRowKind.Topic));
+            ("dev1", 3, TopicTreeRowKind.SparkplugDevice),
+            ("DCMD", 4, TopicTreeRowKind.MessageType),
+            ("spBv1.0/plant1/DCMD/node1/dev1", 5, TopicTreeRowKind.Topic));
 
         rows[^1].IsVirtualTopic.Should().BeFalse();
         rows[^1].MessageCount.Should().Be(3);

@@ -77,13 +77,13 @@ public sealed class TopicBrowserGroupedSelectionTests : BunitTestContext
     }
 
     [Test]
-    public async Task SelectingTheDevicesRow_ExcludesTheNodesOwnTraffic()
+    public async Task SelectingADeviceRow_ExcludesTheNodesOwnTraffic()
     {
         await PublishAsync("spBv1.0/plant1/NBIRTH/node1", "birth");
         await PublishAsync("spBv1.0/plant1/DDATA/node1/dev1", "dev1-data");
         var cut = await RenderExpandedAsync();
 
-        await cut.InvokeAsync(() => RowWith(cut, "Devices").Click());
+        await cut.InvokeAsync(() => RowWith(cut, "dev1").Click());
 
         var state = _manager.GetSelectedTopicState();
         state.MessageCount.Should().Be(1);

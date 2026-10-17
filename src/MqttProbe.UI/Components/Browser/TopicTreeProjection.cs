@@ -187,7 +187,8 @@ internal static class TopicTreeProjection
             IsValueBearer: node.IsRealTopic && node.Source!.HasDirectMessages,
             Kind: node.Kind,
             SelectionTopics: node.SelectionTopics(),
-            Scope: node.Scope));
+            Scope: node.Scope,
+            Owner: node.Owner));
 
         if (!hasChildren || (!isExpanded && !context.HasFilter))
             return;
@@ -276,12 +277,10 @@ internal static class TopicTreeProjection
                 built.Children.Add(residual);
         }
 
+        // Devices are ordinary children of the node, so the node holds its message-type groups
+        // first and the device rows after them with no synthetic Devices wrapper between.
         foreach (var branch in nodes.Values)
-        {
-            if (branch.Devices is not null)
-                branch.Node.Children.Add(branch.Devices);
             built.Children.Add(branch.Node);
-        }
 
         return built;
     }
@@ -327,7 +326,8 @@ internal static class TopicTreeProjection
             var branch = GetOrCreateNode(nodes, groupPath, tip.Topic);
 
             var typeRow = VirtualRow(
-                $"nm:{groupPath}/{tip.Topic}/{verb}", verb, TopicTreeRowKind.MessageType, MessageTypeOrder(verb));
+                $"nm:{groupPath}/{tip.Topic}/{verb}", verb, TopicTreeRowKind.MessageType, MessageTypeOrder(verb),
+                owner: TopicTreeOwner.Node);
             typeRow.Children.Add(GroupedTip(tip));
             branch.Node.Children.Add(typeRow);
         }
@@ -352,24 +352,21 @@ internal static class TopicTreeProjection
 
                 groupedTips.Add(deviceNode.FullTopic);
                 var branch = GetOrCreateNode(nodes, groupPath, nodeLevel.Topic);
-                branch.Devices ??= VirtualRow(
-                    $"dev:{groupPath}/{nodeLevel.Topic}", "Devices", TopicTreeRowKind.Devices, order: DeviceGroupOrder,
-                    scope: new SparkplugSelectionScope(SparkplugSelectionKind.Devices, groupPath, nodeLevel.Topic));
 
                 var deviceId = deviceNode.Topic;
                 if (!branch.DeviceRows.TryGetValue(deviceId, out var deviceRow))
                 {
                     deviceRow = VirtualRow(
                         $"device:{groupPath}/{nodeLevel.Topic}/{deviceId}",
-                        deviceId, TopicTreeRowKind.SparkplugDevice, order: 0,
+                        deviceId, TopicTreeRowKind.SparkplugDevice, order: DeviceRowOrder,
                         scope: new SparkplugSelectionScope(SparkplugSelectionKind.Device, groupPath, nodeLevel.Topic, deviceId));
                     branch.DeviceRows[deviceId] = deviceRow;
-                    branch.Devices.Children.Add(deviceRow);
+                    branch.Node.Children.Add(deviceRow);
                 }
 
                 var typeRow = VirtualRow(
                     $"devt:{groupPath}/{nodeLevel.Topic}/{deviceId}/{verb}",
-                    verb, TopicTreeRowKind.MessageType, MessageTypeOrder(verb));
+                    verb, TopicTreeRowKind.MessageType, MessageTypeOrder(verb), owner: TopicTreeOwner.Device);
                 typeRow.Children.Add(GroupedTip(deviceNode));
                 deviceRow.Children.Add(typeRow);
             }
@@ -420,18 +417,20 @@ internal static class TopicTreeProjection
     }
 
     private static ProjectionNode VirtualRow(
-        string id, string label, TopicTreeRowKind kind, int order, SparkplugSelectionScope? scope = null) => new()
+        string id, string label, TopicTreeRowKind kind, int order,
+        SparkplugSelectionScope? scope = null, TopicTreeOwner? owner = null) => new()
         {
             Id = VirtualIdPrefix + id,
             Label = label,
             Kind = kind,
             Order = order,
-            Scope = scope
+            Scope = scope,
+            Owner = owner
         };
 
-    // Node message types sort by lifecycle ahead of the Devices group, the node branch's only
-    // other sibling.
-    private const int DeviceGroupOrder = 10;
+    // Node message types sort by lifecycle ahead of the device rows, the node branch's other
+    // children, so every node type sits above every device.
+    private const int DeviceRowOrder = 10;
 
     // Birth, death, data, then command: the order an operator reads a node's lifecycle.
     private static int MessageTypeOrder(string verb) => verb switch
@@ -449,8 +448,6 @@ internal static class TopicTreeProjection
     {
         public required ProjectionNode Node { get; init; }
 
-        public ProjectionNode? Devices { get; set; }
-
         public Dictionary<string, ProjectionNode> DeviceRows { get; } = new(StringComparer.Ordinal);
     }
 
@@ -465,6 +462,8 @@ internal static class TopicTreeProjection
         public TopicTreeRowKind Kind { get; init; }
 
         public SparkplugSelectionScope? Scope { get; init; }
+
+        public TopicTreeOwner? Owner { get; init; }
 
         public TopicNodeSnapshot? Source { get; init; }
 

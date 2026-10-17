@@ -78,7 +78,6 @@ public class TopicBrowserGroupingTests : BunitTestContext
 
         cut.Markup.Should().Contain("Grouped by node and device");
         cut.FindAll(".topic-tree-row--group").Should().NotBeEmpty();
-        cut.Markup.Should().Contain("Devices");
         cut.Markup.Should().Contain("plant1");
         cut.Markup.Should().Contain("node1");
         cut.Markup.Should().Contain("dev1");
@@ -166,17 +165,6 @@ public class TopicBrowserGroupingTests : BunitTestContext
         ]);
         callbackState.Should().NotBeNull();
         cut.Markup.Should().Contain("NDATA", "the click selected rather than collapsed");
-    }
-
-    [Test]
-    public void ClickingDevicesRow_SelectsOnlyDeviceTopics()
-    {
-        var cut = RenderGrouped(grouped: true);
-
-        RowWith(cut, "Devices").Click();
-
-        _fixture.Selections.Should().ContainSingle();
-        _fixture.Selections[0].Topics.Should().BeEquivalentTo([DeviceTip]);
     }
 
     [Test]
@@ -280,7 +268,6 @@ public class TopicBrowserGroupingTests : BunitTestContext
         cut.WaitForAssertion(() =>
         {
             cut.Markup.Should().Contain("dev1");
-            cut.Markup.Should().Contain("Devices");
             cut.Markup.Should().Contain(DeviceTip);
             cut.Markup.Should().NotContain("scada");
             cut.Markup.Should().NotContain("sensors");

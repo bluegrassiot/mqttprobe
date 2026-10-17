@@ -164,17 +164,19 @@ dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~SparkplugEmulatorPub
 through the real UI against the shared local fixture. The grouping preference is enabled through
 Settings, Sparkplug, "Group Sparkplug topics by node and device"; each case subscribes to its own
 `spBv1.0/<group>/#` filter, publishes canonical `NBIRTH`/`NDATA`/`NDEATH`/`DBIRTH`/`DDATA` topics
-from a plain MQTTnet client, and clears all stored messages first so its group owns the tree and
-its `Devices` row is unambiguous. Six cases:
+from a plain MQTTnet client, and clears all stored messages first so its group owns the tree. Device
+rows appear directly beneath their node, without an intermediate `Devices` row. Six cases:
 
-1. grouped tree shape: grouping rows are marked, the row body selects without expanding or
-   collapsing, the chevron collapses the selected row without moving the selection, and the
-   `Devices` row selects device topics only (no node `NBIRTH`/`NDATA`);
+1. grouped tree shape: grouping rows are marked, the device row is directly beneath its node, the
+   row body selects without expanding or collapsing, the chevron collapses the selected row without
+   moving the selection, and selecting the actual device row includes device topics only (no node
+   `NBIRTH`/`NDATA`);
 2. a selected node gains its first new message type, gains a device that appears under it, and a
    selected device gains its first new verb;
-3. a selected `Devices` row gains the first message from a new device, joining the list and count;
-4. a collapsed selected group still updates, re-clicking the same row keeps the selected message
-   detail, and unrelated traffic does not change the selection's membership;
+3. selecting one actual device excludes messages from another device;
+4. a collapsed selected node still updates when a new device appears beneath it, re-clicking the same
+   row keeps the selected message detail, and unrelated traffic does not change the selection's
+   membership;
 5. on the mobile viewport a picker-closed selection stays live, and the mobile label is readable
    and never exposes the internal grouping key;
 6. purging one selected member through an exclude filter clears the whole selection and list, and
@@ -200,7 +202,7 @@ dotnet test tests/MqttProbe.BrowserSmokeTests --filter TestCategory=SparkplugGro
 # Individual cases
 dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~GroupedTreeRowBodySelectsDevicesExcludeNodeTraffic
 dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~SelectedNodeGainsFirstNewMessageTypeAndDeviceVerb
-dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~SelectedDevicesGainsFirstNewDevice
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~SelectedDeviceDoesNotGainOtherDeviceMessages
 dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~CollapsedSelectedGroupUpdatesAndReclickKeepsDetail
 dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~MobilePickerSelectionStaysLiveAndLabelIsReadable
 dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~PurgingOneSelectedMemberClearsSelectionAndFreshTrafficDoesNotResurrect

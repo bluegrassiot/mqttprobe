@@ -59,23 +59,23 @@ public sealed partial class MqttLiveFlowsSmokeTests
             await EnsureSparkplugGroupingAsync(page, token);
             await ClearAllStoredMessagesAsync(page, token);
 
-            SetStage("one device present, Devices selected with an open detail");
+            SetStage("one device present, node selected with an open detail");
             await PublishAsync(mqtt, dbirth1, "device-birth", token);
             await PublishAsync(mqtt, ddata1, "device-1", token);
             await AwaitNamespaceMessageCountAsync(page, 2, token);
             await ExpandAllTreeAsync(page, token);
-            await WaitForGroupRowAsync(page, "Devices", token);
-            await ClickRowBodyAsync(DesktopVirtualRow(page, "Devices"), token);
+            await WaitForGroupRowAsync(page, node, token);
+            await ClickRowBodyAsync(DesktopVirtualRow(page, node), token);
             await OpenDesktopDetailAsync(page, ddata1, token);
 
-            SetStage("re-clicking the same group keeps the selected message detail");
-            await ClickRowBodyAsync(DesktopVirtualRow(page, "Devices"), token);
+            SetStage("re-clicking the same node keeps the selected message detail");
+            await ClickRowBodyAsync(DesktopVirtualRow(page, node), token);
             Assert.That(await DetailTopicTextAsync(page, token), Is.EqualTo(ddata1),
                 "re-selecting the same grouping row must not move the selection or drop the detail");
             await CloseDesktopDetailAsync(page, token);
 
-            SetStage("collapsed selected group still gains a new member");
-            await ClickGroupChevronAsync(page, "Devices", token);
+            SetStage("collapsed selected node still gains a new device member");
+            await ClickGroupChevronAsync(page, node, token);
             await PublishAsync(mqtt, ddata2, "device-2", token);
             await ExpectDesktopPayloadTopicAsync(page, ddata2, token);
 

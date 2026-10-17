@@ -147,10 +147,9 @@ public sealed class TopicTreeRetentionProjectionTests
             ("spBv1.0", 0, TopicTreeRowKind.SparkplugNamespace),
             ("g", 1, TopicTreeRowKind.SparkplugGroup),
             ("n1", 2, TopicTreeRowKind.SparkplugNode),
-            ("Devices", 3, TopicTreeRowKind.Devices),
-            ("dev1", 4, TopicTreeRowKind.SparkplugDevice),
-            ("DDATA", 5, TopicTreeRowKind.MessageType),
-            ("spBv1.0/g/DDATA/n1/dev1", 6, TopicTreeRowKind.Topic));
+            ("dev1", 3, TopicTreeRowKind.SparkplugDevice),
+            ("DDATA", 4, TopicTreeRowKind.MessageType),
+            ("spBv1.0/g/DDATA/n1/dev1", 5, TopicTreeRowKind.Topic));
 
         rows[^1].IsValueBearer.Should().BeFalse();
         rows[^1].MessageCount.Should().Be(0);
@@ -184,7 +183,7 @@ public sealed class TopicTreeRetentionProjectionTests
 
         var rows = Rows(tree);
 
-        rows.Should().Contain(row => row.Kind == TopicTreeRowKind.Devices);
+        rows.Should().Contain(row => row.Kind == TopicTreeRowKind.SparkplugDevice);
         rows.Should().Contain(row => row.Kind == TopicTreeRowKind.MessageType && row.DisplayName == verb);
         rows.Should().Contain(row => row.FullPath == $"spBv1.0/g/{verb}/n1/dev1" && !row.IsVirtualTopic);
     }
@@ -249,11 +248,10 @@ public sealed class TopicTreeRetentionProjectionTests
             ("spBv1.0", 0, TopicTreeRowKind.SparkplugNamespace),
             ("g", 1, TopicTreeRowKind.SparkplugGroup),
             ("n1", 2, TopicTreeRowKind.SparkplugNode),
-            ("Devices", 3, TopicTreeRowKind.Devices),
-            ("dev1", 4, TopicTreeRowKind.SparkplugDevice),
-            ("DDATA", 5, TopicTreeRowKind.MessageType),
-            ("spBv1.0/g/DDATA/n1/dev1", 6, TopicTreeRowKind.Topic),
-            ("extra", 7, TopicTreeRowKind.Topic));
+            ("dev1", 3, TopicTreeRowKind.SparkplugDevice),
+            ("DDATA", 4, TopicTreeRowKind.MessageType),
+            ("spBv1.0/g/DDATA/n1/dev1", 5, TopicTreeRowKind.Topic),
+            ("extra", 6, TopicTreeRowKind.Topic));
 
         rows.Single(row => row.FullPath == "spBv1.0/g/DDATA/n1/dev1").IsValueBearer.Should().BeFalse();
         rows.Single(row => row.FullPath == "spBv1.0/g/DDATA/n1/dev1").MessageCount.Should().Be(1);

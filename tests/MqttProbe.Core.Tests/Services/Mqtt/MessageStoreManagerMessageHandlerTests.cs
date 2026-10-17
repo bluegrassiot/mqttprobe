@@ -710,8 +710,8 @@ public partial class MessageStoreManagerMessageHandlerTests
         await built.Fire(MakeBinaryArgs("spBv1.0/g/NDATA/n1", AliasOnlyDataPayload()));
 
         received.Should().NotBeNull();
-        received!.AliasNames.Should().NotBeNull();
-        received.AliasNames![7].Should().Be("temperature");
+        received.AliasNames.Should().NotBeNull();
+        received.AliasNames[7].Should().Be("temperature");
     }
 
     [Test]
@@ -763,8 +763,8 @@ public partial class MessageStoreManagerMessageHandlerTests
         await handler!(MakeBinaryArgs("spBv1.0/g/NDATA/n1", AliasOnlyDataPayload()));
 
         received.Should().NotBeNull();
-        received!.AliasNames.Should().NotBeNull();
-        received.AliasNames![7].Should().Be("temperature");
+        received.AliasNames.Should().NotBeNull();
+        received.AliasNames[7].Should().Be("temperature");
     }
 
     [Test]

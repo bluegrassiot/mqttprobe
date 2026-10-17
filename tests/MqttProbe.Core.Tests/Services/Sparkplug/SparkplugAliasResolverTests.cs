@@ -146,7 +146,7 @@ public class SparkplugAliasResolverTests
             "spBv1.0/group/NDATA/eon1", Parse(null, 42, 3.14), groups);
 
         result.Should().NotBeNull();
-        result![42].Should().Be("Flow Rate");
+        result[42].Should().Be("Flow Rate");
     }
 
     [Test]
@@ -191,7 +191,7 @@ public class SparkplugAliasResolverTests
             "spBv1.0/group/DDATA/eon1/dev1", Parse(null, 10, 25.5), groups);
 
         result.Should().NotBeNull();
-        result![10].Should().Be("Temperature");
+        result[10].Should().Be("Temperature");
     }
 
     [Test]
@@ -207,7 +207,7 @@ public class SparkplugAliasResolverTests
             "spBv1.0/group/DDATA/eon1/missing", Parse(null, 10, 25.5), groups);
 
         result.Should().NotBeNull();
-        result![10].Should().Be("NodeTemperature");
+        result[10].Should().Be("NodeTemperature");
     }
 
     [Test]
@@ -248,7 +248,7 @@ public class SparkplugAliasResolverTests
             GroupsWithNodeAlias(42, "Flow Rate"));
 
         result.Should().NotBeNull();
-        result![42].Should().Be("Flow Rate");
+        result[42].Should().Be("Flow Rate");
     }
 
     [Test]
@@ -260,7 +260,7 @@ public class SparkplugAliasResolverTests
             "spBv1.0/group/NDATA/eon1", Envelope(bytes, null), GroupsWithNodeAlias(42, "Flow Rate"));
 
         result.Should().NotBeNull();
-        result![42].Should().Be("Flow Rate");
+        result[42].Should().Be("Flow Rate");
     }
 
     [Test]
@@ -272,6 +272,6 @@ public class SparkplugAliasResolverTests
             "spBv1.0/group/NDATA/eon1", Envelope(bytes, new object()), GroupsWithNodeAlias(42, "Flow Rate"));
 
         result.Should().NotBeNull();
-        result![42].Should().Be("Flow Rate");
+        result[42].Should().Be("Flow Rate");
     }
 }

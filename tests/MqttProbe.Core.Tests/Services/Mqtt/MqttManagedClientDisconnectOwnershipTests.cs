@@ -183,18 +183,26 @@ public class MqttManagedClientDisconnectOwnershipTests
         sut.ConnectionStateChangedAsync += _ => { Interlocked.Increment(ref stateCount); return Task.CompletedTask; };
 
         var attemptA = sut.StartAttempt(BuildOptions());
-        (await attemptA.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
 
-        var attemptB = sut.StartAttempt(BuildOptions());
-        (await attemptB.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
-        await cleanupAEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            (await attemptA.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
 
-        var stop = sut.StopAsync();
-        releaseCleanupA.TrySetResult();
-        await stop.WaitAsync(TimeSpan.FromSeconds(5));
+            var attemptB = sut.StartAttempt(BuildOptions());
+            (await attemptB.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
+            await cleanupAEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        Volatile.Read(ref disconnected).Should().Be(1, "only the explicitly stopped generation reports a deliberate disconnect");
-        Volatile.Read(ref stateCount).Should().Be(1, "a superseded generation must not emit deliberate-stop state");
+            var stop = sut.StopAsync();
+            releaseCleanupA.TrySetResult();
+            await stop.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Volatile.Read(ref disconnected).Should().Be(1, "only the explicitly stopped generation reports a deliberate disconnect");
+            Volatile.Read(ref stateCount).Should().Be(1, "a superseded generation must not emit deliberate-stop state");
+        }
+        finally
+        {
+            releaseCleanupA.TrySetResult();
+        }
     }
 
     [Test]
@@ -279,23 +287,32 @@ public class MqttManagedClientDisconnectOwnershipTests
         sut.ConnectionStateChangedAsync += _ => { Interlocked.Increment(ref stateCount); return Task.CompletedTask; };
 
         var attemptA = sut.StartAttempt(BuildOptions());
-        (await attemptA.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
-
-        var stop = sut.StopAsync();
-        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-
         using var bCts = new CancellationTokenSource();
-        var attemptB = sut.StartAttempt(BuildOptions(), bCts.Token);
-        await bStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        bCts.Cancel();
-        releaseB.TrySetResult();
-        (await attemptB.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Canceled);
 
-        releaseFirst.TrySetResult();
-        await stop.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            (await attemptA.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
 
-        Volatile.Read(ref secondDisconnected).Should().Be(0, "supersession must outlive the newer attempt's retirement");
-        Volatile.Read(ref stateCount).Should().Be(0, "a superseded generation must not emit trailing deliberate-stop state");
+            var stop = sut.StopAsync();
+            await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            var attemptB = sut.StartAttempt(BuildOptions(), bCts.Token);
+            await bStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            bCts.Cancel();
+            releaseB.TrySetResult();
+            (await attemptB.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Canceled);
+
+            releaseFirst.TrySetResult();
+            await stop.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Volatile.Read(ref secondDisconnected).Should().Be(0, "supersession must outlive the newer attempt's retirement");
+            Volatile.Read(ref stateCount).Should().Be(0, "a superseded generation must not emit trailing deliberate-stop state");
+        }
+        finally
+        {
+            releaseB.TrySetResult();
+            releaseFirst.TrySetResult();
+        }
     }
 
     [Test]

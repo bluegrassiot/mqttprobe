@@ -31,10 +31,7 @@ env:
 jobs:
   build-ios-archive:
     name: Build (iOS archive)
-    # Same runner and Xcode pin as build-macos.yml. macOS 15's default Xcode 16.4
-    # cannot build net10.0 Apple targets, and since 2026-04-28 App Store Connect
-    # rejects uploads built with an Xcode below 26.
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 45
     # The distribution secrets live in the ios-signing environment; its required
     # reviewers and deployment branch rule are the real gate. The ref test is
@@ -49,15 +46,27 @@ jobs:
         with:
           submodules: true
 
-      - name: Select Xcode 26.6
-        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+      - name: Select and identify Xcode 27
+        id: xcode
+        run: |
+          XCODE_APP=/Applications/Xcode_27.0.app
+          [[ -d "$XCODE_APP" ]] || { echo "::error::Xcode not found at $XCODE_APP"; exit 1; }
+          sudo xcode-select -s "$XCODE_APP"
+          xcode_info="$(xcodebuild -version)"
+          newline=$'\n'
+          xcode_version=${xcode_info%%"$newline"*}
+          xcode_build=${xcode_info#*"$newline"}
+          [[ "$xcode_version" == "Xcode 27.0" ]] || { echo "::error::Unexpected Xcode version: ${xcode_version:-missing}"; exit 1; }
+          [[ "$xcode_build" == "Build version "* ]] || { echo "::error::Xcode build version unavailable"; exit 1; }
+          xcode_build="${xcode_build#Build version }"
+          [[ -n "$xcode_build" && "$xcode_build" != *"$newline"* ]] || { echo "::error::Xcode build version unavailable"; exit 1; }
+          echo "version=$xcode_version ($xcode_build)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-dotnet-workload
         with:
-          dotnet-version: '10.x'
-
-      - name: Install MAUI iOS workload
-        run: dotnet workload install maui-ios --source https://api.nuget.org/v3/index.json
+          workload: maui-ios
+          workload-version: '10.0.402'
+          xcode-version: ${{ steps.xcode.outputs.version }}
 
       - name: Validate version and build number
         id: version

@@ -37,7 +37,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.x'
+          global-json-file: global.json
 
       - name: Restore NuGet cache
         uses: actions/cache@v6
@@ -133,7 +133,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.x'
+          global-json-file: global.json
 
       # Testcontainers reads the Docker config written by this login, so an
       # untrusted or unauthenticated run just falls back to anonymous pulls.
@@ -184,7 +184,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.x'
+          global-json-file: global.json
 
       - name: Restore NuGet cache
         uses: actions/cache@v6
@@ -263,24 +263,10 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
+      - uses: ./.github/actions/setup-dotnet-workload
         with:
-          dotnet-version: '10.x'
-
-      - name: Restore NuGet cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            C:/Program Files/dotnet/packs/
-            C:/Program Files/dotnet/metadata/workloads/
-          key: maui-windows-workload-${{ hashFiles('global.json') }}
-
-      - name: Install MAUI Windows workload
-        shell: pwsh
-        run: |
-          if (-not (dotnet workload list | Select-String 'maui-windows')) {
-            dotnet workload install maui-windows --source https://api.nuget.org/v3/index.json
-          }
+          workload: maui-windows
+          workload-version: '10.0.402'
 
       - name: Publish
         run: >
@@ -315,10 +301,6 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: '10.x'
-
       - uses: actions/setup-java@v6.1.0
         with:
           distribution: 'microsoft'
@@ -331,11 +313,10 @@ jobs:
           key: nuget-${{ hashFiles('Directory.Packages.props', 'src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj', 'src/MqttProbe.Core/MqttProbe.Core.csproj', 'src/MqttProbe.UI/MqttProbe.UI.csproj', 'global.json') }}
           restore-keys: nuget-
 
-      - name: Install MAUI Android workload
-        run: |
-          if ! dotnet workload list | grep -q 'maui-android'; then
-            dotnet workload install maui-android --source https://api.nuget.org/v3/index.json
-          fi
+      - uses: ./.github/actions/setup-dotnet-workload
+        with:
+          workload: maui-android
+          workload-version: '10.0.402'
 
       # Release config exercises the trimmer/linker like a real release,
       # but AOT is disabled to keep the smoke build fast.
@@ -370,7 +351,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.x'
+          global-json-file: global.json
 
       - name: Restore NuGet cache
         uses: actions/cache@v6

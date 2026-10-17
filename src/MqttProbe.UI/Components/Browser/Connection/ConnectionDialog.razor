@@ -116,9 +116,14 @@
             <div class="connection-actions-footer">
                 @if (_connectionState == ConnectionState.Connecting)
                 {
-                    <div class="d-flex align-center gap-2">
-                        <img class="signal-connecting-sm" width="26" height="26" src="/_content/MqttProbe.UI/img/signal-motif.svg" alt="" />
-                        <MudText Typo="Typo.subtitle1">Connecting...</MudText>
+                    <div class="connection-connecting-row" data-testid="connection-connecting-row">
+                        <div class="connection-connecting-indicator">
+                            <img class="signal-connecting-sm" width="26" height="26" src="/_content/MqttProbe.UI/img/signal-motif.svg" alt="" />
+                            <MudText Typo="Typo.subtitle1">Connecting...</MudText>
+                        </div>
+                        <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@LucideIcons.Square"
+                                   Class="mr-2" data-testid="cancel-connect"
+                                   OnClick="@(async () => await CancelConnect())">Stop</MudButton>
                     </div>
                 }
                 else
@@ -127,7 +132,7 @@
                         <MudButton Variant="Variant.Text" OnClick="@(async () => await RequestClose())"
                                    Class="mr-2">Cancel</MudButton>
                         <AppPrimaryButton title="Connect" MinWidth="true"
-                                    StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect)"
+                                    StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect || _operation is not null)"
                                     OnClick="@(async () => await Connect())">Connect</AppPrimaryButton>
                     </div>
                 }
@@ -143,20 +148,21 @@
     private MudForm _form = new();
     private ElementReference _dialogContent;
     private ConnectionDialogViewportInterop? _viewport;
-    private bool _disposed;
     private readonly ConnectionValidator _connectionValidator = new();
     private ConnectionState _connectionState;
     private Connection? _savedConnectionForSelector;
     private Connection _selectedConnection = new();
     private bool _canConnect, _canSave, _canDelete, _isFormValid, _formReportsValid = true;
     private int _activeTabIndex;
-    private CertificateSessionResource? _activeCertResource;
     private string? _stagedAssetId;
     private Guid _stagedAssetOwnerId;
     private ConnectionCertificateSection? _certSection;
 
     private Connection? _pendingAttemptConnection;
     private Connection? _pendingAttemptSavedSelector;
+    private ConnectOperation? _operation;
+    private int _handledOutcomeCount;
+    private bool _disposed;
 
     private Connection _baselineConnection = new();
     private bool _baselineCertHadPendingChange;
@@ -174,6 +180,8 @@
     internal Connection? SavedConnectionForSelectorTests => _savedConnectionForSelector;
     internal int ActiveTabIndexForTests => _activeTabIndex;
     internal string? NameCollisionErrorForTests => _nameCollisionError;
+    internal bool IsConnectingForTests => _connectionState == ConnectionState.Connecting;
+    internal int HandledOutcomeCountForTests => _handledOutcomeCount;
 
     internal void SetStagedCertificate(byte[]? pfxBytes, byte[]? pemCertBytes, byte[]? pemKeyBytes, string password)
     {
@@ -194,9 +202,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        ManagedMqttClient.ConnectingFailedAsync += OnConnectingFailed;
-        ManagedMqttClient.ConnectedAsync += OnConnected;
-
         var preselected = false;
         if (SessionState.LastSuccessfulConnectionId is { } lastId)
         {
@@ -300,15 +305,33 @@
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+
+        // Captured before the first await: the attempt's own completion retires the operation,
+        // so reading the field afterwards would leave that started connection running.
+        var operation = _operation;
+        if (operation is not null && !operation.Finalizing && !operation.Completed)
+        {
+            operation.Cancelled = true;
+            await operation.Cancellation.CancelAsync();
+        }
+
         if (_viewport is not null)
             await _viewport.DisposeAsync();
-        ManagedMqttClient.ConnectingFailedAsync -= OnConnectingFailed;
-        ManagedMqttClient.ConnectedAsync -= OnConnected;
-        if (_activeCertResource is not null)
+
+        if (operation is not null && !operation.Finalizing)
         {
-            _activeCertResource.Dispose();
-            _activeCertResource = null;
+            if (operation.AttemptStarted)
+            {
+                operation.Teardown ??= StopOwnedConnectionAsync(operation);
+                await operation.Teardown;
+                ReleaseOperation(operation);
+            }
+            else if (!operation.Completed && !operation.Building)
+            {
+                ReleaseOperation(operation);
+            }
         }
+
         if (_stagedAssetId is not null)
         {
             try { await CertStore.DeleteAsync(_stagedAssetOwnerId, _stagedAssetId); } catch { /* unreferenced staged asset */ }

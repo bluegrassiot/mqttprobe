@@ -4,48 +4,64 @@ using MQTTnet.Packets;
 
 namespace MqttProbe.Core.Services.Mqtt;
 
-public sealed class MqttManagedClient : IMqttManagedClient
+public sealed partial class MqttManagedClient : IMqttManagedClient
 {
     private const int MaxPendingMessages = 1000;
 
-    private readonly IMqttClient _client;
-    private readonly bool _ownsClient;
+    private readonly IMqttClientFactory _clientFactory;
+    private readonly IMqttClient? _adoptedClient;
+    private readonly bool _ownsAdoptedClient;
     private readonly ILogger<MqttManagedClient>? _logger;
     private readonly ISessionActivityGate _activityGate;
 
     private readonly Lock _sync = new();
     private readonly Dictionary<string, MqttTopicFilter> _subscriptions = new(StringComparer.Ordinal);
     private readonly Queue<MqttApplicationMessage> _pending = new();
+    private readonly HashSet<Generation> _generations = [];
     private readonly SemaphoreSlim _stopSemaphore = new(1, 1);
+    private readonly SemaphoreSlim _drainSemaphore = new(1, 1);
 
-    private MqttManagedClientOptions? _options;
-    private CancellationTokenSource? _reconnectCts;
-    private Task _reconnectLoop = Task.CompletedTask;
-    private bool _isStarted;
+    private Generation? _current;
+    private long _nextAttemptId;
+    private long _pendingHeadRevision;
+    private int _adoptedGenerationsUsed;
+    private bool _adoptedClientDisposed;
     private bool _disposed;
 
     public MqttManagedClient(ILogger<MqttManagedClient>? logger = null, ISessionActivityGate? gate = null)
-        : this(new MqttClientFactory().CreateMqttClient(), ownsClient: true, logger, gate)
+        : this(new MqttNetClientFactory(), logger, gate)
     {
     }
 
-    public MqttManagedClient(IMqttClient client, bool ownsClient = false, ILogger<MqttManagedClient>? logger = null, ISessionActivityGate? gate = null)
+    public MqttManagedClient(IMqttClientFactory clientFactory, ILogger<MqttManagedClient>? logger, ISessionActivityGate? gate = null)
     {
-        _client = client ?? throw new ArgumentNullException(nameof(client));
-        _ownsClient = ownsClient;
+        _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
         _logger = logger;
         _activityGate = gate ?? new AlwaysActiveSessionActivityGate();
-
-        _client.ConnectedAsync += OnClientConnectedAsync;
-        _client.DisconnectedAsync += OnClientDisconnectedAsync;
-        _client.ApplicationMessageReceivedAsync += OnClientApplicationMessageReceivedAsync;
     }
 
-    public bool IsConnected => _client.IsConnected;
+    // An adopted client backs one generation; use IMqttClientFactory to restart.
+    public MqttManagedClient(IMqttClient client, bool ownsClient = false, ILogger<MqttManagedClient>? logger = null, ISessionActivityGate? gate = null)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        _clientFactory = new AdoptedClientFactory(client);
+        _adoptedClient = client;
+        _ownsAdoptedClient = ownsClient;
+        _logger = logger;
+        _activityGate = gate ?? new AlwaysActiveSessionActivityGate();
+    }
+
+    public bool IsConnected
+    {
+        get
+        {
+            lock (_sync) { return _current?.Client.IsConnected ?? false; }
+        }
+    }
 
     public bool IsStarted
     {
-        get { lock (_sync) { return _isStarted; } }
+        get { lock (_sync) { return _current is not null; } }
     }
 
     public event Func<MqttClientConnectedEventArgs, Task>? ConnectedAsync;
@@ -54,66 +70,88 @@ public sealed class MqttManagedClient : IMqttManagedClient
     public event Func<EventArgs, Task>? ConnectionStateChangedAsync;
     public event Func<MqttApplicationMessageReceivedEventArgs, Task>? ApplicationMessageReceivedAsync;
     public event Func<MqttManagedProcessFailedEventArgs, Task>? SynchronizingSubscriptionsFailedAsync;
+    public event Func<MqttConnectOutcome, Task>? ConnectAttemptCompletedAsync;
+
+    private IMqttClient? ActiveClient
+    {
+        get { lock (_sync) { return _current?.Client; } }
+    }
 
     public async Task StartAsync(MqttManagedClientOptions options, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
         _activityGate.EnsureActive();
 
-        lock (_sync)
-        {
-            _options = options;
-            _isStarted = true;
-#pragma warning disable S6966
-            _reconnectCts?.Cancel();
-#pragma warning restore S6966
-            _reconnectCts?.Dispose();
-            _reconnectCts = _activityGate.RevocationToken.CanBeCanceled
-                ? CancellationTokenSource.CreateLinkedTokenSource(_activityGate.RevocationToken)
-                : new CancellationTokenSource();
-        }
+        var (generation, _) = BeginAttempt(options, cancellationToken);
+        await generation.OperationCompleted.Task.ConfigureAwait(false);
 
-        await TryConnectAsync(cancellationToken).ConfigureAwait(false);
+        MqttConnectStatus? settled;
+        lock (_sync) { settled = generation.SettledOutcome?.Status; }
+
+        if (cancellationToken.IsCancellationRequested && settled == MqttConnectStatus.Canceled)
+        {
+            throw new OperationCanceledException(
+                "The connection attempt was canceled by the caller.", cancellationToken);
+        }
+    }
+
+    public MqttConnectAttempt StartAttempt(MqttManagedClientOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _activityGate.EnsureActive();
+
+        var (_, attempt) = BeginAttempt(options, cancellationToken);
+        return attempt;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
+        Generation[] generations;
+        Generation? stopped;
         await _stopSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            CancellationTokenSource? cts;
             lock (_sync)
             {
-                if (!_isStarted)
-                    return;
-                _isStarted = false;
-                cts = _reconnectCts;
-                _reconnectCts = null;
+                generations = _generations.ToArray();
+                stopped = _current;
                 _pending.Clear();
+                _pendingHeadRevision++;
             }
 
-            if (cts is not null)
-            {
-                await cts.CancelAsync().ConfigureAwait(false);
-                cts.Dispose();
-            }
+            foreach (var generation in generations)
+                RetireGeneration(generation);
 
-            if (_client.IsConnected)
-            {
-                try
-                {
-                    await _client.DisconnectAsync(new MqttClientDisconnectOptions(), cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    _logger?.LogWarning(ex, "Error while disconnecting MQTT client during stop");
-                }
-            }
+            // Await every retiring generation, not just the (possibly already cleared)
+            // current one, so a caller that disposes certificate material after Stop cannot
+            // free it while a generation is still using it.
+            foreach (var generation in generations)
+                await generation.CleanupCompleted.Task.ConfigureAwait(false);
         }
         finally
         {
             _stopSemaphore.Release();
         }
+
+        // Emitted after releasing the semaphore: a Disconnected subscriber may itself call Stop.
+        if (stopped is not null)
+            await NotifyDeliberateStopAsync(stopped).ConfigureAwait(false);
+    }
+
+    public async Task StopAttemptAsync(MqttConnectAttemptId attemptId, CancellationToken cancellationToken = default)
+    {
+        Generation? target;
+        lock (_sync)
+        {
+            target = _generations.FirstOrDefault(generation => generation.AttemptId == attemptId);
+        }
+
+        if (target is null)
+            return;
+
+        RetireGeneration(target);
+        await target.CleanupCompleted.Task.ConfigureAwait(false);
+        await NotifyDeliberateStopAsync(target).ConfigureAwait(false);
     }
 
     public async Task SubscribeAsync(IEnumerable<MqttTopicFilter> topicFilters, CancellationToken cancellationToken = default)
@@ -129,14 +167,14 @@ public sealed class MqttManagedClient : IMqttManagedClient
                 _subscriptions[filter.Topic] = filter;
         }
 
-        if (_client.IsConnected)
+        if (ActiveClient is { IsConnected: true } client)
         {
             var builder = new MqttClientSubscribeOptionsBuilder();
             foreach (var filter in filters)
                 builder.WithTopicFilter(filter);
             using var linked = LinkWithRevocation(cancellationToken);
             var token = linked?.Token ?? cancellationToken;
-            await _client.SubscribeAsync(builder.Build(), token).ConfigureAwait(false);
+            await client.SubscribeAsync(builder.Build(), token).ConfigureAwait(false);
         }
     }
 
@@ -153,14 +191,14 @@ public sealed class MqttManagedClient : IMqttManagedClient
                 _subscriptions.Remove(topic);
         }
 
-        if (_client.IsConnected)
+        if (ActiveClient is { IsConnected: true } client)
         {
             var builder = new MqttClientUnsubscribeOptionsBuilder();
             foreach (var topic in list)
                 builder.WithTopicFilter(topic);
             using var linked = LinkWithRevocation(cancellationToken);
             var token = linked?.Token ?? cancellationToken;
-            await _client.UnsubscribeAsync(builder.Build(), token).ConfigureAwait(false);
+            await client.UnsubscribeAsync(builder.Build(), token).ConfigureAwait(false);
         }
     }
 
@@ -169,11 +207,11 @@ public sealed class MqttManagedClient : IMqttManagedClient
         ArgumentNullException.ThrowIfNull(applicationMessage);
         _activityGate.EnsureActive();
 
-        if (_client.IsConnected)
+        if (ActiveClient is { IsConnected: true } client)
         {
             using var linked = LinkWithRevocation(cancellationToken);
             var token = linked?.Token ?? cancellationToken;
-            await _client.PublishAsync(applicationMessage, token).ConfigureAwait(false);
+            await client.PublishAsync(applicationMessage, token).ConfigureAwait(false);
             return;
         }
 
@@ -182,6 +220,7 @@ public sealed class MqttManagedClient : IMqttManagedClient
             if (_pending.Count >= MaxPendingMessages)
             {
                 _pending.Dequeue();
+                _pendingHeadRevision++;
                 _logger?.LogWarning(
                     "Pending publish queue full ({Max}); dropped oldest message for topic {Topic}",
                     MaxPendingMessages, applicationMessage.Topic);
@@ -191,236 +230,60 @@ public sealed class MqttManagedClient : IMqttManagedClient
         }
     }
 
-    private async Task TryConnectAsync(CancellationToken cancellationToken)
+    public void Dispose()
     {
-        MqttManagedClientOptions? options;
+        _ = InitiateDispose();
+        DisposeAdoptedClient();
+
+        // _stopSemaphore is left undisposed on purpose: a StopAsync already past WaitAsync
+        // must still be able to Release. Disposing here would turn its finally into an
+        // ObjectDisposedException and strand the disconnect it was performing.
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        var generations = InitiateDispose();
+
+        foreach (var generation in generations)
+            await generation.CleanupCompleted.Task.ConfigureAwait(false);
+
+        DisposeAdoptedClient();
+    }
+
+    // Initiates disposal once, but returns the tracked generations every caller must await:
+    // a synchronous Dispose does not release another caller from the cleanup barrier.
+    private Generation[] InitiateDispose()
+    {
+        Generation[] generations;
         lock (_sync)
         {
-            options = _options;
+            _disposed = true;
+            generations = _generations.ToArray();
+            _current = null;
         }
 
-        if (options is null)
+        foreach (var generation in generations)
+            RetireGeneration(generation);
+
+        return generations;
+    }
+
+    private void DisposeAdoptedClient()
+    {
+        if (_adoptedClient is not { } client)
             return;
 
-        var linkedToken = _activityGate.RevocationToken.CanBeCanceled
-            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _activityGate.RevocationToken)
-            : null;
-        try
-        {
-            var token = linkedToken?.Token ?? cancellationToken;
-            await _client.ConnectAsync(options.ClientOptions, token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (_activityGate.RevocationToken.IsCancellationRequested)
-        {
-            // Revocation during initial connect is expected session termination;
-            // do not schedule reconnect or raise ConnectingFailed.
-        }
-        catch (Exception ex)
-        {
-            StartReconnectLoop();
-            await RaiseAsync(ConnectingFailedAsync, new MqttConnectingFailedEventArgs(ex), nameof(ConnectingFailedAsync))
-                .ConfigureAwait(false);
-        }
-        finally
-        {
-            linkedToken?.Dispose();
-        }
-    }
-
-    private async Task RaiseAsync<TArgs>(Func<TArgs, Task>? handler, TArgs args, string eventName)
-    {
-        if (handler is null)
-            return;
-
-        foreach (var subscriber in handler.GetInvocationList())
-        {
-            try
-            {
-                await ((Func<TArgs, Task>)subscriber)(args).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "A {EventName} subscriber threw; continuing", eventName);
-            }
-        }
-    }
-
-    private void StartReconnectLoop()
-    {
+        bool dispose;
         lock (_sync)
         {
-            if (!_isStarted || _reconnectCts is null)
-                return;
-            if (!_reconnectLoop.IsCompleted)
-                return;
-
-            _reconnectLoop = ReconnectLoopAsync(_reconnectCts.Token);
+            dispose = _ownsAdoptedClient && !_adoptedClientDisposed;
+            if (dispose)
+                _adoptedClientDisposed = true;
         }
+
+        if (dispose)
+            client.Dispose();
     }
-
-    private async Task ReconnectLoopAsync(CancellationToken cancellationToken)
-    {
-        var delay = _options?.AutoReconnectDelay ?? TimeSpan.FromSeconds(5);
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            bool started;
-            lock (_sync)
-            {
-                started = _isStarted;
-            }
-
-            if (!started || _client.IsConnected || !_activityGate.IsActive)
-                return;
-
-            try
-            {
-                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-
-            MqttManagedClientOptions? options;
-            lock (_sync)
-            {
-                options = _isStarted ? _options : null;
-            }
-
-            if (options is null)
-                return;
-
-            try
-            {
-                await _client.ConnectAsync(options.ClientOptions, cancellationToken).ConfigureAwait(false);
-                return;
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                await RaiseAsync(ConnectingFailedAsync, new MqttConnectingFailedEventArgs(ex), nameof(ConnectingFailedAsync))
-                    .ConfigureAwait(false);
-            }
-        }
-    }
-
-    private async Task OnClientConnectedAsync(MqttClientConnectedEventArgs args)
-    {
-        if (!_activityGate.IsActive)
-        {
-            // Connected callback arrived after session revocation. Disconnect immediately
-            // without resubscribing, draining, or emitting any application events.
-            if (_client.IsConnected)
-            {
-                try { await _client.DisconnectAsync(new MqttClientDisconnectOptions(), CancellationToken.None).ConfigureAwait(false); }
-                catch { /* best-effort disconnect after late connect */ }
-            }
-            return;
-        }
-
-        await ResubscribeAsync().ConfigureAwait(false);
-        await DrainPendingAsync().ConfigureAwait(false);
-
-        await RaiseAsync(ConnectedAsync, args, nameof(ConnectedAsync)).ConfigureAwait(false);
-        await RaiseConnectionStateChangedAsync().ConfigureAwait(false);
-    }
-
-    private async Task OnClientDisconnectedAsync(MqttClientDisconnectedEventArgs args)
-    {
-        bool started;
-        lock (_sync)
-        {
-            started = _isStarted;
-        }
-
-        if (started && _activityGate.IsActive)
-            StartReconnectLoop();
-
-        await RaiseAsync(DisconnectedAsync, args, nameof(DisconnectedAsync)).ConfigureAwait(false);
-        await RaiseConnectionStateChangedAsync().ConfigureAwait(false);
-    }
-
-    private Task OnClientApplicationMessageReceivedAsync(MqttApplicationMessageReceivedEventArgs args)
-    {
-        if (!_activityGate.IsActive)
-            return Task.CompletedTask;
-
-        return ApplicationMessageReceivedAsync?.Invoke(args) ?? Task.CompletedTask;
-    }
-
-    private async Task ResubscribeAsync()
-    {
-        List<MqttTopicFilter> filters;
-        lock (_sync)
-        {
-            if (_subscriptions.Count == 0)
-                return;
-            filters = _subscriptions.Values.ToList();
-        }
-
-        try
-        {
-            if (!_activityGate.IsActive) return;
-            var builder = new MqttClientSubscribeOptionsBuilder();
-            foreach (var filter in filters)
-                builder.WithTopicFilter(filter);
-            await _client.SubscribeAsync(builder.Build(), _activityGate.RevocationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (_activityGate.RevocationToken.IsCancellationRequested)
-        {
-            // Revocation during resubscribe is expected; suppress.
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Failed to restore {Count} subscription(s) after connect", filters.Count);
-            await RaiseAsync(SynchronizingSubscriptionsFailedAsync, new MqttManagedProcessFailedEventArgs(ex),
-                nameof(SynchronizingSubscriptionsFailedAsync)).ConfigureAwait(false);
-        }
-    }
-
-    private async Task DrainPendingAsync()
-    {
-        while (true)
-        {
-            if (!_activityGate.IsActive)
-                return;
-
-            MqttApplicationMessage? message;
-            lock (_sync)
-            {
-                if (_pending.Count == 0)
-                    return;
-                message = _pending.Peek();
-            }
-
-            try
-            {
-                await _client.PublishAsync(message, _activityGate.RevocationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (_activityGate.RevocationToken.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "Failed to publish queued message for topic {Topic}; will retry on next connect", message.Topic);
-                return;
-            }
-
-            lock (_sync)
-            {
-                if (_pending.Count > 0)
-                    _pending.Dequeue();
-            }
-        }
-    }
-
-    private Task RaiseConnectionStateChangedAsync() =>
-        RaiseAsync(ConnectionStateChangedAsync, EventArgs.Empty, nameof(ConnectionStateChangedAsync));
 
     private CancellationTokenSource? LinkWithRevocation(CancellationToken cancellationToken)
     {
@@ -429,39 +292,5 @@ public sealed class MqttManagedClient : IMqttManagedClient
         if (!cancellationToken.CanBeCanceled)
             return CancellationTokenSource.CreateLinkedTokenSource(_activityGate.RevocationToken);
         return CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _activityGate.RevocationToken);
-    }
-
-    public void Dispose()
-    {
-        CancellationTokenSource? cts;
-        lock (_sync)
-        {
-            if (_disposed)
-                return;
-            _disposed = true;
-            _isStarted = false;
-            cts = _reconnectCts;
-            _reconnectCts = null;
-        }
-
-        cts?.Cancel();
-        cts?.Dispose();
-
-        // _stopSemaphore is left undisposed on purpose: a StopAsync already past WaitAsync
-        // must still be able to Release. Disposing here would turn its finally into an
-        // ObjectDisposedException and strand the disconnect it was performing.
-
-        _client.ConnectedAsync -= OnClientConnectedAsync;
-        _client.DisconnectedAsync -= OnClientDisconnectedAsync;
-        _client.ApplicationMessageReceivedAsync -= OnClientApplicationMessageReceivedAsync;
-
-        if (_ownsClient)
-            _client.Dispose();
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        Dispose();
-        return ValueTask.CompletedTask;
     }
 }

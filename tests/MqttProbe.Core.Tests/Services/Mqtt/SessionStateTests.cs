@@ -1,5 +1,6 @@
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
+using MqttProbe.Core.Services.Security;
 
 namespace MqttProbe.Core.Tests.Services.Mqtt;
 
@@ -64,5 +65,98 @@ public class SessionStateTests
         _sessionState.SelectedConnection = second;
 
         _sessionState.SelectedConnection.Name.Should().Be("Second");
+    }
+
+    [Test]
+    public void TakeActiveCertificateResource_ReturnsAndClearsTheActiveResource()
+    {
+        var resource = new CertificateSessionResource();
+        _sessionState.ActiveCertificateResource = resource;
+
+        _sessionState.TakeActiveCertificateResource().Should().BeSameAs(resource);
+        _sessionState.ActiveCertificateResource.Should().BeNull();
+        _sessionState.TakeActiveCertificateResource().Should().BeNull();
+    }
+
+    [Test]
+    public void TakeActiveCertificateResource_WithExpectedResource_ClaimsThatIdentityOnly()
+    {
+        var resource = new CertificateSessionResource();
+        _sessionState.ActiveCertificateResource = resource;
+
+        _sessionState.TakeActiveCertificateResource(resource).Should().BeSameAs(resource);
+        _sessionState.ActiveCertificateResource.Should().BeNull();
+    }
+
+    [Test]
+    public void TakeActiveCertificateResource_WithExpectedResource_ReturnsNullForAReplacement()
+    {
+        var superseded = new CertificateSessionResource();
+        var replacement = new CertificateSessionResource();
+        _sessionState.ActiveCertificateResource = replacement;
+
+        _sessionState.TakeActiveCertificateResource(superseded).Should().BeNull();
+        _sessionState.ActiveCertificateResource.Should().BeSameAs(replacement);
+    }
+
+    [Test]
+    public void TakeActiveCertificateResource_WhenNothingIsActive_ReturnsNull()
+    {
+        _sessionState.TakeActiveCertificateResource().Should().BeNull();
+        _sessionState.TakeActiveCertificateResource(new CertificateSessionResource()).Should().BeNull();
+    }
+
+    [Test]
+    public void TakeActiveCertificateResource_WithVersion_CapturesThePublicationWithoutAdvancingIt()
+    {
+        var resource = new CertificateSessionResource();
+        _sessionState.ActiveCertificateResource = resource;
+
+        var taken = _sessionState.TakeActiveCertificateResource(resource, out var version);
+
+        taken.Should().BeSameAs(resource);
+        _sessionState.TryMarkCertificateSessionFaulted(version).Should().BeTrue(
+            "detaching a claimed certificate is not a new publication");
+        _sessionState.CertificateSessionFaulted.Should().BeTrue();
+    }
+
+    [Test]
+    public void TryMarkCertificateSessionFaulted_AfterAReplacementPublication_IsRejected()
+    {
+        var claimed = new CertificateSessionResource();
+        _sessionState.ActiveCertificateResource = claimed;
+        _sessionState.TakeActiveCertificateResource(claimed, out var version);
+
+        _sessionState.ActiveCertificateResource = new CertificateSessionResource();
+
+        _sessionState.TryMarkCertificateSessionFaulted(version).Should().BeFalse();
+        _sessionState.CertificateSessionFaulted.Should().BeFalse();
+    }
+
+    [Test]
+    public void TryMarkCertificateSessionFaulted_AfterRepublishingTheSameReference_IsRejected()
+    {
+        var claimed = new CertificateSessionResource();
+        _sessionState.ActiveCertificateResource = claimed;
+        _sessionState.TakeActiveCertificateResource(claimed, out var version);
+
+        _sessionState.ActiveCertificateResource = claimed;
+
+        _sessionState.TryMarkCertificateSessionFaulted(version).Should().BeFalse(
+            "every publication advances the version, even one that republishes the same reference");
+        _sessionState.CertificateSessionFaulted.Should().BeFalse();
+    }
+
+    [Test]
+    public void TryMarkCertificateSessionFaulted_AfterAnExplicitNullPublication_IsRejected()
+    {
+        var claimed = new CertificateSessionResource();
+        _sessionState.ActiveCertificateResource = claimed;
+        _sessionState.TakeActiveCertificateResource(claimed, out var version);
+
+        _sessionState.ActiveCertificateResource = null;
+
+        _sessionState.TryMarkCertificateSessionFaulted(version).Should().BeFalse();
+        _sessionState.CertificateSessionFaulted.Should().BeFalse();
     }
 }

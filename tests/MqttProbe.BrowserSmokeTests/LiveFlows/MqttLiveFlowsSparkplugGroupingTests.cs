@@ -262,6 +262,8 @@ public sealed partial class MqttLiveFlowsSmokeTests
 
             SetStage("message from a different device remains outside the selection");
             await PublishAsync(mqtt, ddata2, "device-2", token);
+            SetStage("confirm the second device message reached the app");
+            await AwaitNamespaceMessageCountAsync(page, 2, token);
             await ExpectNoDesktopPayloadTopicAsync(page, ddata2, token);
             Assert.That(await DesktopPayloadRowCountAsync(page, token), Is.EqualTo(beforeDevice2),
                 "a different device's message must not join the selected device's list");

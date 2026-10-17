@@ -11,7 +11,9 @@ internal sealed class RefreshCoalescer : IDisposable, IAsyncDisposable
     private readonly Func<Func<Task>, Task> _invokeAsync;
     private readonly Func<Task> _refresh;
     private readonly Timer _timer;
+    private readonly Lock _dispatchLock = new();
     private long _lastRefreshTicks;
+    private long _dispatchGeneration;
     private int _state;
     private int _queued;
     private int _executed;
@@ -36,6 +38,8 @@ internal sealed class RefreshCoalescer : IDisposable, IAsyncDisposable
 
     internal Func<Func<Task>, Task>? DispatchOverrideForTest { get; set; }
 
+    internal Action? DispatchFailureObservedForTest { get; set; }
+
     // Callable from any thread; later callers are absorbed until the dispatched refresh releases the slot.
     internal void Request()
     {
@@ -57,30 +61,60 @@ internal sealed class RefreshCoalescer : IDisposable, IAsyncDisposable
     internal void Tick()
     {
         if (_disposed) return;
-        if (Interlocked.CompareExchange(ref _state, Dispatched, Claimed) != Claimed) return;
+        long generation;
+        lock (_dispatchLock)
+        {
+            if (Interlocked.CompareExchange(ref _state, Dispatched, Claimed) != Claimed) return;
+            generation = ++_dispatchGeneration;
+        }
 
         Interlocked.Increment(ref _queued);
         try
         {
-            _ = (DispatchOverrideForTest ?? _invokeAsync)(RunRefreshAsync);
+            var dispatchTask = (DispatchOverrideForTest ?? _invokeAsync)(() => RunRefreshAsync(generation));
+            _ = dispatchTask.ContinueWith(
+                static (task, state) =>
+                {
+                    var (coalescer, dispatchGeneration) = ((RefreshCoalescer Coalescer, long Generation))state!;
+                    if (!task.IsFaulted && !task.IsCanceled) return;
+                    _ = task.Exception;
+                    coalescer.ReleaseDispatch(dispatchGeneration);
+                    coalescer.DispatchFailureObservedForTest?.Invoke();
+                },
+                (this, generation),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
         catch (ObjectDisposedException)
         {
             // The renderer went away before the refresh could be dispatched.
-            Interlocked.Exchange(ref _state, Idle);
+            ReleaseDispatch(generation);
         }
     }
 
-    private async Task RunRefreshAsync()
+    private void ReleaseDispatch(long generation)
     {
-        if (_disposed) return;
-        if (Volatile.Read(ref _state) != Dispatched) return;
+        lock (_dispatchLock)
+        {
+            if (_dispatchGeneration != generation) return;
+            Interlocked.CompareExchange(ref _state, Idle, Dispatched);
+        }
+    }
 
-        // The window counts from when the refresh actually runs, and the slot is freed only after
-        // that stamp is visible, so an event racing the release cannot schedule an immediate render.
-        Volatile.Write(ref _lastRefreshTicks, Environment.TickCount64);
-        Interlocked.Exchange(ref _state, Idle);
-        Interlocked.Increment(ref _executed);
+    private async Task RunRefreshAsync(long generation)
+    {
+        lock (_dispatchLock)
+        {
+            if (_disposed || _dispatchGeneration != generation || Volatile.Read(ref _state) != Dispatched) return;
+
+            // The window counts from when the refresh actually runs, and the slot is freed only after
+            // that stamp is visible, so an event racing the release cannot schedule an immediate render.
+            Volatile.Write(ref _lastRefreshTicks, Environment.TickCount64);
+            Interlocked.Exchange(ref _state, Idle);
+            Interlocked.Increment(ref _executed);
+        }
+
         await _refresh();
     }
 

@@ -82,6 +82,73 @@ public class RefreshCoalescerTests
     }
 
     [Test]
+    public void Tick_WhenDispatchTaskFaultsImmediately_ReleasesSlotForAnotherRequest()
+    {
+        using var coalescer = CreateCoalescer(windowMs: 600_000, () => { });
+        coalescer.DispatchOverrideForTest = _ => Task.FromException(new InvalidOperationException());
+
+        coalescer.Request();
+        coalescer.Tick();
+
+        coalescer.IsPending.Should().BeFalse();
+        coalescer.DispatchOverrideForTest = work => work();
+        coalescer.Request();
+        coalescer.Tick();
+
+        coalescer.ExecutedCount.Should().Be(1);
+    }
+
+    [Test]
+    public async Task Tick_WhenDispatchTaskFaultsBeforeCallback_ReleasesSlotForAnotherRequest()
+    {
+        await VerifyDispatchFailureReleasesSlotAsync(canceled: false);
+    }
+
+    [Test]
+    public async Task Tick_WhenDispatchTaskIsCanceledBeforeCallback_ReleasesSlotForAnotherRequest()
+    {
+        await VerifyDispatchFailureReleasesSlotAsync(canceled: true);
+    }
+
+    [Test]
+    public async Task Tick_WhenOldDispatchFaultsAfterCallback_DoesNotClearNewDispatch()
+    {
+        using var coalescer = CreateCoalescer(windowMs: 600_000, () => { });
+        var oldDispatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var newDispatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldFailureObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Func<Task>? originalCallback = null;
+        Func<Task>? newCallback = null;
+        var dispatches = 0;
+        coalescer.DispatchFailureObservedForTest = () => oldFailureObserved.TrySetResult();
+        coalescer.DispatchOverrideForTest = callback =>
+        {
+            if (Interlocked.Increment(ref dispatches) == 1)
+            {
+                originalCallback = callback;
+                return oldDispatch.Task;
+            }
+
+            newCallback = callback;
+            return newDispatch.Task;
+        };
+
+        coalescer.Request();
+        coalescer.Tick();
+        await originalCallback!();
+        coalescer.Request();
+        coalescer.Tick();
+
+        oldDispatch.SetException(new InvalidOperationException());
+        await oldFailureObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        coalescer.IsPending.Should().BeTrue("the newer dispatch still owns the pending slot");
+        coalescer.QueuedCount.Should().Be(2);
+        await newCallback!();
+        coalescer.ExecutedCount.Should().Be(2);
+    }
+
+    [Test]
     public async Task DisposeAsync_ThenRequestAndTick_DoesNothing()
     {
         var refreshes = 0;
@@ -103,6 +170,28 @@ public class RefreshCoalescerTests
             onRefresh();
             return Task.CompletedTask;
         }, windowMs);
+
+    private static async Task VerifyDispatchFailureReleasesSlotAsync(bool canceled)
+    {
+        using var coalescer = CreateCoalescer(windowMs: 600_000, () => { });
+        var dispatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        coalescer.DispatchOverrideForTest = _ => dispatch.Task;
+
+        coalescer.Request();
+        coalescer.Tick();
+        if (canceled)
+            dispatch.SetCanceled();
+        else
+            dispatch.SetException(new InvalidOperationException());
+
+        var released = await WaitUntilAsync(() => !coalescer.IsPending, TimeSpan.FromSeconds(5));
+        released.Should().BeTrue();
+        coalescer.DispatchOverrideForTest = work => work();
+        coalescer.Request();
+        coalescer.Tick();
+
+        coalescer.ExecutedCount.Should().Be(1);
+    }
 
     private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {

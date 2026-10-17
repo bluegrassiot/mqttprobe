@@ -1,6 +1,7 @@
 using Google.Protobuf;
 using MqttProbe.Core.Models.Sparkplug;
 using MqttProbe.Core.Services.Sparkplug;
+using MqttProbe.PluginContracts;
 using Org.Eclipse.Tahu.Protobuf;
 
 namespace MqttProbe.Core.Tests.Services.Sparkplug;
@@ -127,5 +128,150 @@ public class SparkplugAliasResolverTests
         var result = SparkplugAliasResolver.Resolve("spBv1.0/group/NDATA/eon1", [], groups);
 
         result.Should().BeNull();
+    }
+
+    private static Payload Parse(string? name, ulong alias, double doubleValue) =>
+        Payload.Parser.ParseFrom(BuildSparkplugPayload(name, alias, doubleValue));
+
+    [Test]
+    public void Resolve_ParsedPayload_AliasOnlyMetric_ResolvesName()
+    {
+        var node = new SpbNode { NodeId = "eon1", GroupId = "group" };
+        node.AliasMap[42] = "Flow Rate";
+        var group = new SpbGroup { GroupId = "group" };
+        group.Nodes["eon1"] = node;
+        var groups = new Dictionary<string, SpbGroup> { ["group"] = group };
+
+        var result = SparkplugAliasResolver.Resolve(
+            "spBv1.0/group/NDATA/eon1", Parse(null, 42, 3.14), groups);
+
+        result.Should().NotBeNull();
+        result[42].Should().Be("Flow Rate");
+    }
+
+    [Test]
+    public void Resolve_ParsedPayload_MatchesByteOverload()
+    {
+        var node = new SpbNode { NodeId = "eon1", GroupId = "group" };
+        node.AliasMap[42] = "Flow Rate";
+        var group = new SpbGroup { GroupId = "group" };
+        group.Nodes["eon1"] = node;
+        var groups = new Dictionary<string, SpbGroup> { ["group"] = group };
+
+        var bytes = BuildSparkplugPayload(null, 42, 3.14);
+        var fromBytes = SparkplugAliasResolver.Resolve("spBv1.0/group/NDATA/eon1", bytes, groups);
+        var fromPayload = SparkplugAliasResolver.Resolve(
+            "spBv1.0/group/NDATA/eon1", Payload.Parser.ParseFrom(bytes), groups);
+
+        fromPayload.Should().BeEquivalentTo(fromBytes);
+    }
+
+    [Test]
+    public void Resolve_ParsedPayload_NullPayload_ReturnsNull()
+    {
+        var groups = new Dictionary<string, SpbGroup>();
+
+        var result = SparkplugAliasResolver.Resolve("spBv1.0/group/NDATA/eon1", (Payload?)null, groups);
+
+        result.Should().BeNull();
+    }
+
+    [Test]
+    public void Resolve_ParsedPayload_DeviceAlias_ResolvesFromDeviceMap()
+    {
+        var device = new SpbDevice { DeviceId = "dev1", NodeId = "eon1", GroupId = "group" };
+        device.AliasMap[10] = "Temperature";
+        var node = new SpbNode { NodeId = "eon1", GroupId = "group" };
+        node.Devices["dev1"] = device;
+        var group = new SpbGroup { GroupId = "group" };
+        group.Nodes["eon1"] = node;
+        var groups = new Dictionary<string, SpbGroup> { ["group"] = group };
+
+        var result = SparkplugAliasResolver.Resolve(
+            "spBv1.0/group/DDATA/eon1/dev1", Parse(null, 10, 25.5), groups);
+
+        result.Should().NotBeNull();
+        result[10].Should().Be("Temperature");
+    }
+
+    [Test]
+    public void Resolve_ParsedPayload_DeviceMissing_FallsBackToNodeMap()
+    {
+        var node = new SpbNode { NodeId = "eon1", GroupId = "group" };
+        node.AliasMap[10] = "NodeTemperature";
+        var group = new SpbGroup { GroupId = "group" };
+        group.Nodes["eon1"] = node;
+        var groups = new Dictionary<string, SpbGroup> { ["group"] = group };
+
+        var result = SparkplugAliasResolver.Resolve(
+            "spBv1.0/group/DDATA/eon1/missing", Parse(null, 10, 25.5), groups);
+
+        result.Should().NotBeNull();
+        result[10].Should().Be("NodeTemperature");
+    }
+
+    [Test]
+    public void Resolve_ParsedPayload_NamedMetric_ReturnsNull()
+    {
+        var node = new SpbNode { NodeId = "eon1", GroupId = "group" };
+        node.AliasMap[5] = "Pressure";
+        var group = new SpbGroup { GroupId = "group" };
+        group.Nodes["eon1"] = node;
+        var groups = new Dictionary<string, SpbGroup> { ["group"] = group };
+
+        var result = SparkplugAliasResolver.Resolve(
+            "spBv1.0/group/NBIRTH/eon1", Parse("Pressure", 5, 1013.25), groups);
+
+        result.Should().BeNull();
+    }
+
+    private static Dictionary<string, SpbGroup> GroupsWithNodeAlias(ulong alias, string name)
+    {
+        var node = new SpbNode { NodeId = "eon1", GroupId = "group" };
+        node.AliasMap[alias] = name;
+        var group = new SpbGroup { GroupId = "group" };
+        group.Nodes["eon1"] = node;
+        return new Dictionary<string, SpbGroup> { ["group"] = group };
+    }
+
+    private static DecodedPayloadEnvelope Envelope(byte[] raw, object? typedPayload) =>
+        DecodedPayloadEnvelope.CreateSuccess(
+            "sparkplug-b", "spBv1.0/group/NDATA/eon1", raw, "{}", typedPayload);
+
+    [Test]
+    public void Resolve_EnvelopeWithHostPayload_UsesTypedFastPath()
+    {
+        var bytes = BuildSparkplugPayload(null, 42, 3.14);
+
+        var result = SparkplugAliasResolver.Resolve(
+            "spBv1.0/group/NDATA/eon1", Envelope(bytes, Payload.Parser.ParseFrom(bytes)),
+            GroupsWithNodeAlias(42, "Flow Rate"));
+
+        result.Should().NotBeNull();
+        result[42].Should().Be("Flow Rate");
+    }
+
+    [Test]
+    public void Resolve_EnvelopeWithNullTypedPayload_FallsBackToRawPayload()
+    {
+        var bytes = BuildSparkplugPayload(null, 42, 3.14);
+
+        var result = SparkplugAliasResolver.Resolve(
+            "spBv1.0/group/NDATA/eon1", Envelope(bytes, null), GroupsWithNodeAlias(42, "Flow Rate"));
+
+        result.Should().NotBeNull();
+        result[42].Should().Be("Flow Rate");
+    }
+
+    [Test]
+    public void Resolve_EnvelopeWithForeignTypedPayload_FallsBackToRawPayload()
+    {
+        var bytes = BuildSparkplugPayload(null, 42, 3.14);
+
+        var result = SparkplugAliasResolver.Resolve(
+            "spBv1.0/group/NDATA/eon1", Envelope(bytes, new object()), GroupsWithNodeAlias(42, "Flow Rate"));
+
+        result.Should().NotBeNull();
+        result[42].Should().Be("Flow Rate");
     }
 }

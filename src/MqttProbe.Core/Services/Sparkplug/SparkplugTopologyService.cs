@@ -271,21 +271,35 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         lock (node.SyncRoot)
         {
             node.LastDataAt = DateTime.UtcNow;
-            var metrics = node.Metrics.ToList();
-
-            foreach (var snapshot in newMetrics)
-            {
-                var idx = metrics.FindIndex(m => m.Name == snapshot.Name);
-                if (idx >= 0)
-                    metrics[idx] = snapshot;
-                else
-                    metrics.Add(snapshot);
-            }
-
-            node.Metrics = metrics.ToArray();
+            node.Metrics = MergeMetricSnapshots(node.Metrics, newMetrics);
         }
 
         TopologyChanged?.Invoke();
+    }
+
+    // Preserves the previous order: existing metrics are replaced in place, new names appended.
+    private static SpbMetricSnapshot[] MergeMetricSnapshots(
+        IReadOnlyList<SpbMetricSnapshot> existing, SpbMetricSnapshot[] incoming)
+    {
+        var metrics = existing.ToList();
+        var index = new Dictionary<string, int>(metrics.Count, StringComparer.Ordinal);
+        for (var i = 0; i < metrics.Count; i++)
+            index.TryAdd(metrics[i].Name, i);
+
+        foreach (var snapshot in incoming)
+        {
+            if (index.TryGetValue(snapshot.Name, out var idx))
+            {
+                metrics[idx] = snapshot;
+            }
+            else
+            {
+                index[snapshot.Name] = metrics.Count;
+                metrics.Add(snapshot);
+            }
+        }
+
+        return metrics.ToArray();
     }
 
     private void ApplyDeviceBirth(string groupId, string nodeId, string deviceId, SpbMetricSnapshot[] metrics)
@@ -323,18 +337,7 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         lock (device.SyncRoot)
         {
             device.LastDataAt = DateTime.UtcNow;
-            var metrics = device.Metrics.ToList();
-
-            foreach (var snapshot in newMetrics)
-            {
-                var idx = metrics.FindIndex(m => m.Name == snapshot.Name);
-                if (idx >= 0)
-                    metrics[idx] = snapshot;
-                else
-                    metrics.Add(snapshot);
-            }
-
-            device.Metrics = metrics.ToArray();
+            device.Metrics = MergeMetricSnapshots(device.Metrics, newMetrics);
         }
 
         TopologyChanged?.Invoke();

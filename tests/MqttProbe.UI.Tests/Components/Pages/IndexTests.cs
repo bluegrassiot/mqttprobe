@@ -28,6 +28,10 @@ namespace MqttProbe.UI.Tests.Components.Pages;
 [TestFixture]
 public class IndexTests : BunitTestContext
 {
+    private const int BurstSize = 500;
+
+    private const int DormantRenderWindowMs = 600_000;
+
     private IMessageStoreManager _mockMsgStore = null!;
     private ISubscriptionManager _mockSubManager = null!;
     private IEmulationService _mockEmulation = null!;
@@ -110,7 +114,7 @@ public class IndexTests : BunitTestContext
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["plant1"] = group });
         _mockTopology.TopologyChanged += Raise.Event<Action>();
 
-        cut.Markup.Should().Contain("Nodes (1)");
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Nodes (1)"), TimeSpan.FromSeconds(5));
     }
 
     [Test]
@@ -376,9 +380,166 @@ public class IndexTests : BunitTestContext
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["g1"] = group });
         _mockTopology.TopologyChanged += Raise.Event<Action>();
 
-        cut.FindAll(".mud-tab[aria-selected='true']")
-            .Should().ContainSingle()
-            .Which.TextContent.Should().Contain("Charts");
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".mud-tab[aria-selected='true']")
+                .Should().ContainSingle()
+                .Which.TextContent.Should().Contain("Charts");
+        }, TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public void TopologyChanged_Burst_DoesNotRenderOncePerEvent()
+    {
+        var cut = Render<IndexPage>();
+        var coalescer = cut.Instance.RenderCoalescerForTest;
+        coalescer.WindowMs = DormantRenderWindowMs;
+        var rendersBefore = cut.RenderCount;
+
+        RaiseTopologyBurst(BurstSize);
+
+        cut.RenderCount.Should().BeLessThanOrEqualTo(rendersBefore + 1,
+            "a 500-event burst queues at most one page refresh, not one render per event");
+        coalescer.QueuedCount.Should().Be(0, "the refresh waits for the coalesce window to elapse");
+        coalescer.IsPending.Should().BeTrue("the burst claimed the single pending slot");
+    }
+
+    [Test]
+    public void TopologyChanged_Burst_RendersLatestTopologyOnce()
+    {
+        var cut = Render<IndexPage>();
+        var coalescer = cut.Instance.RenderCoalescerForTest;
+        coalescer.WindowMs = DormantRenderWindowMs;
+
+        var group = new SpbGroup();
+        group.Nodes["sensor-01"] = new SpbNode { NodeId = "sensor-01", GroupId = "plant1", Status = SpbNodeStatus.Online };
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["plant1"] = group });
+        RaiseTopologyBurst(BurstSize);
+
+        coalescer.Tick();
+        coalescer.Tick();
+
+        coalescer.ExecutedCount.Should().Be(1, "one refresh serves the whole burst");
+        coalescer.QueuedCount.Should().Be(1, "the consumed slot cannot be replayed");
+        cut.Markup.Should().Contain("Nodes (1)");
+    }
+
+    [Test]
+    public void TopologyChanged_SingleEvent_RefreshesWithoutManualFlush()
+    {
+        var cut = Render<IndexPage>();
+
+        var group = new SpbGroup();
+        group.Nodes["sensor-01"] = new SpbNode { NodeId = "sensor-01", GroupId = "plant1", Status = SpbNodeStatus.Online };
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["plant1"] = group });
+        RaiseTopologyBurst(1);
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Nodes (1)"), TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public void TopologyChanged_DefersSlugReconciliationToTheDispatchedRefresh()
+    {
+        var group = new SpbGroup();
+        group.Nodes["sensor-01"] = new SpbNode { NodeId = "sensor-01", GroupId = "plant1", Status = SpbNodeStatus.Online };
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["plant1"] = group });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/?tab=nodes");
+
+        var cut = Render<IndexPage>();
+        var coalescer = cut.Instance.RenderCoalescerForTest;
+        coalescer.WindowMs = DormantRenderWindowMs;
+        cut.Instance.ActiveSlugForTest.Should().Be("nodes");
+
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup>());
+        _mockTopology.TopologyChanged += Raise.Event<Action>();
+
+        cut.Instance.ActiveSlugForTest.Should().Be("nodes",
+            "the broker thread must not touch the state the render reads");
+
+        coalescer.Tick();
+
+        cut.Instance.ActiveSlugForTest.Should().Be("browser", "the dispatched refresh reconciles the active tab");
+        cut.FindAll(".mud-tab[aria-selected='true']").Should().ContainSingle()
+            .Which.TextContent.Should().Contain("Browser");
+    }
+
+    [Test]
+    public async Task BlockedDispatcher_BurstAndRepeatedTicks_QueuesOneRefresh()
+    {
+        var cut = Render<IndexPage>();
+        var coalescer = cut.Instance.RenderCoalescerForTest;
+        coalescer.WindowMs = DormantRenderWindowMs;
+        var blocked = new BlockedRenderDispatcher { Hold = true };
+        coalescer.DispatchOverrideForTest = blocked.Dispatch;
+
+        for (var window = 0; window < 4; window++)
+        {
+            RaiseTopologyBurst(BurstSize);
+            coalescer.Tick();
+        }
+
+        blocked.PostedCount.Should().Be(1, "the claimed slot blocks every later refresh while the renderer is stuck");
+        coalescer.ExecutedCount.Should().Be(0);
+        coalescer.IsPending.Should().BeTrue();
+
+        var group = new SpbGroup();
+        group.Nodes["sensor-01"] = new SpbNode { NodeId = "sensor-01", GroupId = "plant1", Status = SpbNodeStatus.Online };
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["plant1"] = group });
+        await blocked.ReleaseAsync();
+
+        coalescer.ExecutedCount.Should().Be(1, "one page refresh serves the whole backlog");
+        coalescer.IsPending.Should().BeFalse();
+        cut.WaitForAssertion(
+            () => cut.Markup.Should().Contain("Nodes (1)",
+                "the refresh reads the topology as it stands when it runs"),
+            TimeSpan.FromSeconds(5));
+
+        blocked.Hold = false;
+        RaiseTopologyBurst(1);
+        coalescer.Tick();
+
+        blocked.PostedCount.Should().Be(2, "the coalescer is ready for the next window");
+        coalescer.ExecutedCount.Should().Be(2);
+    }
+
+    [Test]
+    public async Task Dispose_AfterDispatchQueued_SkipsTheQueuedRefresh()
+    {
+        var cut = Render<IndexPage>();
+        var coalescer = cut.Instance.RenderCoalescerForTest;
+        coalescer.WindowMs = DormantRenderWindowMs;
+        var blocked = new BlockedRenderDispatcher { Hold = true };
+        coalescer.DispatchOverrideForTest = blocked.Dispatch;
+
+        RaiseTopologyBurst(BurstSize);
+        coalescer.Tick();
+        blocked.PostedCount.Should().Be(1);
+
+        cut.Instance.Dispose();
+        await blocked.ReleaseAsync();
+
+        coalescer.ExecutedCount.Should().Be(0, "a refresh queued before disposal must not run");
+    }
+
+    [Test]
+    public void Dispose_WithPendingRefresh_QueuesNothing()
+    {
+        var cut = Render<IndexPage>();
+        var coalescer = cut.Instance.RenderCoalescerForTest;
+        coalescer.WindowMs = DormantRenderWindowMs;
+        RaiseTopologyBurst(BurstSize);
+        coalescer.IsPending.Should().BeTrue();
+
+        cut.Instance.Dispose();
+
+        coalescer.QueuedCount.Should().Be(0, "the pending refresh never reached the renderer");
+        coalescer.ExecutedCount.Should().Be(0, "a disposed page renders nothing");
+    }
+
+    private void RaiseTopologyBurst(int count)
+    {
+        for (var i = 0; i < count; i++)
+            _mockTopology.TopologyChanged += Raise.Event<Action>();
     }
 
     [Test]

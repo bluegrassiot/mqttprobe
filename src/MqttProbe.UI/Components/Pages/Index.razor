@@ -234,6 +234,8 @@
 </MudTabs>
 
 @code {
+    private const int DefaultRenderCoalesceMs = 250;
+
     private string BrowserTabLabel =>
         MessageStoreManager.RootTopicCount > 0 ? $"Browser ({MessageStoreManager.RootTopicCount})" : "Browser";
 
@@ -261,6 +263,7 @@
     private int _activeTabIndex;
     private bool _suppressUrlUpdate;
     private Func<EventArgs, Task>? _connectionStateChangedHandler;
+    private RefreshCoalescer? _refreshCoalescer;
 
     private IReadOnlyList<NavigationDestination> GetRenderedDestinations() =>
         _destinations.Where(d => d.IsVisible()).ToList();
@@ -324,6 +327,8 @@
 
     protected override void OnInitialized()
     {
+        _refreshCoalescer = new RefreshCoalescer(InvokeAsync, RefreshTopologyAsync, DefaultRenderCoalesceMs);
+
         TopologyService.TopologyChanged += OnTopologyChanged;
         _destinations = BuildDestinations();
         _activeSlug = ResolveSlugFromUrl();
@@ -336,15 +341,30 @@
         SessionLifecycle.ActiveConnectionStopped += OnActiveConnectionStopped;
     }
 
-    private void OnTopologyChanged()
+    // The broker thread only asks for a refresh; the dispatcher reconciles the active tab, then renders.
+    private void OnTopologyChanged() => _refreshCoalescer?.Request();
+
+    private async Task RefreshTopologyAsync()
     {
         var activeDest = _destinations.FirstOrDefault(d =>
             string.Equals(d.Slug, _activeSlug, StringComparison.OrdinalIgnoreCase));
         if (activeDest is null || !activeDest.IsVisible())
             _activeSlug = "browser";
         SyncActiveTabIndex();
-        InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException)
+        {
+            // The circuit was torn down between the coalesced tick and the dispatch.
+        }
     }
+
+    internal RefreshCoalescer RenderCoalescerForTest => _refreshCoalescer!;
+
+    internal string ActiveSlugForTest => _activeSlug;
 
     private Task OnConnectionStateChangedAsync(EventArgs args) =>
         InvokeAsync(StateHasChanged);
@@ -359,6 +379,7 @@
         if (_connectionStateChangedHandler is not null)
             MqttClient.ConnectionStateChangedAsync -= _connectionStateChangedHandler;
         SessionLifecycle.ActiveConnectionStopped -= OnActiveConnectionStopped;
+        _refreshCoalescer?.Dispose();
     }
 
     private async Task DismissHint(string hintId)

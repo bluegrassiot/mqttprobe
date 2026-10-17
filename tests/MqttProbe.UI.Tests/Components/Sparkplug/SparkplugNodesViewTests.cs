@@ -88,7 +88,7 @@ public class SparkplugNodesViewTests : BunitTestContext
 
         _mockTopology.TopologyChanged += Raise.Event<Action>();
 
-        cut.Markup.Should().Contain("edge-01");
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("edge-01"), TimeSpan.FromSeconds(5));
     }
 
     [Test]
@@ -108,10 +108,13 @@ public class SparkplugNodesViewTests : BunitTestContext
         group.Nodes.TryRemove("edge-B", out _);
         _mockTopology.TopologyChanged += Raise.Event<Action>();
 
-        cut.FindAll(".spb-node-row").Should().ContainSingle();
-        cut.Markup.Should().Contain("edge-A");
-        cut.Markup.Should().NotContain("edge-B");
-        cut.FindAll(".spb-node-row--selected").Should().ContainSingle("the selected node survives a sibling removal");
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".spb-node-row").Should().ContainSingle();
+            cut.Markup.Should().Contain("edge-A");
+            cut.Markup.Should().NotContain("edge-B");
+            cut.FindAll(".spb-node-row--selected").Should().ContainSingle("the selected node survives a sibling removal");
+        }, TimeSpan.FromSeconds(5));
     }
 
     [Test]
@@ -286,7 +289,7 @@ public class SparkplugNodesViewTests : BunitTestContext
         group.Nodes.TryRemove("edge-A", out _);
         _mockTopology.TopologyChanged += Raise.Event<Action>();
 
-        cut.FindAll(".spb-detail-panel").Should().BeEmpty();
+        cut.WaitForAssertion(() => cut.FindAll(".spb-detail-panel").Should().BeEmpty(), TimeSpan.FromSeconds(5));
     }
 
     [Test]
@@ -310,7 +313,7 @@ public class SparkplugNodesViewTests : BunitTestContext
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["beta"] = groupB });
         _mockTopology.TopologyChanged += Raise.Event<Action>();
 
-        cut.Instance.GetGroupFilterForTest().Should().BeNull();
+        cut.WaitForAssertion(() => cut.Instance.GetGroupFilterForTest().Should().BeNull(), TimeSpan.FromSeconds(5));
     }
 
     [Test]

@@ -80,7 +80,7 @@ public sealed class TopicSelectionSessionTests
         adapter.BeforeClear = null;
         var recovered = session.Refresh(null, EmptyExpanded(), grouped: false);
         recovered.Should().NotBeNull();
-        recovered!.Selection.Key.Should().Be("root/selected");
+        recovered.Selection.Key.Should().Be("root/selected");
         recovered.Rows.Should().Contain(row => row.FullPath == "root");
     }
 
@@ -119,7 +119,7 @@ public sealed class TopicSelectionSessionTests
         var frame = session.Refresh("other", EmptyExpanded(), grouped: false);
 
         frame.Should().NotBeNull();
-        frame!.Selection.Key.Should().Be("root/selected");
+        frame.Selection.Key.Should().Be("root/selected");
         adapter.Store.GetSelectedTopicState().Key.Should().Be("root/selected");
     }
 

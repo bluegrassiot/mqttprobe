@@ -30,6 +30,10 @@ Concretely, the app transmits:
 If you have imported a client certificate for mutual TLS, the app presents that
 certificate during the TLS handshake.
 
+While node emulation runs, it publishes synthetic values and app-health metrics, such
+as CPU use, memory use, uptime, and publishing counters, to the broker you select.
+These metrics are not sent to us.
+
 ### What stays on your side of the connection
 
 Some of what you type is configuration for how the app connects, not message data sent to

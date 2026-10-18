@@ -50,7 +50,7 @@ updates:
         patterns:
           - "*"
 
-  # Bump SDK pin in global.json (currently 10.0.301)
+  # Bump the SDK pin in global.json
   - package-ecosystem: "dotnet-sdk"
     directory: "/"
     schedule:

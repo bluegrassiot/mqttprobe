@@ -36,9 +36,16 @@ public class ConnectionDialogTests : BunitTestContext
     private ICertificateFilePicker _mockFilePicker = null!;
     private ICertificateInputCapability _mockInputCapability = null!;
     private IChartDataService _mockChart = null!;
+    private IConnectionSessionLifecycle _mockSessionLifecycle = null!;
+    private IUxMetricsService _mockUxMetrics = null!;
 
-    private Func<MqttClientConnectedEventArgs, Task>? _connectedHandler;
-    private Func<MqttConnectingFailedEventArgs, Task>? _failedHandler;
+    private CancellationToken? _capturedStartToken;
+    private long _attemptIdCounter;
+    private MqttConnectAttemptId _attemptId;
+    private TaskCompletionSource<MqttConnectOutcome>? _attemptCompletion;
+    private MqttConnectStatus? _immediateAttemptStatus;
+    private Exception? _immediateAttemptException;
+    private bool _attemptRetired;
 
     // Exercises the pre-connect iOS note from a non-iOS host.
     private sealed class IosConnectionDialog : ConnectionDialog
@@ -82,14 +89,17 @@ public class ConnectionDialogTests : BunitTestContext
                 ClientOptions = new MqttClientOptionsBuilder().WithTcpServer("localhost").Build()
             }));
 
-        _connectedHandler = null;
-        _failedHandler = null;
+        _capturedStartToken = null;
+        _attemptId = MqttConnectAttemptId.None;
+        _attemptCompletion = null;
+        _attemptIdCounter = 0;
+        _immediateAttemptStatus = null;
+        _immediateAttemptException = null;
         _mockClient
-            .When(x => x.ConnectedAsync += Arg.Any<Func<MqttClientConnectedEventArgs, Task>>())
-            .Do(x => _connectedHandler = x.Arg<Func<MqttClientConnectedEventArgs, Task>>());
-        _mockClient
-            .When(x => x.ConnectingFailedAsync += Arg.Any<Func<MqttConnectingFailedEventArgs, Task>>())
-            .Do(x => _failedHandler = x.Arg<Func<MqttConnectingFailedEventArgs, Task>>());
+            .StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(ci => BeginTestAttempt(ci.Arg<CancellationToken>()));
+        _mockClient.IsCurrentAttempt(Arg.Any<MqttConnectAttemptId>())
+            .Returns(ci => !_attemptRetired && ci.Arg<MqttConnectAttemptId>() == _attemptId);
 
         Services.AddSingleton(_mockClient);
         Services.AddConnectionSettings(_mockConnections);
@@ -102,8 +112,13 @@ public class ConnectionDialogTests : BunitTestContext
         Services.AddSingleton(_mockCoordinator);
         Services.AddSingleton(Substitute.For<ILogger<ConnectionDialog>>());
         Services.AddSingleton(_mockChart);
-        Services.AddSingleton(Substitute.For<IUxMetricsService>());
-        Services.AddSingleton(Substitute.For<IConnectionSessionLifecycle>());
+        _mockUxMetrics = Substitute.For<IUxMetricsService>();
+        Services.AddSingleton(_mockUxMetrics);
+        _mockSessionLifecycle = Substitute.For<IConnectionSessionLifecycle>();
+        _mockSessionLifecycle.StopActiveConnectionAsync().Returns(Task.CompletedTask);
+        _mockSessionLifecycle.StopAttemptAsync(
+            Arg.Any<MqttConnectAttemptId>(), Arg.Any<CertificateSessionResource?>()).Returns(Task.CompletedTask);
+        Services.AddSingleton(_mockSessionLifecycle);
         Services.AddSingleton(_mockCertStore);
         Services.AddSingleton(_mockFilePicker);
         Services.AddSingleton(_mockInputCapability);
@@ -137,6 +152,71 @@ public class ConnectionDialogTests : BunitTestContext
     private Task SelectConnection(Connection conn) =>
         _dialogProvider.InvokeAsync(async () =>
             await _dialogProvider.FindComponent<ConnectionDialog>().Instance.ConnectionChanged(conn));
+
+    private MqttConnectAttempt BeginTestAttempt(CancellationToken token)
+    {
+        _capturedStartToken = token;
+        _attemptId = new MqttConnectAttemptId(++_attemptIdCounter);
+        _attemptRetired = false;
+        var completion = new TaskCompletionSource<MqttConnectOutcome>();
+        if (_immediateAttemptStatus is { } status)
+        {
+            _immediateAttemptStatus = null;
+            var exception = _immediateAttemptException;
+            _immediateAttemptException = null;
+            completion.SetResult(new MqttConnectOutcome(_attemptId, status, exception));
+            ApplyClientConnectState(status);
+        }
+        _attemptCompletion = completion;
+        return new MqttConnectAttempt(_attemptId, completion.Task);
+    }
+
+    private void ArmNextAttemptOutcome(MqttConnectStatus status, Exception? exception = null)
+    {
+        _immediateAttemptStatus = status;
+        _immediateAttemptException = exception;
+    }
+
+    private async Task CompletePendingAttemptAsync(MqttConnectStatus status, Exception? exception = null)
+    {
+        var completion = _attemptCompletion
+            ?? throw new InvalidOperationException("no connect attempt is pending");
+        var id = _attemptId;
+        ApplyClientConnectState(status);
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var handledBefore = dialog.HandledOutcomeCountForTests;
+        await _dialogProvider.InvokeAsync(() =>
+            completion.TrySetResult(new MqttConnectOutcome(id, status, exception)));
+        await FlushDispatcherAsync();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            dialog.HandledOutcomeCountForTests.Should().BeGreaterThan(handledBefore,
+                "the dialog should have processed the pending attempt outcome"));
+    }
+
+    // The attempt completion continuation is posted to the dispatcher; flush it before asserting.
+    private Task FlushDispatcherAsync() => _dialogProvider.InvokeAsync(() => { });
+
+    private void ApplyClientConnectState(MqttConnectStatus status)
+    {
+        _mockClient.IsConnected.Returns(status == MqttConnectStatus.Connected);
+        _attemptRetired = status == MqttConnectStatus.Failed;
+    }
+
+    private List<CertificateSessionResource> CertificateResources() =>
+        _mockOptionsBuilder.ReceivedCalls()
+            .Select(call => call.GetArguments().OfType<CertificateSessionResource>().Single())
+            .ToList();
+
+    private static MqttManagedClientOptions TestOptions() => new()
+    {
+        ClientOptions = new MqttClientOptionsBuilder().WithTcpServer("localhost").Build()
+    };
+
+    private Task SucceedPendingAttemptAsync() =>
+        CompletePendingAttemptAsync(MqttConnectStatus.Connected);
+
+    private Task FailPendingAttemptAsync(string message = "refused") =>
+        CompletePendingAttemptAsync(MqttConnectStatus.Failed, new InvalidOperationException(message));
 
     [Test]
     public async Task Renders_WithSavedConnectionList_WhenConnectionsExist()
@@ -307,9 +387,8 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task ConnectButton_CallsStartAsync_OnManagedClient()
+    public async Task ConnectButton_StartsAttempt_OnManagedClient()
     {
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var cfg = new AppConfiguration
         {
             Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
@@ -320,7 +399,7 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        await _mockClient.Received(1).StartAsync(Arg.Any<MqttManagedClientOptions>());
+        _mockClient.Received(1).StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -338,18 +417,794 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Markup.Should().Contain("Connecting...");
     }
 
-    [Test]
-    public async Task ConnectedAsync_Ignored_WhenNoPendingAttempt()
+    private void ConnectSavedConnectionAndWaitForPending()
     {
-        await OpenDialog();
-        _connectedHandler.Should().NotBeNull("component should subscribe to ConnectedAsync in OnInitialized");
+        _dialogProvider.Find("button[title='Connect']").Click();
+        _dialogProvider.FindComponent<ConnectionDialog>().Instance.IsConnectingForTests
+            .Should().BeTrue("clicking Connect on a valid saved connection starts a pending attempt");
+    }
 
-        // Fire ConnectedAsync without going through Connect() - no pending attempt exists
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
+    [Test]
+    public async Task ConnectingFooter_ShowsStopBesideIndicator_AndHidesConnect()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
 
-        // Dialog should remain open because there's no matching pending attempt
+        ConnectSavedConnectionAndWaitForPending();
+
+        var row = _dialogProvider.Find("[data-testid=connection-connecting-row]");
+        row.TextContent.Should().Contain("Connecting...");
+        var stop = row.QuerySelector("[data-testid=cancel-connect]");
+        stop.Should().NotBeNull("the stop action stays visible beside the connecting indicator");
+        stop!.TextContent.Trim().Should().Be("Stop",
+            "the connecting action carries the emulation Stop label");
+        stop.GetAttribute("type").Should().Be("button");
+        stop.ClassList.Should().Contain("mud-button-filled");
+        stop.ClassList.Should().Contain("mud-button-filled-error");
+        stop.QuerySelectorAll("svg").Should().HaveCount(1,
+            "StartIcon renders the emulation Stop button's square glyph");
+        _dialogProvider.FindAll("button[title='Connect']").Should().BeEmpty(
+            "Connect is replaced by Stop while an attempt is pending");
+    }
+
+    [Test]
+    public async Task Cancel_WhileConnecting_CancelsAttemptToken_AndStopsPendingAttempt()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ConnectSavedConnectionAndWaitForPending();
+        _mockSessionLifecycle.ClearReceivedCalls();
+
+        _dialogProvider.Find("[data-testid=cancel-connect]").Click();
+
+        _dialogProvider.FindComponent<ConnectionDialog>().Instance.IsConnectingForTests
+            .Should().BeFalse("cancelling clears the connecting state");
+        _capturedStartToken.Should().NotBeNull("the pending attempt passed a cancellable token");
+        _capturedStartToken!.Value.IsCancellationRequested.Should().BeTrue(
+            "cancelling the attempt must cancel the token handed to StartAttempt");
+        await _mockSessionLifecycle.Received(1).StopAttemptAsync(
+            _attemptId, Arg.Any<CertificateSessionResource?>());
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+        _dialogProvider.FindAll(".mud-dialog").Should().NotBeEmpty("Cancel keeps the dialog open");
+        _dialogProvider.FindAll("button[title='Connect']").Should().HaveCount(1,
+            "Connect is offered again so the user can retry or edit");
+    }
+
+    [Test]
+    public async Task Cancel_WhileConnecting_PreservesEnteredValues()
+    {
+        await OpenDialog(new AppConfiguration());
+        DirtyNameField("My Broker");
+        SetTextField("Host", "localhost");
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Trim() == "Connect anyway").Click();
+        _dialogProvider.WaitForAssertion(() =>
+            _dialogProvider.FindComponent<ConnectionDialog>().Instance.IsConnectingForTests
+                .Should().BeTrue(), TimeSpan.FromSeconds(2));
+
+        _dialogProvider.Find("[data-testid=cancel-connect]").Click();
+
+        _dialogProvider.FindComponent<ConnectionDialog>().Instance.IsConnectingForTests.Should().BeFalse();
+        _dialogProvider.FindComponents<MudTextField<string>>().First(f => f.Instance.Label == "Name")
+            .Find("input").GetAttribute("value").Should().Be("My Broker");
+        _dialogProvider.FindComponents<MudTextField<string>>().First(f => f.Instance.Label == "Host")
+            .Find("input").GetAttribute("value").Should().Be("localhost");
         _dialogProvider.FindAll(".mud-dialog").Should().NotBeEmpty(
-            "ConnectedAsync without a pending attempt should be ignored");
+            "Cancel keeps the dialog open with the entered values intact");
+    }
+
+    [Test]
+    public async Task Cancel_WhileConnecting_DoesNotPersistOrRecordLastSuccessful()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ConnectSavedConnectionAndWaitForPending();
+
+        _dialogProvider.Find("[data-testid=cancel-connect]").Click();
+
+        await _mockConnections.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+        _mockSessionState.DidNotReceive().LastSuccessfulConnectionId = Arg.Any<Guid?>();
+        _mockSessionState.DidNotReceive().LastSuccessfulConnectionSnapshot = Arg.Any<Connection>();
+        _mockUxMetrics.DidNotReceive().RecordConnectSuccess();
+        _mockUxMetrics.DidNotReceive().RecordConnectFailure();
+    }
+
+    [Test]
+    public async Task Cancel_ThenLateFailure_RecordsNoFailureAndStaysOpen()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ConnectSavedConnectionAndWaitForPending();
+        var completion = _attemptCompletion!;
+        var id = _attemptId;
+
+        _dialogProvider.Find("[data-testid=cancel-connect]").Click();
+        await _dialogProvider.InvokeAsync(() =>
+            completion.TrySetResult(new MqttConnectOutcome(id, MqttConnectStatus.Failed, new InvalidOperationException("refused"))));
+        await FlushDispatcherAsync();
+
+        _mockUxMetrics.DidNotReceive().RecordConnectFailure();
+        _dialogProvider.FindAll(".mud-dialog").Should().NotBeEmpty("a cancelled attempt stays open for retry");
+        _dialogProvider.Markup.Should().NotContain("Connection failed. Verify broker");
+    }
+
+    [Test]
+    public async Task ImmediateSuccess_ClosesDialogAndRecordsConnection()
+    {
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        ArmNextAttemptOutcome(MqttConnectStatus.Connected);
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("a synchronous success closes the dialog"));
+        _mockSessionState.Received(1).LastSuccessfulConnectionId = conn.Id;
+        _mockUxMetrics.Received(1).RecordConnectSuccess();
+    }
+
+    [Test]
+    public async Task ImmediateFailure_ShowsFailureAlertAndRecordsFailure()
+    {
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        ArmNextAttemptOutcome(MqttConnectStatus.Failed, new InvalidOperationException("refused"));
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        _dialogProvider.Markup.Should().Contain("Connection failed. Verify broker, credentials, and transport settings.");
+        _mockUxMetrics.Received(1).RecordConnectFailure();
+        _mockSessionState.DidNotReceive().LastSuccessfulConnectionId = Arg.Any<Guid?>();
+    }
+
+    [Test]
+    public async Task Cancel_DuringOptionsBuild_DoesNotStartMqtt()
+    {
+        var buildGate = new TaskCompletionSource<MqttManagedClientOptions>();
+        _mockOptionsBuilder.BuildAsync(Arg.Any<Connection>(), Arg.Any<CertificateSessionResource>())
+            .Returns(buildGate.Task);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        _dialogProvider.FindComponent<ConnectionDialog>().Instance.IsConnectingForTests.Should().BeTrue();
+
+        _dialogProvider.Find("[data-testid=cancel-connect]").Click();
+
+        buildGate.SetResult(TestOptions());
+        await FlushDispatcherAsync();
+
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+        _mockSessionState.DidNotReceive().ActiveCertificateResource = Arg.Any<CertificateSessionResource>();
+        _dialogProvider.FindAll(".mud-dialog").Should().NotBeEmpty("the dialog stays open after cancel");
+    }
+
+    [Test]
+    public async Task Close_DuringOptionsBuild_DoesNotStartMqtt()
+    {
+        var buildGate = new TaskCompletionSource<MqttManagedClientOptions>();
+        _mockOptionsBuilder.BuildAsync(Arg.Any<Connection>(), Arg.Any<CertificateSessionResource>())
+            .Returns(buildGate.Task);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        dialog.IsConnectingForTests.Should().BeTrue();
+
+        await _dialogProvider.InvokeAsync(async () => await dialog.DisposeAsync());
+
+        buildGate.SetResult(TestOptions());
+        await FlushDispatcherAsync();
+
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+        _mockSessionState.DidNotReceive().ActiveCertificateResource = Arg.Any<CertificateSessionResource>();
+    }
+
+    [Test]
+    public async Task Cancel_DuringCaptureStart_DoesNotStartMqtt()
+    {
+        var captureGate = new TaskCompletionSource();
+        _mockMsgStore.Start().Returns(captureGate.Task);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        _dialogProvider.FindComponent<ConnectionDialog>().Instance.IsConnectingForTests.Should().BeTrue();
+
+        _dialogProvider.Find("[data-testid=cancel-connect]").Click();
+
+        captureGate.SetResult();
+        await FlushDispatcherAsync();
+
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+        _dialogProvider.FindComponent<ConnectionDialog>().Instance.IsConnectingForTests.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Connect_SelectorChangedDuringStartup_RecordsAttemptedConnection()
+    {
+        var connA = new Connection { Name = "Broker A", Host = "a.local", Port = 1883 };
+        var connB = new Connection { Name = "Broker B", Host = "b.local", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [connA, connB] };
+        await OpenDialog(cfg);
+        await SelectConnection(connA);
+
+        var resetGate = new TaskCompletionSource();
+        _mockCoordinator.ResetIfBrokerChangedAsync(Arg.Any<Connection>()).Returns(resetGate.Task);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        await _mockCoordinator.Received(1).ResetIfBrokerChangedAsync(
+            Arg.Is<Connection>(c => c!.Id == connA.Id));
+
+        await SelectConnection(connB);
+
+        resetGate.SetResult();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _mockClient.Received(1).StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>()));
+        await _mockOptionsBuilder.Received(1).BuildAsync(
+            Arg.Is<Connection>(c => c!.Id == connA.Id), Arg.Any<CertificateSessionResource>());
+
+        await SucceedPendingAttemptAsync();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("a successful connect closes the dialog"));
+
+        _mockSessionState.Received(1).LastSuccessfulConnectionId = connA.Id;
+        _mockSessionState.DidNotReceive().LastSuccessfulConnectionId = connB.Id;
+        _mockSessionState.Received(1).LastSuccessfulConnectionSnapshot = Arg.Is<Connection>(
+            c => c!.Id == connA.Id && c.Host == "a.local");
+    }
+
+    [Test]
+    public async Task CaptureStartFailure_MessageStore_RecoversStateAndDoesNotStartMqtt()
+    {
+        _mockMsgStore.Start().Returns(Task.FromException(new InvalidOperationException("capture boom")));
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        _dialogProvider.FindComponent<ConnectionDialog>().Instance.IsConnectingForTests.Should().BeFalse();
+        _dialogProvider.Markup.Should().Contain("Connection failed. Verify broker, credentials, and transport settings.");
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+        _mockSessionState.DidNotReceive().ActiveCertificateResource = Arg.Any<CertificateSessionResource>();
+    }
+
+    [Test]
+    public async Task CaptureStartFailure_Chart_RecoversStateAndDoesNotStartMqtt()
+    {
+        _mockChart.StartAsync().Returns(Task.FromException(new InvalidOperationException("chart boom")));
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        _dialogProvider.FindComponent<ConnectionDialog>().Instance.IsConnectingForTests.Should().BeFalse();
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+        _mockSessionState.DidNotReceive().ActiveCertificateResource = Arg.Any<CertificateSessionResource>();
+    }
+
+    [Test]
+    public async Task Cancel_KeepsRetryDisabledUntilTeardownCompletes()
+    {
+        var stopGate = new TaskCompletionSource();
+        _mockSessionLifecycle.StopAttemptAsync(
+            Arg.Any<MqttConnectAttemptId>(), Arg.Any<CertificateSessionResource?>()).Returns(stopGate.Task);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ConnectSavedConnectionAndWaitForPending();
+        var completion = _attemptCompletion!;
+        var id = _attemptId;
+
+        _dialogProvider.Find("[data-testid=cancel-connect]").Click();
+
+        await _dialogProvider.InvokeAsync(() =>
+            completion.TrySetResult(new MqttConnectOutcome(id, MqttConnectStatus.Canceled)));
+        await FlushDispatcherAsync();
+
+        _dialogProvider.Find("button[title='Connect']").GetAttribute("disabled")
+            .Should().NotBeNull("retry stays disabled until the cancelled attempt's teardown completes");
+
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var disposeTask = _dialogProvider.InvokeAsync(async () => await dialog.DisposeAsync());
+        await FlushDispatcherAsync();
+        disposeTask.IsCompleted.Should().BeFalse("dispose waits for the cancelled attempt's teardown");
+
+        stopGate.SetResult();
+        await disposeTask;
+        await FlushDispatcherAsync();
+    }
+
+    [Test]
+    public async Task QueuedCancelDuringSuccessFinalizing_DoesNotStopAcceptedConnection()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+
+        var finalizeGate = new TaskCompletionSource();
+        var starts = 0;
+        _mockMsgStore.Start().Returns(_ =>
+            Interlocked.Increment(ref starts) == 1 ? Task.CompletedTask : finalizeGate.Task);
+
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        Func<Task> queuedCancel = dialog.CancelConnect;
+
+        ConnectSavedConnectionAndWaitForPending();
+        await SucceedPendingAttemptAsync();
+        _mockSessionLifecycle.ClearReceivedCalls();
+
+        await _dialogProvider.InvokeAsync(queuedCancel);
+
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+        await _mockSessionLifecycle.DidNotReceive().StopAttemptAsync(
+            Arg.Any<MqttConnectAttemptId>(), Arg.Any<CertificateSessionResource?>());
+
+        finalizeGate.SetResult();
+        await FlushDispatcherAsync();
+    }
+
+    [Test]
+    public async Task SavedConnectAnywaySuccess_DeletesUnpersistedStagedAsset()
+    {
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        _mockCertStore.ImportAsync(conn.Id, Arg.Any<CertificateImportRequest>()).Returns("staged-asset-id");
+
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        await _dialogProvider.InvokeAsync(() => dialog.SetStagedCertificate([1, 2, 3], null, null, ""));
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Connect anyway")).Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _mockClient.Received().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>()));
+
+        await SucceedPendingAttemptAsync();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("a successful connect closes the dialog"));
+
+        await _mockCertStore.Received(1).DeleteAsync(conn.Id, "staged-asset-id");
+        _mockSessionState.DidNotReceive().RetainedUnsavedAssetId = Arg.Is<string>(s => s != null);
+    }
+
+    [Test]
+    public async Task Dispose_DuringBlockedStagedImport_DeletesLateImport()
+    {
+        var importGate = new TaskCompletionSource<string>();
+        _mockCertStore.ImportAsync(Arg.Any<Guid>(), Arg.Any<CertificateImportRequest>())
+            .Returns(importGate.Task);
+
+        await OpenDialog(new AppConfiguration());
+        DirtyNameField("UnsavedConn");
+        SetTextField("Host", "localhost");
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        await _dialogProvider.InvokeAsync(() =>
+            dialog.SetStagedCertificate([1, 2, 3], null, null, ""));
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Connect anyway")).Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _mockCertStore.Received().ImportAsync(Arg.Any<Guid>(), Arg.Any<CertificateImportRequest>()));
+
+        await _dialogProvider.InvokeAsync(async () => await dialog.DisposeAsync());
+
+        importGate.SetResult("late-asset-id");
+        await FlushDispatcherAsync();
+
+        await _mockCertStore.Received().DeleteAsync(Arg.Any<Guid>(), "late-asset-id");
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Dispose_DuringBlockedGracefulShutdown_DoesNotResetBrokerOrStartAttempt()
+    {
+        var shutdownGate = new TaskCompletionSource();
+        _mockSessionLifecycle.StopActiveConnectionAsync().Returns(_ => shutdownGate.Task);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        await _mockSessionLifecycle.Received(1).StopActiveConnectionAsync();
+
+        await _dialogProvider.InvokeAsync(async () => await dialog.DisposeAsync());
+
+        shutdownGate.SetResult();
+        await FlushDispatcherAsync();
+
+        await _mockCoordinator.DidNotReceive().ResetIfBrokerChangedAsync(Arg.Any<Connection>());
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+        dialog.IsConnectingForTests.Should().BeFalse(
+            "a startup that outlives the dialog must not flip the connection state");
+    }
+
+    [Test]
+    public async Task Cancel_DuringBlockedGracefulShutdown_CancelsStartupInPlace()
+    {
+        var shutdownGate = new TaskCompletionSource();
+        _mockSessionLifecycle.StopActiveConnectionAsync().Returns(_ => shutdownGate.Task);
+
+        var connA = new Connection { Name = "Broker A", Host = "a.local", Port = 1883 };
+        var connB = new Connection { Name = "Broker B", Host = "b.local", Port = 1883 };
+        await OpenDialog(new AppConfiguration { Connections = [connA, connB] });
+        await SelectConnection(connA);
+
+        DirtyNameField("Broker B");
+        _dialogProvider.Markup.Should().Contain("already exists");
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        try
+        {
+            await _mockSessionLifecycle.Received(1).StopActiveConnectionAsync();
+            await FlushDispatcherAsync();
+
+            _dialogProvider.FindAll("[data-testid=cancel-connect]").Should().NotBeEmpty(
+                "the connecting footer owns Cancel while startup waits on the previous shutdown");
+
+            _dialogProvider.Find("[data-testid=cancel-connect]").Click();
+
+            var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+            dialog.IsConnectingForTests.Should().BeFalse("cancelling the startup clears the connecting state");
+            _dialogProvider.FindAll(".mud-dialog").Should().NotBeEmpty(
+                "cancelling the startup keeps the dialog open");
+            _dialogProvider.Markup.Should().NotContain("will be discarded",
+                "cancelling the startup must not raise the unsaved-changes discard prompt");
+            _dialogProvider.FindComponents<MudTextField<string>>().First(f => f.Instance.Label == "Name")
+                .Find("input").GetAttribute("value").Should().Be("Broker B");
+            _dialogProvider.FindComponents<MudTextField<string>>().First(f => f.Instance.Label == "Host")
+                .Find("input").GetAttribute("value").Should().Be("a.local");
+
+            await _mockSessionLifecycle.Received(1).StopActiveConnectionAsync();
+            _mockUxMetrics.DidNotReceive().RecordConnectAttempt();
+            _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+            await _mockCoordinator.DidNotReceive().ResetIfBrokerChangedAsync(Arg.Any<Connection>());
+        }
+        finally
+        {
+            shutdownGate.TrySetResult();
+        }
+
+        await FlushDispatcherAsync();
+
+        _dialogProvider.WaitForAssertion(() =>
+            _dialogProvider.Find("button[title='Connect']").GetAttribute("disabled").Should().BeNull(
+                "the cancelled startup is retired so the user can retry"),
+            TimeSpan.FromSeconds(2));
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task Dispose_WhileSaveAndConnectPending_DoesNotStopActiveConnection()
+    {
+        var saveGate = new TaskCompletionSource();
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(saveGate.Task);
+
+        await OpenDialog(new AppConfiguration());
+        FillNewConnection();
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Save & Connect")).Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _mockConnections.Received(1).AddConnectionAsync(Arg.Any<Connection>()));
+
+        await _dialogProvider.InvokeAsync(async () => await dialog.DisposeAsync());
+
+        saveGate.SetResult();
+        await FlushDispatcherAsync();
+
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+        await _mockCoordinator.DidNotReceive().ResetIfBrokerChangedAsync(Arg.Any<Connection>());
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+        dialog.IsConnectingForTests.Should().BeFalse(
+            "a startup that outlives the dialog must not flip the connection state");
+    }
+
+    [Test]
+    public async Task Dispose_WhileUnsavedPromptPending_DoesNotStopActiveConnection()
+    {
+        await OpenDialog(new AppConfiguration());
+        FillNewConnection();
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+
+        await _dialogProvider.InvokeAsync(async () => await dialog.DisposeAsync());
+
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Connect anyway")).Click();
+        await FlushDispatcherAsync();
+
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+        await _mockCoordinator.DidNotReceive().ResetIfBrokerChangedAsync(Arg.Any<Connection>());
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
+        dialog.IsConnectingForTests.Should().BeFalse(
+            "a startup that outlives the dialog must not flip the connection state");
+    }
+
+    [Test]
+    public async Task SuccessWhileCleanupBlocked_CloseKeepsNewStagedAsset()
+    {
+        var priorOwnerId = Guid.NewGuid();
+        _mockSessionState.RetainedUnsavedAssetId.Returns("prior-asset-id");
+        _mockSessionState.RetainedUnsavedAssetOwnerId.Returns(priorOwnerId);
+        _mockCertStore.ImportAsync(Arg.Any<Guid>(), Arg.Any<CertificateImportRequest>()).Returns("new-staged-id");
+        var deleteGate = new TaskCompletionSource();
+        _mockCertStore.DeleteAsync(Arg.Any<Guid>(), "prior-asset-id").Returns(deleteGate.Task);
+
+        await OpenDialog(new AppConfiguration());
+        DirtyNameField("UnsavedConn");
+        SetTextField("Host", "localhost");
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        await _dialogProvider.InvokeAsync(() =>
+            dialog.SetStagedCertificate([1, 2, 3], null, null, ""));
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Connect anyway")).Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _mockClient.Received().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>()));
+
+        await SucceedPendingAttemptAsync();
+
+        _dialogProvider.Find("button[title='Connect']").GetAttribute("disabled")
+            .Should().NotBeNull("admission is blocked while the success finalizes");
+
+        await _dialogProvider.InvokeAsync(async () => await dialog.DisposeAsync());
+
+        deleteGate.SetResult();
+        await FlushDispatcherAsync();
+
+        _mockSessionState.Received().RetainedUnsavedAssetId = "new-staged-id";
+        await _mockCertStore.DidNotReceive().DeleteAsync(Arg.Any<Guid>(), "new-staged-id");
+        await _mockCertStore.Received().DeleteAsync(priorOwnerId, "prior-asset-id");
+    }
+
+    [Test]
+    public async Task Close_WhileConnecting_StopsPendingAttempt()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ConnectSavedConnectionAndWaitForPending();
+        _mockSessionLifecycle.ClearReceivedCalls();
+
+        _dialogProvider.Find(".connection-dialog-content").KeyDown(key: "Escape");
+
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("closing while connecting closes the dialog"));
+        _capturedStartToken.Should().NotBeNull();
+        _capturedStartToken!.Value.IsCancellationRequested.Should().BeTrue(
+            "closing the dialog cancels the pending attempt token");
+        await _mockSessionLifecycle.Received(1).StopAttemptAsync(
+            _attemptId, Arg.Any<CertificateSessionResource?>());
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+    }
+
+    [Test]
+    public async Task Dispose_AfterSuccessfulConnect_DoesNotStopConnection()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ConnectSavedConnectionAndWaitForPending();
+        _mockSessionLifecycle.ClearReceivedCalls();
+
+        await SucceedPendingAttemptAsync();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("a successful connect closes the dialog"));
+
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+        await _mockSessionLifecycle.DidNotReceive().StopAttemptAsync(
+            Arg.Any<MqttConnectAttemptId>(), Arg.Any<CertificateSessionResource?>());
+    }
+
+    [TestCase(MqttConnectStatus.Connected)]
+    [TestCase(MqttConnectStatus.Failed)]
+    public async Task Dispose_WhileTheAttemptLandsDuringViewportRelease_StillStopsPendingAttempt(MqttConnectStatus outcome)
+    {
+        var module = JSInterop.SetupModule("./_content/MqttProbe.UI/js/connection-dialog-viewport.js");
+        module.Setup<int?>("attach", _ => true).SetResult(7);
+        var detach = module.SetupVoid("detach", _ => true);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ConnectSavedConnectionAndWaitForPending();
+        _mockSessionLifecycle.ClearReceivedCalls();
+
+        var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var dispose = _dialogProvider.InvokeAsync(async () => await dialog.DisposeAsync());
+        await FlushDispatcherAsync();
+        dispose.IsCompleted.Should().BeFalse(
+            "the dialog is still releasing its viewport module, so the pending attempt can land in that window");
+
+        await _dialogProvider.InvokeAsync(() =>
+            _attemptCompletion!.TrySetResult(new MqttConnectOutcome(_attemptId, outcome)));
+        await FlushDispatcherAsync();
+
+        detach.SetVoidResult();
+        await dispose;
+        await FlushDispatcherAsync();
+
+        _capturedStartToken!.Value.IsCancellationRequested.Should().BeTrue(
+            "an attempt that lands while the dialog closes is still cancelled");
+        await _mockSessionLifecycle.Received(1).StopAttemptAsync(
+            _attemptId, Arg.Any<CertificateSessionResource?>());
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+        _mockUxMetrics.DidNotReceive().RecordConnectSuccess();
+    }
+
+    [Test]
+    public async Task Dispose_WhileASupersedingAttemptStarts_StopsOnlyItsOwnAttempt()
+    {
+        var module = JSInterop.SetupModule("./_content/MqttProbe.UI/js/connection-dialog-viewport.js");
+        module.Setup<int?>("attach", _ => true).SetResult(7);
+        var detach = module.SetupVoid("detach", _ => true);
+
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ConnectSavedConnectionAndWaitForPending();
+        var dialogA = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
+        var aCompletion = _attemptCompletion!;
+        var aAttemptId = _attemptId;
+        var aResource = CertificateResources().Single();
+
+        var disposeA = _dialogProvider.InvokeAsync(async () => await dialogA.DisposeAsync());
+        await FlushDispatcherAsync();
+        disposeA.IsCompleted.Should().BeFalse("A is still releasing its viewport module");
+
+        await _dialogProvider.InvokeAsync(() =>
+            aCompletion.TrySetResult(new MqttConnectOutcome(aAttemptId, MqttConnectStatus.Connected)));
+        await FlushDispatcherAsync();
+
+        var dialogService = Services.GetRequiredService<IDialogService>();
+        await _dialogProvider.InvokeAsync(async () =>
+            await dialogService.ShowAsync<ConnectionDialog>("Connection Setup"));
+        var dialogB = _dialogProvider.FindComponents<ConnectionDialog>()
+            .Single(rendered => !ReferenceEquals(rendered.Instance, dialogA));
+        await dialogB.InvokeAsync(async () => await dialogB.Instance.ConnectionChanged(cfg.Connections[0]));
+        dialogB.Find("button[title='Connect']").Click();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            dialogB.Instance.IsConnectingForTests.Should().BeTrue("the replacement attempt is pending"));
+        var bAttemptId = _attemptId;
+        var bResource = CertificateResources().Last();
+        bAttemptId.Should().NotBe(aAttemptId, "the replacement attempt is its own generation");
+        bResource.Should().NotBeSameAs(aResource, "the replacement attempt owns its own certificate resource");
+
+        _mockSessionLifecycle.ClearReceivedCalls();
+        detach.SetVoidResult();
+        await disposeA;
+        await FlushDispatcherAsync();
+
+        await _mockSessionLifecycle.Received(1).StopAttemptAsync(aAttemptId, aResource);
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+        _mockSessionState.ActiveCertificateResource.Should().BeSameAs(bResource,
+            "A's teardown must leave the replacement attempt's certificate published");
+        Assert.DoesNotThrow(() => bResource.Set(TestCertFactory.CreateRsaCert()),
+            "A's teardown must not dispose the replacement attempt's certificate");
+    }
+
+    [Test]
+    public async Task ClosingDialog_WithoutAPendingAttempt_DoesNotStopTheActiveConnection()
+    {
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Trim() == "Cancel").Click();
+
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("Cancel closes the clean dialog"));
+        await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
+    }
+
+    [Test]
+    public async Task LateOutcome_FromCancelledAttempt_IsIgnored()
+    {
+        var cfg = new AppConfiguration
+        {
+            Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
+        };
+        await OpenDialog(cfg);
+        await SelectConnection(cfg.Connections[0]);
+        ConnectSavedConnectionAndWaitForPending();
+
+        var attemptCompletion = _attemptCompletion!;
+        var attemptId = _attemptId;
+
+        _dialogProvider.Find("[data-testid=cancel-connect]").Click();
+        await _dialogProvider.InvokeAsync(() =>
+            attemptCompletion.TrySetResult(new MqttConnectOutcome(attemptId, MqttConnectStatus.Connected)));
+        await FlushDispatcherAsync();
+
+        _dialogProvider.FindAll(".mud-dialog").Should().NotBeEmpty(
+            "a late outcome from a cancelled attempt must not close the dialog");
+        _mockSessionState.DidNotReceive().LastSuccessfulConnectionId = Arg.Any<Guid?>();
     }
 
     [Test]
@@ -384,7 +1239,6 @@ public class ConnectionDialogTests : BunitTestContext
     public async Task Connect_DoesNotCallSubscriptionManagerAdd()
     {
         _mockSubMgr.Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>()).Returns(Task.CompletedTask);
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var cfg = new AppConfiguration
         {
             Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
@@ -402,7 +1256,6 @@ public class ConnectionDialogTests : BunitTestContext
         _mockSubMgr.Subscriptions.Returns(new List<SubscribedTopic>());
         _mockSubMgr.Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>()).Returns(Task.CompletedTask);
         _mockSubMgr.Remove(Arg.Any<List<string>>()).Returns(Task.CompletedTask);
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
 
         var cfg = new AppConfiguration
         {
@@ -421,8 +1274,7 @@ public class ConnectionDialogTests : BunitTestContext
         await SelectConnection(cfg.Connections[0]);
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        _connectedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
+        await SucceedPendingAttemptAsync();
 
         await _mockSubMgr.DidNotReceive().Add(Arg.Any<string>(), Arg.Any<MqttQualityOfServiceLevel>());
         await _mockSubMgr.DidNotReceive().Remove(Arg.Any<List<string>>());
@@ -797,17 +1649,11 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task Connect_SetsSelectedConnection_BeforeCallingStartAsync()
+    public async Task Connect_SetsSelectedConnection_BeforeStartingAttempt()
     {
-        // Regression: SessionState.SelectedConnection must be assigned BEFORE
-        // _managedMqttClient.StartAsync is invoked. Otherwise the SubscriptionManager,
-        // which subscribes to IMqttManagedClient.ConnectedAsync during app startup
-        // (before this dialog opens), reads the default empty SelectedConnection in
-        // its OnConnected handler and fails to re-subscribe to saved topics on
-        // app restart. The dialog's OnConnected handler runs too late — by the time
-        // it sets SelectedConnection, the SubscriptionManager has already read the
-        // default value and given up.
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
+        // Regression: SessionState.SelectedConnection must be assigned before the attempt starts,
+        // or the SubscriptionManager (subscribed at app startup) reads the default and fails to
+        // re-subscribe to saved topics on restart.
         var cfg = new AppConfiguration
         {
             Connections =
@@ -826,18 +1672,17 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        await _mockClient.Received(1).StartAsync(Arg.Any<MqttManagedClientOptions>());
+        _mockClient.Received(1).StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
         Received.InOrder(() =>
         {
             _mockSessionState.SelectedConnection = Arg.Is<Connection>(c => c!.SubscribedTopics.Any(s => s.Topic == "saved/topic"));
-            _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>());
+            _mockClient.StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
         });
     }
 
     [Test]
-    public async Task Connect_StartsMessageStoreAndChart_BeforeCallingStartAsync()
+    public async Task Connect_StartsMessageStoreAndChart_BeforeStartingAttempt()
     {
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var cfg = new AppConfiguration
         {
             Connections =
@@ -856,12 +1701,12 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        await _mockClient.Received(1).StartAsync(Arg.Any<MqttManagedClientOptions>());
+        _mockClient.Received(1).StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
         Received.InOrder(() =>
         {
             _mockMsgStore.Start();
             _mockChart.StartAsync();
-            _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>());
+            _mockClient.StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
         });
     }
 
@@ -869,7 +1714,6 @@ public class ConnectionDialogTests : BunitTestContext
     public async Task ConnectingFailed_DoesNotCallSubscriptionManagerAdd()
     {
         _mockSubMgr.Add(Arg.Any<string>()).Returns(Task.CompletedTask);
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var cfg = new AppConfiguration
         {
             Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
@@ -878,8 +1722,7 @@ public class ConnectionDialogTests : BunitTestContext
         await SelectConnection(cfg.Connections[0]);
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        await _dialogProvider.InvokeAsync(() =>
-            _failedHandler!(new MqttConnectingFailedEventArgs(new Exception("refused"))));
+        await FailPendingAttemptAsync();
 
         await _mockSubMgr.DidNotReceive().Add(Arg.Any<string>());
     }
@@ -928,12 +1771,11 @@ public class ConnectionDialogTests : BunitTestContext
             Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
         };
         await OpenDialog(cfg);
-        _failedHandler.Should().NotBeNull("component should subscribe to ConnectingFailedAsync in OnInitialized");
 
         await SelectConnection(cfg.Connections[0]);
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        await _dialogProvider.InvokeAsync(() => _failedHandler!(new MqttConnectingFailedEventArgs(new Exception("refused"))));
+        await FailPendingAttemptAsync();
 
         _dialogProvider.Markup.Should().Contain("Connection failed. Verify broker, credentials, and transport settings.");
     }
@@ -1104,7 +1946,7 @@ public class ConnectionDialogTests : BunitTestContext
 
         await _dialogProvider.WaitForAssertionAsync(() =>
             _dialogProvider.Markup.Should().Contain("Unsaved changes"));
-        await _mockClient.DidNotReceive().StartAsync(Arg.Any<MqttManagedClientOptions>());
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
     }
 
     private void DirtyNameField(string newName)
@@ -1191,9 +2033,8 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task Connect_CallsResetCoordinatorBeforeStartAsync()
+    public async Task Connect_CallsResetCoordinatorBeforeStartingAttempt()
     {
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var cfg = new AppConfiguration
         {
             Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
@@ -1206,14 +2047,13 @@ public class ConnectionDialogTests : BunitTestContext
         Received.InOrder(() =>
         {
             _mockCoordinator.ResetIfBrokerChangedAsync(Arg.Any<Connection>());
-            _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>());
+            _mockClient.StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
         });
     }
 
     [Test]
     public async Task Connect_PassesSelectedConnectionToCoordinator()
     {
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var conn = new Connection { Name = "TestConn", Host = "broker.example.com", Port = 8883 };
         var cfg = new AppConfiguration { Connections = [conn] };
         await OpenDialog(cfg);
@@ -1230,7 +2070,6 @@ public class ConnectionDialogTests : BunitTestContext
     {
         _mockCoordinator.ResetIfBrokerChangedAsync(Arg.Any<Connection>())
             .Returns(Task.FromException(new Exception("reset failed")));
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var cfg = new AppConfiguration
         {
             Connections = [new Connection { Name = "TestConn", Host = "localhost", Port = 1883 }]
@@ -1240,7 +2079,7 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        await _mockClient.Received(1).StartAsync(Arg.Any<MqttManagedClientOptions>());
+        _mockClient.Received(1).StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -1445,7 +2284,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Find("button[title='Connect']").Click();
 
         _dialogProvider.Markup.Should().Contain("unavailable or corrupt");
-        await _mockClient.DidNotReceive().StartAsync(Arg.Any<MqttManagedClientOptions>());
+        _mockClient.DidNotReceive().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -2663,11 +3502,9 @@ public class ConnectionDialogTests : BunitTestContext
         await OpenDialog(cfg);
         await SelectConnection(conn);
 
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        _connectedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
+        await SucceedPendingAttemptAsync();
 
         _mockSessionState.Received().LastSuccessfulConnectionId = conn.Id;
         _mockSessionState.Received().LastSuccessfulConnectionSnapshot = Arg.Any<Connection>();
@@ -2808,7 +3645,6 @@ public class ConnectionDialogTests : BunitTestContext
     {
         var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
         var cfg = new AppConfiguration { Connections = [conn] };
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         await OpenDialog(cfg);
         await SelectConnection(conn);
 
@@ -2817,8 +3653,7 @@ public class ConnectionDialogTests : BunitTestContext
         // Simulate user editing the form WHILE connecting (before Connected fires)
         DirtyNameField("Modified While Connecting");
 
-        _connectedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
+        await SucceedPendingAttemptAsync();
 
         // Should record the original connection, not the mutated form
         _mockSessionState.Received().LastSuccessfulConnectionSnapshot =
@@ -2835,9 +3670,7 @@ public class ConnectionDialogTests : BunitTestContext
 
         _dialogProvider.Find("button[title='Connect']").Click();
 
-        _failedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() =>
-            _failedHandler!(new MqttConnectingFailedEventArgs(new Exception("refused"))));
+        await FailPendingAttemptAsync();
 
         _mockSessionState.DidNotReceive().LastSuccessfulConnectionId = Arg.Any<Guid?>();
         _mockSessionState.DidNotReceive().LastSuccessfulConnectionSnapshot = Arg.Any<Connection>();
@@ -3304,27 +4137,57 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task ConnectedAsync_Ignored_WhenNoPendingAttempt_AfterFailedConnect()
+    public async Task Retry_AfterCancel_LateSuccessFromAttemptA_QueuedBeforeB_IsIgnored()
     {
         var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
         var cfg = new AppConfiguration { Connections = [conn] };
         await OpenDialog(cfg);
         await SelectConnection(conn);
 
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
-        _dialogProvider.Find("button[title='Connect']").Click();
+        ConnectSavedConnectionAndWaitForPending();
+        var attemptACompletion = _attemptCompletion!;
+        var attemptAId = _attemptId;
+        _dialogProvider.Find("[data-testid=cancel-connect]").Click();
 
-        // Simulate failure - clears pending attempt
-        _failedHandler.Should().NotBeNull();
+        ConnectSavedConnectionAndWaitForPending();
+        _attemptId.Should().NotBe(attemptAId, "each attempt gets its own id");
+
         await _dialogProvider.InvokeAsync(() =>
-            _failedHandler!(new MqttConnectingFailedEventArgs(new Exception("refused"))));
-
-        // Now fire ConnectedAsync (late/stale event)
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
-
-        // Dialog should still be open - stale ConnectedAsync was ignored
+            attemptACompletion.TrySetResult(new MqttConnectOutcome(attemptAId, MqttConnectStatus.Connected)));
+        await FlushDispatcherAsync();
         _dialogProvider.FindAll(".mud-dialog").Should().NotBeEmpty(
-            "stale ConnectedAsync after failure should be ignored");
+            "attempt A's late success must not close the dialog while attempt B is pending");
+
+        await SucceedPendingAttemptAsync();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("attempt B's success closes the dialog"));
+        _mockSessionState.Received(1).LastSuccessfulConnectionId = conn.Id;
+    }
+
+    [Test]
+    public async Task Retry_AfterCancel_LateSuccessFromAttemptA_AfterBClosed_IsIgnored()
+    {
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+
+        ConnectSavedConnectionAndWaitForPending();
+        var attemptACompletion = _attemptCompletion!;
+        var attemptAId = _attemptId;
+        await _dialogProvider.Find("[data-testid=cancel-connect]").ClickAsync();
+
+        ConnectSavedConnectionAndWaitForPending();
+        await SucceedPendingAttemptAsync();
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("attempt B's success closes the dialog"));
+
+        await _dialogProvider.InvokeAsync(() =>
+            attemptACompletion.TrySetResult(new MqttConnectOutcome(attemptAId, MqttConnectStatus.Connected)));
+        await FlushDispatcherAsync();
+
+        _mockSessionState.Received(1).LastSuccessfulConnectionId = conn.Id;
+        _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("the closed dialog stays closed");
     }
 
     [Test]
@@ -3479,7 +4342,6 @@ public class ConnectionDialogTests : BunitTestContext
         _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         _mockCertStore.ImportAsync(Arg.Any<Guid>(), Arg.Any<CertificateImportRequest>())
             .Returns("imported-asset-id");
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         await OpenDialog(new AppConfiguration());
 
         // Fill in a valid new connection (no saved selector)
@@ -3503,11 +4365,10 @@ public class ConnectionDialogTests : BunitTestContext
         connectAnyway.Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _mockClient.Received().StartAsync(Arg.Any<MqttManagedClientOptions>()));
+            _mockClient.Received().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>()));
 
         // Fire Connected
-        _connectedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
+        await SucceedPendingAttemptAsync();
 
         // Session state should retain the asset transferred from dialog (unsaved attempt)
         _mockSessionState.Received().RetainedUnsavedAssetId = "imported-asset-id";
@@ -3521,7 +4382,6 @@ public class ConnectionDialogTests : BunitTestContext
         _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         _mockCertStore.ImportAsync(conn.Id, Arg.Any<CertificateImportRequest>())
             .Returns("imported-asset-id");
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         await OpenDialog(cfg);
         await SelectConnection(conn);
 
@@ -3543,11 +4403,10 @@ public class ConnectionDialogTests : BunitTestContext
         saveConnect.Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _mockClient.Received().StartAsync(Arg.Any<MqttManagedClientOptions>()));
+            _mockClient.Received().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>()));
 
         // Fire Connected
-        _connectedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
+        await SucceedPendingAttemptAsync();
 
         // Saved connection: RetainedUnsavedAssetId must NOT be set to a non-null value.
         // (CleanupPriorRetainedAssetIfNeeded may set it to null, which is fine.)
@@ -3562,7 +4421,6 @@ public class ConnectionDialogTests : BunitTestContext
         _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         _mockCertStore.ImportAsync(conn.Id, Arg.Any<CertificateImportRequest>())
             .Returns("new-asset-id");
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
 
         // Simulate a prior retained asset in session state
         _mockSessionState.RetainedUnsavedAssetId.Returns("prior-asset-id");
@@ -3584,10 +4442,9 @@ public class ConnectionDialogTests : BunitTestContext
         buttons.First(b => b.TextContent.Contains("Connect anyway")).Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _mockClient.Received().StartAsync(Arg.Any<MqttManagedClientOptions>()));
+            _mockClient.Received().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>()));
 
-        _connectedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
+        await SucceedPendingAttemptAsync();
 
         // Prior retained asset should have been deleted
         await _mockCertStore.Received().DeleteAsync(
@@ -3602,7 +4459,6 @@ public class ConnectionDialogTests : BunitTestContext
         _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         _mockCertStore.ImportAsync(conn.Id, Arg.Any<CertificateImportRequest>())
             .Returns("persisted-asset-id");
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         await OpenDialog(cfg);
         await SelectConnection(conn);
 
@@ -3620,10 +4476,9 @@ public class ConnectionDialogTests : BunitTestContext
         buttons.First(b => b.TextContent.Contains("Save & Connect")).Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _mockClient.Received().StartAsync(Arg.Any<MqttManagedClientOptions>()));
+            _mockClient.Received().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>()));
 
-        _connectedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
+        await SucceedPendingAttemptAsync();
 
         // The persisted asset should NOT be retained as unsaved (it's now saved with the connection).
         // CleanupPriorRetainedAssetIfNeeded may set to null; only non-null retention is wrong.
@@ -4207,7 +5062,6 @@ public class ConnectionDialogTests : BunitTestContext
         _mockSessionState.RetainedUnsavedAssetId.Returns("prior-asset-id");
         _mockSessionState.RetainedUnsavedAssetOwnerId.Returns(priorOwnerId);
 
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         await OpenDialog(new AppConfiguration());
 
         // Fill in a valid new connection WITHOUT any cert
@@ -4224,10 +5078,9 @@ public class ConnectionDialogTests : BunitTestContext
         buttons.First(b => b.TextContent.Contains("Connect anyway")).Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _mockClient.Received().StartAsync(Arg.Any<MqttManagedClientOptions>()));
+            _mockClient.Received().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>()));
 
-        _connectedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
+        await SucceedPendingAttemptAsync();
 
         // Prior retained asset should have been deleted (new snapshot has no cert)
         await _mockCertStore.Received().DeleteAsync(priorOwnerId, "prior-asset-id");
@@ -4241,7 +5094,6 @@ public class ConnectionDialogTests : BunitTestContext
         _mockSessionState.RetainedUnsavedAssetId.Returns("same-asset-id");
         _mockSessionState.RetainedUnsavedAssetOwnerId.Returns(ownerId);
 
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         await OpenDialog(new AppConfiguration());
 
         // Fill in a valid new connection with the same cert asset ID
@@ -4260,10 +5112,9 @@ public class ConnectionDialogTests : BunitTestContext
         buttons.First(b => b.TextContent.Contains("Connect anyway")).Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _mockClient.Received().StartAsync(Arg.Any<MqttManagedClientOptions>()));
+            _mockClient.Received().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>()));
 
-        _connectedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() => _connectedHandler!(null!));
+        await SucceedPendingAttemptAsync();
 
         // Prior retained asset should NOT be deleted (same snapshot cert)
         await _mockCertStore.DidNotReceive().DeleteAsync(ownerId, "same-asset-id");
@@ -4573,7 +5424,6 @@ public class ConnectionDialogTests : BunitTestContext
         _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
         _mockCertStore.ImportAsync(Arg.Any<Guid>(), Arg.Any<CertificateImportRequest>())
             .Returns("imported-asset-id");
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 8883, UseTls = true };
         var cfg = new AppConfiguration { Connections = [conn] };
         await OpenDialog(cfg);
@@ -4594,12 +5444,10 @@ public class ConnectionDialogTests : BunitTestContext
         buttons.First(b => b.TextContent.Contains("Connect anyway")).Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _mockClient.Received().StartAsync(Arg.Any<MqttManagedClientOptions>()));
+            _mockClient.Received().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>()));
 
         // Simulate connection failure
-        _failedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() =>
-            _failedHandler!(new MqttConnectingFailedEventArgs(new Exception("refused"))));
+        await FailPendingAttemptAsync();
 
         // Now revert - should clean up the imported staged asset
         _dialogProvider.Find("button.client-cert-revert-btn").Click();
@@ -4672,7 +5520,6 @@ public class ConnectionDialogTests : BunitTestContext
             .Returns("staged-asset-id");
         _mockCertStore.DuplicateAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>())
             .Returns("dup-asset-id");
-        _mockClient.StartAsync(Arg.Any<MqttManagedClientOptions>()).Returns(Task.CompletedTask);
         var conn = new Connection
         {
             Name = "Source",
@@ -4698,12 +5545,10 @@ public class ConnectionDialogTests : BunitTestContext
         var buttons = _dialogProvider.FindAll("button");
         buttons.First(b => b.TextContent.Contains("Connect anyway")).Click();
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _mockClient.Received().StartAsync(Arg.Any<MqttManagedClientOptions>()));
+            _mockClient.Received().StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>()));
 
         // Simulate connection failure - _stagedAssetId stays tracked
-        _failedHandler.Should().NotBeNull();
-        await _dialogProvider.InvokeAsync(() =>
-            _failedHandler!(new MqttConnectingFailedEventArgs(new Exception("refused"))));
+        await FailPendingAttemptAsync();
 
         // Clear prior received calls to isolate copy behavior
         _mockCertStore.ClearReceivedCalls();

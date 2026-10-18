@@ -162,6 +162,45 @@ public class BrowserPanelTests : BunitTestContext
     }
 
     [Test]
+    public async Task ClearMessages_AfterClear_WhenTrafficRestoresCount_ReenablesButtonOnNextTick()
+    {
+        var rootCount = 1;
+        _mockMsgStore.RootTopicCount.Returns(_ => rootCount);
+
+        _mockDialogService.ShowMessageBoxAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
+            .Returns(Task.FromResult<bool?>(true));
+
+        _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask)
+            .AndDoes(_ => rootCount = 0);
+
+        var cut = Render<BrowserPanelWithoutUpdateTimer>();
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Clear"))
+            .HasAttribute("disabled").Should().BeFalse();
+        cut.FindAll(".mud-chip").Should().HaveCount(1);
+
+        await cut.InvokeAsync(() => cut.FindAll("button")
+            .First(b => b.TextContent.Contains("Clear")).Click());
+
+        cut.FindAll("button").First(b => b.TextContent.Contains("Clear"))
+            .HasAttribute("disabled").Should().BeTrue();
+        cut.FindAll(".mud-chip").Should().BeEmpty();
+
+        rootCount = 1;
+        cut.Instance.OnTimerTick();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll("button")
+                .First(b => b.TextContent.Contains("Clear"))
+                .HasAttribute("disabled").Should().BeFalse();
+            cut.FindAll(".mud-chip").Should().HaveCount(1);
+        });
+    }
+
+    [Test]
     public void BrowserHint_WhenNoStoresAndNotDismissed_IsVisible()
     {
         var cut = Render<BrowserPanel>();
@@ -219,5 +258,10 @@ public class BrowserPanelTests : BunitTestContext
         cut.Render();
 
         cut.Markup.Should().NotContain("topic-picker-overlay__panel");
+    }
+
+    private sealed class BrowserPanelWithoutUpdateTimer : BrowserPanel
+    {
+        protected override System.Threading.Timer? CreateUpdateTimer() => null;
     }
 }

@@ -26,8 +26,7 @@ public sealed class ConnectionSessionLifecycle : IConnectionSessionLifecycle
 
     public async Task StopActiveConnectionAsync()
     {
-        var certResource = _sessionState.ActiveCertificateResource;
-        _sessionState.ActiveCertificateResource = null;
+        var certResource = _sessionState.TakeActiveCertificateResource();
 
         try
         {
@@ -53,6 +52,34 @@ public sealed class ConnectionSessionLifecycle : IConnectionSessionLifecycle
         catch (Exception ex)
         {
             _logger.LogError(ex, "ActiveConnectionStopped handler failed");
+        }
+    }
+
+    public async Task StopAttemptAsync(MqttConnectAttemptId attemptId, CertificateSessionResource? certificateResource)
+    {
+        CertificateSessionResource? claimed = null;
+        long publicationVersion = 0;
+        if (certificateResource is not null)
+            claimed = _sessionState.TakeActiveCertificateResource(certificateResource, out publicationVersion);
+
+        try
+        {
+            await _mqttClient.StopAttemptAsync(attemptId);
+            claimed?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            if (claimed is not null)
+            {
+                // Fault only the publication this claim observed: a replacement session that
+                // published during the teardown owns the session now and must stay usable, while
+                // the claimed resource is still this attempt's to quarantine.
+                _sessionState.TryMarkCertificateSessionFaulted(publicationVersion);
+                _quarantine.Quarantine(claimed,
+                    $"StopAttemptAsync {attemptId.Value} failed: {ex.Message}");
+            }
+            _logger.LogError(ex, "Failed to stop connection attempt {AttemptId} cleanly", attemptId.Value);
+            throw;
         }
     }
 }

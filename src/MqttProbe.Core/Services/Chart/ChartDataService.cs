@@ -6,7 +6,6 @@ using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Plugins.Pipeline;
 using MqttProbe.Core.Services.Sparkplug;
-using MqttProbe.PluginContracts;
 
 namespace MqttProbe.Core.Services.Chart;
 
@@ -141,10 +140,7 @@ public class ChartDataService(
                 && sparkplugSettings.Sparkplug.EnrichAliasNames
                 && topologyService is not null)
             {
-                var rawPayload = e.ApplicationMessage.GetPayloadSegment().Count > 0
-                    ? e.ApplicationMessage.GetPayloadSegment().ToArray()
-                    : [];
-                aliasNames = SparkplugAliasResolver.Resolve(topic, rawPayload, topologyService.Groups);
+                aliasNames = SparkplugAliasResolver.Resolve(topic, result.Envelope, topologyService.Groups);
             }
 
             if (!TryExtractFields(payload, aliasNames, out var fields))

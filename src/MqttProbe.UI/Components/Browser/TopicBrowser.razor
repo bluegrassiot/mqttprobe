@@ -1,4 +1,4 @@
-@inject IMessageStoreManager MessageStoreManagerService
+@inject ITopicSelectionStore TopicSelectionStore
 @inject IUiSettings UiSettings
 @inject ILogger<TopicBrowser> Logger
 @using Microsoft.Extensions.Logging
@@ -9,13 +9,17 @@
     <div class="topic-header-row">
         <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary"/>
         <MudText Typo="Typo.subtitle2" Class="topic-title">Topics</MudText>
-        @if (MessageStoreManagerService.RootTopicCount > 0)
+        @if (_rootTopicCount > 0)
         {
             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
                      Class="topic-count-chip">
-                @MessageStoreManagerService.RootTopicCount
+                @_rootTopicCount
             </MudChip>
         }
+        <MudIconButton Icon="@LucideIcons.Info" Size="Size.Small" Class="topic-icon-key-toggle"
+                       title="Icon key" aria-label="Icon key"
+                       aria-expanded="@(_iconKeyOpen ? "true" : "false")" aria-controls="@IconKeyControls"
+                       OnClick="ToggleIconKey"/>
     </div>
     <div class="topic-filter-wrap">
         <MudTextField @bind-Value="_searchFilter" @bind-Value:after="OnSearchChanged"
@@ -24,10 +28,12 @@
                       Immediate="true" Clearable="true" Variant="Variant.Outlined"
                       Margin="Margin.Dense" Class="topic-filter-field"/>
     </div>
-    <div class="topic-tree-wrap">
+    <div class="topic-tree-wrap @TreeThemeClass">
         <MudToolBar Class="pa-0 mb-1 topic-toolbar">
-            <MudIconButton Icon="@LucideIcons.Maximize2" Size="Size.Small" title="Expand all" OnClick="ExpandAll"/>
-            <MudIconButton Icon="@LucideIcons.Minimize2" Size="Size.Small" title="Collapse all" OnClick="CollapseAll"/>
+            <MudIconButton Icon="@LucideIcons.Maximize2" Size="Size.Small"
+                           title="Expand all" aria-label="Expand all" OnClick="ExpandAll"/>
+            <MudIconButton Icon="@LucideIcons.Minimize2" Size="Size.Small"
+                           title="Collapse all" aria-label="Collapse all" OnClick="CollapseAll"/>
             @if (_groupSparkplugTopics)
             {
                 <span class="topic-grouping-flag"
@@ -38,13 +44,83 @@
             }
             <span class="topic-stat-legend">T = topics · M = messages</span>
         </MudToolBar>
+        @if (_iconKeyOpen)
+        {
+            <div class="topic-icon-key" id="@_iconKeyId" role="group" aria-label="Icon key">
+                <div class="topic-icon-key-header">
+                    <span class="topic-icon-key-title">Icon key</span>
+                    <MudIconButton Icon="@LucideIcons.X" Size="Size.Small"
+                                   title="Close icon key" aria-label="Close icon key" OnClick="CloseIconKey"/>
+                </div>
+                <div class="topic-icon-key-columns">
+                    <div class="topic-icon-key-column">
+                        <span class="topic-icon-key-heading">Topic rows</span>
+                        <ul class="topic-icon-key-list">
+                            <li data-icon-key="branch">
+                                <span class="topic-icon-key-glyphs">
+                                    <MudIcon Icon="@TopicTreeIconLanguage.BranchGlyph(isExpanded: false)" Size="Size.Small"
+                                             Class="topic-node-icon topic-role--branch"/>
+                                    <MudIcon Icon="@TopicTreeIconLanguage.BranchGlyph(isExpanded: true)" Size="Size.Small"
+                                             Class="topic-node-icon topic-role--branch"/>
+                                </span>
+                                <span class="topic-icon-key-text">Topic with subtopics (folder)</span>
+                            </li>
+                            <li data-icon-key="leaf">
+                                <span class="topic-icon-key-glyphs">
+                                    <MudIcon Icon="@TopicTreeIconLanguage.LeafGlyph" Size="Size.Small"
+                                             Class="topic-node-icon topic-role--leaf"/>
+                                </span>
+                                <span class="topic-icon-key-text">Topic with no subtopics (green circle, not health or message presence)</span>
+                            </li>
+                            <li data-icon-key="counts">
+                                <span class="topic-icon-key-glyphs">
+                                    <span class="topic-icon-key-sample">T 3 · M 42</span>
+                                </span>
+                                <span class="topic-icon-key-text">Topics below; messages there and below</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="topic-icon-key-column">
+                        <span class="topic-icon-key-heading">Sparkplug grouping</span>
+                        <ul class="topic-icon-key-list">
+                            @foreach (var role in SparkplugRoles)
+                            {
+                                <li data-icon-key="@role.Hook">
+                                    <span class="topic-icon-key-glyphs">
+                                        <MudIcon Icon="@TopicTreeIconLanguage.RoleGlyph(role.Kind)" Size="Size.Small"
+                                                 Class="@($"topic-node-icon {TopicTreeIconLanguage.RoleClass(role.Kind)}")"/>
+                                    </span>
+                                    <span class="topic-icon-key-text">@role.Explanation</span>
+                                </li>
+                            }
+                            <li data-icon-key="message-type">
+                                <span class="topic-icon-key-glyphs">
+                                    <MudIcon Icon="@TopicTreeIconLanguage.MessageTypeGlyph" Size="Size.Small"
+                                             Class="topic-node-icon topic-role--node"/>
+                                    <MudIcon Icon="@TopicTreeIconLanguage.MessageTypeGlyph" Size="Size.Small"
+                                             Class="topic-node-icon topic-role--device"/>
+                                </span>
+                                <span class="topic-icon-key-text">Message type, such as NDATA or NCMD: violet under a node, amber under a device</span>
+                            </li>
+                            <li data-icon-key="grouping-row">
+                                <span class="topic-icon-key-glyphs">
+                                    <span class="topic-icon-key-sample topic-icon-key-sample--group">grouping</span>
+                                </span>
+                                <span class="topic-icon-key-text">Grouping row: not a real MQTT topic</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <p class="topic-icon-key-note">Shape and colour name the category. Labels and tooltips carry the same meaning without relying on colour.</p>
+            </div>
+        }
         @if (_visibleRows.Count > 0)
         {
             <Virtualize Items="@_visibleRows" Context="row" ItemSize="36">
                 <TopicTreeRow Row="row" IsSelected="@IsRowSelected(row)" OnExpandToggled="ToggleExpand" OnSelected="OnRowSelected"/>
             </Virtualize>
         }
-        else if (MessageStoreManagerService.RootTopicCount > 0)
+        else if (_rootTopicCount > 0)
         {
             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-3">
                 No topics match "@_searchFilter"
@@ -63,21 +139,49 @@
 
 @code {
     private string? _searchFilter;
+    [CascadingParameter(Name = "IsDarkMode")] private bool? DarkMode { get; set; }
     private Timer? _updateTimer;
     private bool _disposed;
     private bool _groupSparkplugTopics;
-    private long _lastTreeVersion;
-    private Guid _lastSelectionStoreId;
-    private long _lastSelectionGeneration;
+    private bool _iconKeyOpen;
+
+    // A responsive layout can mount two browsers at once, so the panel id must belong to this
+    // instance. It is generated once, which keeps aria-controls stable across renders.
+    private readonly string _iconKeyId = $"topic-icon-key-{Guid.NewGuid():N}";
+    private TopicSelectionSession? _selectionSession;
+    private int _rootTopicCount;
     private List<TopicTreeRowModel> _visibleRows = [];
     private readonly HashSet<string> _expandedPaths = [];
-    private string? _selectedFullPath;
+    private string? _selectedKey;
+
+    // The key explains the glyphs of both tree modes from one place, so it names every Sparkplug
+    // role the grouping view can show. A message type keeps its own hue from its owner rather than
+    // a colour of its own, so the node and device lines are joined by one explicit message-type
+    // line that shows both owner tones.
+    private static readonly (TopicTreeRowKind Kind, string Hook, string Explanation)[] SparkplugRoles =
+    [
+        (TopicTreeRowKind.SparkplugNamespace, "namespace", "Sparkplug namespace (spBv1.0)"),
+        (TopicTreeRowKind.SparkplugGroup, "group", "Sparkplug group id"),
+        (TopicTreeRowKind.SparkplugNode, "node", "Node or gateway that published"),
+        (TopicTreeRowKind.SparkplugDevice, "device", "Device under that node")
+    ];
 
     [Parameter] public EventCallback<SelectedTopicState> OnSelectedChanged { get; set; }
+
+    private string? IconKeyControls => _iconKeyOpen ? _iconKeyId : null;
+
+    // The app opens in dark mode, so a bare instance or a unit test that cannot cascade still
+    // gets the dark tones rather than light tones on a dark surface.
+    private string TreeThemeClass => (DarkMode ?? true) ? "topic-tree--dark" : "topic-tree--light";
+
+    private void ToggleIconKey() => _iconKeyOpen = !_iconKeyOpen;
+
+    private void CloseIconKey() => _iconKeyOpen = false;
 
     protected override void OnInitialized()
     {
         _groupSparkplugTopics = UiSettings.Ui.GroupSparkplugTopicsByNodeAndDevice;
+        _selectionSession = new TopicSelectionSession(TopicSelectionStore);
         BuildVisibleRows();
         UiSettings.UiPreferencesChanged += OnUiPreferencesChanged;
         _updateTimer = new Timer(_ =>
@@ -115,38 +219,22 @@
         catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser preference refresh failed"); }
     }
 
-    private void BuildVisibleRows()
+    private TopicSelectionFrame? BuildVisibleRows(bool force = true)
     {
-        var snapshot = MessageStoreManagerService.GetTopicTreeSnapshot();
-        var selection = MessageStoreManagerService.GetSelectedTopicState();
-        BuildVisibleRows(snapshot, selection);
+        var frame = _selectionSession!.Refresh(_searchFilter, _expandedPaths, _groupSparkplugTopics, force);
+        ApplyFrame(frame);
+        return frame;
     }
 
-    // One projection pass builds the rows and reports whether the selected real topic still has
-    // one, ignoring filter and expansion, so a purge cannot leave a selection without a row.
-    private void BuildVisibleRows(TopicTreeSnapshot snapshot, SelectedTopicState selection)
+    private void ApplyFrame(TopicSelectionFrame? frame)
     {
-        _visibleRows = TopicTreeProjection.CreateRows(
-            snapshot.Roots, _searchFilter, _expandedPaths, _groupSparkplugTopics,
-            selection.FullTopic, out var selectionRepresented);
-
-        if (selection.FullTopic is not null && !selectionRepresented)
-        {
-            // One conditional clear under the store's own lock; a purge that fresh traffic undid
-            // rejects it, so the next ordinary refresh rebuilds rather than clearing a live row.
-            if (!MessageStoreManagerService.TryClearSelection(snapshot.Version, selection))
-                return;
-
-            selection = MessageStoreManagerService.GetSelectedTopicState();
-        }
-
-        _lastTreeVersion = snapshot.Version;
-        _lastSelectionStoreId = selection.Token.StoreId;
-        _lastSelectionGeneration = selection.Token.Generation;
-        _selectedFullPath = selection.FullTopic;
+        if (frame is null) return;
+        _visibleRows = frame.Rows.ToList();
+        _rootTopicCount = frame.RootCount;
+        _selectedKey = frame.Selection.Key;
     }
 
-    private async Task RefreshAsync()
+    internal async Task RefreshAsync()
     {
         try
         {
@@ -154,14 +242,10 @@
             {
                 if (_disposed) return;
 
-                var snapshot = MessageStoreManagerService.GetTopicTreeSnapshot();
-                var selection = MessageStoreManagerService.GetSelectedTopicState();
-                if (snapshot.Version == _lastTreeVersion
-                    && selection.Token.StoreId == _lastSelectionStoreId
-                    && selection.Token.Generation == _lastSelectionGeneration)
+                var frame = _selectionSession!.Refresh(_searchFilter, _expandedPaths, _groupSparkplugTopics);
+                if (frame is null)
                     return;
-
-                BuildVisibleRows(snapshot, selection);
+                ApplyFrame(frame);
                 StateHasChanged();
             });
         }
@@ -170,21 +254,24 @@
     }
 
     private bool IsRowSelected(TopicTreeRowModel row) =>
-        !row.IsVirtualTopic && string.Equals(row.FullPath, _selectedFullPath, StringComparison.Ordinal);
+        string.Equals(row.FullPath, _selectedKey, StringComparison.Ordinal);
 
     private void OnSearchChanged()
     {
-        MessageStoreManagerService.SelectTopic(null);
+        _selectionSession!.Select(null);
         BuildVisibleRows();
         StateHasChanged();
     }
 
-    private async Task OnRowSelected(string path)
+    private async Task OnRowSelected(TopicSelection request)
     {
-        BuildVisibleRows();
+        if (_selectionSession!.Select(request) is null) return;
+        var frame = BuildVisibleRows();
         StateHasChanged();
-        if (OnSelectedChanged.HasDelegate)
-            await OnSelectedChanged.InvokeAsync(MessageStoreManagerService.GetSelectedTopicState());
+        if (frame is not null
+            && string.Equals(frame.Selection.Key, request.Key, StringComparison.Ordinal)
+            && OnSelectedChanged.HasDelegate)
+            await OnSelectedChanged.InvokeAsync(frame.Selection);
     }
 
     private Task ToggleExpand(string path)
@@ -202,7 +289,7 @@
     private void ExpandAll()
     {
         TopicTreeProjection.AddExpandablePaths(
-            MessageStoreManagerService.GetTopicTreeSnapshot().Roots, _groupSparkplugTopics, _expandedPaths);
+            TopicSelectionStore.GetTopicTreeSnapshot().Roots, _groupSparkplugTopics, _expandedPaths);
         BuildVisibleRows();
         StateHasChanged();
     }

@@ -1,24 +1,14 @@
 .connection-dialog-content {
     display: flex;
     flex-direction: column;
-    /* Fixed height matching the Transport tab's natural size so shorter tabs
-       (Identity, On Connect) do not shrink the dialog. Capped by the viewport
-       so it never overflows on phones. */
+    /* Preferred desktop size; the paper's bounded chain hands any shortfall back to the panel. */
     height: 560px;
-    /* Ceiling: never exceed viewport minus title + chrome + device safe areas. */
-    max-height: calc(
-        100dvh
-        - env(safe-area-inset-top, 0px)
-        - env(safe-area-inset-bottom, 0px)
-        - 32px
-    );
+    max-height: 100%;
+    flex: 0 1 auto;
+    min-height: 0;
 }
 
 
-/* MudForm must be a flex column so the step selector, tabs, and footer
-   distribute height correctly within the fixed-height dialog. Without this,
-   .connection-tabs flex:1 has no effect because the parent form defaults to
-   display:block. */
 .connection-dialog-content ::deep .mud-form {
     display: flex;
     flex-direction: column;
@@ -31,9 +21,6 @@
     min-height: 0;
 }
 
-/* MudBlazor renders a .mud-tabs-panels wrapper between MudTabs and the
-   individual tab panels. Make it a bounded flex column so the active
-   panel can fill the available space. */
 .connection-dialog-content ::deep .connection-tabs .mud-tabs-panels {
     display: flex;
     flex-direction: column;
@@ -57,6 +44,17 @@
     scrollbar-gutter: stable;
 }
 
+.connection-dialog-notices {
+    display: flex;
+    flex-direction: column;
+    background: var(--mud-palette-surface);
+    flex-shrink: 0;
+}
+
+.connection-dialog-notices ::deep .mud-alert {
+    margin: 12px 16px 0;
+}
+
 .connection-actions-footer {
     display: flex;
     flex-direction: column;
@@ -72,13 +70,27 @@
     justify-content: flex-end;
 }
 
+.connection-connecting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.connection-connecting-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
 .signal-connecting-sm {
     width: 26px;
     height: 26px;
     animation: signal-breathe 1.6s ease-in-out infinite;
 }
 
-/* Compact step selector — visible only on mobile */
 .step-selector {
     display: none;
 }
@@ -90,6 +102,8 @@
     background: transparent;
     color: var(--mud-palette-text-secondary);
     font-size: 0.85rem;
+    /* "On Connect" must stay on one line at the narrowest phone width. */
+    white-space: nowrap;
     cursor: pointer;
     transition: color 150ms ease-out, border-color 150ms ease-out;
     border-bottom: 2px solid transparent;
@@ -106,15 +120,60 @@
 }
 
 @media (max-width: 599px) {
+    .connection-dialog-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
+        max-height: none;
+    }
+
     .step-selector {
         display: flex;
         border-bottom: 1px solid var(--mud-palette-divider);
     }
 
-    /* Hide the MudTabs tabbar on mobile, keep panels */
     .connection-dialog-content ::deep .connection-tabs .mud-tabs-tabbar {
         display: none;
     }
+
+    .connection-actions-footer {
+        padding: 8px 12px;
+        gap: 8px;
+    }
+}
+
+/* Compact fallback: the card scrolls, so the chain inside it must not clip or scroll on its own. */
+.connection-dialog-content--compact {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
+.connection-dialog-content--compact ::deep .connection-dialog-header,
+.connection-dialog-content--compact ::deep .mud-form,
+.connection-dialog-content--compact ::deep .connection-tabs,
+.connection-dialog-content--compact ::deep .connection-tabs .mud-tabs-panels,
+.connection-dialog-content--compact .connection-dialog-notices {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: visible;
+}
+
+/* overflow, not overflow-y: a visible axis beside a hidden one computes to auto, a second scroll container. */
+/* The trailing padding is the stuck footer's height, so the last control can clear it. */
+.connection-dialog-content--compact ::deep .connection-tabs .mud-tab-panel[role='tabpanel'].mud-tab-panel-active {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: calc(16px + var(--connection-dialog-footer-height, 0px));
+}
+
+.connection-dialog-content--compact .connection-actions-footer {
+    position: sticky;
+    bottom: 0;
+}
+
+.connection-dialog-content--compact .step-selector {
+    flex: 0 0 auto;
 }
 
 /* iOS local-network note: a compact disclosure so the explanation is one tap away

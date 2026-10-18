@@ -130,6 +130,33 @@ public class SparkplugSectionTests : BunitTestContext
     }
 
     [Test]
+    public async Task ReorderTimeout_NumericField_PersistsMilliseconds()
+    {
+        _mockStore.SetReorderTimeoutMillisecondsAsync(Arg.Any<int>()).Returns(Task.CompletedTask);
+        var cut = Render<SparkplugSection>();
+
+        var field = cut.FindComponents<MudNumericField<int>>()
+            .First(component => component.Instance.Label == "Sequence reorder wait (ms)");
+        await cut.InvokeAsync(() => field.Instance.ValueChanged.InvokeAsync(1500));
+
+        await _mockStore.Received(1).SetReorderTimeoutMillisecondsAsync(1500);
+    }
+
+    [Test]
+    public void ReorderTimeout_NumericField_UsesExpectedBoundsAndSavedValue()
+    {
+        _mockStore.Sparkplug.ReorderTimeoutMilliseconds = 2500;
+        var cut = Render<SparkplugSection>();
+
+        var field = cut.FindComponents<MudNumericField<int>>()
+            .First(component => component.Instance.Label == "Sequence reorder wait (ms)");
+        field.Instance.Min.Should().Be(0);
+        field.Instance.Max.Should().Be(60000);
+        field.Instance.GetState(value => value.Value).Should().Be(2500);
+        cut.Markup.Should().Contain("0 ms acts immediately");
+    }
+
+    [Test]
     public void Section_RendersNoPanelChrome()
     {
         var cut = Render<SparkplugSection>();

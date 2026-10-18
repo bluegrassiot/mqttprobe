@@ -118,6 +118,8 @@ public class FirstConnectRetainedMessageRaceTests
         public bool IsConnected => true;
         public bool IsStarted => true;
 
+        public bool IsCurrentAttempt(MqttConnectAttemptId attemptId) => false;
+
         public event Func<MqttClientConnectedEventArgs, Task>? ConnectedAsync
         {
             add => _connectedHandler += value;
@@ -153,6 +155,16 @@ public class FirstConnectRetainedMessageRaceTests
             add { }
             remove { }
         }
+
+        public event Func<MqttConnectOutcome, Task>? ConnectAttemptCompletedAsync
+        {
+            add { }
+            remove { }
+        }
+
+        public MqttConnectAttempt StartAttempt(MqttManagedClientOptions options, CancellationToken cancellationToken = default) =>
+            new(MqttConnectAttemptId.None,
+                Task.FromResult(new MqttConnectOutcome(MqttConnectAttemptId.None, MqttConnectStatus.Canceled)));
 
         public int SubscribeAsyncCallCount { get; private set; }
 
@@ -199,6 +211,9 @@ public class FirstConnectRetainedMessageRaceTests
             Task.CompletedTask;
 
         public Task StopAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task StopAttemptAsync(MqttConnectAttemptId attemptId, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
         public void Dispose() { }

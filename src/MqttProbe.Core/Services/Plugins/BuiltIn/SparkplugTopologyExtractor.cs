@@ -30,8 +30,10 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
             {
                 FormatId = FormatId,
                 Topic = envelope.Topic,
+                SequenceNumber = ReadSequenceNumber(envelope.RawPayload),
                 GroupId = group,
-                NodeId = node
+                NodeId = node,
+                BirthDeathSequenceNumber = GetBirthDeathSequence(payload)
             }],
             "NDATA" => HandleNData(envelope, payload, group, node),
             "DBIRTH" when device != null => HandleDBirth(envelope, payload, group, node, device),
@@ -39,6 +41,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
             {
                 FormatId = FormatId,
                 Topic = envelope.Topic,
+                SequenceNumber = ReadSequenceNumber(envelope.RawPayload),
                 GroupId = group,
                 NodeId = node,
                 DeviceId = device
@@ -67,9 +70,12 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
         {
             FormatId = FormatId,
             Topic = envelope.Topic,
+            TimestampUtc = GetSourceTimestamp(payload, DateTime.UtcNow),
+            SequenceNumber = ReadSequenceNumber(envelope.RawPayload),
             GroupId = group,
             NodeId = node,
-            Metrics = metrics
+            Metrics = metrics,
+            BirthDeathSequenceNumber = GetBirthDeathSequence(payload)
         }];
     }
 
@@ -85,6 +91,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
         {
             FormatId = FormatId,
             Topic = envelope.Topic,
+            SequenceNumber = ReadSequenceNumber(envelope.RawPayload),
             GroupId = group,
             NodeId = node,
             Metrics = metrics
@@ -110,6 +117,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
         {
             FormatId = FormatId,
             Topic = envelope.Topic,
+            SequenceNumber = ReadSequenceNumber(envelope.RawPayload),
             GroupId = group,
             NodeId = node,
             DeviceId = device,
@@ -129,6 +137,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
         {
             FormatId = FormatId,
             Topic = envelope.Topic,
+            SequenceNumber = ReadSequenceNumber(envelope.RawPayload),
             GroupId = group,
             NodeId = node,
             DeviceId = device,
@@ -179,6 +188,93 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
         }
 
         return result;
+    }
+
+    private static ulong? GetBirthDeathSequence(Payload payload)
+    {
+        var metric = payload.Metrics.FirstOrDefault(item => string.Equals(item.Name, "bdSeq", StringComparison.Ordinal));
+        if (metric is null)
+            return null;
+        return metric.ValueCase switch
+        {
+            Payload.Types.Metric.ValueOneofCase.IntValue when metric.IntValue >= 0 => (ulong)metric.IntValue,
+            Payload.Types.Metric.ValueOneofCase.LongValue when metric.LongValue >= 0 => metric.LongValue,
+            _ => null
+        };
+    }
+
+    private static DateTime GetSourceTimestamp(Payload payload, DateTime fallback) =>
+        payload.Timestamp == 0
+            ? fallback
+            : DateTimeOffset.FromUnixTimeMilliseconds((long)Math.Min(payload.Timestamp, (ulong)DateTimeOffset.MaxValue.ToUnixTimeMilliseconds())).UtcDateTime;
+
+    private static ulong? ReadSequenceNumber(ReadOnlySpan<byte> payload)
+    {
+        var position = 0;
+        ulong? sequenceNumber = null;
+        while (position < payload.Length)
+        {
+            if (!TryReadVarint(payload, ref position, out var tag))
+                return null;
+            if ((tag >> 3) > 0x1FFFFFFF)
+                return null;
+            var field = (int)(tag >> 3);
+            var wireType = (int)(tag & 7);
+            if (field == 0)
+                return null;
+
+            if (field == 3 && wireType == 0)
+            {
+                if (!TryReadVarint(payload, ref position, out var sequence))
+                    return null;
+                sequenceNumber = sequence;
+                continue;
+            }
+
+            switch (wireType)
+            {
+                case 0:
+                    if (!TryReadVarint(payload, ref position, out _)) return null;
+                    break;
+                case 1:
+                    if (payload.Length - position < 8) return null;
+                    position += 8;
+                    break;
+                case 2:
+                    if (!TryReadVarint(payload, ref position, out var length)
+                        || length > int.MaxValue
+                        || (int)length > payload.Length - position) return null;
+                    position += (int)length;
+                    break;
+                case 5:
+                    if (payload.Length - position < 4) return null;
+                    position += 4;
+                    break;
+                default:
+                    return null;
+            }
+
+            if (position > payload.Length)
+                return null;
+        }
+
+        return sequenceNumber ?? 0UL;
+    }
+
+    private static bool TryReadVarint(ReadOnlySpan<byte> payload, ref int position, out ulong value)
+    {
+        value = 0;
+        for (var shift = 0; shift < 70 && position < payload.Length; shift += 7)
+        {
+            var current = payload[position++];
+            if (shift == 63 && current > 1)
+                return false;
+            value |= (ulong)(current & 0x7f) << shift;
+            if ((current & 0x80) == 0)
+                return true;
+        }
+
+        return false;
     }
 
     private static List<MetricSnapshot> ExtractMetricsWithAliasResolution(

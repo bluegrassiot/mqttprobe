@@ -93,12 +93,14 @@
     protected override void OnInitialized()
     {
         _lastCount = MessageStoreManager.RootTopicCount;
-        _updateTimer = new Timer(_ =>
-        {
-            if (_disposed) return;
-            OnTimerTick();
-        }, null, 0, 1_000);
+        _updateTimer = CreateUpdateTimer();
     }
+
+    protected virtual Timer? CreateUpdateTimer() => new Timer(_ =>
+    {
+        if (_disposed) return;
+        OnTimerTick();
+    }, null, 0, 1_000);
 
     internal void OnTimerTick()
     {
@@ -138,6 +140,7 @@
             return;
 
         await MessageStoreManager.ClearAllMessages();
+        _lastCount = MessageStoreManager.RootTopicCount;
         Snackbar.Add("All stored messages cleared.", Severity.Success);
     }
 

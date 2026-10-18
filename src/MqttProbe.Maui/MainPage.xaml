@@ -6,7 +6,8 @@
              x:Class="MqttProbe.MainPage"
              SafeAreaEdges="All"
              BackgroundColor="{DynamicResource PageBackgroundColor}">
-    <BlazorWebView HostPage="wwwroot/index.html" Margin="0,0,0,0">
+    <BlazorWebView HostPage="wwwroot/index.html" Margin="0,0,0,0"
+                   BlazorWebViewInitialized="OnBlazorWebViewInitialized">
         <BlazorWebView.RootComponents>
             <RootComponent Selector="#app" ComponentType="{x:Type local:Main}" />
         </BlazorWebView.RootComponents>

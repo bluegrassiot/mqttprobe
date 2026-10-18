@@ -7,14 +7,36 @@ public interface IMqttManagedClient : IAsyncDisposable, IDisposable
 {
     public bool IsConnected { get; }
     public bool IsStarted { get; }
+    public long? ConnectionEpoch => null;
+    public long? InboundConnectionEpoch => null;
+    public MqttSubscriptionSnapshot? LiveSubscriptionSnapshot => null;
+    public MqttSubscriptionSnapshot? InboundSubscriptionSnapshot => null;
 
     public Task StartAsync(MqttManagedClientOptions options, CancellationToken cancellationToken = default);
+
+    public MqttConnectAttempt StartAttempt(MqttManagedClientOptions options, CancellationToken cancellationToken = default);
+
     public Task StopAsync(CancellationToken cancellationToken = default);
+
+    public Task StopAttemptAsync(MqttConnectAttemptId attemptId, CancellationToken cancellationToken = default);
+    public bool IsCurrentAttempt(MqttConnectAttemptId attemptId);
 
     public Task SubscribeAsync(IEnumerable<MqttTopicFilter> topicFilters, CancellationToken cancellationToken = default);
     public Task UnsubscribeAsync(IEnumerable<string> topics, CancellationToken cancellationToken = default);
 
     public Task EnqueueAsync(MqttApplicationMessage applicationMessage, CancellationToken cancellationToken = default);
+    public Task<bool> TryPublishConnectedAsync(
+        MqttApplicationMessage applicationMessage,
+        long? expectedConnectionEpoch = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+
+    public Task<bool> TryPublishConnectedAsync(
+        MqttApplicationMessage applicationMessage,
+        long? expectedConnectionEpoch,
+        long? expectedSubscriptionRevision,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(false);
 
     public event Func<MqttClientConnectedEventArgs, Task>? ConnectedAsync;
     public event Func<MqttClientDisconnectedEventArgs, Task>? DisconnectedAsync;
@@ -22,4 +44,5 @@ public interface IMqttManagedClient : IAsyncDisposable, IDisposable
     public event Func<EventArgs, Task>? ConnectionStateChangedAsync;
     public event Func<MqttApplicationMessageReceivedEventArgs, Task>? ApplicationMessageReceivedAsync;
     public event Func<MqttManagedProcessFailedEventArgs, Task>? SynchronizingSubscriptionsFailedAsync;
+    public event Func<MqttConnectOutcome, Task>? ConnectAttemptCompletedAsync;
 }

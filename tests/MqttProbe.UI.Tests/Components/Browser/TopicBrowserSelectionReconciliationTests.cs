@@ -27,40 +27,39 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _fixture = new TopicBrowserTestFixture(_mockMsgStore);
-        _fixture.Configure();
+        Services.AddSingleton<ITopicSelectionStore>(_fixture.Adapter);
         _mockUi = SettingsSubstituteRegistration.CreateUiSettings(_preferences);
         Services.AddSingleton(_mockMsgStore);
         Services.AddUiSettings(_mockUi);
     }
 
-    private static TopicNodeSnapshot[] Tree() =>
+    private static (string Topic, int Messages)[] Topics() =>
     [
-        .. TopicSnapshotBuilder.Build(
-            (NodeTip, 3),
-            ("spBv1.0/plant1/NDATA/node1/extra", 1),
-            ("spBv1.0/plant1/NBIRTH/node1", 1),
-            ("spBv1.0/plant1/DDATA/node1/dev1", 2),
-            ("spBv1.0/plant1/STATE/scada", 1),
-            ("spBv1.0/STATE/scada-host", 1),
-            ("sensors/temp", 2))
+        (NodeTip, 3),
+        ("spBv1.0/plant1/NDATA/node1/extra", 1),
+        ("spBv1.0/plant1/NBIRTH/node1", 1),
+        ("spBv1.0/plant1/DDATA/node1/dev1", 2),
+        ("spBv1.0/plant1/STATE/scada", 1),
+        ("spBv1.0/STATE/scada-host", 1),
+        ("sensors/temp", 2)
     ];
 
     private IRenderedComponent<TopicBrowser> RenderWithSelection(
         bool grouped,
         string? selectedPath,
         Func<SelectedTopicState, Task>? onSelected = null) =>
-        RenderSnapshot(Tree(), grouped, selectedPath, onSelected);
+        RenderTopics(Topics(), grouped, selectedPath, onSelected);
 
-    private IRenderedComponent<TopicBrowser> RenderSnapshot(
-        TopicNodeSnapshot[] tree,
+    private IRenderedComponent<TopicBrowser> RenderTopics(
+        IEnumerable<(string Topic, int Messages)> topics,
         bool grouped,
         string? selectedPath,
         Func<SelectedTopicState, Task>? onSelected = null)
     {
         _preferences.GroupSparkplugTopicsByNodeAndDevice = grouped;
-        _fixture.SetSnapshot(tree);
+        _fixture.AddTopics([.. topics]);
         if (selectedPath is not null)
-            _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(_storeId, 1, 1), selectedPath, 1));
+            _fixture.SetSelection(TopicSelection.ForTopic(selectedPath));
         var cut = Render<TopicBrowser>(parameters =>
         {
             if (onSelected is not null)
@@ -84,6 +83,12 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
 
     private static void CollapseAll(IRenderedComponent<TopicBrowser> cut) =>
         cut.FindAll(".mud-toolbar button")[1].Click();
+
+    private void UseRetentionStore()
+    {
+        _fixture = new TopicBrowserTestFixture(_mockMsgStore, maxStoredMessages: 0);
+        Services.AddSingleton<ITopicSelectionStore>(_fixture.Adapter);
+    }
 
     [Test]
     public void TurningGroupingOn_ClearsASelectionTheGroupedViewCannotShow()
@@ -148,7 +153,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         // toggle must leave it alone.
         cut.Find(".topic-filter-field input").Input("sensors");
         cut.WaitForAssertion(() => cut.Markup.Should().NotContain("NDATA"));
-        _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(_storeId, 2, 2), NodeTip, 3));
+        _fixture.SetSelection(TopicSelection.ForTopic(NodeTip));
         _mockMsgStore.ClearReceivedCalls();
 
         ApplyPreference(false);
@@ -157,7 +162,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedFullTopic.Should().Be(NodeTip);
+        _fixture.SelectedKey.Should().Be(NodeTip);
     }
 
     [TestCase("spBv1.0")]
@@ -194,22 +199,21 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     [Test]
     public void TurningGroupingOn_KeepsTheSelectionForARetainedFallbackAggregate()
     {
-        TopicNodeSnapshot[] mixed =
+        (string Topic, int Messages)[] mixed =
         [
-            .. TopicSnapshotBuilder.Build(
-                (NodeTip, 3),
-                ("spBv1.0/plant1/NDATA/ghosttip/leaf", 1),
-                ("spBv1.0/plant1/DDATA/node1/dev1", 2))
+            (NodeTip, 3),
+            ("spBv1.0/plant1/NDATA/ghosttip/leaf", 1),
+            ("spBv1.0/plant1/DDATA/node1/dev1", 2)
         ];
 
-        var cut = RenderSnapshot(mixed, grouped: false, NodeVerb);
+        var cut = RenderTopics(mixed, grouped: false, NodeVerb);
 
         ApplyPreference(true);
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedFullTopic.Should().Be(NodeVerb);
+        _fixture.SelectedKey.Should().Be(NodeVerb);
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
         {
@@ -224,21 +228,21 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     [Test]
     public void TurningGroupingOn_KeepsTheSelectionForARetainedZeroMessageTopic()
     {
-        TopicNodeSnapshot[] retained =
+        UseRetentionStore();
+        (string Topic, int Messages)[] retained =
         [
-            .. TopicSnapshotBuilder.Build(
-                (NodeTip, 3),
-                ("spBv1.0/plant1/STATE/zero-host", 0))
+            (NodeTip, 3),
+            ("spBv1.0/plant1/STATE/zero-host", 1)
         ];
 
-        var cut = RenderSnapshot(retained, grouped: false, "spBv1.0/plant1/STATE/zero-host");
+        var cut = RenderTopics(retained, grouped: false, "spBv1.0/plant1/STATE/zero-host");
 
         ApplyPreference(true);
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedFullTopic.Should().Be("spBv1.0/plant1/STATE/zero-host");
+        _fixture.SelectedKey.Should().Be("spBv1.0/plant1/STATE/zero-host");
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
         {
@@ -251,22 +255,22 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     [Test]
     public void TurningGroupingOn_KeepsTheSelectionForARetainedChildlessTip()
     {
+        UseRetentionStore();
         const string keptNode = "spBv1.0/plant1/NDATA/keptnode";
-        TopicNodeSnapshot[] retained =
+        (string Topic, int Messages)[] retained =
         [
-            .. TopicSnapshotBuilder.Build(
-                (NodeTip, 3),
-                (keptNode, 0))
+            (NodeTip, 3),
+            (keptNode, 1)
         ];
 
-        var cut = RenderSnapshot(retained, grouped: false, keptNode);
+        var cut = RenderTopics(retained, grouped: false, keptNode);
 
         ApplyPreference(true);
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedFullTopic.Should().Be(keptNode);
+        _fixture.SelectedKey.Should().Be(keptNode);
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
         {

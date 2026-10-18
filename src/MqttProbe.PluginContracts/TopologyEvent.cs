@@ -5,6 +5,7 @@ public abstract class TopologyEvent
     public required string FormatId { get; init; }
     public required string Topic { get; init; }
     public DateTime TimestampUtc { get; init; } = DateTime.UtcNow;
+    public ulong? SequenceNumber { get; init; }
 }
 
 public sealed class NodeBirthEvent : TopologyEvent
@@ -12,12 +13,14 @@ public sealed class NodeBirthEvent : TopologyEvent
     public required string GroupId { get; init; }
     public required string NodeId { get; init; }
     public required IReadOnlyList<MetricSnapshot> Metrics { get; init; }
+    public ulong? BirthDeathSequenceNumber { get; init; }
 }
 
 public sealed class NodeDeathEvent : TopologyEvent
 {
     public required string GroupId { get; init; }
     public required string NodeId { get; init; }
+    public ulong? BirthDeathSequenceNumber { get; init; }
 }
 
 public sealed class NodeDataEvent : TopologyEvent

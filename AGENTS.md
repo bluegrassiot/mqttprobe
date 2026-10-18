@@ -2,6 +2,8 @@
 
 ## Repository setup
 
+- Create new worktrees under `.worktrees/<task-name>` in the main repository root, not in tool-managed storage, sibling folders, or temporary directories. When already in a worktree, use the main repository's `.worktrees` directory rather than nesting another `.worktrees` inside the current worktree.
+- Use a worktree creation method that supports this location. If a tool chooses its own location and cannot target the repository's `.worktrees` directory, do not use it to create worktrees. Existing worktrees stay where they are unless the user explicitly asks to move them.
 - After cloning or creating a worktree, run `git submodule update --init --recursive` from that checkout before building, testing, formatting, or loading the solution in Roslynk.
 - `external/SparkplugNet` is a required build dependency. Each new worktree needs its own submodule checkout, even if the original worktree already has it initialized.
 - If a check reports a missing SparkplugNet project, check `git submodule status` and initialize the submodule before treating it as a source-code failure. Use the commit pinned by the repository, not `--remote`.
@@ -36,9 +38,12 @@
 
 ## Comments
 
-- Prefer few comments. Explain non-obvious *why*, not restate *what*.
-- Do not add routine XML doc comments to hand-written code; `python scripts/ci/check-comments.py` gates it.
-- Acceptable where they clarify messy CSS/Razor markup, complex regex, or hard-to-name structure. `CONTRIBUTING.md` (Code Style) works through examples.
+- Keep comments VERY minimal. The default is no new comment, in production code and tests alike.
+- Add a comment only when necessary to explain a non-obvious reason, constraint, or invariant that clear naming and structure cannot express. Keep it short.
+- Do not add section banners, narrated steps, Arrange/Act/Assert labels, summaries of obvious behavior, or comments that restate the code.
+- Do not add routine XML doc comments to hand-written code; `python scripts/ci/check-comments.py` gates it. Passing this gate does not make other unnecessary comments acceptable.
+- Short explanations of genuinely unclear CSS/Razor markup or complex regex are acceptable. Prefer clearer code over explanatory comments. `CONTRIBUTING.md` (Code Style) works through examples.
+- Apply these rules to every delegated task. Before accepting specialist work, review added comments in the diff and remove those that do not meet this standard.
 
 ## Styling and layout
 

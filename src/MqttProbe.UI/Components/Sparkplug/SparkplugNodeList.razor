@@ -29,13 +29,14 @@ else
         <div class="spb-group-header">@grp.Key.ToUpperInvariant()</div>
         @foreach (var node in grp.OrderBy(n => n.NodeId, NaturalStringComparer.Instance))
         {
+            var sequence = node.Sequence;
             <div @key="@($"{node.GroupId}/{node.NodeId}")" class="spb-node-row @(SelectedNode == node ? "spb-node-row--selected" : "")"
                  @onclick="() => OnSelect.InvokeAsync(node)">
                 <div class="d-flex align-center justify-space-between">
                     <div class="d-flex align-center gap-1">
-                        <span class="spb-status-dot" style="background:@SparkplugNodeDisplay.NodeStatusColor(node)"></span>
+                        <span class="spb-status-dot @NodeStatusClass(node)"></span>
                         <span class="spb-node-id">@node.NodeId</span>
-                        <span class="spb-status-label spb-status-label--node" style="color:@SparkplugNodeDisplay.NodeStatusColor(node)">
+                        <span class="spb-status-label spb-status-label--node @NodeStatusClass(node)">
                             @SparkplugNodeDisplay.NodeStatusLabel(node)
                         </span>
                     </div>
@@ -53,12 +54,39 @@ else
                 <div class="spb-node-secondary">
                     @SparkplugNodeDisplay.NodeSecondaryText(node)
                 </div>
+                @if (sequence.State is SpbSequenceState.Reordering or SpbSequenceState.GapDetected or SpbSequenceState.Invalid)
+                {
+                    <div class="spb-sequence-warning spb-sequence-warning--@sequence.State.ToString().ToLowerInvariant()">
+                        <MudIcon Icon="@LucideIcons.AlertTriangle" Size="Size.Small" />
+                        @if (sequence.State == SpbSequenceState.Reordering)
+                        {
+                            <span>Sequence gap · waiting</span>
+                        }
+                        else if (sequence.State == SpbSequenceState.GapDetected)
+                        {
+                            <span>Unresolved sequence gap · @sequence.MissingSequences.Count missing</span>
+                        }
+                        else
+                        {
+                            <span>Invalid sequence</span>
+                        }
+                    </div>
+                }
             </div>
         }
     }
 }
 
 @code {
+    private static string NodeStatusClass(SpbNode node) => SparkplugNodeDisplay.IsStale(node)
+        ? "spb-status--stale"
+        : node.Status switch
+        {
+            SpbNodeStatus.Online => "spb-status--online",
+            SpbNodeStatus.Offline => "spb-status--offline",
+            _ => "spb-status--unknown"
+        };
+
     [Parameter, EditorRequired]
     public IReadOnlyList<IGrouping<string, SpbNode>> Groups { get; set; } = [];
 

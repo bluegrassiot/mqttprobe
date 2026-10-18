@@ -63,7 +63,7 @@ public class MqttManagedClientTests
         client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
             .Returns(
                 _ => Task.FromException<MqttClientConnectResult>(new Exception("boom")),
-                _ => Task.FromResult(new MqttClientConnectResult()));
+                _ => Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
 
         await using var sut = new MqttManagedClient(client);
 
@@ -114,17 +114,46 @@ public class MqttManagedClientTests
     {
         var client = Substitute.For<IMqttClient>();
         await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
+
         var reached = false;
         sut.ConnectionStateChangedAsync += _ => throw new InvalidOperationException("subscriber blew up");
         sut.ConnectionStateChangedAsync += _ => { reached = true; return Task.CompletedTask; };
 
         client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
 
+        await WaitUntilAsync(() => reached);
         reached.Should().BeTrue();
     }
 
     private static int ConnectCount(IMqttClient client) =>
         client.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IMqttClient.ConnectAsync));
+
+    private static int SubscribeCount(IMqttClient client) =>
+        client.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IMqttClient.SubscribeAsync));
+
+    private static int PublishCount(IMqttClient client) =>
+        client.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IMqttClient.PublishAsync));
+
+    private static Task RaiseConnectedAsync(IMqttClient client)
+    {
+        client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
+        return Task.CompletedTask;
+    }
+
+    private static MqttClientSubscribeResult SubscribeResult(MqttClientSubscribeOptions options) => new(
+        1,
+        options.TopicFilters.Select(filter => new MqttClientSubscribeResultItem(
+            filter, MqttClientSubscribeResultCode.GrantedQoS0)).ToArray(),
+        null!,
+        []);
+
+    private static MqttClientUnsubscribeResult UnsubscribeResult(MqttClientUnsubscribeOptions options) => new(
+        1,
+        options.TopicFilters.Select(topic => new MqttClientUnsubscribeResultItem(
+            topic, MqttClientUnsubscribeResultCode.Success)).ToArray(),
+        null!,
+        []);
 
     [Test]
     public async Task StopAsync_disconnects_and_clears_started()
@@ -145,7 +174,11 @@ public class MqttManagedClientTests
     {
         var client = Substitute.For<IMqttClient>();
         client.IsConnected.Returns(true);
+        client.SubscribeAsync(Arg.Any<MqttClientSubscribeOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(SubscribeResult(call.Arg<MqttClientSubscribeOptions>())));
         await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
+        await RaiseConnectedAsync(client);
 
         await sut.SubscribeAsync(new[] { Filter("a/b") });
 
@@ -158,12 +191,17 @@ public class MqttManagedClientTests
         var client = Substitute.For<IMqttClient>();
         client.IsConnected.Returns(false);
         await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
 
         await sut.SubscribeAsync(new[] { Filter("a/b") });
         await client.DidNotReceive().SubscribeAsync(Arg.Any<MqttClientSubscribeOptions>(), Arg.Any<CancellationToken>());
 
+        client.IsConnected.Returns(true);
+        client.SubscribeAsync(Arg.Any<MqttClientSubscribeOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(SubscribeResult(call.Arg<MqttClientSubscribeOptions>())));
         client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
 
+        await WaitUntilAsync(() => SubscribeCount(client) >= 1);
         await client.Received(1).SubscribeAsync(Arg.Any<MqttClientSubscribeOptions>(), Arg.Any<CancellationToken>());
     }
 
@@ -172,7 +210,14 @@ public class MqttManagedClientTests
     {
         var client = Substitute.For<IMqttClient>();
         client.IsConnected.Returns(true);
+        client.SubscribeAsync(Arg.Any<MqttClientSubscribeOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(SubscribeResult(call.Arg<MqttClientSubscribeOptions>())));
+        client.UnsubscribeAsync(Arg.Any<MqttClientUnsubscribeOptions>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(UnsubscribeResult(call.Arg<MqttClientUnsubscribeOptions>())));
         await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
+        await RaiseConnectedAsync(client);
+        await sut.SubscribeAsync([Filter("a/b")]);
 
         await sut.UnsubscribeAsync(new[] { "a/b" });
 
@@ -185,6 +230,7 @@ public class MqttManagedClientTests
         var client = Substitute.For<IMqttClient>();
         client.IsConnected.Returns(true);
         await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
         var message = new MqttApplicationMessageBuilder().WithTopic("a/b").Build();
 
         await sut.EnqueueAsync(message);
@@ -198,6 +244,7 @@ public class MqttManagedClientTests
         var client = Substitute.For<IMqttClient>();
         client.IsConnected.Returns(false);
         await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
         var message = new MqttApplicationMessageBuilder().WithTopic("a/b").Build();
 
         await sut.EnqueueAsync(message);
@@ -206,6 +253,7 @@ public class MqttManagedClientTests
         client.IsConnected.Returns(true);
         client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
 
+        await WaitUntilAsync(() => PublishCount(client) >= 1);
         await client.Received(1).PublishAsync(message, Arg.Any<CancellationToken>());
     }
 
@@ -215,6 +263,7 @@ public class MqttManagedClientTests
         var client = Substitute.For<IMqttClient>();
         client.IsConnected.Returns(false);
         await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
 
         // Queue bound is 1000; enqueue 1001 so the first is dropped.
         for (var i = 0; i <= 1000; i++)
@@ -223,6 +272,7 @@ public class MqttManagedClientTests
         client.IsConnected.Returns(true);
         client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
 
+        await WaitUntilAsync(() => PublishCount(client) >= 1000);
         await client.Received(1000).PublishAsync(Arg.Any<MqttApplicationMessage>(), Arg.Any<CancellationToken>());
         await client.DidNotReceive().PublishAsync(
             Arg.Is<MqttApplicationMessage>(m => m != null && m.Topic == "msg-0"), Arg.Any<CancellationToken>());
@@ -233,11 +283,13 @@ public class MqttManagedClientTests
     {
         var client = Substitute.For<IMqttClient>();
         await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
         var raised = false;
         sut.ConnectedAsync += _ => { raised = true; return Task.CompletedTask; };
 
         client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
 
+        await WaitUntilAsync(() => raised);
         raised.Should().BeTrue();
     }
 
@@ -246,11 +298,13 @@ public class MqttManagedClientTests
     {
         var client = Substitute.For<IMqttClient>();
         await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
         var raised = false;
         sut.DisconnectedAsync += _ => { raised = true; return Task.CompletedTask; };
 
         client.DisconnectedAsync += Raise.Event<Func<MqttClientDisconnectedEventArgs, Task>>(DisconnectedArgs());
 
+        await WaitUntilAsync(() => raised);
         raised.Should().BeTrue();
     }
 
@@ -258,7 +312,10 @@ public class MqttManagedClientTests
     public async Task ApplicationMessageReceivedAsync_bubbles_from_client()
     {
         var client = Substitute.For<IMqttClient>();
+        client.IsConnected.Returns(true);
         await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
+        await RaiseConnectedAsync(client);
         var raised = false;
         sut.ApplicationMessageReceivedAsync += _ => { raised = true; return Task.CompletedTask; };
 
@@ -274,11 +331,15 @@ public class MqttManagedClientTests
     {
         var client = Substitute.For<IMqttClient>();
         await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
         var count = 0;
         sut.ConnectionStateChangedAsync += _ => { count++; return Task.CompletedTask; };
 
         client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
+        await WaitUntilAsync(() => count >= 1);
+
         client.DisconnectedAsync += Raise.Event<Func<MqttClientDisconnectedEventArgs, Task>>(DisconnectedArgs());
+        await WaitUntilAsync(() => count >= 2);
 
         count.Should().Be(2);
     }

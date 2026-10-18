@@ -1,7 +1,6 @@
-@inject IMessageStoreManager MessageStoreManager
 
 <div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsSelected ? "topic-tree-row--selected" : "")"
-     title="@(Row.IsVirtualTopic ? "Grouping row · not an MQTT topic" : null)"
+     title="@Title"
      @onclick="OnRowClick">
     <svg class="topic-tree-indent" width="@IndentWidth" height="1" aria-hidden="true" focusable="false"></svg>
     @if (Row.HasChildren)
@@ -9,6 +8,10 @@
         <span @onclick:stopPropagation="true">
             <MudIconButton Icon="@(Row.IsExpanded ? LucideIcons.ChevronDown : LucideIcons.ChevronRight)"
                            Size="Size.Small"
+                           Class="topic-chevron topic-role--brand"
+                           title="@ExpandLabel"
+                           aria-label="@ExpandLabel"
+                           aria-expanded="@(Row.IsExpanded ? "true" : "false")"
                            OnClick="OnToggleExpand"/>
         </span>
     }
@@ -16,18 +19,18 @@
     {
         <div class="topic-tree-chevron-spacer" aria-hidden="true"></div>
     }
-    <MudIcon Icon="@NodeIcon" Size="Size.Small" Color="@NodeColor" Class="mx-1"/>
-    <span class="flex-grow-1" title="@Row.DisplayName">
+    <MudIcon Icon="@TopicTreeIconLanguage.NodeGlyph(Row)" Size="Size.Small" Class="@TopicTreeIconLanguage.IconClass(Row)"/>
+    <span class="flex-grow-1 topic-name-cell" title="@Row.DisplayName">
         @if (Row.IsVirtualTopic)
         {
-            <span class="topic-group-label">@Row.DisplayName</span>
+            <span class="topic-name topic-group-label">@Row.DisplayName</span>
         }
         else
         {
-            <span>@Row.DisplayName</span>
+            <span class="topic-name">@Row.DisplayName</span>
         }
     </span>
-    <span class="topic-stat-text" title="@($"{Row.TopicCount:N0} topics, {Row.MessageCount:N0} messages")">
+    <span class="topic-stat-text" title="@StatsLabel">
         T @Row.TopicCount.ToString("N0") · M @Row.MessageCount.ToString("N0")
     </span>
 </div>
@@ -36,7 +39,7 @@
     [Parameter] public TopicTreeRowModel Row { get; set; } = null!;
     [Parameter] public bool IsSelected { get; set; }
     [Parameter] public EventCallback<string> OnExpandToggled { get; set; }
-    [Parameter] public EventCallback<string> OnSelected { get; set; }
+    [Parameter] public EventCallback<TopicSelection> OnSelected { get; set; }
 
     private const int IndentStepWidth = 16;
 
@@ -44,57 +47,41 @@
     // at depth 1000 as at depth 0, with no inline style and no depth-keyed classes.
     private int IndentWidth => Row.Depth * IndentStepWidth;
 
-    private string NodeIcon => Row.Kind switch
+    private string ExpandLabel => $"{(Row.IsExpanded ? "Collapse" : "Expand")} {Row.DisplayName}";
+
+    // Every Sparkplug row says which role it is and whether it stands for a real MQTT topic or an
+    // invented grouping, and a grouping row also says how much its selection covers. Plain topic
+    // rows carry no role, so they get no row tooltip.
+    private string? Title => Row.Kind switch
     {
-        TopicTreeRowKind.SparkplugNamespace => LucideIcons.Zap,
-        TopicTreeRowKind.SparkplugGroup => LucideIcons.Layers,
-        TopicTreeRowKind.SparkplugNode => LucideIcons.Cpu,
-        TopicTreeRowKind.Devices => LucideIcons.Folder,
-        TopicTreeRowKind.SparkplugDevice => LucideIcons.Network,
-        TopicTreeRowKind.MessageType => LucideIcons.Hash,
-        _ => (Row.IsValueBearer, Row.HasChildren) switch
-        {
-            (true, _) => LucideIcons.Database,
-            (false, true) => LucideIcons.Folder,
-            (false, false) => LucideIcons.Circle
-        }
+        TopicTreeRowKind.SparkplugNamespace => "Sparkplug namespace · real MQTT topic",
+        TopicTreeRowKind.SparkplugGroup => "Sparkplug group · real MQTT topic",
+        TopicTreeRowKind.SparkplugNode => GroupingTitle("Sparkplug node"),
+        TopicTreeRowKind.Devices => GroupingTitle("Sparkplug devices"),
+        TopicTreeRowKind.SparkplugDevice => GroupingTitle("Sparkplug device"),
+        TopicTreeRowKind.MessageType => GroupingTitle("Sparkplug message type"),
+        _ => null
     };
 
-    private Color NodeColor
-    {
-        get
-        {
-            if (Row.IsVirtualTopic)
-                return Color.Secondary;
+    private string GroupingTitle(string role) =>
+        $"{role} · grouping row, not a real MQTT topic · selects {Count(Row.SelectedTopics.Length, "topic")} beneath it";
 
-            if (Row.IsValueBearer)
-                return Color.Success;
+    // The T count is the topics below the row and the M count is the messages at the row's own
+    // path plus the ones below it, so each tooltip says which total it is rather than implying
+    // the row's own messages.
+    private string StatsLabel => Row.IsVirtualTopic
+        ? $"{CountPhrase(Row.TopicCount, "topic")} below, {CountPhrase(Row.MessageCount, "message")} in the topics below it"
+        : $"{CountPhrase(Row.TopicCount, "topic")} below, {CountPhrase(Row.MessageCount, "message")} in this topic and below";
 
-            return Row.Depth switch
-            {
-                0 => Color.Primary,
-                1 => Color.Info,
-                _ => Color.Secondary
-            };
-        }
-    }
+    private static string CountPhrase(int value, string noun) =>
+        value == 0 ? $"no {noun}s" : Count(value, noun);
+
+    private static string Count(int value, string noun) =>
+        value == 1 ? $"1 {noun}" : $"{value:N0} {noun}s";
 
     private async Task OnRowClick()
     {
-        // Grouping rows only navigate; a fabricated topic here would select something that
-        // does not exist in the store.
-        if (Row.IsVirtualTopic)
-        {
-            await OnExpandToggled.InvokeAsync(Row.FullPath);
-            return;
-        }
-
-        MessageStoreManager.SelectTopic(Row.FullPath);
-        var selection = MessageStoreManager.GetSelectedTopicState();
-        if (!string.Equals(selection.FullTopic, Row.FullPath, StringComparison.Ordinal))
-            return;
-
-        await OnSelected.InvokeAsync(Row.FullPath);
+        await OnSelected.InvokeAsync(Row.ToSelection());
     }
 
     private async Task OnToggleExpand() =>

@@ -42,8 +42,11 @@ public class SparkplugTopologyServiceTests
     }
 
     private static byte[] SpbPayload(params (string Name, ulong Alias, uint Datatype, double DoubleValue)[] metrics)
+        => SpbPayload(0, metrics);
+
+    private static byte[] SpbPayload(ulong sequence, params (string Name, ulong Alias, uint Datatype, double DoubleValue)[] metrics)
     {
-        var p = new Payload { Timestamp = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
+        var p = new Payload { Timestamp = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), Seq = sequence };
         foreach (var (name, alias, datatype, doubleValue) in metrics)
         {
             var m = new Payload.Types.Metric { Datatype = datatype, DoubleValue = doubleValue };
@@ -127,6 +130,171 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
+    public async Task DuplicateNBirthAfterNodeData_DoesNotResetSequenceBaseline()
+    {
+        var timestamp = DateTime.UtcNow;
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                TimestampUtc = timestamp,
+                SequenceNumber = 10,
+                BirthDeathSequenceNumber = 4,
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = []
+            }
+        ]);
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDATA/n",
+                SequenceNumber = 11,
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = []
+            }
+        ]);
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                TimestampUtc = timestamp,
+                SequenceNumber = 10,
+                BirthDeathSequenceNumber = 4,
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = []
+            }
+        ]);
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDATA/n",
+                SequenceNumber = 12,
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = []
+            }
+        ]);
+
+        _service.Groups["g"].Nodes["n"].Sequence.State.Should().Be(SpbSequenceState.InOrder);
+        _service.Groups["g"].Nodes["n"].Sequence.ExpectedSequence.Should().Be(13);
+    }
+
+    [Test]
+    public async Task DuplicateNBirth_IsDistinctFromNewBirthWithSameSequenceAndBirthDeathSequence()
+    {
+        var topology = new SparkplugTopologyService(reorderTimeoutMilliseconds: 0);
+        var birthTimestamp = DateTime.UtcNow;
+        await topology.ApplyTopologyEventsAsync([MakeNodeBirth(10, birthTimestamp, 4)]);
+        await topology.ApplyTopologyEventsAsync(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDATA/n",
+                SequenceNumber = 12,
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = []
+            }
+        ]);
+        topology.CheckSequenceTimeouts().Should().Be(1);
+
+        await topology.ApplyTopologyEventsAsync([MakeNodeBirth(10, birthTimestamp, 4)]);
+        topology.Groups["g"].Nodes["n"].Sequence.State.Should().Be(SpbSequenceState.GapDetected);
+
+        await topology.ApplyTopologyEventsAsync([MakeNodeBirth(10, birthTimestamp.AddTicks(1), 4)]);
+
+        var node = topology.Groups["g"].Nodes["n"];
+        node.Sequence.State.Should().Be(SpbSequenceState.InOrder);
+        node.Sequence.ExpectedSequence.Should().Be(11);
+        node.Sequence.MissingSequences.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task ResetSequenceTracking_AllowsSameSequenceAndBirthDeathSequenceBaselineAgain()
+    {
+        var topology = new SparkplugTopologyService(reorderTimeoutMilliseconds: 0);
+        var birth = MakeNodeBirth(10, DateTime.UtcNow, 4);
+        await topology.ApplyTopologyEventsAsync([birth]);
+        await topology.ApplyTopologyEventsAsync(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDATA/n",
+                SequenceNumber = 12,
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = []
+            }
+        ]);
+        topology.CheckSequenceTimeouts().Should().Be(1);
+
+        topology.ResetSequenceTracking();
+        await topology.ApplyTopologyEventsAsync([birth]);
+
+        var node = topology.Groups["g"].Nodes["n"];
+        node.Sequence.State.Should().Be(SpbSequenceState.InOrder);
+        node.Sequence.ExpectedSequence.Should().Be(11);
+        node.Sequence.MissingSequences.Should().BeEmpty();
+    }
+
+    private static NodeBirthEvent MakeNodeBirth(ulong sequence, DateTime timestamp, ulong birthDeathSequence) => new()
+    {
+        FormatId = "sparkplug-b",
+        Topic = "spBv1.0/g/NBIRTH/n",
+        TimestampUtc = timestamp,
+        SequenceNumber = sequence,
+        BirthDeathSequenceNumber = birthDeathSequence,
+        GroupId = "g",
+        NodeId = "n",
+        Metrics = []
+    };
+
+    [Test]
+    public async Task NDeathWithMismatchedBirthDeathSequence_IsIgnored()
+    {
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                BirthDeathSequenceNumber = 7,
+                SequenceNumber = 1,
+                Metrics = []
+            }
+        ]);
+
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeDeathEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDEATH/n",
+                GroupId = "g",
+                NodeId = "n",
+                BirthDeathSequenceNumber = 8
+            }
+        ]);
+
+        _service.Groups["g"].Nodes["n"].Status.Should().Be(SpbNodeStatus.Online);
+    }
+
+    [Test]
     public async Task NBIRTH_PublishesStableMetricSnapshotForReaders()
     {
         await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(("OldMetric", 0, 10, 20.0)));
@@ -153,8 +321,8 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task NDEATH_PropagatesOfflineToAllDevices()
     {
-        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(("Metric", 0, 10, 1.0)));
-        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(("DevMetric", 0, 10, 1.0)));
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(1, ("Metric", 0, 10, 1.0)));
+        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(2, ("DevMetric", 0, 10, 1.0)));
         await Fire("spBv1.0/g/NDEATH/n", Array.Empty<byte>());
 
         _service.Groups["g"].Nodes["n"].Devices["d1"].Status.Should().Be(SpbNodeStatus.Offline);
@@ -163,8 +331,8 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task NDATA_UpdatesMetricByName()
     {
-        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(("Temp", 0, 10, 20.0)));
-        await Fire("spBv1.0/g/NDATA/n", SpbPayload(("Temp", 0, 10, 25.0)));
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(1, ("Temp", 0, 10, 20.0)));
+        await Fire("spBv1.0/g/NDATA/n", SpbPayload(2, ("Temp", 0, 10, 25.0)));
 
         var node = _service.Groups["g"].Nodes["n"];
         node.Metrics.Should().HaveCount(1);
@@ -174,11 +342,11 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task NDATA_PublishesStableMetricSnapshotForReaders()
     {
-        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(("Temp", 0, 10, 20.0)));
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(1, ("Temp", 0, 10, 20.0)));
         var node = _service.Groups["g"].Nodes["n"];
         var snapshot = node.Metrics;
 
-        await Fire("spBv1.0/g/NDATA/n", SpbPayload(("Pressure", 0, 10, 101.0)));
+        await Fire("spBv1.0/g/NDATA/n", SpbPayload(2, ("Pressure", 0, 10, 101.0)));
 
         snapshot.Should().HaveCount(1);
         snapshot.Single().Name.Should().Be("Temp");
@@ -189,8 +357,8 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task NDATA_UpdatesMetricByAlias()
     {
-        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(("Temp", 42, 10, 20.0)));
-        await Fire("spBv1.0/g/NDATA/n", SpbPayload(("", 42, 10, 30.0)));
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(1, ("Temp", 42, 10, 20.0)));
+        await Fire("spBv1.0/g/NDATA/n", SpbPayload(2, ("", 42, 10, 30.0)));
 
         _service.Groups["g"].Nodes["n"].Metrics.Single().Value.Should().Be("30.0000");
     }
@@ -225,8 +393,8 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task DBIRTH_PreservesAliasOnSnapshot()
     {
-        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload());
-        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(("Voltage", 7, 10, 220.0)));
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(1));
+        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(2, ("Voltage", 7, 10, 220.0)));
 
         var device = _service.Groups["g"].Nodes["n"].Devices["d1"];
         device.Metrics.Single().Alias.Should().Be(7UL);
@@ -235,9 +403,9 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task DDATA_PreservesAliasOnSnapshot()
     {
-        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload());
-        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(("Current", 99, 10, 1.5)));
-        await Fire("spBv1.0/g/DDATA/n/d1", SpbPayload(("", 99, 10, 2.0)));
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(1));
+        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(2, ("Current", 99, 10, 1.5)));
+        await Fire("spBv1.0/g/DDATA/n/d1", SpbPayload(3, ("", 99, 10, 2.0)));
 
         var device = _service.Groups["g"].Nodes["n"].Devices["d1"];
         device.Metrics.Single().Alias.Should().Be(99UL);
@@ -256,8 +424,8 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task DBIRTH_RegistersDeviceOnlineWithMetrics()
     {
-        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload());
-        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(("Voltage", 0, 10, 220.0)));
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(1));
+        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(2, ("Voltage", 0, 10, 220.0)));
 
         var device = _service.Groups["g"].Nodes["n"].Devices["d1"];
         device.Status.Should().Be(SpbNodeStatus.Online);
@@ -283,9 +451,9 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task DDEATH_MarksDeviceOffline()
     {
-        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload());
-        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(("DevMetric", 0, 10, 1.0)));
-        await Fire("spBv1.0/g/DDEATH/n/d1", Array.Empty<byte>());
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(1));
+        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(2, ("DevMetric", 0, 10, 1.0)));
+        await Fire("spBv1.0/g/DDEATH/n/d1", SpbPayload(3));
 
         _service.Groups["g"].Nodes["n"].Devices["d1"].Status.Should().Be(SpbNodeStatus.Offline);
     }
@@ -293,9 +461,9 @@ public class SparkplugTopologyServiceTests
     [Test]
     public async Task DDATA_UpdatesDeviceMetric()
     {
-        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload());
-        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(("Current", 0, 10, 1.5)));
-        await Fire("spBv1.0/g/DDATA/n/d1", SpbPayload(("Current", 0, 10, 2.0)));
+        await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(1));
+        await Fire("spBv1.0/g/DBIRTH/n/d1", SpbPayload(2, ("Current", 0, 10, 1.5)));
+        await Fire("spBv1.0/g/DDATA/n/d1", SpbPayload(3, ("Current", 0, 10, 2.0)));
 
         var device = _service.Groups["g"].Nodes["n"].Devices["d1"];
         device.Metrics.Should().HaveCount(1);
@@ -1328,5 +1496,319 @@ public class SparkplugTopologyServiceTests
 
         resolved.Should().NotBeNull();
         resolved[42].Should().Be("Flow Rate");
+    }
+
+    private Task ApplyNodeDataAsync(params MetricSnapshot[] metrics) =>
+        _service.ApplyTopologyEventsAsync(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDATA/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = metrics
+            }
+        ]);
+
+    [Test]
+    public async Task ApplyTopologyEvents_IncompleteSequenceObservation_AppliesLargeJumpNodeData()
+    {
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b", Topic = "spBv1.0/g/NBIRTH/n", GroupId = "g", NodeId = "n", SequenceNumber = 1,
+                Metrics = [Ms("Temp", "double", "20.0000")]
+            }
+        ]);
+        _service.MarkSequenceObservationIncomplete("spBv1.0/g/NDATA/n");
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b", Topic = "spBv1.0/g/NDATA/n", GroupId = "g", NodeId = "n", SequenceNumber = 200,
+                Metrics = [Ms("Temp", "double", "25.0000")]
+            }
+        ]);
+
+        _service.Groups["g"].Nodes["n"].Metrics.Single().Value.Should().Be("25.0000");
+    }
+
+    [Test]
+    public async Task ApplyTopologyEvents_IncompleteSequenceObservation_AppliesLargeJumpDeviceDeath()
+    {
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b", Topic = "spBv1.0/g/NBIRTH/n", GroupId = "g", NodeId = "n", SequenceNumber = 1, Metrics = []
+            },
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b", Topic = "spBv1.0/g/DBIRTH/n/d1", GroupId = "g", NodeId = "n", DeviceId = "d1", SequenceNumber = 2, Metrics = []
+            }
+        ]);
+        _service.MarkSequenceObservationIncomplete("spBv1.0/g/DDEATH/n/d1");
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new DeviceDeathEvent
+            {
+                FormatId = "sparkplug-b", Topic = "spBv1.0/g/DDEATH/n/d1", GroupId = "g", NodeId = "n", DeviceId = "d1", SequenceNumber = 200
+            }
+        ]);
+
+        _service.Groups["g"].Nodes["n"].Devices["d1"].Status.Should().Be(SpbNodeStatus.Offline);
+    }
+
+    [Test]
+    public async Task ApplyTopologyEvents_ObservationContextLatchesBirthRevisionOnly()
+    {
+        var topology = new SparkplugTopologyService();
+        var timestamp = DateTime.UtcNow;
+        var birth = new NodeBirthEvent
+        {
+            FormatId = "sparkplug-b",
+            Topic = "spBv1.0/g/NBIRTH/n",
+            TimestampUtc = timestamp,
+            SequenceNumber = 10,
+            BirthDeathSequenceNumber = 4,
+            GroupId = "g",
+            NodeId = "n",
+            Metrics = []
+        };
+        await topology.ApplyTopologyEventsAsync([birth], new SpbSequenceObservationContext(3, 10, true));
+        var node = topology.Groups["g"].Nodes["n"];
+        node.SequenceSubscriptionRevision.Should().Be(10);
+        node.SequenceConnectionEpoch.Should().Be(3);
+
+        await topology.ApplyTopologyEventsAsync([birth], new SpbSequenceObservationContext(4, 11, true));
+        node.SequenceSubscriptionRevision.Should().Be(10);
+        node.SequenceConnectionEpoch.Should().Be(3);
+
+        await topology.ApplyTopologyEventsAsync(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDATA/n",
+                GroupId = "g",
+                NodeId = "n",
+                SequenceNumber = 11,
+                Metrics = []
+            }
+        ], new SpbSequenceObservationContext(5, 12, true));
+        node.SequenceSubscriptionRevision.Should().Be(10);
+
+        topology.ResetSequenceTracking();
+        node.SequenceSubscriptionRevision.Should().BeNull();
+        node.SequenceConnectionEpoch.Should().BeNull();
+    }
+
+    [TestCase(3L, 12L)]
+    [TestCase(4L, 10L)]
+    public async Task ApplyTopologyEvents_RestoredCoverageWithDifferentProof_AppliesLargeJumpNodeData(
+        long connectionEpoch, long subscriptionRevision)
+    {
+        var topology = new SparkplugTopologyService();
+        await topology.ApplyTopologyEventsAsync(
+        [
+            MakeNodeBirth(1, DateTime.UtcNow, 4)
+        ], new SpbSequenceObservationContext(3, 10, true));
+
+        await topology.ApplyTopologyEventsAsync(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDATA/n",
+                GroupId = "g",
+                NodeId = "n",
+                SequenceNumber = 200,
+                Metrics = [Ms("Temp", "double", "25.0000")]
+            }
+        ], new SpbSequenceObservationContext(connectionEpoch, subscriptionRevision, true));
+
+        var node = topology.Groups["g"].Nodes["n"];
+        node.Metrics.Single().Value.Should().Be("25.0000");
+        node.SequenceObservationComplete.Should().BeFalse();
+        node.SequenceSubscriptionRevision.Should().Be(10);
+    }
+
+    [Test]
+    public async Task ApplyTopologyEvents_RestoredCoverageWithDifferentRevision_AppliesLargeJumpDeviceDeath()
+    {
+        var topology = new SparkplugTopologyService();
+        await topology.ApplyTopologyEventsAsync(
+        [
+            MakeNodeBirth(1, DateTime.UtcNow, 4),
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                SequenceNumber = 2,
+                Metrics = []
+            }
+        ], new SpbSequenceObservationContext(3, 10, true));
+
+        await topology.ApplyTopologyEventsAsync(
+        [
+            new DeviceDeathEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DDEATH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                SequenceNumber = 200
+            }
+        ], new SpbSequenceObservationContext(3, 12, true));
+
+        var device = topology.Groups["g"].Nodes["n"].Devices["d1"];
+        device.Status.Should().Be(SpbNodeStatus.Offline);
+        topology.Groups["g"].Nodes["n"].SequenceSubscriptionRevision.Should().Be(10);
+    }
+
+    [Test]
+    public async Task ApplyTopologyEvents_IncompleteSubscriptionContextDoesNotProveObservationComplete()
+    {
+        var topology = new SparkplugTopologyService();
+        await topology.ApplyTopologyEventsAsync(
+        [
+            MakeNodeBirth(10, DateTime.UtcNow, 4)
+        ], new SpbSequenceObservationContext(3, 10, false));
+
+        var node = topology.Groups["g"].Nodes["n"];
+        node.SequenceObservationComplete.Should().BeFalse();
+        node.SequenceSubscriptionRevision.Should().BeNull();
+
+        await topology.ApplyTopologyEventsAsync(
+        [
+            new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDATA/n",
+                GroupId = "g",
+                NodeId = "n",
+                SequenceNumber = 200,
+                Metrics = [Ms("Temp", "double", "25.0000")]
+            }
+        ], new SpbSequenceObservationContext(3, 11, false));
+        node.Metrics.Single().Value.Should().Be("25.0000");
+    }
+
+    private async Task SeedNodeAsync(params MetricSnapshot[] metrics) =>
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = metrics
+            }
+        ]);
+
+    private IReadOnlyList<SpbMetricSnapshot> NodeMetrics() => _service.Groups["g"].Nodes["n"].Metrics;
+
+    [Test]
+    public async Task NodeData_ReplacesExistingMetricInPlace_PreservingOrder()
+    {
+        await SeedNodeAsync(Ms("A", "double", "1.0000"), Ms("B", "double", "2.0000"), Ms("C", "double", "3.0000"));
+
+        await ApplyNodeDataAsync(Ms("B", "double", "20.0000"));
+
+        NodeMetrics().Select(m => m.Name).Should().Equal("A", "B", "C");
+        NodeMetrics().Single(m => m.Name == "B").Value.Should().Be("20.0000");
+    }
+
+    [Test]
+    public async Task NodeData_AppendsNewMetricsAfterExistingOnes()
+    {
+        await SeedNodeAsync(Ms("A", "double", "1.0000"));
+
+        await ApplyNodeDataAsync(Ms("B", "double", "2.0000"), Ms("C", "double", "3.0000"));
+
+        NodeMetrics().Select(m => m.Name).Should().Equal("A", "B", "C");
+    }
+
+    [Test]
+    public async Task NodeData_DuplicateIncomingName_UpdatesTheSameSlotTwice()
+    {
+        await SeedNodeAsync(Ms("A", "double", "1.0000"), Ms("B", "double", "2.0000"));
+
+        await ApplyNodeDataAsync(Ms("A", "double", "10.0000"), Ms("A", "double", "11.0000"));
+
+        NodeMetrics().Should().HaveCount(2);
+        NodeMetrics().Select(m => m.Name).Should().Equal("A", "B");
+        NodeMetrics().Single(m => m.Name == "A").Value.Should().Be("11.0000");
+    }
+
+    [Test]
+    public async Task NodeData_OrderMixedUpdateAndAppend_MatchesLinearScanResult()
+    {
+        await SeedNodeAsync(Ms("A"), Ms("B"), Ms("C"));
+
+        await ApplyNodeDataAsync(Ms("C", "double", "30.0000"), Ms("D"), Ms("A", "double", "10.0000"));
+
+        NodeMetrics().Select(m => m.Name).Should().Equal("A", "B", "C", "D");
+        NodeMetrics().Single(m => m.Name == "C").Value.Should().Be("30.0000");
+        NodeMetrics().Single(m => m.Name == "A").Value.Should().Be("10.0000");
+    }
+
+    [Test]
+    public async Task DeviceData_ReplacesExistingMetricInPlace_PreservingOrder()
+    {
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("A", "double", "1.0000"), Ms("B", "double", "2.0000")]
+            }
+        ]);
+
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new DeviceDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DDATA/n/d1",
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = "d1",
+                Metrics = [Ms("B", "double", "20.0000"), Ms("C", "double", "3.0000")]
+            }
+        ]);
+
+        var metrics = _service.Groups["g"].Nodes["n"].Devices["d1"].Metrics;
+        metrics.Select(m => m.Name).Should().Equal("A", "B", "C");
+        metrics.Single(m => m.Name == "B").Value.Should().Be("20.0000");
+    }
+
+    [Test]
+    public async Task ConcurrentNodeData_MergesEveryDistinctMetricWithoutLoss()
+    {
+        await SeedNodeAsync();
+
+        const int count = 64;
+        var updates = Enumerable.Range(0, count)
+            .Select(i => Task.Run(() => ApplyNodeDataAsync(Ms($"m{i}", "double", $"{i}.0000"))))
+            .ToArray();
+
+        await Task.WhenAll(updates);
+
+        var metrics = NodeMetrics();
+        metrics.Should().HaveCount(count);
+        for (var i = 0; i < count; i++)
+            metrics.Single(m => m.Name == $"m{i}").Value.Should().Be($"{i}.0000");
     }
 }

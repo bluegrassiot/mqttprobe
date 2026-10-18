@@ -41,7 +41,7 @@ public sealed class MessageStoreReadContractTests
         store.SelectTopic("/Root// Child /Leaf/");
 
         var state = store.GetSelectedTopicState();
-        state.FullTopic.Should().Be("Root/ Child /Leaf");
+        state.Key.Should().Be("Root/ Child /Leaf");
         state.MessageCount.Should().Be(1);
     }
 
@@ -93,6 +93,24 @@ public sealed class MessageStoreReadContractTests
     }
 
     [Test]
+    public void SelectedTopicToken_SeparatesSelectionIdentityFromContentFreshness()
+    {
+        var token = new SelectedTopicToken(Guid.NewGuid(), 3, 5);
+
+        token.IsSameSelection(token with { ContentVersion = 6 }).Should().BeTrue();
+        token.IsSameSelection(token with { Generation = 4 }).Should().BeFalse();
+        token.IsSameSelection(token with { StoreId = Guid.NewGuid() }).Should().BeFalse();
+
+        token.IsContentAtLeastAsNewAs(token with { ContentVersion = 4 }).Should().BeTrue();
+        token.IsContentAtLeastAsNewAs(token).Should().BeTrue();
+        token.IsContentAtLeastAsNewAs(token with { ContentVersion = 6 }).Should().BeFalse();
+        token.IsContentAtLeastAsNewAs(token with { Generation = 4, ContentVersion = 6 }).Should().BeFalse();
+        token.IsContentAtLeastAsNewAs(token with { StoreId = Guid.NewGuid(), ContentVersion = 6 }).Should().BeFalse();
+
+        token.Should().NotBe(token with { ContentVersion = 6 });
+    }
+
+    [Test]
     public void SelectedMessagesAreNewestFirstBoundedDetachedAndRetainOriginalReferences()
     {
         var store = CreateStore();
@@ -124,7 +142,7 @@ public sealed class MessageStoreReadContractTests
         var initial = store.GetSelectedTopicState();
 
         store.Clear();
-        store.GetSelectedTopicState().FullTopic.Should().BeNull();
+        store.GetSelectedTopicState().Key.Should().BeNull();
         store.GetSelectedMessages(initial.Token, 10).Should().BeNull();
 
         store.Add("root/child", Message("after-clear", 2));
@@ -133,7 +151,7 @@ public sealed class MessageStoreReadContractTests
         recreated.Token.Generation.Should().BeGreaterThan(initial.Token.Generation);
 
         store.RemoveMatchingTopic("#");
-        store.GetSelectedTopicState().FullTopic.Should().BeNull();
+        store.GetSelectedTopicState().Key.Should().BeNull();
         store.GetSelectedMessages(recreated.Token, 10).Should().BeNull();
 
         store.Add("root/child", Message("after-purge", 3));
@@ -295,7 +313,7 @@ public sealed class MessageStoreReadContractTests
         var partialSelection = partialStore.GetSelectedTopicState();
         partialStore.RemoveMatchingTopic("root/remove");
         var afterPartialPurge = partialStore.GetSelectedTopicState();
-        afterPartialPurge.FullTopic.Should().Be("root");
+        afterPartialPurge.Key.Should().Be("root");
         afterPartialPurge.Token.Generation.Should().Be(partialSelection.Token.Generation);
         afterPartialPurge.Token.ContentVersion.Should().BeGreaterThan(partialSelection.Token.ContentVersion);
         partialStore.GetSelectedMessages(partialSelection.Token, 10)!.Messages
@@ -375,7 +393,7 @@ public sealed class MessageStoreReadContractTests
                 continue;
 
             result.State.Token.Generation.Should().Be(selected.Token.Generation);
-            result.State.FullTopic.Should().Be("root/child");
+            result.State.Key.Should().Be("root/child");
             result.State.MessageCount.Should().Be(1);
             result.Messages.Should().ContainSingle().Which.Should().BeSameAs(original);
         }

@@ -70,7 +70,7 @@ public class SparkplugCommandServiceTests
         ]);
     }
 
-    private async Task SeedNodeData(string group = "g", string node = "n")
+    private async Task SeedNodeData(string group = "g", string node = "n", ulong? sequence = null)
     {
         await _topology.ApplyTopologyEventsAsync(
         [
@@ -80,9 +80,16 @@ public class SparkplugCommandServiceTests
                 Topic = $"spBv1.0/{group}/NDATA/{node}",
                 GroupId = group,
                 NodeId = node,
+                SequenceNumber = sequence,
                 Metrics = [Ms("Temp", "double", "25.0000")]
             }
         ]);
+        if (sequence is null)
+            _topology.Groups[group].Nodes[node].Sequence = new SpbSequenceDiagnostics
+            {
+                State = SpbSequenceState.InOrder,
+                ExpectedSequence = 1
+            };
     }
 
     private async Task SeedDeviceBirth(string group = "g", string node = "n", string device = "d1")
@@ -316,6 +323,216 @@ public class SparkplugCommandServiceTests
 
         await _mockClient.Received(1).EnqueueAsync(
             Arg.Is<MqttApplicationMessage>(m => m!.Topic == "spBv1.0/g/NCMD/n"));
+    }
+
+    [Test]
+    public async Task RequestNodeRebirthIfNeeded_FirstDataFromUnknownNodeWithUnusableSequence_QueuesRebirth()
+    {
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
+        await SeedNodeData(sequence: 300);
+        var node = _topology.Groups["g"].Nodes["n"];
+        node.Sequence.State.Should().Be(SpbSequenceState.Invalid);
+        node.Status.Should().Be(SpbNodeStatus.Unknown);
+
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n");
+
+        await _mockClient.Received(1).EnqueueAsync(
+            Arg.Is<MqttApplicationMessage>(m => m!.Topic == "spBv1.0/g/NCMD/n"));
+        await _mockClient.DidNotReceive().TryPublishConnectedAsync(
+            Arg.Any<MqttApplicationMessage>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+    }
+
+    [TestCase("NDATA", null)]
+    [TestCase("DDATA", "d1")]
+    public async Task RequestNodeRebirthIfNeeded_MatchingNodeDeathThenData_QueuesExactlyOneRebirth(
+        string verb, string? deviceId)
+    {
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
+        await SeedNodeBirth();
+        await _topology.ApplyTopologyEventsAsync(
+        [
+            new NodeDeathEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDEATH/n",
+                GroupId = "g",
+                NodeId = "n"
+            }
+        ]);
+        var node = _topology.Groups["g"].Nodes["n"];
+        node.Status.Should().Be(SpbNodeStatus.Offline);
+        node.Sequence.State.Should().Be(SpbSequenceState.Unknown);
+
+        var topic = deviceId is null ? $"spBv1.0/g/{verb}/n" : $"spBv1.0/g/{verb}/n/{deviceId}";
+        TopologyEvent dataEvent = deviceId is null
+            ? new NodeDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = topic,
+                GroupId = "g",
+                NodeId = "n",
+                SequenceNumber = 300,
+                Metrics = [Ms("Temp", "double", "25.0000")]
+            }
+            : new DeviceDataEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = topic,
+                GroupId = "g",
+                NodeId = "n",
+                DeviceId = deviceId,
+                SequenceNumber = 300,
+                Metrics = [Ms("Temp", "double", "25.0000")]
+            };
+        await _topology.ApplyTopologyEventsAsync([dataEvent]);
+        node.Sequence.State.Should().Be(SpbSequenceState.Invalid,
+            "the sequence state is unusable, which must not veto missing-birth recovery");
+
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n");
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n");
+
+        await _mockClient.Received(1).EnqueueAsync(
+            Arg.Is<MqttApplicationMessage>(m => m!.Topic == "spBv1.0/g/NCMD/n"));
+        node.Status.Should().Be(SpbNodeStatus.Offline, "data must not bring a dead node back online");
+
+        _fakeClock.Advance(TimeSpan.FromSeconds(31));
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n");
+
+        await _mockClient.Received(2).EnqueueAsync(
+            Arg.Is<MqttApplicationMessage>(m => m!.Topic == "spBv1.0/g/NCMD/n"));
+    }
+
+    [TestCase(SpbSequenceState.Unknown)]
+    [TestCase(SpbSequenceState.Invalid)]
+    [TestCase(SpbSequenceState.Reordering)]
+    public async Task RequestNodeRebirthIfNeeded_NonRecoverableSequenceState_DoesNotPublish(SpbSequenceState state)
+    {
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
+        await SeedNodeBirth();
+        _topology.Groups["g"].Nodes["n"].Sequence = new SpbSequenceDiagnostics { State = state };
+
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n", 42);
+
+        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>(), Arg.Any<CancellationToken>());
+        await _mockClient.DidNotReceive().TryPublishConnectedAsync(
+            Arg.Any<MqttApplicationMessage>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RequestNodeRebirthIfNeeded_GapRecoveryRequiresMatchingOnlineEpoch()
+    {
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
+        await SeedNodeBirth();
+        var node = _topology.Groups["g"].Nodes["n"];
+        node.Sequence = new SpbSequenceDiagnostics { State = SpbSequenceState.GapDetected };
+        node.SequenceObservationComplete = true;
+        node.SequenceConnectionEpoch = 41;
+
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n", 42);
+
+        await _mockClient.DidNotReceive().TryPublishConnectedAsync(
+            Arg.Any<MqttApplicationMessage>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task RequestNodeRebirthIfNeeded_OfflineNodeWithGap_IgnoresStaleGapAndUsesMissingBirthPath()
+    {
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
+        await SeedNodeBirth();
+        var node = _topology.Groups["g"].Nodes["n"];
+        node.Status = SpbNodeStatus.Offline;
+        node.Sequence = new SpbSequenceDiagnostics
+        {
+            State = SpbSequenceState.GapDetected,
+            ExpectedSequence = 2
+        };
+
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n", 42, 17, CancellationToken.None);
+
+        await _mockClient.DidNotReceive().TryPublishConnectedAsync(
+            Arg.Any<MqttApplicationMessage>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+        await _mockClient.Received(1).EnqueueAsync(
+            Arg.Is<MqttApplicationMessage>(m => m!.Topic == "spBv1.0/g/NCMD/n"));
+    }
+
+    [Test]
+    public async Task RequestNodeRebirthIfNeeded_MatchingNDeathCancelsInFlightRecoveryCompletion()
+    {
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
+        await SeedNodeBirth();
+        var node = _topology.Groups["g"].Nodes["n"];
+        node.BirthDeathSequenceNumber = 7;
+        PrepareGapRecovery(node, 42, 3);
+        var publishStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var publishResult = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _mockClient.TryPublishConnectedAsync(
+                Arg.Any<MqttApplicationMessage>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                publishStarted.TrySetResult();
+                return publishResult.Task;
+            });
+
+        var recovery = _service.RequestNodeRebirthIfNeededAsync("g", "n", 42, 17, CancellationToken.None);
+        await publishStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await _topology.ApplyTopologyEventsAsync(
+        [
+            new NodeDeathEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDEATH/n",
+                GroupId = "g",
+                NodeId = "n",
+                BirthDeathSequenceNumber = 7
+            }
+        ]);
+        publishResult.TrySetResult(true);
+        await recovery;
+
+        node.Status.Should().Be(SpbNodeStatus.Offline);
+        node.SequenceRecoverySentEpisodeId.Should().BeNull();
+        node.SequenceRecoveryInFlightEpisodeId.Should().BeNull();
+    }
+
+    [Test]
+    public async Task RequestNodeRebirthIfNeeded_FailedConnectedPublishRetriesAfterCooldown()
+    {
+        _sparkplugSettings = MakeSparkplugSettings(autoRequestRebirth: true, allowNodeReboot: false, rebirthCooldownSeconds: 5);
+        _service = new SparkplugCommandService(_mockClient, _mockLogger, _sparkplugSettings, _topology, _fakeClock);
+        await SeedNodeBirth();
+        var node = _topology.Groups["g"].Nodes["n"];
+        PrepareGapRecovery(node, 42, 2);
+        _mockClient.TryPublishConnectedAsync(
+                Arg.Any<MqttApplicationMessage>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false), Task.FromResult(true));
+
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n", 42, 17, CancellationToken.None);
+        node.SequenceRecoverySentEpisodeId.Should().BeNull();
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n", 42, 17, CancellationToken.None);
+        await _mockClient.Received(1).TryPublishConnectedAsync(
+            Arg.Any<MqttApplicationMessage>(), 42, 17, Arg.Any<CancellationToken>());
+
+        _fakeClock.Advance(TimeSpan.FromSeconds(6));
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n", 42, 17, CancellationToken.None);
+
+        await _mockClient.Received(2).TryPublishConnectedAsync(
+            Arg.Any<MqttApplicationMessage>(), 42, 17, Arg.Any<CancellationToken>());
+        node.SequenceRecoverySentEpisodeId.Should().Be(2);
+    }
+
+    private static void PrepareGapRecovery(SpbNode node, long connectionEpoch, long episodeId)
+    {
+        node.Sequence = new SpbSequenceDiagnostics { State = SpbSequenceState.GapDetected, ExpectedSequence = 2 };
+        node.SequenceObservationComplete = true;
+        node.SequenceEpisodeId = episodeId;
+        node.SequenceConnectionEpoch = connectionEpoch;
+        node.SequenceSubscriptionRevision = 17;
     }
 
     [Test]

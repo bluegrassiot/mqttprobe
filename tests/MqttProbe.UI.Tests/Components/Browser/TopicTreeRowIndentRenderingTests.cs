@@ -2,7 +2,6 @@ using System.Globalization;
 using AngleSharp.Dom;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Mqtt;
-using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Tests.TestHelpers;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
@@ -12,20 +11,6 @@ namespace MqttProbe.UI.Tests.Components.Browser;
 [TestFixture]
 public class TopicTreeRowIndentRenderingTests : BunitTestContext
 {
-    private IMessageStoreManager _manager = null!;
-
-    [SetUp]
-    public void SetupMocks()
-    {
-        _manager = Substitute.For<IMessageStoreManager>();
-        _manager.GetSelectedTopicState().Returns(Selection(null));
-        Services.AddSingleton(_manager);
-        EnsureMudProviders();
-    }
-
-    private static SelectedTopicState Selection(string? topic) =>
-        new(new SelectedTopicToken(Guid.NewGuid(), 1, 0), topic, 0);
-
     private static TopicTreeRowModel Row(int depth, TopicTreeRowKind kind = TopicTreeRowKind.Devices) =>
         new($"spBv1.0/plant1/{depth}", $"level-{depth}", depth, HasChildren: true,
             TopicCount: 3, MessageCount: 42, IsExpanded: true, IsValueBearer: false, Kind: kind);
@@ -33,10 +18,10 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
     private IRenderedComponent<TopicTreeRow> RenderRow(
         TopicTreeRowModel row,
         Action<string>? onExpandToggled = null,
-        Action<string>? onSelected = null)
+        Action<TopicSelection>? onSelected = null)
     {
         Action<string> toggled = onExpandToggled ?? (_ => { });
-        Action<string> selected = onSelected ?? (_ => { });
+        Action<TopicSelection> selected = onSelected ?? (_ => { });
 
         return Render<TopicTreeRow>(parameters => parameters
             .Add(component => component.Row, row)
@@ -89,36 +74,36 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
     }
 
     [Test]
-    public void DeepGroupingRowClickTogglesExpandWithoutSelectingATopic()
+    public void DeepGroupingRowClickSelectsTheTopicsItStandsForWithoutTogglingExpand()
     {
-        var row = Row(1000, TopicTreeRowKind.Devices);
+        var row = Row(1000, TopicTreeRowKind.Devices) with
+        {
+            SelectionTopics = ["spBv1.0/plant1/node1/dev1", "spBv1.0/plant1/node1/dev2"],
+        };
         string? toggled = null;
-        var selected = false;
-        var cut = RenderRow(row, path => toggled = path, _ => selected = true);
+        TopicSelection? selected = null;
+        var cut = RenderRow(row, path => toggled = path, request => selected = request);
 
         cut.Find(".topic-tree-row").Click();
 
-        toggled.Should().Be(row.FullPath);
-        selected.Should().BeFalse();
-        _manager.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        selected.Should().NotBeNull();
+        selected.Key.Should().Be(row.FullPath);
+        selected.Topics.Should().Equal(row.SelectionTopics);
+        toggled.Should().BeNull("expansion belongs to the chevron");
     }
 
     [Test]
     public void DeepRealRowClickSelectsTheTopic()
     {
         var row = Row(1000, TopicTreeRowKind.Topic);
-        var current = Selection(null);
-        _manager.GetSelectedTopicState().Returns(_ => current);
-        _manager.When(m => m.SelectTopic(Arg.Any<string?>()))
-            .Do(call => current = Selection(call.Arg<string?>()));
-
-        string? selected = null;
-        var cut = RenderRow(row, null, path => selected = path);
+        TopicSelection? selected = null;
+        var cut = RenderRow(row, null, request => selected = request);
 
         cut.Find(".topic-tree-row").Click();
 
-        _manager.Received(1).SelectTopic(row.FullPath);
-        selected.Should().Be(row.FullPath);
+        selected.Should().NotBeNull();
+        selected.Key.Should().Be(row.FullPath);
+        selected.Topics.Should().Equal(row.FullPath);
     }
 
     [Test]
@@ -129,17 +114,31 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
         cut.Find(".topic-tree-row").TextContent.Should().Contain("level-1000");
         cut.Find(".topic-tree-row").TextContent.Should().Contain("T 3 · M 42");
         cut.Find(".topic-tree-row .flex-grow-1").GetAttribute("title").Should().Be("level-1000");
-        cut.Find(".topic-stat-text").GetAttribute("title").Should().Be("3 topics, 42 messages");
+        cut.Find(".topic-stat-text").GetAttribute("title")
+            .Should().Be("3 topics below, 42 messages in the topics below it");
     }
 
     [Test]
     public void DeepGroupingRowKeepsItsGroupingTitleAndGroupClass()
     {
-        var cut = RenderRow(Row(1000, TopicTreeRowKind.Devices));
+        var cut = RenderRow(Row(1000, TopicTreeRowKind.Devices) with
+        {
+            SelectionTopics = ["spBv1.0/plant1/node1/dev1", "spBv1.0/plant1/node1/dev2"],
+        });
 
-        cut.Find(".topic-tree-row").GetAttribute("title").Should().Be("Grouping row · not an MQTT topic");
+        cut.Find(".topic-tree-row").GetAttribute("title")
+            .Should().Be("Sparkplug devices · grouping row, not a real MQTT topic · selects 2 topics beneath it");
         cut.Find(".topic-tree-row").ClassName.Should().Contain("topic-tree-row--group");
         cut.Find(".topic-group-label").TextContent.Should().Be("level-1000");
+    }
+
+    [Test]
+    public void PlainTopicRowCarriesNoRoleTooltip()
+    {
+        var cut = RenderRow(Row(1000, TopicTreeRowKind.Topic));
+
+        cut.Find(".topic-tree-row").HasAttribute("title").Should().BeFalse(
+            "an ordinary topic row has no Sparkplug role to state");
     }
 
     [Test]

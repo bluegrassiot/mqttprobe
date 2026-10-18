@@ -22,7 +22,7 @@ public sealed class TopicTreeStoreSelectionClearTests
         store.TryClearSelection(version, expected).Should().BeTrue();
 
         var cleared = store.GetSelectedTopicState();
-        cleared.FullTopic.Should().BeNull();
+        cleared.Key.Should().BeNull();
         cleared.MessageCount.Should().Be(0);
         cleared.Token.Generation.Should().Be(expected.Token.Generation + 1);
         cleared.Token.ContentVersion.Should().Be(expected.Token.ContentVersion + 1);
@@ -88,7 +88,7 @@ public sealed class TopicTreeStoreSelectionClearTests
 
         before.Token.Generation.Should().Be(expected.Token.Generation);
         before.Token.ContentVersion.Should().Be(expected.Token.ContentVersion);
-        before.FullTopic.Should().Be(expected.FullTopic);
+        before.Key.Should().Be(expected.Key);
 
         store.TryClearSelection(staleVersion, expected).Should().BeFalse("only the tree version differs");
         store.GetSelectedTopicState().Should().Be(before);
@@ -108,7 +108,7 @@ public sealed class TopicTreeStoreSelectionClearTests
         store.SelectTopic("root/tip");
 
         var before = store.GetSelectedTopicState();
-        before.FullTopic.Should().Be("root/tip", "the path came back");
+        before.Key.Should().Be("root/tip", "the path came back");
         before.Token.Generation.Should().NotBe(expected.Token.Generation, "the detour advanced the generation");
 
         store.TryClearSelection(store.Version, expected).Should().BeFalse("the captured generation is stale");
@@ -125,7 +125,7 @@ public sealed class TopicTreeStoreSelectionClearTests
 
         var version = store.Version;
         var current = store.GetSelectedTopicState();
-        var wrongPath = current with { FullTopic = "root/other" };
+        var wrongPath = current with { Key = "root/other" };
 
         store.TryClearSelection(version, wrongPath).Should().BeFalse("the expected path is not the selected one");
         store.GetSelectedTopicState().Should().Be(current);
@@ -146,7 +146,7 @@ public sealed class TopicTreeStoreSelectionClearTests
         foreignStore.SelectTopic("root/tip");
         var foreign = foreignStore.GetSelectedTopicState();
 
-        foreign.FullTopic.Should().Be(current.FullTopic);
+        foreign.Key.Should().Be(current.Key);
         foreign.Token.Generation.Should().Be(current.Token.Generation);
         foreign.Token.StoreId.Should().NotBe(current.Token.StoreId);
 
@@ -161,7 +161,7 @@ public sealed class TopicTreeStoreSelectionClearTests
         store.Add("root/tip", Message("first", 1, "root/tip"));
 
         var state = store.GetSelectedTopicState();
-        state.FullTopic.Should().BeNull();
+        state.Key.Should().BeNull();
 
         store.TryClearSelection(store.Version, state).Should().BeFalse("there is no selection to clear");
         store.GetSelectedTopicState().Should().Be(state);

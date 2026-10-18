@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
+using MqttProbe.UI.Components.Layout;
 using MqttProbe.UI.Tests.TestHelpers;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
@@ -16,8 +17,7 @@ public class TopicBrowserTests : BunitTestContext
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _fixture = new TopicBrowserTestFixture(_mockMsgStore);
-        _fixture.Configure();
-        Services.AddSingleton(_mockMsgStore);
+        Services.AddSingleton<ITopicSelectionStore>(_fixture.Adapter);
         Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
     }
 
@@ -32,7 +32,7 @@ public class TopicBrowserTests : BunitTestContext
     [Test]
     public void Renders_TreeItems_WhenSnapshotHasRoots()
     {
-        _fixture.SetSnapshot(TopicBrowserTestTrees.Node("sensor"));
+        _fixture.AddTopics(("sensor", 1));
 
         var cut = Render<TopicBrowser>();
 
@@ -53,10 +53,10 @@ public class TopicBrowserTests : BunitTestContext
     [Test]
     public async Task DisposeAsync_AfterTimerHasFired_DoesNotThrow()
     {
-        _fixture.SetSnapshot(TopicBrowserTestTrees.Node("sensor"));
+        _fixture.AddTopics(("sensor", 1));
 
         var cut = Render<TopicBrowser>();
-        await Task.Delay(50); // let the immediate timer tick dispatch a render
+        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
 
         var act = async () => await cut.Instance.DisposeAsync();
 
@@ -64,38 +64,31 @@ public class TopicBrowserTests : BunitTestContext
     }
 
     [Test]
-    public void DoesNotTriggerStateHasChanged_WhenVersionUnchanged()
+    public async Task DoesNotTriggerStateHasChanged_WhenVersionUnchanged()
     {
-        _fixture.SetSnapshot(TopicBrowserTestTrees.Node("sensor"));
+        _fixture.AddTopics(("sensor", 1));
 
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
 
-        // First timer tick (t=0) sees version 100 != _lastVersion 0 → counts computed but unchanged → no render.
-        // Second tick should skip entirely because version hasn't changed.
         cut.Markup.Should().Contain("sensor");
         string markupBefore = cut.Markup;
 
-        Thread.Sleep(1100);
+        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
 
         cut.Markup.Should().Be(markupBefore);
     }
 
     [Test]
-    public void TriggersStateHasChanged_WhenVersionIncrements()
+    public async Task TriggersStateHasChanged_WhenVersionIncrements()
     {
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
         cut.Markup.Should().Contain("No messages received");
 
-        // Add a store so the re-render produces different markup.
-        _fixture.SetSnapshot(TopicBrowserTestTrees.Node("sensor"));
-
-        // The timer at t=0 already fired with version 100L.
-        // Advance once more: GetVersion() returns 101L → counts computed → re-render.
-        Thread.Sleep(1100);
-
-        cut.WaitForAssertion(() => cut.Markup.Should().Contain("sensor"));
+        _fixture.AddTopics(("sensor", 1));
+        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
+        cut.Markup.Should().Contain("sensor");
     }
 }
 
@@ -110,17 +103,16 @@ public class TopicBrowserVirtualizedTests : BunitTestContext
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _fixture = new TopicBrowserTestFixture(_mockMsgStore);
-        _fixture.Configure();
-        Services.AddSingleton(_mockMsgStore);
+        Services.AddSingleton<ITopicSelectionStore>(_fixture.Adapter);
         Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
     }
 
-    internal static TopicNodeSnapshot BuildTree() => TopicBrowserTestTrees.BuildTree();
+    internal static (string Topic, int Messages)[] BuildTopics() => TopicBrowserTestTrees.BuildTopics();
 
     [Test]
     public void RendersRootNodes_WhenDataExists()
     {
-        _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
+        _fixture.AddTopics(TopicBrowserTestTrees.BuildTopics());
 
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
@@ -131,7 +123,7 @@ public class TopicBrowserVirtualizedTests : BunitTestContext
     [Test]
     public void CollapsedRoot_DoesNotRenderChildren()
     {
-        _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
+        _fixture.AddTopics(TopicBrowserTestTrees.BuildTopics());
 
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
@@ -143,7 +135,7 @@ public class TopicBrowserVirtualizedTests : BunitTestContext
     [Test]
     public void ShowCounts_ForRootNode()
     {
-        _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
+        _fixture.AddTopics(TopicBrowserTestTrees.BuildTopics());
 
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
@@ -155,24 +147,56 @@ public class TopicBrowserVirtualizedTests : BunitTestContext
 [TestFixture]
 public class TopicBrowserInteractionTests : BunitTestContext
 {
+    private sealed record SnapshotReadGate(TaskCompletionSource<bool> Started, ManualResetEventSlim Release);
+
+    private sealed class CoordinatedSelectionStore(ITopicSelectionStore inner) : ITopicSelectionStore
+    {
+        private SnapshotReadGate? _nextReadGate;
+
+        public SnapshotReadGate? NextReadGate
+        {
+            set => Interlocked.Exchange(ref _nextReadGate, value);
+        }
+
+        public TopicTreeSnapshot GetTopicTreeSnapshot()
+        {
+            var gate = Interlocked.Exchange(ref _nextReadGate, null);
+            if (gate is not null)
+            {
+                gate.Started.TrySetResult(true);
+                if (!gate.Release.Wait(TimeSpan.FromSeconds(10)))
+                    throw new TimeoutException("The coordinated snapshot read was not released.");
+            }
+
+            return inner.GetTopicTreeSnapshot();
+        }
+
+        public SelectedTopicState GetSelectedTopicState() => inner.GetSelectedTopicState();
+
+        public void SelectTopics(TopicSelection? selection) => inner.SelectTopics(selection);
+
+        public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection) =>
+            inner.TryClearSelection(treeVersion, expectedSelection);
+
+        public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit) =>
+            inner.GetSelectedMessagesAsync(expectedSelection, limit);
+    }
+
     private IMessageStoreManager _mockMsgStore = null!;
     private TopicBrowserTestFixture _fixture = null!;
-
-    private sealed record SnapshotReadGate(TaskCompletionSource<bool> Started, ManualResetEventSlim Release);
 
     [SetUp]
     public void SetupMocks()
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _fixture = new TopicBrowserTestFixture(_mockMsgStore);
-        _fixture.Configure();
-        Services.AddSingleton(_mockMsgStore);
+        Services.AddSingleton<ITopicSelectionStore>(_fixture.Adapter);
         Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
     }
 
     private IRenderedComponent<TopicBrowser> RenderWithTree(Func<SelectedTopicState, Task>? onSelected = null)
     {
-        _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
+        _fixture.AddTopics(TopicBrowserTestTrees.BuildTopics());
         var cut = Render<TopicBrowser>(parameters =>
         {
             if (onSelected is not null)
@@ -207,7 +231,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
 
         cut.Find(".topic-tree-row").Click();
 
-        _mockMsgStore.Received().SelectTopic("sensors");
+        _mockMsgStore.Received().SelectTopics(Arg.Is<TopicSelection>(selection => selection.Key == "sensors"));
     }
 
     [Test]
@@ -223,9 +247,9 @@ public class TopicBrowserInteractionTests : BunitTestContext
         cut.Find(".topic-tree-row").Click();
 
         callbackState.Should().NotBeNull();
-        callbackState!.FullTopic.Should().Be("sensors");
+        callbackState!.Key.Should().Be("sensors");
         callbackState.Token.Generation.Should().BeGreaterThan(0);
-        _mockMsgStore.Received().SelectTopic("sensors");
+        _mockMsgStore.Received().SelectTopics(Arg.Is<TopicSelection>(selection => selection.Key == "sensors"));
     }
 
     [Test]
@@ -239,12 +263,12 @@ public class TopicBrowserInteractionTests : BunitTestContext
         });
         // The store loses the topic while the rendered row is still on screen; holding the
         // version keeps that the frame under test.
-        _fixture.PurgeHoldingRenderedFrame();
+        _fixture.Adapter.Store.RemoveMatchingTopic("sensors/#");
 
         await ClickAsync(cut, ".topic-tree-row");
 
         callbackState.Should().BeNull();
-        _mockMsgStore.Received().SelectTopic("sensors");
+        _mockMsgStore.Received().SelectTopics(Arg.Is<TopicSelection>(selection => selection.Key == "sensors"));
     }
 
     [Test]
@@ -257,21 +281,12 @@ public class TopicBrowserInteractionTests : BunitTestContext
             return Task.CompletedTask;
         });
 
-        var refreshRead = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var armed = true;
-        _fixture.SetSnapshot();
-        _mockMsgStore.GetTopicTreeSnapshot().Returns(_ =>
-        {
-            if (Interlocked.Exchange(ref armed, false))
-                refreshRead.TrySetResult(true);
-            return _fixture.Snapshot;
-        });
-
-        await refreshRead.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        _fixture.Clear();
+        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row").Should().BeEmpty());
 
         callbackState.Should().BeNull();
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string>());
+        _mockMsgStore.DidNotReceive().SelectTopics(Arg.Any<TopicSelection>());
     }
 
     [Test]
@@ -360,52 +375,30 @@ public class TopicBrowserInteractionTests : BunitTestContext
     [Test]
     public async Task DirtySnapshotRefresh_IsSerializedWithCollapse_AndUnchangedPollKeepsLatestState()
     {
-        var tree = TopicBrowserTestTrees.BuildTree();
-        _fixture.SetSnapshot(tree);
-        var snapshot = new TopicTreeSnapshot(20, System.Collections.Immutable.ImmutableArray.Create(tree));
-        var nextReadStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        SnapshotReadGate? nextGate = null;
-        using var releaseSnapshotRead = new ManualResetEventSlim();
-        _mockMsgStore.GetTopicTreeSnapshot().Returns(_ =>
-        {
-            var gate = Interlocked.Exchange(ref nextGate, null);
-            if (gate is not null)
-            {
-                gate.Started.TrySetResult(true);
-                if (!gate.Release.Wait(TimeSpan.FromSeconds(10)))
-                    throw new TimeoutException("The coordinated snapshot read was not released.");
-            }
-
-            Interlocked.Exchange(ref nextReadStarted, null)?.TrySetResult(true);
-            return snapshot;
-        });
-
+        _fixture.AddTopics(TopicBrowserTestTrees.BuildTopics());
+        var coordinatedStore = new CoordinatedSelectionStore(_fixture.Adapter);
+        Services.AddSingleton<ITopicSelectionStore>(coordinatedStore);
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
         await cut.InvokeAsync(() => cut.Find(".topic-tree-row button").Click());
         cut.FindAll(".topic-tree-row").Should().HaveCount(3);
 
-        snapshot = snapshot with { Version = 21 };
-        var dirtyRefreshStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        Interlocked.Exchange(ref nextGate, new SnapshotReadGate(dirtyRefreshStarted, releaseSnapshotRead));
-        await dirtyRefreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        _fixture.Adapter.Add("sensors/humidity", new MqttMessage("new humidity", "unused", false,
+            MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce)
+        { Topic = "sensors/humidity" });
+        using var releaseRead = new ManualResetEventSlim();
+        var readStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinatedStore.NextReadGate = new SnapshotReadGate(readStarted, releaseRead);
+        var dirtyRefresh = Task.Run(cut.Instance.RefreshAsync);
+        await readStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var collapse = cut.InvokeAsync(() => cut.Find(".topic-tree-row button").Click());
-        try
-        {
-            collapse.IsCompleted.Should().BeFalse("the refresh owns the renderer until its snapshot poll completes");
-        }
-        finally
-        {
-            releaseSnapshotRead.Set();
-        }
-
+        collapse.IsCompleted.Should().BeFalse("the refresh owns the renderer until its snapshot poll completes");
+        releaseRead.Set();
+        await dirtyRefresh.WaitAsync(TimeSpan.FromSeconds(5));
         await collapse.WaitAsync(TimeSpan.FromSeconds(5));
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row").Should().ContainSingle());
 
-        var unchangedPollStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        Interlocked.Exchange(ref nextReadStarted, unchangedPollStarted);
-        await unchangedPollStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await cut.InvokeAsync(() => Task.CompletedTask);
+        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
         cut.FindAll(".topic-tree-row").Should().ContainSingle();
         cut.Find(".topic-tree-row").TextContent.Should().Contain("sensors");
     }
@@ -466,7 +459,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
         });
 
         // Manager selection should also be cleared
-        _mockMsgStore.Received().SelectTopic(null);
+        _mockMsgStore.Received().SelectTopics(null);
     }
 
     [Test]
@@ -479,7 +472,7 @@ public class TopicBrowserInteractionTests : BunitTestContext
         cut.Find(".topic-tree-row").ClassName.Should().Contain("topic-tree-row--selected");
 
         // Simulate external clear (e.g., ClearAllMessages)
-        _fixture.SetSelection(new SelectedTopicState(new SelectedTopicToken(Guid.NewGuid(), 2, 0), null, 0));
+        _fixture.SetSelection(null);
 
         await ClickAsync(cut, ".topic-tree-row button");
 
@@ -491,11 +484,11 @@ public class TopicBrowserInteractionTests : BunitTestContext
     }
 
     [Test]
-    public void ValueBearerLeaf_RendersDatabaseIcon()
+    public void ValueBearerLeaf_IsAGreenCircleWithoutASeparateMarker()
     {
-        // BuildTree() has humidity with 2 messages (value-bearing leaf).
-        // sensors has empty Messages queue (structural-only).
-        _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
+        // humidity holds messages of its own while
+        // sensors is structural only.
+        _fixture.AddTopics(TopicBrowserTestTrees.BuildTopics());
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
 
@@ -505,19 +498,20 @@ public class TopicBrowserInteractionTests : BunitTestContext
         cut.WaitForAssertion(() =>
         {
             var rows = cut.FindAll(".topic-tree-row");
-            // Find the humidity row (has messages, value-bearing leaf)
-            var humidityRow = rows.FirstOrDefault(r => r.TextContent.Contains("humidity"));
+            var humidityRow = rows.FirstOrDefault(r => r.TextContent.Contains("humidity", StringComparison.Ordinal));
             humidityRow.Should().NotBeNull();
-            // Value-bearing nodes should render with success color after Task 6.
-            // MudBlazor MudIcon with Color.Success renders class "mud-success-text".
-            humidityRow!.InnerHtml.Should().Contain("mud-success-text");
+            humidityRow!.QuerySelector(".topic-node-icon.topic-role--leaf").Should().NotBeNull(
+                "an ordinary topic stays a green circle whether or not it holds messages");
+            humidityRow.QuerySelector(".topic-direct-badge").Should().BeNull(
+                "the separate message-presence marker is removed");
+            humidityRow.InnerHtml.Should().NotContain(LucideIcons.Database);
         });
     }
 
     [Test]
     public void StructuralNode_RendersFolderIcon()
     {
-        _fixture.SetSnapshot(TopicBrowserTestTrees.BuildTree());
+        _fixture.AddTopics(TopicBrowserTestTrees.BuildTopics());
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
 

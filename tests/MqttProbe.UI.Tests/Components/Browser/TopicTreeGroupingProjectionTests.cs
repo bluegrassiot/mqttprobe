@@ -49,6 +49,80 @@ public sealed class TopicTreeGroupingProjectionTests
         return subtree;
     }
 
+    private static TopicTreeRowModel Row(List<TopicTreeRowModel> rows, string displayName)
+    {
+        var row = rows.Find(candidate => candidate.DisplayName == displayName);
+        row.Should().NotBeNull(displayName + " is present");
+        return row!;
+    }
+
+    [Test]
+    public void EveryRowKind_ReportsTheTopicsSelectingItWouldShow()
+    {
+        var rows = Rows(SupportedTree());
+
+        Row(rows, "node1").SelectedTopics.Should().BeEquivalentTo(
+        [
+            "spBv1.0/plant1/NBIRTH/node1",
+            "spBv1.0/plant1/NDATA/node1",
+            "spBv1.0/plant1/DDATA/node1/dev1"
+        ], "a node shows every message type under it");
+        Row(rows, "dev1").SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/DDATA/node1/dev1"]);
+        Row(rows, "DDATA").SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/DDATA/node1/dev1"]);
+        Row(rows, "plant1").SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1"]);
+        Row(rows, "spBv1.0").SelectedTopics.Should().BeEquivalentTo(["spBv1.0"]);
+    }
+
+    [Test]
+    public void SelectionLabel_NamesTheRowRatherThanItsSnapshot()
+    {
+        var rows = Rows(SupportedTree());
+
+        Row(rows, "NDATA").SelectionLabel.Should().Be("spBv1.0/plant1/NDATA/node1");
+        Row(rows, "node1").SelectionLabel.Should().Be("spBv1.0/plant1/node1");
+        Row(rows, "dev1").SelectionLabel.Should().Be("spBv1.0/plant1/node1/dev1");
+    }
+
+    [Test]
+    public void GroupedRows_CarryTheScopeThatResolvesThemAgainstTheStore()
+    {
+        var rows = Rows(SupportedTree());
+
+        Row(rows, "node1").ToSelection().Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"));
+        Row(rows, "dev1").ToSelection().Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Device, "spBv1.0/plant1", "node1", "dev1"));
+
+        Row(rows, "NDATA").ToSelection().Scope.Should().BeNull();
+        Row(rows, "plant1").ToSelection().Scope.Should().BeNull();
+        Row(rows, "spBv1.0").ToSelection().Scope.Should().BeNull();
+    }
+
+    [Test]
+    public void OnlyMessageTypeRows_RequireCanonicalTopics()
+    {
+        var rows = Rows(SupportedTree());
+
+        rows.Where(row => row.Kind == TopicTreeRowKind.MessageType)
+            .Should().OnlyContain(row => row.ToSelection().RequireCanonicalTopics);
+        rows.Where(row => row.Kind != TopicTreeRowKind.MessageType)
+            .Should().OnlyContain(row => !row.ToSelection().RequireCanonicalTopics);
+    }
+
+    [Test]
+    public void ALiteralRowSelectsItsOwnTopic()
+    {
+        var rows = Rows(MixedTree(), group: false);
+
+        var prefix = rows.Find(row => row.FullPath == "spBv1.0/plant1/NDATA");
+        prefix.Should().NotBeNull();
+        prefix!.SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/NDATA"]);
+        prefix.SelectionLabel.Should().Be("spBv1.0/plant1/NDATA");
+
+        var leaf = rows.Find(row => row.FullPath == "spBv1.0/plant1/NDATA/node1");
+        leaf!.SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/NDATA/node1"]);
+    }
+
     [Test]
     public void GroupingOn_ProjectsSupportedTopicsByNodeAndDevice()
     {
@@ -62,10 +136,9 @@ public sealed class TopicTreeGroupingProjectionTests
             ("spBv1.0/plant1/NBIRTH/node1", 4, TopicTreeRowKind.Topic),
             ("NDATA", 3, TopicTreeRowKind.MessageType),
             ("spBv1.0/plant1/NDATA/node1", 4, TopicTreeRowKind.Topic),
-            ("Devices", 3, TopicTreeRowKind.Devices),
-            ("dev1", 4, TopicTreeRowKind.SparkplugDevice),
-            ("DDATA", 5, TopicTreeRowKind.MessageType),
-            ("spBv1.0/plant1/DDATA/node1/dev1", 6, TopicTreeRowKind.Topic));
+            ("dev1", 3, TopicTreeRowKind.SparkplugDevice),
+            ("DDATA", 4, TopicTreeRowKind.MessageType),
+            ("spBv1.0/plant1/DDATA/node1/dev1", 5, TopicTreeRowKind.Topic));
     }
 
     [Test]
@@ -93,7 +166,6 @@ public sealed class TopicTreeGroupingProjectionTests
             .Should().BeEquivalentTo(new List<TopicTreeRowKind>
             {
                 TopicTreeRowKind.SparkplugNode,
-                TopicTreeRowKind.Devices,
                 TopicTreeRowKind.SparkplugDevice,
                 TopicTreeRowKind.MessageType
             });
@@ -126,7 +198,6 @@ public sealed class TopicTreeGroupingProjectionTests
         var namespaceRow = rows[0];
         var groupRow = rows.Single(row => row.Kind == TopicTreeRowKind.SparkplugGroup);
         var nodeRow = rows.Single(row => row.Kind == TopicTreeRowKind.SparkplugNode);
-        var devices = rows.Single(row => row.Kind == TopicTreeRowKind.Devices);
         var device = rows.Single(row => row.Kind == TopicTreeRowKind.SparkplugDevice);
 
         namespaceRow.TopicCount.Should().Be(8);
@@ -136,17 +207,17 @@ public sealed class TopicTreeGroupingProjectionTests
 
         nodeRow.TopicCount.Should().Be(3);
         nodeRow.MessageCount.Should().Be(8);
-        devices.TopicCount.Should().Be(1);
-        devices.MessageCount.Should().Be(4);
         device.TopicCount.Should().Be(1);
         device.MessageCount.Should().Be(4);
+        device.Depth.Should().Be(nodeRow.Depth + 1,
+            "a device is a direct child of the node, beside the node's own message types");
 
         var nodeTypes = rows.Where(row => row.Kind == TopicTreeRowKind.MessageType
             && row.Depth == nodeRow.Depth + 1).ToList();
         nodeTypes.Select(row => row.DisplayName).Should().Equal("NBIRTH", "NDATA");
         nodeTypes.Sum(row => row.TopicCount).Should().Be(2);
         nodeTypes.Sum(row => row.MessageCount).Should().Be(4);
-        nodeRow.MessageCount.Should().Be(nodeTypes.Sum(row => row.MessageCount) + devices.MessageCount);
+        nodeRow.MessageCount.Should().Be(nodeTypes.Sum(row => row.MessageCount) + device.MessageCount);
     }
 
     [Test]
@@ -388,7 +459,7 @@ public sealed class TopicTreeGroupingProjectionTests
         var rows = Rows(MixedTree(), "DDATA/node1/dev1");
 
         rows.Select(row => row.DisplayName).Should().Equal(
-            "spBv1.0", "plant1", "node1", "Devices", "dev1", "DDATA", "spBv1.0/plant1/DDATA/node1/dev1");
+            "spBv1.0", "plant1", "node1", "dev1", "DDATA", "spBv1.0/plant1/DDATA/node1/dev1");
     }
 
     [Test]
@@ -451,12 +522,11 @@ public sealed class TopicTreeGroupingProjectionTests
     }
 
     [Test]
-    public void GroupingOn_FilterMatchesGroupingLabels()
+    public void GroupingOn_FilterNoLongerMatchesARemovedDevicesWrapper()
     {
         var rows = Rows(MixedTree(), "Devices");
 
-        rows.Select(row => row.DisplayName).Should().Equal(
-            "spBv1.0", "plant1", "node1", "Devices");
+        rows.Should().BeEmpty("the synthetic Devices wrapper is gone, so nothing carries that label");
     }
 
     [Test]
@@ -523,7 +593,7 @@ public sealed class TopicTreeGroupingProjectionTests
             SupportedTree(), null, onIds, groupSparkplugTopics: true);
 
         onIds.Should().Contain(id => TopicTreeProjection.IsVirtualExpansionId(id));
-        rows.Should().HaveCount(11);
+        rows.Should().HaveCount(10);
         rows.Should().OnlyContain(row => !row.HasChildren || row.IsExpanded);
     }
 

@@ -79,7 +79,6 @@ jobs:
         with:
           workload: maui-maccatalyst
           workload-version: '10.0.402'
-          xcode-version: ${{ steps.xcode.outputs.version }}
 
       - name: Extract and validate version
         id: version

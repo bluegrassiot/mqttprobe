@@ -1,73 +1,40 @@
-name: Setup cached .NET workload
-description: Set up the global.json SDK and cache workload assets
+name: Setup .NET workload
+description: Set up the global.json SDK and install a pinned workload set
 inputs:
   workload:
     description: Workload ID to install
     required: true
   workload-version:
-    description: Workload SDK version to install
+    description: Workload set version to install
     required: true
-  xcode-version:
-    description: Xcode identity for Apple workload cache separation
-    required: false
-    default: none
 runs:
   using: composite
   steps:
     - uses: actions/setup-dotnet@v6
       with:
         global-json-file: global.json
-    - name: Resolve workload cache
-      id: workload
+    - name: Verify selected SDK matches global.json
       shell: pwsh
-      env:
-        WORKLOAD_ID: ${{ inputs.workload }}
-        WORKLOAD_VERSION: ${{ inputs.workload-version }}
-        XCODE_VERSION: ${{ inputs.xcode-version }}
-      run: >-
-        python scripts/ci/dotnet-workload.py
-        --workload "$env:WORKLOAD_ID"
-        --workload-version "$env:WORKLOAD_VERSION"
-        --xcode-version "$env:XCODE_VERSION"
-    - name: Restore workload assets
-      id: workload-cache
-      uses: actions/cache@v6
-      with:
-        path: ${{ steps.workload.outputs.cache-path }}
-        key: ${{ steps.workload.outputs.cache-key }}
-    - name: Validate and restore workload snapshot
-      shell: pwsh
-      env:
-        INSTALL_ROOT: ${{ steps.workload.outputs.install-root }}
-        SNAPSHOT_ROOT: ${{ steps.workload.outputs.cache-path }}
       run: |
-        python scripts/ci/dotnet-workload.py --snapshot-operation restore --snapshot-root "$env:SNAPSHOT_ROOT" --install-root "$env:INSTALL_ROOT"
-        $restoreCode = $LASTEXITCODE
-        if ($restoreCode -eq 2) {
-          Write-Host "Ignoring incomplete or missing workload snapshot; installing without cache merge."
-          python scripts/ci/dotnet-workload.py --snapshot-operation discard --snapshot-root "$env:SNAPSHOT_ROOT"
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "No owned snapshot directory was discarded. Continuing with uncached install."
-            $global:LASTEXITCODE = 0
-          }
+        $expected = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
+        if (-not $expected) {
+          Write-Host "::error::global.json does not contain an sdk.version pin"
+          exit 1
         }
-        elseif ($restoreCode -ne 0) { exit $restoreCode }
+        $selected = (dotnet --version)
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $selected = $selected.Trim()
+        if ($selected -ne $expected) {
+          Write-Host "::error::Selected .NET SDK $selected does not match global.json pin $expected"
+          exit 1
+        }
     - name: Install .NET workload
       shell: pwsh
       env:
         WORKLOAD_ID: ${{ inputs.workload }}
         WORKLOAD_VERSION: ${{ inputs.workload-version }}
-        CACHE_HIT: ${{ steps.workload-cache.outputs.cache-hit }}
-        INSTALL_ROOT: ${{ steps.workload.outputs.install-root }}
-        SNAPSHOT_ROOT: ${{ steps.workload.outputs.cache-path }}
       run: |
         $started = [System.Diagnostics.Stopwatch]::StartNew()
         dotnet workload install "$env:WORKLOAD_ID" --version "$env:WORKLOAD_VERSION" --source https://api.nuget.org/v3/index.json
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        $started.Stop()
         Write-Host "Workload install elapsed: $($started.Elapsed)"
-        Write-Host "Workload cache: $env:CACHE_HIT"
-        if ($env:CACHE_HIT -ne "true") {
-          python scripts/ci/dotnet-workload.py --snapshot-operation capture --snapshot-root "$env:SNAPSHOT_ROOT" --install-root "$env:INSTALL_ROOT"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        }

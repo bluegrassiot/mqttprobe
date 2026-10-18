@@ -168,7 +168,6 @@
 
     [Parameter] public EventCallback<SelectedTopicState> OnSelectedChanged { get; set; }
 
-    // Points the toggle at the panel only while the panel is on the page.
     private string? IconKeyControls => _iconKeyOpen ? _iconKeyId : null;
 
     // The app opens in dark mode, so a bare instance or a unit test that cannot cascade still

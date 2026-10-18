@@ -4163,7 +4163,7 @@ public class ConnectionDialogTests : BunitTestContext
         ConnectSavedConnectionAndWaitForPending();
         var attemptACompletion = _attemptCompletion!;
         var attemptAId = _attemptId;
-        _dialogProvider.Find("[data-testid=cancel-connect]").Click();
+        await _dialogProvider.Find("[data-testid=cancel-connect]").ClickAsync();
 
         ConnectSavedConnectionAndWaitForPending();
         await SucceedPendingAttemptAsync();

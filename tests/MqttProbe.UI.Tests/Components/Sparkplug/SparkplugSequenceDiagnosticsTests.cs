@@ -42,9 +42,9 @@ public class SparkplugSequenceDiagnosticsTests : BunitTestContext
         var cut = Render<SparkplugNodeDetail>(parameters => parameters
             .Add(component => component.Node, node));
 
-        cut.Markup.Should().Contain("Expected");
-        cut.Markup.Should().Contain("Received");
-        cut.FindAll(".spb-sequence-values").Single().TextContent.Should().Contain("Expected 0").And.Contain("Received 0");
+        cut.Markup.Should().Contain("Next expected");
+        cut.Markup.Should().Contain("Last received");
+        cut.FindAll(".spb-sequence-values").Single().TextContent.Should().Contain("Next expected 0").And.Contain("Last received 0");
         cut.Markup.Should().Contain("Birth/death session identifier (bdSeq):");
         cut.Markup.Should().Contain("<span class=\"metrics-mono\">0</span>");
 
@@ -53,6 +53,37 @@ public class SparkplugSequenceDiagnosticsTests : BunitTestContext
             .Add(component => component.Node, node));
         unknown.Markup.Should().Contain("Birth/death session identifier (bdSeq):");
         unknown.Markup.Should().Contain("<span class=\"metrics-mono\">Unknown</span>");
+    }
+
+    [TestCase(new byte[] { 10 }, "10")]
+    [TestCase(new byte[] { 10, 11 }, "10-11")]
+    [TestCase(new byte[] { 10, 11, 12, 13, 14, 15, 18, 20, 21, 22 }, "10-15, 18, 20-22")]
+    [TestCase(new byte[] { 12, 10, 11 }, "12, 10-11")]
+    [TestCase(new byte[] { 254, 255, 0, 1, 2 }, "254-255, 0-2")]
+    public void Detail_RendersMissingSequencesAsOrderedRanges(byte[] missingSequences, string expected)
+    {
+        var node = CreateNode(SpbSequenceState.GapDetected);
+        node.Sequence = new SpbSequenceDiagnostics
+        {
+            State = SpbSequenceState.GapDetected,
+            MissingSequences = missingSequences
+        };
+
+        var cut = Render<SparkplugNodeDetail>(parameters => parameters
+            .Add(component => component.Node, node));
+
+        cut.Find(".spb-sequence-values").TextContent.Should().Contain($"Missing sequences {expected}");
+    }
+
+    [Test]
+    public void Detail_DoesNotRenderMissingSequencesWhenListIsEmpty()
+    {
+        var node = CreateNode(SpbSequenceState.InOrder);
+
+        var cut = Render<SparkplugNodeDetail>(parameters => parameters
+            .Add(component => component.Node, node));
+
+        cut.Find(".spb-sequence-values").TextContent.Should().NotContain("Missing sequences");
     }
 
     [Test]
@@ -89,7 +120,7 @@ public class SparkplugSequenceDiagnosticsTests : BunitTestContext
         cut.Find(".spb-sequence-warning").TextContent.Should().Contain("2 missing");
         var detail = Render<SparkplugNodeDetail>(parameters => parameters
             .Add(component => component.Node, node));
-        detail.Find(".spb-sequence-values").TextContent.Should().Contain("Expected 4").And.Contain("Received 6").And.Contain("Missing 2, 3");
+        detail.Find(".spb-sequence-values").TextContent.Should().Contain("Next expected 4").And.Contain("Last received 6").And.Contain("Missing sequences 2-3");
     }
 
     [Test]

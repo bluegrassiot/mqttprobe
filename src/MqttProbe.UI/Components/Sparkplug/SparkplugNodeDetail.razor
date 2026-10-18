@@ -57,11 +57,11 @@ else
                 <span class="spb-sequence-state">@SequenceStateLabel(sequence.State)</span>
             </div>
             <div class="spb-sequence-values">
-                <span>Expected <strong class="metrics-mono">@(sequence.ExpectedSequence?.ToString() ?? "Unknown")</strong></span>
-                <span>Received <strong class="metrics-mono">@(sequence.ReceivedSequence?.ToString() ?? "Unknown")</strong></span>
+                <span>Next expected <strong class="metrics-mono">@(sequence.ExpectedSequence?.ToString() ?? "Unknown")</strong></span>
+                <span>Last received <strong class="metrics-mono">@(sequence.ReceivedSequence?.ToString() ?? "Unknown")</strong></span>
                 @if (sequence.MissingSequences.Count > 0)
                 {
-                    <span>Missing <strong class="metrics-mono">@string.Join(", ", sequence.MissingSequences)</strong></span>
+                    <span>Missing sequences <strong class="metrics-mono">@FormatMissingSequences(sequence.MissingSequences)</strong></span>
                 }
             </div>
             <MudText Typo="Typo.caption" Class="spb-sequence-explanation">@SequenceExplanation(sequence.State)</MudText>
@@ -215,6 +215,35 @@ else
         SpbSequenceState.Invalid => "The received sequence cannot be compared reliably.",
         _ => "Sequence diagnostics will appear after messages are observed."
     };
+
+    private static string FormatMissingSequences(IReadOnlyList<byte> missingSequences)
+    {
+        if (missingSequences.Count == 0) return string.Empty;
+
+        var ranges = new List<string>();
+        var start = missingSequences[0];
+        var end = start;
+
+        for (var i = 1; i < missingSequences.Count; i++)
+        {
+            var current = missingSequences[i];
+            if (end != byte.MaxValue && current == end + 1)
+            {
+                end = current;
+                continue;
+            }
+
+            ranges.Add(FormatSequenceRun(start, end));
+            start = current;
+            end = current;
+        }
+
+        ranges.Add(FormatSequenceRun(start, end));
+        return string.Join(", ", ranges);
+    }
+
+    private static string FormatSequenceRun(byte start, byte end) =>
+        start == end ? start.ToString() : $"{start}-{end}";
 
     [Parameter]
     public SpbNode? Node { get; set; }

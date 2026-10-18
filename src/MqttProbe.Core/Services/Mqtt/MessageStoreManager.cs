@@ -138,7 +138,6 @@ public class MessageStoreManager : IMessageStoreManager
             if (IsListening) return Task.CompletedTask;
             _client.ApplicationMessageReceivedAsync += MessageHandler;
             _client.DisconnectedAsync += OnClientDisconnectedAsync;
-            _client.ConnectedAsync += OnClientConnectedAsync;
             _sequenceMonitorCts = new CancellationTokenSource();
             var monitorToken = _sequenceMonitorCts.Token;
             _sequenceMonitorTask = Task.Run(() => MonitorSequenceTimeoutsAsync(monitorToken), CancellationToken.None);
@@ -157,7 +156,6 @@ public class MessageStoreManager : IMessageStoreManager
             if (!IsListening) return;
             _client.ApplicationMessageReceivedAsync -= MessageHandler;
             _client.DisconnectedAsync -= OnClientDisconnectedAsync;
-            _client.ConnectedAsync -= OnClientConnectedAsync;
             monitorCts = _sequenceMonitorCts;
             monitorTask = _sequenceMonitorTask;
             _sequenceMonitorCts = null;
@@ -198,7 +196,8 @@ public class MessageStoreManager : IMessageStoreManager
                         foreach (var group in _topologyService.Groups.Values)
                         {
                             foreach (var node in group.Nodes.Values.Where(node =>
-                                          node.Sequence.State == SpbSequenceState.GapDetected
+                                          node.Status == SpbNodeStatus.Online
+                                          && node.Sequence.State == SpbSequenceState.GapDetected
                                           && HasCurrentCompleteSequenceSubscriptions(group.GroupId, node.NodeId, subscriptionSnapshot)))
                             {
                                 long? expectedEpoch;
@@ -224,12 +223,6 @@ public class MessageStoreManager : IMessageStoreManager
     }
 
     private Task OnClientDisconnectedAsync(MqttClientDisconnectedEventArgs args)
-    {
-        _topologyService?.ResetSequenceTracking();
-        return Task.CompletedTask;
-    }
-
-    private Task OnClientConnectedAsync(MqttClientConnectedEventArgs args)
     {
         _topologyService?.ResetSequenceTracking();
         return Task.CompletedTask;
@@ -386,6 +379,11 @@ public class MessageStoreManager : IMessageStoreManager
         if (topology is null || !topology.Groups.TryGetValue(groupId, out var group))
             return true;
         if (!group.Nodes.TryGetValue(nodeId, out var node))
+            return true;
+
+        // Missing-birth recovery must not depend on sequence validity; only a gap on an
+        // online node needs proven subscription coverage.
+        if (node.Status != SpbNodeStatus.Online)
             return true;
 
         return node.Sequence.State != SpbSequenceState.GapDetected

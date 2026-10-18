@@ -150,20 +150,17 @@ public sealed class SparkplugCommandService(
     {
         lock (node.SyncRoot)
         {
-            isSequenceFault = node.Sequence.State == SpbSequenceState.GapDetected;
+            isSequenceFault = node.Status == SpbNodeStatus.Online
+                && node.Sequence.State == SpbSequenceState.GapDetected;
             episodeId = isSequenceFault ? node.SequenceEpisodeId : 0;
-            if (node.Sequence.State is SpbSequenceState.Invalid or SpbSequenceState.Reordering or SpbSequenceState.Unknown
-                || node.Status == SpbNodeStatus.Offline)
-                return false;
 
             if (isSequenceFault)
             {
-                if (node.Status != SpbNodeStatus.Online
-                    || !node.SequenceObservationComplete
-                    || expectedConnectionEpoch is not { } expectedEpoch
-                    || node.SequenceConnectionEpoch != expectedEpoch
-                    || expectedSubscriptionRevision is not { } expectedRevision
-                    || node.SequenceSubscriptionRevision != expectedRevision
+                if (!node.SequenceObservationComplete
+                    || expectedConnectionEpoch is null
+                    || node.SequenceConnectionEpoch != expectedConnectionEpoch
+                    || expectedSubscriptionRevision is null
+                    || node.SequenceSubscriptionRevision != expectedSubscriptionRevision
                     || node.SequenceRecoveryInFlightEpisodeId == episodeId
                     || node.SequenceRecoverySentEpisodeId == episodeId)
                     return false;
@@ -173,6 +170,7 @@ public sealed class SparkplugCommandService(
                 return false;
             }
 
+            // Missing-birth recovery must not depend on sequence validity.
             var now = _timeProvider.GetUtcNow().UtcDateTime;
             if (node.LastRebirthRequestAt != null && now - node.LastRebirthRequestAt < cooldown)
                 return false;

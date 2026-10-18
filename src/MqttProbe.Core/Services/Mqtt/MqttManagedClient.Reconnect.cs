@@ -48,6 +48,9 @@ public sealed partial class MqttManagedClient
 
             try
             {
+                await generation.ReconnectDrainTask.ConfigureAwait(false);
+                if (!IsOwnedForWork(generation) || !_activityGate.IsActive)
+                    return;
                 var result = await generation.Client.ConnectAsync(generation.Options.ClientOptions, cancellationToken)
                     .ConfigureAwait(false);
                 EnsureConnectAccepted(result);
@@ -75,11 +78,34 @@ public sealed partial class MqttManagedClient
 
     private async Task OnGenerationConnectedAsync(Generation generation, MqttClientConnectedEventArgs args)
     {
+        ConnectionLifetime? previousLifetime;
+        lock (_sync)
+        {
+            if (!IsOwnedForWorkLocked(generation) || !_activityGate.IsActive)
+            {
+                previousLifetime = null;
+            }
+            else
+            {
+                previousLifetime = generation.Lifetime;
+                if (previousLifetime is not null)
+                    previousLifetime.Retired = true;
+                var lifetime = new ConnectionLifetime(++_nextConnectionEpoch, _subscriptionRevision);
+                generation.Lifetime = lifetime;
+                generation.Lifetimes.Add(lifetime);
+                _confirmedSubscriptions.Clear();
+                _subscriptionSnapshotReady = _subscriptions.Count == 0;
+            }
+        }
+
         if (!IsEligibleForWork(generation))
         {
             await DisconnectQuietlyAsync(generation.Client).ConfigureAwait(false);
             return;
         }
+
+        if (previousLifetime is not null)
+            CancelQuietly(previousLifetime.Cancellation);
 
         await ResubscribeAsync(generation).ConfigureAwait(false);
         await DrainPendingAsync(generation).ConfigureAwait(false);
@@ -105,8 +131,25 @@ public sealed partial class MqttManagedClient
 
     private Task OnGenerationDisconnectedAsync(Generation generation, MqttClientDisconnectedEventArgs args)
     {
-        if (!IsOwnedForWork(generation))
-            return Task.CompletedTask;
+        ConnectionLifetime? lifetime;
+        lock (_sync)
+        {
+            if (!IsOwnedForWorkLocked(generation))
+                return Task.CompletedTask;
+            lifetime = generation.Lifetime;
+            if (lifetime is not null)
+            {
+                lifetime.Retired = true;
+                generation.ReconnectDrainTask = Task.WhenAll(generation.ReconnectDrainTask, lifetime.DrainTask);
+            }
+            generation.Lifetime = null;
+            _subscriptionRevision++;
+            _subscriptionSnapshotReady = false;
+            _confirmedSubscriptions.Clear();
+        }
+
+        if (lifetime is not null)
+            CancelQuietly(lifetime.Cancellation);
 
         if (_activityGate.IsActive)
             StartReconnectLoop(generation);
@@ -121,8 +164,18 @@ public sealed partial class MqttManagedClient
         if (!IsOwnedForWork(generation) || !_activityGate.IsActive)
             return;
 
-        var priorEpoch = _messageConnectionEpoch.Value;
-        _messageConnectionEpoch.Value = generation.AttemptId.Value;
+        long epoch;
+        MqttSubscriptionSnapshot? snapshot;
+        lock (_sync)
+        {
+            if (generation.Lifetime is not { Retired: false } lifetime)
+                return;
+            epoch = lifetime.Epoch;
+            snapshot = CreateLiveSubscriptionSnapshotLocked();
+        }
+
+        var priorContext = _inboundContext.Value;
+        _inboundContext.Value = new InboundContext(epoch, snapshot);
         try
         {
             if (ApplicationMessageReceivedAsync is { } handler)
@@ -130,7 +183,7 @@ public sealed partial class MqttManagedClient
         }
         finally
         {
-            _messageConnectionEpoch.Value = priorEpoch;
+            _inboundContext.Value = priorContext;
         }
     }
 }

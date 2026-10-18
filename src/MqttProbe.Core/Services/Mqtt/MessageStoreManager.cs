@@ -26,7 +26,6 @@ public class MessageStoreManager : IMessageStoreManager
     private readonly InboundRateLimiter _rateLimiter;
     private readonly SparkplugAliasEnricher _aliasEnricher;
     private readonly ITopicExcludeService? _topicExcludeService;
-    private readonly ISubscriptionManager? _subscriptionManager;
     private readonly Lock _lifecycleSync = new();
     private CancellationTokenSource? _sequenceMonitorCts;
     private Task _sequenceMonitorTask = Task.CompletedTask;
@@ -49,7 +48,6 @@ public class MessageStoreManager : IMessageStoreManager
         _topologyService = topologyService;
         _commandService = commandService;
         _topicExcludeService = topicExcludeService;
-        _subscriptionManager = subscriptionManager;
         _store = new TopicTreeStore(performanceSettings, logger);
         _rateLimiter = new InboundRateLimiter(performanceSettings, metrics, logger);
         _aliasEnricher = new SparkplugAliasEnricher(sparkplugSettings, topologyService);
@@ -196,17 +194,19 @@ public class MessageStoreManager : IMessageStoreManager
                     _topologyService?.CheckSequenceTimeouts();
                     if (_commandService is not null && _topologyService is not null)
                     {
+                        var subscriptionSnapshot = _client.LiveSubscriptionSnapshot;
                         foreach (var group in _topologyService.Groups.Values)
                         {
                             foreach (var node in group.Nodes.Values.Where(node =>
-                                         node.Sequence.State == SpbSequenceState.GapDetected
-                                         && HasCompleteSequenceSubscriptions(group.GroupId, node.NodeId)))
+                                          node.Sequence.State == SpbSequenceState.GapDetected
+                                          && HasCurrentCompleteSequenceSubscriptions(group.GroupId, node.NodeId, subscriptionSnapshot)))
                             {
                                 long? expectedEpoch;
                                 lock (node.SyncRoot)
                                     expectedEpoch = node.SequenceConnectionEpoch;
                                 await _commandService.RequestNodeRebirthIfNeededAsync(
-                                    group.GroupId, node.NodeId, expectedEpoch, cancellationToken).ConfigureAwait(false);
+                                    group.GroupId, node.NodeId, expectedEpoch,
+                                    subscriptionSnapshot?.Revision, cancellationToken).ConfigureAwait(false);
                             }
                         }
                     }
@@ -248,6 +248,8 @@ public class MessageStoreManager : IMessageStoreManager
 
     private Task MessageHandler(MqttApplicationMessageReceivedEventArgs arg)
     {
+        var connectionEpoch = _client.InboundConnectionEpoch ?? _client.ConnectionEpoch;
+        var subscriptionSnapshot = _client.InboundSubscriptionSnapshot;
         var topic = arg.ApplicationMessage.Topic;
         IDisposable? exclusionGate = null;
         if (_topicExcludeService is { } excludes)
@@ -268,11 +270,11 @@ public class MessageStoreManager : IMessageStoreManager
             return Task.CompletedTask;
         }
 
-        return ProcessMessageAsync(arg, topic, exclusionGate, _client.ConnectionEpoch);
+        return ProcessMessageAsync(arg, topic, exclusionGate, connectionEpoch, subscriptionSnapshot);
     }
 
     private async Task ProcessMessageAsync(MqttApplicationMessageReceivedEventArgs arg, string topic,
-        IDisposable? exclusionGate, long? connectionEpoch)
+        IDisposable? exclusionGate, long? connectionEpoch, MqttSubscriptionSnapshot? subscriptionSnapshot)
     {
         MqttMessage? message = null;
         string? formatId = null;
@@ -292,7 +294,7 @@ public class MessageStoreManager : IMessageStoreManager
                 LogPipelineDiagnostics(topic, result.Diagnostics);
 
                 if (result.TopologyEvents.Count > 0)
-                    await ApplyTopologyEventsAsync(result.TopologyEvents, connectionEpoch).ConfigureAwait(false);
+                    await ApplyTopologyEventsAsync(result.TopologyEvents, connectionEpoch, subscriptionSnapshot).ConfigureAwait(false);
 
                 var aliasNames = _aliasEnricher.Resolve(topic, result);
 
@@ -327,12 +329,24 @@ public class MessageStoreManager : IMessageStoreManager
         }
     }
 
-    private async Task ApplyTopologyEventsAsync(IReadOnlyList<TopologyEvent> events, long? connectionEpoch)
+    private async Task ApplyTopologyEventsAsync(
+        IReadOnlyList<TopologyEvent> events,
+        long? connectionEpoch,
+        MqttSubscriptionSnapshot? subscriptionSnapshot)
     {
+        var target = events.Select(GetSequenceTarget).FirstOrDefault(item => item is not null);
+        var isComplete = target is { } sequenceTarget
+                         && subscriptionSnapshot is { } snapshot
+                         && snapshot.ConnectionEpoch == connectionEpoch
+                         && HasCompleteSequenceSubscriptions(sequenceTarget.GroupId, sequenceTarget.NodeId, snapshot);
+        var observationContext = new SpbSequenceObservationContext(
+            subscriptionSnapshot?.ConnectionEpoch ?? connectionEpoch ?? 0,
+            subscriptionSnapshot?.Revision ?? -1,
+            isComplete);
+
         if (_topologyService is not null)
         {
-            await _topologyService.ApplyTopologyEventsAsync(events).ConfigureAwait(false);
-            _topologyService.RecordSequenceConnectionEpoch(events, connectionEpoch);
+            await _topologyService.ApplyTopologyEventsAsync(events, observationContext).ConfigureAwait(false);
         }
 
         if (_commandService is null)
@@ -340,20 +354,33 @@ public class MessageStoreManager : IMessageStoreManager
 
         foreach (var evt in events)
         {
-            if (evt is NodeDataEvent nde && CanRequestSequenceRecovery(nde.GroupId, nde.NodeId))
+            if (evt is NodeDataEvent nde && CanRequestSequenceRecovery(nde.GroupId, nde.NodeId, subscriptionSnapshot))
             {
                 await _commandService.RequestNodeRebirthIfNeededAsync(
-                    nde.GroupId, nde.NodeId, connectionEpoch, CancellationToken.None).ConfigureAwait(false);
+                    nde.GroupId, nde.NodeId, connectionEpoch,
+                    subscriptionSnapshot?.Revision, CancellationToken.None).ConfigureAwait(false);
             }
-            else if (evt is DeviceDataEvent dde && CanRequestSequenceRecovery(dde.GroupId, dde.NodeId))
+            else if (evt is DeviceDataEvent dde && CanRequestSequenceRecovery(dde.GroupId, dde.NodeId, subscriptionSnapshot))
             {
                 await _commandService.RequestNodeRebirthIfNeededAsync(
-                    dde.GroupId, dde.NodeId, connectionEpoch, CancellationToken.None).ConfigureAwait(false);
+                    dde.GroupId, dde.NodeId, connectionEpoch,
+                    subscriptionSnapshot?.Revision, CancellationToken.None).ConfigureAwait(false);
             }
         }
     }
 
-    private bool CanRequestSequenceRecovery(string groupId, string nodeId)
+    private static (string GroupId, string NodeId)? GetSequenceTarget(TopologyEvent evt) => evt switch
+    {
+        NodeBirthEvent item => (item.GroupId, item.NodeId),
+        NodeDataEvent item => (item.GroupId, item.NodeId),
+        DeviceBirthEvent item => (item.GroupId, item.NodeId),
+        DeviceDataEvent item => (item.GroupId, item.NodeId),
+        DeviceDeathEvent item => (item.GroupId, item.NodeId),
+        NodeDeathEvent item => (item.GroupId, item.NodeId),
+        _ => null
+    };
+
+    private bool CanRequestSequenceRecovery(string groupId, string nodeId, MqttSubscriptionSnapshot? subscriptionSnapshot)
     {
         var topology = _topologyService;
         if (topology is null || !topology.Groups.TryGetValue(groupId, out var group))
@@ -362,21 +389,44 @@ public class MessageStoreManager : IMessageStoreManager
             return true;
 
         return node.Sequence.State != SpbSequenceState.GapDetected
-            || HasCompleteSequenceSubscriptions(groupId, nodeId);
+            || HasCurrentCompleteSequenceSubscriptions(groupId, nodeId, subscriptionSnapshot);
     }
 
-    private bool HasCompleteSequenceSubscriptions(string groupId, string nodeId)
+    private bool HasCurrentCompleteSequenceSubscriptions(
+        string groupId, string nodeId, MqttSubscriptionSnapshot? subscriptionSnapshot)
     {
-        var subscriptions = _subscriptionManager?.Subscriptions;
-        if (subscriptions is null || subscriptions.Count == 0)
+        if (subscriptionSnapshot is null || _client.LiveSubscriptionSnapshot is not { } live
+            || live.ConnectionEpoch != subscriptionSnapshot.ConnectionEpoch
+            || live.Revision != subscriptionSnapshot.Revision)
+            return false;
+
+        var node = _topologyService?.Groups.GetValueOrDefault(groupId)?.Nodes.GetValueOrDefault(nodeId);
+        if (node is null)
+            return false;
+        lock (node.SyncRoot)
+        {
+            if (!node.SequenceObservationComplete
+                || node.SequenceConnectionEpoch != subscriptionSnapshot.ConnectionEpoch
+                || node.SequenceSubscriptionRevision != subscriptionSnapshot.Revision)
+                return false;
+        }
+
+        return HasCompleteSequenceSubscriptions(groupId, nodeId, subscriptionSnapshot);
+    }
+
+    private static bool HasCompleteSequenceSubscriptions(
+        string groupId, string nodeId, MqttSubscriptionSnapshot subscriptionSnapshot)
+    {
+        var subscriptions = subscriptionSnapshot.ConfirmedFilters;
+        if (subscriptions.Count == 0)
             return false;
 
         var nodeVerbs = new[] { "NBIRTH", "NDATA" };
         var deviceVerbs = new[] { "DBIRTH", "DDATA", "DDEATH" };
         return nodeVerbs.All(verb => subscriptions.Any(subscription =>
-                   MqttTopicMatcher.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}", subscription.Topic)))
+                   MqttTopicMatcher.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}", subscription)))
                && deviceVerbs.All(verb => subscriptions.Any(subscription =>
-                   CoversArbitraryDevice(subscription.Topic, groupId, verb, nodeId)));
+                   CoversArbitraryDevice(subscription, groupId, verb, nodeId)));
     }
 
     private static bool CoversArbitraryDevice(string filter, string groupId, string verb, string nodeId)

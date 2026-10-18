@@ -397,14 +397,14 @@ public class SparkplugCommandServiceTests
         var publishStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var publishResult = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _mockClient.TryPublishConnectedAsync(
-                Arg.Any<MqttApplicationMessage>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+                Arg.Any<MqttApplicationMessage>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 publishStarted.TrySetResult();
                 return publishResult.Task;
             });
 
-        var recovery = _service.RequestNodeRebirthIfNeededAsync("g", "n", 42);
+        var recovery = _service.RequestNodeRebirthIfNeededAsync("g", "n", 42, 17, CancellationToken.None);
         await publishStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
         await _topology.ApplyTopologyEventsAsync(
         [
@@ -434,20 +434,20 @@ public class SparkplugCommandServiceTests
         var node = _topology.Groups["g"].Nodes["n"];
         PrepareGapRecovery(node, 42, 2);
         _mockClient.TryPublishConnectedAsync(
-                Arg.Any<MqttApplicationMessage>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
+                Arg.Any<MqttApplicationMessage>(), Arg.Any<long?>(), Arg.Any<long?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false), Task.FromResult(true));
 
-        await _service.RequestNodeRebirthIfNeededAsync("g", "n", 42);
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n", 42, 17, CancellationToken.None);
         node.SequenceRecoverySentEpisodeId.Should().BeNull();
-        await _service.RequestNodeRebirthIfNeededAsync("g", "n", 42);
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n", 42, 17, CancellationToken.None);
         await _mockClient.Received(1).TryPublishConnectedAsync(
-            Arg.Any<MqttApplicationMessage>(), 42, Arg.Any<CancellationToken>());
+            Arg.Any<MqttApplicationMessage>(), 42, 17, Arg.Any<CancellationToken>());
 
         _fakeClock.Advance(TimeSpan.FromSeconds(6));
-        await _service.RequestNodeRebirthIfNeededAsync("g", "n", 42);
+        await _service.RequestNodeRebirthIfNeededAsync("g", "n", 42, 17, CancellationToken.None);
 
         await _mockClient.Received(2).TryPublishConnectedAsync(
-            Arg.Any<MqttApplicationMessage>(), 42, Arg.Any<CancellationToken>());
+            Arg.Any<MqttApplicationMessage>(), 42, 17, Arg.Any<CancellationToken>());
         node.SequenceRecoverySentEpisodeId.Should().Be(2);
     }
 
@@ -457,6 +457,7 @@ public class SparkplugCommandServiceTests
         node.SequenceObservationComplete = true;
         node.SequenceEpisodeId = episodeId;
         node.SequenceConnectionEpoch = connectionEpoch;
+        node.SequenceSubscriptionRevision = 17;
     }
 
     [Test]

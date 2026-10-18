@@ -271,6 +271,7 @@ public partial class MessageStoreManagerMessageHandlerTests
         BuildManager(AppConfiguration config)
     {
         var client = Substitute.For<IMqttManagedClient>();
+        SetCompleteSubscriptionContext(client);
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
               .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
@@ -538,6 +539,7 @@ public partial class MessageStoreManagerMessageHandlerTests
     public async Task TopicExclusion_PurgesExistingDataAndGatesFutureMessages()
     {
         var client = Substitute.For<IMqttManagedClient>();
+        SetCompleteSubscriptionContext(client);
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
@@ -572,6 +574,7 @@ public partial class MessageStoreManagerMessageHandlerTests
     public async Task TopicExclusion_PurgesEmptyRetentionNodes()
     {
         var client = Substitute.For<IMqttManagedClient>();
+        SetCompleteSubscriptionContext(client);
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
@@ -642,6 +645,7 @@ public partial class MessageStoreManagerMessageHandlerTests
             ISparkplugCommandService? commandService = null, ITopicExcludeService? excludes = null)
     {
         var client = Substitute.For<IMqttManagedClient>();
+        SetCompleteSubscriptionContext(client);
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
               .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
@@ -659,12 +663,22 @@ public partial class MessageStoreManagerMessageHandlerTests
         return (manager, handler!);
     }
 
+    private static void SetCompleteSubscriptionContext(IMqttManagedClient client)
+    {
+        var snapshot = new MqttSubscriptionSnapshot(1, 1, ["spBv1.0/#"]);
+        client.ConnectionEpoch.Returns(1);
+        client.InboundConnectionEpoch.Returns(1);
+        client.LiveSubscriptionSnapshot.Returns(snapshot);
+        client.InboundSubscriptionSnapshot.Returns(snapshot);
+    }
+
     [Test]
     public async Task MessageHandler_TopologyApplyThrows_StillRecordsProcessedFormat()
     {
         var metrics = Substitute.For<IUxMetricsService>();
         var topology = Substitute.For<ISparkplugTopologyService>();
-        topology.ApplyTopologyEventsAsync(Arg.Any<IReadOnlyList<TopologyEvent>>())
+        topology.ApplyTopologyEventsAsync(
+                Arg.Any<IReadOnlyList<TopologyEvent>>(), Arg.Any<SpbSequenceObservationContext?>())
             .Returns(_ => throw new InvalidOperationException("topology fault"));
 
         var built = BuildManagerWithTopology(metrics, topology);
@@ -674,9 +688,43 @@ public partial class MessageStoreManagerMessageHandlerTests
 
         await built.Fire(MakeBinaryArgs("spBv1.0/g/NBIRTH/n1", SparkplugPayload()));
 
-        await topology.Received(1).ApplyTopologyEventsAsync(Arg.Any<IReadOnlyList<TopologyEvent>>());
+        await topology.Received(1).ApplyTopologyEventsAsync(
+            Arg.Any<IReadOnlyList<TopologyEvent>>(), Arg.Any<SpbSequenceObservationContext?>());
         metrics.Received(1).RecordMessageProcessed("sparkplug-b");
         received.Should().BeNull("the message is only constructed after topology events are applied");
+    }
+
+    [Test]
+    public async Task BirthReceivedBeforeSubscribeAcknowledgement_RemainsIncomplete()
+    {
+        var client = Substitute.For<IMqttManagedClient>();
+        client.InboundConnectionEpoch.Returns(5);
+        client.ConnectionEpoch.Returns(5);
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        var sparkplug = Substitute.For<ISparkplugSettings>();
+        sparkplug.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
+        var topology = new SparkplugTopologyService(sparkplugSettings: sparkplug);
+        var performance = Substitute.For<IPerformanceSettings>();
+        performance.Performance.Returns(new AppConfiguration().Performance);
+        using var manager = new MessageStoreManager(client, Substitute.For<ILogger<MessageStoreManager>>(),
+            performance, Substitute.For<IUxMetricsService>(), TestPipelineHelper.BuildBuiltInPipeline(),
+            sparkplug, topology);
+        await manager.Start();
+
+        var payload = new Payload { Timestamp = 1, Seq = 1 };
+        var inboundHandler = handler ?? throw new InvalidOperationException("Message handler was not subscribed.");
+        await inboundHandler(MakeBinaryArgs("spBv1.0/g/NBIRTH/n1", payload.ToByteArray()));
+
+        var acknowledgedSnapshot = new MqttSubscriptionSnapshot(5, 1, ["spBv1.0/#"]);
+        client.LiveSubscriptionSnapshot.Returns(acknowledgedSnapshot);
+        client.InboundSubscriptionSnapshot.Returns(acknowledgedSnapshot);
+        await inboundHandler(MakeBinaryArgs("spBv1.0/g/NDATA/n1", new Payload { Timestamp = 2, Seq = 2 }.ToByteArray()));
+
+        topology.Groups["g"].Nodes["n1"].SequenceObservationComplete.Should().BeFalse();
+        topology.Groups["g"].Nodes["n1"].SequenceSubscriptionRevision.Should().BeNull();
     }
 
     [Test]
@@ -692,7 +740,8 @@ public partial class MessageStoreManagerMessageHandlerTests
 
         Received.InOrder(() =>
         {
-            topology.ApplyTopologyEventsAsync(Arg.Any<IReadOnlyList<TopologyEvent>>());
+            topology.ApplyTopologyEventsAsync(
+                Arg.Any<IReadOnlyList<TopologyEvent>>(), Arg.Any<SpbSequenceObservationContext?>());
             _ = topology.Groups;
         });
     }
@@ -742,6 +791,7 @@ public partial class MessageStoreManagerMessageHandlerTests
         ]);
 
         var client = Substitute.For<IMqttManagedClient>();
+        SetCompleteSubscriptionContext(client);
         Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
         client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
               .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
@@ -780,7 +830,8 @@ public partial class MessageStoreManagerMessageHandlerTests
 
         await built.Fire(MakeBinaryArgs("spBv1.0/g/NDATA/n1", SparkplugPayload()));
 
-        await commandService.Received(1).RequestNodeRebirthIfNeededAsync("g", "n1");
+        await commandService.Received(1).RequestNodeRebirthIfNeededAsync(
+            "g", "n1", 1, 1, CancellationToken.None);
     }
 
     [Test]
@@ -804,7 +855,8 @@ public partial class MessageStoreManagerMessageHandlerTests
         });
         await built.Fire(MakeBinaryArgs("spBv1.0/g/DDATA/n1/d1", payload.ToByteArray()));
 
-        await commandService.Received(1).RequestNodeRebirthIfNeededAsync("g", "n1");
+        await commandService.Received(1).RequestNodeRebirthIfNeededAsync(
+            "g", "n1", 1, 1, CancellationToken.None);
     }
 
     [Test]

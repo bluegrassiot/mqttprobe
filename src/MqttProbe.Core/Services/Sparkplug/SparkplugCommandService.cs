@@ -27,6 +27,13 @@ public interface ISparkplugCommandService
         string nodeId,
         long? expectedConnectionEpoch = null,
         CancellationToken cancellationToken = default);
+
+    public Task RequestNodeRebirthIfNeededAsync(
+        string groupId,
+        string nodeId,
+        long? expectedConnectionEpoch,
+        long? expectedSubscriptionRevision,
+        CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 public sealed class SparkplugCommandService(
@@ -82,7 +89,16 @@ public sealed class SparkplugCommandService(
         string groupId,
         string nodeId,
         long? expectedConnectionEpoch = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await RequestNodeRebirthIfNeededAsync(groupId, nodeId, expectedConnectionEpoch, null, cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task RequestNodeRebirthIfNeededAsync(
+        string groupId,
+        string nodeId,
+        long? expectedConnectionEpoch,
+        long? expectedSubscriptionRevision,
+        CancellationToken cancellationToken)
     {
         if (!sparkplugSettings.Sparkplug.AutoRequestRebirth)
             return;
@@ -93,7 +109,8 @@ public sealed class SparkplugCommandService(
             return;
 
         var cooldown = TimeSpan.FromSeconds(sparkplugSettings.Sparkplug.RebirthCooldownSeconds);
-        if (!TryReserveRebirth(node, cooldown, expectedConnectionEpoch, out var isSequenceFault, out var episodeId))
+        if (!TryReserveRebirth(node, cooldown, expectedConnectionEpoch, expectedSubscriptionRevision,
+                out var isSequenceFault, out var episodeId))
             return;
 
         var result = await PublishNcmdAsync(
@@ -102,8 +119,10 @@ public sealed class SparkplugCommandService(
             "Node Control/Rebirth",
             "rebirth",
             isSequenceFault,
-            isSequenceFault ? () => IsCurrentSequenceFault(groupId, nodeId, node, episodeId, expectedConnectionEpoch) : null,
+            isSequenceFault ? () => IsCurrentSequenceFault(
+                groupId, nodeId, node, episodeId, expectedConnectionEpoch, expectedSubscriptionRevision) : null,
             isSequenceFault ? expectedConnectionEpoch : null,
+            isSequenceFault ? expectedSubscriptionRevision : null,
             cancellationToken).ConfigureAwait(false);
         if (isSequenceFault)
         {
@@ -125,6 +144,7 @@ public sealed class SparkplugCommandService(
         SpbNode node,
         TimeSpan cooldown,
         long? expectedConnectionEpoch,
+        long? expectedSubscriptionRevision,
         out bool isSequenceFault,
         out long episodeId)
     {
@@ -142,6 +162,8 @@ public sealed class SparkplugCommandService(
                     || !node.SequenceObservationComplete
                     || expectedConnectionEpoch is not { } expectedEpoch
                     || node.SequenceConnectionEpoch != expectedEpoch
+                    || expectedSubscriptionRevision is not { } expectedRevision
+                    || node.SequenceSubscriptionRevision != expectedRevision
                     || node.SequenceRecoveryInFlightEpisodeId == episodeId
                     || node.SequenceRecoverySentEpisodeId == episodeId)
                     return false;
@@ -170,6 +192,7 @@ public sealed class SparkplugCommandService(
         bool requireConnected = false,
         Func<bool>? canDispatch = null,
         long? expectedConnectionEpoch = null,
+        long? expectedSubscriptionRevision = null,
         CancellationToken cancellationToken = default)
     {
         var payload = new Payload
@@ -195,7 +218,8 @@ public sealed class SparkplugCommandService(
             if (canDispatch is not null && !canDispatch())
                 return SparkplugCommandResult.Failed;
             var published = requireConnected
-                ? await client.TryPublishConnectedAsync(message, expectedConnectionEpoch, cancellationToken).ConfigureAwait(false)
+                ? await client.TryPublishConnectedAsync(
+                    message, expectedConnectionEpoch, expectedSubscriptionRevision, cancellationToken).ConfigureAwait(false)
                 : await PublishQueuedAsync(message, cancellationToken).ConfigureAwait(false);
             if (!published)
                 return SparkplugCommandResult.Failed;
@@ -215,7 +239,8 @@ public sealed class SparkplugCommandService(
         string nodeId,
         SpbNode expectedNode,
         long episodeId,
-        long? expectedConnectionEpoch)
+        long? expectedConnectionEpoch,
+        long? expectedSubscriptionRevision)
     {
         if (!topologyService.Groups.TryGetValue(groupId, out var group)
             || !group.Nodes.TryGetValue(nodeId, out var currentNode)
@@ -227,6 +252,7 @@ public sealed class SparkplugCommandService(
                 && currentNode.SequenceObservationComplete
                 && currentNode.SequenceEpisodeId == episodeId
                 && currentNode.SequenceConnectionEpoch == expectedConnectionEpoch
+                && currentNode.SequenceSubscriptionRevision == expectedSubscriptionRevision
                 && currentNode.SequenceRecoverySentEpisodeId != episodeId;
     }
 

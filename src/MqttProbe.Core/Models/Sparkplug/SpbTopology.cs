@@ -51,11 +51,17 @@ public sealed class SpbNode
     internal long? SequenceRecoverySentEpisodeId { get; set; }
     internal ulong? LastBirthSequenceNumber { get; set; }
     internal long? SequenceConnectionEpoch { get; set; }
+    public long? SequenceSubscriptionRevision { get; internal set; }
     public IReadOnlyList<SpbMetricSnapshot> Metrics { get; internal set; } = [];
     public ConcurrentDictionary<string, SpbDevice> Devices { get; } = new(StringComparer.Ordinal);
     internal Lock SyncRoot { get; } = new();
     internal Dictionary<ulong, string> AliasMap { get; } = [];
 }
+
+public sealed record SpbSequenceObservationContext(
+    long ConnectionEpoch,
+    long SubscriptionRevision,
+    bool HasCompleteSubscriptions);
 
 public sealed class SpbGroup
 {

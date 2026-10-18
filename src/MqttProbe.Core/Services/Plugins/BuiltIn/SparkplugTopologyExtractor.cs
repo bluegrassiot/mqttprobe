@@ -211,14 +211,25 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
     private static ulong? ReadSequenceNumber(ReadOnlySpan<byte> payload)
     {
         var position = 0;
+        ulong? sequenceNumber = null;
         while (position < payload.Length)
         {
             if (!TryReadVarint(payload, ref position, out var tag))
                 return null;
+            if ((tag >> 3) > 0x1FFFFFFF)
+                return null;
             var field = (int)(tag >> 3);
             var wireType = (int)(tag & 7);
+            if (field == 0)
+                return null;
+
             if (field == 3 && wireType == 0)
-                return TryReadVarint(payload, ref position, out var sequence) ? sequence : null;
+            {
+                if (!TryReadVarint(payload, ref position, out var sequence))
+                    return null;
+                sequenceNumber = sequence;
+                continue;
+            }
 
             switch (wireType)
             {
@@ -226,6 +237,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
                     if (!TryReadVarint(payload, ref position, out _)) return null;
                     break;
                 case 1:
+                    if (payload.Length - position < 8) return null;
                     position += 8;
                     break;
                 case 2:
@@ -235,6 +247,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
                     position += (int)length;
                     break;
                 case 5:
+                    if (payload.Length - position < 4) return null;
                     position += 4;
                     break;
                 default:
@@ -245,7 +258,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
                 return null;
         }
 
-        return null;
+        return sequenceNumber ?? 0UL;
     }
 
     private static bool TryReadVarint(ReadOnlySpan<byte> payload, ref int position, out ulong value)

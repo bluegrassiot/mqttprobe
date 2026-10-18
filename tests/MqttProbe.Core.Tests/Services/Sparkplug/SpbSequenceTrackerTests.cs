@@ -96,4 +96,46 @@ public sealed class SpbSequenceTrackerTests
         tracker.Observe(138).Should().BeFalse();
         tracker.Snapshot.State.Should().Be(SpbSequenceState.Invalid);
     }
+
+    [Test]
+    public void Observe_FullCycleHoleFill_AdvancesModuloProgress()
+    {
+        var tracker = new SpbSequenceTracker(TimeProvider.System, 5000);
+        tracker.Reset(0);
+
+        for (var sequence = 2; sequence <= byte.MaxValue; sequence++)
+            tracker.Observe((ulong)sequence).Should().BeTrue();
+        tracker.Observe(0).Should().BeTrue();
+        tracker.Snapshot.MissingSequences.Should().Equal(1);
+
+        tracker.Observe(1).Should().BeTrue();
+        tracker.Snapshot.MissingSequences.Should().BeEmpty();
+        tracker.Observe(2).Should().BeTrue();
+
+        tracker.Snapshot.State.Should().Be(SpbSequenceState.InOrder);
+        tracker.Snapshot.MissingSequences.Should().BeEmpty();
+        tracker.Snapshot.ExpectedSequence.Should().Be(3);
+    }
+
+    [Test]
+    public void Observe_ForwardHoleAfterWrap_TracksTheNewCycleGap()
+    {
+        var tracker = new SpbSequenceTracker(TimeProvider.System, 5000);
+        tracker.Reset(0);
+        tracker.Observe(4).Should().BeTrue();
+        tracker.Observe(1).Should().BeTrue();
+        tracker.Observe(2).Should().BeTrue();
+        for (var sequence = 5; sequence <= byte.MaxValue; sequence++)
+            tracker.Observe((ulong)sequence).Should().BeTrue();
+        tracker.Observe(0).Should().BeTrue();
+
+        tracker.Observe(3).Should().BeTrue();
+        tracker.Snapshot.State.Should().Be(SpbSequenceState.Reordering);
+        tracker.Snapshot.MissingSequences.Should().Equal(1, 2);
+        tracker.Snapshot.ExpectedSequence.Should().Be(1);
+
+        tracker.Observe(4).Should().BeTrue();
+        tracker.Snapshot.State.Should().Be(SpbSequenceState.Reordering);
+        tracker.Snapshot.MissingSequences.Should().Equal(1, 2);
+    }
 }

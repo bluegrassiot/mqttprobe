@@ -5,7 +5,7 @@ using MqttProbe.Core.Services.Mqtt;
 namespace MqttProbe.Core.Tests.Services.Mqtt;
 
 [TestFixture]
-public class MqttManagedClientActivityGateTests
+public partial class MqttManagedClientActivityGateTests
 {
     private static MqttManagedClientOptions BuildOptions(TimeSpan? reconnect = null) => new()
     {
@@ -147,26 +147,6 @@ public class MqttManagedClientActivityGateTests
         var connectCalls = client.ReceivedCalls()
             .Count(c => c.GetMethodInfo().Name == nameof(IMqttClient.ConnectAsync));
         connectCalls.Should().Be(1, "reconnect loop must not start after revocation");
-    }
-
-    [Test]
-    public async Task Resubscribe_skipped_on_connect_after_revoke()
-    {
-        var client = Substitute.For<IMqttClient>();
-        client.IsConnected.Returns(false);
-        var gate = new RevocableSessionActivityGate();
-        await using var sut = new MqttManagedClient(client, gate: gate);
-        await sut.StartAsync(BuildOptions());
-
-        await sut.SubscribeAsync(new[] { Filter("a/b") });
-        client.ClearReceivedCalls();
-
-        gate.Revoke();
-
-        client.IsConnected.Returns(true);
-        client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
-
-        await client.DidNotReceive().SubscribeAsync(Arg.Any<MqttClientSubscribeOptions>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -327,52 +307,6 @@ public class MqttManagedClientActivityGateTests
     }
 
     [Test]
-    public async Task SubscribeAsync_passes_linked_token_to_client()
-    {
-        var client = Substitute.For<IMqttClient>();
-        client.IsConnected.Returns(true);
-        var gate = new RevocableSessionActivityGate();
-        await using var sut = new MqttManagedClient(client, gate: gate);
-        await sut.StartAsync(BuildOptions());
-        CancellationToken capturedToken = default;
-        var tcs = new TaskCompletionSource<MqttClientSubscribeResult>();
-        client.SubscribeAsync(Arg.Any<MqttClientSubscribeOptions>(), Arg.Do<CancellationToken>(t => capturedToken = t))
-            .Returns(tcs.Task);
-
-        var subscribeTask = sut.SubscribeAsync(new[] { Filter("a/b") });
-
-        capturedToken.CanBeCanceled.Should().BeTrue();
-        gate.Revoke();
-        await gate.RevocationCompletion.WaitAsync(TimeSpan.FromSeconds(10));
-        capturedToken.IsCancellationRequested.Should().BeTrue();
-        tcs.SetResult(new MqttClientSubscribeResult(0, Array.Empty<MqttClientSubscribeResultItem>(), null!, Array.Empty<MqttUserProperty>()));
-        await subscribeTask;
-    }
-
-    [Test]
-    public async Task UnsubscribeAsync_passes_linked_token_to_client()
-    {
-        var client = Substitute.For<IMqttClient>();
-        client.IsConnected.Returns(true);
-        var gate = new RevocableSessionActivityGate();
-        await using var sut = new MqttManagedClient(client, gate: gate);
-        await sut.StartAsync(BuildOptions());
-        CancellationToken capturedToken = default;
-        var tcs = new TaskCompletionSource<MqttClientUnsubscribeResult>();
-        client.UnsubscribeAsync(Arg.Any<MqttClientUnsubscribeOptions>(), Arg.Do<CancellationToken>(t => capturedToken = t))
-            .Returns(tcs.Task);
-
-        var unsubTask = sut.UnsubscribeAsync(new[] { "a/b" });
-
-        capturedToken.CanBeCanceled.Should().BeTrue();
-        gate.Revoke();
-        await gate.RevocationCompletion.WaitAsync(TimeSpan.FromSeconds(10));
-        capturedToken.IsCancellationRequested.Should().BeTrue();
-        tcs.SetResult(new MqttClientUnsubscribeResult(0, Array.Empty<MqttClientUnsubscribeResultItem>(), null!, Array.Empty<MqttUserProperty>()));
-        await unsubTask;
-    }
-
-    [Test]
     public async Task EnqueueAsync_immediate_publish_passes_linked_token_to_client()
     {
         var client = Substitute.For<IMqttClient>();
@@ -394,30 +328,6 @@ public class MqttManagedClientActivityGateTests
         capturedToken.IsCancellationRequested.Should().BeTrue();
         tcs.SetResult(new MqttClientPublishResult(null, default, null!, Array.Empty<MqttUserProperty>()));
         await publishTask;
-    }
-
-    [Test]
-    public async Task Resubscribe_passes_revocation_token_to_client()
-    {
-        var client = Substitute.For<IMqttClient>();
-        client.IsConnected.Returns(false);
-        var gate = new RevocableSessionActivityGate();
-        await using var sut = new MqttManagedClient(client, gate: gate);
-        await sut.StartAsync(BuildOptions());
-
-        await sut.SubscribeAsync(new[] { Filter("a/b") });
-        CancellationToken capturedToken = default;
-        client.SubscribeAsync(Arg.Any<MqttClientSubscribeOptions>(), Arg.Do<CancellationToken>(t => capturedToken = t))
-            .Returns(Task.FromResult(new MqttClientSubscribeResult(0, Array.Empty<MqttClientSubscribeResultItem>(), null!, Array.Empty<MqttUserProperty>())));
-        client.ClearReceivedCalls();
-
-        client.IsConnected.Returns(true);
-        client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
-
-        capturedToken.CanBeCanceled.Should().BeTrue();
-        gate.Revoke();
-        await WaitUntilAsync(() => capturedToken.IsCancellationRequested);
-        capturedToken.IsCancellationRequested.Should().BeTrue();
     }
 
     [Test]
@@ -581,4 +491,5 @@ public class MqttManagedClientActivityGateTests
             waited += 20;
         }
     }
+
 }

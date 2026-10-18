@@ -308,13 +308,25 @@ public class MqttManagedClientGenerationRaceTests
     public async Task ConnectedPublishWithOldEpoch_DoesNotPublishThroughReplacementGeneration()
     {
         var clientA = Substitute.For<IMqttClient>();
+        var connectedA = CaptureConnected(clientA);
         clientA.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
+            .Returns(async _ =>
+            {
+                clientA.IsConnected.Returns(true);
+                await connectedA.Handler!(ConnectedArgs());
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
+            });
         clientA.IsConnected.Returns(true);
 
         var clientB = Substitute.For<IMqttClient>();
+        var connectedB = CaptureConnected(clientB);
         clientB.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
+            .Returns(async _ =>
+            {
+                clientB.IsConnected.Returns(true);
+                await connectedB.Handler!(ConnectedArgs());
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
+            });
         clientB.IsConnected.Returns(true);
 
         var factory = new QueueClientFactory();
@@ -339,8 +351,14 @@ public class MqttManagedClientGenerationRaceTests
     {
         var publishStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var client = Substitute.For<IMqttClient>();
+        var connected = CaptureConnected(client);
         client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
+            .Returns(async _ =>
+            {
+                client.IsConnected.Returns(true);
+                await connected.Handler!(ConnectedArgs());
+                return new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success };
+            });
         client.IsConnected.Returns(true);
         client.PublishAsync(Arg.Any<MqttApplicationMessage>(), Arg.Any<CancellationToken>())
             .Returns(async call =>

@@ -8,23 +8,9 @@ public sealed partial class MqttManagedClient
 {
     private async Task ResubscribeAsync(Generation generation)
     {
-        List<MqttTopicFilter> filters;
-        lock (_sync)
-        {
-            if (_subscriptions.Count == 0)
-                return;
-            filters = _subscriptions.Values.ToList();
-        }
-
-        if (!IsOwnedForWork(generation) || !_activityGate.IsActive)
-            return;
-
         try
         {
-            var builder = new MqttClientSubscribeOptionsBuilder();
-            foreach (var filter in filters)
-                builder.WithTopicFilter(filter);
-            await generation.Client.SubscribeAsync(builder.Build(), generation.Cts.Token).ConfigureAwait(false);
+            await ResubscribeCoreAsync(generation).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -36,11 +22,167 @@ public sealed partial class MqttManagedClient
             if (!IsOwnedForWork(generation) || generation.Cts.IsCancellationRequested)
                 return;
 
-            _logger?.LogError(ex, "Failed to restore {Count} subscription(s) after connect", filters.Count);
+            int subscriptionCount;
+            lock (_sync)
+                subscriptionCount = _subscriptions.Count;
+            _logger?.LogError(ex, "Failed to restore {Count} subscription(s) after connect", subscriptionCount);
             _ = RaiseWhileEligibleAsync(SynchronizingSubscriptionsFailedAsync, new MqttManagedProcessFailedEventArgs(ex),
                 nameof(SynchronizingSubscriptionsFailedAsync), generation);
         }
     }
+
+    private async Task ResubscribeCoreAsync(Generation generation)
+    {
+        List<SemaphoreSlim> mutationGates = [];
+        try
+        {
+            while (true)
+            {
+                string[] gatedTopics;
+                lock (_sync)
+                    gatedTopics = _subscriptions.Keys.ToArray();
+
+                mutationGates = GetSubscriptionMutationGates(gatedTopics);
+                var acquired = 0;
+                try
+                {
+                    for (; acquired < mutationGates.Count; acquired++)
+                        await mutationGates[acquired].WaitAsync(generation.Cts.Token).ConfigureAwait(false);
+                }
+                catch
+                {
+                    for (var index = acquired - 1; index >= 0; index--)
+                        mutationGates[index].Release();
+                    mutationGates = [];
+                    throw;
+                }
+
+                ConnectionLifetime? lifetime;
+                long revision;
+                string[] currentTopics;
+                List<MqttTopicFilter> filters;
+                lock (_sync)
+                {
+                    lifetime = generation.Lifetime;
+                    revision = _subscriptionRevision;
+                    filters = _subscriptions.Values.ToList();
+                    currentTopics = _subscriptions.Keys.ToArray();
+                    if (filters.Count == 0 && lifetime is not null && ReferenceEquals(_current, generation))
+                        _subscriptionSnapshotReady = true;
+                }
+
+                if (currentTopics.Except(gatedTopics, StringComparer.Ordinal).Any())
+                {
+                    ReleaseSubscriptionMutationGates(mutationGates);
+                    mutationGates = [];
+                    continue;
+                }
+
+                if (filters.Count == 0 || !IsOwnedForWork(generation) || !_activityGate.IsActive)
+                    return;
+
+                if (lifetime is not null)
+                    await SubscribeAndConfirmAsync(generation, lifetime, filters, revision, generation.Cts.Token)
+                        .ConfigureAwait(false);
+                return;
+            }
+        }
+        finally
+        {
+            ReleaseSubscriptionMutationGates(mutationGates);
+        }
+    }
+
+    private async Task SubscribeAndConfirmAsync(
+        Generation generation,
+        ConnectionLifetime lifetime,
+        List<MqttTopicFilter> filters,
+        long revision,
+        CancellationToken cancellationToken)
+    {
+        var builder = new MqttClientSubscribeOptionsBuilder();
+        foreach (var filter in filters)
+            builder.WithTopicFilter(filter);
+
+        using var linked = CreatePublishTokenSource(cancellationToken, generation.Cts.Token, lifetime.Cancellation.Token);
+        var result = await generation.Client.SubscribeAsync(builder.Build(), linked.Token).ConfigureAwait(false);
+        var accepted = result.Items
+            .Where(item => IsGrantedSubscribeReason(item.ResultCode.ToString()))
+            .Select(item => item.TopicFilter.Topic)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var current = false;
+        lock (_sync)
+        {
+            current = ReferenceEquals(_current, generation)
+                      && ReferenceEquals(generation.Lifetime, lifetime)
+                      && !generation.Retired && !lifetime.Retired
+                      && !generation.Cts.IsCancellationRequested
+                      && !lifetime.Cancellation.IsCancellationRequested
+                      && _activityGate.IsActive
+                      && _subscriptionRevision == revision;
+            if (current)
+            {
+                foreach (var filter in filters)
+                {
+                    if (accepted.Contains(filter.Topic))
+                        _confirmedSubscriptions[filter.Topic] = filter;
+                    else
+                        _confirmedSubscriptions.Remove(filter.Topic);
+                }
+                _subscriptionSnapshotReady = true;
+            }
+        }
+
+        if (!current)
+            return;
+
+        if (accepted.Count != filters.Count
+            || !accepted.SetEquals(filters.Select(filter => filter.Topic)))
+            throw new InvalidOperationException(
+                $"The broker rejected or did not acknowledge {filters.Count - accepted.Count} subscription(s).");
+    }
+
+    private async Task UnsubscribeAndConfirmAsync(
+        Generation generation,
+        ConnectionLifetime lifetime,
+        List<string> topics,
+        long revision,
+        CancellationToken cancellationToken)
+    {
+        var builder = new MqttClientUnsubscribeOptionsBuilder();
+        foreach (var topic in topics)
+            builder.WithTopicFilter(topic);
+
+        using var linked = CreatePublishTokenSource(cancellationToken, generation.Cts.Token, lifetime.Cancellation.Token);
+        var result = await generation.Client.UnsubscribeAsync(builder.Build(), linked.Token).ConfigureAwait(false);
+        var accepted = result.Items.Count == topics.Count
+                       && result.Items.All(item => item.ResultCode.ToString() is "Success" or "NoSubscriptionExisted")
+                       && result.Items.Select(item => item.TopicFilter).ToHashSet(StringComparer.Ordinal)
+                           .SetEquals(topics);
+        lock (_sync)
+        {
+            if (!ReferenceEquals(_current, generation)
+                || !ReferenceEquals(generation.Lifetime, lifetime)
+                || generation.Retired || lifetime.Retired
+                || generation.Cts.IsCancellationRequested
+                || lifetime.Cancellation.IsCancellationRequested
+                || !_activityGate.IsActive
+                || _subscriptionRevision != revision)
+                return;
+
+            if (accepted)
+                foreach (var topic in topics)
+                    _confirmedSubscriptions.Remove(topic);
+            _subscriptionSnapshotReady = accepted;
+        }
+
+        if (!accepted)
+            throw new InvalidOperationException("The broker rejected an unsubscribe request.");
+    }
+
+    private static bool IsGrantedSubscribeReason(string reasonCode) =>
+        reasonCode is "GrantedQoS0" or "GrantedQoS1" or "GrantedQoS2";
 
     private async Task DrainPendingAsync(Generation generation)
     {

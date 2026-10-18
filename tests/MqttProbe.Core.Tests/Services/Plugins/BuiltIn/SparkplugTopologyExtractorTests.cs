@@ -111,22 +111,84 @@ public class SparkplugTopologyExtractorTests
     }
 
     [Test]
-    public void Extract_NBirth_PreservesExplicitWireSequenceZero()
+    public void Extract_NBirth_DefaultSequenceZero_IsReadFromSerializedPayload()
     {
         var extractor = new SparkplugTopologyExtractor();
-        var payload = MakePayloadWithMetrics();
-        var payloadBytesWithExplicitZeroSequence = payload.ToByteArray().Concat(new byte[] { 0x18, 0x00 }).ToArray();
-        var envelope = DecodedPayloadEnvelope.CreateSuccess(
-            "sparkplug-b",
-            "spBv1.0/mygroup/NBIRTH/eon1",
-            payloadBytesWithExplicitZeroSequence,
-            payload.ToString(),
-            typedPayload: payload);
+        var payload = new Payload { Timestamp = 1 };
+        payload.ToByteArray().Should().NotContain(0x18);
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NBIRTH/eon1", payload);
 
         var birth = extractor.Extract(envelope).Should().ContainSingle().Subject
             .Should().BeOfType<NodeBirthEvent>().Subject;
 
         birth.SequenceNumber.Should().Be(0UL);
+    }
+
+    [Test]
+    public void Extract_NData_WrappedSequenceZero_IsReadFromSerializedPayload()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var birthPayload = new Payload { Timestamp = 1, Seq = 255 };
+        extractor.Extract(MakeEnvelope("spBv1.0/mygroup/NBIRTH/eon1", birthPayload))
+            .Should().ContainSingle().Subject.Should().BeOfType<NodeBirthEvent>().Subject
+            .SequenceNumber.Should().Be(255UL);
+
+        var dataPayload = new Payload { Timestamp = 2, Seq = 0 };
+        var data = extractor.Extract(MakeEnvelope("spBv1.0/mygroup/NDATA/eon1", dataPayload))
+            .Should().ContainSingle().Subject.Should().BeOfType<NodeDataEvent>().Subject;
+
+        data.SequenceNumber.Should().Be(0UL);
+    }
+
+    [Test]
+    public void Extract_NBirth_OversizedSequenceVarint_IsMissing()
+    {
+        var payload = new Payload { Timestamp = 1 };
+        var envelope = DecodedPayloadEnvelope.CreateSuccess(
+            "sparkplug-b",
+            "spBv1.0/mygroup/NBIRTH/eon1",
+            [0x18, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80],
+            payload.ToString(),
+            typedPayload: payload);
+
+        var birth = new SparkplugTopologyExtractor().Extract(envelope).Should().ContainSingle().Subject
+            .Should().BeOfType<NodeBirthEvent>().Subject;
+
+        birth.SequenceNumber.Should().BeNull();
+    }
+
+    [Test]
+    public void Extract_NBirth_TruncatedSequenceVarint_IsMissing()
+    {
+        var payload = new Payload { Timestamp = 1 };
+        var envelope = DecodedPayloadEnvelope.CreateSuccess(
+            "sparkplug-b",
+            "spBv1.0/mygroup/NBIRTH/eon1",
+            [0x18, 0x80],
+            payload.ToString(),
+            typedPayload: payload);
+
+        var birth = new SparkplugTopologyExtractor().Extract(envelope).Should().ContainSingle().Subject
+            .Should().BeOfType<NodeBirthEvent>().Subject;
+
+        birth.SequenceNumber.Should().BeNull();
+    }
+
+    [Test]
+    public void Extract_NBirth_MalformedTrailingField_IsMissing()
+    {
+        var payload = new Payload { Timestamp = 1 };
+        var envelope = DecodedPayloadEnvelope.CreateSuccess(
+            "sparkplug-b",
+            "spBv1.0/mygroup/NBIRTH/eon1",
+            [0x18, 0x01, 0x08, 0x80],
+            payload.ToString(),
+            typedPayload: payload);
+
+        var birth = new SparkplugTopologyExtractor().Extract(envelope).Should().ContainSingle().Subject
+            .Should().BeOfType<NodeBirthEvent>().Subject;
+
+        birth.SequenceNumber.Should().BeNull();
     }
 
     // --- NDEATH ---

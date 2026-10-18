@@ -33,12 +33,12 @@ public sealed class MtlsBrokerFixture : IAsyncDisposable
     public byte[] ClientPfxBytes => ClientCert.Export(X509ContentType.Pfx, ClientPfxPassword);
     public string ClientPfxPassword => "test";
 
-    public static async Task<MtlsBrokerFixture> StartAsync()
+    public static async Task<MtlsBrokerFixture> StartAsync(string? rejectedSubscriptionFilter = null)
     {
         var fixture = new MtlsBrokerFixture();
         try
         {
-            await fixture.SetupAsync();
+            await fixture.SetupAsync(rejectedSubscriptionFilter);
             return fixture;
         }
         catch (Exception ex) when (IsDockerUnavailable(ex))
@@ -59,7 +59,7 @@ public sealed class MtlsBrokerFixture : IAsyncDisposable
         _clientCert?.Dispose();
     }
 
-    private async Task SetupAsync()
+    private async Task SetupAsync(string? rejectedSubscriptionFilter)
     {
         var notBefore = DateTimeOffset.Now;
         var notAfter = notBefore.AddHours(1);
@@ -116,6 +116,41 @@ public sealed class MtlsBrokerFixture : IAsyncDisposable
             certfile /mosquitto/config/server.crt
             keyfile /mosquitto/config/server.key
             """;
+        var dynamicSecurity = rejectedSubscriptionFilter is null
+            ? null
+            : $$"""
+              {
+                "clients": [],
+                "groups": [{
+                  "groupname": "anonymous",
+                  "roles": [{ "rolename": "integration" }]
+                }],
+                "roles": [{
+                  "rolename": "integration",
+                  "acls": [
+                    { "acltype": "publishClientSend", "topic": "#", "allow": true },
+                    { "acltype": "publishClientReceive", "topic": "#", "allow": true },
+                    { "acltype": "subscribePattern", "topic": "#", "allow": true, "priority": 1 },
+                    { "acltype": "subscribeLiteral", "topic": "{{rejectedSubscriptionFilter}}", "allow": false, "priority": 100 }
+                  ]
+                }],
+                "defaultACLAccess": {
+                  "publishClientSend": false,
+                  "publishClientReceive": true,
+                  "subscribe": false,
+                  "unsubscribe": true
+                },
+                "anonymousGroup": "anonymous"
+              }
+              """;
+        if (dynamicSecurity is not null)
+        {
+            config += """
+
+                plugin /usr/lib/mosquitto_dynamic_security.so
+                plugin_opt_config_file /mosquitto/config/mosquitto-dynsec.json
+                """;
+        }
 
         _container = new ContainerBuilder(MosquittoImage)
             .WithPortBinding(8883, true)
@@ -123,6 +158,7 @@ public sealed class MtlsBrokerFixture : IAsyncDisposable
             .WithResourceMapping(Encoding.UTF8.GetBytes(caPem), "/mosquitto/config/ca.crt")
             .WithResourceMapping(Encoding.UTF8.GetBytes(serverCertPem), "/mosquitto/config/server.crt")
             .WithResourceMapping(Encoding.UTF8.GetBytes(serverKeyPem), "/mosquitto/config/server.key")
+            .WithResourceMapping(Encoding.UTF8.GetBytes(dynamicSecurity ?? "{}"), "/mosquitto/config/mosquitto-dynsec.json")
             .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("mosquitto.*running"))
             .Build();
 

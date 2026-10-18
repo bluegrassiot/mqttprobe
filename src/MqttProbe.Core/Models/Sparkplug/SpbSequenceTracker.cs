@@ -55,21 +55,7 @@ internal sealed class SpbSequenceTracker(TimeProvider timeProvider, int timeoutM
         var sequence = (byte)value;
         var missingIndex = _missing.IndexOf(sequence);
         if (missingIndex >= 0)
-        {
-            _missing.RemoveAt(missingIndex);
-            if (_missing.Count == 0)
-            {
-                _startedAt = null;
-                _deadline = null;
-            }
-            var nextState = SpbSequenceState.InOrder;
-            if (_expired)
-                nextState = SpbSequenceState.GapDetected;
-            else if (_missing.Count > 0)
-                nextState = SpbSequenceState.Reordering;
-            UpdateSnapshot(nextState, value);
-            return true;
-        }
+            return ResolveMissingSequence(sequence, value, missingIndex);
 
         if (_last is not { } last)
         {
@@ -104,6 +90,32 @@ internal sealed class SpbSequenceTracker(TimeProvider timeProvider, int timeoutM
         }
 
         return false;
+    }
+
+    private bool ResolveMissingSequence(byte sequence, ulong received, int missingIndex)
+    {
+        _missing.RemoveAt(missingIndex);
+        if (_last is { } previous)
+        {
+            var forwardDelta = unchecked((byte)(sequence - previous));
+            if (forwardDelta is > 0 and < 128)
+            {
+                ApplyForwardSequence(previous, sequence, forwardDelta, received);
+                return true;
+            }
+        }
+        if (_missing.Count == 0)
+        {
+            _startedAt = null;
+            _deadline = null;
+        }
+        var nextState = SpbSequenceState.InOrder;
+        if (_expired)
+            nextState = SpbSequenceState.GapDetected;
+        else if (_missing.Count > 0)
+            nextState = SpbSequenceState.Reordering;
+        UpdateSnapshot(nextState, received);
+        return true;
     }
 
     private void ApplyForwardSequence(byte last, byte sequence, byte delta, ulong received)

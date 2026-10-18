@@ -16,18 +16,25 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
 
     private readonly Lock _sync = new();
     private readonly Dictionary<string, MqttTopicFilter> _subscriptions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, MqttTopicFilter> _confirmedSubscriptions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SemaphoreSlim> _subscriptionMutationGates = new(StringComparer.Ordinal);
     private readonly Queue<MqttApplicationMessage> _pending = new();
     private readonly HashSet<Generation> _generations = [];
     private readonly SemaphoreSlim _stopSemaphore = new(1, 1);
     private readonly SemaphoreSlim _drainSemaphore = new(1, 1);
-    private readonly AsyncLocal<long?> _messageConnectionEpoch = new();
+    private readonly AsyncLocal<InboundContext?> _inboundContext = new();
 
     private Generation? _current;
     private long _nextAttemptId;
+    private long _nextConnectionEpoch;
+    private long _subscriptionRevision;
+    private bool _subscriptionSnapshotReady;
     private long _pendingHeadRevision;
     private int _adoptedGenerationsUsed;
     private bool _adoptedClientDisposed;
     private bool _disposed;
+
+    private sealed record InboundContext(long Epoch, MqttSubscriptionSnapshot? Snapshot);
 
     public MqttManagedClient(ILogger<MqttManagedClient>? logger = null, ISessionActivityGate? gate = null)
         : this(new MqttNetClientFactory(), logger, gate)
@@ -69,14 +76,25 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
     {
         get
         {
-            if (_messageConnectionEpoch.Value is { } eventEpoch)
-                return eventEpoch;
             lock (_sync)
-                return _current is { Client.IsConnected: true, Retired: false } generation
-                    ? generation.AttemptId.Value
+                return _current is { Client.IsConnected: true, Retired: false, Lifetime: { Retired: false } lifetime }
+                    ? lifetime.Epoch
                     : null;
         }
     }
+
+    public MqttSubscriptionSnapshot? LiveSubscriptionSnapshot
+    {
+        get
+        {
+            lock (_sync)
+                return CreateLiveSubscriptionSnapshotLocked();
+        }
+    }
+
+    public MqttSubscriptionSnapshot? InboundSubscriptionSnapshot => _inboundContext.Value?.Snapshot;
+
+    public long? InboundConnectionEpoch => _inboundContext.Value?.Epoch;
 
     public event Func<MqttClientConnectedEventArgs, Task>? ConnectedAsync;
     public event Func<MqttClientDisconnectedEventArgs, Task>? DisconnectedAsync;
@@ -175,20 +193,47 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
         if (filters.Count == 0)
             return;
 
-        lock (_sync)
+        var mutationGates = GetSubscriptionMutationGates(filters.Select(filter => filter.Topic));
+        using var linked = LinkWithRevocation(cancellationToken);
+        var waitToken = linked?.Token ?? cancellationToken;
+        var acquired = 0;
+        try
         {
-            foreach (var filter in filters)
-                _subscriptions[filter.Topic] = filter;
-        }
+            for (; acquired < mutationGates.Count; acquired++)
+                await mutationGates[acquired].WaitAsync(waitToken).ConfigureAwait(false);
 
-        if (ActiveClient is { IsConnected: true } client)
+            Generation? generation;
+            ConnectionLifetime? lifetime;
+            long revision;
+            List<MqttTopicFilter> toSubscribe;
+            lock (_sync)
+            {
+                toSubscribe = filters.Where(filter => !_subscriptions.TryGetValue(filter.Topic, out var existing)
+                                                      || existing.Topic != filter.Topic
+                                                      || existing.QualityOfServiceLevel != filter.QualityOfServiceLevel
+                                                      || !_confirmedSubscriptions.ContainsKey(filter.Topic)
+                                                      || !_subscriptionSnapshotReady)
+                    .ToList();
+                foreach (var filter in filters)
+                    _subscriptions[filter.Topic] = filter;
+                if (toSubscribe.Count == 0)
+                    return;
+                foreach (var filter in toSubscribe)
+                    _confirmedSubscriptions.Remove(filter.Topic);
+                revision = InvalidateSubscriptionSnapshotLocked();
+                generation = _current;
+                lifetime = generation?.Lifetime;
+            }
+
+            if (generation is null || lifetime is null || lifetime.Retired)
+                return;
+
+            await SubscribeAndConfirmAsync(generation, lifetime, toSubscribe, revision, cancellationToken).ConfigureAwait(false);
+        }
+        finally
         {
-            var builder = new MqttClientSubscribeOptionsBuilder();
-            foreach (var filter in filters)
-                builder.WithTopicFilter(filter);
-            using var linked = LinkWithRevocation(cancellationToken);
-            var token = linked?.Token ?? cancellationToken;
-            await client.SubscribeAsync(builder.Build(), token).ConfigureAwait(false);
+            for (var index = acquired - 1; index >= 0; index--)
+                mutationGates[index].Release();
         }
     }
 
@@ -199,20 +244,39 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
         if (list.Count == 0)
             return;
 
-        lock (_sync)
+        var mutationGates = GetSubscriptionMutationGates(list);
+        using var linked = LinkWithRevocation(cancellationToken);
+        var waitToken = linked?.Token ?? cancellationToken;
+        var acquired = 0;
+        try
         {
-            foreach (var topic in list)
-                _subscriptions.Remove(topic);
-        }
+            for (; acquired < mutationGates.Count; acquired++)
+                await mutationGates[acquired].WaitAsync(waitToken).ConfigureAwait(false);
 
-        if (ActiveClient is { IsConnected: true } client)
+            Generation? generation;
+            ConnectionLifetime? lifetime;
+            long revision;
+            lock (_sync)
+            {
+                foreach (var topic in list)
+                {
+                    _subscriptions.Remove(topic);
+                    _confirmedSubscriptions.Remove(topic);
+                }
+                revision = InvalidateSubscriptionSnapshotLocked();
+                generation = _current;
+                lifetime = generation?.Lifetime;
+            }
+
+            if (generation is null || lifetime is null || lifetime.Retired)
+                return;
+
+            await UnsubscribeAndConfirmAsync(generation, lifetime, list, revision, cancellationToken).ConfigureAwait(false);
+        }
+        finally
         {
-            var builder = new MqttClientUnsubscribeOptionsBuilder();
-            foreach (var topic in list)
-                builder.WithTopicFilter(topic);
-            using var linked = LinkWithRevocation(cancellationToken);
-            var token = linked?.Token ?? cancellationToken;
-            await client.UnsubscribeAsync(builder.Build(), token).ConfigureAwait(false);
+            for (var index = acquired - 1; index >= 0; index--)
+                mutationGates[index].Release();
         }
     }
 
@@ -247,43 +311,115 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
     public async Task<bool> TryPublishConnectedAsync(
         MqttApplicationMessage applicationMessage,
         long? expectedConnectionEpoch = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await TryPublishConnectedAsync(applicationMessage, expectedConnectionEpoch, null, cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task<bool> TryPublishConnectedAsync(
+        MqttApplicationMessage applicationMessage,
+        long? expectedConnectionEpoch,
+        long? expectedSubscriptionRevision,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(applicationMessage);
         _activityGate.EnsureActive();
 
-        Generation? generation;
-        lock (_sync)
-            generation = _current;
-        if (generation is null || !generation.Client.IsConnected || !IsOwnedForWork(generation))
-            return false;
-        if (expectedConnectionEpoch is { } expectedEpoch && generation.AttemptId.Value != expectedEpoch)
-            return false;
-
-        using var linked = CreatePublishTokenSource(cancellationToken, generation.Cts.Token);
-
+        Generation generation;
+        ConnectionLifetime lifetime;
         lock (_sync)
         {
-            if (!ReferenceEquals(_current, generation)
-                || generation.Retired
-                || !generation.Client.IsConnected
-                || expectedConnectionEpoch is { } expected && generation.AttemptId.Value != expected)
+            if (_current is not { } current
+                || current.Lifetime is not { Retired: false } currentLifetime
+                || current.Retired
+                || current.Cts.IsCancellationRequested
+                || !_activityGate.IsActive
+                || !current.Client.IsConnected
+                || !IsOwnedForWorkLocked(current)
+                || expectedConnectionEpoch is { } expectedEpoch && currentLifetime.Epoch != expectedEpoch
+                || expectedSubscriptionRevision is { } expectedRevision
+                    && (currentLifetime.SubscriptionRevision != expectedRevision
+                        || !_subscriptionSnapshotReady
+                        || _subscriptionRevision != expectedRevision))
                 return false;
+
+            generation = current;
+            lifetime = currentLifetime;
+            lifetime.AdmitPublish();
         }
 
-        await generation.Client.PublishAsync(applicationMessage, linked.Token).ConfigureAwait(false);
-        return true;
+        using var linked = CreatePublishTokenSource(
+            cancellationToken,
+            generation.Cts.Token,
+            lifetime.Cancellation.Token);
+        try
+        {
+            linked.Token.ThrowIfCancellationRequested();
+            await generation.Client.PublishAsync(applicationMessage, linked.Token).ConfigureAwait(false);
+            return true;
+        }
+        finally
+        {
+            lock (_sync)
+                lifetime.CompletePublish();
+        }
     }
 
-    private CancellationTokenSource CreatePublishTokenSource(CancellationToken cancellationToken, CancellationToken generationToken)
+    private CancellationTokenSource CreatePublishTokenSource(
+        CancellationToken cancellationToken,
+        CancellationToken generationToken,
+        CancellationToken lifetimeToken)
     {
-        var tokens = new List<CancellationToken>(3);
+        var tokens = new List<CancellationToken>(4);
         if (cancellationToken.CanBeCanceled)
             tokens.Add(cancellationToken);
         tokens.Add(generationToken);
+        tokens.Add(lifetimeToken);
         if (_activityGate.RevocationToken.CanBeCanceled)
             tokens.Add(_activityGate.RevocationToken);
         return CancellationTokenSource.CreateLinkedTokenSource(tokens.ToArray());
+    }
+
+    private long InvalidateSubscriptionSnapshotLocked()
+    {
+        _subscriptionRevision++;
+        _subscriptionSnapshotReady = false;
+        if (_current?.Lifetime is { Retired: false } lifetime)
+            lifetime.SubscriptionRevision = _subscriptionRevision;
+        return _subscriptionRevision;
+    }
+
+    private List<SemaphoreSlim> GetSubscriptionMutationGates(IEnumerable<string> topics)
+    {
+        lock (_sync)
+        {
+            return topics.Distinct(StringComparer.Ordinal)
+                .OrderBy(topic => topic, StringComparer.Ordinal)
+                .Select(topic =>
+                {
+                    if (!_subscriptionMutationGates.TryGetValue(topic, out var gate))
+                    {
+                        gate = new SemaphoreSlim(1, 1);
+                        _subscriptionMutationGates.Add(topic, gate);
+                    }
+                    return gate;
+                })
+                .ToList();
+        }
+    }
+
+    private static void ReleaseSubscriptionMutationGates(List<SemaphoreSlim> gates)
+    {
+        for (var index = gates.Count - 1; index >= 0; index--)
+            gates[index].Release();
+    }
+
+    private MqttSubscriptionSnapshot? CreateLiveSubscriptionSnapshotLocked()
+    {
+        if (!_subscriptionSnapshotReady
+            || _current is not { Client.IsConnected: true, Retired: false, Lifetime: { Retired: false } lifetime })
+            return null;
+        return new MqttSubscriptionSnapshot(lifetime.Epoch, _subscriptionRevision,
+            Array.AsReadOnly(_confirmedSubscriptions.Keys.ToArray()));
     }
 
     public void Dispose()

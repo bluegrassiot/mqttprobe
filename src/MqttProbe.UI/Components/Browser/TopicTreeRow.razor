@@ -1,4 +1,3 @@
-@inject IMessageStoreManager MessageStoreManager
 
 <div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsSelected ? "topic-tree-row--selected" : "")"
      title="@Title"
@@ -40,7 +39,7 @@
     [Parameter] public TopicTreeRowModel Row { get; set; } = null!;
     [Parameter] public bool IsSelected { get; set; }
     [Parameter] public EventCallback<string> OnExpandToggled { get; set; }
-    [Parameter] public EventCallback<string> OnSelected { get; set; }
+    [Parameter] public EventCallback<TopicSelection> OnSelected { get; set; }
 
     private const int IndentStepWidth = 16;
 
@@ -82,12 +81,7 @@
 
     private async Task OnRowClick()
     {
-        MessageStoreManager.SelectTopics(Row.ToSelection());
-        var selection = MessageStoreManager.GetSelectedTopicState();
-        if (!string.Equals(selection.Key, Row.FullPath, StringComparison.Ordinal))
-            return;
-
-        await OnSelected.InvokeAsync(Row.FullPath);
+        await OnSelected.InvokeAsync(Row.ToSelection());
     }
 
     private async Task OnToggleExpand() =>

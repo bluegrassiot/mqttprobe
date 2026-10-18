@@ -2,7 +2,6 @@ using System.Globalization;
 using AngleSharp.Dom;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Mqtt;
-using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Tests.TestHelpers;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
@@ -12,20 +11,6 @@ namespace MqttProbe.UI.Tests.Components.Browser;
 [TestFixture]
 public class TopicTreeRowIndentRenderingTests : BunitTestContext
 {
-    private IMessageStoreManager _manager = null!;
-
-    [SetUp]
-    public void SetupMocks()
-    {
-        _manager = Substitute.For<IMessageStoreManager>();
-        _manager.GetSelectedTopicState().Returns(Selection(null));
-        Services.AddSingleton(_manager);
-        EnsureMudProviders();
-    }
-
-    private static SelectedTopicState Selection(string? topic) =>
-        new(new SelectedTopicToken(Guid.NewGuid(), 1, 0), topic, 0);
-
     private static TopicTreeRowModel Row(int depth, TopicTreeRowKind kind = TopicTreeRowKind.Devices) =>
         new($"spBv1.0/plant1/{depth}", $"level-{depth}", depth, HasChildren: true,
             TopicCount: 3, MessageCount: 42, IsExpanded: true, IsValueBearer: false, Kind: kind);
@@ -33,10 +18,10 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
     private IRenderedComponent<TopicTreeRow> RenderRow(
         TopicTreeRowModel row,
         Action<string>? onExpandToggled = null,
-        Action<string>? onSelected = null)
+        Action<TopicSelection>? onSelected = null)
     {
         Action<string> toggled = onExpandToggled ?? (_ => { });
-        Action<string> selected = onSelected ?? (_ => { });
+        Action<TopicSelection> selected = onSelected ?? (_ => { });
 
         return Render<TopicTreeRow>(parameters => parameters
             .Add(component => component.Row, row)
@@ -95,21 +80,15 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
         {
             SelectionTopics = ["spBv1.0/plant1/node1/dev1", "spBv1.0/plant1/node1/dev2"],
         };
-        var current = Selection(null);
-        _manager.GetSelectedTopicState().Returns(_ => current);
-        _manager.When(m => m.SelectTopics(Arg.Any<TopicSelection?>()))
-            .Do(call => current = Selection(call.Arg<TopicSelection>()?.Key));
-
         string? toggled = null;
-        string? selected = null;
-        var cut = RenderRow(row, path => toggled = path, path => selected = path);
+        TopicSelection? selected = null;
+        var cut = RenderRow(row, path => toggled = path, request => selected = request);
 
         cut.Find(".topic-tree-row").Click();
 
-        _manager.Received(1).SelectTopics(Arg.Is<TopicSelection>(selection =>
-            selection.Key == row.FullPath
-            && selection.Topics.SequenceEqual(row.SelectionTopics.ToArray())));
-        selected.Should().Be(row.FullPath);
+        selected.Should().NotBeNull();
+        selected!.Key.Should().Be(row.FullPath);
+        selected.Topics.Should().Equal(row.SelectionTopics);
         toggled.Should().BeNull("expansion belongs to the chevron");
     }
 
@@ -117,21 +96,14 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
     public void DeepRealRowClickSelectsTheTopic()
     {
         var row = Row(1000, TopicTreeRowKind.Topic);
-        var current = Selection(null);
-        _manager.GetSelectedTopicState().Returns(_ => current);
-        _manager.When(m => m.SelectTopics(Arg.Any<TopicSelection?>()))
-            .Do(call => current = Selection(call.Arg<TopicSelection>()?.Key));
-
-        string? selected = null;
-        var cut = RenderRow(row, null, path => selected = path);
+        TopicSelection? selected = null;
+        var cut = RenderRow(row, null, request => selected = request);
 
         cut.Find(".topic-tree-row").Click();
 
-        _manager.Received(1).SelectTopics(Arg.Is<TopicSelection>(selection =>
-            selection.Key == row.FullPath
-            && selection.Topics.Length == 1
-            && selection.Topics[0] == row.FullPath));
-        selected.Should().Be(row.FullPath);
+        selected.Should().NotBeNull();
+        selected!.Key.Should().Be(row.FullPath);
+        selected.Topics.Should().Equal(row.FullPath);
     }
 
     [Test]

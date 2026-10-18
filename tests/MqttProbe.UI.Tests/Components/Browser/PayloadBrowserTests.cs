@@ -171,6 +171,28 @@ public class PayloadBrowserTests : BunitTestContext
     }
 
     [Test]
+    public async Task DoesNotQueryAgain_WhenAppliedContentIsNewerThanSelectionState()
+    {
+        var newerSelection = MakeSelection("sensor", generation: 1, contentVersion: 2);
+        ReturnResponses(Task.FromResult<SelectedMessagesSnapshot?>(Snapshot(newerSelection, 500, "newer-content")));
+        EnsureMudProviders();
+
+        var initialQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ObserveNextQuery(initialQuery);
+        var cut = Render<PayloadBrowser>();
+        (await initialQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((_selection.Token, 500));
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("newer-content"), TimeSpan.FromSeconds(5));
+
+        var timerTick = cut.Instance.GetType().GetMethod("OnTimerTick",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        timerTick.Should().NotBeNull();
+        await cut.InvokeAsync(() => timerTick!.Invoke(cut.Instance, new object?[] { null }));
+
+        await _mockMsgStore.Received(1).GetSelectedMessagesAsync(Arg.Any<SelectedTopicToken>(), Arg.Any<int>());
+    }
+
+    [Test]
     public async Task QueriesAgain_WhenVersionChanges()
     {
         ReturnMessages(Enumerable.Range(1, 5)

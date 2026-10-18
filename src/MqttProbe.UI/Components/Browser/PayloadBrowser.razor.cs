@@ -57,8 +57,7 @@ public partial class PayloadBrowser
 
             var limit = MaxMessageCount;
             if (_lastAppliedToken is { } lastApplied
-                && IsSameSelection(lastApplied, selection.Token)
-                && lastApplied.ContentVersion >= selection.Token.ContentVersion
+                && lastApplied.IsContentAtLeastAsNewAs(selection.Token)
                 && limit == _lastAppliedMaxCount)
                 return;
 
@@ -104,18 +103,18 @@ public partial class PayloadBrowser
 
         if (result is null
             || result.Limit != requestedLimit
-            || !IsSameSelection(requestedToken, currentSelection.Token)
-            || !IsSameSelection(requestedToken, result.State.Token)
+            || !requestedToken.IsSameSelection(currentSelection.Token)
+            || !requestedToken.IsSameSelection(result.State.Token)
             || MaxMessageCount != requestedLimit)
             return;
 
         if (_lastAppliedToken is { } lastApplied
-            && IsSameSelection(lastApplied, result.State.Token)
-            && result.State.Token.ContentVersion < lastApplied.ContentVersion)
+            && lastApplied.IsSameSelection(result.State.Token)
+            && !result.State.Token.IsContentAtLeastAsNewAs(lastApplied))
             return;
 
         if (_lastAppliedToken is { } previousToken
-            && !IsSameSelection(previousToken, result.State.Token))
+            && !previousToken.IsSameSelection(result.State.Token))
             _selectedMessage = null;
 
         _messageList = _newestFirst
@@ -127,6 +126,4 @@ public partial class PayloadBrowser
         StateHasChanged();
     }
 
-    private static bool IsSameSelection(SelectedTopicToken left, SelectedTopicToken right) =>
-        left.StoreId == right.StoreId && left.Generation == right.Generation;
 }

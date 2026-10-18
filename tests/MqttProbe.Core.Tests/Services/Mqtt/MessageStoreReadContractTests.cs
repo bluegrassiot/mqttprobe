@@ -93,6 +93,24 @@ public sealed class MessageStoreReadContractTests
     }
 
     [Test]
+    public void SelectedTopicToken_SeparatesSelectionIdentityFromContentFreshness()
+    {
+        var token = new SelectedTopicToken(Guid.NewGuid(), 3, 5);
+
+        token.IsSameSelection(token with { ContentVersion = 6 }).Should().BeTrue();
+        token.IsSameSelection(token with { Generation = 4 }).Should().BeFalse();
+        token.IsSameSelection(token with { StoreId = Guid.NewGuid() }).Should().BeFalse();
+
+        token.IsContentAtLeastAsNewAs(token with { ContentVersion = 4 }).Should().BeTrue();
+        token.IsContentAtLeastAsNewAs(token).Should().BeTrue();
+        token.IsContentAtLeastAsNewAs(token with { ContentVersion = 6 }).Should().BeFalse();
+        token.IsContentAtLeastAsNewAs(token with { Generation = 4, ContentVersion = 6 }).Should().BeFalse();
+        token.IsContentAtLeastAsNewAs(token with { StoreId = Guid.NewGuid(), ContentVersion = 6 }).Should().BeFalse();
+
+        token.Should().NotBe(token with { ContentVersion = 6 });
+    }
+
+    [Test]
     public void SelectedMessagesAreNewestFirstBoundedDetachedAndRetainOriginalReferences()
     {
         var store = CreateStore();

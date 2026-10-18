@@ -1,123 +1,51 @@
 using System.Collections.Immutable;
 using MqttProbe.Core.Models.Mqtt;
+using MqttProbe.Core.Services.Mqtt;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
 internal sealed class TopicBrowserTestFixture
 {
-    private readonly MqttProbe.Core.Services.Mqtt.IMessageStoreManager _manager;
-    private readonly Guid _storeId = Guid.NewGuid();
-    private long _generation;
-    private TopicTreeSnapshot _snapshot = new(0, ImmutableArray<TopicNodeSnapshot>.Empty);
-    private SelectedTopicState _selection = new(default, null, 0);
+    public TopicBrowserTestFixture(IMessageStoreManager? observer = null, int maxStoredMessages = 1000) =>
+        Adapter = TopicTreeSelectionTestAdapter.Create(observer, maxStoredMessages);
 
-    public List<TopicSelection> Selections { get; } = [];
+    public TopicTreeSelectionTestAdapter Adapter { get; }
 
-    public TopicBrowserTestFixture(MqttProbe.Core.Services.Mqtt.IMessageStoreManager manager) => _manager = manager;
+    public void Clear() => Adapter.Store.Clear();
 
-    public void Configure()
+    public void AddTopics(params (string Topic, int Messages)[] topics)
     {
-        _manager.RootTopicCount.Returns(_ => _snapshot.Roots.IsDefault ? 0 : _snapshot.Roots.Length);
-        _manager.GetTopicTreeSnapshot().Returns(_ => _snapshot);
-        _manager.GetSelectedTopicState().Returns(_ => _selection);
-        _manager.When(m => m.SelectTopics(Arg.Any<TopicSelection?>()))
-            .Do(call => Select(call.Arg<TopicSelection?>()));
-        _manager.TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>())
-            .Returns(call => TryClearSelection(call.Arg<long>(), call.Arg<SelectedTopicState>()));
+        foreach (var (topic, count) in topics)
+        {
+            for (var index = 0; index < count; index++)
+                Adapter.Add(topic, new MqttMessage($"payload-{index}", "unused", false,
+                    MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce)
+                { Topic = topic });
+        }
     }
-
-    public void SetSnapshot(params TopicNodeSnapshot[] roots) =>
-        _snapshot = new TopicTreeSnapshot(_snapshot.Version + 1, ImmutableArray.CreateRange(roots));
-
-    public TopicTreeSnapshot Snapshot => _snapshot;
-
-    // Empties the store but keeps the reported version, so the component keeps the frame it
-    // already rendered: the row is on screen while the topic it names has left the store.
-    public void PurgeHoldingRenderedFrame() =>
-        _snapshot = new TopicTreeSnapshot(_snapshot.Version, ImmutableArray<TopicNodeSnapshot>.Empty);
 
     // Runs just before the conditional clear is evaluated, so a test can move the store on
     // between the component's verdict and the clear without a race.
-    public Action? BeforeConditionalClear { get; set; }
-
-    // Mirrors TopicTreeStore.TryClearSelection so the component never meets a substitute's
-    // default false, and a stale verdict comes from the store rather than from the mock.
-    public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection)
+    public Action? BeforeConditionalClear
     {
-        BeforeConditionalClear?.Invoke();
-
-        if (_snapshot.Version != treeVersion
-            || expectedSelection.Token.StoreId != _selection.Token.StoreId
-            || expectedSelection.Token.Generation != _selection.Token.Generation
-            || _selection.Key is null
-            || !string.Equals(_selection.Key, expectedSelection.Key, StringComparison.Ordinal))
-            return false;
-
-        _generation = Math.Max(_generation, _selection.Token.Generation);
-        _selection = new SelectedTopicState(new SelectedTopicToken(_storeId, ++_generation, 0), null, 0);
-        return true;
+        get => Adapter.BeforeClear;
+        set => Adapter.BeforeClear = value;
     }
 
-    public void SetSelection(SelectedTopicState selection) => _selection = selection;
+    public void SetSelection(TopicSelection? selection) => Adapter.Store.SelectTopics(selection);
 
-    public string? SelectedKey => _selection.Key;
+    public string? SelectedKey => Adapter.Store.GetSelectedTopicState().Key;
 
-    private void Select(TopicSelection? selection)
-    {
-        Selections.Add(selection!);
-
-        if (selection is null)
-        {
-            _selection = new SelectedTopicState(new SelectedTopicToken(_storeId, ++_generation, 0), null, 0);
-            return;
-        }
-
-        var nodes = selection.Topics
-            .Select(topic => Find(_snapshot.Roots, topic))
-            .OfType<TopicNodeSnapshot>()
-            .ToArray();
-
-        if (nodes.Length == 0)
-            return;
-
-        if (_selection.Key != selection.Key)
-        {
-            _selection = new SelectedTopicState(
-                new SelectedTopicToken(_storeId, ++_generation, 0),
-                selection.Key,
-                nodes.Sum(node => node.MessageCount),
-                selection.Label);
-        }
-    }
-
-    private static TopicNodeSnapshot? Find(ImmutableArray<TopicNodeSnapshot> nodes, string fullTopic)
-    {
-        if (nodes.IsDefaultOrEmpty)
-            return null;
-        foreach (var node in nodes)
-        {
-            if (node.FullTopic == fullTopic)
-                return node;
-            var match = Find(node.Children, fullTopic);
-            if (match is not null)
-                return match;
-        }
-        return null;
-    }
 }
 
 internal static class TopicBrowserTestTrees
 {
-    public static TopicNodeSnapshot BuildTree() =>
-        new("sensors", "sensors", 3, 5, false,
-        [
-            new TopicNodeSnapshot("temp", "sensors/temp", 1, 3, true,
-            [new TopicNodeSnapshot("room1", "sensors/temp/room1", 0, 2, true, [])]),
-            new TopicNodeSnapshot("humidity", "sensors/humidity", 0, 2, true, [])
-        ]);
-
-    public static TopicNodeSnapshot Node(string topic, int messageCount = 0, bool hasDirectMessages = false) =>
-        new(topic, topic, 0, messageCount, hasDirectMessages, []);
+    public static (string Topic, int Messages)[] BuildTopics() =>
+    [
+        ("sensors/temp", 1),
+        ("sensors/temp/room1", 2),
+        ("sensors/humidity", 2)
+    ];
 }
 
 [TestFixture]

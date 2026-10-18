@@ -87,10 +87,9 @@ public sealed class TopicBrowserExcludePurgeReconciliationTests : BunitTestConte
         // The exclude purge Core performs for a matching topic filter.
         _excludes.PurgeExcludedTopic += Raise.Event<Action<string>>("spBv1.0/plant1/NDATA/ghosttip/#");
 
-        // The refresh is timer-driven (one tick per second), so bound both waits above that period.
-        var refreshBound = TimeSpan.FromSeconds(10);
-        cut.WaitForAssertion(() => _manager.GetSelectedTopicState().Key.Should().BeNull(), refreshBound);
-        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().BeEmpty(), refreshBound);
+        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
+        _manager.GetSelectedTopicState().Key.Should().BeNull();
+        cut.FindAll(".topic-tree-row--selected").Should().BeEmpty();
         _manager.GetTopicTreeSnapshot().Roots.Should().NotBeEmpty();
         cut.Markup.Should().Contain("spBv1.0/plant1/NDATA/node1",
             "the valid tip under the same verb survives the purge and stays grouped");
@@ -115,13 +114,13 @@ public sealed class TopicBrowserExcludePurgeReconciliationTests : BunitTestConte
         _manager.GetVersion().Should().BeGreaterThan(purgedVerdict.Version,
             "the store moved on since the verdict was taken");
 
-        var forwarding = new StaleVerdictManager(_manager, purgedVerdict);
-        Services.AddSingleton<IMessageStoreManager>(forwarding);
+        var forwarding = new StaleVerdictSelectionStore(_manager, purgedVerdict);
+        Services.AddSingleton<ITopicSelectionStore>(forwarding);
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
 
-        cut.WaitForAssertion(() => forwarding.ClearAttempts.Should().Be(1,
-            "the component asks once, then the restored residue is always represented"));
+        forwarding.ClearAttempts.Should().Be(1,
+            "the component asks once, then the restored residue is always represented");
         forwarding.Cleared.Should().Be(0, "the tree version no longer matched the verdict");
         var after = _manager.GetSelectedTopicState();
         after.Key.Should().Be(Aggregate, "the rejected clear left the selection alone");
@@ -130,15 +129,13 @@ public sealed class TopicBrowserExcludePurgeReconciliationTests : BunitTestConte
             "a rejected clear must not move the selection on");
 
         await cut.InvokeAsync(() => cut.FindAll(".mud-toolbar button")[0].Click());
-        cut.WaitForAssertion(
-            () => cut.FindAll(".topic-tree-row--selected").Should().ContainSingle(),
-            TimeSpan.FromSeconds(10));
+        cut.FindAll(".topic-tree-row--selected").Should().ContainSingle();
     }
 
     // Serves the purged verdict the component's own read took, then forwards the conditional
     // clear to the real manager, whose tree has since moved on with the returned residue.
-    private sealed class StaleVerdictManager(IMessageStoreManager inner, TopicTreeSnapshot verdict)
-        : IMessageStoreManager
+    private sealed class StaleVerdictSelectionStore(IMessageStoreManager manager, TopicTreeSnapshot verdict)
+        : ITopicSelectionStore
     {
         private bool _verdictPending = true;
 
@@ -149,7 +146,7 @@ public sealed class TopicBrowserExcludePurgeReconciliationTests : BunitTestConte
         public TopicTreeSnapshot GetTopicTreeSnapshot()
         {
             if (!_verdictPending)
-                return inner.GetTopicTreeSnapshot();
+                return manager.GetTopicTreeSnapshot();
 
             _verdictPending = false;
             return verdict;
@@ -158,54 +155,19 @@ public sealed class TopicBrowserExcludePurgeReconciliationTests : BunitTestConte
         public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection)
         {
             ClearAttempts++;
-            var cleared = inner.TryClearSelection(treeVersion, expectedSelection);
+            var cleared = manager.TryClearSelection(treeVersion, expectedSelection);
             if (cleared)
                 Cleared++;
 
             return cleared;
         }
 
-        public int RootTopicCount => inner.RootTopicCount;
+        public SelectedTopicState GetSelectedTopicState() => manager.GetSelectedTopicState();
 
-        public SelectedTopicState GetSelectedTopicState() => inner.GetSelectedTopicState();
-
-        public void SelectTopic(string? fullTopic) => inner.SelectTopic(fullTopic);
-
-        public void SelectTopics(TopicSelection? selection) => inner.SelectTopics(selection);
+        public void SelectTopics(TopicSelection? selection) => manager.SelectTopics(selection);
 
         public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(
             SelectedTopicToken expectedSelection, int limit) =>
-            inner.GetSelectedMessagesAsync(expectedSelection, limit);
-
-        public bool IsListening => inner.IsListening;
-
-        public int MaxStoredMessages => inner.MaxStoredMessages;
-
-        public int MaxTopicNodes => inner.MaxTopicNodes;
-
-        public int TotalStoredMessages => inner.TotalStoredMessages;
-
-        public int TopicNodeCount => inner.TopicNodeCount;
-
-        public long DroppedMessageCount => inner.DroppedMessageCount;
-
-        public long ExcludedMessageCount => inner.ExcludedMessageCount;
-
-        public long GetVersion() => inner.GetVersion();
-
-        public Task ClearAllMessages() => inner.ClearAllMessages();
-
-        public Task Stop() => inner.Stop();
-
-        public Task Start() => inner.Start();
-
-        public event Func<MqttMessage, Task>? MessageReceived
-        {
-            add => inner.MessageReceived += value;
-            remove => inner.MessageReceived -= value;
-        }
-
-        // The fixture owns the real manager's lifetime; this wrapper adds no resources of its own.
-        public void Dispose() => GC.SuppressFinalize(this);
+            manager.GetSelectedMessagesAsync(expectedSelection, limit);
     }
 }

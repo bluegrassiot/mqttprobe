@@ -46,6 +46,9 @@ internal sealed class PreferenceSettings(ISettingsDocument document)
     public Task SetAllowNodeRebootAsync(bool allow) =>
         SetSparkplugAsync(s => s.AllowNodeReboot = allow);
 
+    public Task SetReorderTimeoutMillisecondsAsync(int milliseconds) =>
+        SetSparkplugAsync(s => s.ReorderTimeoutMilliseconds = Math.Clamp(milliseconds, 0, 60000));
+
     public Task SetMaxStoredMessagesAsync(int value) =>
         SetPerformanceAsync(p => p.MaxStoredMessages = value);
 

@@ -21,13 +21,22 @@ public interface ISparkplugTopologyService
     public int RemoveOfflineNodes();
     public void ClearAll();
     public Task ApplyTopologyEventsAsync(IReadOnlyList<TopologyEvent> events);
+    public int CheckSequenceTimeouts() => 0;
+    public void ResetSequenceTracking() { }
+    public void MarkSequenceObservationIncomplete(string topic) { }
+    public void RecordSequenceConnectionEpoch(IReadOnlyList<TopologyEvent> events, long? connectionEpoch) { }
 }
 
-public sealed class SparkplugTopologyService : ISparkplugTopologyService
+public sealed class SparkplugTopologyService(
+    TimeProvider? timeProvider = null,
+    int reorderTimeoutMilliseconds = 5000,
+    MqttProbe.Core.Services.Configuration.ISparkplugSettings? sparkplugSettings = null) : ISparkplugTopologyService
 {
     private static readonly string[] _nodeVerbs = ["NBIRTH", "NDATA", "NDEATH"];
     private static readonly string[] _deviceVerbs = ["DBIRTH", "DDATA", "DDEATH"];
     private readonly ConcurrentDictionary<string, SpbGroup> _groups = new(StringComparer.Ordinal);
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    private readonly int _reorderTimeoutMilliseconds = Math.Clamp(reorderTimeoutMilliseconds, 0, 60000);
 
     public IReadOnlyDictionary<string, SpbGroup> Groups => _groups;
     public event Action? TopologyChanged;
@@ -121,6 +130,81 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
             TopologyChanged?.Invoke();
     }
 
+    public int CheckSequenceTimeouts()
+    {
+        var changed = 0;
+        foreach (var node in _groups.Values.SelectMany(group => group.Nodes.Values))
+        {
+            lock (node.SyncRoot)
+            {
+                node.SequenceTracker?.UpdateTimeout(sparkplugSettings?.Sparkplug.ReorderTimeoutMilliseconds ?? _reorderTimeoutMilliseconds);
+                if (node.SequenceTracker?.CheckTimeout() != true)
+                    continue;
+                node.Sequence = node.SequenceTracker.Snapshot;
+                changed++;
+            }
+        }
+
+        if (changed > 0)
+            TopologyChanged?.Invoke();
+        return changed;
+    }
+
+    public void ResetSequenceTracking()
+    {
+        foreach (var node in _groups.Values.SelectMany(group => group.Nodes.Values))
+        {
+            lock (node.SyncRoot)
+            {
+                node.SequenceTracker?.Reset(null);
+                node.Sequence = node.SequenceTracker?.Snapshot ?? new SpbSequenceDiagnostics();
+                node.SequenceRecoveryInFlightEpisodeId = null;
+                node.SequenceRecoverySentEpisodeId = null;
+                node.SequenceObservationComplete = false;
+                node.SequenceConnectionEpoch = null;
+                node.LastBirthSequenceNumber = null;
+                node.LastBirthTimestampUtc = null;
+                node.SequenceEpisodeId++;
+            }
+        }
+    }
+
+    public void RecordSequenceConnectionEpoch(IReadOnlyList<TopologyEvent> events, long? connectionEpoch)
+    {
+        foreach (var evt in events)
+        {
+            var (groupId, nodeId) = evt switch
+            {
+                NodeBirthEvent birth => (birth.GroupId, birth.NodeId),
+                NodeDataEvent data => (data.GroupId, data.NodeId),
+                DeviceBirthEvent birth => (birth.GroupId, birth.NodeId),
+                DeviceDataEvent data => (data.GroupId, data.NodeId),
+                DeviceDeathEvent death => (death.GroupId, death.NodeId),
+                _ => (null, null)
+            };
+
+            if (groupId is null || nodeId is null
+                || !_groups.TryGetValue(groupId, out var group)
+                || !group.Nodes.TryGetValue(nodeId, out var node))
+                continue;
+
+            lock (node.SyncRoot)
+                node.SequenceConnectionEpoch = connectionEpoch;
+        }
+    }
+
+    public void MarkSequenceObservationIncomplete(string topic)
+    {
+        if (!TryParseTopic(topic, out var groupId, out var verb, out var nodeId, out _)
+            || verb is not ("NBIRTH" or "DBIRTH" or "NDATA" or "DDATA" or "DDEATH")
+            || !_groups.TryGetValue(groupId, out var group)
+            || !group.Nodes.TryGetValue(nodeId, out var node))
+            return;
+
+        lock (node.SyncRoot)
+            node.SequenceObservationComplete = false;
+    }
+
     private static bool TopicMatchesNode(string filter, string groupId, string nodeId) =>
         _nodeVerbs
             .Any(verb => TopicExcludeService.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}", filter));
@@ -158,12 +242,28 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         return group.Nodes.GetOrAdd(nodeId, id => new SpbNode { NodeId = id, GroupId = groupId });
     }
 
-    private void HandleNDeath(string groupId, string nodeId)
+    private void HandleNDeath(string groupId, string nodeId, ulong? birthDeathSequenceNumber)
     {
         var node = GetOrCreateNode(groupId, nodeId);
         var now = DateTime.UtcNow;
         lock (node.SyncRoot)
         {
+            if (birthDeathSequenceNumber is { } deathSequence
+                && node.BirthDeathSequenceNumber is { } currentSequence
+                && deathSequence != currentSequence)
+                return;
+            if (node.BirthDeathSequenceNumber is { } activeSequence
+                && birthDeathSequenceNumber != activeSequence)
+                return;
+            node.SequenceTracker?.Reset(null);
+            node.Sequence = node.SequenceTracker?.Snapshot ?? new SpbSequenceDiagnostics();
+            node.SequenceEpisodeId++;
+            node.SequenceRecoveryInFlightEpisodeId = null;
+            node.SequenceRecoverySentEpisodeId = null;
+            node.SequenceObservationComplete = false;
+            node.SequenceConnectionEpoch = null;
+            node.LastBirthSequenceNumber = null;
+            node.LastBirthTimestampUtc = null;
             node.Status = SpbNodeStatus.Offline;
             node.LastDeathAt = now;
         }
@@ -206,22 +306,26 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
             switch (evt)
             {
                 case NodeBirthEvent e:
-                    ApplyNodeBirth(e.GroupId, e.NodeId, ConvertMetricSnapshots(e.Metrics));
+                    ApplyNodeBirth(e, ConvertMetricSnapshots(e.Metrics));
                     break;
                 case NodeDeathEvent e:
-                    HandleNDeath(e.GroupId, e.NodeId);
+                    HandleNDeath(e.GroupId, e.NodeId, e.BirthDeathSequenceNumber);
                     break;
                 case NodeDataEvent e:
-                    ApplyNodeData(e.GroupId, e.NodeId, ConvertMetricSnapshots(e.Metrics));
+                    if (ObserveSequence(e.GroupId, e.NodeId, e.SequenceNumber))
+                        ApplyNodeData(e.GroupId, e.NodeId, ConvertMetricSnapshots(e.Metrics));
                     break;
                 case DeviceBirthEvent e:
-                    ApplyDeviceBirth(e.GroupId, e.NodeId, e.DeviceId, ConvertMetricSnapshots(e.Metrics));
+                    if (ObserveSequence(e.GroupId, e.NodeId, e.SequenceNumber))
+                        ApplyDeviceBirth(e.GroupId, e.NodeId, e.DeviceId, ConvertMetricSnapshots(e.Metrics));
                     break;
                 case DeviceDeathEvent e:
-                    HandleDDeath(e.GroupId, e.NodeId, e.DeviceId);
+                    if (ObserveSequence(e.GroupId, e.NodeId, e.SequenceNumber))
+                        HandleDDeath(e.GroupId, e.NodeId, e.DeviceId);
                     break;
                 case DeviceDataEvent e:
-                    ApplyDeviceData(e.GroupId, e.NodeId, e.DeviceId, ConvertMetricSnapshots(e.Metrics));
+                    if (ObserveSequence(e.GroupId, e.NodeId, e.SequenceNumber))
+                        ApplyDeviceData(e.GroupId, e.NodeId, e.DeviceId, ConvertMetricSnapshots(e.Metrics));
                     break;
             }
         }
@@ -241,11 +345,27 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
         return result;
     }
 
-    private void ApplyNodeBirth(string groupId, string nodeId, SpbMetricSnapshot[] metrics)
+    private void ApplyNodeBirth(NodeBirthEvent evt, SpbMetricSnapshot[] metrics)
     {
-        var node = GetOrCreateNode(groupId, nodeId);
+        var node = GetOrCreateNode(evt.GroupId, evt.NodeId);
         lock (node.SyncRoot)
         {
+            var duplicate = evt.SequenceNumber is { } sequence
+                && node.LastBirthSequenceNumber == sequence
+                && node.LastBirthTimestampUtc == evt.TimestampUtc
+                && node.BirthDeathSequenceNumber == evt.BirthDeathSequenceNumber;
+            if (!duplicate)
+            {
+                EnsureSequenceTracker(node).Reset(evt.SequenceNumber);
+                node.Sequence = node.SequenceTracker!.Snapshot;
+                node.SequenceEpisodeId++;
+                node.SequenceRecoveryInFlightEpisodeId = null;
+                node.SequenceRecoverySentEpisodeId = null;
+                node.SequenceObservationComplete = evt.SequenceNumber is { } baseline && baseline <= byte.MaxValue;
+                node.BirthDeathSequenceNumber = evt.BirthDeathSequenceNumber;
+                node.LastBirthSequenceNumber = evt.SequenceNumber;
+                node.LastBirthTimestampUtc = evt.TimestampUtc;
+            }
             node.Status = SpbNodeStatus.Online;
             node.LastBirthAt = DateTime.UtcNow;
             node.AliasMap.Clear();
@@ -255,6 +375,30 @@ public sealed class SparkplugTopologyService : ISparkplugTopologyService
 
         TopologyChanged?.Invoke();
     }
+
+    private bool ObserveSequence(string groupId, string nodeId, ulong? sequence)
+    {
+        var node = GetOrCreateNode(groupId, nodeId);
+        bool accepted;
+        lock (node.SyncRoot)
+        {
+            var tracker = EnsureSequenceTracker(node);
+            var wasInOrder = node.Sequence.State == SpbSequenceState.InOrder;
+            accepted = tracker.Observe(sequence);
+            node.Sequence = tracker.Snapshot;
+            if (wasInOrder && node.Sequence.State == SpbSequenceState.Reordering)
+                node.SequenceEpisodeId++;
+            if (node.Sequence.State == SpbSequenceState.InOrder)
+                node.SequenceRecoverySentEpisodeId = null;
+        }
+
+        if (!accepted)
+            TopologyChanged?.Invoke();
+        return accepted || sequence is null or > byte.MaxValue;
+    }
+
+    private SpbSequenceTracker EnsureSequenceTracker(SpbNode node) =>
+        node.SequenceTracker ??= new SpbSequenceTracker(_timeProvider, _reorderTimeoutMilliseconds);
 
     private static void PopulateAliasMap(Dictionary<ulong, string> aliasMap, SpbMetricSnapshot[] metrics)
     {

@@ -20,6 +20,7 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
     private readonly HashSet<Generation> _generations = [];
     private readonly SemaphoreSlim _stopSemaphore = new(1, 1);
     private readonly SemaphoreSlim _drainSemaphore = new(1, 1);
+    private readonly AsyncLocal<long?> _messageConnectionEpoch = new();
 
     private Generation? _current;
     private long _nextAttemptId;
@@ -62,6 +63,19 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
     public bool IsStarted
     {
         get { lock (_sync) { return _current is not null; } }
+    }
+
+    public long? ConnectionEpoch
+    {
+        get
+        {
+            if (_messageConnectionEpoch.Value is { } eventEpoch)
+                return eventEpoch;
+            lock (_sync)
+                return _current is { Client.IsConnected: true, Retired: false } generation
+                    ? generation.AttemptId.Value
+                    : null;
+        }
     }
 
     public event Func<MqttClientConnectedEventArgs, Task>? ConnectedAsync;
@@ -228,6 +242,48 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
 
             _pending.Enqueue(applicationMessage);
         }
+    }
+
+    public async Task<bool> TryPublishConnectedAsync(
+        MqttApplicationMessage applicationMessage,
+        long? expectedConnectionEpoch = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(applicationMessage);
+        _activityGate.EnsureActive();
+
+        Generation? generation;
+        lock (_sync)
+            generation = _current;
+        if (generation is null || !generation.Client.IsConnected || !IsOwnedForWork(generation))
+            return false;
+        if (expectedConnectionEpoch is { } expectedEpoch && generation.AttemptId.Value != expectedEpoch)
+            return false;
+
+        using var linked = CreatePublishTokenSource(cancellationToken, generation.Cts.Token);
+
+        lock (_sync)
+        {
+            if (!ReferenceEquals(_current, generation)
+                || generation.Retired
+                || !generation.Client.IsConnected
+                || expectedConnectionEpoch is { } expected && generation.AttemptId.Value != expected)
+                return false;
+        }
+
+        await generation.Client.PublishAsync(applicationMessage, linked.Token).ConfigureAwait(false);
+        return true;
+    }
+
+    private CancellationTokenSource CreatePublishTokenSource(CancellationToken cancellationToken, CancellationToken generationToken)
+    {
+        var tokens = new List<CancellationToken>(3);
+        if (cancellationToken.CanBeCanceled)
+            tokens.Add(cancellationToken);
+        tokens.Add(generationToken);
+        if (_activityGate.RevocationToken.CanBeCanceled)
+            tokens.Add(_activityGate.RevocationToken);
+        return CancellationTokenSource.CreateLinkedTokenSource(tokens.ToArray());
     }
 
     public void Dispose()

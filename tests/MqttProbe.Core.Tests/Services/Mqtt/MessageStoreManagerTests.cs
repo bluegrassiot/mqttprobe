@@ -106,6 +106,20 @@ public class MessageStoreManagerTests
     }
 
     [Test]
+    public async Task Dispose_FromSynchronousSynchronizationContext_CompletesMonitorShutdown()
+    {
+        await _messageStoreManager.Start();
+
+        var disposal = Task.Run(() =>
+        {
+            SynchronizationContext.SetSynchronizationContext(new NonPumpingSynchronizationContext());
+            _messageStoreManager.Dispose();
+        });
+
+        await disposal.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [Test]
     public async Task GetMessagesForSelectedTopic_Should_ReturnEmpty_WhenNoMessagesExist()
     {
         var state = _messageStoreManager.GetSelectedTopicState();
@@ -349,5 +363,10 @@ public class MessageStoreManagerTests
         var selection = _messageStoreManager.GetSelectedTopicState();
         (await _messageStoreManager.GetSelectedMessagesAsync(selection.Token, 10))!
             .Messages.Should().ContainSingle().Which.Should().BeSameAs(msg);
+    }
+
+    private sealed class NonPumpingSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback d, object? state) { }
     }
 }

@@ -304,6 +304,66 @@ public class MqttManagedClientGenerationRaceTests
         }
     }
 
+    [Test]
+    public async Task ConnectedPublishWithOldEpoch_DoesNotPublishThroughReplacementGeneration()
+    {
+        var clientA = Substitute.For<IMqttClient>();
+        clientA.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
+        clientA.IsConnected.Returns(true);
+
+        var clientB = Substitute.For<IMqttClient>();
+        clientB.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
+        clientB.IsConnected.Returns(true);
+
+        var factory = new QueueClientFactory();
+        factory.Enqueue(clientA);
+        factory.Enqueue(clientB);
+        await using var sut = new MqttManagedClient(factory, null);
+        var first = sut.StartAttempt(BuildOptions());
+        (await first.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
+        var firstEpoch = sut.ConnectionEpoch;
+        firstEpoch.Should().NotBeNull();
+
+        var second = sut.StartAttempt(BuildOptions());
+        (await second.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
+
+        (await sut.TryPublishConnectedAsync(Message("stale"), firstEpoch)).Should().BeFalse();
+        await clientA.DidNotReceive().PublishAsync(Arg.Any<MqttApplicationMessage>(), Arg.Any<CancellationToken>());
+        await clientB.DidNotReceive().PublishAsync(Arg.Any<MqttApplicationMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    [Test]
+    public async Task ConnectedPublish_PropagatesCallerCancellationToRawPublish()
+    {
+        var publishStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = Substitute.For<IMqttClient>();
+        client.ConnectAsync(Arg.Any<MqttClientOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new MqttClientConnectResult { ResultCode = MqttClientConnectResultCode.Success }));
+        client.IsConnected.Returns(true);
+        client.PublishAsync(Arg.Any<MqttApplicationMessage>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                publishStarted.TrySetResult();
+                await Task.Delay(Timeout.Infinite, call.ArgAt<CancellationToken>(1));
+                return PublishResult();
+            });
+
+        var factory = new QueueClientFactory();
+        factory.Enqueue(client);
+        await using var sut = new MqttManagedClient(factory, null);
+        var attempt = sut.StartAttempt(BuildOptions());
+        (await attempt.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
+        using var cancellation = new CancellationTokenSource();
+
+        var publish = sut.TryPublishConnectedAsync(Message("cancel"), sut.ConnectionEpoch, cancellation.Token);
+        await publishStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        cancellation.Cancel();
+
+        await FluentActions.Invoking(async () => await publish).Should().ThrowAsync<OperationCanceledException>();
+    }
+
     private static ConnectedCapture CaptureConnected(IMqttClient client)
     {
         var capture = new ConnectedCapture();

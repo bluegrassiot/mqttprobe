@@ -110,6 +110,25 @@ public class SparkplugTopologyExtractorTests
         evt.Metrics[1].DataType.Should().Be("string");
     }
 
+    [Test]
+    public void Extract_NBirth_PreservesExplicitWireSequenceZero()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics();
+        var payloadBytesWithExplicitZeroSequence = payload.ToByteArray().Concat(new byte[] { 0x18, 0x00 }).ToArray();
+        var envelope = DecodedPayloadEnvelope.CreateSuccess(
+            "sparkplug-b",
+            "spBv1.0/mygroup/NBIRTH/eon1",
+            payloadBytesWithExplicitZeroSequence,
+            payload.ToString(),
+            typedPayload: payload);
+
+        var birth = extractor.Extract(envelope).Should().ContainSingle().Subject
+            .Should().BeOfType<NodeBirthEvent>().Subject;
+
+        birth.SequenceNumber.Should().Be(0UL);
+    }
+
     // --- NDEATH ---
 
     [Test]

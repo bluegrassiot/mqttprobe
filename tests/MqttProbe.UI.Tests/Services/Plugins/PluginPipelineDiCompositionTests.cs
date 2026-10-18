@@ -2,6 +2,7 @@ using Google.Protobuf;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using MQTTnet;
+using MqttProbe.Core;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Plugins;
 using MqttProbe.Core.Services.Configuration;
@@ -56,6 +57,7 @@ public class PluginPipelineDiCompositionTests
         services.AddLogging();
         services.AddSingleton(Options.Create(new PluginConfig()));
         services.AddSingleton(Substitute.For<IAppInfoService>());
+        services.AddSingleton(Substitute.For<IUserNotifier>());
 
         // The real shared registrations, not a copy of them. An earlier version of this test
         // re-declared the host wiring by hand and drifted out of sync with it, so it kept
@@ -153,6 +155,7 @@ public class PluginPipelineDiCompositionTests
         services.AddLogging();
         services.AddSingleton(Substitute.For<ICertificateAssetStore>());
         services.AddSingleton(Substitute.For<ICertificateEnvelopeKeyStore>());
+        services.AddSingleton(Substitute.For<IUserNotifier>());
         // PayloadPipeline is sealed, so it can't be substituted: EmulationService and
         // MessageStoreManager both require a real one, which only AddMqttProbePlugins provides.
         services.AddSingleton(Options.Create(new PluginConfig()));

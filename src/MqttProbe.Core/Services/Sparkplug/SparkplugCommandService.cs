@@ -22,7 +22,11 @@ public interface ISparkplugCommandService
     public Task<SparkplugCommandResult> RequestNodeRebirthAsync(string groupId, string nodeId);
     public Task<SparkplugCommandResult> RequestDeviceRebirthAsync(string groupId, string nodeId, string deviceId);
     public Task<SparkplugCommandResult> RequestNodeRebootAsync(string groupId, string nodeId);
-    public Task RequestNodeRebirthIfNeededAsync(string groupId, string nodeId);
+    public Task RequestNodeRebirthIfNeededAsync(
+        string groupId,
+        string nodeId,
+        long? expectedConnectionEpoch = null,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class SparkplugCommandService(
@@ -74,7 +78,11 @@ public sealed class SparkplugCommandService(
         return await PublishNcmdAsync(groupId, nodeId, "Node Control/Reboot", "node reboot");
     }
 
-    public async Task RequestNodeRebirthIfNeededAsync(string groupId, string nodeId)
+    public async Task RequestNodeRebirthIfNeededAsync(
+        string groupId,
+        string nodeId,
+        long? expectedConnectionEpoch = null,
+        CancellationToken cancellationToken = default)
     {
         if (!sparkplugSettings.Sparkplug.AutoRequestRebirth)
             return;
@@ -85,23 +93,84 @@ public sealed class SparkplugCommandService(
             return;
 
         var cooldown = TimeSpan.FromSeconds(sparkplugSettings.Sparkplug.RebirthCooldownSeconds);
+        if (!TryReserveRebirth(node, cooldown, expectedConnectionEpoch, out var isSequenceFault, out var episodeId))
+            return;
 
+        var result = await PublishNcmdAsync(
+            groupId,
+            nodeId,
+            "Node Control/Rebirth",
+            "rebirth",
+            isSequenceFault,
+            isSequenceFault ? () => IsCurrentSequenceFault(groupId, nodeId, node, episodeId, expectedConnectionEpoch) : null,
+            isSequenceFault ? expectedConnectionEpoch : null,
+            cancellationToken).ConfigureAwait(false);
+        if (isSequenceFault)
+        {
+            lock (node.SyncRoot)
+            {
+                if (node.SequenceEpisodeId == episodeId
+                    && node.SequenceRecoveryInFlightEpisodeId == episodeId)
+                {
+                    node.SequenceRecoveryInFlightEpisodeId = null;
+                    if (result == SparkplugCommandResult.Published
+                        && node.Sequence.State == SpbSequenceState.GapDetected)
+                        node.SequenceRecoverySentEpisodeId = episodeId;
+                }
+            }
+        }
+    }
+
+    private bool TryReserveRebirth(
+        SpbNode node,
+        TimeSpan cooldown,
+        long? expectedConnectionEpoch,
+        out bool isSequenceFault,
+        out long episodeId)
+    {
         lock (node.SyncRoot)
         {
-            if (node.Status == SpbNodeStatus.Online)
-                return;
+            isSequenceFault = node.Sequence.State == SpbSequenceState.GapDetected;
+            episodeId = isSequenceFault ? node.SequenceEpisodeId : 0;
+            if (node.Sequence.State is SpbSequenceState.Invalid or SpbSequenceState.Reordering or SpbSequenceState.Unknown
+                || node.Status == SpbNodeStatus.Offline)
+                return false;
+
+            if (isSequenceFault)
+            {
+                if (node.Status != SpbNodeStatus.Online
+                    || !node.SequenceObservationComplete
+                    || expectedConnectionEpoch is not { } expectedEpoch
+                    || node.SequenceConnectionEpoch != expectedEpoch
+                    || node.SequenceRecoveryInFlightEpisodeId == episodeId
+                    || node.SequenceRecoverySentEpisodeId == episodeId)
+                    return false;
+            }
+            else if (node.Status == SpbNodeStatus.Online)
+            {
+                return false;
+            }
 
             var now = _timeProvider.GetUtcNow().UtcDateTime;
             if (node.LastRebirthRequestAt != null && now - node.LastRebirthRequestAt < cooldown)
-                return;
+                return false;
 
             node.LastRebirthRequestAt = now;
+            if (isSequenceFault)
+                node.SequenceRecoveryInFlightEpisodeId = episodeId;
+            return true;
         }
-
-        await PublishNcmdAsync(groupId, nodeId, "Node Control/Rebirth", "rebirth");
     }
 
-    private async Task<SparkplugCommandResult> PublishNcmdAsync(string groupId, string nodeId, string metricName, string label)
+    private async Task<SparkplugCommandResult> PublishNcmdAsync(
+        string groupId,
+        string nodeId,
+        string metricName,
+        string label,
+        bool requireConnected = false,
+        Func<bool>? canDispatch = null,
+        long? expectedConnectionEpoch = null,
+        CancellationToken cancellationToken = default)
     {
         var payload = new Payload
         {
@@ -123,7 +192,13 @@ public sealed class SparkplugCommandService(
 
         try
         {
-            await client.EnqueueAsync(message);
+            if (canDispatch is not null && !canDispatch())
+                return SparkplugCommandResult.Failed;
+            var published = requireConnected
+                ? await client.TryPublishConnectedAsync(message, expectedConnectionEpoch, cancellationToken).ConfigureAwait(false)
+                : await PublishQueuedAsync(message, cancellationToken).ConfigureAwait(false);
+            if (!published)
+                return SparkplugCommandResult.Failed;
             if (logger.IsEnabled(LogLevel.Information))
                 logger.LogInformation("Requested {Label} for node {GroupId}/{NodeId}", label, groupId, nodeId);
             return SparkplugCommandResult.Published;
@@ -133,6 +208,32 @@ public sealed class SparkplugCommandService(
             logger.LogWarning(ex, "Failed to request {Label} for node {GroupId}/{NodeId}", label, groupId, nodeId);
             return SparkplugCommandResult.Failed;
         }
+    }
+
+    private bool IsCurrentSequenceFault(
+        string groupId,
+        string nodeId,
+        SpbNode expectedNode,
+        long episodeId,
+        long? expectedConnectionEpoch)
+    {
+        if (!topologyService.Groups.TryGetValue(groupId, out var group)
+            || !group.Nodes.TryGetValue(nodeId, out var currentNode)
+            || !ReferenceEquals(expectedNode, currentNode))
+            return false;
+
+        lock (currentNode.SyncRoot)
+            return currentNode.Sequence.State == SpbSequenceState.GapDetected
+                && currentNode.SequenceObservationComplete
+                && currentNode.SequenceEpisodeId == episodeId
+                && currentNode.SequenceConnectionEpoch == expectedConnectionEpoch
+                && currentNode.SequenceRecoverySentEpisodeId != episodeId;
+    }
+
+    private async Task<bool> PublishQueuedAsync(MqttApplicationMessage message, CancellationToken cancellationToken)
+    {
+        await client.EnqueueAsync(message, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     private async Task<SparkplugCommandResult> PublishDcmdAsync(

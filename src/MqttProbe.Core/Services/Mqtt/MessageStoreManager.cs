@@ -3,9 +3,11 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MqttProbe.Core.Models.Mqtt;
+using MqttProbe.Core.Models.Sparkplug;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Plugins.Pipeline;
+using MqttProbe.Core.Services.Plugins.Protobuf;
 using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.PluginContracts;
 
@@ -24,7 +26,10 @@ public class MessageStoreManager : IMessageStoreManager
     private readonly InboundRateLimiter _rateLimiter;
     private readonly SparkplugAliasEnricher _aliasEnricher;
     private readonly ITopicExcludeService? _topicExcludeService;
+    private readonly ISubscriptionManager? _subscriptionManager;
     private readonly Lock _lifecycleSync = new();
+    private CancellationTokenSource? _sequenceMonitorCts;
+    private Task _sequenceMonitorTask = Task.CompletedTask;
     private int _disposed;
     private int _topologyChangedPending;
 
@@ -33,7 +38,8 @@ public class MessageStoreManager : IMessageStoreManager
         PayloadPipeline pipeline, ISparkplugSettings sparkplugSettings,
         ISparkplugTopologyService? topologyService = null,
         ISparkplugCommandService? commandService = null,
-        ITopicExcludeService? topicExcludeService = null)
+        ITopicExcludeService? topicExcludeService = null,
+        ISubscriptionManager? subscriptionManager = null)
     {
         _client = client;
         _logger = logger;
@@ -43,6 +49,7 @@ public class MessageStoreManager : IMessageStoreManager
         _topologyService = topologyService;
         _commandService = commandService;
         _topicExcludeService = topicExcludeService;
+        _subscriptionManager = subscriptionManager;
         _store = new TopicTreeStore(performanceSettings, logger);
         _rateLimiter = new InboundRateLimiter(performanceSettings, metrics, logger);
         _aliasEnricher = new SparkplugAliasEnricher(sparkplugSettings, topologyService);
@@ -132,21 +139,99 @@ public class MessageStoreManager : IMessageStoreManager
         {
             if (IsListening) return Task.CompletedTask;
             _client.ApplicationMessageReceivedAsync += MessageHandler;
+            _client.DisconnectedAsync += OnClientDisconnectedAsync;
+            _client.ConnectedAsync += OnClientConnectedAsync;
+            _sequenceMonitorCts = new CancellationTokenSource();
+            var monitorToken = _sequenceMonitorCts.Token;
+            _sequenceMonitorTask = Task.Run(() => MonitorSequenceTimeoutsAsync(monitorToken), CancellationToken.None);
             IsListening = true;
         }
 
         return Task.CompletedTask;
     }
 
-    public Task Stop()
+    public async Task Stop()
     {
+        CancellationTokenSource? monitorCts;
+        Task monitorTask;
         lock (_lifecycleSync)
         {
-            if (!IsListening) return Task.CompletedTask;
+            if (!IsListening) return;
             _client.ApplicationMessageReceivedAsync -= MessageHandler;
+            _client.DisconnectedAsync -= OnClientDisconnectedAsync;
+            _client.ConnectedAsync -= OnClientConnectedAsync;
+            monitorCts = _sequenceMonitorCts;
+            monitorTask = _sequenceMonitorTask;
+            _sequenceMonitorCts = null;
             IsListening = false;
         }
 
+        if (monitorCts is not null)
+        {
+            await monitorCts.CancelAsync().ConfigureAwait(false);
+            try
+            {
+                await monitorTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException ex)
+            {
+                _logger.LogDebug(ex, "Sequence diagnostics monitor was canceled");
+            }
+            finally
+            {
+                monitorCts.Dispose();
+            }
+        }
+    }
+
+    private async Task MonitorSequenceTimeoutsAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                try
+                {
+                    _topologyService?.CheckSequenceTimeouts();
+                    if (_commandService is not null && _topologyService is not null)
+                    {
+                        foreach (var group in _topologyService.Groups.Values)
+                        {
+                            foreach (var node in group.Nodes.Values.Where(node =>
+                                         node.Sequence.State == SpbSequenceState.GapDetected
+                                         && HasCompleteSequenceSubscriptions(group.GroupId, node.NodeId)))
+                            {
+                                long? expectedEpoch;
+                                lock (node.SyncRoot)
+                                    expectedEpoch = node.SequenceConnectionEpoch;
+                                await _commandService.RequestNodeRebirthIfNeededAsync(
+                                    group.GroupId, node.NodeId, expectedEpoch, cancellationToken).ConfigureAwait(false);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Sequence diagnostics monitor failed");
+                }
+            }
+        }
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug(ex, "Sequence diagnostics monitor stopped");
+        }
+    }
+
+    private Task OnClientDisconnectedAsync(MqttClientDisconnectedEventArgs args)
+    {
+        _topologyService?.ResetSequenceTracking();
+        return Task.CompletedTask;
+    }
+
+    private Task OnClientConnectedAsync(MqttClientConnectedEventArgs args)
+    {
+        _topologyService?.ResetSequenceTracking();
         return Task.CompletedTask;
     }
 
@@ -171,6 +256,7 @@ public class MessageStoreManager : IMessageStoreManager
             if (exclusionGate is null)
             {
                 _metrics.RecordMessageExcluded();
+                _topologyService?.MarkSequenceObservationIncomplete(topic);
                 return Task.CompletedTask;
             }
         }
@@ -178,14 +264,15 @@ public class MessageStoreManager : IMessageStoreManager
         if (!_rateLimiter.TryAcquire())
         {
             exclusionGate?.Dispose();
+            _topologyService?.MarkSequenceObservationIncomplete(topic);
             return Task.CompletedTask;
         }
 
-        return ProcessMessageAsync(arg, topic, exclusionGate);
+        return ProcessMessageAsync(arg, topic, exclusionGate, _client.ConnectionEpoch);
     }
 
     private async Task ProcessMessageAsync(MqttApplicationMessageReceivedEventArgs arg, string topic,
-        IDisposable? exclusionGate)
+        IDisposable? exclusionGate, long? connectionEpoch)
     {
         MqttMessage? message = null;
         string? formatId = null;
@@ -205,7 +292,7 @@ public class MessageStoreManager : IMessageStoreManager
                 LogPipelineDiagnostics(topic, result.Diagnostics);
 
                 if (result.TopologyEvents.Count > 0)
-                    await ApplyTopologyEventsAsync(result.TopologyEvents);
+                    await ApplyTopologyEventsAsync(result.TopologyEvents, connectionEpoch).ConfigureAwait(false);
 
                 var aliasNames = _aliasEnricher.Resolve(topic, result);
 
@@ -240,21 +327,66 @@ public class MessageStoreManager : IMessageStoreManager
         }
     }
 
-    private async Task ApplyTopologyEventsAsync(IReadOnlyList<TopologyEvent> events)
+    private async Task ApplyTopologyEventsAsync(IReadOnlyList<TopologyEvent> events, long? connectionEpoch)
     {
         if (_topologyService is not null)
-            await _topologyService.ApplyTopologyEventsAsync(events);
+        {
+            await _topologyService.ApplyTopologyEventsAsync(events).ConfigureAwait(false);
+            _topologyService.RecordSequenceConnectionEpoch(events, connectionEpoch);
+        }
 
         if (_commandService is null)
             return;
 
         foreach (var evt in events)
         {
-            if (evt is NodeDataEvent nde)
-                await _commandService.RequestNodeRebirthIfNeededAsync(nde.GroupId, nde.NodeId);
-            else if (evt is DeviceDataEvent dde)
-                await _commandService.RequestNodeRebirthIfNeededAsync(dde.GroupId, dde.NodeId);
+            if (evt is NodeDataEvent nde && CanRequestSequenceRecovery(nde.GroupId, nde.NodeId))
+            {
+                await _commandService.RequestNodeRebirthIfNeededAsync(
+                    nde.GroupId, nde.NodeId, connectionEpoch, CancellationToken.None).ConfigureAwait(false);
+            }
+            else if (evt is DeviceDataEvent dde && CanRequestSequenceRecovery(dde.GroupId, dde.NodeId))
+            {
+                await _commandService.RequestNodeRebirthIfNeededAsync(
+                    dde.GroupId, dde.NodeId, connectionEpoch, CancellationToken.None).ConfigureAwait(false);
+            }
         }
+    }
+
+    private bool CanRequestSequenceRecovery(string groupId, string nodeId)
+    {
+        var topology = _topologyService;
+        if (topology is null || !topology.Groups.TryGetValue(groupId, out var group))
+            return true;
+        if (!group.Nodes.TryGetValue(nodeId, out var node))
+            return true;
+
+        return node.Sequence.State != SpbSequenceState.GapDetected
+            || HasCompleteSequenceSubscriptions(groupId, nodeId);
+    }
+
+    private bool HasCompleteSequenceSubscriptions(string groupId, string nodeId)
+    {
+        var subscriptions = _subscriptionManager?.Subscriptions;
+        if (subscriptions is null || subscriptions.Count == 0)
+            return false;
+
+        var nodeVerbs = new[] { "NBIRTH", "NDATA" };
+        var deviceVerbs = new[] { "DBIRTH", "DDATA", "DDEATH" };
+        return nodeVerbs.All(verb => subscriptions.Any(subscription =>
+                   MqttTopicMatcher.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}", subscription.Topic)))
+               && deviceVerbs.All(verb => subscriptions.Any(subscription =>
+                   CoversArbitraryDevice(subscription.Topic, groupId, verb, nodeId)));
+    }
+
+    private static bool CoversArbitraryDevice(string filter, string groupId, string verb, string nodeId)
+    {
+        var segments = filter.Split('/');
+        var deviceWildcard = segments.Length > 4 && segments[4] == "+";
+        var broadTerminalWildcard = segments[^1] == "#"
+                                    && Array.IndexOf(segments, "#") <= 4;
+        return (deviceWildcard || broadTerminalWildcard)
+               && MqttTopicMatcher.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}/__sequence_probe__", filter);
     }
 
     // Trusted purger: runs while the exclude service holds its lock, so topology removal

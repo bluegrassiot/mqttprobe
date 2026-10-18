@@ -10,6 +10,7 @@
 }
 else
 {
+    var sequence = Node.Sequence;
     <MudPaper Elevation="0" Class="spb-detail-panel">
         <MudHidden Breakpoint="Breakpoint.MdAndUp">
             <AppTertiaryButton StartIcon="@LucideIcons.ArrowLeft"
@@ -26,8 +27,8 @@ else
                      Class="spb-group-chip">
                 @Node.GroupId
             </MudChip>
-            <span class="spb-status-dot" style="background:@SparkplugNodeDisplay.NodeStatusColor(Node)"></span>
-            <span class="spb-status-label" style="color:@SparkplugNodeDisplay.NodeStatusColor(Node)">
+            <span class="spb-status-dot @NodeStatusClass(Node)"></span>
+            <span class="spb-status-label @NodeStatusClass(Node)">
                 @SparkplugNodeDisplay.NodeStatusLabel(Node)
             </span>
         </div>
@@ -49,6 +50,26 @@ else
                 </MudButton>
             </span>
         </div>
+
+        <section class="spb-sequence-panel spb-sequence-panel--@sequence.State.ToString().ToLowerInvariant()" aria-label="Sequence diagnostics">
+            <div class="spb-sequence-panel__heading">
+                <MudText Typo="Typo.subtitle2">Message sequence</MudText>
+                <span class="spb-sequence-state">@SequenceStateLabel(sequence.State)</span>
+            </div>
+            <div class="spb-sequence-values">
+                <span>Expected <strong class="metrics-mono">@(sequence.ExpectedSequence?.ToString() ?? "Unknown")</strong></span>
+                <span>Received <strong class="metrics-mono">@(sequence.ReceivedSequence?.ToString() ?? "Unknown")</strong></span>
+                @if (sequence.MissingSequences.Count > 0)
+                {
+                    <span>Missing <strong class="metrics-mono">@string.Join(", ", sequence.MissingSequences)</strong></span>
+                }
+            </div>
+            <MudText Typo="Typo.caption" Class="spb-sequence-explanation">@SequenceExplanation(sequence.State)</MudText>
+            @if (sequence.State is SpbSequenceState.Reordering or SpbSequenceState.GapDetected)
+            {
+                <MudText Typo="Typo.caption" Class="spb-sequence-caveat">Filtered, excluded or rate-limited traffic can also appear as gaps. A gap does not prove broker loss.</MudText>
+            }
+        </section>
 
         <div class="spb-timestamps d-flex flex-wrap gap-3 mb-3">
             @if (Node.LastBirthAt != null)
@@ -91,6 +112,10 @@ else
                     </span>
                 </span>
             }
+            <span>
+                Birth/death session identifier (bdSeq):
+                <span class="metrics-mono">@(Node.BirthDeathSequenceNumber?.ToString() ?? "Unknown")</span>
+            </span>
         </div>
 
         <div class="spb-subsection-header">
@@ -123,9 +148,9 @@ else
             {
                 <div @key="device.DeviceId" class="spb-device-row @(ExpandedDevice == device ? "spb-device-row--expanded" : "")"
                      @onclick="() => OnToggleDevice.InvokeAsync(device)">
-                    <span class="spb-status-dot" style="background:@SparkplugNodeDisplay.StatusColor(device.Status)"></span>
+                    <span class="spb-status-dot @StatusClass(device.Status)"></span>
                     <span class="spb-device-id">@device.DeviceId</span>
-                    <span class="spb-status-label spb-status-label--device" style="color:@SparkplugNodeDisplay.StatusColor(device.Status)">
+                    <span class="spb-status-label spb-status-label--device @StatusClass(device.Status)">
                         @SparkplugNodeDisplay.StatusLabel(device.Status)
                     </span>
                     <span class="spb-device-secondary">
@@ -162,6 +187,35 @@ else
 }
 
 @code {
+    private static string NodeStatusClass(SpbNode node) => SparkplugNodeDisplay.IsStale(node)
+        ? "spb-status--stale"
+        : StatusClass(node.Status);
+
+    private static string StatusClass(SpbNodeStatus status) => status switch
+    {
+        SpbNodeStatus.Online => "spb-status--online",
+        SpbNodeStatus.Offline => "spb-status--offline",
+        _ => "spb-status--unknown"
+    };
+
+    private static string SequenceStateLabel(SpbSequenceState state) => state switch
+    {
+        SpbSequenceState.InOrder => "In order",
+        SpbSequenceState.Reordering => "Waiting for late messages",
+        SpbSequenceState.GapDetected => "Unresolved gap",
+        SpbSequenceState.Invalid => "Invalid sequence",
+        _ => "Not enough data"
+    };
+
+    private static string SequenceExplanation(SpbSequenceState state) => state switch
+    {
+        SpbSequenceState.InOrder => "Observed message sequence is in order.",
+        SpbSequenceState.Reordering => "A message is missing so far. Waiting for late messages before marking the gap unresolved.",
+        SpbSequenceState.GapDetected => "Unresolved gaps in observed messages.",
+        SpbSequenceState.Invalid => "The received sequence cannot be compared reliably.",
+        _ => "Sequence diagnostics will appear after messages are observed."
+    };
+
     [Parameter]
     public SpbNode? Node { get; set; }
 

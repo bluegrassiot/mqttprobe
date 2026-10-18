@@ -7,6 +7,7 @@ public interface IMqttManagedClient : IAsyncDisposable, IDisposable
 {
     public bool IsConnected { get; }
     public bool IsStarted { get; }
+    public long? ConnectionEpoch => null;
 
     public Task StartAsync(MqttManagedClientOptions options, CancellationToken cancellationToken = default);
 
@@ -20,6 +21,11 @@ public interface IMqttManagedClient : IAsyncDisposable, IDisposable
     public Task UnsubscribeAsync(IEnumerable<string> topics, CancellationToken cancellationToken = default);
 
     public Task EnqueueAsync(MqttApplicationMessage applicationMessage, CancellationToken cancellationToken = default);
+    public Task<bool> TryPublishConnectedAsync(
+        MqttApplicationMessage applicationMessage,
+        long? expectedConnectionEpoch = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
 
     public event Func<MqttClientConnectedEventArgs, Task>? ConnectedAsync;
     public event Func<MqttClientDisconnectedEventArgs, Task>? DisconnectedAsync;

@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Services.Chart;
 using MqttProbe.Core.Services.Configuration;
@@ -29,7 +31,9 @@ public class WebHostCompositionTests
     private WebApplicationFactory<Program> _factory = null!;
 
     [OneTimeSetUp]
-    public void OneTimeSetUp() => _factory = new WebApplicationFactory<Program>();
+    public void OneTimeSetUp() => _factory = new WebApplicationFactory<Program>()
+        .WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            services.AddSingleton<NavigationManager>(new InitializedNavigationManager())));
 
     [OneTimeTearDown]
     public void OneTimeTearDown() => _factory.Dispose();
@@ -74,5 +78,14 @@ public class WebHostCompositionTests
     {
         using var scope = _factory.Services.CreateScope();
         scope.ServiceProvider.GetService(serviceType).Should().NotBeNull();
+    }
+
+    private sealed class InitializedNavigationManager : NavigationManager
+    {
+        public InitializedNavigationManager() => Initialize("http://localhost/", "http://localhost/");
+
+        protected override void NavigateToCore(string uri, bool forceLoad)
+        {
+        }
     }
 }

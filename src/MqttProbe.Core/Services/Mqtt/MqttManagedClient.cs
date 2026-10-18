@@ -204,6 +204,7 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
 
             Generation? generation;
             ConnectionLifetime? lifetime;
+            var admitted = false;
             long revision;
             List<MqttTopicFilter> toSubscribe;
             lock (_sync)
@@ -223,12 +224,21 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
                 revision = InvalidateSubscriptionSnapshotLocked();
                 generation = _current;
                 lifetime = generation?.Lifetime;
+                admitted = lifetime?.TryAdmitResource() == true;
             }
 
-            if (generation is null || lifetime is null || lifetime.Retired)
+            if (generation is null || lifetime is null || !admitted)
                 return;
 
-            await SubscribeAndConfirmAsync(generation, lifetime, toSubscribe, revision, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await SubscribeAndConfirmAsync(generation, lifetime, toSubscribe, revision, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                CompleteLifetimeResource(lifetime);
+            }
         }
         finally
         {
@@ -255,6 +265,7 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
 
             Generation? generation;
             ConnectionLifetime? lifetime;
+            var admitted = false;
             long revision;
             lock (_sync)
             {
@@ -266,12 +277,21 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
                 revision = InvalidateSubscriptionSnapshotLocked();
                 generation = _current;
                 lifetime = generation?.Lifetime;
+                admitted = lifetime?.TryAdmitResource() == true;
             }
 
-            if (generation is null || lifetime is null || lifetime.Retired)
+            if (generation is null || lifetime is null || !admitted)
                 return;
 
-            await UnsubscribeAndConfirmAsync(generation, lifetime, list, revision, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await UnsubscribeAndConfirmAsync(generation, lifetime, list, revision, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                CompleteLifetimeResource(lifetime);
+            }
         }
         finally
         {
@@ -339,28 +359,29 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
                 || expectedSubscriptionRevision is { } expectedRevision
                     && (currentLifetime.SubscriptionRevision != expectedRevision
                         || !_subscriptionSnapshotReady
-                        || _subscriptionRevision != expectedRevision))
+                        || _subscriptionRevision != expectedRevision)
+                || !currentLifetime.TryAdmitResource())
                 return false;
 
             generation = current;
             lifetime = currentLifetime;
-            lifetime.AdmitPublish();
         }
 
-        using var linked = CreatePublishTokenSource(
-            cancellationToken,
-            generation.Cts.Token,
-            lifetime.Cancellation.Token);
+        CancellationTokenSource? linked = null;
         try
         {
+            linked = CreatePublishTokenSource(
+                cancellationToken,
+                generation.Cts.Token,
+                lifetime.Cancellation.Token);
             linked.Token.ThrowIfCancellationRequested();
             await generation.Client.PublishAsync(applicationMessage, linked.Token).ConfigureAwait(false);
             return true;
         }
         finally
         {
-            lock (_sync)
-                lifetime.CompletePublish();
+            linked?.Dispose();
+            CompleteLifetimeResource(lifetime);
         }
     }
 
@@ -386,31 +407,6 @@ public sealed partial class MqttManagedClient : IMqttManagedClient
         if (_current?.Lifetime is { Retired: false } lifetime)
             lifetime.SubscriptionRevision = _subscriptionRevision;
         return _subscriptionRevision;
-    }
-
-    private List<SemaphoreSlim> GetSubscriptionMutationGates(IEnumerable<string> topics)
-    {
-        lock (_sync)
-        {
-            return topics.Distinct(StringComparer.Ordinal)
-                .OrderBy(topic => topic, StringComparer.Ordinal)
-                .Select(topic =>
-                {
-                    if (!_subscriptionMutationGates.TryGetValue(topic, out var gate))
-                    {
-                        gate = new SemaphoreSlim(1, 1);
-                        _subscriptionMutationGates.Add(topic, gate);
-                    }
-                    return gate;
-                })
-                .ToList();
-        }
-    }
-
-    private static void ReleaseSubscriptionMutationGates(List<SemaphoreSlim> gates)
-    {
-        for (var index = gates.Count - 1; index >= 0; index--)
-            gates[index].Release();
     }
 
     private MqttSubscriptionSnapshot? CreateLiveSubscriptionSnapshotLocked()

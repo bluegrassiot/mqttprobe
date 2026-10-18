@@ -78,34 +78,18 @@ public sealed partial class MqttManagedClient
 
     private async Task OnGenerationConnectedAsync(Generation generation, MqttClientConnectedEventArgs args)
     {
-        ConnectionLifetime? previousLifetime;
-        lock (_sync)
-        {
-            if (!IsOwnedForWorkLocked(generation) || !_activityGate.IsActive)
-            {
-                previousLifetime = null;
-            }
-            else
-            {
-                previousLifetime = generation.Lifetime;
-                if (previousLifetime is not null)
-                    previousLifetime.Retired = true;
-                var lifetime = new ConnectionLifetime(++_nextConnectionEpoch, _subscriptionRevision);
-                generation.Lifetime = lifetime;
-                generation.Lifetimes.Add(lifetime);
-                _confirmedSubscriptions.Clear();
-                _subscriptionSnapshotReady = _subscriptions.Count == 0;
-            }
-        }
-
         if (!IsEligibleForWork(generation))
         {
             await DisconnectQuietlyAsync(generation.Client).ConfigureAwait(false);
             return;
         }
 
-        if (previousLifetime is not null)
-            CancelQuietly(previousLifetime.Cancellation);
+        await RetireCurrentLifetime(generation).ConfigureAwait(false);
+        if (!CreateConnectionLifetime(generation))
+        {
+            await DisconnectQuietlyAsync(generation.Client).ConfigureAwait(false);
+            return;
+        }
 
         await ResubscribeAsync(generation).ConfigureAwait(false);
         await DrainPendingAsync(generation).ConfigureAwait(false);
@@ -129,9 +113,49 @@ public sealed partial class MqttManagedClient
             generation.ConnectedArgs = args;
     }
 
+    private Task RetireCurrentLifetime(Generation generation)
+    {
+        ConnectionLifetime? lifetime;
+        bool startRetirement;
+        lock (_sync)
+        {
+            if (!IsOwnedForWorkLocked(generation) || !_activityGate.IsActive)
+                return Task.CompletedTask;
+
+            lifetime = generation.Lifetime;
+            if (lifetime is null)
+                return Task.CompletedTask;
+
+            startRetirement = lifetime.ClaimRetirement();
+            generation.Lifetime = null;
+            generation.ReconnectDrainTask = Task.WhenAll(generation.ReconnectDrainTask, lifetime.RetirementTask);
+        }
+
+        if (startRetirement)
+            StartLifetimeRetirement(generation, lifetime);
+        return lifetime.RetirementTask;
+    }
+
+    private bool CreateConnectionLifetime(Generation generation)
+    {
+        lock (_sync)
+        {
+            if (!IsOwnedForWorkLocked(generation) || !_activityGate.IsActive)
+                return false;
+
+            var lifetime = new ConnectionLifetime(++_nextConnectionEpoch, _subscriptionRevision);
+            generation.Lifetime = lifetime;
+            generation.Lifetimes.Add(lifetime);
+            _confirmedSubscriptions.Clear();
+            _subscriptionSnapshotReady = _subscriptions.Count == 0;
+            return true;
+        }
+    }
+
     private Task OnGenerationDisconnectedAsync(Generation generation, MqttClientDisconnectedEventArgs args)
     {
         ConnectionLifetime? lifetime;
+        bool startRetirement = false;
         lock (_sync)
         {
             if (!IsOwnedForWorkLocked(generation))
@@ -139,8 +163,9 @@ public sealed partial class MqttManagedClient
             lifetime = generation.Lifetime;
             if (lifetime is not null)
             {
-                lifetime.Retired = true;
-                generation.ReconnectDrainTask = Task.WhenAll(generation.ReconnectDrainTask, lifetime.DrainTask);
+                startRetirement = lifetime.ClaimRetirement();
+                generation.ReconnectDrainTask = Task.WhenAll(
+                    generation.ReconnectDrainTask, lifetime.RetirementTask);
             }
             generation.Lifetime = null;
             _subscriptionRevision++;
@@ -148,8 +173,8 @@ public sealed partial class MqttManagedClient
             _confirmedSubscriptions.Clear();
         }
 
-        if (lifetime is not null)
-            CancelQuietly(lifetime.Cancellation);
+        if (lifetime is not null && startRetirement)
+            StartLifetimeRetirement(generation, lifetime);
 
         if (_activityGate.IsActive)
             StartReconnectLoop(generation);

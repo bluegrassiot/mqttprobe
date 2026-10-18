@@ -5,7 +5,7 @@ using MqttProbe.Core.Services.Mqtt;
 namespace MqttProbe.Core.Tests.Services.Mqtt;
 
 [TestFixture]
-public class MqttManagedClientConnectionLifetimeTests
+public partial class MqttManagedClientConnectionLifetimeTests
 {
     private static MqttManagedClientOptions BuildOptions(TimeSpan? reconnect = null) => new()
     {
@@ -113,14 +113,18 @@ public class MqttManagedClientConnectionLifetimeTests
         (await attempt.Completion.WaitAsync(TimeSpan.FromSeconds(5))).Status.Should().Be(MqttConnectStatus.Connected);
         var publish = sut.TryPublishConnectedAsync(Message("old-epoch"), sut.ConnectionEpoch);
         await publishStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var oldLifetimeCancellation = GetLifetimeCancellationSource(sut);
 
         client.IsConnected.Returns(false);
         await disconnected.Handler!(DisconnectedArgs());
-        await Task.Delay(100);
+        var retirementBarrier = GetReconnectDrainTask(sut);
+        retirementBarrier.IsCompleted.Should().BeFalse();
         secondConnectStarted.Task.IsCompleted.Should().BeFalse();
 
         releasePublish.TrySetResult();
         await publish.WaitAsync(TimeSpan.FromSeconds(5));
+        await retirementBarrier.WaitAsync(TimeSpan.FromSeconds(5));
+        IsLifetimeDisposed(oldLifetimeCancellation).Should().BeTrue();
         await secondConnectStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
     }
 

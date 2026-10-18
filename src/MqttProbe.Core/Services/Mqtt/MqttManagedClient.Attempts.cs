@@ -75,41 +75,6 @@ public sealed partial class MqttManagedClient
         public Task ReconnectDrainTask { get; set; } = Task.CompletedTask;
     }
 
-    private sealed class ConnectionLifetime(long epoch, long subscriptionRevision)
-    {
-        private int _activePublishes;
-        private TaskCompletionSource _drained = CompletedDrain();
-
-        public long Epoch { get; } = epoch;
-
-        public long SubscriptionRevision { get; set; } = subscriptionRevision;
-
-        public CancellationTokenSource Cancellation { get; } = new();
-
-        public bool Retired { get; set; }
-
-        public Task DrainTask => _drained.Task;
-
-        public void AdmitPublish()
-        {
-            if (_activePublishes++ == 0)
-                _drained = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        }
-
-        public void CompletePublish()
-        {
-            if (--_activePublishes == 0)
-                _drained.TrySetResult();
-        }
-
-        private static TaskCompletionSource CompletedDrain()
-        {
-            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            completion.SetResult();
-            return completion;
-        }
-    }
-
     private (Generation Generation, MqttConnectAttempt Attempt) BeginAttempt(
         MqttManagedClientOptions options, CancellationToken cancellationToken)
     {
@@ -342,7 +307,7 @@ public sealed partial class MqttManagedClient
     private void RetireGeneration(Generation generation)
     {
         bool startCleanup = false;
-        ConnectionLifetime? lifetime;
+        List<ConnectionLifetime> lifetimeOwners;
         lock (_sync)
         {
             if (!generation.Retired)
@@ -353,9 +318,8 @@ public sealed partial class MqttManagedClient
             }
 
             generation.CallerRegistrationActive = false;
-            lifetime = generation.Lifetime;
-            if (lifetime is not null)
-                lifetime.Retired = true;
+            generation.Lifetime = null;
+            lifetimeOwners = generation.Lifetimes.Where(lifetime => lifetime.ClaimRetirement()).ToList();
 
             if (!generation.CleanupStarted)
             {
@@ -364,8 +328,8 @@ public sealed partial class MqttManagedClient
             }
         }
 
-        if (lifetime is not null)
-            CancelQuietly(lifetime.Cancellation);
+        foreach (var lifetime in lifetimeOwners)
+            StartLifetimeRetirement(generation, lifetime);
         CancelQuietly(generation.Cts);
 
         if (startCleanup)
@@ -378,11 +342,18 @@ public sealed partial class MqttManagedClient
         {
             await generation.ConnectCompleted.Task.ConfigureAwait(false);
             await AwaitQuietlyAsync(generation.ReconnectTask).ConfigureAwait(false);
-            foreach (var lifetime in generation.Lifetimes)
+
+            ConnectionLifetime[] lifetimes;
+            List<ConnectionLifetime> lifetimeOwners;
+            lock (_sync)
             {
-                await lifetime.DrainTask.ConfigureAwait(false);
-                lifetime.Cancellation.Dispose();
+                lifetimes = generation.Lifetimes.ToArray();
+                lifetimeOwners = lifetimes.Where(lifetime => lifetime.ClaimRetirement()).ToList();
             }
+
+            foreach (var lifetime in lifetimeOwners)
+                StartLifetimeRetirement(generation, lifetime);
+            await Task.WhenAll(lifetimes.Select(lifetime => lifetime.RetirementTask)).ConfigureAwait(false);
 
             UnwireGenerationHandlers(generation);
 

@@ -42,54 +42,77 @@ public sealed partial class MqttManagedClient
                 lock (_sync)
                     gatedTopics = _subscriptions.Keys.ToArray();
 
-                mutationGates = GetSubscriptionMutationGates(gatedTopics);
-                var acquired = 0;
-                try
-                {
-                    for (; acquired < mutationGates.Count; acquired++)
-                        await mutationGates[acquired].WaitAsync(generation.Cts.Token).ConfigureAwait(false);
-                }
-                catch
-                {
-                    for (var index = acquired - 1; index >= 0; index--)
-                        mutationGates[index].Release();
-                    mutationGates = [];
-                    throw;
-                }
-
-                ConnectionLifetime? lifetime;
-                long revision;
-                string[] currentTopics;
-                List<MqttTopicFilter> filters;
-                lock (_sync)
-                {
-                    lifetime = generation.Lifetime;
-                    revision = _subscriptionRevision;
-                    filters = _subscriptions.Values.ToList();
-                    currentTopics = _subscriptions.Keys.ToArray();
-                    if (filters.Count == 0 && lifetime is not null && ReferenceEquals(_current, generation))
-                        _subscriptionSnapshotReady = true;
-                }
-
-                if (currentTopics.Except(gatedTopics, StringComparer.Ordinal).Any())
-                {
-                    ReleaseSubscriptionMutationGates(mutationGates);
-                    mutationGates = [];
-                    continue;
-                }
-
-                if (filters.Count == 0 || !IsOwnedForWork(generation) || !_activityGate.IsActive)
+                mutationGates = await AcquireSubscriptionMutationGatesAsync(gatedTopics, generation.Cts.Token)
+                    .ConfigureAwait(false);
+                if (await ResubscribeWithConfirmedTopicsAsync(generation, gatedTopics).ConfigureAwait(false))
                     return;
 
-                if (lifetime is not null)
-                    await SubscribeAndConfirmAsync(generation, lifetime, filters, revision, generation.Cts.Token)
-                        .ConfigureAwait(false);
-                return;
+                ReleaseSubscriptionMutationGates(mutationGates);
+                mutationGates = [];
             }
         }
         finally
         {
             ReleaseSubscriptionMutationGates(mutationGates);
+        }
+    }
+
+    private async Task<List<SemaphoreSlim>> AcquireSubscriptionMutationGatesAsync(
+        IEnumerable<string> topics, CancellationToken cancellationToken)
+    {
+        var gates = GetSubscriptionMutationGates(topics);
+        var acquired = 0;
+        try
+        {
+            for (; acquired < gates.Count; acquired++)
+                await gates[acquired].WaitAsync(cancellationToken).ConfigureAwait(false);
+            return gates;
+        }
+        catch
+        {
+            for (var index = acquired - 1; index >= 0; index--)
+                gates[index].Release();
+            throw;
+        }
+    }
+
+    private async Task<bool> ResubscribeWithConfirmedTopicsAsync(Generation generation, string[] gatedTopics)
+    {
+        ConnectionLifetime? lifetime;
+        long revision;
+        List<MqttTopicFilter> filters;
+        bool needsRetry;
+        bool admitted;
+        lock (_sync)
+        {
+            lifetime = generation.Lifetime;
+            revision = _subscriptionRevision;
+            filters = _subscriptions.Values.ToList();
+            if (filters.Count == 0 && lifetime is not null && ReferenceEquals(_current, generation))
+                _subscriptionSnapshotReady = true;
+            needsRetry = _subscriptions.Keys.Except(gatedTopics, StringComparer.Ordinal).Any();
+            admitted = !needsRetry && filters.Count > 0 && lifetime?.TryAdmitResource() == true;
+        }
+
+        if (needsRetry)
+            return false;
+        if (!admitted)
+            return true;
+
+        try
+        {
+            if (!IsOwnedForWork(generation) || !_activityGate.IsActive)
+                return true;
+
+            if (lifetime is not null)
+                await SubscribeAndConfirmAsync(generation, lifetime, filters, revision, generation.Cts.Token)
+                    .ConfigureAwait(false);
+            return true;
+        }
+        finally
+        {
+            if (lifetime is not null)
+                CompleteLifetimeResource(lifetime);
         }
     }
 

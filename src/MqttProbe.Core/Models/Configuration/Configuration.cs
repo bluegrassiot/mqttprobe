@@ -24,10 +24,16 @@ public class PerformanceSettings
 
 public class SparkplugSettings
 {
+    private int _reorderTimeoutMilliseconds = 5000;
     public bool AutoRequestRebirth { get; set; }
     public int RebirthCooldownSeconds { get; set; } = 30;
     public bool EnrichAliasNames { get; set; } = true;
     public bool AllowNodeReboot { get; set; }
+    public int ReorderTimeoutMilliseconds
+    {
+        get => _reorderTimeoutMilliseconds;
+        set => _reorderTimeoutMilliseconds = Math.Clamp(value, 0, 60000);
+    }
 }
 
 public static class FontProfiles

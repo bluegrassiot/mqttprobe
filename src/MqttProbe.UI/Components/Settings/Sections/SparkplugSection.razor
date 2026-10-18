@@ -29,7 +29,18 @@
                Color="Color.Primary"
                Label="Automatically request rebirth" />
     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
-        Asks nodes with no known birth to re-announce. Manual rebirth still works when off.
+        Requests rebirth when a node has no known birth or a sequence gap remains unresolved after the wait below. Requests wait for a complete observation and follow the cooldown. Manual rebirth still works when off.
+    </MudText>
+
+    <MudNumericField T="int" Label="Sequence reorder wait (ms)"
+                     Value="@SparkplugSettings.Sparkplug.ReorderTimeoutMilliseconds"
+                     ValueChanged="@OnReorderTimeoutChanged"
+                     Min="0" Max="60000" Step="500"
+                     Variant="Variant.Outlined"
+                     Margin="Margin.Dense"
+                     Class="settings-field-narrow" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Wait 0 to 60,000 ms for late messages before treating a sequence gap as unresolved. 0 ms acts immediately.
     </MudText>
 
     <MudNumericField T="int" Label="Rebirth cooldown (s)"
@@ -73,6 +84,11 @@
     private async Task OnRebirthCooldownChanged(int value)
     {
         await SparkplugSettings.SetRebirthCooldownSecondsAsync(value);
+    }
+
+    private async Task OnReorderTimeoutChanged(int value)
+    {
+        await SparkplugSettings.SetReorderTimeoutMillisecondsAsync(Math.Clamp(value, 0, 60_000));
     }
 
     private async Task OnAllowNodeRebootChanged(bool value)

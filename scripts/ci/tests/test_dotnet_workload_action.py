@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import textwrap
 import unittest
 from pathlib import Path
@@ -19,8 +20,41 @@ CALLERS = {
 }
 
 
+POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
+SDK_VERIFICATION_STEP = "Verify selected SDK matches global.json"
+PINNED_SDK = "10.0.402"
+
+
 def action_text():
     return ACTION.read_text(encoding="utf-8")
+
+
+def sdk_verification_block():
+    action = action_text()
+    start = action.index(f"- name: {SDK_VERIFICATION_STEP}")
+    body = action.index("run: |\n", start) + len("run: |\n")
+    lines = []
+    for line in action[body:].splitlines():
+        if line.strip() and not line.startswith("        "):
+            break
+        lines.append(line)
+    return textwrap.dedent("\n".join(lines)).strip() + "\n"
+
+
+def dotnet_stub(version, exit_code, marker):
+    if os.name == "nt":
+        return "dotnet.cmd", (
+            "@echo off\r\n"
+            f'> "{marker}" echo called\r\n'
+            f"echo {version}\r\n"
+            f"exit /b {exit_code}\r\n"
+        )
+    return "dotnet", (
+        "#!/bin/sh\n"
+        f'printf called > "{marker}"\n'
+        f"printf '%s\\n' '{version}'\n"
+        f"exit {exit_code}\n"
+    )
 
 
 def job_section(text, job):
@@ -122,6 +156,65 @@ class WorkflowIntegrationTests(unittest.TestCase):
                 self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
                 if expected:
                     self.assertIn(expected, result.stdout)
+
+
+class SdkVerificationBehaviorTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if POWERSHELL is None:
+            raise unittest.SkipTest("PowerShell is unavailable on this platform")
+
+    def invoke(self, block, global_json, version, exit_code):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "global.json").write_text(global_json, encoding="utf-8")
+            bindir = root / "bin"
+            bindir.mkdir()
+            marker = root / "dotnet-invoked"
+            name, stub = dotnet_stub(version, exit_code, marker)
+            stub_path = bindir / name
+            stub_path.write_text(stub, encoding="utf-8", newline="")
+            if os.name != "nt":
+                stub_path.chmod(0o755)
+            script = root / "verify.ps1"
+            script.write_text(block, encoding="utf-8")
+            # PATH holds only the stub directory so a real SDK can never answer.
+            env = dict(os.environ, PATH=str(bindir))
+            result = subprocess.run(
+                [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(script)],
+                cwd=str(root), env=env, capture_output=True, text=True,
+            )
+            return result, marker.exists()
+
+    @staticmethod
+    def pinned_global_json():
+        return f'{{"sdk": {{"version": "{PINNED_SDK}", "rollForward": "disable"}}}}'
+
+    def test_matching_sdk_pin_succeeds(self):
+        result, invoked = self.invoke(
+            sdk_verification_block(), self.pinned_global_json(), PINNED_SDK, 0)
+        self.assertTrue(invoked)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_mismatched_sdk_fails_with_exit_code_one(self):
+        result, invoked = self.invoke(
+            sdk_verification_block(), self.pinned_global_json(), "10.0.401", 0)
+        self.assertTrue(invoked)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("does not match global.json pin", result.stdout)
+
+    def test_failed_dotnet_version_propagates_its_exit_code(self):
+        result, invoked = self.invoke(
+            sdk_verification_block(), self.pinned_global_json(), PINNED_SDK, 3)
+        self.assertTrue(invoked)
+        self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+
+    def test_missing_sdk_pin_fails_without_invoking_dotnet(self):
+        result, invoked = self.invoke(
+            sdk_verification_block(), '{"sdk": {"rollForward": "disable"}}', PINNED_SDK, 0)
+        self.assertFalse(invoked)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("does not contain an sdk.version pin", result.stdout)
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ public sealed class TopicSelectionSessionTests
         var frame = session.Refresh(null, EmptyExpanded(), grouped: true);
 
         frame.Should().NotBeNull();
-        frame!.Selection.Key.Should().BeNull();
+        frame.Selection.Key.Should().BeNull();
         frame.Rows.Should().NotContain(row => row.FullPath == "spBv1.0/g/NDATA/n1");
     }
 
@@ -39,7 +39,7 @@ public sealed class TopicSelectionSessionTests
         var frame = session.Refresh(null, EmptyExpanded(), grouped: true);
 
         frame.Should().NotBeNull();
-        frame!.Selection.Key.Should().Be("spBv1.0/g/NDATA/n1");
+        frame.Selection.Key.Should().Be("spBv1.0/g/NDATA/n1");
         adapter.Store.GetSelectedTopicState().Key.Should().Be("spBv1.0/g/NDATA/n1");
     }
 
@@ -57,7 +57,7 @@ public sealed class TopicSelectionSessionTests
         var frame = session.Refresh(null, EmptyExpanded(), grouped: false);
 
         frame.Should().NotBeNull();
-        frame!.Selection.Key.Should().BeNull();
+        frame.Selection.Key.Should().BeNull();
         frame.Rows.Should().NotContain(row => row.FullPath == "root/selected");
     }
 

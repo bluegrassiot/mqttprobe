@@ -45,6 +45,7 @@ public class ConnectionDialogTests : BunitTestContext
     private TaskCompletionSource<MqttConnectOutcome>? _attemptCompletion;
     private MqttConnectStatus? _immediateAttemptStatus;
     private Exception? _immediateAttemptException;
+    private bool _attemptRetired;
 
     // Exercises the pre-connect iOS note from a non-iOS host.
     private sealed class IosConnectionDialog : ConnectionDialog
@@ -97,6 +98,8 @@ public class ConnectionDialogTests : BunitTestContext
         _mockClient
             .StartAttempt(Arg.Any<MqttManagedClientOptions>(), Arg.Any<CancellationToken>())
             .Returns(ci => BeginTestAttempt(ci.Arg<CancellationToken>()));
+        _mockClient.IsCurrentAttempt(Arg.Any<MqttConnectAttemptId>())
+            .Returns(ci => !_attemptRetired && ci.Arg<MqttConnectAttemptId>() == _attemptId);
 
         Services.AddSingleton(_mockClient);
         Services.AddConnectionSettings(_mockConnections);
@@ -154,6 +157,7 @@ public class ConnectionDialogTests : BunitTestContext
     {
         _capturedStartToken = token;
         _attemptId = new MqttConnectAttemptId(++_attemptIdCounter);
+        _attemptRetired = false;
         var completion = new TaskCompletionSource<MqttConnectOutcome>();
         if (_immediateAttemptStatus is { } status)
         {
@@ -161,6 +165,7 @@ public class ConnectionDialogTests : BunitTestContext
             var exception = _immediateAttemptException;
             _immediateAttemptException = null;
             completion.SetResult(new MqttConnectOutcome(_attemptId, status, exception));
+            ApplyClientConnectState(status);
         }
         _attemptCompletion = completion;
         return new MqttConnectAttempt(_attemptId, completion.Task);
@@ -177,6 +182,7 @@ public class ConnectionDialogTests : BunitTestContext
         var completion = _attemptCompletion
             ?? throw new InvalidOperationException("no connect attempt is pending");
         var id = _attemptId;
+        ApplyClientConnectState(status);
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
         var handledBefore = dialog.HandledOutcomeCountForTests;
         await _dialogProvider.InvokeAsync(() =>
@@ -189,6 +195,12 @@ public class ConnectionDialogTests : BunitTestContext
 
     // The attempt completion continuation is posted to the dispatcher; flush it before asserting.
     private Task FlushDispatcherAsync() => _dialogProvider.InvokeAsync(() => { });
+
+    private void ApplyClientConnectState(MqttConnectStatus status)
+    {
+        _mockClient.IsConnected.Returns(status == MqttConnectStatus.Connected);
+        _attemptRetired = status == MqttConnectStatus.Failed;
+    }
 
     private List<CertificateSessionResource> CertificateResources() =>
         _mockOptionsBuilder.ReceivedCalls()

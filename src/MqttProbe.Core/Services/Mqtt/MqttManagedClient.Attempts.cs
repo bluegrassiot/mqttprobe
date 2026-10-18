@@ -142,6 +142,20 @@ public sealed partial class MqttManagedClient
         }
     }
 
+    public bool IsCurrentAttempt(MqttConnectAttemptId attemptId)
+    {
+        if (attemptId.IsNone)
+            return false;
+
+        lock (_sync)
+        {
+            var generation = _current;
+            return generation is not null
+                && generation.AttemptId == attemptId
+                && IsOwnedForWorkLocked(generation);
+        }
+    }
+
     private void OnCallerCancellation(Generation generation)
     {
         RetireGeneration(generation);

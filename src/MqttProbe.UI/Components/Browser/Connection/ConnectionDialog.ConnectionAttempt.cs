@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using MQTTnet;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Security;
@@ -18,6 +19,12 @@ public partial class ConnectionDialog
         public bool Building { get; set; }
 
         public bool Finalizing { get; set; }
+
+        public bool AwaitingReconnect { get; set; }
+
+        public bool ConnectedHandled { get; set; }
+
+        public Func<MqttClientConnectedEventArgs, Task>? ConnectedHandler { get; set; }
 
         public bool Completed { get; set; }
 
@@ -48,6 +55,11 @@ public partial class ConnectionDialog
             _operation = null;
         if (_connectionState == ConnectionState.Connecting)
             _connectionState = ConnectionState.Disconnected;
+        if (operation.ConnectedHandler is not null)
+        {
+            ManagedMqttClient.ConnectedAsync -= operation.ConnectedHandler;
+            operation.ConnectedHandler = null;
+        }
         operation.Certificate?.Dispose();
         operation.Certificate = null;
         operation.Cancellation.Dispose();
@@ -92,7 +104,7 @@ public partial class ConnectionDialog
             {
                 if (operation.Teardown is { } teardown)
                     await teardown;
-                if (!operation.Completed)
+                if (!operation.Completed && !operation.AwaitingReconnect && !operation.ConnectedHandled)
                 {
                     ReleaseOperation(operation);
                     if (!_disposed)
@@ -257,7 +269,8 @@ public partial class ConnectionDialog
             SessionState.ActiveCertificateResource = operation.Certificate;
             operation.Certificate = null;
         }
-        operation.AttemptId = attempt.Id;
+        if (await ListenAndReconcileAttemptAsync(operation, attempt))
+            return;
 
         MqttConnectOutcome outcome;
         try
@@ -293,10 +306,13 @@ public partial class ConnectionDialog
         switch (outcome.Status)
         {
             case MqttConnectStatus.Connected:
-                await HandleConnectedAttemptAsync(operation);
+                await FinalizeConnectedAttemptAsync(operation);
                 break;
             case MqttConnectStatus.Failed:
-                HandleFailedAttempt(operation, outcome);
+                if (AttemptAlreadyConnected(operation))
+                    await FinalizeConnectedAttemptAsync(operation, requireConnected: true);
+                else
+                    HandleFailedAttempt(operation, outcome);
                 break;
             default:
                 HandleCanceledAttempt(operation);
@@ -384,14 +400,25 @@ public partial class ConnectionDialog
 
     private void HandleFailedAttempt(ConnectOperation operation, MqttConnectOutcome outcome)
     {
-        _connectionState = ConnectionState.Failed;
-        _pendingAttemptConnection = null;
-        _pendingAttemptSavedSelector = null;
         UxMetrics?.RecordConnectFailure();
         Logger.LogError(outcome.Exception,
             "Connecting to broker {Host}:{Port} failed. ResultCode={ResultCode}",
             _selectedConnection.Host, _selectedConnection.Port,
             outcome.ConnectResult?.ResultCode);
+
+        // A live generation keeps retrying, so the attempt stays owned until it connects, the
+        // user stops it, or another generation replaces it.
+        if (operation.AttemptStarted && ManagedMqttClient.IsCurrentAttempt(operation.AttemptId))
+        {
+            operation.AwaitingReconnect = true;
+            _connectionState = ConnectionState.Connecting;
+            StateHasChanged();
+            return;
+        }
+
+        _connectionState = ConnectionState.Failed;
+        _pendingAttemptConnection = null;
+        _pendingAttemptSavedSelector = null;
         ReleaseOperation(operation);
     }
 

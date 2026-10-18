@@ -118,6 +118,8 @@ public class FirstConnectRetainedMessageRaceTests
         public bool IsConnected => true;
         public bool IsStarted => true;
 
+        public bool IsCurrentAttempt(MqttConnectAttemptId attemptId) => false;
+
         public event Func<MqttClientConnectedEventArgs, Task>? ConnectedAsync
         {
             add => _connectedHandler += value;

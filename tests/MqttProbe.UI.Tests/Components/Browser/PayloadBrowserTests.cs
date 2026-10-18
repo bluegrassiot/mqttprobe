@@ -187,7 +187,7 @@ public class PayloadBrowserTests : BunitTestContext
         var timerTick = cut.Instance.GetType().GetMethod("OnTimerTick",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         timerTick.Should().NotBeNull();
-        await cut.InvokeAsync(() => timerTick!.Invoke(cut.Instance, new object?[] { null }));
+        await cut.InvokeAsync(() => timerTick.Invoke(cut.Instance, new object?[] { null }));
 
         await _mockMsgStore.Received(1).GetSelectedMessagesAsync(Arg.Any<SelectedTopicToken>(), Arg.Any<int>());
     }

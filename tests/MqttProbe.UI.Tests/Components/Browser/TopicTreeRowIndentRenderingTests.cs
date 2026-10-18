@@ -87,7 +87,7 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
         cut.Find(".topic-tree-row").Click();
 
         selected.Should().NotBeNull();
-        selected!.Key.Should().Be(row.FullPath);
+        selected.Key.Should().Be(row.FullPath);
         selected.Topics.Should().Equal(row.SelectionTopics);
         toggled.Should().BeNull("expansion belongs to the chevron");
     }
@@ -102,7 +102,7 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
         cut.Find(".topic-tree-row").Click();
 
         selected.Should().NotBeNull();
-        selected!.Key.Should().Be(row.FullPath);
+        selected.Key.Should().Be(row.FullPath);
         selected.Topics.Should().Equal(row.FullPath);
     }
 

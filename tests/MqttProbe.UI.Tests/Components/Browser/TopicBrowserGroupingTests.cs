@@ -24,20 +24,19 @@ public class TopicBrowserGroupingTests : BunitTestContext
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _fixture = new TopicBrowserTestFixture(_mockMsgStore);
-        _fixture.Configure();
+        Services.AddSingleton<ITopicSelectionStore>(_fixture.Adapter);
         _mockUi = SettingsSubstituteRegistration.CreateUiSettings(_preferences);
         Services.AddSingleton(_mockMsgStore);
         Services.AddUiSettings(_mockUi);
     }
 
-    private static TopicNodeSnapshot[] SparkplugTree() =>
+    private static (string Topic, int Messages)[] SparkplugTree() =>
     [
-        .. TopicSnapshotBuilder.Build(
-            (NodeTip, 3),
-            ("spBv1.0/plant1/NBIRTH/node1", 1),
-            (DeviceTip, 2),
-            ("spBv1.0/STATE/scada", 1),
-            ("sensors/temp", 4))
+        (NodeTip, 3),
+        ("spBv1.0/plant1/NBIRTH/node1", 1),
+        (DeviceTip, 2),
+        ("spBv1.0/STATE/scada", 1),
+        ("sensors/temp", 4)
     ];
 
     private IRenderedComponent<TopicBrowser> RenderGrouped(
@@ -46,7 +45,7 @@ public class TopicBrowserGroupingTests : BunitTestContext
         Func<SelectedTopicState, Task>? onSelected = null)
     {
         _preferences.GroupSparkplugTopicsByNodeAndDevice = grouped;
-        _fixture.SetSnapshot(SparkplugTree());
+        _fixture.AddTopics(SparkplugTree());
         var cut = Render<TopicBrowser>(parameters => parameters
             .Add(component => component.OnSelectedChanged, state => onSelected?.Invoke(state) ?? Task.CompletedTask));
         EnsureMudProviders();
@@ -110,19 +109,18 @@ public class TopicBrowserGroupingTests : BunitTestContext
     }
 
     [Test]
-    public void GroupingRows_AreMarkedAndOnlyTheSelectedRowIsHighlighted()
+    public async Task GroupingRows_AreMarkedAndOnlyTheSelectedRowIsHighlighted()
     {
-        _fixture.SetSelection(new SelectedTopicState(
-            new SelectedTopicToken(Guid.NewGuid(), 1, 1), NodeTip, 3));
         var cut = RenderGrouped(grouped: true);
+        RowWith(cut, "node1").Click();
+        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
 
         var groupingRows = cut.FindAll(".topic-tree-row--group");
         var selectedRows = cut.FindAll(".topic-tree-row--selected");
 
-        groupingRows.Should().NotBeEmpty();
         selectedRows.Should().ContainSingle()
-            .Which.TextContent.Should().Contain(NodeTip);
-        groupingRows.Should().NotContain(row => row.ClassList.Contains("topic-tree-row--selected"));
+            .Which.ClassList.Should().Contain("topic-tree-row--group");
+        groupingRows.Should().Contain(row => row.ClassList.Contains("topic-tree-row--selected"));
     }
 
     [Test]
@@ -156,8 +154,8 @@ public class TopicBrowserGroupingTests : BunitTestContext
 
         RowWith(cut, "node1").Click();
 
-        _fixture.Selections.Should().ContainSingle();
-        _fixture.Selections[0].Topics.Should().BeEquivalentTo(
+        _fixture.Adapter.Selections.Should().ContainSingle();
+        _fixture.Adapter.Selections[0]!.Topics.Should().BeEquivalentTo(
         [
             NodeTip,
             "spBv1.0/plant1/NBIRTH/node1",
@@ -174,8 +172,8 @@ public class TopicBrowserGroupingTests : BunitTestContext
 
         RowWith(cut, "dev1").Click();
 
-        _fixture.Selections.Should().ContainSingle();
-        _fixture.Selections[0].Topics.Should().BeEquivalentTo([DeviceTip]);
+        _fixture.Adapter.Selections.Should().ContainSingle();
+        _fixture.Adapter.Selections[0]!.Topics.Should().BeEquivalentTo([DeviceTip]);
     }
 
     [Test]
@@ -185,8 +183,8 @@ public class TopicBrowserGroupingTests : BunitTestContext
 
         RowWith(cut, "NBIRTH").Click();
 
-        _fixture.Selections.Should().ContainSingle();
-        _fixture.Selections[0].Topics.Should().BeEquivalentTo(["spBv1.0/plant1/NBIRTH/node1"]);
+        _fixture.Adapter.Selections.Should().ContainSingle();
+        _fixture.Adapter.Selections[0]!.Topics.Should().BeEquivalentTo(["spBv1.0/plant1/NBIRTH/node1"]);
     }
 
     [Test]

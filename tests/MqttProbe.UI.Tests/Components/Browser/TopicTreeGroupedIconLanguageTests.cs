@@ -1,7 +1,6 @@
 using AngleSharp.Dom;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Configuration;
-using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Components.Layout;
 using MqttProbe.UI.Tests.TestHelpers;
@@ -33,37 +32,30 @@ public sealed class TopicTreeGroupedIconLanguageTests : BunitTestContext
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _fixture = new TopicBrowserTestFixture(_mockMsgStore);
-        _fixture.Configure();
+        Services.AddSingleton<ITopicSelectionStore>(_fixture.Adapter);
         Services.AddSingleton(_mockMsgStore);
         Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings(_preferences));
     }
 
-    private static TopicNodeSnapshot[] GroupedTree(bool withResidueBelowTheNode) =>
-    [
-        .. TopicSnapshotBuilder.Build(
-            withResidueBelowTheNode
-                ? new (string Topic, int Messages)[]
-                {
-                    (NodeTip, 3),
-                    ($"{NodeTip}/extra/leaf", 1),
-                    ("spBv1.0/plant1/NBIRTH/node1", 1),
-                    ("spBv1.0/plant1/DDATA/node1/dev1", 2),
-                    ("spBv1.0/STATE/scada", 1)
-                }
-                :
-                new (string Topic, int Messages)[]
-                {
-                    (NodeTip, 3),
-                    ("spBv1.0/plant1/NBIRTH/node1", 1),
-                    ("spBv1.0/plant1/DDATA/node1/dev1", 2),
-                    ("spBv1.0/STATE/scada", 1)
-                })
-    ];
+    private static (string Topic, int Messages)[] GroupedTree(bool withResidueBelowTheNode)
+    {
+        var topics = new List<(string Topic, int Messages)>
+        {
+            (NodeTip, 3),
+            ("spBv1.0/plant1/NBIRTH/node1", 1),
+            ("spBv1.0/plant1/DDATA/node1/dev1", 2),
+            ("spBv1.0/STATE/scada", 1)
+        };
+        if (withResidueBelowTheNode)
+            topics.Add(($"{NodeTip}/extra/leaf", 1));
+        return [.. topics];
+    }
 
-    private IRenderedComponent<TopicBrowser> RenderGrouped(TopicNodeSnapshot[] tree)
+    private IRenderedComponent<TopicBrowser> RenderGrouped((string Topic, int Messages)[] topics)
     {
         _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
-        _fixture.SetSnapshot(tree);
+        _fixture.Clear();
+        _fixture.AddTopics(topics);
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
         cut.FindAll(".mud-toolbar button")[0].Click();
@@ -71,14 +63,13 @@ public sealed class TopicTreeGroupedIconLanguageTests : BunitTestContext
         return cut;
     }
 
-    private static TopicNodeSnapshot[] CommandTree() =>
+    private static (string Topic, int Messages)[] CommandTree() =>
     [
-        .. TopicSnapshotBuilder.Build(
-            (NodeTip, 3),
-            ("spBv1.0/plant1/NBIRTH/node1", 1),
-            (NodeCommandTip, 1),
-            ("spBv1.0/plant1/DDATA/node1/dev1", 1),
-            (DeviceCommandTip, 1))
+        (NodeTip, 3),
+        ("spBv1.0/plant1/NBIRTH/node1", 1),
+        (NodeCommandTip, 1),
+        ("spBv1.0/plant1/DDATA/node1/dev1", 1),
+        (DeviceCommandTip, 1)
     ];
 
     private static IElement RowWithLabel(IRenderedComponent<TopicBrowser> cut, string label)

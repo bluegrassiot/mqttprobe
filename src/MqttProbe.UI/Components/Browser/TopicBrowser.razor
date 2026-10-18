@@ -1,4 +1,4 @@
-@inject IMessageStoreManager MessageStoreManagerService
+@inject ITopicSelectionStore TopicSelectionStore
 @inject IUiSettings UiSettings
 @inject ILogger<TopicBrowser> Logger
 @using Microsoft.Extensions.Logging
@@ -9,11 +9,11 @@
     <div class="topic-header-row">
         <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary"/>
         <MudText Typo="Typo.subtitle2" Class="topic-title">Topics</MudText>
-        @if (MessageStoreManagerService.RootTopicCount > 0)
+        @if (_rootTopicCount > 0)
         {
             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
                      Class="topic-count-chip">
-                @MessageStoreManagerService.RootTopicCount
+                @_rootTopicCount
             </MudChip>
         }
         <MudIconButton Icon="@LucideIcons.Info" Size="Size.Small" Class="topic-icon-key-toggle"
@@ -120,7 +120,7 @@
                 <TopicTreeRow Row="row" IsSelected="@IsRowSelected(row)" OnExpandToggled="ToggleExpand" OnSelected="OnRowSelected"/>
             </Virtualize>
         }
-        else if (MessageStoreManagerService.RootTopicCount > 0)
+        else if (_rootTopicCount > 0)
         {
             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-3">
                 No topics match "@_searchFilter"
@@ -148,9 +148,8 @@
     // A responsive layout can mount two browsers at once, so the panel id must belong to this
     // instance. It is generated once, which keeps aria-controls stable across renders.
     private readonly string _iconKeyId = $"topic-icon-key-{Guid.NewGuid():N}";
-    private long _lastTreeVersion;
-    private Guid _lastSelectionStoreId;
-    private long _lastSelectionGeneration;
+    private TopicSelectionSession? _selectionSession;
+    private int _rootTopicCount;
     private List<TopicTreeRowModel> _visibleRows = [];
     private readonly HashSet<string> _expandedPaths = [];
     private string? _selectedKey;
@@ -183,6 +182,7 @@
     protected override void OnInitialized()
     {
         _groupSparkplugTopics = UiSettings.Ui.GroupSparkplugTopicsByNodeAndDevice;
+        _selectionSession = new TopicSelectionSession(TopicSelectionStore);
         BuildVisibleRows();
         UiSettings.UiPreferencesChanged += OnUiPreferencesChanged;
         _updateTimer = new Timer(_ =>
@@ -220,38 +220,22 @@
         catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser preference refresh failed"); }
     }
 
-    private void BuildVisibleRows()
+    private TopicSelectionFrame? BuildVisibleRows(bool force = true)
     {
-        var snapshot = MessageStoreManagerService.GetTopicTreeSnapshot();
-        var selection = MessageStoreManagerService.GetSelectedTopicState();
-        BuildVisibleRows(snapshot, selection);
+        var frame = _selectionSession!.Refresh(_searchFilter, _expandedPaths, _groupSparkplugTopics, force);
+        ApplyFrame(frame);
+        return frame;
     }
 
-    // One projection pass builds the rows and reports whether the selected real topic still has
-    // one, ignoring filter and expansion, so a purge cannot leave a selection without a row.
-    private void BuildVisibleRows(TopicTreeSnapshot snapshot, SelectedTopicState selection)
+    private void ApplyFrame(TopicSelectionFrame? frame)
     {
-        _visibleRows = TopicTreeProjection.CreateRows(
-            snapshot.Roots, _searchFilter, _expandedPaths, _groupSparkplugTopics,
-            selection.Key, out var selectionRepresented);
-
-        if (selection.Key is not null && !selectionRepresented)
-        {
-            // One conditional clear under the store's own lock; a purge that fresh traffic undid
-            // rejects it, so the next ordinary refresh rebuilds rather than clearing a live row.
-            if (!MessageStoreManagerService.TryClearSelection(snapshot.Version, selection))
-                return;
-
-            selection = MessageStoreManagerService.GetSelectedTopicState();
-        }
-
-        _lastTreeVersion = snapshot.Version;
-        _lastSelectionStoreId = selection.Token.StoreId;
-        _lastSelectionGeneration = selection.Token.Generation;
-        _selectedKey = selection.Key;
+        if (frame is null) return;
+        _visibleRows = frame.Rows.ToList();
+        _rootTopicCount = frame.RootCount;
+        _selectedKey = frame.Selection.Key;
     }
 
-    private async Task RefreshAsync()
+    internal async Task RefreshAsync()
     {
         try
         {
@@ -259,14 +243,10 @@
             {
                 if (_disposed) return;
 
-                var snapshot = MessageStoreManagerService.GetTopicTreeSnapshot();
-                var selection = MessageStoreManagerService.GetSelectedTopicState();
-                if (snapshot.Version == _lastTreeVersion
-                    && selection.Token.StoreId == _lastSelectionStoreId
-                    && selection.Token.Generation == _lastSelectionGeneration)
+                var frame = _selectionSession!.Refresh(_searchFilter, _expandedPaths, _groupSparkplugTopics);
+                if (frame is null)
                     return;
-
-                BuildVisibleRows(snapshot, selection);
+                ApplyFrame(frame);
                 StateHasChanged();
             });
         }
@@ -279,17 +259,20 @@
 
     private void OnSearchChanged()
     {
-        MessageStoreManagerService.SelectTopics(null);
+        _selectionSession!.Select(null);
         BuildVisibleRows();
         StateHasChanged();
     }
 
-    private async Task OnRowSelected(string path)
+    private async Task OnRowSelected(TopicSelection request)
     {
-        BuildVisibleRows();
+        if (_selectionSession!.Select(request) is null) return;
+        var frame = BuildVisibleRows();
         StateHasChanged();
-        if (OnSelectedChanged.HasDelegate)
-            await OnSelectedChanged.InvokeAsync(MessageStoreManagerService.GetSelectedTopicState());
+        if (frame is not null
+            && string.Equals(frame.Selection.Key, request.Key, StringComparison.Ordinal)
+            && OnSelectedChanged.HasDelegate)
+            await OnSelectedChanged.InvokeAsync(frame.Selection);
     }
 
     private Task ToggleExpand(string path)
@@ -307,7 +290,7 @@
     private void ExpandAll()
     {
         TopicTreeProjection.AddExpandablePaths(
-            MessageStoreManagerService.GetTopicTreeSnapshot().Roots, _groupSparkplugTopics, _expandedPaths);
+            TopicSelectionStore.GetTopicTreeSnapshot().Roots, _groupSparkplugTopics, _expandedPaths);
         BuildVisibleRows();
         StateHasChanged();
     }

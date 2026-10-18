@@ -23,11 +23,16 @@ internal static class TopicSnapshotBuilder
         return root.SnapshotChildren();
     }
 
-    // Mirrors TopicTreeStore.Normalize, so "a//b/" and "a/b" file under the same node.
     private static string Normalize(string topic)
     {
-        var segments = topic.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        return string.Join('/', segments);
+        var adapter = TopicTreeSelectionTestAdapter.Create(maxStoredMessages: 0);
+        adapter.Add(topic, new MqttMessage("payload", "unused", false,
+            MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce)
+        { Topic = topic });
+        var node = adapter.Store.GetTopicTreeSnapshot().Roots.Single();
+        while (!node.Children.IsDefaultOrEmpty)
+            node = node.Children.Single();
+        return node.FullTopic;
     }
 
     private sealed class Node(string topic, string fullTopic)

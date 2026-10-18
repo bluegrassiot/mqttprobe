@@ -50,7 +50,7 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
         Render<TopicTreeRow>(parameters => parameters
             .Add(component => component.Row, row)
             .Add(component => component.OnExpandToggled, (string p) => { })
-            .Add(component => component.OnSelected, (string p) => { }));
+            .Add(component => component.OnSelected, (TopicSelection p) => { }));
 
     private static IElement NodeGlyph(IRenderedComponent<TopicTreeRow> cut) =>
         cut.Find(".topic-node-icon");

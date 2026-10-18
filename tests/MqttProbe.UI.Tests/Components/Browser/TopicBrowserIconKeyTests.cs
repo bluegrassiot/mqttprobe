@@ -1,7 +1,6 @@
 using AngleSharp.Dom;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Configuration;
-using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Components.Layout;
 using MqttProbe.UI.Tests.TestHelpers;
@@ -28,31 +27,31 @@ public sealed class TopicBrowserIconKeyTests : BunitTestContext
     {
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _fixture = new TopicBrowserTestFixture(_mockMsgStore);
-        _fixture.Configure();
+        Services.AddSingleton<ITopicSelectionStore>(_fixture.Adapter);
         Services.AddSingleton(_mockMsgStore);
         Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings(_preferences));
     }
 
-    private static TopicNodeSnapshot[] PlainTree() => [TopicBrowserTestTrees.BuildTree()];
+    private static (string Topic, int Messages)[] PlainTree() => TopicBrowserTestTrees.BuildTopics();
 
-    private static TopicNodeSnapshot[] SparkplugTree() =>
+    private static (string Topic, int Messages)[] SparkplugTree() =>
     [
-        .. TopicSnapshotBuilder.Build(
-            ("spBv1.0/plant1/NDATA/node1", 3),
-            ("spBv1.0/plant1/NDATA/node1/extra", 1),
-            ("spBv1.0/plant1/NBIRTH/node1", 1),
-            ("spBv1.0/plant1/DDATA/node1/dev1", 2),
-            ("spBv1.0/STATE/scada", 1),
-            ("sensors/temp", 4))
+        ("spBv1.0/plant1/NDATA/node1", 3),
+        ("spBv1.0/plant1/NDATA/node1/extra", 1),
+        ("spBv1.0/plant1/NBIRTH/node1", 1),
+        ("spBv1.0/plant1/DDATA/node1/dev1", 2),
+        ("spBv1.0/STATE/scada", 1),
+        ("sensors/temp", 4)
     ];
 
     private IRenderedComponent<TopicBrowser> RenderTopics(
-        TopicNodeSnapshot[] tree,
+        (string Topic, int Messages)[] topics,
         bool grouped = false,
         bool expandAll = true)
     {
         _preferences.GroupSparkplugTopicsByNodeAndDevice = grouped;
-        _fixture.SetSnapshot(tree);
+        _fixture.Clear();
+        _fixture.AddTopics(topics);
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
         if (expandAll)
@@ -190,7 +189,7 @@ public sealed class TopicBrowserIconKeyTests : BunitTestContext
     [Test]
     public void TreeWrapCarriesTheLightRoleTokensInLightTheme()
     {
-        _fixture.SetSnapshot(PlainTree());
+        _fixture.AddTopics(PlainTree());
         var cut = Render<TopicBrowser>(parameters =>
             parameters.AddCascadingValue("IsDarkMode", false));
         EnsureMudProviders();
@@ -244,14 +243,14 @@ public sealed class TopicBrowserIconKeyTests : BunitTestContext
     }
 
     [Test]
-    public void OpeningAndClosingTheIconKeyLeavesExpansionAndSelectionAlone()
+    public async Task OpeningAndClosingTheIconKeyLeavesExpansionAndSelectionAlone()
     {
         var cut = RenderTopics(PlainTree(), expandAll: true);
 
         var rowsBefore = cut.FindAll(".topic-tree-row").Count;
         rowsBefore.Should().BeGreaterThan(1);
 
-        cut.FindAll(".topic-tree-row")[1].Click();
+        await cut.InvokeAsync(() => cut.FindAll(".topic-tree-row")[1].ClickAsync(new()));
         cut.FindAll(".topic-tree-row--selected").Should().ContainSingle();
 
         OpenIconKey(cut);

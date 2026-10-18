@@ -79,14 +79,12 @@ public sealed partial class MqttManagedClient
     private async Task<bool> ResubscribeWithConfirmedTopicsAsync(Generation generation, string[] gatedTopics)
     {
         ConnectionLifetime? lifetime;
-        long revision;
         List<MqttTopicFilter> filters;
         bool needsRetry;
         bool admitted;
         lock (_sync)
         {
             lifetime = generation.Lifetime;
-            revision = _subscriptionRevision;
             filters = _subscriptions.Values.ToList();
             if (filters.Count == 0 && lifetime is not null && ReferenceEquals(_current, generation))
                 _subscriptionSnapshotReady = true;
@@ -105,7 +103,7 @@ public sealed partial class MqttManagedClient
                 return true;
 
             if (lifetime is not null)
-                await SubscribeAndConfirmAsync(generation, lifetime, filters, revision, generation.Cts.Token)
+                await SubscribeAndConfirmAsync(generation, lifetime, filters, generation.Cts.Token)
                     .ConfigureAwait(false);
             return true;
         }
@@ -120,7 +118,6 @@ public sealed partial class MqttManagedClient
         Generation generation,
         ConnectionLifetime lifetime,
         List<MqttTopicFilter> filters,
-        long revision,
         CancellationToken cancellationToken)
     {
         var builder = new MqttClientSubscribeOptionsBuilder();
@@ -142,8 +139,7 @@ public sealed partial class MqttManagedClient
                       && !generation.Retired && !lifetime.Retired
                       && !generation.Cts.IsCancellationRequested
                       && !lifetime.Cancellation.IsCancellationRequested
-                      && _activityGate.IsActive
-                      && _subscriptionRevision == revision;
+                      && _activityGate.IsActive;
             if (current)
             {
                 foreach (var filter in filters)
@@ -170,7 +166,6 @@ public sealed partial class MqttManagedClient
         Generation generation,
         ConnectionLifetime lifetime,
         List<string> topics,
-        long revision,
         CancellationToken cancellationToken)
     {
         var builder = new MqttClientUnsubscribeOptionsBuilder();
@@ -190,8 +185,7 @@ public sealed partial class MqttManagedClient
                 || generation.Retired || lifetime.Retired
                 || generation.Cts.IsCancellationRequested
                 || lifetime.Cancellation.IsCancellationRequested
-                || !_activityGate.IsActive
-                || _subscriptionRevision != revision)
+                || !_activityGate.IsActive)
                 return;
 
             if (accepted)

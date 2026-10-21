@@ -80,7 +80,8 @@
                              OnToggleDevice="@ToggleDevice"
                              OnRequestRebirth="@RequestRebirthAsync"
                              OnRequestReboot="@RequestRebootAsync"
-                             OnRequestDeviceRebirth="@RequestDeviceRebirthAsync" />
+                             OnRequestDeviceRebirth="@RequestDeviceRebirthAsync"
+                             OnAddToChart="@AddMetricToChartAsync" />
     </div>
 </div>
 
@@ -217,6 +218,13 @@
     private void ToggleDevice(SpbDevice device)
     {
         _selectedDevice = _selectedDevice == device ? null : device;
+    }
+
+    private async Task AddMetricToChartAsync(SparkplugChartRequest request)
+    {
+        await QuickAddToChartLauncher.OpenAsync(
+            DialogService, Snackbar, request.Topic,
+            new ChartFieldSelection(request.JsonPath, request.SeriesName));
     }
 
     private void OnGroupFilterChanged(string? groupId)

@@ -290,11 +290,8 @@ else
         catch { return null; }
     }
 
-    internal static string ChartShortLabel(string jsonPath)
-    {
-        var dot = jsonPath.LastIndexOf('.');
-        return dot >= 0 ? jsonPath[(dot + 1)..] : jsonPath;
-    }
+    internal static string ChartShortLabel(string jsonPath) =>
+        QuickAddToChartLauncher.ShortLabel(jsonPath);
 
     private async Task HandleAddToChart(ChartFieldSelection selection)
     {
@@ -303,24 +300,12 @@ else
     }
 
     internal static string ChartLabel(ChartFieldSelection selection) =>
-        string.IsNullOrWhiteSpace(selection.SeriesName)
-            ? ChartShortLabel(selection.JsonPath)
-            : selection.SeriesName;
+        QuickAddToChartLauncher.SeriesLabel(selection);
 
     internal async Task AddToChart(string jsonPath, string label, string topic)
     {
-        var parameters = new DialogParameters<QuickAddToChartDialog>
-        {
-            { x => x.Topic, topic },
-            { x => x.JsonPath, jsonPath },
-            { x => x.SeriesName, label }
-        };
-        var dialog = await DialogService.ShowAsync<QuickAddToChartDialog>(
-            "Chart Field", parameters,
-            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
-        var result = await dialog.Result;
-        if (result is { Canceled: false, Data: string message })
-            Snackbar.Add(message, Severity.Success);
+        await QuickAddToChartLauncher.OpenAsync(
+            DialogService, Snackbar, topic, new ChartFieldSelection(jsonPath, label));
     }
 
     internal bool FilterFunc(MqttMessage msg)

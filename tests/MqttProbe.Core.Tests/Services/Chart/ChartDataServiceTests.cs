@@ -153,6 +153,50 @@ public class ChartDataServiceTests
     }
 
     [Test]
+    public async Task SetConnection_SameConnectionPreservesCollectedPoints_AndSwitchingConnectionsClearsThem()
+    {
+        var connectionA = Guid.NewGuid();
+        var connectionB = Guid.NewGuid();
+        var seriesA = Guid.NewGuid();
+        var seriesB = Guid.NewGuid();
+        _mockChartSettings.GetCharts(connectionA).Returns([
+            new ChartConfiguration
+            {
+                Series = [new ChartSeries { Id = seriesA, Topic = "test/topic", JsonPath = "value" }],
+                MaxPoints = 100
+            }
+        ]);
+        _mockChartSettings.GetCharts(connectionB).Returns([
+            new ChartConfiguration
+            {
+                Series = [new ChartSeries { Id = seriesB, Topic = "test/topic", JsonPath = "value" }],
+                MaxPoints = 100
+            }
+        ]);
+
+        _service.SetConnection(connectionA);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/topic", """{"value":1}"""));
+
+        _service.SetConnection(connectionA);
+
+        _service.GetPoints(seriesA).Should().ContainSingle().Which.Value.Should().Be(1);
+        await _handler!(MakeArgs("test/topic", """{"value":2}"""));
+        _service.GetPoints(seriesA).Select(point => point.Value).Should().Equal(1, 2);
+
+        _service.SetConnection(connectionB);
+        _service.GetPoints(seriesA).Should().BeEmpty();
+        await _handler!(MakeArgs("test/topic", """{"value":3}"""));
+        _service.GetPoints(seriesA).Should().BeEmpty();
+        _service.GetPoints(seriesB).Should().ContainSingle().Which.Value.Should().Be(3);
+
+        _service.SetConnection(connectionA);
+        _service.GetPoints(seriesA).Should().BeEmpty();
+        await _handler!(MakeArgs("test/topic", """{"value":4}"""));
+        _service.GetPoints(seriesA).Should().ContainSingle().Which.Value.Should().Be(4);
+    }
+
+    [Test]
     public async Task OnChartsChanged_IgnoresEventForNonMatchingConnectionId()
     {
         var connectionId = Guid.NewGuid();

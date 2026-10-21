@@ -235,6 +235,10 @@ public partial class ConnectionDialog
         try
         {
             await MessageStoreManagerService.Start();
+            if (!IsCurrent(operation))
+                return;
+
+            ChartDataService.SetConnection(connection.Id);
             await ChartDataService.StartAsync();
         }
         catch (Exception ex)

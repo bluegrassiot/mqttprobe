@@ -903,6 +903,31 @@ public class PayloadBrowserTests : BunitTestContext
     }
 
     [Test]
+    public async Task AddToChart_PassesTopicPathAndSeriesNameToDialog()
+    {
+        var mockDialogService = Services.GetRequiredService<IDialogService>();
+        var mockDialogRef = Substitute.For<IDialogReference>();
+        mockDialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Cancel()));
+        DialogParameters? captured = null;
+        mockDialogService
+            .ShowAsync<QuickAddToChartDialog>(
+                Arg.Any<string>(),
+                Arg.Do<DialogParameters>(p => captured = p),
+                Arg.Any<DialogOptions>())
+            .Returns(Task.FromResult(mockDialogRef));
+
+        var cut = Render<PayloadBrowser>();
+
+        await cut.InvokeAsync(() => cut.Instance.AddToChart("metrics.Temp", "Temp", "sensors/temp"));
+
+        captured.Should().NotBeNull();
+        var typed = (DialogParameters<QuickAddToChartDialog>)captured!;
+        typed.Get(x => x.Topic).Should().Be("sensors/temp");
+        typed.Get(x => x.JsonPath).Should().Be("metrics.Temp");
+        typed.Get(x => x.SeriesName).Should().Be("Temp");
+    }
+
+    [Test]
     public async Task AddToChart_WhenDialogReturnsMessage_ShowsSnackbar()
     {
         var mockDialogService = Services.GetRequiredService<IDialogService>();

@@ -307,21 +307,8 @@ else
             ? ChartShortLabel(selection.JsonPath)
             : selection.SeriesName;
 
-    internal async Task AddToChart(string jsonPath, string label, string topic)
-    {
-        var parameters = new DialogParameters<QuickAddToChartDialog>
-        {
-            { x => x.Topic, topic },
-            { x => x.JsonPath, jsonPath },
-            { x => x.SeriesName, label }
-        };
-        var dialog = await DialogService.ShowAsync<QuickAddToChartDialog>(
-            "Chart Field", parameters,
-            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
-        var result = await dialog.Result;
-        if (result is { Canceled: false, Data: string message })
-            Snackbar.Add(message, Severity.Success);
-    }
+    internal Task AddToChart(string jsonPath, string label, string topic) =>
+        ChartQuickAdd.AddToChartAsync(DialogService, Snackbar, topic, jsonPath, label);
 
     internal bool FilterFunc(MqttMessage msg)
     {

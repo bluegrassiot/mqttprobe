@@ -1,10 +1,14 @@
+using Google.Protobuf;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Sparkplug;
 using MqttProbe.Core.Services.Configuration;
+using MqttProbe.Core.Services.Plugins.BuiltIn;
 using MqttProbe.Core.Services.Sparkplug;
+using MqttProbe.PluginContracts;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
+using Org.Eclipse.Tahu.Protobuf;
 
 namespace MqttProbe.UI.Tests.Components.Sparkplug;
 
@@ -359,6 +363,177 @@ public class SparkplugNodesViewTests : BunitTestContext
         cut.FindAll(".spb-node-row").First(r => r.TextContent.Contains("edge-01")).Click();
 
         cut.Markup.Should().Contain("\u2014");
+    }
+
+    [Test]
+    public async Task NodeMetric_AddToChart_UsesNodeDataTopicAndPreservesMetricName()
+    {
+        var dialogRef = Substitute.For<IDialogReference>();
+        dialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Ok("Chart created")));
+        _mockDialogService.ShowAsync<QuickAddToChartDialog>(Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
+            .Returns(dialogRef);
+        var node = new SpbNode { NodeId = "edge one", GroupId = "Plant A", Status = SpbNodeStatus.Online };
+        node.Metrics = [new SpbMetricSnapshot("Flow Rate", "double", "3.14", DateTime.UtcNow)];
+        var group = new SpbGroup();
+        group.Nodes[node.NodeId] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { [group.GroupId] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").Single().Click();
+        await cut.Find(".json-chart-btn").ClickAsync(new());
+
+        var parameters = _mockDialogService.ReceivedCalls()
+            .Single(call => call.GetMethodInfo().Name == nameof(IDialogService.ShowAsync))
+            .GetArguments()[1].Should().BeOfType<DialogParameters<QuickAddToChartDialog>>().Subject;
+        parameters.Get<string>("Topic").Should().Be("spBv1.0/Plant A/NDATA/edge one");
+        parameters.Get<string>("JsonPath").Should().Be("metrics.Flow Rate");
+        parameters.Get<string>("SeriesName").Should().Be("Flow Rate");
+        _mockSnackbar.Received(1).Add("Chart created", Severity.Success, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public async Task DeviceMetric_AddToChart_UsesDeviceDataTopic()
+    {
+        var dialogRef = Substitute.For<IDialogReference>();
+        dialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Cancel()));
+        _mockDialogService.ShowAsync<QuickAddToChartDialog>(Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
+            .Returns(dialogRef);
+        var node = new SpbNode { NodeId = "edge", GroupId = "plant", Status = SpbNodeStatus.Online };
+        var device = new SpbDevice { DeviceId = "sensor", NodeId = node.NodeId, GroupId = node.GroupId, Status = SpbNodeStatus.Online };
+        device.Metrics = [new SpbMetricSnapshot("Temperature", "float", "21", DateTime.UtcNow)];
+        node.Devices[device.DeviceId] = device;
+        var group = new SpbGroup();
+        group.Nodes[node.NodeId] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { [group.GroupId] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").Single().Click();
+        cut.FindAll(".spb-device-row").Single().Click();
+        await cut.Find(".json-chart-btn").ClickAsync(new());
+
+        var call = _mockDialogService.ReceivedCalls().Single(c => c.GetMethodInfo().Name == nameof(IDialogService.ShowAsync));
+        var parameters = call.GetArguments()[1].Should().BeOfType<DialogParameters<QuickAddToChartDialog>>().Subject;
+        parameters.Get<string>("Topic").Should().Be("spBv1.0/plant/DDATA/edge/sensor");
+        parameters.Get<string>("JsonPath").Should().Be("metrics.Temperature");
+        parameters.Get<string>("SeriesName").Should().Be("Temperature");
+        _mockSnackbar.DidNotReceive().Add(Arg.Any<string>(), Arg.Any<Severity>(), Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public void NonNumericSparkplugMetric_DoesNotShowChartButton()
+    {
+        var node = new SpbNode { NodeId = "edge", GroupId = "plant", Status = SpbNodeStatus.Online };
+        node.Metrics = [new SpbMetricSnapshot("Mode", "string", "auto", DateTime.UtcNow)];
+        var group = new SpbGroup();
+        group.Nodes[node.NodeId] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { [group.GroupId] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").Single().Click();
+
+        cut.FindAll(".json-chart-btn").Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task ChartableSparkplugValues_OpenQuickAddWithNamedPathsAndSeries()
+    {
+        var dialogRef = Substitute.For<IDialogReference>();
+        dialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Cancel()));
+        _mockDialogService.ShowAsync<QuickAddToChartDialog>(Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
+            .Returns(dialogRef);
+        var node = new SpbNode { NodeId = "edge", GroupId = "plant", Status = SpbNodeStatus.Online };
+        node.Metrics =
+        [
+            new SpbMetricSnapshot("Boolean Flag", "bool", "true", DateTime.UtcNow),
+            new SpbMetricSnapshot("Boolean Off", "bool", "false", DateTime.UtcNow),
+            new SpbMetricSnapshot("Boolean Text", "string", "true", DateTime.UtcNow),
+            new SpbMetricSnapshot("Set Point", "string", "22.5", DateTime.UtcNow),
+            new SpbMetricSnapshot("Alias Metric", "unknown", "7", DateTime.UtcNow, 42UL),
+            new SpbMetricSnapshot("Missing Value", "unknown", "\u2014", DateTime.UtcNow),
+            new SpbMetricSnapshot("Null Value", "double", null!, DateTime.UtcNow)
+        ];
+        var group = new SpbGroup();
+        group.Nodes[node.NodeId] = node;
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { [group.GroupId] = group });
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").Single().Click();
+        var rows = cut.FindAll(".spb-metric-row");
+        rows.Should().HaveCount(7);
+        rows.Single(row => row.TextContent.Contains("Boolean Flag")).QuerySelector(".json-chart-btn").Should().NotBeNull();
+        rows.Single(row => row.TextContent.Contains("Boolean Off")).QuerySelector(".json-chart-btn").Should().NotBeNull();
+        rows.Single(row => row.TextContent.Contains("Boolean Text")).QuerySelector(".json-chart-btn").Should().BeNull();
+        rows.Single(row => row.TextContent.Contains("Set Point")).QuerySelector(".json-chart-btn").Should().NotBeNull();
+        rows.Single(row => row.TextContent.Contains("Alias Metric")).QuerySelector(".json-chart-btn").Should().NotBeNull();
+        rows.Single(row => row.TextContent.Contains("Missing Value")).QuerySelector(".json-chart-btn").Should().BeNull();
+        rows.Single(row => row.TextContent.Contains("Null Value")).QuerySelector(".json-chart-btn").Should().BeNull();
+
+        foreach (var name in new[] { "Boolean Flag", "Boolean Off", "Set Point", "Alias Metric" })
+        {
+            var button = cut.FindAll(".spb-metric-row").Single(row => row.TextContent.Contains(name))
+                .QuerySelector(".json-chart-btn")!;
+            await cut.InvokeAsync(() => button.Click());
+        }
+
+        var calls = _mockDialogService.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IDialogService.ShowAsync))
+            .ToList();
+        calls.Should().HaveCount(4);
+        foreach (var name in new[] { "Boolean Flag", "Boolean Off", "Set Point", "Alias Metric" })
+        {
+            var parameters = calls.Select(call => call.GetArguments()[1])
+                .OfType<DialogParameters<QuickAddToChartDialog>>()
+                .Single(parameters => parameters.Get<string>("SeriesName") == name);
+            parameters.Get<string>("JsonPath").Should().Be($"metrics.{name}");
+        }
+    }
+
+    [Test]
+    public async Task AliasOnlyNativeBooleanWithoutDatatype_OffersChartActionButStringTrueDoesNot()
+    {
+        var dialogRef = Substitute.For<IDialogReference>();
+        dialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Cancel()));
+        _mockDialogService.ShowAsync<QuickAddToChartDialog>(Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
+            .Returns(dialogRef);
+
+        var topology = new SparkplugTopologyService();
+        var extractor = new SparkplugTopologyExtractor();
+        async Task Apply(string topic, Payload payload)
+        {
+            var bytes = payload.ToByteArray();
+            var envelope = DecodedPayloadEnvelope.CreateSuccess("sparkplug-b", topic, bytes, payload.ToString(), typedPayload: payload);
+            await topology.ApplyTopologyEventsAsync(extractor.Extract(envelope));
+        }
+
+        var birth = new Payload { Timestamp = 1, Seq = 1 };
+        birth.Metrics.Add(new Payload.Types.Metric { Name = "Boolean Metric", Alias = 7, Datatype = 11, BooleanValue = false });
+        birth.Metrics.Add(new Payload.Types.Metric { Name = "Text Metric", Alias = 8, Datatype = 12, StringValue = "false" });
+        await Apply("spBv1.0/plant/NBIRTH/edge", birth);
+
+        var data = new Payload { Timestamp = 2, Seq = 2 };
+        data.Metrics.Add(new Payload.Types.Metric { Alias = 7, BooleanValue = true });
+        data.Metrics.Add(new Payload.Types.Metric { Alias = 8, StringValue = "true" });
+        await Apply("spBv1.0/plant/NDATA/edge", data);
+
+        var node = topology.Groups["plant"].Nodes["edge"];
+        _mockTopology.Groups.Returns(topology.Groups);
+        node.Metrics.Single(metric => metric.Name == "Boolean Metric").DataType.Should().Be("bool");
+        node.Metrics.Single(metric => metric.Name == "Boolean Metric").Value.Should().Be("true");
+        node.Metrics.Single(metric => metric.Name == "Text Metric").DataType.Should().Be("unknown");
+
+        var cut = Render<SparkplugNodesView>();
+        cut.FindAll(".spb-node-row").Single().Click();
+        var rows = cut.FindAll(".spb-metric-row");
+        rows.Single(row => row.TextContent.Contains("Boolean Metric")).QuerySelector(".json-chart-btn").Should().NotBeNull();
+        rows.Single(row => row.TextContent.Contains("Text Metric")).QuerySelector(".json-chart-btn").Should().BeNull();
+
+        await cut.InvokeAsync(() => rows.Single(row => row.TextContent.Contains("Boolean Metric"))
+            .QuerySelector(".json-chart-btn")!.Click());
+        var parameters = _mockDialogService.ReceivedCalls()
+            .Single(call => call.GetMethodInfo().Name == nameof(IDialogService.ShowAsync))
+            .GetArguments()[1].Should().BeOfType<DialogParameters<QuickAddToChartDialog>>().Subject;
+        parameters.Get<string>("JsonPath").Should().Be("metrics.Boolean Metric");
+        parameters.Get<string>("SeriesName").Should().Be("Boolean Metric");
     }
 
     [Test]

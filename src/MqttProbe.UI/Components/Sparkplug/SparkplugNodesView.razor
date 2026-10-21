@@ -1,6 +1,7 @@
 @using Microsoft.Extensions.Logging
 @using MqttProbe.Core.Models.Sparkplug
 @using MqttProbe.Core.Services.Configuration
+@using MqttProbe.UI.Components.Charts
 @inject ISparkplugTopologyService TopologyService
 @inject ISparkplugCommandService CommandService
 @inject ISparkplugSettings SparkplugSettings
@@ -79,8 +80,9 @@
                              OnBack="@ClearSelection"
                              OnToggleDevice="@ToggleDevice"
                              OnRequestRebirth="@RequestRebirthAsync"
-                             OnRequestReboot="@RequestRebootAsync"
-                             OnRequestDeviceRebirth="@RequestDeviceRebirthAsync" />
+                              OnRequestReboot="@RequestRebootAsync"
+                              OnRequestDeviceRebirth="@RequestDeviceRebirthAsync"
+                              OnAddToChart="@HandleAddToChartAsync" />
     </div>
 </div>
 
@@ -218,6 +220,16 @@
     {
         _selectedDevice = _selectedDevice == device ? null : device;
     }
+
+    private Task HandleAddToChartAsync(SparkplugChartSelection selection) =>
+        QuickAddToChartFlow.OpenAsync(
+            DialogService,
+            Snackbar,
+            selection.Field.JsonPath,
+            string.IsNullOrWhiteSpace(selection.Field.SeriesName)
+                ? selection.Field.JsonPath[(selection.Field.JsonPath.LastIndexOf('.') + 1)..]
+                : selection.Field.SeriesName,
+            selection.Topic);
 
     private void OnGroupFilterChanged(string? groupId)
     {

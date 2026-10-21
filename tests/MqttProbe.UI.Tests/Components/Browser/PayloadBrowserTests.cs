@@ -922,6 +922,32 @@ public class PayloadBrowserTests : BunitTestContext
     }
 
     [Test]
+    public async Task MessageDetailsChartButton_OpensQuickAddDialogWithSelectedMessage()
+    {
+        var mockDialogService = Services.GetRequiredService<IDialogService>();
+        var dialogRef = Substitute.For<IDialogReference>();
+        dialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Cancel()));
+        mockDialogService.ShowAsync<QuickAddToChartDialog>(Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
+            .Returns(dialogRef);
+        var cut = Render<PayloadBrowser>();
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(new MqttMessage
+        {
+            Topic = "spBv1.0/Plant/NDATA/edge",
+            Payload = """{"metrics":[{"name":"Flow Rate","datatype":10,"doubleValue":3.14}]}"""
+        }));
+        await cut.Find("button[title='Expand']").ClickAsync(new());
+
+        await cut.Find(".json-chart-btn").ClickAsync(new());
+
+        var parameters = mockDialogService.ReceivedCalls()
+            .Single(call => call.GetMethodInfo().Name == nameof(IDialogService.ShowAsync))
+            .GetArguments()[1].Should().BeOfType<DialogParameters<QuickAddToChartDialog>>().Subject;
+        parameters.Get<string>("Topic").Should().Be("spBv1.0/Plant/NDATA/edge");
+        parameters.Get<string>("JsonPath").Should().Be("metrics.Flow Rate");
+        parameters.Get<string>("SeriesName").Should().Be("Flow Rate");
+    }
+
+    [Test]
     public async Task CopyFullMessage_WhenMessageSelected_WritesSerializedJsonToClipboard()
     {
         var mockClipboard = Services.GetRequiredService<IClipboardService>();

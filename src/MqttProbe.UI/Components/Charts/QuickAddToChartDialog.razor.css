@@ -1,0 +1,44 @@
+.quick-add-dialog-body {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.quick-add-dialog-body ::deep .quick-add-summary {
+    min-width: 0;
+    max-width: 100%;
+    background: var(--mud-palette-background-grey);
+    border: 1px solid var(--mud-palette-lines-default);
+}
+
+.quick-add-dialog-body ::deep .quick-add-summary-title,
+.quick-add-dialog-body ::deep .quick-add-existing-chart-name {
+    min-width: 0;
+    max-width: 100%;
+    font-weight: 600;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.quick-add-topic-path {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.quick-add-topic-path ::deep .quick-add-topic-path-text {
+    min-width: 0;
+    max-width: 100%;
+    font-family: var(--font-mono);
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.quick-add-existing-chart {
+    cursor: pointer;
+    border: 2px solid var(--mud-palette-lines-default);
+    background: transparent;
+}
+
+.quick-add-existing-chart--selected {
+    border-color: var(--mud-palette-primary);
+    background: var(--mud-palette-action-default-hover);
+}

@@ -1,6 +1,7 @@
 @using System.Globalization
 @using MqttProbe.Core.Services.Configuration
 @using MqttProbe.Core.Services.Plugins.Registry
+@using MqttProbe.UI.Components.Charts
 @inject ITopicSelectionStore MessageStoreManager
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -309,18 +310,7 @@ else
 
     internal async Task AddToChart(string jsonPath, string label, string topic)
     {
-        var parameters = new DialogParameters<QuickAddToChartDialog>
-        {
-            { x => x.Topic, topic },
-            { x => x.JsonPath, jsonPath },
-            { x => x.SeriesName, label }
-        };
-        var dialog = await DialogService.ShowAsync<QuickAddToChartDialog>(
-            "Chart Field", parameters,
-            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
-        var result = await dialog.Result;
-        if (result is { Canceled: false, Data: string message })
-            Snackbar.Add(message, Severity.Success);
+        await QuickAddToChartFlow.OpenAsync(DialogService, Snackbar, jsonPath, label, topic);
     }
 
     internal bool FilterFunc(MqttMessage msg)

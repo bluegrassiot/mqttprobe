@@ -1,14 +1,16 @@
 @namespace MqttProbe.UI.Components.Sparkplug
 @using MqttProbe.Core.Models.Sparkplug
+@using MqttProbe.UI.Components.Charts
 
 <MudTable Items="@Items"
           Dense="true" Hover="true" Elevation="0"
           Breakpoint="Breakpoint.None" Class="@Class" RowClass="spb-metric-row">
     <ColGroup>
-        <col style="width: 30%;" />
-        <col style="width: 15%;" />
-        <col style="width: 15%;" />
         <col style="width: 25%;" />
+        <col style="width: 12%;" />
+        <col style="width: 10%;" />
+        <col style="width: 23%;" />
+        <col style="width: 15%;" />
         <col style="width: 15%;" />
     </ColGroup>
     <HeaderContent>
@@ -21,6 +23,7 @@
         <MudTh Class="spb-th-right">Alias</MudTh>
         <MudTh Class="spb-th-right">Value</MudTh>
         <MudTh>Updated</MudTh>
+        <MudTh></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd Class="spb-td-name">@context.Name</MudTd>
@@ -34,6 +37,14 @@
         <MudTd Class="spb-td-updated">
             @context.LastUpdated.ToLocalTime().ToString("HH:mm:ss")
         </MudTd>
+        <MudTd Class="spb-td-chart">
+            @if (ChartFieldEligibility.IsChartableSparkplugValue(context.Value, context.DataType))
+            {
+                <AddToChartButton JsonPath="@($"metrics.{context.Name}")"
+                                  SeriesName="@context.Name"
+                                  OnAddToChart="@(selection => OnAddToChart.InvokeAsync(new SparkplugChartSelection(Topic, selection)))" />
+            }
+        </MudTd>
     </RowTemplate>
 </MudTable>
 
@@ -43,4 +54,10 @@
 
     [Parameter]
     public string? Class { get; set; }
+
+    [Parameter]
+    public string Topic { get; set; } = "";
+
+    [Parameter]
+    public EventCallback<SparkplugChartSelection> OnAddToChart { get; set; }
 }

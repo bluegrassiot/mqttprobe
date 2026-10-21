@@ -323,5 +323,5 @@ public class JsonFieldExtractor : IJsonFieldExtractor
 
     private static bool IsMetricValueFieldName(string propertyName) =>
         propertyName is "value" or "int_value" or "float_value" or "double_value" or "long_value" or "boolean_value"
-            or "intValue" or "floatValue" or "doubleValue" or "longValue" or "booleanValue";
+            or "intValue" or "floatValue" or "doubleValue" or "longValue" or "booleanValue" or "string_value" or "stringValue";
 }

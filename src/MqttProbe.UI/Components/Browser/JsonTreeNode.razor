@@ -1,5 +1,6 @@
 @using System.Globalization
 @using System.Text.Json
+@using MqttProbe.UI.Components.Charts
 
 @switch (Element.ValueKind)
 {
@@ -162,8 +163,7 @@
     private void Toggle() => _isExpanded = !_isExpanded;
 
     private static bool IsNumericString(JsonElement element) =>
-        element.GetString() is { } s &&
-        double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+        ChartFieldEligibility.IsNumericString(element.GetString());
 
     private static string BuildChildPath(string parent, string key) =>
         string.IsNullOrEmpty(parent) ? key : $"{parent}.{key}";

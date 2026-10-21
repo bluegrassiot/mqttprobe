@@ -364,6 +364,26 @@ public class SparkplugTopologyServiceTests
     }
 
     [Test]
+    public async Task NDATA_AliasOnlyNativeBooleanWithoutDatatype_PreservesBooleanAndStringTypes()
+    {
+        var birth = new Payload { Timestamp = 1, Seq = 1 };
+        birth.Metrics.Add(new Payload.Types.Metric { Name = "Boolean Metric", Alias = 7, Datatype = 11, BooleanValue = false });
+        birth.Metrics.Add(new Payload.Types.Metric { Name = "Text Metric", Alias = 8, Datatype = 12, StringValue = "false" });
+        await Fire("spBv1.0/g/NBIRTH/n", birth.ToByteArray());
+
+        var data = new Payload { Timestamp = 2, Seq = 2 };
+        data.Metrics.Add(new Payload.Types.Metric { Alias = 7, BooleanValue = true });
+        data.Metrics.Add(new Payload.Types.Metric { Alias = 8, StringValue = "true" });
+        await Fire("spBv1.0/g/NDATA/n", data.ToByteArray());
+
+        var metrics = _service.Groups["g"].Nodes["n"].Metrics;
+        metrics.Single(metric => metric.Name == "Boolean Metric").DataType.Should().Be("bool");
+        metrics.Single(metric => metric.Name == "Boolean Metric").Value.Should().Be("true");
+        metrics.Single(metric => metric.Name == "Text Metric").DataType.Should().Be("unknown");
+        metrics.Single(metric => metric.Name == "Text Metric").Value.Should().Be("true");
+    }
+
+    [Test]
     public async Task NBIRTH_PreservesAliasOnSnapshot()
     {
         await Fire("spBv1.0/g/NBIRTH/n", SpbPayload(("Temp", 42, 10, 20.0)));

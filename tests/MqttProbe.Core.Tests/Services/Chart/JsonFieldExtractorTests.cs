@@ -139,6 +139,26 @@ public class JsonFieldExtractorTests
     }
 
     [Test]
+    public void Extract_SparkplugStringValueFields_ExtractsNumericStringsAndIgnoresOtherStrings()
+    {
+        var json = """
+        {
+          "metrics": [
+            { "name": "Set Point", "stringValue": "22.5" },
+            { "name": "Device State", "string_value": "Running" },
+            { "name": "Target", "string_value": "-1.25e2" }
+          ]
+        }
+        """;
+
+        var result = _extractor.Extract(json);
+
+        result["metrics.Set Point"].Value.Should().BeApproximately(22.5, 0.001);
+        result["metrics.Target"].Value.Should().Be(-125);
+        result.Should().NotContainKey("metrics.Device State");
+    }
+
+    [Test]
     public void Extract_SparkplugMetrics_ExtractsBooleanAndNumericStringValueFieldsByMetricName()
     {
         var json = """

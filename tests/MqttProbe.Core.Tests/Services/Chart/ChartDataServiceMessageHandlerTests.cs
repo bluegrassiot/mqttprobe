@@ -538,6 +538,198 @@ public class ChartDataServiceMessageHandlerTests
         excludes.Received(1).TopicExcluded -= Arg.Any<Action<string>>();
     }
 
+    [TestCase("spBv1.0/g/NDATA/node-1")]
+    [TestCase("spBv1.0/g/DDATA/node-1/device-1")]
+    public async Task SparkplugNamedStringMetricValue_AddsChartPointUsingMetricName(string topic)
+    {
+        var connectionId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        var client = Substitute.For<IMqttManagedClient>();
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+        _mockChartSettings.GetCharts(connectionId).Returns(
+        [
+            ConfigWith(100, new ChartSeries
+            {
+                Id = seriesId,
+                Topic = topic,
+                JsonPath = "metrics.Set Point"
+            })
+        ]);
+        var sparkplugSettings = Substitute.For<ISparkplugSettings>();
+        sparkplugSettings.Sparkplug.Returns(new SparkplugSettings());
+        using var service = new ChartDataService(client, new JsonFieldExtractor(), _registry, _mockChartSettings,
+            TestPipelineHelper.BuildBuiltInPipeline(), sparkplugSettings);
+        service.SetConnection(connectionId);
+        await service.StartAsync();
+
+        var payload = new Payload();
+        payload.Metrics.Add(new Payload.Types.Metric
+        {
+            Name = "Set Point",
+            Datatype = 12,
+            StringValue = "22.5"
+        });
+
+        await handler!(MakeBinaryArgs(topic, payload.ToByteArray()));
+
+        service.GetPoints(seriesId).Should().ContainSingle()
+            .Which.Value.Should().BeApproximately(22.5, 0.001);
+    }
+
+    [Test]
+    public async Task SparkplugNamedNonNumericStringValue_DoesNotAddChartPoint()
+    {
+        const string topic = "spBv1.0/g/NDATA/node-1";
+        var connectionId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        var client = Substitute.For<IMqttManagedClient>();
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+        _mockChartSettings.GetCharts(connectionId).Returns(
+        [
+            ConfigWith(100, new ChartSeries
+            {
+                Id = seriesId,
+                Topic = topic,
+                JsonPath = "metrics.Device State"
+            })
+        ]);
+        var sparkplugSettings = Substitute.For<ISparkplugSettings>();
+        sparkplugSettings.Sparkplug.Returns(new SparkplugSettings());
+        using var service = new ChartDataService(client, new JsonFieldExtractor(), _registry, _mockChartSettings,
+            TestPipelineHelper.BuildBuiltInPipeline(), sparkplugSettings);
+        service.SetConnection(connectionId);
+        await service.StartAsync();
+
+        var payload = new Payload();
+        payload.Metrics.Add(new Payload.Types.Metric
+        {
+            Name = "Device State",
+            Datatype = 12,
+            StringValue = "Running"
+        });
+        await handler!(MakeBinaryArgs(topic, payload.ToByteArray()));
+
+        service.GetPoints(seriesId).Should().BeEmpty();
+    }
+
+    [Test]
+    [TestCase(false, "spBv1.0/g/NDATA/eon1", "spBv1.0/g/NBIRTH/eon1")]
+    [TestCase(true, "spBv1.0/g/DDATA/eon1/motor-1", "spBv1.0/g/DBIRTH/eon1/motor-1")]
+    public async Task SparkplugAliasOnlyStringMetricValue_AddsChartPointWithResolvedName(
+        bool isDevice, string dataTopic, string birthTopic)
+    {
+        const ulong alias = 42;
+        const string metricName = "Set Point";
+        var connectionId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        var topology = new SparkplugTopologyService();
+        TopologyEvent birthEvent;
+        if (isDevice)
+        {
+            birthEvent = new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = birthTopic,
+                GroupId = "g",
+                NodeId = "eon1",
+                DeviceId = "motor-1",
+                Metrics = [new MetricSnapshot { Name = metricName, DataType = "string", Value = "22.5", Alias = alias }]
+            };
+        }
+        else
+        {
+            birthEvent = new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = birthTopic,
+                GroupId = "g",
+                NodeId = "eon1",
+                Metrics = [new MetricSnapshot { Name = metricName, DataType = "string", Value = "22.5", Alias = alias }]
+            };
+        }
+        await topology.ApplyTopologyEventsAsync([birthEvent]);
+
+        var client = Substitute.For<IMqttManagedClient>();
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+        _mockChartSettings.GetCharts(connectionId).Returns(
+        [
+            ConfigWith(100, new ChartSeries
+            {
+                Id = seriesId,
+                Topic = dataTopic,
+                JsonPath = "metrics.Set Point"
+            })
+        ]);
+        var sparkplugSettings = Substitute.For<ISparkplugSettings>();
+        sparkplugSettings.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
+        using var service = new ChartDataService(client, new JsonFieldExtractor(), _registry, _mockChartSettings,
+            TestPipelineHelper.BuildBuiltInPipeline(), sparkplugSettings, topology);
+        service.SetConnection(connectionId);
+        await service.StartAsync();
+
+        var payload = new Payload();
+        payload.Metrics.Add(new Payload.Types.Metric
+        {
+            Alias = alias,
+            Datatype = 12,
+            StringValue = "22.5"
+        });
+        await handler!(MakeBinaryArgs(dataTopic, payload.ToByteArray()));
+
+        service.GetPoints(seriesId).Should().ContainSingle()
+            .Which.Value.Should().BeApproximately(22.5, 0.001);
+    }
+
+    [Test]
+    public async Task SparkplugDeviceAliasOnlyMetric_ResolvesNameFromDecodedPayload()
+    {
+        var topology = new SparkplugTopologyService();
+        await topology.ApplyTopologyEventsAsync(
+        [
+            new DeviceBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/DBIRTH/eon1/motor-1",
+                GroupId = "g",
+                NodeId = "eon1",
+                DeviceId = "motor-1",
+                Metrics = [new MetricSnapshot { Name = "Motor Temp", DataType = "double", Value = "1.0000", Alias = 43 }]
+            }
+        ]);
+
+        var sparkplugSettings = Substitute.For<ISparkplugSettings>();
+        sparkplugSettings.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
+
+        var connectionId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        var settings = Substitute.For<IChartSettings>();
+        settings.GetCharts(connectionId).Returns(
+        [
+            ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "spBv1.0/g/DDATA/eon1/motor-1", JsonPath = "metrics.Motor Temp" })
+        ]);
+
+        var client = Substitute.For<IMqttManagedClient>();
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        using var service = new ChartDataService(client, new JsonFieldExtractor(), new ChartFieldRegistry(),
+            settings, TestPipelineHelper.BuildBuiltInPipeline(), sparkplugSettings, topology);
+        service.SetConnection(connectionId);
+        await service.StartAsync();
+
+        await handler!(MakeBinaryArgs("spBv1.0/g/DDATA/eon1/motor-1", AliasOnlySparkplugPayload(43)));
+
+        service.GetPoints(seriesId).Should().ContainSingle()
+            .Which.Value.Should().BeApproximately(24.5, 0.001);
+    }
+
     [Test]
     public async Task SparkplugAliasOnlyMetric_ResolvesNameFromDecodedPayload()
     {
@@ -642,10 +834,10 @@ public class ChartDataServiceMessageHandlerTests
         return new MqttApplicationMessageReceivedEventArgs("test-client", appMsg, packet, null);
     }
 
-    private static byte[] AliasOnlySparkplugPayload()
+    private static byte[] AliasOnlySparkplugPayload(ulong alias = 42)
     {
         var payload = new Payload { Timestamp = 2 };
-        payload.Metrics.Add(new Payload.Types.Metric { Alias = 42, Datatype = 10, DoubleValue = 24.5 });
+        payload.Metrics.Add(new Payload.Types.Metric { Alias = alias, Datatype = 10, DoubleValue = 24.5 });
         return payload.ToByteArray();
     }
 

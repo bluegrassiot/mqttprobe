@@ -1,15 +1,18 @@
 @namespace MqttProbe.UI.Components.Sparkplug
 @using MqttProbe.Core.Models.Sparkplug
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <MudTable Items="@Items"
           Dense="true" Hover="true" Elevation="0"
           Breakpoint="Breakpoint.None" Class="@Class" RowClass="spb-metric-row">
     <ColGroup>
-        <col style="width: 30%;" />
-        <col style="width: 15%;" />
-        <col style="width: 15%;" />
-        <col style="width: 25%;" />
-        <col style="width: 15%;" />
+        <col class="spb-col-name" />
+        <col class="spb-col-type" />
+        <col class="spb-col-alias" />
+        <col class="spb-col-value" />
+        <col class="spb-col-updated" />
+        <col class="spb-col-chart" />
     </ColGroup>
     <HeaderContent>
         <MudTh>
@@ -21,6 +24,7 @@
         <MudTh Class="spb-th-right">Alias</MudTh>
         <MudTh Class="spb-th-right">Value</MudTh>
         <MudTh>Updated</MudTh>
+        <MudTh Class="spb-th-right">Chart</MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd Class="spb-td-name">@context.Name</MudTd>
@@ -28,11 +32,19 @@
         <MudTd Class="spb-td-alias spb-th-right">
             @(context.Alias.HasValue ? context.Alias.Value.ToString() : "\u2014")
         </MudTd>
-        <MudTd Class="spb-td-value" Style="@($"color:{SparkplugNodeDisplay.ValueColor(context)}")">
+        <MudTd Class="@($"spb-td-value {SparkplugNodeDisplay.ValueCssClass(context)}")">
             @context.Value
         </MudTd>
         <MudTd Class="spb-td-updated">
             @context.LastUpdated.ToLocalTime().ToString("HH:mm:ss")
+        </MudTd>
+        <MudTd Class="spb-td-chart">
+            @if (SparkplugChartField.IsChartable(context))
+            {
+                <AddToChartButton JsonPath="@SparkplugChartField.JsonPath(context.Name)"
+                                  SeriesName="@context.Name"
+                                  OnAddToChart="HandleAddToChart" />
+            }
         </MudTd>
     </RowTemplate>
 </MudTable>
@@ -43,4 +55,13 @@
 
     [Parameter]
     public string? Class { get; set; }
+
+    [Parameter]
+    public string? Topic { get; set; }
+
+    private Task HandleAddToChart(ChartFieldSelection selection) =>
+        string.IsNullOrWhiteSpace(Topic)
+            ? Task.CompletedTask
+            : ChartQuickAdd.AddToChartAsync(
+                DialogService, Snackbar, Topic, selection.JsonPath, selection.SeriesName ?? "");
 }

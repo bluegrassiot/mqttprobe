@@ -222,6 +222,12 @@
         margin-right: 6px;
         color: var(--mud-palette-text-disabled);
     }
+
+    /* The chart action joins the meta line and sits at its right edge. */
+    .spb-split__detail ::deep .spb-td-chart {
+        order: 7;
+        margin-left: auto;
+    }
 }
 
 /* ── Header chips and filters ────────────────────────────────────────────── */
@@ -364,13 +370,33 @@
     font-family: var(--font-mono);
     font-size: 13px;
     overflow-wrap: anywhere;
-    /* color kept inline — driven by ValueColor() */
 }
+
+::deep .spb-td-value--numeric { color: var(--mud-palette-success); }
+::deep .spb-td-value--text    { color: var(--mud-palette-text-secondary); }
 
 ::deep .spb-td-updated {
     font-family: var(--font-mono);
     font-size: 12px;
     color: var(--mud-palette-text-secondary);
+}
+
+/* The chart cell rules live here, next to the other metric cell rules: MudTd
+   renders the td without a scope attribute of its own, so a rule scoped to the
+   table component would never reach it. */
+::deep .spb-td-chart {
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* The shared button carries a left margin for its inline use in the payload
+   tree; inside a table cell it has to sit flush against the column edge. */
+::deep .spb-td-chart .json-chart-btn {
+    margin-left: 0;
+}
+
+::deep .spb-td-chart .json-chart-btn__label {
+    white-space: nowrap;
 }
 
 /* ── Device list ─────────────────────────────────────────────────────────── */

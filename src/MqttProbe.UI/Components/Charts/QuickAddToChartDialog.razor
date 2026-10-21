@@ -12,13 +12,12 @@
     </TitleContent>
     <DialogContent>
         <!-- Field info -->
-        <MudPaper Elevation="0" Class="pa-2 mb-3 rounded"
-                  Style="background:var(--mud-palette-background-grey); border:1px solid var(--mud-palette-lines-default)">
-            <MudText Typo="Typo.subtitle2" Style="font-weight:600">@SeriesName</MudText>
-            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-family:var(--font-mono)">
+        <div class="quick-add-field-info pa-2 mb-3 rounded">
+            <MudText Typo="Typo.subtitle2" Class="quick-add-field-info__name">@SeriesName</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="quick-add-field-info__meta">
                 @Topic › @JsonPath
             </MudText>
-        </MudPaper>
+        </div>
 
         <MudTextField @bind-Value="_displayName" Label="Line Label" Variant="Variant.Outlined"
                       Margin="Margin.Dense"
@@ -46,16 +45,15 @@
             {
                 var c = chart;
                 var isSelected = _selectedChartId == c.Id;
-                <div class="pa-2 mb-1 rounded"
+                <div class="quick-add-chart-option pa-2 mb-1 rounded @(isSelected ? "quick-add-chart-option--selected" : "")"
                      role="button" tabindex="0"
-                     style="cursor:pointer; border:2px solid @(isSelected ? "var(--mud-palette-primary)" : "var(--mud-palette-lines-default)"); background:@(isSelected ? "var(--mud-palette-action-default-hover)" : "transparent")"
                      @onclick="() => _selectedChartId = c.Id"
                      @onkeydown="(e => HandleChartKeySelection(e, c.Id))">
                     <div class="d-flex align-center gap-2">
                         <MudIcon Icon="@LucideIcons.Activity" Size="Size.Small"
                                  Color="@(isSelected ? Color.Primary : Color.Secondary)"/>
                         <div>
-                            <MudText Typo="Typo.body2" Style="font-weight:600">@c.Name</MudText>
+                            <MudText Typo="Typo.body2" Class="quick-add-chart-option__name">@c.Name</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                 @c.Series.Count series · @c.Type
                             </MudText>

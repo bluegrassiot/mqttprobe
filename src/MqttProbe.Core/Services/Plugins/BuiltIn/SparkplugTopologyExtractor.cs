@@ -334,6 +334,9 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
             _ => "unknown"
         };
 
+        if (dataType == "unknown" && metric.ValueCase == Payload.Types.Metric.ValueOneofCase.BooleanValue)
+            dataType = "bool";
+
         var value = metric.ValueCase switch
         {
             // Invariant so the displayed value matches what is on the wire rather than

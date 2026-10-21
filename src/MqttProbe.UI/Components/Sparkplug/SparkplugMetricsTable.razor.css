@@ -1,0 +1,9 @@
+/* Column widths for the metric table. The <col> elements live in this
+   component's own markup, so the scoped selector reaches them. The action
+   column gets the room the shared chart button needs. */
+.spb-col-name    { width: 26%; }
+.spb-col-type    { width: 9%; }
+.spb-col-alias   { width: 9%; }
+.spb-col-value   { width: 20%; }
+.spb-col-updated { width: 12%; }
+.spb-col-action  { width: 24%; }

@@ -216,6 +216,10 @@
     .spb-split__detail ::deep .spb-td-alias   { order: 5; text-align: left; }
     .spb-split__detail ::deep .spb-td-updated { order: 6; }
 
+    /* The chart action rides at the end of the meta line, so the value keeps
+       its flush-right alignment. */
+    .spb-split__detail ::deep .spb-td-action { order: 7; margin-left: 8px; }
+
     .spb-split__detail ::deep .spb-td-alias::before,
     .spb-split__detail ::deep .spb-td-updated::before {
         content: "·";
@@ -372,6 +376,17 @@
     font-size: 12px;
     color: var(--mud-palette-text-secondary);
 }
+
+/* The chart action sits in its own column so a long metric name keeps the name
+   column to itself. The cell repeats MudBlazor's own cell chain so its tighter
+   padding outranks the table default, which keeps the button label on one line. */
+::deep .mud-table-root .mud-table-body .mud-table-row .mud-table-cell.spb-td-action {
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+/* The shared button carries a left margin for the JSON tree. */
+::deep .spb-td-action .json-chart-btn { margin-left: 0; }
 
 /* ── Device list ─────────────────────────────────────────────────────────── */
 

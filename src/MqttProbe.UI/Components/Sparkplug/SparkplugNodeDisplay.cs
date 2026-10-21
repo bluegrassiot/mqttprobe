@@ -33,6 +33,30 @@ public static class SparkplugNodeDisplay
             or "uint8" or "uint16" or "uint32" or "uint64"
             or "float" or "double";
 
+    // The chart plots numbers, so a metric is chartable when the value on the wire
+    // is one: a numeric type, a boolean the chart reads as 1 or 0, or a DateTime
+    // epoch. A string metric arrives as string_value, which the chart extractor
+    // does not read, so it would never produce a point.
+    public static bool IsChartableMetric(SpbMetricSnapshot metric) =>
+        HasValue(metric) && (IsNumericType(metric.DataType) || metric.DataType is "bool" or "datetime");
+
+    // A metric that carried no value shows the extractor's placeholder.
+    private static bool HasValue(SpbMetricSnapshot metric) =>
+        !string.IsNullOrEmpty(metric.Value) && metric.Value != "\u2014";
+
+    public static string NodeDataTopic(SpbNode node) =>
+        $"spBv1.0/{node.GroupId}/NDATA/{node.NodeId}";
+
+    public static string DeviceDataTopic(SpbDevice device) =>
+        $"spBv1.0/{device.GroupId}/DDATA/{device.NodeId}/{device.DeviceId}";
+
+    // The chart extractor keys a named metric by its metric name, so a Sparkplug
+    // metric charts under metrics.<Name>, the same convention the payload browser's
+    // JSON tree produces. A metric published with only an alias is charted under
+    // the name its birth message gave it, and that path only resolves while alias
+    // enrichment is on.
+    public static string MetricChartPath(string metricName) => $"metrics.{metricName}";
+
     public static string ValueColor(SpbMetricSnapshot metric) =>
         IsNumericType(metric.DataType) ? "var(--mud-palette-success)" : "var(--mud-palette-text-secondary)";
 

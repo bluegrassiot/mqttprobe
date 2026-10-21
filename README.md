@@ -53,6 +53,14 @@ Create your admin password, add a broker connection, then subscribe to topics an
 
 See [Getting Started](https://github.com/bluegrassiot/mqttprobe/wiki/01-Getting-Started) and [Connection Setup](https://github.com/bluegrassiot/mqttprobe/wiki/02-Connection-Setup).
 
+### Chart Sparkplug metrics
+
+In **Nodes**, use **Add to chart** on a node or expanded device metric. The series follows the metric's name on its ongoing `NDATA` or `DDATA` topic, preserving spaces and case. Numeric metrics and timestamps are supported; timestamps plot as raw Unix epoch milliseconds, and booleans as 1 or 0. Nodes does not offer string metrics, including numeric strings, or bytes because the Sparkplug chart extractor does not read those value fields. Message details still offers its existing indexed action for numeric string leaves, but a named Sparkplug string metric currently produces no chart fields.
+
+For alias-only updates, turn on **Enrich Sparkplug alias names** in Settings and ensure the node or device birth message has been received. The chart uses the name from that birth message.
+
+Collection currently starts when you first open **Charts**, not when you create the chart from Nodes. Updates received before that first visit are not collected.
+
 ## Docs
 
 - [Home](https://github.com/bluegrassiot/mqttprobe/wiki)

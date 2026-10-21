@@ -1,0 +1,10 @@
+/* Column widths for the metric table. The col elements belong to this
+   component, so they carry its scope attribute and the widths apply.
+   The chart column keeps room for the shared ADD TO CHART button so the
+   label never clips. */
+.spb-col-name    { width: 25%; }
+.spb-col-type    { width: 11%; }
+.spb-col-alias   { width: 10%; }
+.spb-col-value   { width: 20%; }
+.spb-col-updated { width: 14%; }
+.spb-col-chart   { width: 20%; }

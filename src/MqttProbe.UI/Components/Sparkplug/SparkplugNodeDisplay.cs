@@ -33,8 +33,8 @@ public static class SparkplugNodeDisplay
             or "uint8" or "uint16" or "uint32" or "uint64"
             or "float" or "double";
 
-    public static string ValueColor(SpbMetricSnapshot metric) =>
-        IsNumericType(metric.DataType) ? "var(--mud-palette-success)" : "var(--mud-palette-text-secondary)";
+    public static string ValueCssClass(SpbMetricSnapshot metric) =>
+        IsNumericType(metric.DataType) ? "spb-td-value--numeric" : "spb-td-value--text";
 
     public static string NodeSecondaryText(SpbNode node)
     {

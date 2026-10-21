@@ -131,6 +131,7 @@ else
         else
         {
             <SparkplugMetricsTable Class="mb-3"
+                                   Topic="@SparkplugChartField.NodeTopic(Node.GroupId, Node.NodeId)"
                                    Items="@Node.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)" />
         }
 
@@ -177,7 +178,9 @@ else
                         }
                         else
                         {
-                            <SparkplugMetricsTable Items="@device.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)" />
+                            <SparkplugMetricsTable
+                                Topic="@SparkplugChartField.DeviceTopic(device.GroupId, device.NodeId, device.DeviceId)"
+                                Items="@device.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)" />
                         }
                     </div>
                 }

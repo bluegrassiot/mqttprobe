@@ -328,6 +328,23 @@ body:has(.mud-dialog-container) .mobile-primary-nav {
     overflow: hidden;
 }
 
+.mud-dialog.quick-add-dialog-paper {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.mud-dialog.quick-add-dialog-paper > .mud-dialog-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.mud-dialog.quick-add-dialog-paper > .mud-dialog-actions {
+    flex: 0 0 auto;
+}
+
 .mud-dialog.connection-dialog-paper > div:not(.mud-dialog-title),
 .mud-dialog.connection-dialog-paper .mud-focus-trap-child-container,
 .mud-dialog.connection-dialog-paper .mud-dialog-content {

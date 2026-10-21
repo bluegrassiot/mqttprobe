@@ -50,6 +50,9 @@ public class ChartsComponentTests : BunitTestContext
         var cut = Render<ChartsComponent>();
 
         cut.Markup.Should().Contain("No charts yet");
+        cut.Markup.Should().Contain("select a node or device, then choose the chart icon");
+        cut.Markup.Should().Contain("values are not exposed under a stable metric name");
+        cut.Markup.Should().NotContain("open a metric");
         return Task.CompletedTask;
     }
 

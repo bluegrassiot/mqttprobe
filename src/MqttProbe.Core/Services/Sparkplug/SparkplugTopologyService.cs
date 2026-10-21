@@ -355,12 +355,15 @@ public sealed partial class SparkplugTopologyService(
         {
             if (index.TryGetValue(snapshot.Name, out var idx))
             {
-                metrics[idx] = snapshot;
+                var dataType = snapshot.DataType;
+                if (dataType.Length == 0)
+                    dataType = metrics[idx].DataType.Length > 0 ? metrics[idx].DataType : "unknown";
+                metrics[idx] = snapshot with { DataType = dataType };
             }
             else
             {
                 index[snapshot.Name] = metrics.Count;
-                metrics.Add(snapshot);
+                metrics.Add(snapshot.DataType.Length > 0 ? snapshot : snapshot with { DataType = "unknown" });
             }
         }
 

@@ -80,7 +80,8 @@
                              OnToggleDevice="@ToggleDevice"
                              OnRequestRebirth="@RequestRebirthAsync"
                              OnRequestReboot="@RequestRebootAsync"
-                             OnRequestDeviceRebirth="@RequestDeviceRebirthAsync" />
+                             OnRequestDeviceRebirth="@RequestDeviceRebirthAsync"
+                             OnAddMetricToChart="@AddMetricToChartAsync" />
     </div>
 </div>
 
@@ -218,6 +219,10 @@
     {
         _selectedDevice = _selectedDevice == device ? null : device;
     }
+
+    private Task AddMetricToChartAsync(SparkplugChartSelection selection) =>
+        QuickAddToChartLauncher.ShowAsync(
+            DialogService, Snackbar, selection.Topic, selection.JsonPath, selection.SeriesName);
 
     private void OnGroupFilterChanged(string? groupId)
     {

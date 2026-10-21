@@ -94,6 +94,11 @@
     padding: 0;
 }
 
+.spb-split__detail ::deep .mud-table-cell {
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
 @media (max-width: 959px) {
     .spb-split {
         flex-direction: column;
@@ -136,13 +141,14 @@
         overflow-y: auto;
     }
 
-    /* Metric tables have 5 columns that never fit ~360px. Rather than let each
-       one scroll horizontally under a capped height — which stacks two or three
-       nested scrollbars on top of the detail panel's own — collapse every row
-       into a stacked card, the same approach the Browser tab uses. Name + value
-       read as the headline; type/alias/updated drop to a muted meta line. Only
-       the detail panel's vertical scroll remains. ::deep throughout because
-       MudTable owns this markup without the component's scope attribute. */
+    /* Metric tables never fit ~360px. Rather than let each one scroll
+       horizontally under a capped height — which stacks two or three nested
+       scrollbars on top of the detail panel's own — collapse every row into a
+       stacked card, the same approach the Browser tab uses. Name + value read
+       as the headline; type/alias/updated drop to a muted meta line and the
+       chart action gets its own line. Only the detail panel's vertical scroll
+       remains. ::deep throughout because MudTable owns this markup without the
+       component's scope attribute. */
     .spb-split__detail ::deep .mud-table-container {
         overflow-x: hidden;
     }
@@ -215,6 +221,13 @@
     .spb-split__detail ::deep .spb-td-type    { order: 4; }
     .spb-split__detail ::deep .spb-td-alias   { order: 5; text-align: left; }
     .spb-split__detail ::deep .spb-td-updated { order: 6; }
+
+    .spb-split__detail ::deep .spb-td-chart {
+        order: 7;
+        flex: 0 0 100%;
+        margin-top: 4px;
+        padding: 0;
+    }
 
     .spb-split__detail ::deep .spb-td-alias::before,
     .spb-split__detail ::deep .spb-td-updated::before {
@@ -371,6 +384,11 @@
     font-family: var(--font-mono);
     font-size: 12px;
     color: var(--mud-palette-text-secondary);
+}
+
+::deep .spb-td-chart .json-chart-btn {
+    margin-left: 0;
+    white-space: nowrap;
 }
 
 /* ── Device list ─────────────────────────────────────────────────────────── */

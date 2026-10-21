@@ -131,7 +131,9 @@ else
         else
         {
             <SparkplugMetricsTable Class="mb-3"
-                                   Items="@Node.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)" />
+                                   Topic="@SparkplugChartTargets.NodeTopic(Node.GroupId, Node.NodeId)"
+                                   Items="@Node.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
+                                   OnAddToChart="OnAddMetricToChart" />
         }
 
         <div class="spb-subsection-header">
@@ -177,7 +179,10 @@ else
                         }
                         else
                         {
-                            <SparkplugMetricsTable Items="@device.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)" />
+                            <SparkplugMetricsTable
+                                Topic="@SparkplugChartTargets.DeviceTopic(Node.GroupId, Node.NodeId, device.DeviceId)"
+                                Items="@device.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
+                                OnAddToChart="OnAddMetricToChart" />
                         }
                     </div>
                 }
@@ -268,4 +273,7 @@ else
 
     [Parameter]
     public EventCallback<SpbDevice> OnRequestDeviceRebirth { get; set; }
+
+    [Parameter]
+    public EventCallback<SparkplugChartSelection> OnAddMetricToChart { get; set; }
 }

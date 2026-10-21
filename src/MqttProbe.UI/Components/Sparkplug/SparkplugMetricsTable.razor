@@ -5,11 +5,12 @@
           Dense="true" Hover="true" Elevation="0"
           Breakpoint="Breakpoint.None" Class="@Class" RowClass="spb-metric-row">
     <ColGroup>
-        <col style="width: 30%;" />
-        <col style="width: 15%;" />
-        <col style="width: 15%;" />
-        <col style="width: 25%;" />
-        <col style="width: 15%;" />
+        <col />
+        <col class="spb-col-type" />
+        <col class="spb-col-alias" />
+        <col class="spb-col-value" />
+        <col class="spb-col-updated" />
+        <col class="spb-col-chart" />
     </ColGroup>
     <HeaderContent>
         <MudTh>
@@ -21,6 +22,7 @@
         <MudTh Class="spb-th-right">Alias</MudTh>
         <MudTh Class="spb-th-right">Value</MudTh>
         <MudTh>Updated</MudTh>
+        <MudTh>Chart</MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd Class="spb-td-name">@context.Name</MudTd>
@@ -34,6 +36,14 @@
         <MudTd Class="spb-td-updated">
             @context.LastUpdated.ToLocalTime().ToString("HH:mm:ss")
         </MudTd>
+        <MudTd Class="spb-td-chart">
+            @if (OnAddToChart.HasDelegate && SparkplugChartTargets.IsChartable(context))
+            {
+                <AddToChartButton JsonPath="@SparkplugChartTargets.JsonPath(context.Name)"
+                                  SeriesName="@context.Name"
+                                  OnAddToChart="@(selection => AddToChart(context, selection))" />
+            }
+        </MudTd>
     </RowTemplate>
 </MudTable>
 
@@ -43,4 +53,14 @@
 
     [Parameter]
     public string? Class { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Topic { get; set; } = "";
+
+    [Parameter]
+    public EventCallback<SparkplugChartSelection> OnAddToChart { get; set; }
+
+    private Task AddToChart(SpbMetricSnapshot metric, ChartFieldSelection selection) =>
+        OnAddToChart.InvokeAsync(new SparkplugChartSelection(
+            Topic, selection.JsonPath, selection.SeriesName ?? metric.Name));
 }

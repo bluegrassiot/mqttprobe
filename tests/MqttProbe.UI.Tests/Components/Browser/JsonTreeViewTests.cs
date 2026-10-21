@@ -321,6 +321,23 @@ public class JsonTreeViewTests : BunitTestContext
         cut.FindAll(".json-chart-btn").Should().ContainSingle();
     }
 
+    [TestCase("stringValue")]
+    [TestCase("string_value")]
+    public async Task SparkplugStringValue_NumericString_UsesIndexedPathAndShortSeriesName(string propertyName)
+    {
+        ChartFieldSelection? captured = null;
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, $$"""{"metrics":[{"name":"Batch Count","datatype":12,"{{propertyName}}":"42"}]}""")
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+        await cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        var button = cut.Find(".json-chart-btn");
+        await button.ClickAsync(new());
+
+        captured.Should().Be(new ChartFieldSelection($"metrics[0].{propertyName}"));
+        PayloadBrowser.ChartLabel(captured!).Should().Be(propertyName);
+    }
+
     [Test]
     public async Task SparkplugValue_InvokesCallbackWithMetricNameAsSeriesName()
     {

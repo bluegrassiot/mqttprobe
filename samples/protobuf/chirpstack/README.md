@@ -1,6 +1,6 @@
 # ChirpStack protobuf sample
 
-Decodes ChirpStack v4 uplink events with mqttprobe's built-in `protobuf` format.
+Decodes ChirpStack v4 gateway and integration protobuf payloads with mqttprobe's built-in `protobuf` format.
 
 The `.proto` files here are **ChirpStack's own, copied verbatim** — nothing was
 trimmed, inlined, or rewritten. That is the point of this sample: you drop your
@@ -72,8 +72,9 @@ in the store keep the decoding they were captured with; new messages use the new
   topics map to which message type.
 - `integration/`, `gw/`, `common/` — unmodified ChirpStack v4 schema files, in their
   original directory layout so the `import` statements resolve as written.
-- `sample-uplink.b64` — a base64-encoded sample uplink payload for replay/testing. It
-  covers the `up` topic only; the other mappings are exercised against live traffic.
+- `sample-uplink.b64`: a base64-encoded application uplink payload for replay/testing. It
+  covers the application `up` topic only. Gateway payloads are not included; the gateway
+  mappings are exercised against live traffic.
 
 `integration.proto` also imports `google/protobuf/timestamp.proto` and `struct.proto`.
 You do **not** need to supply those — mqttprobe's protobuf parser resolves the Google
@@ -81,8 +82,7 @@ well-known types itself.
 
 ## What gets decoded
 
-The manifest maps **every** topic ChirpStack uses — all seven device events plus the
-downlink command topic:
+The manifest maps the ChirpStack v4 gateway topics, all seven device events, and the downlink command topic:
 
 | Topic | Message |
 |-------|---------|
@@ -94,9 +94,27 @@ downlink command topic:
 | `application/+/device/+/event/status` | `integration.StatusEvent` |
 | `application/+/device/+/event/location` | `integration.LocationEvent` |
 | `application/+/device/+/command/down` | `integration.DownlinkCommand` |
+| `+/gateway/+/event/up` | `gw.UplinkFrame` |
+| `+/gateway/+/event/stats` | `gw.GatewayStats` |
+| `+/gateway/+/event/ack` | `gw.DownlinkTxAck` |
+| `+/gateway/+/command/down` | `gw.DownlinkFrame` |
+| `+/gateway/+/state/conn` | `gw.ConnState` |
 
-The command topic is included because applications *publish* downlinks there — those
-messages cross the broker, so mqttprobe sees them too.
+The application command topic is included because applications *publish* downlinks there. The
+gateway topics cover what ChirpStack publishes to and receives from the gateway itself.
+
+Gateway topics carry a region level in front, for example
+`us915_1/gateway/008000000001fdbd/event/up`, so the `+` in the first position matches the
+region name. If your broker publishes gateway topics without that region level
+(`gateway/<gateway_id>/event/up`), add a second mapping for each message with the shorter
+pattern. One pattern cannot match both shapes.
+
+`gw.UplinkFrame.phy_payload` stays as the encrypted LoRaWAN PHYPayload bytes, shown base64
+encoded. Gateway decoding exposes the radio metadata around those bytes. Decrypted application
+data appears on the integration event topics, not here.
+
+`state/conn` decodes to `gw.ConnState` with the gateway id and a `state` value of `ONLINE` or
+`OFFLINE`.
 
 ## The manifest
 
@@ -107,6 +125,11 @@ messages cross the broker, so mqttprobe sees them too.
       "files": [ "integration/integration.proto" ],
       "topicPattern": "application/+/device/+/event/up",
       "messageType": "integration.UplinkEvent"
+    },
+    {
+      "files": [ "gw/gw.proto" ],
+      "topicPattern": "+/gateway/+/event/up",
+      "messageType": "gw.UplinkFrame"
     }
   ]
 }
@@ -131,7 +154,14 @@ and subscribes for downlinks on:
 
     application/{application_id}/device/{dev_eui}/command/{command}
 
-Both templates are configurable in ChirpStack; if you have changed them, adjust
+Gateway traffic uses:
+
+    {region}/gateway/{gateway_id}/event/{event_type}
+    {region}/gateway/{gateway_id}/command/down
+    {region}/gateway/{gateway_id}/state/conn
+
+The gateway event types are `up`, `stats`, and `ack`. Connection state uses `state/conn`.
+These templates are configurable in ChirpStack; if you have changed them, adjust
 `topicPattern` to match.
 
 ### Tracking upstream instead
@@ -147,6 +177,10 @@ Nothing here is special to these copies. To follow upstream, clone
 
 (or publish the decoded bytes with any MQTT client). mqttprobe will show the decoded
 `UplinkEvent` fields (`f_cnt`, `device_info.dev_eui`, `data`, …) in the payload tree.
+
+Gateway frames can be replayed the same way on `us915_1/gateway/<gateway_id>/event/up` (or
+your region prefix). The decoded `phy_payload` remains the encrypted LoRaWAN bytes; mqttprobe
+shows those bytes and the surrounding radio metadata, not decrypted sensor values.
 
 Use `-s` (`--stdin-file`), not `-l` (`--stdin-line`): the payload is binary and contains
 `0x0a` bytes, which `-l` would treat as message separators — publishing several truncated

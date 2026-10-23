@@ -69,8 +69,7 @@ public class ProtobufChirpStackEndToEndTests
             "the sample installs as its own schema-set subdirectory");
 
         var registry = new ProtobufSchemaRegistry(sources);
-        registry.Diagnostics.Should().BeEmpty(
-            "the unmodified ChirpStack schema must parse with no errors or warnings");
+        ChirpStackSampleDiagnostics.ShouldMatch(registry);
         registry.HasAnySchemas.Should().BeTrue();
 
         var envelope = new ProtobufPayloadDecoder(registry)
@@ -97,7 +96,7 @@ public class ProtobufChirpStackEndToEndTests
     {
         var sources = ProtobufSchemaFolderLoader.Discover([StageAsDroppedInPluginFolder()]);
         var registry = new ProtobufSchemaRegistry(sources);
-        registry.Diagnostics.Should().BeEmpty();
+        ChirpStackSampleDiagnostics.ShouldMatch(registry);
 
         registry.TryResolveByTopic($"application/1/device/0102030405060708/{suffix}", out var message)
             .Should().BeTrue($"the sample manifest must map {suffix}");

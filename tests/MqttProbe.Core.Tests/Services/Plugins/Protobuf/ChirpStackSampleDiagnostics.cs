@@ -14,6 +14,6 @@ internal static class ChirpStackSampleDiagnostics
         "WARN: topic pattern '+/gateway/+/state/conn' overlaps the Sparkplug B namespace (spBv1.0). Sparkplug decoding takes precedence there; the protobuf decoder will not claim those topics.",
     ];
 
-    public static void ShouldMatch(ProtobufSchemaRegistry registry) =>
+    public static void ShouldMatchKnownWarnings(ProtobufSchemaRegistry registry) =>
         registry.Diagnostics.Should().BeEquivalentTo(_knownWarnings);
 }

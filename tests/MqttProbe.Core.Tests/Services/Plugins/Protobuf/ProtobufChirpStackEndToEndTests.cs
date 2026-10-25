@@ -1,7 +1,5 @@
-using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
-using MQTTnet;
 using MqttProbe.Core.Models.Plugins;
 using MqttProbe.Core.Services.Platform;
 using MqttProbe.Core.Services.Plugins;
@@ -10,45 +8,18 @@ using MqttProbe.Core.Services.Plugins.Packaging;
 using MqttProbe.Core.Services.Plugins.Protobuf;
 using MqttProbe.PluginContracts;
 using static MqttProbe.Core.Tests.Services.Plugins.Packaging.PluginPackageTestData;
+using static MqttProbe.Core.Tests.Services.Plugins.Protobuf.ChirpStackSampleFixture;
 
 namespace MqttProbe.Core.Tests.Services.Plugins.Protobuf;
 
 [TestFixture]
 public class ProtobufChirpStackEndToEndTests
 {
-    private static string SamplesProtobufDir()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !Directory.Exists(Path.Combine(dir.FullName, "samples", "protobuf")))
-            dir = dir.Parent;
-        dir.Should().NotBeNull("repo root with samples/protobuf must be found");
-        return Path.Combine(dir.FullName, "samples", "protobuf");
-    }
-
-    private static string ChirpStackSampleDir() =>
-        Path.Combine(SamplesProtobufDir(), "chirpstack");
-
     private static string StageAsDroppedInPluginFolder()
     {
         var pluginFolder = Path.Combine(Path.GetTempPath(), "mqttprobe-plugins-" + Guid.NewGuid().ToString("N"));
         CopyDirectory(SamplesProtobufDir(), Path.Combine(pluginFolder, ProtobufSchemaFolderLoader.FolderName));
         return pluginFolder;
-    }
-
-    private static void CopyDirectory(string source, string destination)
-    {
-        Directory.CreateDirectory(destination);
-        foreach (var file in Directory.GetFiles(source))
-            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: true);
-        foreach (var sub in Directory.GetDirectories(source))
-            CopyDirectory(sub, Path.Combine(destination, Path.GetFileName(sub)));
-    }
-
-    private static MqttApplicationMessageReceivedEventArgs MakeArgs(string topic, byte[] payload)
-    {
-        var appMsg = new MqttApplicationMessageBuilder().WithTopic(topic).WithPayload(payload).Build();
-        var packet = new MQTTnet.Packets.MqttPublishPacket { Topic = topic };
-        return new MqttApplicationMessageReceivedEventArgs("test-client", appMsg, packet, null);
     }
 
     private static byte[] SamplePayload()
@@ -69,7 +40,7 @@ public class ProtobufChirpStackEndToEndTests
             "the sample installs as its own schema-set subdirectory");
 
         var registry = new ProtobufSchemaRegistry(sources);
-        ChirpStackSampleDiagnostics.ShouldMatch(registry);
+        ChirpStackSampleDiagnostics.ShouldMatchKnownWarnings(registry);
         registry.HasAnySchemas.Should().BeTrue();
 
         var envelope = new ProtobufPayloadDecoder(registry)
@@ -96,7 +67,7 @@ public class ProtobufChirpStackEndToEndTests
     {
         var sources = ProtobufSchemaFolderLoader.Discover([StageAsDroppedInPluginFolder()]);
         var registry = new ProtobufSchemaRegistry(sources);
-        ChirpStackSampleDiagnostics.ShouldMatch(registry);
+        ChirpStackSampleDiagnostics.ShouldMatchKnownWarnings(registry);
 
         registry.TryResolveByTopic($"application/1/device/0102030405060708/{suffix}", out var message)
             .Should().BeTrue($"the sample manifest must map {suffix}");
@@ -114,30 +85,6 @@ public class ProtobufChirpStackEndToEndTests
         registry.FindDecoder("protobuf").Should().NotBeNull();
         registry.FindDetector(MakeArgs("application/1/device/0102030405060708/event/up", SamplePayload()))
             !.FormatId.Should().Be("protobuf");
-    }
-
-    private static MemoryStream PackSampleAsPackage()
-    {
-        var buffer = new MemoryStream();
-        var sourceDir = ChirpStackSampleDir();
-
-        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
-            {
-                var relative = Path.GetRelativePath(sourceDir, file).Replace('\\', '/');
-
-                if (relative.EndsWith(".b64", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                zip.CreateEntryFromFile(file, relative);
-            }
-        }
-
-        buffer.Position = 0;
-        return buffer;
     }
 
     [Test]

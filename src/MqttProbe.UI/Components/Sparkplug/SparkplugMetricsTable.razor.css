@@ -1,5 +1,7 @@
-.spb-col-type { width: 58px; }
+/* Fixed columns stay narrow enough for the detail pane at its smallest size;
+   the metric name takes whatever is left and wraps. */
+.spb-col-type { width: 64px; }
 .spb-col-alias { width: 44px; }
-.spb-col-value { width: 16%; }
-.spb-col-updated { width: 70px; }
-.spb-col-chart { width: 126px; }
+.spb-col-value { width: 18%; }
+.spb-col-updated { width: 68px; }
+.spb-col-chart { width: 84px; }

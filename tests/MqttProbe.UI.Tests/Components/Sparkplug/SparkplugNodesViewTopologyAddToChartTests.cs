@@ -15,6 +15,8 @@ namespace MqttProbe.UI.Tests.Components.Sparkplug;
 public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
 {
     private const string AddToChartSelector = "button[title='Add to chart']";
+    private const int DormantRenderWindowMs = 600_000;
+    private const int HighRateBurstSize = 64;
     private const string Node = "edge-01";
     private const string Device = "sensor-A";
     private const string NodeBirthTopic = "spBv1.0/factory/NBIRTH/edge-01";
@@ -76,6 +78,99 @@ public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
             TimeSpan.FromSeconds(5));
         AssertChartButtons(cut, "Device Numeric", "Device Switch", "Device Timestamp");
         AssertNoChartButtons(cut, "Device String Number", "Device String Bool");
+    }
+
+    [Test]
+    public async Task NodeMetricRow_AliasOnlyValueUpdate_RetainsTheSameChartButtonComponent()
+    {
+        await FireAsync(NodeBirthTopic, NodeBirthPayload());
+        var cut = RenderNode();
+        HoldRefreshes(cut);
+        var before = ChartButton(cut, "Node Numeric").Instance;
+
+        await FireAsync(NodeDataTopic, NodeDataPayload(sequence: 1));
+        cut.Instance.RenderCoalescerForTest.Tick();
+
+        cut.WaitForAssertion(() => MetricValue(cut, "Node Numeric").Should().Be("25.0000"),
+            TimeSpan.FromSeconds(5));
+        var after = ChartButton(cut, "Node Numeric");
+        after.Instance.Should().BeSameAs(before,
+            "the row keeps its chart button while the value changes");
+        after.Instance.JsonPath.Should().Be("metrics.Node Numeric");
+        after.Instance.SeriesName.Should().Be("Node Numeric");
+    }
+
+    [Test]
+    public async Task NodeMetricRow_HighRateAliasOnlyBurst_ShowsLatestValueOnTheRetainedChartButton()
+    {
+        await FireAsync(NodeBirthTopic, NodeBirthPayload());
+        var cut = RenderNode();
+        HoldRefreshes(cut);
+        var before = ChartButton(cut, "Node Numeric").Instance;
+
+        for (var i = 0; i < HighRateBurstSize; i++)
+            await FireAsync(NodeDataTopic, AliasDoublePayload((ulong)(i + 1), 11, 100 + i));
+
+        cut.Instance.RenderCoalescerForTest.Tick();
+
+        cut.WaitForAssertion(() => MetricValue(cut, "Node Numeric").Should().Be("163.0000"),
+            TimeSpan.FromSeconds(5));
+        ChartButton(cut, "Node Numeric").Instance.Should().BeSameAs(before,
+            "one coalesced refresh keeps the row identity while showing the last value");
+    }
+
+    [Test]
+    public async Task DeviceMetricRow_AliasOnlyValueUpdate_RetainsTheSameChartButtonComponent()
+    {
+        await FireAsync(NodeBirthTopic, NodeBirthPayload());
+        await FireAsync(DeviceBirthTopic, DeviceBirthPayload());
+        var cut = RenderNode();
+        ExpandDevice(cut);
+        HoldRefreshes(cut);
+        var before = ChartButton(cut, "Device Numeric").Instance;
+
+        await FireAsync(DeviceDataTopic, DeviceDataPayload(sequence: 2));
+        cut.Instance.RenderCoalescerForTest.Tick();
+
+        cut.WaitForAssertion(() => MetricValue(cut, "Device Numeric").Should().Be("31.5000"),
+            TimeSpan.FromSeconds(5));
+        var after = ChartButton(cut, "Device Numeric");
+        after.Instance.Should().BeSameAs(before,
+            "the expanded device row keeps its chart button while the value changes");
+        after.Instance.JsonPath.Should().Be("metrics.Device Numeric");
+        after.Instance.SeriesName.Should().Be("Device Numeric");
+    }
+
+    [Test]
+    public async Task NodeMetricRow_AliasOnlyNonNumericValue_DropsOnlyThatChartButton()
+    {
+        await FireAsync(NodeBirthTopic, NodeBirthPayload());
+        var cut = RenderNode();
+        HoldRefreshes(cut);
+
+        await FireAsync(NodeDataTopic, AliasStringPayload(sequence: 1, alias: 11, value: "not-a-number"));
+        cut.Instance.RenderCoalescerForTest.Tick();
+
+        cut.WaitForAssertion(() => MetricValue(cut, "Node Numeric").Should().Be("not-a-number"),
+            TimeSpan.FromSeconds(5));
+        ChartButtonOrNull(cut, "Node Numeric").Should().BeNull("a non-numeric value is not chartable");
+        ChartButton(cut, "Node Switch").Instance.JsonPath.Should().Be("metrics.Node Switch",
+            "the other metrics stay chartable");
+    }
+
+    private static void HoldRefreshes(IRenderedComponent<SparkplugNodesView> cut) =>
+        cut.Instance.RenderCoalescerForTest.WindowMs = DormantRenderWindowMs;
+
+    private static IRenderedComponent<AddToChartButton> ChartButton(
+        IRenderedComponent<SparkplugNodesView> cut, string metricName) =>
+        ChartButtonOrNull(cut, metricName)
+        ?? throw new InvalidOperationException($"No add-to-chart button for {metricName}");
+
+    private static IRenderedComponent<AddToChartButton>? ChartButtonOrNull(
+        IRenderedComponent<SparkplugNodesView> cut, string metricName)
+    {
+        var jsonPath = SparkplugChartTargets.JsonPath(metricName);
+        return cut.FindComponents<AddToChartButton>().SingleOrDefault(button => button.Instance.JsonPath == jsonPath);
     }
 
     private async Task FireAsync(string topic, Payload payload)
@@ -157,6 +252,20 @@ public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
         payload.Metrics.Add(AliasString(23, "42"));
         payload.Metrics.Add(AliasString(24, "true"));
         payload.Metrics.Add(AliasLong(25, 1712345679000UL));
+        return payload;
+    }
+
+    private static Payload AliasDoublePayload(ulong sequence, ulong alias, double value)
+    {
+        var payload = new Payload { Seq = sequence, Timestamp = Now() };
+        payload.Metrics.Add(AliasDouble(alias, value));
+        return payload;
+    }
+
+    private static Payload AliasStringPayload(ulong sequence, ulong alias, string value)
+    {
+        var payload = new Payload { Seq = sequence, Timestamp = Now() };
+        payload.Metrics.Add(AliasString(alias, value));
         return payload;
     }
 

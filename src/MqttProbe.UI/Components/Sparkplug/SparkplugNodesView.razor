@@ -1,4 +1,5 @@
 @using Microsoft.Extensions.Logging
+@using Microsoft.JSInterop
 @using MqttProbe.Core.Models.Sparkplug
 @using MqttProbe.Core.Services.Configuration
 @inject ISparkplugTopologyService TopologyService
@@ -7,6 +8,7 @@
 @inject ILogger<SparkplugNodesView> Logger
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <TabPanelHeader Title="Nodes" Icon="@LucideIcons.Network" Class="app-tabpanel-header--stack-chips">
@@ -62,28 +64,29 @@
     </HeaderFilters>
 </TabPanelHeader>
 
-<div class="spb-split @(_selectedNode != null ? "spb-split--detail-open" : "")">
-    <div class="spb-split__nodes">
-        <SparkplugNodeList Groups="@GroupedNodes.ToList()"
-                           SelectedNode="@_selectedNode"
-                           FilterText="@_filterText"
-                           SelectedGroupId="@_selectedGroupId"
-                           OnSelect="@SelectNode"
-                           OnRemove="@RemoveNodeAsync" />
+<MudHidden Breakpoint="Breakpoint.SmAndDown">
+    <div class="spb-split-wrap" @ref="_splitWrapper">
+        <MudSplitPanel @ref="_splitPanel"
+                       Class="spb-split-panel app-split-panel"
+                       ClassFirstPanel="spb-panel-nodes"
+                       FirstPanelInitialSize="320" MinPanelSize="220"
+                       PanelGap="6" ResetOnDoubleClick="true" Transparent="true">
+            <FirstPanel>
+                <div class="spb-split__nodes">@_nodeList</div>
+            </FirstPanel>
+            <SecondPanel>
+                <div class="spb-split__detail">@_nodeDetail</div>
+            </SecondPanel>
+        </MudSplitPanel>
     </div>
+</MudHidden>
 
-    <div class="spb-split__detail">
-        <SparkplugNodeDetail Node="@_selectedNode"
-                             ExpandedDevice="@_selectedDevice"
-                             AllowNodeReboot="@SparkplugSettings.Sparkplug.AllowNodeReboot"
-                             OnBack="@ClearSelection"
-                             OnToggleDevice="@ToggleDevice"
-                             OnRequestRebirth="@RequestRebirthAsync"
-                             OnRequestReboot="@RequestRebootAsync"
-                             OnRequestDeviceRebirth="@RequestDeviceRebirthAsync"
-                             OnAddMetricToChart="@AddMetricToChartAsync" />
+<MudHidden Breakpoint="Breakpoint.MdAndUp">
+    <div class="spb-split @(_selectedNode != null ? "spb-split--detail-open" : "")">
+        <div class="spb-split__nodes">@_nodeList</div>
+        <div class="spb-split__detail">@_nodeDetail</div>
     </div>
-</div>
+</MudHidden>
 
 @code {
     private const int DefaultRenderCoalesceMs = 250;
@@ -95,6 +98,29 @@
     private Timer? _updateTimer;
     private RefreshCoalescer? _refreshCoalescer;
     private volatile bool _disposed;
+    private MudSplitPanel? _splitPanel;
+    private ElementReference _splitWrapper;
+    private SparkplugSplitBoundsInterop? _splitBounds;
+    private MudSplitPanel? _boundsPanel;
+    private bool _boundsInstalled;
+    private bool _splitSized;
+
+    private RenderFragment _nodeList => @<SparkplugNodeList Groups="@GroupedNodes.ToList()"
+                                                              SelectedNode="@_selectedNode"
+                                                              FilterText="@_filterText"
+                                                              SelectedGroupId="@_selectedGroupId"
+                                                              OnSelect="@SelectNode"
+                                                              OnRemove="@RemoveNodeAsync" />;
+
+    private RenderFragment _nodeDetail => @<SparkplugNodeDetail Node="@_selectedNode"
+                                                                ExpandedDevice="@_selectedDevice"
+                                                                AllowNodeReboot="@SparkplugSettings.Sparkplug.AllowNodeReboot"
+                                                                OnBack="@ClearSelection"
+                                                                OnToggleDevice="@ToggleDevice"
+                                                                OnRequestRebirth="@RequestRebirthAsync"
+                                                                OnRequestReboot="@RequestRebootAsync"
+                                                                OnRequestDeviceRebirth="@RequestDeviceRebirthAsync"
+                                                                OnAddMetricToChart="@AddMetricToChartAsync" />;
 
     private int TotalNodeCount =>
         TopologyService.Groups.Values.Sum(g => g.Nodes.Count);
@@ -121,6 +147,7 @@
 
     protected override void OnInitialized()
     {
+        _splitBounds = new SparkplugSplitBoundsInterop(JS);
         _refreshCoalescer = new RefreshCoalescer(InvokeAsync, RefreshTopologyAsync, DefaultRenderCoalesceMs);
         TopologyService.TopologyChanged += OnTopologyChanged;
         _updateTimer = new Timer(_ =>
@@ -128,6 +155,43 @@
             if (_disposed) return;
             OnRelativeTimeTick();
         }, null, 1_000, 1_000);
+    }
+
+    // The split is mounted inside a tab panel that may be hidden, where its first
+    // measurement is zero wide; reset it once it has a real width.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_disposed) return;
+
+        if (!_boundsInstalled && _splitBounds is not null)
+            _boundsInstalled = await _splitBounds.InstallAsync();
+
+        if (_disposed) return;
+
+        if (_splitPanel is null)
+        {
+            _boundsPanel = null;
+            return;
+        }
+
+        if (!ReferenceEquals(_splitPanel, _boundsPanel))
+        {
+            _boundsPanel = _splitPanel;
+            if (_splitBounds is not null)
+                await _splitBounds.AttachAsync(_splitWrapper);
+        }
+
+        if (_disposed) return;
+
+        if (_splitSized) return;
+
+        if (await _splitPanel.GetDividerPositionAsync() <= 0)
+            return;
+
+        if (_disposed) return;
+
+        _splitSized = true;
+        await _splitPanel.ResetDividerPositionAsync();
     }
 
     private async Task RequestRenderSafelyAsync()
@@ -306,5 +370,10 @@
             await _updateTimer.DisposeAsync();
         if (_refreshCoalescer != null)
             await _refreshCoalescer.DisposeAsync();
+        if (_splitBounds is not null)
+        {
+            await _splitBounds.DisposeAsync();
+            _splitBounds = null;
+        }
     }
 }

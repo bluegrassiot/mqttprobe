@@ -1,7 +1,7 @@
 @namespace MqttProbe.UI.Components.Sparkplug
 @using MqttProbe.Core.Models.Sparkplug
 
-<MudTable Items="@Items"
+<MudTable Items="@_rows"
           Dense="true" Hover="true" Elevation="0"
           Breakpoint="Breakpoint.None" Class="@Class" RowClass="spb-metric-row">
     <ColGroup>
@@ -14,7 +14,7 @@
     </ColGroup>
     <HeaderContent>
         <MudTh>
-            <MudTableSortLabel SortBy="new Func<SpbMetricSnapshot, object>(m => m.Name)">
+            <MudTableSortLabel SortBy="new Func<SparkplugMetricRow, object>(m => m.Name)">
                 Name
             </MudTableSortLabel>
         </MudTh>
@@ -26,28 +26,32 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd Class="spb-td-name">@context.Name</MudTd>
-        <MudTd Class="spb-td-type">@context.DataType</MudTd>
+        <MudTd Class="spb-td-type">@context.Snapshot.DataType</MudTd>
         <MudTd Class="spb-td-alias spb-th-right">
-            @(context.Alias.HasValue ? context.Alias.Value.ToString() : "\u2014")
+            @(context.Snapshot.Alias.HasValue ? context.Snapshot.Alias.Value.ToString() : "\u2014")
         </MudTd>
-        <MudTd Class="spb-td-value" Style="@($"color:{SparkplugNodeDisplay.ValueColor(context)}")">
-            @context.Value
+        <MudTd Class="spb-td-value" Style="@($"color:{SparkplugNodeDisplay.ValueColor(context.Snapshot)}")">
+            @context.Snapshot.Value
         </MudTd>
         <MudTd Class="spb-td-updated">
-            @context.LastUpdated.ToLocalTime().ToString("HH:mm:ss")
+            @context.Snapshot.LastUpdated.ToLocalTime().ToString("HH:mm:ss")
         </MudTd>
         <MudTd Class="spb-td-chart">
-            @if (OnAddToChart.HasDelegate && SparkplugChartTargets.IsChartable(context))
+            @if (OnAddToChart.HasDelegate && SparkplugChartTargets.IsChartable(context.Snapshot))
             {
                 <AddToChartButton JsonPath="@SparkplugChartTargets.JsonPath(context.Name)"
                                   SeriesName="@context.Name"
-                                  OnAddToChart="@(selection => AddToChart(context, selection))" />
+                                  Label="Chart"
+                                  OnAddToChart="@(selection => AddToChart(context.Snapshot, selection))" />
             }
         </MudTd>
     </RowTemplate>
 </MudTable>
 
 @code {
+    private readonly Dictionary<string, SparkplugMetricRow> _rowsByName = new(StringComparer.Ordinal);
+    private List<SparkplugMetricRow> _rows = [];
+
     [Parameter, EditorRequired]
     public IEnumerable<SpbMetricSnapshot> Items { get; set; } = [];
 
@@ -60,7 +64,37 @@
     [Parameter]
     public EventCallback<SparkplugChartSelection> OnAddToChart { get; set; }
 
+    protected override void OnParametersSet()
+    {
+        var rows = new List<SparkplugMetricRow>(_rowsByName.Count);
+        foreach (var metric in Items)
+        {
+            if (!_rowsByName.TryGetValue(metric.Name, out var row))
+            {
+                row = new SparkplugMetricRow(metric.Name, metric);
+                _rowsByName.Add(row.Name, row);
+            }
+
+            row.Snapshot = metric;
+            rows.Add(row);
+        }
+
+        ForgetRowsNotIn(rows);
+        _rows = rows;
+    }
+
+    private void ForgetRowsNotIn(List<SparkplugMetricRow> rows)
+    {
+        var current = rows.Select(row => row.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var name in _rowsByName.Keys.Where(name => !current.Contains(name)).ToList())
+            _rowsByName.Remove(name);
+    }
+
+    internal int CachedRowCountForTest => _rowsByName.Count;
+
     private Task AddToChart(SpbMetricSnapshot metric, ChartFieldSelection selection) =>
         OnAddToChart.InvokeAsync(new SparkplugChartSelection(
-            Topic, selection.JsonPath, selection.SeriesName ?? metric.Name));
+            Topic,
+            selection.JsonPath,
+            ChartSeriesLabels.FromSelection(selection.SeriesName ?? metric.Name, selection.JsonPath)));
 }

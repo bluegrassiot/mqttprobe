@@ -50,6 +50,20 @@ public class SparkplugNodesViewAddToChartTests : BunitTestContext
     }
 
     [Test]
+    public void NodeMetricChartButton_UsesShortVisibleLabelButKeepsDescriptiveName()
+    {
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        node.Metrics = [new SpbMetricSnapshot("Flow Rate", "double", "12.5000", DateTime.UtcNow)];
+
+        var cut = RenderNode(node);
+
+        var button = MetricRow(cut, "Flow Rate").QuerySelector(AddToChartSelector)!;
+        button.QuerySelector(".json-chart-btn__label")!.TextContent.Should().Be("Chart");
+        button.GetAttribute("title").Should().Be("Add to chart");
+        button.GetAttribute("aria-label").Should().Be("Add to chart");
+    }
+
+    [Test]
     public void NodeMetricRows_FollowPayloadExtractionEligibility()
     {
         var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };

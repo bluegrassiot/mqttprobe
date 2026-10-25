@@ -174,6 +174,24 @@ class TestCheckCoverage(unittest.TestCase):
         )
 
 
+class TestSchemaPackageAsset(unittest.TestCase):
+    def test_versioned_schema_package_is_matched_by_the_asset_glob(self) -> None:
+        manifest = "chirpstack-*.zip\n"
+        notes = "| `chirpstack-1.0.2.zip` | ChirpStack schemas. |\n"
+        fixture = Fixture(
+            self,
+            manifest=manifest,
+            notes=notes,
+            assets={"chirpstack-1.0.2.zip": ""},
+        )
+
+        found, unmatched = fixture.resolve()
+
+        self.assertEqual(unmatched, [])
+        self.assertEqual(found, ["chirpstack-1.0.2.zip"])
+        self.assertEqual(release_notes.check_coverage(notes, found), [])
+
+
 class TestLeakedExpressions(unittest.TestCase):
     def test_finds_a_github_expression_left_in_the_notes(self) -> None:
         text = "| `mqttprobe-web-linux-x64-${{ github.ref_name }}.zip` | Web. |\n"

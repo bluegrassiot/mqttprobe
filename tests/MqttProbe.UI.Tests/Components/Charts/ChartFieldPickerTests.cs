@@ -31,21 +31,16 @@ public class ChartFieldPickerTests
     public string FormatValue_ReturnsExpected(double value)
         => ChartFieldPicker.FormatValue(value);
 
-    // RowStyle
-
     [Test]
-    public void RowStyle_Selected_ReturnsHighlightedStyle()
+    public void RowClass_Selected_AddsSelectedModifier()
     {
-        var style = ChartFieldPicker.RowStyle(true);
-        style.Should().Contain("mud-palette-primary");
+        ChartFieldPicker.RowClass(true).Should().Be("chart-field-option chart-field-option--selected");
     }
 
     [Test]
-    public void RowStyle_NotSelected_ReturnsTransparentBorder()
+    public void RowClass_NotSelected_OmitsSelectedModifier()
     {
-        var style = ChartFieldPicker.RowStyle(false);
-        style.Should().Contain("transparent");
-        style.Should().NotContain("mud-palette-primary-lighten");
+        ChartFieldPicker.RowClass(false).Should().Be("chart-field-option");
     }
 }
 

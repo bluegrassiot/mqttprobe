@@ -1,3 +1,8 @@
+.quick-add-dialog-body {
+    min-width: 0;
+    max-width: 100%;
+}
+
 .quick-add-field-info {
     background: var(--mud-palette-background-gray);
     border: 1px solid var(--mud-palette-lines-default);
@@ -25,6 +30,12 @@
     background: var(--mud-palette-action-default-hover);
 }
 
+.quick-add-chart-option__body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .quick-add-chart-option ::deep .quick-add-chart-option__name {
     font-weight: 600;
+    overflow-wrap: anywhere;
 }

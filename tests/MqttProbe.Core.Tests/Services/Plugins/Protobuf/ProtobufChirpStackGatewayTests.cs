@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using MQTTnet;
@@ -7,23 +6,23 @@ using MqttProbe.Core.Services.Platform;
 using MqttProbe.Core.Services.Plugins;
 using MqttProbe.Core.Services.Plugins.Packaging;
 using MqttProbe.Core.Services.Plugins.Protobuf;
+using static MqttProbe.Core.Tests.Services.Plugins.Protobuf.ChirpStackSampleFixture;
 
 namespace MqttProbe.Core.Tests.Services.Plugins.Protobuf;
 
 [TestFixture]
 public class ProtobufChirpStackGatewayTests
 {
-    private const string TopicPrefix = "us915_1/gateway/008000000001fdbd/";
-    private const string ConnStateSuffix = "state/conn";
-    private const string ConnStateTopic = "us915_1/gateway/008000000001fdd9/state/conn";
+    private static readonly (string Topic, string MessageType, string Fixture) _connState =
+        ("us915_1/gateway/008000000001fdd9/state/conn", "ConnState", "state-conn.b64");
 
-    private static readonly (string Suffix, string MessageType, string Fixture)[] _fixtures =
+    private static readonly (string Topic, string MessageType, string Fixture)[] _fixtures =
     [
-        ("event/up", "UplinkFrame", "event-up.b64"),
-        ("event/stats", "GatewayStats", "event-stats.b64"),
-        ("event/ack", "DownlinkTxAck", "event-ack.b64"),
-        ("command/down", "DownlinkFrame", "command-down.b64"),
-        (ConnStateSuffix, "ConnState", "state-conn.b64"),
+        ("us915_1/gateway/008000000001fdbd/event/up", "UplinkFrame", "event-up.b64"),
+        ("us915_1/gateway/008000000001fdbd/event/stats", "GatewayStats", "event-stats.b64"),
+        ("us915_1/gateway/008000000001fdbd/event/ack", "DownlinkTxAck", "event-ack.b64"),
+        ("us915_1/gateway/008000000001fdbd/command/down", "DownlinkFrame", "command-down.b64"),
+        _connState,
     ];
 
     private static string _pluginFolder = string.Empty;
@@ -42,32 +41,16 @@ public class ProtobufChirpStackGatewayTests
         sources.Should().ContainSingle();
 
         _registry = new ProtobufSchemaRegistry(sources);
-        ChirpStackSampleDiagnostics.ShouldMatch(_registry);
+        ChirpStackSampleDiagnostics.ShouldMatchKnownWarnings(_registry);
         _decoder = new ProtobufPayloadDecoder(_registry);
         _detector = new ProtobufPayloadDetector(_registry);
     }
-
-    private static string RepoRoot()
-    {
-        var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !Directory.Exists(Path.Combine(root.FullName, "samples", "protobuf")))
-            root = root.Parent;
-        root.Should().NotBeNull("repo root with samples/protobuf must be found");
-
-        return root!.FullName;
-    }
-
-    private static string ChirpStackSampleDir() =>
-        Path.Combine(RepoRoot(), "samples", "protobuf", "chirpstack");
 
     private static string FixtureDir() =>
         Path.Combine(RepoRoot(), "tests", "MqttProbe.Core.Tests", "Services", "Plugins", "Protobuf", "Fixtures");
 
     private static byte[] FixtureBytes(string fixture) =>
         Convert.FromBase64String(File.ReadAllText(Path.Combine(FixtureDir(), fixture)).Trim());
-
-    private static string TopicFor(string suffix) =>
-        suffix == ConnStateSuffix ? ConnStateTopic : TopicPrefix + suffix;
 
     [OneTimeTearDown]
     public void RemoveSchemaSet()
@@ -76,28 +59,15 @@ public class ProtobufChirpStackGatewayTests
             Directory.Delete(_pluginFolder, recursive: true);
     }
 
-    private static void CopyDirectory(string source, string destination)
-    {
-        Directory.CreateDirectory(destination);
-        foreach (var file in Directory.GetFiles(source))
-            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: true);
-        foreach (var sub in Directory.GetDirectories(source))
-            CopyDirectory(sub, Path.Combine(destination, Path.GetFileName(sub)));
-    }
+    private static MqttApplicationMessageReceivedEventArgs GatewayArgs(string fixture) =>
+        MakeArgs(_fixtures.Single(f => f.Fixture == fixture).Topic, FixtureBytes(fixture));
 
-    private static MqttApplicationMessageReceivedEventArgs MakeArgs(string suffix) =>
-        MakeArgs(TopicFor(suffix), FixtureBytes(_fixtures.Single(f => f.Suffix == suffix).Fixture));
+    private static JsonElement Decode(string fixture) =>
+        DecodeWith(_decoder, fixture);
 
-    private static MqttApplicationMessageReceivedEventArgs MakeArgs(string topic, byte[] payload)
+    private static JsonElement DecodeWith(ProtobufPayloadDecoder decoder, string fixture)
     {
-        var appMsg = new MqttApplicationMessageBuilder().WithTopic(topic).WithPayload(payload).Build();
-        var packet = new MQTTnet.Packets.MqttPublishPacket { Topic = topic };
-        return new MqttApplicationMessageReceivedEventArgs("test-client", appMsg, packet, null);
-    }
-
-    private static JsonElement Decode(string suffix)
-    {
-        var envelope = _decoder.Decode(MakeArgs(suffix));
+        var envelope = decoder.Decode(GatewayArgs(fixture));
         envelope.IsFailure.Should().BeFalse(envelope.FailureReason);
 
         using var doc = JsonDocument.Parse(envelope.DisplayText);
@@ -107,36 +77,36 @@ public class ProtobufChirpStackGatewayTests
     private static IEnumerable<TestCaseData> FixtureCases()
     {
         foreach (var fixture in _fixtures)
-            yield return new TestCaseData(fixture.Suffix, fixture.MessageType);
+            yield return new TestCaseData(fixture.Topic, fixture.MessageType, fixture.Fixture);
     }
 
-    private static IEnumerable<TestCaseData> SuffixCases()
+    private static IEnumerable<TestCaseData> FixtureNameCases()
     {
         foreach (var fixture in _fixtures)
-            yield return new TestCaseData(fixture.Suffix);
+            yield return new TestCaseData(fixture.Fixture);
     }
 
     [TestCaseSource(nameof(FixtureCases))]
-    public void Gateway_Topic_Routes_To_Its_Message_And_Is_Detected(string suffix, string messageType)
+    public void Gateway_Topic_Routes_To_Its_Message_And_Is_Detected(string topic, string messageType, string fixture)
     {
-        _registry.TryResolveByTopic(TopicFor(suffix), out var message).Should().BeTrue();
+        _registry.TryResolveByTopic(topic, out var message).Should().BeTrue();
         message.Name.Should().Be(messageType);
-        _detector.CanDetect(MakeArgs(suffix)).Should().BeTrue();
+        _detector.CanDetect(GatewayArgs(fixture)).Should().BeTrue();
     }
 
-    [TestCaseSource(nameof(SuffixCases))]
-    public void Registered_Detector_Chain_Claims_Gateway_Topics_As_Protobuf(string suffix)
+    [TestCaseSource(nameof(FixtureNameCases))]
+    public void Registered_Detector_Chain_Claims_Gateway_Topics_As_Protobuf(string fixture)
     {
         var config = new PluginConfig { PluginFolders = { _pluginFolder } };
         var registry = MqttProbePluginStartup.BuildPluginRegistry(config, NullLoggerFactory.Instance);
 
-        registry.FindDetector(MakeArgs(suffix))!.FormatId.Should().Be("protobuf");
+        registry.FindDetector(GatewayArgs(fixture))!.FormatId.Should().Be("protobuf");
     }
 
     [Test]
     public void Decodes_Uplink_Frame()
     {
-        var root = Decode("event/up");
+        var root = Decode("event-up.b64");
 
         root.GetProperty("phy_payload").GetString().Should().Be("QDTnpwGDdTIG/gcCvZO4R1Wyd+YxNGdfkoSo");
 
@@ -159,7 +129,7 @@ public class ProtobufChirpStackGatewayTests
     [Test]
     public void Decodes_Gateway_Stats()
     {
-        var root = Decode("event/stats");
+        var root = Decode("event-stats.b64");
 
         root.GetProperty("time").GetProperty("seconds").GetInt64().Should().Be(1_630_573_282);
         root.GetProperty("gateway_id").GetString().Should().Be("008000000001fdbd");
@@ -195,7 +165,7 @@ public class ProtobufChirpStackGatewayTests
     [Test]
     public void Decodes_Downlink_TxAck()
     {
-        var root = Decode("event/ack");
+        var root = Decode("event-ack.b64");
 
         root.GetProperty("downlink_id").GetUInt32().Should().Be(865_876_675);
         root.GetProperty("gateway_id").GetString().Should().Be("008000000001fdbd");
@@ -209,7 +179,7 @@ public class ProtobufChirpStackGatewayTests
     [Test]
     public void Decodes_Downlink_Frame_With_Legacy_And_Current_Tx_Info()
     {
-        var root = Decode("command/down");
+        var root = Decode("command-down.b64");
 
         root.GetProperty("downlink_id").GetUInt32().Should().Be(708_599_062);
         root.GetProperty("downlink_id_legacy").GetString().Should().Be("AAAAAAAAAAAAAAAAKjxdFg==");
@@ -243,21 +213,21 @@ public class ProtobufChirpStackGatewayTests
             .GetProperty("delay").GetProperty("seconds").GetInt64().Should().Be(2);
     }
 
-    [TestCaseSource(nameof(SuffixCases))]
-    public void Decode_Leaves_No_Unknown_Fields(string suffix)
+    [TestCaseSource(nameof(FixtureNameCases))]
+    public void Decode_Leaves_No_Unknown_Fields(string fixture)
     {
-        AssertNoUnknownFields(Decode(suffix));
+        AssertNoUnknownFields(Decode(fixture));
     }
 
     [Test]
     public void Decodes_Reported_Connection_State()
     {
-        FixtureBytes("state-conn.b64").Length.Should().Be(20);
+        FixtureBytes(_connState.Fixture).Length.Should().Be(20);
 
-        _registry.TryResolveByTopic(ConnStateTopic, out var message).Should().BeTrue();
-        message.Name.Should().Be("ConnState");
+        _registry.TryResolveByTopic(_connState.Topic, out var message).Should().BeTrue();
+        message.Name.Should().Be(_connState.MessageType);
 
-        var root = Decode("state/conn");
+        var root = Decode(_connState.Fixture);
         AssertConnState(root);
         AssertNoUnknownFields(root);
     }
@@ -282,48 +252,23 @@ public class ProtobufChirpStackGatewayTests
         var installer = new PluginPackageInstaller(
             config, appInfo, new PluginInstallSession(), new PluginArchiveLimits(), NullLoggerFactory.Instance);
 
-        var outcome = await installer.InstallAsync(PackSample(), CancellationToken.None);
+        var outcome = await installer.InstallAsync(PackSampleAsPackage(), CancellationToken.None);
 
         outcome.Succeeded.Should().BeTrue(outcome.Error);
         outcome.Manifest!.Version.Should().Be("1.0.2");
 
         var registry = new ProtobufSchemaRegistry(ProtobufSchemaFolderLoader.Discover([pluginFolder]));
-        ChirpStackSampleDiagnostics.ShouldMatch(registry);
+        ChirpStackSampleDiagnostics.ShouldMatchKnownWarnings(registry);
         var decoder = new ProtobufPayloadDecoder(registry);
 
-        foreach (var (suffix, _, _) in _fixtures)
-        {
-            var envelope = decoder.Decode(MakeArgs(suffix));
-            envelope.IsFailure.Should().BeFalse(envelope.FailureReason);
+        foreach (var (_, _, fixture) in _fixtures)
+            AssertNoUnknownFields(DecodeWith(decoder, fixture));
 
-            using var doc = JsonDocument.Parse(envelope.DisplayText);
-            AssertNoUnknownFields(doc.RootElement);
-            if (suffix == ConnStateSuffix)
-                AssertConnState(doc.RootElement);
-        }
+        var connState = DecodeWith(decoder, _connState.Fixture);
+        AssertConnState(connState);
+        AssertNoUnknownFields(connState);
 
         Directory.Delete(pluginFolder, recursive: true);
-    }
-
-    private static MemoryStream PackSample()
-    {
-        var buffer = new MemoryStream();
-        var sourceDir = ChirpStackSampleDir();
-
-        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
-        {
-            foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
-            {
-                var relative = Path.GetRelativePath(sourceDir, file).Replace('\\', '/');
-                if (relative.EndsWith(".b64", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                zip.CreateEntryFromFile(file, relative);
-            }
-        }
-
-        buffer.Position = 0;
-        return buffer;
     }
 
     private static void AssertNoUnknownFields(JsonElement element)

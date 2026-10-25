@@ -201,6 +201,48 @@ public class ConnectionDialogReconnectTests : BunitTestContext
     }
 
     [Test]
+    public async Task ConnectAttempt_SetsChartConnectionBeforeStartingCollection()
+    {
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        await OpenDialog(new AppConfiguration { Connections = [conn] });
+        await SelectConnection(conn);
+
+        ConnectAndWaitForPending();
+
+        Received.InOrder(() =>
+        {
+            _mockChart.SetConnection(conn.Id);
+            _mockChart.StartAsync();
+        });
+    }
+
+    [Test]
+    public async Task CanceledConnectDuringMessageStoreStartup_DoesNotBindOrStartChartCollection()
+    {
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var messageStoreStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _mockMsgStore.Start().Returns(messageStoreStarted.Task);
+        await OpenDialog(new AppConfiguration { Connections = [conn] });
+        await SelectConnection(conn);
+
+        var connect = _dialogProvider.Find("button[title='Connect']").ClickAsync();
+        await _dialogProvider.InvokeAsync(() => Task.CompletedTask);
+        Dialog().IsConnectingForTests.Should().BeTrue(
+            "clicking Connect on a valid saved connection starts a pending attempt");
+        await _mockMsgStore.Received(1).Start();
+
+        _dialogProvider.Find(".connection-dialog-content").KeyDown(key: "Escape");
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("closing cancels the pending startup"));
+
+        messageStoreStarted.TrySetResult();
+        await connect.WaitAsync(_signalBound);
+
+        _mockChart.DidNotReceive().SetConnection(Arg.Any<Guid>());
+        await _mockChart.DidNotReceive().StartAsync();
+    }
+
+    [Test]
     public async Task FailedAttempt_ThenReconnectSucceeds_ClosesDialogAndRecordsSuccessOnce()
     {
         var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };

@@ -44,6 +44,8 @@ public class ChartDataService(
 
     public void SetConnection(Guid connectionId)
     {
+        if (_connectionId == connectionId) return;
+
         _connectionId = connectionId;
         _buffers.Clear();
     }

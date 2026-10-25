@@ -8,9 +8,30 @@ schema in as-is and point a manifest at it.
 
 ## Install
 
-Copy `samples/protobuf` into your plugin folder and restart mqttprobe — the same
-gesture as dropping in a plugin DLL. The sample directory mirrors the installed layout,
-so nothing needs renaming or rearranging:
+Each new release builds `chirpstack-1.0.2.zip` from this folder and attaches it as a
+download. Releases published before the package was added do not include it.
+
+When your release lists it, download the package directly:
+
+    https://github.com/bluegrassiot/mqttprobe/releases/latest/download/chirpstack-1.0.2.zip
+
+You can also open the [releases page](https://github.com/bluegrassiot/mqttprobe/releases)
+and pick it from the assets.
+
+If the release you use does not carry `chirpstack-1.0.2.zip`, build the same package from
+a checkout:
+
+    python scripts/packaging/pack-plugin.py samples/protobuf/chirpstack
+
+Install the zip from **Settings → Plugins → Install plugin**. Schema packages activate as
+soon as you press **Apply now**; no restart is needed. Messages already in the store keep
+the decoding they were captured with; new messages use the new schemas.
+
+## Install from a checkout
+
+For a development checkout, you can skip the package and copy `samples/protobuf` into
+your plugin folder. It is the same gesture as dropping in a plugin DLL. The sample
+directory mirrors the installed layout, so nothing needs renaming or rearranging:
 
     samples/protobuf/chirpstack/   ->   Plugins/protobuf/chirpstack/
 
@@ -53,17 +74,6 @@ host:
 | Photino Desktop (Windows) | `%USERPROFILE%\.config\mqttprobe\plugins` |
 | MAUI Windows | `%LOCALAPPDATA%\Bluegrass IoT\com.bluegrassiot.mqttprobe\Data\plugins` |
 
-## Installing from the UI
-
-Build a package and install it from **Settings → Plugins → Install plugin**:
-
-```bash
-python scripts/packaging/pack-plugin.py samples/protobuf/chirpstack
-```
-
-Schema packages activate as soon as you press **Apply now** — no restart needed. Messages already
-in the store keep the decoding they were captured with; new messages use the new schemas.
-
 ## Files
 
 - `mqttprobe-plugin.json` — the package manifest read by **Install plugin**; identifies this as a
@@ -76,13 +86,17 @@ in the store keep the decoding they were captured with; new messages use the new
   covers the application `up` topic only. Gateway payloads are not included; the gateway
   mappings are exercised against live traffic.
 
+The release package contains `mqttprobe-plugin.json`, `protobuf-schemas.json`, this
+README, and the `.proto` files. It leaves `sample-uplink.b64` out, because a schema
+package can only contain `.proto`, `.json`, `.md`, and `.txt` files.
+
 `integration.proto` also imports `google/protobuf/timestamp.proto` and `struct.proto`.
 You do **not** need to supply those — mqttprobe's protobuf parser resolves the Google
 well-known types itself.
 
-## What gets decoded
+## Supported topics
 
-The manifest maps the ChirpStack v4 gateway topics, all seven device events, and the downlink command topic:
+The package maps the ChirpStack v4 gateway topics, all seven device events, and the downlink command topic:
 
 | Topic | Message |
 |-------|---------|

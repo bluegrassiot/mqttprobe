@@ -31,4 +31,20 @@ public class MqttMessagePropertyDisplayTests
     [Test]
     public void FormatCorrelationData_InvalidUtf8_ReturnsHex() =>
         MqttMessagePropertyDisplay.FormatCorrelationData([0xC3, 0x28]).Should().Be("0xc328 (2 bytes)");
+
+    [Test]
+    public void FormatCorrelationData_EmbeddedTab_ReturnsHexSoItCannotBeMistakenForSpaces() =>
+        MqttMessagePropertyDisplay.FormatCorrelationData("a\tb"u8.ToArray()).Should().Be("0x610962 (3 bytes)");
+
+    [Test]
+    public void FormatCorrelationData_EmbeddedNewline_ReturnsHex() =>
+        MqttMessagePropertyDisplay.FormatCorrelationData("a\nb"u8.ToArray()).Should().Be("0x610a62 (3 bytes)");
+
+    [Test]
+    public void FormatCorrelationData_WhitespaceOnly_ReturnsHex() =>
+        MqttMessagePropertyDisplay.FormatCorrelationData("   "u8.ToArray()).Should().Be("0x202020 (3 bytes)");
+
+    [Test]
+    public void FormatCorrelationData_TextWithInteriorSpaces_StillReturnsText() =>
+        MqttMessagePropertyDisplay.FormatCorrelationData("order 42"u8.ToArray()).Should().Be("order 42");
 }

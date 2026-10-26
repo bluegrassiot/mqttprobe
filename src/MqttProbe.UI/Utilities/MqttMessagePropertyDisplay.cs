@@ -45,6 +45,6 @@ public static class MqttMessagePropertyDisplay
             return false;
         }
 
-        return text.Length > 0 && !text.Any(c => char.IsControl(c) && c is not ('\t' or '\n' or '\r'));
+        return !string.IsNullOrWhiteSpace(text) && !text.Any(char.IsControl);
     }
 }

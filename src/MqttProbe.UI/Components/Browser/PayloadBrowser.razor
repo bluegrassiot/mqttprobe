@@ -122,17 +122,19 @@
                         <tr>
                             <td class="pb-meta-label">User properties</td>
                             <td>
-                                <table class="pb-user-props">
-                                    <tbody>
-                                        @foreach (var property in userProperties)
-                                        {
-                                            <tr>
-                                                <td class="pb-user-prop-name app-mono">@property.Name</td>
-                                                <td class="pb-user-prop-value app-mono">@property.Value</td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
+                                <div class="pb-user-props-scroll">
+                                    <table class="pb-user-props">
+                                        <tbody>
+                                            @foreach (var property in userProperties)
+                                            {
+                                                <tr>
+                                                    <td class="pb-user-prop-name app-mono">@property.Name</td>
+                                                    <td class="pb-user-prop-value app-mono">@property.Value</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
                             </td>
                         </tr>
                     }

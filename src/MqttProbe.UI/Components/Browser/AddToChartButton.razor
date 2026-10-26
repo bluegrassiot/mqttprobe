@@ -8,7 +8,7 @@
 @code {
     [Parameter, EditorRequired] public string JsonPath { get; set; } = "";
     [Parameter] public string? SeriesName { get; set; }
-    [Parameter] public string Label { get; set; } = "ADD TO CHART";
+    [Parameter] public string Label { get; set; } = "CHART";
     [Parameter] public EventCallback<ChartFieldSelection> OnAddToChart { get; set; }
 
     private Task HandleClick() => OnAddToChart.InvokeAsync(new ChartFieldSelection(JsonPath, SeriesName));

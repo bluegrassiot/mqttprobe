@@ -11,7 +11,7 @@ public class JsonTreeViewTests : BunitTestContext
     [Test]
     public void NullJson_RendersEmpty()
     {
-        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, (string?)null));
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, null));
         cut.FindAll(".json-tree-root").Should().BeEmpty();
     }
 
@@ -268,7 +268,7 @@ public class JsonTreeViewTests : BunitTestContext
         ChartFieldSelection? captured = null;
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, """{"temp":23.4}""")
-            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, chartFieldSelection => captured = chartFieldSelection)));
 
         await cut.Find(".json-chart-btn").ClickAsync(new());
 
@@ -293,7 +293,7 @@ public class JsonTreeViewTests : BunitTestContext
 
         var button = cut.Find(".json-chart-btn");
         button.GetAttribute("title").Should().Be("Add to chart");
-        button.QuerySelector(".json-chart-btn__label")!.TextContent.Should().Contain("ADD TO CHART");
+        button.QuerySelector(".json-chart-btn__label")!.TextContent.Should().Contain("CHART");
     }
 
     [Test]
@@ -302,7 +302,7 @@ public class JsonTreeViewTests : BunitTestContext
         ChartFieldSelection? captured = null;
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, """{"device":{"temp":23.4}}""")
-            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, chartFieldSelection => captured = chartFieldSelection)));
 
         // "device" is at depth 1 → auto-expanded; "temp" is a number leaf → button visible
         await cut.Find(".json-chart-btn").ClickAsync(new());
@@ -328,7 +328,7 @@ public class JsonTreeViewTests : BunitTestContext
         ChartFieldSelection? captured = null;
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, $$"""{"metrics":[{"name":"Batch Count","datatype":12,"{{propertyName}}":"42"}]}""")
-            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, chartFieldSelection => captured = chartFieldSelection)));
         await cut.InvokeAsync(() => cut.Instance.ExpandAll());
 
         var button = cut.Find(".json-chart-btn");
@@ -344,7 +344,7 @@ public class JsonTreeViewTests : BunitTestContext
         ChartFieldSelection? captured = null;
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, """{"metrics":[{"name":"Metric-1","datatype":10,"doubleValue":66.36}]}""")
-            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, chartFieldSelection => captured = chartFieldSelection)));
         await cut.InvokeAsync(() => cut.Instance.ExpandAll());
 
         await cut.Find(".json-chart-btn").ClickAsync(new());
@@ -358,7 +358,7 @@ public class JsonTreeViewTests : BunitTestContext
         ChartFieldSelection? captured = null;
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, """{"metrics":[{"datatype":10,"doubleValue":66.36}]}""")
-            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, chartFieldSelection => captured = chartFieldSelection)));
         await cut.InvokeAsync(() => cut.Instance.ExpandAll());
 
         await cut.Find(".json-chart-btn").ClickAsync(new());
@@ -432,7 +432,7 @@ public class JsonTreeViewTests : BunitTestContext
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, """{"metrics":[{"alias":42,"doubleValue":3.14}]}""")
             .Add(x => x.AliasNames, aliasNames)
-            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, chartFieldSelection => captured = chartFieldSelection)));
         await cut.InvokeAsync(() => cut.Instance.ExpandAll());
 
         await cut.Find(".json-chart-btn").ClickAsync(new());
@@ -450,7 +450,7 @@ public class JsonTreeViewTests : BunitTestContext
     [Test]
     public void HasExpandableContent_False_WhenJsonIsNull()
     {
-        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, (string?)null));
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, null));
         cut.Instance.HasExpandableContent.Should().BeFalse();
     }
 
@@ -581,7 +581,7 @@ public class JsonTreeViewTests : BunitTestContext
     {
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, """{"metrics":[{"alias":42,"doubleValue":3.14}]}""")
-            .Add(x => x.AliasNames, (IReadOnlyDictionary<ulong, string>?)null));
+            .Add(x => x.AliasNames, null));
         cut.InvokeAsync(() => cut.Instance.ExpandAll());
 
         cut.Markup.Should().NotContain("(resolved)");

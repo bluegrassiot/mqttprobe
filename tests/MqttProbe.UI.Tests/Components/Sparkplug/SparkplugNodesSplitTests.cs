@@ -32,7 +32,7 @@ public class SparkplugNodesSplitTests : BunitTestContext
     [Test]
     public void DesktopSplit_RendersTheSharedSplitterWithBothPanes()
     {
-        var cut = RenderDesktopNodes();
+        var cut = RenderNodes(Breakpoint.Lg);
 
         var panel = cut.Find(".spb-split-panel");
         panel.ClassList.Should().Contain("app-split-panel");
@@ -56,7 +56,7 @@ public class SparkplugNodesSplitTests : BunitTestContext
         module.SetupVoid("install", _ => true).SetVoidResult();
         module.Setup<int?>("attach", _ => true).SetResult(1);
 
-        var cut = RenderDesktopNodes();
+        var cut = RenderNodes(Breakpoint.Lg);
 
         cut.WaitForAssertion(() => module.VerifyInvoke("attach"));
         module.VerifyInvoke("install", 1);
@@ -73,10 +73,33 @@ public class SparkplugNodesSplitTests : BunitTestContext
         cut.FindAll(".divider").Should().BeEmpty();
     }
 
-    private IRenderedComponent<SparkplugNodesView> RenderDesktopNodes()
+    [TestCase(Breakpoint.Xs, false)]
+    [TestCase(Breakpoint.Sm, false)]
+    [TestCase(Breakpoint.Md, true)]
+    [TestCase(Breakpoint.Lg, true)]
+    public void ResponsiveBreakpoints_RenderOnlyTheMatchingLayout(Breakpoint breakpoint, bool desktop)
+    {
+        var cut = RenderNodes(breakpoint);
+
+        var desktopRoots = cut.FindAll(".spb-split-wrap");
+        var stackedRoots = cut.FindAll(".spb-split");
+
+        if (desktop)
+        {
+            desktopRoots.Should().ContainSingle();
+            stackedRoots.Should().BeEmpty();
+        }
+        else
+        {
+            stackedRoots.Should().ContainSingle();
+            desktopRoots.Should().BeEmpty();
+        }
+    }
+
+    private IRenderedComponent<SparkplugNodesView> RenderNodes(Breakpoint breakpoint)
     {
         var wrapper = Render<CascadingValue<Breakpoint>>(parameters => parameters
-            .Add(value => value.Value, Breakpoint.Lg)
+            .Add(value => value.Value, breakpoint)
             .Add(value => value.IsFixed, true)
             .Add(value => value.ChildContent, (RenderFragment)(builder =>
             {

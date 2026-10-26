@@ -24,6 +24,8 @@ public partial class ConnectionDialog
 
         public bool ConnectedHandled { get; set; }
 
+        public bool ChartCollectionOwned { get; set; }
+
         public Func<MqttClientConnectedEventArgs, Task>? ConnectedHandler { get; set; }
 
         public bool Completed { get; set; }
@@ -232,23 +234,7 @@ public partial class ConnectionDialog
     {
         UxMetrics?.RecordConnectAttempt();
 
-        try
-        {
-            await MessageStoreManagerService.Start();
-            if (!IsCurrent(operation))
-                return;
-
-            ChartDataService.SetConnection(connection.Id);
-            await ChartDataService.StartAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to start message capture for the connection attempt.");
-            AbortStartup(operation);
-            return;
-        }
-
-        if (!IsCurrent(operation))
+        if (!await StartMessageCaptureAsync(operation, connection))
             return;
 
         _pendingAttemptConnection = connection.Clone();
@@ -264,6 +250,7 @@ public partial class ConnectionDialog
         {
             Logger.LogError(ex, "Failed to start the connection attempt.");
             AbortStartup(operation);
+            await StopOwnedChartCollectionAsync(operation);
             return;
         }
 
@@ -288,6 +275,50 @@ public partial class ConnectionDialog
 
         if (!_disposed)
             await InvokeAsync(() => HandleAttemptOutcomeAsync(operation, outcome));
+    }
+
+    private async Task<bool> StartMessageCaptureAsync(
+        ConnectOperation operation, MqttProbe.Core.Models.Mqtt.Connection connection)
+    {
+        try
+        {
+            await MessageStoreManagerService.Start();
+            if (!IsCurrent(operation))
+                return false;
+
+            var chartWasListening = ChartDataService.IsListening;
+            ChartDataService.SetConnection(connection.Id);
+            await ChartDataService.StartAsync();
+            operation.ChartCollectionOwned = !chartWasListening;
+            return IsCurrent(operation);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to start message capture for the connection attempt.");
+            AbortStartup(operation);
+            return false;
+        }
+        finally
+        {
+            if (!IsCurrent(operation))
+                await StopOwnedChartCollectionAsync(operation);
+        }
+    }
+
+    private async Task StopOwnedChartCollectionAsync(ConnectOperation operation)
+    {
+        if (!operation.ChartCollectionOwned)
+            return;
+
+        operation.ChartCollectionOwned = false;
+        try
+        {
+            await ChartDataService.StopAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to stop chart collection for a connection attempt.");
+        }
     }
 
     private void AbortStartup(ConnectOperation operation)
@@ -376,6 +407,7 @@ public partial class ConnectionDialog
 
         await MessageStoreManagerService.Start();
         await ChartDataService.StartAsync();
+        operation.ChartCollectionOwned = false;
 
         if (!_disposed)
             await InvokeAsync(() => MudDialog.Close(DialogResult.Ok(true)));

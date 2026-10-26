@@ -243,6 +243,57 @@ public class ConnectionDialogReconnectTests : BunitTestContext
     }
 
     [Test]
+    public async Task CanceledConnectDuringChartStartup_StopsTheChartCollectionItStarted()
+    {
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var chartStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _mockChart.StartAsync().Returns(chartStarted.Task);
+        await OpenDialog(new AppConfiguration { Connections = [conn] });
+        await SelectConnection(conn);
+
+        var connect = _dialogProvider.Find("button[title='Connect']").ClickAsync();
+        await _dialogProvider.InvokeAsync(() => Task.CompletedTask);
+        Dialog().IsConnectingForTests.Should().BeTrue(
+            "clicking Connect on a valid saved connection starts a pending attempt");
+        _dialogProvider.WaitForAssertion(() => _mockChart.Received(1).StartAsync());
+
+        _dialogProvider.Find(".connection-dialog-content").KeyDown(key: "Escape");
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("closing cancels the pending startup"));
+
+        chartStarted.TrySetResult();
+        await connect.WaitAsync(_signalBound);
+
+        await _mockChart.Received(1).StopAsync();
+        _client.StartedAttempts.Should().BeEmpty("no MQTT attempt starts after the canceled startup");
+    }
+
+    [Test]
+    public async Task CanceledConnectDuringChartStartup_LeavesAlreadyListeningCollectionRunning()
+    {
+        var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
+        var chartStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _mockChart.IsListening.Returns(true);
+        _mockChart.StartAsync().Returns(chartStarted.Task);
+        await OpenDialog(new AppConfiguration { Connections = [conn] });
+        await SelectConnection(conn);
+
+        var connect = _dialogProvider.Find("button[title='Connect']").ClickAsync();
+        await _dialogProvider.InvokeAsync(() => Task.CompletedTask);
+        _dialogProvider.WaitForAssertion(() => _mockChart.Received(1).StartAsync());
+
+        _dialogProvider.Find(".connection-dialog-content").KeyDown(key: "Escape");
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("closing cancels the pending startup"));
+
+        chartStarted.TrySetResult();
+        await connect.WaitAsync(_signalBound);
+
+        await _mockChart.DidNotReceive().StopAsync();
+        _client.StartedAttempts.Should().BeEmpty("no MQTT attempt starts after the canceled startup");
+    }
+
+    [Test]
     public async Task FailedAttempt_ThenReconnectSucceeds_ClosesDialogAndRecordsSuccessOnce()
     {
         var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };

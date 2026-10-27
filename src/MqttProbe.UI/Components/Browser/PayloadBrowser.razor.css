@@ -5,7 +5,13 @@
     background: var(--mud-palette-surface);
 }
 
+/* Shrinks before the payload body does (which has a min-height), and scrolls
+   once it can no longer fit, so long v5 property values cannot push the
+   payload out of view. */
 .payload-detail-meta {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
     background: var(--mud-palette-surface);
     border-bottom: 1px solid var(--mud-palette-divider);
 }
@@ -153,13 +159,6 @@
     word-break: break-all;
 }
 
-/* Bounded so a message with many user properties cannot starve the payload
-   body, which flex-fills whatever height the metadata block leaves. */
-.pb-user-props-scroll {
-    max-height: 30vh;
-    overflow-y: auto;
-}
-
 .pb-user-props {
     width: 100%;
     border-collapse: collapse;
@@ -176,6 +175,10 @@
 .pb-user-prop-name {
     width: 35%;
     color: var(--mud-palette-text-secondary);
+}
+
+.pb-preserve-ws {
+    white-space: pre-wrap;
 }
 
 /* ── MudTable flex height fix ──────────────────────────────────────────────

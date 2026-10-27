@@ -1089,7 +1089,47 @@ public class PayloadBrowserTests : BunitTestContext
         names.Should().Equal("source", "site");
         var values = cut.FindAll(".pb-user-prop-value").Select(td => td.TextContent.Trim());
         values.Should().Equal("paho", "lab");
-        cut.Find(".pb-user-props-scroll .pb-user-props").Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task SelectedMessage_WithPresentButEmptyV5Values_ShowsExplicitEmptyState()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            ContentType = string.Empty,
+            ResponseTopic = string.Empty,
+            CorrelationData = []
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var labels = cut.FindAll(".payload-detail-meta td.pb-meta-label").Select(td => td.TextContent.Trim()).ToList();
+        labels.Should().Contain("Content type").And.Contain("Response topic").And.Contain("Correlation data");
+        cut.FindAll(".payload-detail-meta td.pb-meta-value")
+            .Count(td => td.TextContent.Trim() == "(empty)")
+            .Should().Be(3);
+    }
+
+    [TestCase("order 42")]
+    [TestCase("order  42")]
+    [TestCase("  order 42")]
+    public async Task SelectedMessage_CorrelationData_PreservesWhitespaceInCell(string text)
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            CorrelationData = System.Text.Encoding.UTF8.GetBytes(text)
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var cell = cut.Find(".payload-detail-meta td.pb-preserve-ws");
+        cell.TextContent.Should().Be(text);
     }
 
     [Test]

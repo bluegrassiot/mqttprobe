@@ -21,14 +21,11 @@ internal static class InboundMessageMapper
             UserProperties = UserProperties(source)
         };
 
-    public static string? ContentType(MqttApplicationMessage message) =>
-        NullIfEmpty(message.ContentType);
+    public static string? ContentType(MqttApplicationMessage message) => message.ContentType;
 
-    public static string? ResponseTopic(MqttApplicationMessage message) =>
-        NullIfEmpty(message.ResponseTopic);
+    public static string? ResponseTopic(MqttApplicationMessage message) => message.ResponseTopic;
 
-    public static byte[]? CorrelationData(MqttApplicationMessage message) =>
-        message.CorrelationData is { Length: > 0 } data ? data : null;
+    public static byte[]? CorrelationData(MqttApplicationMessage message) => message.CorrelationData;
 
     public static uint? MessageExpiryInterval(MqttApplicationMessage message) =>
         message.MessageExpiryInterval > 0 ? message.MessageExpiryInterval : null;
@@ -48,7 +45,4 @@ internal static class InboundMessageMapper
             result[i] = new MqttMessageUserProperty(source[i].Name, source[i].ReadValueAsString());
         return result;
     }
-
-    private static string? NullIfEmpty(string? value) =>
-        string.IsNullOrEmpty(value) ? null : value;
 }

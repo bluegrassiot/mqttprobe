@@ -28,20 +28,29 @@ public class InboundMessageMapperTests
     }
 
     [Test]
-    public void EmptyStringsAndZeroValues_AreTreatedAsAbsent()
+    public void PresentButEmptyValues_ArePreservedAsEmpty()
     {
         var message = new MqttApplicationMessageBuilder()
             .WithTopic("t")
             .WithContentType(string.Empty)
             .WithResponseTopic(string.Empty)
             .WithCorrelationData([])
+            .Build();
+
+        InboundMessageMapper.ContentType(message).Should().BeEmpty();
+        InboundMessageMapper.ResponseTopic(message).Should().BeEmpty();
+        InboundMessageMapper.CorrelationData(message).Should().NotBeNull().And.BeEmpty();
+    }
+
+    [Test]
+    public void ZeroExpiryAndUnspecifiedPayloadFormat_AreIndistinguishableFromAbsent_SoMapToNull()
+    {
+        var message = new MqttApplicationMessageBuilder()
+            .WithTopic("t")
             .WithMessageExpiryInterval(0)
             .WithPayloadFormatIndicator(MqttPayloadFormatIndicator.Unspecified)
             .Build();
 
-        InboundMessageMapper.ContentType(message).Should().BeNull();
-        InboundMessageMapper.ResponseTopic(message).Should().BeNull();
-        InboundMessageMapper.CorrelationData(message).Should().BeNull();
         InboundMessageMapper.MessageExpiryInterval(message).Should().BeNull();
         InboundMessageMapper.PayloadFormatIndicator(message).Should().BeNull();
     }

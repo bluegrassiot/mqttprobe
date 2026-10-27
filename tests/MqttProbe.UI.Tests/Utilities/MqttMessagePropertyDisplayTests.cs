@@ -47,4 +47,10 @@ public class MqttMessagePropertyDisplayTests
     [Test]
     public void FormatCorrelationData_TextWithInteriorSpaces_StillReturnsText() =>
         MqttMessagePropertyDisplay.FormatCorrelationData("order 42"u8.ToArray()).Should().Be("order 42");
+
+    [TestCase("order 42")]
+    [TestCase("order  42")]
+    [TestCase("  order 42")]
+    public void FormatCorrelationData_InteriorAndLeadingSpaces_AreReturnedVerbatim(string text) =>
+        MqttMessagePropertyDisplay.FormatCorrelationData(System.Text.Encoding.UTF8.GetBytes(text)).Should().Be(text);
 }

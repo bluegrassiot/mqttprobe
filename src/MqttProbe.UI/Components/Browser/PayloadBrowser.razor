@@ -86,7 +86,16 @@
                     {
                         <tr>
                             <td class="pb-meta-label">Content type</td>
-                            <td class="pb-meta-value app-mono">@msg.ContentType</td>
+                            <td class="pb-meta-value app-mono pb-topic">
+                                @if (msg.ContentType.Length == 0)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">(empty)</MudText>
+                                }
+                                else
+                                {
+                                    @msg.ContentType
+                                }
+                            </td>
                         </tr>
                     }
                     @if (msg.PayloadFormatIndicator is { } payloadFormat)
@@ -107,14 +116,32 @@
                     {
                         <tr>
                             <td class="pb-meta-label">Response topic</td>
-                            <td class="pb-meta-value app-mono pb-topic">@msg.ResponseTopic</td>
+                            <td class="pb-meta-value app-mono pb-topic">
+                                @if (msg.ResponseTopic.Length == 0)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">(empty)</MudText>
+                                }
+                                else
+                                {
+                                    @msg.ResponseTopic
+                                }
+                            </td>
                         </tr>
                     }
                     @if (msg.CorrelationData != null)
                     {
                         <tr>
                             <td class="pb-meta-label">Correlation data</td>
-                            <td class="pb-meta-value app-mono pb-topic">@MqttMessagePropertyDisplay.FormatCorrelationData(msg.CorrelationData)</td>
+                            <td class="pb-meta-value app-mono pb-topic pb-preserve-ws">
+                                @if (msg.CorrelationData.Length == 0)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">(empty)</MudText>
+                                }
+                                else
+                                {
+                                    @MqttMessagePropertyDisplay.FormatCorrelationData(msg.CorrelationData)
+                                }
+                            </td>
                         </tr>
                     }
                     @if (msg.UserProperties is { Count: > 0 } userProperties)
@@ -122,19 +149,17 @@
                         <tr>
                             <td class="pb-meta-label">User properties</td>
                             <td>
-                                <div class="pb-user-props-scroll">
-                                    <table class="pb-user-props">
-                                        <tbody>
-                                            @foreach (var property in userProperties)
-                                            {
-                                                <tr>
-                                                    <td class="pb-user-prop-name app-mono">@property.Name</td>
-                                                    <td class="pb-user-prop-value app-mono">@property.Value</td>
-                                                </tr>
-                                            }
-                                        </tbody>
-                                    </table>
-                                </div>
+                                <table class="pb-user-props">
+                                    <tbody>
+                                        @foreach (var property in userProperties)
+                                        {
+                                            <tr>
+                                                <td class="pb-user-prop-name app-mono">@property.Name</td>
+                                                <td class="pb-user-prop-value app-mono pb-preserve-ws">@property.Value</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
                             </td>
                         </tr>
                     }
@@ -145,10 +170,12 @@
         @* Flex column that clips: the payload content (JSON tree / pre) flex-fills
            it and becomes the bounded scroller, so its horizontal scrollbar sits at
            the visible bottom of the panel instead of below the fold at the end of
-           a tall payload. Inline because MudPaper renders without this component's
+           a tall payload. flex-basis 0 plus a min-height keeps this body usable
+           when the metadata block above is tall; the metadata shrinks and scrolls
+           instead. Inline because MudPaper renders without this component's
            CSS-isolation scope attribute, so a scoped class rule can't reach it. *@
         <MudPaper Outlined="true" Class="ma-2 pa-1 payload-detail-body"
-                  Style="flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden;">
+                  Style="flex:1 1 0; min-height:max(160px, 40%); display:flex; flex-direction:column; overflow:hidden;">
             @{
                 var payloadType = GetPayloadType(msg.Payload);
                 var (typeLabel, typeColor) = payloadType switch

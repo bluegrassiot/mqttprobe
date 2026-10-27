@@ -167,15 +167,8 @@
             </table>
         </div>
 
-        @* Flex column that clips: the payload content (JSON tree / pre) flex-fills
-           it and becomes the bounded scroller, so its horizontal scrollbar sits at
-           the visible bottom of the panel instead of below the fold at the end of
-           a tall payload. flex-basis 0 plus a min-height keeps this body usable
-           when the metadata block above is tall; the metadata shrinks and scrolls
-           instead. Inline because MudPaper renders without this component's
-           CSS-isolation scope attribute, so a scoped class rule can't reach it. *@
-        <MudPaper Outlined="true" Class="ma-2 pa-1 payload-detail-body"
-                  Style="flex:1 1 0; min-height:max(160px, 40%); display:flex; flex-direction:column; overflow:hidden;">
+        <div class="payload-detail-body-host">
+        <MudPaper Outlined="true" Class="ma-2 pa-1 payload-detail-body">
             @{
                 var payloadType = GetPayloadType(msg.Payload);
                 var (typeLabel, typeColor) = payloadType switch
@@ -245,6 +238,7 @@
                 <pre style="margin:0; padding:8px; flex:1 1 auto; min-height:0; overflow:auto; font-size:0.82rem; white-space:pre-wrap; word-break:break-word"><code>@msg.Payload</code></pre>
             }
         </MudPaper>
+        </div>
     </MudPaper>
 }
 else

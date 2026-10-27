@@ -1089,6 +1089,7 @@ public class PayloadBrowserTests : BunitTestContext
         names.Should().Equal("source", "site");
         var values = cut.FindAll(".pb-user-prop-value").Select(td => td.TextContent.Trim());
         values.Should().Equal("paho", "lab");
+        cut.Find(".payload-detail-body-host .payload-detail-body").Should().NotBeNull();
     }
 
     [Test]

@@ -291,18 +291,7 @@ public class MessageStoreManager : IMessageStoreManager
 
                 var aliasNames = _aliasEnricher.Resolve(topic, result);
 
-                var appMessage = arg.ApplicationMessage;
-                message = new MqttMessage(payloadText, topic, appMessage.Retain, appMessage.QualityOfServiceLevel)
-                {
-                    AliasNames = aliasNames,
-                    FormatId = formatId,
-                    ContentType = MqttV5PropertyReader.ContentType(appMessage),
-                    ResponseTopic = MqttV5PropertyReader.ResponseTopic(appMessage),
-                    CorrelationData = MqttV5PropertyReader.CorrelationData(appMessage),
-                    MessageExpiryInterval = MqttV5PropertyReader.MessageExpiryInterval(appMessage),
-                    PayloadFormatIndicator = MqttV5PropertyReader.PayloadFormatIndicator(appMessage),
-                    UserProperties = MqttV5PropertyReader.UserProperties(appMessage)
-                };
+                message = InboundMessageMapper.Map(arg.ApplicationMessage, payloadText, topic, aliasNames, formatId);
 
                 AddMessage(topic, message);
             }

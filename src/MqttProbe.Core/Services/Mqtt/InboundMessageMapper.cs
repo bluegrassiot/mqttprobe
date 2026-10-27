@@ -5,8 +5,22 @@ using MqttProbe.Core.Models.Mqtt;
 
 namespace MqttProbe.Core.Services.Mqtt;
 
-internal static class MqttV5PropertyReader
+internal static class InboundMessageMapper
 {
+    public static MqttMessage Map(MqttApplicationMessage source, string payloadText, string topic,
+        IReadOnlyDictionary<ulong, string>? aliasNames, string? formatId) =>
+        new(payloadText, topic, source.Retain, source.QualityOfServiceLevel)
+        {
+            AliasNames = aliasNames,
+            FormatId = formatId,
+            ContentType = ContentType(source),
+            ResponseTopic = ResponseTopic(source),
+            CorrelationData = CorrelationData(source),
+            MessageExpiryInterval = MessageExpiryInterval(source),
+            PayloadFormatIndicator = PayloadFormatIndicator(source),
+            UserProperties = UserProperties(source)
+        };
+
     public static string? ContentType(MqttApplicationMessage message) =>
         NullIfEmpty(message.ContentType);
 

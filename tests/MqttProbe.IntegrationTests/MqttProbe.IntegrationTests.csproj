@@ -32,6 +32,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\benchmarks\MqttProbe.Benchmarks\MqttProbe.Benchmarks.csproj">
+      <Aliases>benchmarks</Aliases>
+    </ProjectReference>
     <ProjectReference Include="..\..\src\MqttProbe.Core\MqttProbe.Core.csproj" />
     <ProjectReference Include="..\..\src\MqttProbe.UI\MqttProbe.UI.csproj" />
     <ProjectReference Include="..\..\src\MqttProbe.Web\MqttProbe.Web.csproj" />

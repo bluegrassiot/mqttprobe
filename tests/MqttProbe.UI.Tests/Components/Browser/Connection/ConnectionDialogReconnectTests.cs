@@ -2,12 +2,16 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MQTTnet.Packets;
+using MqttProbe.Core.Models.Chart;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Chart;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
+using MqttProbe.Core.Services.Plugins.BuiltIn;
+using MqttProbe.Core.Services.Plugins.Pipeline;
+using MqttProbe.Core.Services.Plugins.Registry;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.UI.Components.Browser.Connection;
 using MqttProbe.UI.Tests.TestHelpers;
@@ -200,20 +204,76 @@ public class ConnectionDialogReconnectTests : BunitTestContext
             throw new TimeoutException($"timed out after {_signalBound} waiting for {what}");
     }
 
+    private void DelegateChartDataService(ChartDataService chart)
+    {
+        _mockChart.IsListening.Returns(_ => chart.IsListening);
+        _mockChart.StartAsync().Returns(_ => chart.StartAsync());
+        _mockChart.StopAsync().Returns(_ => chart.StopAsync());
+        _mockChart.When(x => x.SetConnection(Arg.Any<Guid>()))
+            .Do(ci => chart.SetConnection(ci.Arg<Guid>()));
+    }
+
+    private static async Task<BoundChartCollector> CreateBoundChartCollectorAsync(Guid connectionId)
+    {
+        var seriesId = Guid.NewGuid();
+        var chartSettings = Substitute.For<IChartSettings>();
+        chartSettings.GetCharts(connectionId).Returns(
+        [
+            new ChartConfiguration
+            {
+                Name = "Bound chart",
+                MaxPoints = 100,
+                Series = [new ChartSeries { Id = seriesId, Topic = "sensor/temp", JsonPath = "temperature" }]
+            }
+        ]);
+
+        Func<MqttApplicationMessageReceivedEventArgs, Task>? handler = null;
+        var client = Substitute.For<IMqttManagedClient>();
+        client
+            .When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(ci => handler = ci.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+
+        var registryBuilder = new PluginRegistryBuilder();
+        BuiltInPluginRegistration.RegisterBuiltIns(registryBuilder);
+        var chart = new ChartDataService(client, new JsonFieldExtractor(), new ChartFieldRegistry(), chartSettings,
+            new PayloadPipeline(registryBuilder.Build(), Substitute.For<ILogger<PayloadPipeline>>()),
+            Substitute.For<ISparkplugSettings>());
+
+        chart.SetConnection(connectionId);
+        await chart.StartAsync();
+        await FireJsonAsync(handler!, "sensor/temp", "{\"temperature\": 21.5}");
+
+        return new BoundChartCollector(chart, seriesId,
+            () => FireJsonAsync(handler!, "sensor/temp", "{\"temperature\": 22.5}"));
+    }
+
+    private static Task FireJsonAsync(
+        Func<MqttApplicationMessageReceivedEventArgs, Task> handler, string topic, string payload)
+    {
+        var message = new MqttApplicationMessageBuilder().WithTopic(topic).WithPayload(payload).Build();
+        return handler(new MqttApplicationMessageReceivedEventArgs(
+            "test-client", message, new MqttPublishPacket { Topic = topic }, null));
+    }
+
     [Test]
-    public async Task ConnectAttempt_SetsChartConnectionBeforeStartingCollection()
+    public async Task ConnectAttempt_BindsChartConnectionBeforeStartingTheAttempt()
     {
         var conn = new Connection { Name = "TestConn", Host = "localhost", Port = 1883 };
         await OpenDialog(new AppConfiguration { Connections = [conn] });
         await SelectConnection(conn);
+        var attemptsAtBind = -1;
+        _mockChart.When(c => c.SetConnection(conn.Id))
+            .Do(_ => attemptsAtBind = _client.StartedAttempts.Count);
 
         ConnectAndWaitForPending();
 
         Received.InOrder(() =>
         {
-            _mockChart.SetConnection(conn.Id);
             _mockChart.StartAsync();
+            _mockChart.SetConnection(conn.Id);
         });
+        attemptsAtBind.Should().Be(0, "the chart collection binds before the MQTT attempt starts");
+        _client.StartedAttempts.Should().ContainSingle();
     }
 
     [Test]
@@ -264,6 +324,7 @@ public class ConnectionDialogReconnectTests : BunitTestContext
         chartStarted.TrySetResult();
         await connect.WaitAsync(_signalBound);
 
+        _mockChart.DidNotReceive().SetConnection(Arg.Any<Guid>());
         await _mockChart.Received(1).StopAsync();
         _client.StartedAttempts.Should().BeEmpty("no MQTT attempt starts after the canceled startup");
     }
@@ -290,7 +351,62 @@ public class ConnectionDialogReconnectTests : BunitTestContext
         await connect.WaitAsync(_signalBound);
 
         await _mockChart.DidNotReceive().StopAsync();
+        _mockChart.DidNotReceive().SetConnection(Arg.Any<Guid>());
         _client.StartedAttempts.Should().BeEmpty("no MQTT attempt starts after the canceled startup");
+    }
+
+    [Test]
+    public async Task CanceledConnectDuringChartStartup_PreservesThePreviousConnectionsPoints()
+    {
+        var connA = new Connection { Name = "Broker A", Host = "a.local", Port = 1883 };
+        var connB = new Connection { Name = "Broker B", Host = "b.local", Port = 1883 };
+        var collector = await CreateBoundChartCollectorAsync(connA.Id);
+        DelegateChartDataService(collector.Chart);
+        var chartStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _mockChart.StartAsync().Returns(async _ =>
+        {
+            await chartStarted.Task;
+            await collector.Chart.StartAsync();
+        });
+
+        await OpenDialog(new AppConfiguration { Connections = [connA, connB] });
+        await SelectConnection(connB);
+
+        var connect = _dialogProvider.Find("button[title='Connect']").ClickAsync();
+        await _dialogProvider.InvokeAsync(() => Task.CompletedTask);
+        _dialogProvider.WaitForAssertion(() => _mockChart.Received(1).StartAsync());
+
+        _dialogProvider.Find(".connection-dialog-content").KeyDown(key: "Escape");
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("closing cancels the pending startup"));
+
+        chartStarted.TrySetResult();
+        await connect.WaitAsync(_signalBound);
+
+        await collector.CollectAsync();
+        collector.Chart.IsListening.Should().BeTrue("the previous collection was already running");
+        collector.Chart.GetPoints(collector.SeriesId).Should().HaveCount(2,
+            "a canceled attempt must not rebind or clear the previous connection's points");
+    }
+
+    [Test]
+    public async Task ChartStartFailure_PreservesThePreviousConnectionsPoints()
+    {
+        var connA = new Connection { Name = "Broker A", Host = "a.local", Port = 1883 };
+        var connB = new Connection { Name = "Broker B", Host = "b.local", Port = 1883 };
+        var collector = await CreateBoundChartCollectorAsync(connA.Id);
+        DelegateChartDataService(collector.Chart);
+        _mockChart.StartAsync().Returns(Task.FromException(new InvalidOperationException("chart boom")));
+
+        await OpenDialog(new AppConfiguration { Connections = [connA, connB] });
+        await SelectConnection(connB);
+
+        _dialogProvider.Find("button[title='Connect']").Click();
+
+        Dialog().IsConnectingForTests.Should().BeFalse("a failed chart startup aborts the attempt");
+        _client.StartedAttempts.Should().BeEmpty("no MQTT attempt starts after a failed chart startup");
+        collector.Chart.GetPoints(collector.SeriesId).Should().ContainSingle(
+            "a failed chart startup must not clear the previous connection's points");
     }
 
     [Test]
@@ -646,6 +762,8 @@ public class ConnectionDialogReconnectTests : BunitTestContext
             .StopAttemptAsync(Arg.Any<MqttConnectAttemptId>(), Arg.Any<CertificateSessionResource?>());
         await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
     }
+
+    private sealed record BoundChartCollector(ChartDataService Chart, Guid SeriesId, Func<Task> CollectAsync);
 
     private sealed class FakeManagedClient : IMqttManagedClient
     {

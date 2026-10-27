@@ -437,8 +437,12 @@
     font-family: var(--font-mono);
     font-size: 13px;
     overflow-wrap: anywhere;
-    /* color kept inline — driven by ValueColor() */
 }
+
+/* Doubling the class clears MudBlazor's .mud-table-body .mud-table-cell colour
+   without !important. */
+.spb-split__detail ::deep .spb-td-value.spb-td-value--numeric { color: var(--mud-palette-success); }
+.spb-split__detail ::deep .spb-td-value.spb-td-value--text    { color: var(--mud-palette-text-secondary); }
 
 ::deep .spb-td-updated {
     font-family: var(--font-mono);

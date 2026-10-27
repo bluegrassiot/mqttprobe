@@ -234,9 +234,10 @@ public partial class ConnectionDialog
     {
         UxMetrics?.RecordConnectAttempt();
 
-        if (!await StartMessageCaptureAsync(operation, connection))
+        if (!await StartMessageCaptureAsync(operation))
             return;
 
+        ChartDataService.SetConnection(connection.Id);
         _pendingAttemptConnection = connection.Clone();
         _pendingAttemptSavedSelector = operation.SavedSelector;
         SessionState.SelectedConnection = connection;
@@ -277,8 +278,7 @@ public partial class ConnectionDialog
             await InvokeAsync(() => HandleAttemptOutcomeAsync(operation, outcome));
     }
 
-    private async Task<bool> StartMessageCaptureAsync(
-        ConnectOperation operation, MqttProbe.Core.Models.Mqtt.Connection connection)
+    private async Task<bool> StartMessageCaptureAsync(ConnectOperation operation)
     {
         try
         {
@@ -287,7 +287,6 @@ public partial class ConnectionDialog
                 return false;
 
             var chartWasListening = ChartDataService.IsListening;
-            ChartDataService.SetConnection(connection.Id);
             await ChartDataService.StartAsync();
             operation.ChartCollectionOwned = !chartWasListening;
             return IsCurrent(operation);

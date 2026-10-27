@@ -30,7 +30,7 @@
         <MudTd Class="spb-td-alias spb-th-right">
             @(context.Snapshot.Alias.HasValue ? context.Snapshot.Alias.Value.ToString() : "\u2014")
         </MudTd>
-        <MudTd Class="spb-td-value" Style="@($"color:{SparkplugNodeDisplay.ValueColor(context.Snapshot)}")">
+        <MudTd Class="@($"spb-td-value {SparkplugNodeDisplay.ValueClass(context.Snapshot)}")">
             @context.Snapshot.Value
         </MudTd>
         <MudTd Class="spb-td-updated">

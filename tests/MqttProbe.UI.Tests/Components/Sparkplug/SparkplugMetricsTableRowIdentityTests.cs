@@ -62,6 +62,30 @@ public class SparkplugMetricsTableRowIdentityTests : BunitTestContext
             "replacing the whole metric set must not keep the previous rows cached");
     }
 
+    [Test]
+    public void ValueColourClasses_ReplaceTheInlineStyle()
+    {
+        var numeric = new SpbMetricSnapshot("Flow Rate", "double", "12.5000", DateTime.UtcNow);
+        var text = new SpbMetricSnapshot("Mode", "string", "auto", DateTime.UtcNow);
+        var cut = RenderTable(numeric, text);
+
+        var numericCell = MetricCell(cut, "Flow Rate");
+        numericCell.ClassList.Should().Contain("spb-td-value--numeric");
+        numericCell.ClassList.Should().NotContain("spb-td-value--text");
+        numericCell.GetAttribute("style").Should().BeNull();
+
+        var textCell = MetricCell(cut, "Mode");
+        textCell.ClassList.Should().Contain("spb-td-value--text");
+        textCell.ClassList.Should().NotContain("spb-td-value--numeric");
+        textCell.GetAttribute("style").Should().BeNull();
+    }
+
+    private static AngleSharp.Dom.IElement MetricCell(
+        IRenderedComponent<SparkplugMetricsTable> cut, string name) =>
+        cut.FindAll("tr.spb-metric-row")
+            .Single(row => row.QuerySelector(".spb-td-name")!.TextContent.Trim() == name)
+            .QuerySelector(".spb-td-value")!;
+
     private IRenderedComponent<SparkplugMetricsTable> RenderTable(params SpbMetricSnapshot[] metrics) =>
         Render<SparkplugMetricsTable>(parameters => parameters
             .Add(component => component.Items, metrics)

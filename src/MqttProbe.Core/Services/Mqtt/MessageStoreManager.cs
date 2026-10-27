@@ -291,12 +291,7 @@ public class MessageStoreManager : IMessageStoreManager
 
                 var aliasNames = _aliasEnricher.Resolve(topic, result);
 
-                message = new MqttMessage(payloadText, topic,
-                    arg.ApplicationMessage.Retain, arg.ApplicationMessage.QualityOfServiceLevel)
-                {
-                    AliasNames = aliasNames,
-                    FormatId = formatId
-                };
+                message = InboundMessageMapper.Map(arg.ApplicationMessage, payloadText, topic, aliasNames, formatId);
 
                 AddMessage(topic, message);
             }

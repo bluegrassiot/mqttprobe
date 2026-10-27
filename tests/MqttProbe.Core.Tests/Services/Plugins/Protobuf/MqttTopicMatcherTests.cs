@@ -12,6 +12,9 @@ public class MqttTopicMatcherTests
     [TestCase("a/b/c", "a/b/c", true)]
     [TestCase("a/b", "a/b/c", false)]
     [TestCase("spBv1.0/group/NBIRTH/node", "application/+/device/+/event/up", false)]
+    [TestCase("us915_1/gateway/008000000001fdbd/event/up", "+/gateway/+/event/up", true)]
+    [TestCase("gateway/008000000001fdbd/event/up", "+/gateway/+/event/up", false)]
+    [TestCase("gateway/008000000001fdbd/event/up", "gateway/+/event/up", true)]
     public void Matches_Wildcards(string topic, string filter, bool expected)
     {
         MqttTopicMatcher.Matches(topic, filter).Should().Be(expected);

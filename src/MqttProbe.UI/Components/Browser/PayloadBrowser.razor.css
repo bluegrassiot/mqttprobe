@@ -5,7 +5,13 @@
     background: var(--mud-palette-surface);
 }
 
+/* Shrinks before the payload body does, and scrolls once it can no longer
+   fit, so long v5 property values cannot push the payload out of view. Its
+   own floor keeps the topic row reachable in very short panels. */
 .payload-detail-meta {
+    flex: 0 1 auto;
+    min-height: 25%;
+    overflow-y: auto;
     background: var(--mud-palette-surface);
     border-bottom: 1px solid var(--mud-palette-divider);
 }
@@ -90,9 +96,26 @@
     vertical-align: middle;
 }
 
-/* .payload-detail-body is styled in components.css: MudPaper renders without
-   this component's CSS-isolation scope attribute, so a scoped class rule here
-   never matches it. */
+/* Flex column that clips: the payload content (JSON tree / pre) flex-fills
+   it and becomes the bounded scroller, so its horizontal scrollbar sits at
+   the visible bottom of the panel. flex-basis 0 plus a min-height keeps the
+   body usable when the metadata block above is tall. The host div carries
+   the scope attribute; MudPaper renders without it, hence ::deep. */
+.payload-detail-body-host {
+    flex: 1 1 0;
+    min-height: max(160px, 40%);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.payload-detail-body-host ::deep .payload-detail-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
 
 ::deep .payload-row td {
     padding-top: 6px;
@@ -218,6 +241,28 @@
 .pb-topic {
     font-size: 0.85rem;
     word-break: break-all;
+}
+
+.pb-user-props {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.pb-user-props td {
+    padding: 1px 10px 1px 0;
+    font-size: 0.8rem;
+    vertical-align: top;
+    word-break: break-all;
+}
+
+.pb-user-prop-name {
+    width: 35%;
+    color: var(--mud-palette-text-secondary);
+}
+
+.pb-preserve-ws {
+    white-space: pre-wrap;
 }
 
 /* ── MudTable flex height fix ──────────────────────────────────────────────

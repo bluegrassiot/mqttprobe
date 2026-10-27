@@ -1069,4 +1069,115 @@ public class PayloadBrowserTests : BunitTestContext
         meta.TextContent.Should().Contain("0 · At most once");
         meta.TextContent.Should().NotContain("AtMostOnce");
     }
+
+    [Test]
+    public async Task SelectedMessage_WithUserProperties_RendersNameValueRows()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            UserProperties = [new MqttMessageUserProperty("source", "paho"), new MqttMessageUserProperty("site", "lab")]
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var labels = cut.FindAll(".payload-detail-meta td.pb-meta-label").Select(td => td.TextContent.Trim());
+        labels.Should().Contain("User properties");
+        var names = cut.FindAll(".pb-user-prop-name").Select(td => td.TextContent.Trim());
+        names.Should().Equal("source", "site");
+        var values = cut.FindAll(".pb-user-prop-value").Select(td => td.TextContent.Trim());
+        values.Should().Equal("paho", "lab");
+        cut.Find(".payload-detail-body-host .payload-detail-body").Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task SelectedMessage_WithPresentButEmptyV5Values_ShowsExplicitEmptyState()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            ContentType = string.Empty,
+            ResponseTopic = string.Empty,
+            CorrelationData = []
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var labels = cut.FindAll(".payload-detail-meta td.pb-meta-label").Select(td => td.TextContent.Trim()).ToList();
+        labels.Should().Contain("Content type").And.Contain("Response topic").And.Contain("Correlation data");
+        cut.FindAll(".payload-detail-meta td.pb-meta-value")
+            .Count(td => td.TextContent.Trim() == "(empty)")
+            .Should().Be(3);
+    }
+
+    [TestCase("order 42")]
+    [TestCase("order  42")]
+    [TestCase("  order 42")]
+    public async Task SelectedMessage_CorrelationData_PreservesWhitespaceInCell(string text)
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            CorrelationData = System.Text.Encoding.UTF8.GetBytes(text)
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var cell = cut.Find(".payload-detail-meta td.pb-preserve-ws");
+        cell.TextContent.Should().Be(text);
+    }
+
+    [Test]
+    public async Task SelectedMessage_WithV5Metadata_RendersEachRow()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            ContentType = "application/json",
+            ResponseTopic = "reply/here",
+            CorrelationData = "corr-42"u8.ToArray(),
+            MessageExpiryInterval = 90,
+            PayloadFormatIndicator = MQTTnet.Protocol.MqttPayloadFormatIndicator.CharacterData
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var meta = cut.Find(".payload-detail-meta").TextContent;
+        meta.Should().Contain("Content type").And.Contain("application/json");
+        meta.Should().Contain("Response topic").And.Contain("reply/here");
+        meta.Should().Contain("Correlation data").And.Contain("corr-42");
+        meta.Should().Contain("Expiry").And.Contain("90 s (1m 30s)");
+        meta.Should().Contain("Payload format").And.Contain("UTF-8 text");
+    }
+
+    [Test]
+    public async Task SelectedMessage_WithoutV5Metadata_OmitsV5Rows()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}"""
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var labels = cut.FindAll(".payload-detail-meta td.pb-meta-label")
+            .Select(td => td.TextContent.Trim())
+            .ToList();
+        labels.Should().NotContain("Content type");
+        labels.Should().NotContain("Payload format");
+        labels.Should().NotContain("Expiry");
+        labels.Should().NotContain("Response topic");
+        labels.Should().NotContain("Correlation data");
+        labels.Should().NotContain("User properties");
+    }
 }

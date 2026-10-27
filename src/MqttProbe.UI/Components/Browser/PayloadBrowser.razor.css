@@ -16,6 +16,73 @@
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
+/* The detail toolbar must never wrap: back, title, prev/next, copy stay on one
+   row at phone widths, with the title shrinking first. */
+::deep .payload-toolbar-title {
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A long topic in the list header stays on one line instead of growing the panel. */
+::deep .payload-topic-title {
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+::deep .payload-relative-time {
+    display: inline;
+    margin-left: 6px;
+}
+
+::deep .payload-retained-chip {
+    height: 20px;
+    font-size: 0.72rem;
+}
+
+::deep .payload-type-chip {
+    height: 20px;
+    font-size: 0.72rem;
+    margin-left: 6px;
+}
+
+::deep .payload-number-value {
+    font-family: var(--font-mono);
+    color: var(--mud-palette-success);
+    letter-spacing: 0.05em;
+}
+
+::deep .payload-empty-text {
+    font-style: italic;
+}
+
+.payload-pre {
+    margin: 0;
+    padding: 8px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    font-size: 0.82rem;
+}
+
+.payload-pre--wrap {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.payload-list-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
 /* Plain table replacing MudSimpleTable — no overflow container, no height:100%
    from FixedHeader, so it renders at natural height and never pushes the
    payload body off-screen. */

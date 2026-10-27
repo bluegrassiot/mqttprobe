@@ -39,4 +39,11 @@ public class MqttMessage
 
     public IReadOnlyDictionary<ulong, string>? AliasNames { get; init; }
     public string? FormatId { get; init; }
+
+    public string? ContentType { get; init; }
+    public string? ResponseTopic { get; init; }
+    public byte[]? CorrelationData { get; init; }
+    public uint? MessageExpiryInterval { get; init; }
+    public MqttPayloadFormatIndicator? PayloadFormatIndicator { get; init; }
+    public IReadOnlyList<MqttMessageUserProperty>? UserProperties { get; init; }
 }

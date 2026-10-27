@@ -58,7 +58,7 @@ public class SparkplugNodesViewAddToChartTests : BunitTestContext
         var cut = RenderNode(node);
 
         var button = MetricRow(cut, "Flow Rate").QuerySelector(AddToChartSelector)!;
-        button.QuerySelector(".json-chart-btn__label")!.TextContent.Should().Be("Chart");
+        button.QuerySelector(".json-chart-btn__label")!.TextContent.Should().Be("CHART");
         button.GetAttribute("title").Should().Be("Add to chart");
         button.GetAttribute("aria-label").Should().Be("Add to chart");
     }

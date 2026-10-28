@@ -258,6 +258,33 @@ public class MqttManagedClientTests
     }
 
     [Test]
+    public async Task DrainPending_drops_message_rejected_by_protocol_and_continues()
+    {
+        var client = Substitute.For<IMqttClient>();
+        client.IsConnected.Returns(false);
+        await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
+        var rejected = new MqttApplicationMessageBuilder().WithTopic("v5/only").Build();
+        var accepted = new MqttApplicationMessageBuilder().WithTopic("plain").Build();
+        client.PublishAsync(rejected, Arg.Any<CancellationToken>())
+            .Returns<Task<MqttClientPublishResult>>(_ => throw new NotSupportedException("Feature UserProperties requires MQTT version 5.0.0."));
+
+        await sut.EnqueueAsync(rejected);
+        await sut.EnqueueAsync(accepted);
+
+        client.IsConnected.Returns(true);
+        client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
+
+        await WaitUntilAsync(() => PublishCount(client) >= 2);
+        await client.Received(1).PublishAsync(accepted, Arg.Any<CancellationToken>());
+        await client.Received(1).PublishAsync(rejected, Arg.Any<CancellationToken>());
+
+        client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
+        await Task.Delay(100);
+        await client.Received(1).PublishAsync(rejected, Arg.Any<CancellationToken>());
+    }
+
+    [Test]
     public async Task EnqueueAsync_drops_oldest_when_queue_full()
     {
         var client = Substitute.For<IMqttClient>();

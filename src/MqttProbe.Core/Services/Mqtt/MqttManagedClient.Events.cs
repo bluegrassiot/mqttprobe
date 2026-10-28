@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using MQTTnet;
+using MQTTnet.Exceptions;
 using MQTTnet.Packets;
 
 namespace MqttProbe.Core.Services.Mqtt;
@@ -237,26 +238,38 @@ public sealed partial class MqttManagedClient
                 {
                     return;
                 }
+                catch (Exception ex) when (ex is NotSupportedException or MqttProtocolViolationException)
+                {
+                    // The negotiated session can never carry this message, so retrying would block the queue.
+                    _logger?.LogWarning(ex, "Dropped queued message for topic {Topic}: rejected by the negotiated protocol", message.Topic);
+                    DequeueHead(headRevision);
+                    continue;
+                }
                 catch (Exception ex)
                 {
                     _logger?.LogWarning(ex, "Failed to publish queued message for topic {Topic}; will retry on next connect", message.Topic);
                     return;
                 }
 
-                lock (_sync)
-                {
-                    // Revision match pins the exact queue-head occurrence across clears and evictions.
-                    if (_pendingHeadRevision == headRevision && _pending.Count > 0)
-                    {
-                        _pending.Dequeue();
-                        _pendingHeadRevision++;
-                    }
-                }
+                DequeueHead(headRevision);
             }
         }
         finally
         {
             _drainSemaphore.Release();
+        }
+    }
+
+    private void DequeueHead(long headRevision)
+    {
+        lock (_sync)
+        {
+            // Revision match pins the exact queue-head occurrence across clears and evictions.
+            if (_pendingHeadRevision == headRevision && _pending.Count > 0)
+            {
+                _pending.Dequeue();
+                _pendingHeadRevision++;
+            }
         }
     }
 

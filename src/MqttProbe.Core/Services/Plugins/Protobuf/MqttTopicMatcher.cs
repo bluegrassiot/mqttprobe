@@ -35,4 +35,11 @@ public static class MqttTopicMatcher
 
         return true;
     }
+
+    public static bool IsValidTopicName(string? topic) =>
+        !string.IsNullOrEmpty(topic) &&
+        !topic.Contains('\0') &&
+        !topic.Contains('#') &&
+        !topic.Contains('+') &&
+        Encoding.UTF8.GetByteCount(topic) <= MaxUtf8ByteLength;
 }

@@ -417,4 +417,46 @@ public class PublishersTests : BunitTestContext
 
         cut.Markup.Should().Contain("first/input");
     }
+
+
+    [Test]
+    public async Task Clipboard_WithTooManyProperties_KeepsThemAndBlocksPublish()
+    {
+        var copied = new MqttMessage("{}", "t/1", false, MqttQualityOfServiceLevel.AtMostOnce)
+        {
+            UserProperties = Enumerable.Range(0, PublishPropertiesDraft.MaxUserProperties + 1)
+                .Select(i => new MqttMessageUserProperty($"k{i}", "v")).ToArray()
+        };
+        var clipboard = Services.GetRequiredService<IClipboardService>();
+        clipboard.GetTextAsync().Returns(JsonSerializer.Serialize(copied));
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        await cut.InvokeAsync(() => cut.Instance.SetMessageFromClipBoard());
+        cut.FindAll("input")[0].Change("test/topic");
+
+        cut.Find("button[title='Publish']").Click();
+
+        cut.Instance.PropertiesForTests.UserProperties.Should().HaveCount(PublishPropertiesDraft.MaxUserProperties + 1);
+        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+        _mockSnackbar.Received(1).Add(Arg.Is<string>(m => m!.Contains("At most 50")), Severity.Warning,
+            Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public async Task Publish_OnV311Connection_AfterClearingProperties_Publishes()
+    {
+        _sessionState.SelectedConnection.Returns(new Connection { MqttVersion = MqttVersion.V311 });
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        cut.FindAll("input")[0].Change("test/topic");
+        cut.Instance.PropertiesForTests.ContentType = "text/plain";
+        cut.Instance.PropertiesForTests.UserProperties.Add(new MqttMessageUserProperty("k", "v"));
+        cut.Render();
+
+        cut.Find("button[title='Clear properties']").Click();
+        cut.Find("button[title='Publish']").Click();
+
+        await _mockClient.Received(1).EnqueueAsync(Arg.Is<MqttApplicationMessage>(m =>
+            m!.Topic == "test/topic" && m.ContentType == null && (m.UserProperties == null || m.UserProperties.Count == 0)));
+    }
 }

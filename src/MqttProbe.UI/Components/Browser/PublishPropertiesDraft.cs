@@ -39,7 +39,14 @@ public sealed class PublishPropertiesDraft
             ? null
             : "Correlation data must be an even number of hex digits.";
 
-    public string? ValidationError => ResponseTopicError ?? CorrelationError;
+    public string? UserPropertyError =>
+        UserProperties.Count > MaxUserProperties
+            ? $"At most {MaxUserProperties} user properties can be sent. Remove {UserProperties.Count - MaxUserProperties}."
+            : UserProperties
+                .Select((property, index) => string.IsNullOrWhiteSpace(property.Name) ? $"User property {index + 1} has a blank name. Remove it." : null)
+                .FirstOrDefault(error => error is not null);
+
+    public string? ValidationError => ResponseTopicError ?? CorrelationError ?? UserPropertyError;
 
     public static PublishPropertiesDraft From(MqttMessage message)
     {

@@ -209,4 +209,55 @@ public class PublishPropertiesEditorTests : BunitTestContext
         cut.FindComponents<MudTextField<string>>().Should().AllSatisfy(f => f.Instance.Disabled.Should().BeTrue());
         cut.Find("button[title='Add user property']").HasAttribute("disabled").Should().BeTrue();
     }
+
+
+    [Test]
+    public void Clear_WorksWhileDisabled()
+    {
+        var draft = new PublishPropertiesDraft { ContentType = "x" };
+        draft.UserProperties.Add(new MqttMessageUserProperty("k", "v"));
+        var cut = RenderEditor(draft, disabled: true);
+
+        var clear = cut.Find("button[title='Clear properties']");
+        clear.HasAttribute("disabled").Should().BeFalse("an operator on MQTT 3.1.1 must be able to drop imported properties");
+        clear.Click();
+
+        draft.Any.Should().BeFalse();
+    }
+
+    [Test]
+    public void Clear_IsDisabledWhenNothingIsSet()
+    {
+        var cut = RenderEditor(new PublishPropertiesDraft());
+
+        cut.Find("button[title='Clear properties']").HasAttribute("disabled").Should().BeTrue();
+    }
+
+    [Test]
+    public async Task RemoveSelected_WorksWhileDisabled()
+    {
+        var draft = new PublishPropertiesDraft();
+        draft.UserProperties.Add(new MqttMessageUserProperty("a", "1"));
+        draft.UserProperties.Add(new MqttMessageUserProperty("b", "2"));
+        var cut = RenderEditor(draft, disabled: true);
+        cut.Instance.SelectForTests(0);
+
+        await cut.InvokeAsync(() => cut.Instance.RemoveSelectedForTests());
+
+        draft.UserProperties.Should().Equal(new MqttMessageUserProperty("b", "2"));
+    }
+
+    [Test]
+    public void OverCapDraft_ShowsErrorAlertAndErrorChip()
+    {
+        var draft = new PublishPropertiesDraft();
+        for (var i = 0; i <= PublishPropertiesDraft.MaxUserProperties; i++)
+            draft.UserProperties.Add(new MqttMessageUserProperty($"k{i}", "v"));
+
+        var cut = RenderEditor(draft);
+
+        cut.Markup.Should().Contain("At most 50 user properties can be sent. Remove 1.");
+        cut.Find(".count-chip").ClassList.Should().Contain("mud-chip-color-error");
+        cut.Find("button[title='Add user property']").HasAttribute("disabled").Should().BeTrue();
+    }
 }

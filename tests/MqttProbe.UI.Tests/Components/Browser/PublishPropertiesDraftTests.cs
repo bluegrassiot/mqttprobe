@@ -179,4 +179,43 @@ public class PublishPropertiesDraftTests
 
         draft.CanAddUserProperty.Should().BeFalse();
     }
+
+
+    [Test]
+    public void UserPropertyError_FlagsOverCapAndClearsOnceRemoved()
+    {
+        var draft = new PublishPropertiesDraft();
+        for (var i = 0; i <= PublishPropertiesDraft.MaxUserProperties; i++)
+            draft.UserProperties.Add(new MqttMessageUserProperty($"k{i}", "v"));
+
+        draft.UserPropertyError.Should().Contain("At most 50").And.Contain("Remove 1");
+        draft.ValidationError.Should().Be(draft.UserPropertyError);
+
+        draft.UserProperties.RemoveAt(0);
+
+        draft.ValidationError.Should().BeNull();
+    }
+
+    [Test]
+    public void UserPropertyError_FlagsBlankNameByPosition()
+    {
+        var draft = new PublishPropertiesDraft();
+        draft.UserProperties.Add(new MqttMessageUserProperty("ok", "v"));
+        draft.UserProperties.Add(new MqttMessageUserProperty("   ", "v"));
+
+        draft.UserPropertyError.Should().Be("User property 2 has a blank name. Remove it.");
+    }
+
+    [Test]
+    public void From_KeepsEveryImportedPropertyAndReportsTheOverflow()
+    {
+        var properties = Enumerable.Range(0, PublishPropertiesDraft.MaxUserProperties + 1)
+            .Select(i => new MqttMessageUserProperty($"k{i}", "v")).ToArray();
+        var message = new MqttMessage("{}", "t", false, MqttQualityOfServiceLevel.AtMostOnce) { UserProperties = properties };
+
+        var draft = PublishPropertiesDraft.From(message);
+
+        draft.UserProperties.Should().HaveCount(PublishPropertiesDraft.MaxUserProperties + 1, "nothing is dropped silently");
+        draft.ValidationError.Should().Contain("Remove 1");
+    }
 }

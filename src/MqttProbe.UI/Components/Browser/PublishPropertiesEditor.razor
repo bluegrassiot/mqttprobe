@@ -7,7 +7,8 @@
             <TitleContent>
                 <div class="d-flex align-center gap-2">
                     <MudText Typo="Typo.subtitle2">MQTT 5 properties</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                             Color="@(Draft.ValidationError is null ? Color.Primary : Color.Error)"
                              Class="count-chip" title="Properties set">
                         @Draft.SetCount
                     </MudChip>
@@ -17,7 +18,7 @@
                 @if (Disabled)
                 {
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="publish-props-alert">
-                        Available on MQTT 5 connections. Reconnect with MQTT version 5.0 to send these properties.
+                        Available on MQTT 5 connections. Reconnect with MQTT version 5.0 to send these properties, or clear them to publish without.
                     </MudAlert>
                 }
 
@@ -58,7 +59,18 @@
                     <div class="d-flex align-center gap-2">
                         <MudText Typo="Typo.subtitle2">User properties</MudText>
                         <MudText Typo="Typo.caption" Color="Color.Secondary">@Draft.UserProperties.Count / @PublishPropertiesDraft.MaxUserProperties</MudText>
+                        <MudSpacer/>
+                        <AppTertiaryButton StartIcon="@LucideIcons.X" title="Clear properties"
+                                           Disabled="@(!Draft.Any)" OnClick="@ClearAll">
+                            Clear
+                        </AppTertiaryButton>
                     </div>
+                    @if (Draft.UserPropertyError is { } userPropertyError)
+                    {
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" Class="publish-props-alert">
+                            @userPropertyError
+                        </MudAlert>
+                    }
                     <div class="publish-props-add-row">
                         <MudTextField @ref="_nameField" T="string" Class="publish-props-name" Label="Name"
                                       Variant="Variant.Outlined" Margin="Margin.Dense"
@@ -99,12 +111,8 @@
                                 </ColGroup>
                                 <ToolBarContent>
                                     <MudSpacer/>
-                                    <AppTertiaryButton StartIcon="@LucideIcons.X" title="Clear properties"
-                                                       Disabled="@Disabled" OnClick="@ClearAll">
-                                        Clear
-                                    </AppTertiaryButton>
                                     <AppDestructiveButton StartIcon="@LucideIcons.Trash2" title="Remove"
-                                                          Disabled="@(Disabled || _selected.Count == 0)"
+                                                          Disabled="@(_selected.Count == 0)"
                                                           OnClick="@RemoveSelected">
                                         Remove
                                     </AppDestructiveButton>
@@ -182,8 +190,6 @@
 
     private void RemoveSelected()
     {
-        if (Disabled)
-            return;
         if (_selected.Count == 0)
         {
             Snackbar.Add("Select at least one user property to remove.", Severity.Info);
@@ -197,8 +203,6 @@
 
     private void ClearAll()
     {
-        if (Disabled)
-            return;
         Draft.Clear();
         _selected = [];
     }

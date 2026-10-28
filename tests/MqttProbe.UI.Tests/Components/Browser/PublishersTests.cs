@@ -1,11 +1,16 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
+using MQTTnet.Packets;
+using MQTTnet.Protocol;
+using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Platform;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.UI.Tests.TestHelpers;
+using MqttProbe.UI.Utilities;
 using MudBlazor;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
@@ -15,6 +20,7 @@ public class PublishersTests : BunitTestContext
 {
     private IMqttManagedClient _mockClient = null!;
     private ISnackbar _mockSnackbar = null!;
+    private ISessionState _sessionState = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -22,6 +28,9 @@ public class PublishersTests : BunitTestContext
         _mockClient = Substitute.For<IMqttManagedClient>();
         _mockClient.EnqueueAsync(Arg.Any<MqttApplicationMessage>()).Returns(Task.CompletedTask);
         Services.AddSingleton(_mockClient);
+        _sessionState = Substitute.For<ISessionState>();
+        _sessionState.SelectedConnection.Returns(new Connection { MqttVersion = MqttVersion.V5 });
+        Services.AddSingleton(_sessionState);
         Services.AddSingleton(Substitute.For<ILogger<Publishers>>());
         Services.AddSingleton(Substitute.For<IAppInfoService>());
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
@@ -268,5 +277,144 @@ public class PublishersTests : BunitTestContext
 
         // MudSelect in closed state shows the selected value (AtMostOnce by default).
         cut.Markup.Should().Contain("0 · At most once");
+    }
+
+    [Test]
+    public async Task Publish_WithV5Properties_SendsThemOnTheMessage()
+    {
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        cut.FindAll("input")[0].Change("test/topic");
+        var draft = cut.Instance.PropertiesForTests;
+        draft.ContentType = "application/json";
+        draft.ResponseTopic = "test/topic/reply";
+        draft.CorrelationText = "abcd";
+        draft.CorrelationEncoding = CorrelationDataEncoding.Hex;
+        draft.ExpirySeconds = 30;
+        draft.PayloadFormat = MqttPayloadFormatIndicator.CharacterData;
+        draft.UserProperties.Add(new MqttMessageUserProperty("site", " lab "));
+
+        cut.Find("button[title='Publish']").Click();
+
+        await _mockClient.Received(1).EnqueueAsync(Arg.Is<MqttApplicationMessage>(m =>
+            m!.Topic == "test/topic" &&
+            m.ContentType == "application/json" &&
+            m.ResponseTopic == "test/topic/reply" &&
+            m.CorrelationData!.SequenceEqual(new byte[] { 0xAB, 0xCD }) &&
+            m.MessageExpiryInterval == 30 &&
+            m.PayloadFormatIndicator == MqttPayloadFormatIndicator.CharacterData &&
+            m.UserProperties!.Count == 1 &&
+            m.UserProperties[0].Name == "site" &&
+            m.UserProperties[0].ReadValueAsString() == " lab "));
+    }
+
+    [Test]
+    public async Task Publish_WithV5Properties_OnV311Connection_WarnsAndDoesNotEnqueue()
+    {
+        _sessionState.SelectedConnection.Returns(new Connection { MqttVersion = MqttVersion.V311 });
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        cut.FindAll("input")[0].Change("test/topic");
+        cut.Instance.PropertiesForTests.UserProperties.Add(new MqttMessageUserProperty("k", "v"));
+
+        cut.Find("button[title='Publish']").Click();
+
+        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+        _mockSnackbar.Received(1).Add(Arg.Is<string>(m => m!.Contains("MQTT 5 connection")), Severity.Warning,
+            Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public async Task Publish_ExpiryOnly_OnV311Connection_IsAlsoBlocked()
+    {
+        _sessionState.SelectedConnection.Returns(new Connection { MqttVersion = MqttVersion.V311 });
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        cut.FindAll("input")[0].Change("test/topic");
+        cut.Instance.PropertiesForTests.ExpirySeconds = 5;
+
+        cut.Find("button[title='Publish']").Click();
+
+        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+    }
+
+    [Test]
+    public async Task Publish_WithoutV5Properties_OnV311Connection_StillPublishes()
+    {
+        _sessionState.SelectedConnection.Returns(new Connection { MqttVersion = MqttVersion.V311 });
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        cut.FindAll("input")[0].Change("test/topic");
+
+        cut.Find("button[title='Publish']").Click();
+
+        await _mockClient.Received(1).EnqueueAsync(Arg.Is<MqttApplicationMessage>(m =>
+            m!.Topic == "test/topic" && m.ContentType == null && (m.UserProperties == null || m.UserProperties.Count == 0)));
+    }
+
+    [Test]
+    public async Task Publish_WithInvalidResponseTopic_WarnsAndDoesNotEnqueue()
+    {
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        cut.FindAll("input")[0].Change("test/topic");
+        cut.Instance.PropertiesForTests.ResponseTopic = "reply/#";
+
+        cut.Find("button[title='Publish']").Click();
+
+        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+        _mockSnackbar.Received(1).Add(Arg.Is<string>(m => m!.Contains("wildcards")), Severity.Warning,
+            Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public async Task Publish_WhenBrokerSessionRejectsProperties_ShowsSpecificError()
+    {
+        _mockClient.EnqueueAsync(Arg.Any<MqttApplicationMessage>())
+            .Returns<Task>(_ => throw new NotSupportedException("Feature UserProperties requires MQTT version 5.0.0."));
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        cut.FindAll("input")[0].Change("test/topic");
+        cut.Instance.PropertiesForTests.UserProperties.Add(new MqttMessageUserProperty("k", "v"));
+
+        cut.Find("button[title='Publish']").Click();
+
+        await Task.Yield();
+        _mockSnackbar.Received(1).Add(Arg.Is<string>(m => m!.Contains("does not support the MQTT 5 properties")), Severity.Error,
+            Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public async Task Clipboard_WithV5Properties_PopulatesTheDraft()
+    {
+        var copied = new MqttMessage("{}", "t/1", false, MqttQualityOfServiceLevel.AtMostOnce)
+        {
+            ContentType = "application/json",
+            CorrelationData = "corr-1"u8.ToArray(),
+            MessageExpiryInterval = 120,
+            UserProperties = [new MqttMessageUserProperty("a", "1"), new MqttMessageUserProperty("b", "2")]
+        };
+        var clipboard = Services.GetRequiredService<IClipboardService>();
+        clipboard.GetTextAsync().Returns(JsonSerializer.Serialize(copied));
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+
+        await cut.InvokeAsync(() => cut.Instance.SetMessageFromClipBoard());
+
+        var draft = cut.Instance.PropertiesForTests;
+        draft.ContentType.Should().Be("application/json");
+        draft.CorrelationText.Should().Be("corr-1");
+        draft.CorrelationEncoding.Should().Be(CorrelationDataEncoding.Text);
+        draft.ExpirySeconds.Should().Be(120u);
+        draft.UserProperties.Should().Equal(copied.UserProperties!);
+    }
+
+    [Test]
+    public void TopicRemainsFirstInput()
+    {
+        var cut = Render<Publishers>();
+        cut.FindAll("input")[0].Change("first/input");
+
+        cut.Markup.Should().Contain("first/input");
     }
 }

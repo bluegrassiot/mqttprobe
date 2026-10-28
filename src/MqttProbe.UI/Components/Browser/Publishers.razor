@@ -10,6 +10,7 @@
 @inject IAppInfoService AppInfoService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IUxMetricsService? UxMetrics
+@inject ISessionState SessionState
 
 <TabPanelHeader Title="Publish" Icon="@LucideIcons.Send">
     <HeaderActions>
@@ -84,6 +85,10 @@
                 </MudAlert>
             </MudItem>
         }
+
+        <MudItem xs="12">
+            <PublishPropertiesEditor Draft="_properties" Disabled="@(!IsV5Connection)"/>
+        </MudItem>
     </MudGrid>
 </div>
 
@@ -93,6 +98,11 @@
     private static readonly JsonSerializerOptions _indentedJsonOptions = new() { WriteIndented = true };
 
     private MqttMessage _message = new();
+    private PublishPropertiesDraft _properties = new();
+
+    internal PublishPropertiesDraft PropertiesForTests => _properties;
+
+    private bool IsV5Connection => SessionState.SelectedConnection?.MqttVersion == MqttVersion.V5;
 
     private async Task PublishMessage()
     {
@@ -104,12 +114,21 @@
             return;
         }
 
-        var appMsg = new MqttApplicationMessageBuilder()
-            .WithTopic(_message.Topic)
-            .WithPayload(_message.Payload)
-            .WithQualityOfServiceLevel(_message.QualityOfServiceLevel)
-            .WithRetainFlag(_message.RetainedMessage)
-            .Build();
+        if (_properties.Any)
+        {
+            if (!IsV5Connection)
+            {
+                Snackbar.Add("MQTT 5 properties need an MQTT 5 connection. Clear them or reconnect with MQTT version 5.0.", Severity.Warning);
+                return;
+            }
+            if (_properties.ValidationError is { } validationError)
+            {
+                Snackbar.Add(validationError, Severity.Warning);
+                return;
+            }
+        }
+
+        var appMsg = OutboundMessageMapper.Build(_properties.ToMessage(_message));
 
         try
         {
@@ -118,6 +137,12 @@
 
             Snackbar.Add($"Published to {_message.Topic}", Severity.Success,
                 cfg => { cfg.ShowCloseIcon = true; cfg.VisibleStateDuration = 2000; });
+        }
+        catch (NotSupportedException ex)
+        {
+            UxMetrics?.RecordPublishOutcome(success: false);
+            Logger.LogError(ex, "Broker session rejected MQTT 5 properties for topic {Topic}", _message.Topic);
+            Snackbar.Add("The broker session does not support the MQTT 5 properties on this message.", Severity.Error);
         }
         catch (Exception ex)
         {
@@ -153,6 +178,7 @@
             try
             {
                 _message = JsonSerializer.Deserialize<MqttMessage>(jsonString) ?? new MqttMessage();
+                _properties = PublishPropertiesDraft.From(_message);
             }
             catch (Exception e)
             {

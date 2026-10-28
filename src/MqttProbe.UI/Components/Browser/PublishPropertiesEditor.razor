@@ -1,0 +1,205 @@
+@using MQTTnet.Protocol
+@inject ISnackbar Snackbar
+
+<div class="publish-props" role="region" aria-label="MQTT 5 properties" tabindex="0">
+    <MudExpansionPanels Dense="true" Elevation="0">
+        <MudExpansionPanel @bind-Expanded="_expanded" Dense="true">
+            <TitleContent>
+                <div class="d-flex align-center gap-2">
+                    <MudText Typo="Typo.subtitle2">MQTT 5 properties</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                             Class="count-chip" title="Properties set">
+                        @Draft.SetCount
+                    </MudChip>
+                </div>
+            </TitleContent>
+            <ChildContent>
+                @if (Disabled)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="publish-props-alert">
+                        Available on MQTT 5 connections. Reconnect with MQTT version 5.0 to send these properties.
+                    </MudAlert>
+                }
+
+                <div class="publish-props-grid">
+                    <MudTextField T="string" Label="Content type" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  @bind-Value="Draft.ContentType" Immediate="true" Clearable="true" Disabled="@Disabled"
+                                  HelperText="Not sent when empty"/>
+                    <MudSelect T="MqttPayloadFormatIndicator" Label="Payload format" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" @bind-Value="Draft.PayloadFormat" Disabled="@Disabled">
+                        <MudSelectItem T="MqttPayloadFormatIndicator" Value="MqttPayloadFormatIndicator.Unspecified">
+                            @MqttMessagePropertyDisplay.FormatPayloadFormat(MqttPayloadFormatIndicator.Unspecified)
+                        </MudSelectItem>
+                        <MudSelectItem T="MqttPayloadFormatIndicator" Value="MqttPayloadFormatIndicator.CharacterData">
+                            @MqttMessagePropertyDisplay.FormatPayloadFormat(MqttPayloadFormatIndicator.CharacterData)
+                        </MudSelectItem>
+                    </MudSelect>
+                    <MudNumericField T="uint?" Label="Message expiry (seconds)" Variant="Variant.Outlined"
+                                     Margin="Margin.Dense" @bind-Value="Draft.ExpirySeconds" Min="1" Max="uint.MaxValue"
+                                     Clearable="true" Disabled="@Disabled" HelperText="Not sent when empty"/>
+                    <MudTextField T="string" Label="Response topic" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  @bind-Value="Draft.ResponseTopic" Immediate="true" Clearable="true" Disabled="@Disabled"
+                                  Error="@(Draft.ResponseTopicError is not null)" ErrorText="@Draft.ResponseTopicError"/>
+                    <MudTextField T="string" Label="Correlation data" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  @bind-Value="Draft.CorrelationText" Immediate="true" Clearable="true" Disabled="@Disabled"
+                                  Error="@(Draft.CorrelationError is not null)" ErrorText="@Draft.CorrelationError"
+                                  HelperText="@(Draft.CorrelationEncoding == CorrelationDataEncoding.Hex ? "Hex digits, optional 0x prefix" : "Sent as UTF-8, whitespace kept")"/>
+                    <MudSelect T="CorrelationDataEncoding" Label="Correlation encoding" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" @bind-Value="Draft.CorrelationEncoding" Disabled="@Disabled">
+                        <MudSelectItem T="CorrelationDataEncoding" Value="CorrelationDataEncoding.Text">Text</MudSelectItem>
+                        <MudSelectItem T="CorrelationDataEncoding" Value="CorrelationDataEncoding.Hex">Hex</MudSelectItem>
+                    </MudSelect>
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    The payload is always sent as UTF-8 text; the payload format only tells subscribers so.
+                </MudText>
+
+                <div class="publish-props-user">
+                    <div class="d-flex align-center gap-2">
+                        <MudText Typo="Typo.subtitle2">User properties</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@Draft.UserProperties.Count / @PublishPropertiesDraft.MaxUserProperties</MudText>
+                    </div>
+                    <div class="publish-props-add-row">
+                        <MudTextField @ref="_nameField" T="string" Class="publish-props-name" Label="Name"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      @bind-Value="_name" Immediate="true" Clearable="true" Disabled="@Disabled"
+                                      OnKeyDown="HandleKeyDown"/>
+                        <MudTextField T="string" Class="publish-props-value" Label="Value"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      @bind-Value="_value" Immediate="true" Clearable="true" Disabled="@Disabled"
+                                      OnKeyDown="HandleKeyDown"/>
+                        <AppPrimaryButton Class="publish-props-add" StartIcon="@LucideIcons.Plus" title="Add user property"
+                                          Disabled="@(Disabled || !CanAdd)" OnClick="@AddAsync">
+                            Add
+                        </AppPrimaryButton>
+                    </div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Names cannot be blank. Values keep their whitespace and may be empty. Repeated names are sent in order.
+                    </MudText>
+
+                    @if (Draft.UserProperties.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="publish-props-empty">No user properties</MudText>
+                    }
+                    else
+                    {
+                        <div class="publish-props-table-wrap">
+                            <MudTable T="UserPropertyRow"
+                                      Items="@Rows()"
+                                      MultiSelection="true"
+                                      @bind-SelectedItems="_selected"
+                                      Hover="true"
+                                      Dense="true"
+                                      Striped="true"
+                                      Breakpoint="Breakpoint.None">
+                                <ColGroup>
+                                    <col class="publish-props-col-check"/>
+                                    <col class="publish-props-col-name"/>
+                                    <col/>
+                                </ColGroup>
+                                <ToolBarContent>
+                                    <MudSpacer/>
+                                    <AppTertiaryButton StartIcon="@LucideIcons.X" title="Clear properties"
+                                                       Disabled="@Disabled" OnClick="@ClearAll">
+                                        Clear
+                                    </AppTertiaryButton>
+                                    <AppDestructiveButton StartIcon="@LucideIcons.Trash2" title="Remove"
+                                                          Disabled="@(Disabled || _selected.Count == 0)"
+                                                          OnClick="@RemoveSelected">
+                                        Remove
+                                    </AppDestructiveButton>
+                                </ToolBarContent>
+                                <HeaderContent>
+                                    <MudTh>Name</MudTh>
+                                    <MudTh>Value</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd Class="app-mono publish-props-cell publish-props-cell-name">@context.Property.Name</MudTd>
+                                    <MudTd Class="app-mono publish-props-cell">@context.Property.Value</MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        </div>
+                    }
+                </div>
+            </ChildContent>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PublishPropertiesDraft Draft { get; set; } = new();
+    [Parameter] public bool Disabled { get; set; }
+
+    internal sealed record UserPropertyRow(int Index, MqttMessageUserProperty Property);
+
+    private MudTextField<string>? _nameField;
+    private string _name = string.Empty;
+    private string _value = string.Empty;
+    private HashSet<UserPropertyRow> _selected = [];
+    private bool _expanded;
+
+    private bool CanAdd => !string.IsNullOrWhiteSpace(_name) && Draft.CanAddUserProperty;
+
+    internal string NameDraft { get => _name; set => _name = value; }
+    internal string ValueDraft { get => _value; set => _value = value; }
+    internal bool Expanded { get => _expanded; set => _expanded = value; }
+    internal Task AddForTests() => AddAsync();
+    internal void SelectForTests(int index) => _selected.Add(Rows()[index]);
+    internal void RemoveSelectedForTests() => RemoveSelected();
+
+    protected override void OnParametersSet() => _expanded |= Draft.Any;
+
+    private List<UserPropertyRow> Rows() =>
+        Draft.UserProperties.Select((property, index) => new UserPropertyRow(index, property)).ToList();
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await AddAsync();
+    }
+
+    private async Task AddAsync()
+    {
+        if (Disabled)
+            return;
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("User property name cannot be blank.", Severity.Warning);
+            return;
+        }
+        if (!Draft.CanAddUserProperty)
+        {
+            Snackbar.Add($"User property limit ({PublishPropertiesDraft.MaxUserProperties}) reached.", Severity.Warning);
+            return;
+        }
+
+        Draft.UserProperties.Add(new MqttMessageUserProperty(_name, _value));
+        _name = string.Empty;
+        _value = string.Empty;
+        if (_nameField is not null)
+            await _nameField.FocusAsync();
+    }
+
+    private void RemoveSelected()
+    {
+        if (Disabled)
+            return;
+        if (_selected.Count == 0)
+        {
+            Snackbar.Add("Select at least one user property to remove.", Severity.Info);
+            return;
+        }
+
+        foreach (var index in _selected.Select(row => row.Index).OrderByDescending(index => index))
+            Draft.UserProperties.RemoveAt(index);
+        _selected = [];
+    }
+
+    private void ClearAll()
+    {
+        if (Disabled)
+            return;
+        Draft.Clear();
+        _selected = [];
+    }
+}

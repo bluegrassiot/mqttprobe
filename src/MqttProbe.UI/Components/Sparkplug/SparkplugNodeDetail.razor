@@ -150,15 +150,19 @@ else
             {
                 <div @key="device.DeviceId" class="spb-device-row @(ExpandedDevice == device ? "spb-device-row--expanded" : "")"
                      @onclick="() => OnToggleDevice.InvokeAsync(device)">
-                    <span class="spb-status-dot @StatusClass(device.Status)"></span>
-                    <span class="spb-device-id">@device.DeviceId</span>
-                    <span class="spb-status-label spb-status-label--device @StatusClass(device.Status)">
-                        @SparkplugNodeDisplay.StatusLabel(device.Status)
-                    </span>
-                    <span class="spb-device-secondary">
-                        @SparkplugNodeDisplay.DeviceSecondaryText(device)
-                    </span>
-                    <span @onclick:stopPropagation="true" class="ms-auto">
+                    <button type="button" class="spb-device-select"
+                            aria-expanded="@(ExpandedDevice == device ? "true" : "false")"
+                            @onkeydown="args => OnDeviceKeyDown(device, args)">
+                        <span class="spb-status-dot @StatusClass(device.Status)"></span>
+                        <span class="spb-device-id">@device.DeviceId</span>
+                        <span class="spb-status-label spb-status-label--device @StatusClass(device.Status)">
+                            @SparkplugNodeDisplay.StatusLabel(device.Status)
+                        </span>
+                        <span class="spb-device-secondary">
+                            @SparkplugNodeDisplay.DeviceSecondaryText(device)
+                        </span>
+                    </button>
+                    <span class="spb-device-rebirth" @onclick:stopPropagation="true">
                         <MudButton Variant="Variant.Outlined"
                                    Size="Size.Small" Class="app-btn-min"
                                    StartIcon="@LucideIcons.RefreshCw"
@@ -192,6 +196,16 @@ else
 }
 
 @code {
+    private async Task OnDeviceKeyDown(SpbDevice device, KeyboardEventArgs args)
+    {
+        if (args.IsComposing || args.CtrlKey || args.AltKey || args.MetaKey || args.ShiftKey)
+            return;
+
+        var expanded = ExpandedDevice == device;
+        if ((args.Key == "ArrowRight" && !expanded) || (args.Key == "ArrowLeft" && expanded))
+            await OnToggleDevice.InvokeAsync(device);
+    }
+
     private static string NodeStatusClass(SpbNode node) => SparkplugNodeDisplay.IsStale(node)
         ? "spb-status--stale"
         : StatusClass(node.Status);

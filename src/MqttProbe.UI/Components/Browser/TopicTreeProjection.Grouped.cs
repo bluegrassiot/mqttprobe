@@ -201,5 +201,3 @@ internal static partial class TopicTreeProjection
     };
 
 }
-
-

@@ -378,4 +378,3 @@ public sealed class TopicBulkActionsTests : BunitTestContext
     private void AuthorizeAsOperator() =>
         AuthorizationContext.SetAuthorized("testuser").SetRoles(AppRoles.Operator);
 }
-

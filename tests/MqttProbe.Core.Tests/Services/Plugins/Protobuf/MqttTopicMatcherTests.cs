@@ -85,4 +85,28 @@ public class MqttTopicMatcherTests
 
         MqttTopicMatcher.Matches(topic, topic).Should().BeFalse();
     }
+
+    [TestCase("a/b/c")]
+    [TestCase("a")]
+    [TestCase("a b/c d")]
+    [TestCase("/leading/slash")]
+    [TestCase("trailing/slash/")]
+    [TestCase("benchmarks/v5/all-six/reply")]
+    public void IsValidTopicName_AllowsPlainNames(string topic) =>
+        MqttTopicMatcher.IsValidTopicName(topic).Should().BeTrue();
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("a/+/c")]
+    [TestCase("a/#")]
+    [TestCase("#")]
+    [TestCase("a+b")]
+    [TestCase("a\0b")]
+    public void IsValidTopicName_RejectsEmptyWildcardsAndNul(string? topic) =>
+        MqttTopicMatcher.IsValidTopicName(topic).Should().BeFalse();
+
+    [TestCase(65_535, true)]
+    [TestCase(65_536, false)]
+    public void IsValidTopicName_LimitsByUtf8ByteCount(int charCount, bool expected) =>
+        MqttTopicMatcher.IsValidTopicName(new string('a', charCount)).Should().Be(expected);
 }

@@ -41,6 +41,85 @@ public class MqttV5PropertiesBrokerTests
 
         await PublishRetainedWithPropertiesAsync(topic, payload);
 
+        var message = await ReadSingleMessageAsync(topic);
+
+        message.Payload.Should().Be(payload);
+        message.RetainedMessage.Should().BeTrue();
+        message.ContentType.Should().Be("application/json");
+        message.ResponseTopic.Should().Be($"{topic}/reply");
+        message.CorrelationData.Should().Equal("corr-1"u8.ToArray());
+        message.MessageExpiryInterval.Should().NotBeNull().And.BeInRange(1u, 3600u,
+            "the broker decrements the expiry by the time the message sat retained");
+        message.PayloadFormatIndicator.Should().Be(MqttPayloadFormatIndicator.CharacterData);
+        message.UserProperties.Should().Equal(
+            new MqttMessageUserProperty("source", "integration-test"),
+            new MqttMessageUserProperty("site", "lab"),
+            new MqttMessageUserProperty("schema", "v1"));
+    }
+
+    [Test]
+    public async Task OutboundMapperThroughManagedClient_PropertiesSurviveBrokerRoundTrip_AgainstBroker()
+    {
+        var topic = $"v5/outbound/{Guid.NewGuid():N}";
+        const string payload = """{"device":"publisher","temperature":22.5}""";
+
+        using var publisher = new MqttManagedClient();
+        await publisher.StartAsync(BuildConnectOptions("v5-outbound-publisher", MqttProtocolVersion.V500));
+        await WaitUntilAsync(() => publisher.IsConnected);
+
+        await publisher.EnqueueAsync(OutboundMessageMapper.Build(
+            new MqttMessage(payload, topic, true, MqttQualityOfServiceLevel.AtLeastOnce)
+            {
+                ContentType = "application/json",
+                ResponseTopic = $"{topic}/reply",
+                CorrelationData = "order  42"u8.ToArray(),
+                MessageExpiryInterval = 3600,
+                PayloadFormatIndicator = MqttPayloadFormatIndicator.CharacterData,
+                UserProperties =
+                [
+                    new MqttMessageUserProperty("trace", "1"),
+                    new MqttMessageUserProperty("trace", "2"),
+                    new MqttMessageUserProperty("site", " lab ")
+                ]
+            }));
+        await publisher.StopAsync();
+
+        var message = await ReadSingleMessageAsync(topic);
+
+        message.Payload.Should().Be(payload);
+        message.RetainedMessage.Should().BeTrue();
+        message.ContentType.Should().Be("application/json");
+        message.ResponseTopic.Should().Be($"{topic}/reply");
+        message.CorrelationData.Should().Equal("order  42"u8.ToArray());
+        message.MessageExpiryInterval.Should().NotBeNull().And.BeInRange(1u, 3600u);
+        message.PayloadFormatIndicator.Should().Be(MqttPayloadFormatIndicator.CharacterData);
+        message.UserProperties.Should().Equal(
+            new MqttMessageUserProperty("trace", "1"),
+            new MqttMessageUserProperty("trace", "2"),
+            new MqttMessageUserProperty("site", " lab "));
+    }
+
+    [Test]
+    public async Task EnqueueAsync_OnV311Session_RejectsV5Properties_AgainstBroker()
+    {
+        using var publisher = new MqttManagedClient();
+        await publisher.StartAsync(BuildConnectOptions("v311-publisher", MqttProtocolVersion.V311));
+        await WaitUntilAsync(() => publisher.IsConnected);
+
+        var message = OutboundMessageMapper.Build(
+            new MqttMessage("p", $"v5/reject/{Guid.NewGuid():N}", false, MqttQualityOfServiceLevel.AtMostOnce)
+            {
+                UserProperties = [new MqttMessageUserProperty("k", "v")]
+            });
+
+        var act = () => publisher.EnqueueAsync(message);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+        await publisher.StopAsync();
+    }
+
+    private static async Task<MqttMessage> ReadSingleMessageAsync(string topic)
+    {
         using var client = new MqttManagedClient();
 
         var perfConfig = new AppConfiguration
@@ -85,7 +164,7 @@ public class MqttV5PropertiesBrokerTests
             Substitute.For<IUxMetricsService>(), BuildBuiltInPipeline(), sparkplug);
 
         await storeManager.Start();
-        await client.StartAsync(BuildV5ConnectOptions("v5-props-subscriber"));
+        await client.StartAsync(BuildConnectOptions("v5-props-subscriber", MqttProtocolVersion.V500));
 
         var deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline && storeManager.TotalStoredMessages == 0)
@@ -94,21 +173,17 @@ public class MqttV5PropertiesBrokerTests
         var messages = await MessageStoreReads.ReadMessagesAsync(storeManager, topic, 10);
         var message = messages.Should().ContainSingle().Subject;
 
-        message.Payload.Should().Be(payload);
-        message.RetainedMessage.Should().BeTrue();
-        message.ContentType.Should().Be("application/json");
-        message.ResponseTopic.Should().Be($"{topic}/reply");
-        message.CorrelationData.Should().Equal("corr-1"u8.ToArray());
-        message.MessageExpiryInterval.Should().NotBeNull().And.BeInRange(1u, 3600u,
-            "the broker decrements the expiry by the time the message sat retained");
-        message.PayloadFormatIndicator.Should().Be(MqttPayloadFormatIndicator.CharacterData);
-        message.UserProperties.Should().Equal(
-            new MqttMessageUserProperty("source", "integration-test"),
-            new MqttMessageUserProperty("site", "lab"),
-            new MqttMessageUserProperty("schema", "v1"));
-
         await storeManager.Stop();
         await client.StopAsync();
+        return message;
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!condition() && DateTime.UtcNow < deadline)
+            await Task.Delay(100);
+        condition().Should().BeTrue("the condition should be met within the deadline");
     }
 
     private static ReadOnlyMemory<byte> Utf8(string value) => Encoding.UTF8.GetBytes(value);
@@ -116,7 +191,7 @@ public class MqttV5PropertiesBrokerTests
     private static async Task PublishRetainedWithPropertiesAsync(string topic, string payload)
     {
         using var publisher = new MqttClientFactory().CreateMqttClient();
-        await publisher.ConnectAsync(BuildV5ConnectOptions("v5-props-publisher").ClientOptions);
+        await publisher.ConnectAsync(BuildConnectOptions("v5-props-publisher", MqttProtocolVersion.V500).ClientOptions);
 
         var message = new MqttApplicationMessageBuilder()
             .WithTopic(topic)
@@ -137,12 +212,12 @@ public class MqttV5PropertiesBrokerTests
         await publisher.DisconnectAsync(new MqttClientDisconnectOptions());
     }
 
-    private static MqttManagedClientOptions BuildV5ConnectOptions(string clientIdSuffix)
+    private static MqttManagedClientOptions BuildConnectOptions(string clientIdSuffix, MqttProtocolVersion version)
     {
         var clientOpts = new MqttClientOptionsBuilder()
             .WithTcpServer("127.0.0.1", _broker!.Port)
             .WithClientId($"integ-{clientIdSuffix}-{Guid.NewGuid():N}")
-            .WithProtocolVersion(MqttProtocolVersion.V500)
+            .WithProtocolVersion(version)
             .WithCleanStart()
             .WithTlsOptions(o => o
                 .WithSslProtocols(System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13) // DevSkim: ignore DS440020,DS112836,DS440001

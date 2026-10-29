@@ -33,7 +33,7 @@ public static class MqttMessagePropertyDisplay
         return $"0x{Convert.ToHexStringLower(data)} ({data.Length} bytes)";
     }
 
-    private static bool TryDecodePrintable(byte[] data, out string text)
+    internal static bool TryDecodePrintable(byte[] data, out string text)
     {
         try
         {

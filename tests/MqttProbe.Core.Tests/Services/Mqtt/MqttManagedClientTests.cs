@@ -1,4 +1,5 @@
 using MQTTnet;
+using MQTTnet.Exceptions;
 using MQTTnet.Packets;
 using MqttProbe.Core.Services.Mqtt;
 
@@ -255,6 +256,35 @@ public class MqttManagedClientTests
 
         await WaitUntilAsync(() => PublishCount(client) >= 1);
         await client.Received(1).PublishAsync(message, Arg.Any<CancellationToken>());
+    }
+
+    [TestCase(typeof(NotSupportedException))]
+    [TestCase(typeof(MqttProtocolViolationException))]
+    public async Task DrainPending_drops_message_rejected_by_protocol_and_continues(Type rejection)
+    {
+        var client = Substitute.For<IMqttClient>();
+        client.IsConnected.Returns(false);
+        await using var sut = new MqttManagedClient(client);
+        await sut.StartAsync(BuildOptions());
+        var rejected = new MqttApplicationMessageBuilder().WithTopic("v5/only").Build();
+        var accepted = new MqttApplicationMessageBuilder().WithTopic("plain").Build();
+        var error = (Exception)Activator.CreateInstance(rejection, "Feature UserProperties requires MQTT version 5.0.0.")!;
+        client.PublishAsync(rejected, Arg.Any<CancellationToken>())
+            .Returns<Task<MqttClientPublishResult>>(_ => throw error);
+
+        await sut.EnqueueAsync(rejected);
+        await sut.EnqueueAsync(accepted);
+
+        client.IsConnected.Returns(true);
+        client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
+
+        await WaitUntilAsync(() => PublishCount(client) >= 2);
+        await client.Received(1).PublishAsync(accepted, Arg.Any<CancellationToken>());
+        await client.Received(1).PublishAsync(rejected, Arg.Any<CancellationToken>());
+
+        client.ConnectedAsync += Raise.Event<Func<MqttClientConnectedEventArgs, Task>>(ConnectedArgs());
+        await Task.Delay(100);
+        await client.Received(1).PublishAsync(rejected, Arg.Any<CancellationToken>());
     }
 
     [Test]

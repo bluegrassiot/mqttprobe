@@ -1,4 +1,5 @@
 using MQTTnet;
+using MQTTnet.Exceptions;
 using MQTTnet.Packets;
 using MqttProbe.Core.Services.Mqtt;
 
@@ -257,8 +258,9 @@ public class MqttManagedClientTests
         await client.Received(1).PublishAsync(message, Arg.Any<CancellationToken>());
     }
 
-    [Test]
-    public async Task DrainPending_drops_message_rejected_by_protocol_and_continues()
+    [TestCase(typeof(NotSupportedException))]
+    [TestCase(typeof(MqttProtocolViolationException))]
+    public async Task DrainPending_drops_message_rejected_by_protocol_and_continues(Type rejection)
     {
         var client = Substitute.For<IMqttClient>();
         client.IsConnected.Returns(false);
@@ -266,8 +268,9 @@ public class MqttManagedClientTests
         await sut.StartAsync(BuildOptions());
         var rejected = new MqttApplicationMessageBuilder().WithTopic("v5/only").Build();
         var accepted = new MqttApplicationMessageBuilder().WithTopic("plain").Build();
+        var error = (Exception)Activator.CreateInstance(rejection, "Feature UserProperties requires MQTT version 5.0.0.")!;
         client.PublishAsync(rejected, Arg.Any<CancellationToken>())
-            .Returns<Task<MqttClientPublishResult>>(_ => throw new NotSupportedException("Feature UserProperties requires MQTT version 5.0.0."));
+            .Returns<Task<MqttClientPublishResult>>(_ => throw error);
 
         await sut.EnqueueAsync(rejected);
         await sut.EnqueueAsync(accepted);

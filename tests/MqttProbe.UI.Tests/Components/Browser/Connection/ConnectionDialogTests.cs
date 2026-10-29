@@ -1,4 +1,5 @@
 using System.Text;
+using AngleSharp.Dom;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
@@ -1970,6 +1971,10 @@ public class ConnectionDialogTests : BunitTestContext
         tab.Click();
     }
 
+    private IElement ConfirmButton(string text) =>
+        _dialogProvider.FindAll(".connection-dialog-confirm button")
+            .First(button => button.TextContent.Trim() == text);
+
     private void GoToOnConnectTab()
     {
         var tabs = _dialogProvider.FindAll(".mud-tab");
@@ -3889,11 +3894,11 @@ public class ConnectionDialogTests : BunitTestContext
 
         // Dirty guard should appear - click Discard
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
-        var discardBtn = _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Discard"));
-        discardBtn.Click();
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
+        ConfirmButton("Discard").Click();
 
-        await _mockConnections.Received(1).RemoveConnectionAsync(Arg.Any<Connection>());
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _mockConnections.Received(1).RemoveConnectionAsync(Arg.Any<Connection>()));
     }
 
     // --- Third oracle review remediation tests ---
@@ -3928,11 +3933,10 @@ public class ConnectionDialogTests : BunitTestContext
         // Try to switch - dirty guard appears
         var switchTask = SelectConnection(conn2);
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
 
         // Click Discard
-        var discardBtn = _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Discard"));
-        discardBtn.Click();
+        ConfirmButton("Discard").Click();
 
         await switchTask;
 
@@ -3957,20 +3961,16 @@ public class ConnectionDialogTests : BunitTestContext
         // Attempt to switch to conn2 — dirty guard appears
         _ = SelectConnection(conn2);
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
 
         // Click Cancel — should NOT switch
-        var dialogs = _dialogProvider.FindAll(".mud-dialog");
-        var warningDialog = dialogs.Last();
-        var cancelBtn = warningDialog.QuerySelectorAll("button")
-            .First(b => b.TextContent.Contains("Cancel"));
-        cancelBtn.Click();
+        ConfirmButton("Cancel").Click();
 
         // Warning should close, parent should remain
         await _dialogProvider.WaitForAssertionAsync(() =>
         {
-            var remaining = _dialogProvider.FindAll(".mud-dialog");
-            remaining.Should().HaveCount(1, "warning should close, parent should remain");
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().BeEmpty(
+                "the confirmation should close, the dialog should remain");
         });
 
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
@@ -3999,11 +3999,10 @@ public class ConnectionDialogTests : BunitTestContext
         // Click New - dirty guard appears
         _dialogProvider.Find("button[title='New connection']").Click();
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
 
         // Click Discard
-        var discardBtn = _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Discard"));
-        discardBtn.Click();
+        ConfirmButton("Discard").Click();
 
         // Should reset to new connection
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
@@ -4028,11 +4027,11 @@ public class ConnectionDialogTests : BunitTestContext
 
         // Handle dirty guard
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
-        var discardBtn = _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Discard"));
-        discardBtn.Click();
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
+        ConfirmButton("Discard").Click();
 
-        await _mockConnections.Received(1).RemoveConnectionAsync(Arg.Any<Connection>());
+        await _dialogProvider.WaitForAssertionAsync(() =>
+            _mockConnections.Received(1).RemoveConnectionAsync(Arg.Any<Connection>()));
     }
 
     [Test]
@@ -4085,11 +4084,10 @@ public class ConnectionDialogTests : BunitTestContext
         content.KeyDown(key: "Escape");
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
 
         // Click Cancel - should preserve form and tab
-        var cancelBtn = _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Cancel"));
-        cancelBtn.Click();
+        ConfirmButton("Cancel").Click();
 
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
         dialog.SelectedConnectionForTests.Name.Should().Be("Modified",
@@ -4111,11 +4109,10 @@ public class ConnectionDialogTests : BunitTestContext
         content.KeyDown(key: "Escape");
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
 
         // Click Discard - should close
-        var discardBtn = _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Discard"));
-        discardBtn.Click();
+        ConfirmButton("Discard").Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
             _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty(
@@ -4567,21 +4564,16 @@ public class ConnectionDialogTests : BunitTestContext
 
         // Warning dialog should appear
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
 
-        // Scope to the topmost (warning) dialog and click its Cancel button
-        var dialogs = _dialogProvider.FindAll(".mud-dialog");
-        dialogs.Should().HaveCount(2, "both parent and warning dialog should exist");
-        var warningDialog = dialogs.Last();
-        var warningCancel = warningDialog.QuerySelectorAll("button")
-            .First(b => b.TextContent.Contains("Cancel"));
-        warningCancel.Click();
+        ConfirmButton("Cancel").Click();
 
         // Warning should close, parent should remain
         await _dialogProvider.WaitForAssertionAsync(() =>
         {
-            var remaining = _dialogProvider.FindAll(".mud-dialog");
-            remaining.Should().HaveCount(1, "warning should close, parent should remain");
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().BeEmpty(
+                "the confirmation should close, the dialog should remain");
+            _dialogProvider.FindAll(".mud-dialog").Should().ContainSingle();
         });
 
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
@@ -4603,20 +4595,14 @@ public class ConnectionDialogTests : BunitTestContext
         overlays.Last().Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
 
-        // Scope to the topmost (warning) dialog and click Discard
-        var dialogs = _dialogProvider.FindAll(".mud-dialog");
-        dialogs.Should().HaveCount(2, "both parent and warning dialog should exist");
-        var warningDialog = dialogs.Last();
-        var discardBtn = warningDialog.QuerySelectorAll("button")
-            .First(b => b.TextContent.Contains("Discard"));
-        discardBtn.Click();
+        ConfirmButton("Discard").Click();
 
         // Both warning and parent should be closed
         await _dialogProvider.WaitForAssertionAsync(() =>
             _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty(
-                "Discard should close both warning and parent dialog"));
+                "Discard should close the dialog"));
     }
 
     [Test]
@@ -4639,21 +4625,16 @@ public class ConnectionDialogTests : BunitTestContext
         content.KeyDown(key: "Escape");
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
 
-        // Scope to the topmost (warning) dialog and click Cancel
-        var dialogs = _dialogProvider.FindAll(".mud-dialog");
-        dialogs.Should().HaveCount(2, "both parent and warning dialog should exist");
-        var warningDialog = dialogs.Last();
-        var warningCancel = warningDialog.QuerySelectorAll("button")
-            .First(b => b.TextContent.Contains("Cancel"));
-        warningCancel.Click();
+        ConfirmButton("Cancel").Click();
 
         // Warning should close, parent should remain with form and tab preserved
         await _dialogProvider.WaitForAssertionAsync(() =>
         {
-            var remaining = _dialogProvider.FindAll(".mud-dialog");
-            remaining.Should().HaveCount(1, "warning should close, parent should remain");
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().BeEmpty(
+                "the confirmation should close, the dialog should remain");
+            _dialogProvider.FindAll(".mud-dialog").Should().ContainSingle();
         });
 
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;
@@ -4675,15 +4656,9 @@ public class ConnectionDialogTests : BunitTestContext
         content.KeyDown(key: "Escape");
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
 
-        // Scope to the topmost (warning) dialog and click Discard
-        var dialogs = _dialogProvider.FindAll(".mud-dialog");
-        dialogs.Should().HaveCount(2, "both parent and warning dialog should exist");
-        var warningDialog = dialogs.Last();
-        var discardBtn = warningDialog.QuerySelectorAll("button")
-            .First(b => b.TextContent.Contains("Discard"));
-        discardBtn.Click();
+        ConfirmButton("Discard").Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
             _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty(
@@ -4870,15 +4845,9 @@ public class ConnectionDialogTests : BunitTestContext
         content.KeyDown(key: "Escape");
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
 
-        // Scope to the topmost (warning) dialog and click Discard
-        var dialogs = _dialogProvider.FindAll(".mud-dialog");
-        dialogs.Should().HaveCount(2, "both parent and warning dialog should exist");
-        var warningDialog = dialogs.Last();
-        var discardBtn = warningDialog.QuerySelectorAll("button")
-            .First(b => b.TextContent.Contains("Discard"));
-        discardBtn.Click();
+        ConfirmButton("Discard").Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
             _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty(
@@ -5225,18 +5194,15 @@ public class ConnectionDialogTests : BunitTestContext
         content.KeyDown(key: "Escape");
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.Markup.Should().Contain("Unsaved changes"));
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().ContainSingle());
 
         // Verify Cancel preserves form
-        var dialogs = _dialogProvider.FindAll(".mud-dialog");
-        dialogs.Should().HaveCount(2);
-        var warningDialog = dialogs.Last();
-        warningDialog.QuerySelectorAll("button")
-            .First(b => b.TextContent.Contains("Cancel")).Click();
+        ConfirmButton("Cancel").Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
         {
-            _dialogProvider.FindAll(".mud-dialog").Should().HaveCount(1);
+            _dialogProvider.FindAll(".connection-dialog-confirm").Should().BeEmpty();
+            _dialogProvider.FindAll(".mud-dialog").Should().ContainSingle();
         });
 
         var dialog = _dialogProvider.FindComponent<ConnectionDialog>().Instance;

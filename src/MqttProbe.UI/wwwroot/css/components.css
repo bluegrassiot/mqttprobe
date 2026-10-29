@@ -69,6 +69,26 @@
     color: #F1F5F9 !important;
 }
 
+/* One visible ring for every keyboard focus target in the shared UI. Zero specificity so
+   component styles can still refine their own ring. Text inputs are left out on purpose:
+   MudBlazor already thickens their outline border on focus. */
+:where(a[href], button, summary, [role='button'], [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
+/* MudBlazor ships `a:focus-visible { outline: none }`, which outranks the rule above. */
+a:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
+/* MudBlazor also ships `button:focus { outline: none }`, same reasoning as the link rule. */
+button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
 /* ── Data text ───────────────────────────────────────────────────────────── */
 
 /* Shared monospace data display (BRAND_GUIDE Code and Data Display). */

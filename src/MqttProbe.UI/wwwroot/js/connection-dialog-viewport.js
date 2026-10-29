@@ -16,6 +16,36 @@ const ZOOM_SCALE_THRESHOLD = 1.01;
 const activeAttachments = new Map();
 let nextAttachment = 1;
 
+// Focus memory is per dialog content element, so a confirmation can hand focus back to the
+// control the user was editing without a second focus trap.
+const focusMemory = new WeakMap();
+
+export function rememberFocus(contentElement) {
+    const active = document.activeElement;
+    if (contentElement && active instanceof HTMLElement && contentElement.contains(active)) {
+        focusMemory.set(contentElement, active);
+    }
+}
+
+export function restoreFocus(contentElement) {
+    if (!contentElement) {
+        return false;
+    }
+
+    const previous = focusMemory.get(contentElement);
+    focusMemory.delete(contentElement);
+
+    if (previous && previous.isConnected && contentElement.contains(previous)) {
+        previous.focus();
+        if (document.activeElement === previous) {
+            return true;
+        }
+    }
+
+    contentElement.focus();
+    return false;
+}
+
 export function attach(contentElement) {
     if (!contentElement) {
         return null;

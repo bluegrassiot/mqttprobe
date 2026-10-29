@@ -1,28 +1,39 @@
 @if (IsOpen)
 {
-    <div class="topic-picker-overlay" @onclick="CloseWithoutSelection">
-        <MudPaper Class="topic-picker-overlay__panel" @onclick:stopPropagation="true"
-                  Elevation="8" Square="false">
-            <div class="topic-picker-overlay__header">
-                <MudText Typo="Typo.subtitle1" Class="topic-picker-overlay__title">Topics</MudText>
-                <MudIconButton Icon="@LucideIcons.X" Size="Size.Small"
-                               Color="Color.Default" title="Close"
-                               OnClick="CloseWithoutSelection"/>
-            </div>
-            <div class="topic-picker-overlay__body">
-                <TopicBrowser OnSelectedChanged="OnTopicSelected"/>
-            </div>
-        </MudPaper>
-    </div>
+    <MudFocusTrap>
+        <div class="topic-picker-overlay" @onclick="CloseWithoutSelection" @onkeydown="HandleKeyDown">
+            <MudPaper Class="topic-picker-overlay__panel" @onclick:stopPropagation="true"
+                      role="dialog" aria-modal="true" aria-labelledby="@TitleId"
+                      Elevation="8" Square="false">
+                <div class="topic-picker-overlay__header">
+                    <MudText Typo="Typo.subtitle1" id="@TitleId" Class="topic-picker-overlay__title">Topics</MudText>
+                    <MudIconButton Icon="@LucideIcons.X" Size="Size.Small"
+                                   Color="Color.Default" title="Close"
+                                   OnClick="CloseWithoutSelection"/>
+                </div>
+                <div class="topic-picker-overlay__body">
+                    <TopicBrowser OnSelectedChanged="OnTopicSelected"/>
+                </div>
+            </MudPaper>
+        </div>
+    </MudFocusTrap>
 }
 
 @code {
+    private const string TitleId = "topic-picker-overlay-title";
+
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
     private async Task CloseWithoutSelection()
     {
         await OnClose.InvokeAsync();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            await CloseWithoutSelection();
     }
 
     private async Task OnTopicSelected(SelectedTopicState _)

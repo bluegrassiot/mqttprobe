@@ -96,4 +96,50 @@ public class TopicPickerOverlayTests : BunitTestContext
         // are stopped by @onclick:stopPropagation on MudPaper).
         overlay.Children.Should().Contain(panel!);
     }
+
+    [Test]
+    public void Panel_IsAModalDialogLabelledByItsTitle()
+    {
+        var cut = Render<TopicPickerOverlay>(p => p.Add(x => x.IsOpen, true));
+
+        var panel = cut.Find(".topic-picker-overlay__panel");
+        panel.GetAttribute("role").Should().Be("dialog");
+        panel.GetAttribute("aria-modal").Should().Be("true");
+        var labelledBy = panel.GetAttribute("aria-labelledby");
+        labelledBy.Should().NotBeNullOrWhiteSpace();
+        cut.Find($"#{labelledBy}").TextContent.Trim().Should().Be("Topics");
+    }
+
+    [Test]
+    public void Panel_IsInsideAFocusTrap()
+    {
+        var cut = Render<TopicPickerOverlay>(p => p.Add(x => x.IsOpen, true));
+
+        var trap = cut.FindAll(".mud-focus-trap").Should().ContainSingle().Subject;
+        trap.QuerySelector(".topic-picker-overlay__panel").Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task Escape_InvokesOnClose()
+    {
+        var closed = false;
+        var cut = Render<TopicPickerOverlay>(
+            p => p.Add(x => x.IsOpen, true)
+                  .Add(x => x.OnClose, () => { closed = true; return Task.CompletedTask; }));
+
+        await cut.InvokeAsync(() => cut.Find(".topic-picker-overlay").KeyDown("Escape"));
+
+        closed.Should().BeTrue();
+    }
+
+    [Test]
+    public void Closing_RestoresFocusToWhateverOpenedIt()
+    {
+        var cut = Render<TopicPickerOverlay>(p => p.Add(x => x.IsOpen, true));
+        JSInterop.Invocations.Should().Contain(invocation => invocation.Identifier == "mudElementRef.saveFocus");
+
+        cut.Render(p => p.Add(x => x.IsOpen, false));
+
+        JSInterop.Invocations.Should().Contain(invocation => invocation.Identifier == "mudElementRef.restoreFocus");
+    }
 }

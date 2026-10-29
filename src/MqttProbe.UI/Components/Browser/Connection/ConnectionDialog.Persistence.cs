@@ -72,6 +72,7 @@ public partial class ConnectionDialog
         var previousSelector = _savedConnectionForSelector;
         if (!await GuardIfDirty())
         {
+            if (_disposed) return;
             _savedConnectionForSelector = previousSelector;
             _selectorGeneration++;
             await InvokeAsync(StateHasChanged);

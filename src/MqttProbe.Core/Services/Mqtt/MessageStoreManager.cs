@@ -237,6 +237,9 @@ public class MessageStoreManager : IMessageStoreManager
         return Task.CompletedTask;
     }
 
+    public Task<int> ClearMessagesForTopicsAsync(IReadOnlyList<string> fullTopics) =>
+        Task.FromResult(_store.ClearMessagesForTopics(fullTopics));
+
     internal void AddMessage(string fullTopic, MqttMessage message) => _store.Add(fullTopic, message);
 
     private Task MessageHandler(MqttApplicationMessageReceivedEventArgs arg)

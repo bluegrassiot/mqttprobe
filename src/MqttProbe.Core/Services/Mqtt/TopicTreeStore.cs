@@ -13,7 +13,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
     private const int MaxAliasCharacters = 4 * 1024 * 1024;
 
     private readonly Lock _storeSync = new();
-    private readonly Queue<MessageStore> _retentionOrder = new();
+    private readonly Queue<RetentionEntry> _retentionOrder = new();
     private readonly HashSet<string> _aliasSpellings = new(StringComparer.Ordinal);
 
     private int _totalNodeCount;
@@ -223,7 +223,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             _aliasCharacterCount += rawTopic.Length;
         store.Messages ??= new ConcurrentQueue<MqttMessage>();
         store.Messages.Enqueue(message);
-        _retentionOrder.Enqueue(store);
+        _retentionOrder.Enqueue(new RetentionEntry(store, message));
         _totalMessageCount++;
         IncrementMessageCounts(store);
         AppendToScopedSelection(store);
@@ -240,12 +240,12 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         while (_totalMessageCount > limit && _retentionOrder.Count > 0)
         {
             var oldest = _retentionOrder.Dequeue();
-            oldest.Messages?.TryDequeue(out _);
+            oldest.Store.Messages?.TryDequeue(out _);
             _totalMessageCount--;
-            DecrementMessageCounts(oldest);
+            DecrementMessageCounts(oldest.Store);
             Interlocked.Increment(ref _globalVersion);
             InvalidateTopicTree();
-            if (SelectionIncludes(oldest))
+            if (SelectionIncludes(oldest.Store))
                 _selectionContentVersion++;
         }
     }
@@ -351,6 +351,9 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         if (_selectedRoots.Count == 0)
             return true;
 
+        if (_selectionMode == TopicSelectionMode.MultipleTopics)
+            return ReconcileExactSelection();
+
         foreach (var selected in _selectedRoots)
         {
             if (selected.FullTopic is not { } path || !ReferenceEquals(FindNode(path), selected))
@@ -360,6 +363,26 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
                 return false;
         }
 
+        return true;
+    }
+
+    // Bulk selection prunes only raw spellings a purge actually retired; surviving spellings
+    // stay selected and the key follows the surviving set.
+    private bool ReconcileExactSelection()
+    {
+        if (_selectionPaths.IsDefaultOrEmpty)
+            return false;
+
+        var surviving = ResolveExactPaths(_selectionPaths);
+        if (surviving.Count == _selectionPaths.Length)
+            return true;
+
+        if (surviving.Count == 0)
+            return false;
+
+        var paths = SortedExactPaths(surviving.Select(item => item.Path));
+        ReplaceSelection(DistinctNodes(surviving.Select(item => item.Node)), TopicSelection.ComposeExactKey(paths),
+            ExactSelectionLabel(paths), scope: null, requiresCanonical: false, TopicSelectionMode.MultipleTopics, paths);
         return true;
     }
 
@@ -382,14 +405,6 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         }
     }
 
-    private void RebuildRetentionOrder()
-    {
-        _retentionOrder.Clear();
-        foreach (var store in EnumerateMessages(_messageStores.Values)
-                     .OrderBy(item => item.Message.DateTimeReceived)
-                     .Select(item => item.Store))
-            _retentionOrder.Enqueue(store);
-    }
 
     private static IEnumerable<(MessageStore Store, MqttMessage Message)> EnumerateMessages(
         IEnumerable<MessageStore> stores)

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Runtime.InteropServices;
 
 namespace MqttProbe.Core.Models.Mqtt;
@@ -16,4 +17,9 @@ public sealed record SelectedTopicState(
     SelectedTopicToken Token,
     string? Key,
     int MessageCount,
-    string? Label = null);
+    string? Label = null)
+{
+    public ImmutableArray<string> Paths { get; init; } = ImmutableArray<string>.Empty;
+
+    public TopicSelectionMode Mode { get; init; } = TopicSelectionMode.SingleTopic;
+}

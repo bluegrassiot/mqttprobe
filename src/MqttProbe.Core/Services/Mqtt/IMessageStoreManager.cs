@@ -21,6 +21,7 @@ public interface IMessageStoreManager : IDisposable
     public long ExcludedMessageCount { get; }
     public long GetVersion();
     public Task ClearAllMessages();
+    public Task<int> ClearMessagesForTopicsAsync(IReadOnlyList<string> fullTopics);
 
     // CA1716: "Stop" clashes with a VB keyword. This is public API surface
     // consumed by third-party plugins (MqttProbe.UI) — do not rename.

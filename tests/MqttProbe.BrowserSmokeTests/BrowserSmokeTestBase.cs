@@ -16,7 +16,7 @@ public abstract class BrowserSmokeTestBase
     protected const string LogoutControl =
         "form.logout-action-form button[type='submit'], form.logout-menu-form button[type='submit']";
     protected const string ConnectionDialog = ".connection-dialog-content";
-    protected const string DialogCancel = ".mud-dialog .connection-dialog-content button:has-text('Cancel')";
+    protected const string DialogClose = ".mud-dialog .connection-dialog-content [data-testid='connection-close']";
 
     private static readonly string[] _hostResolverArgs =
     [
@@ -154,7 +154,7 @@ public abstract class BrowserSmokeTestBase
         SetStage($"{tag}: close connection dialog");
         var dialog = page.Locator(ConnectionDialog).First;
         await dialog.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = ActionTimeoutMs });
-        await page.Locator(DialogCancel).First.ClickAsync(new LocatorClickOptions { Timeout = ActionTimeoutMs });
+        await page.Locator(DialogClose).First.ClickAsync(new LocatorClickOptions { Timeout = ActionTimeoutMs });
         await dialog.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden, Timeout = ActionTimeoutMs });
 
         SetStage($"{tag}: end-session request");

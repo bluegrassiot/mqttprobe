@@ -234,8 +234,14 @@ public class ChartDataService(
         OnDataUpdated?.Invoke();
     }
 
-    private bool UpdateBuffers(string topic, IReadOnlyDictionary<string, ExtractedField> fields, DateTime timestamp) =>
-        chartSettings.GetCharts(_connectionId).Any(config => UpdateBuffersForConfiguration(topic, fields, timestamp, config));
+    private bool UpdateBuffers(string topic, IReadOnlyDictionary<string, ExtractedField> fields, DateTime timestamp)
+    {
+        var updated = false;
+        foreach (var config in chartSettings.GetCharts(_connectionId))
+            updated |= UpdateBuffersForConfiguration(topic, fields, timestamp, config);
+
+        return updated;
+    }
 
     private bool UpdateBuffersForConfiguration(
         string topic,

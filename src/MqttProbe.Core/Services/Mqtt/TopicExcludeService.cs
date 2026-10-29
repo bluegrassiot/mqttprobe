@@ -5,7 +5,7 @@ using MqttProbe.Core.Services.Plugins.Protobuf;
 
 namespace MqttProbe.Core.Services.Mqtt;
 
-public sealed class TopicExcludeService : ITopicExcludeService
+public sealed partial class TopicExcludeService : ITopicExcludeService
 {
     private const int MaxTopicExcludes = 500;
 
@@ -19,6 +19,7 @@ public sealed class TopicExcludeService : ITopicExcludeService
     private readonly Dictionary<string, int> _inFlightReaders = new(StringComparer.Ordinal);
     private readonly List<PendingPurge> _pendingPurges = [];
     private long _connectionGeneration;
+    private Connection? _loadedConnection;
     private bool _disposed;
 
     public event Action<string>? PurgeExcludedTopic;
@@ -81,72 +82,8 @@ public sealed class TopicExcludeService : ITopicExcludeService
 
     public async Task<TopicExcludeOperationResult> Add(string topic)
     {
-        var initialValidation = ValidateAdd(topic);
-        if (!initialValidation.IsValid)
-            return new(false, initialValidation.Feedback);
-
-        PendingPurge? purge = null;
-        var deferred = false;
-        if (!await EnterOperationAsync())
-            return ServiceClosedFailure();
-        try
-        {
-            Connection activeConnection;
-            long generation;
-            string[] candidate;
-            lock (_sync)
-            {
-                var validation = ValidateAddLocked(topic);
-                if (!validation.IsValid)
-                    return new(false, validation.Feedback);
-
-                activeConnection = _sessionState.SelectedConnection;
-                generation = _connectionGeneration;
-                candidate = [.. _topics, topic];
-            }
-
-            var persistenceError = await PersistTopicsAsync(activeConnection, candidate);
-            if (persistenceError is not null)
-                return PersistenceFailure();
-
-            lock (_sync)
-            {
-                // Disposal can land while persistence is awaited. The change stays on the
-                // connection (it loads with the next service), but this call must not claim
-                // an active filter it can no longer purge or back.
-                if (_disposed)
-                    return ServiceClosedFailure();
-
-                if (!IsCurrentConnectionLocked(activeConnection, generation))
-                    return ConnectionChangedFailure();
-
-                _topics.Add(topic);
-                purge = RequestPurgeLocked(topic, generation, out deferred);
-            }
-        }
-        finally
-        {
-            ReleaseOperationLock();
-        }
-
-        if (purge is null)
-            return ConnectionChangedFailure();
-
-        return await SettlePurgeAsync(purge, deferred);
-    }
-
-    // Runs with neither the operation semaphore nor _sync held, so a subscriber that
-    // re-enters Add from a notification cannot deadlock against this call.
-    private async Task<TopicExcludeOperationResult> SettlePurgeAsync(PendingPurge purge, bool deferred)
-    {
-        var outcome = deferred ? await purge.Completion.Task : FinishPurge(purge);
-        return outcome switch
-        {
-            PurgeOutcome.Completed => new(true),
-            PurgeOutcome.Failed => PurgeFailure(),
-            PurgeOutcome.Removed => ExclusionRemovedFailure(),
-            _ => ConnectionChangedFailure()
-        };
+        var (outcome, feedback) = await AddCore(topic, boundConnection: null, boundGeneration: 0);
+        return new(outcome == TopicExcludeAddOutcome.Added, feedback);
     }
 
     public async Task<TopicExcludeOperationResult> Remove(IReadOnlyList<string> topics)
@@ -218,6 +155,7 @@ public sealed class TopicExcludeService : ITopicExcludeService
         lock (_sync)
         {
             _connectionGeneration++;
+            _loadedConnection = connection;
             DropPendingPurgesLocked();
             _topics.Clear();
             foreach (var topic in (connection.TopicExcludes).Where(IsValid).Take(MaxTopicExcludes))
@@ -427,7 +365,7 @@ public sealed class TopicExcludeService : ITopicExcludeService
 
     private static TopicExcludeOperationResult PurgeFailure() =>
         new(false, new UserNotification(UserNotificationSeverity.Error,
-            "Exclusion applied, but clearing existing topic data failed"));
+            "Exclusion applied and future messages are now blocked, but clearing existing topic data failed"));
 
     private static TopicExcludeOperationResult ExclusionRemovedFailure() =>
         new(false, new UserNotification(UserNotificationSeverity.Warning,

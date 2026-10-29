@@ -1,10 +1,14 @@
+@using Microsoft.JSInterop
+@using MudBlazor.Services
 @using MQTTnet.Protocol
+@implements IAsyncDisposable
 @inject ISnackbar Snackbar
+@inject IKeyInterceptorService KeyInterceptorService
 
-<div class="subscription-editor"
-     role="region" aria-label="Subscriptions list" tabindex="0">
+<div id="@_rootId" class="subscription-editor"
+     role="region" aria-label="Subscriptions list">
     <MudExpansionPanels Dense="true" Elevation="0">
-        <MudExpansionPanel @bind-Expanded="_expanded" Dense="true">
+        <MudExpansionPanel @ref="_panel" @bind-Expanded="_expanded" Dense="true">
             <TitleContent>
                 <div class="d-flex align-center gap-2">
                     <MudText Typo="Typo.subtitle2">Subscriptions</MudText>
@@ -113,6 +117,8 @@
     private HashSet<SubscribedTopic> _selected = [];
     private bool _busy;
     private bool _expanded = true;
+    private readonly string _rootId = $"subscription-editor-{Guid.NewGuid():N}";
+    private MudExpansionPanel? _panel;
 
     // S2292 (suppressed project-wide via NoWarn in MqttProbe.UI.csproj — like
     // CS8669/S8970 there, it is reported against the Razor @code block and neither
@@ -125,6 +131,43 @@
     internal MqttQualityOfServiceLevel QosDraft { get => _qos; set => _qos = value; }
     internal Task AddForTests() => AddAsync();
     internal Task RemoveSelectedForTests() => RemoveSelectedAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await KeyInterceptorService.SubscribeAsync(
+            _rootId,
+            new KeyInterceptorOptions(
+                "mud-expand-panel-header",
+                new KeyOptions("ArrowRight", subscribeDown: true, ignoreDownRepeats: true),
+                new KeyOptions("ArrowLeft", subscribeDown: true, ignoreDownRepeats: true)),
+            HandleDisclosureKeyDown);
+    }
+
+    private async Task HandleDisclosureKeyDown(KeyboardEventArgs e)
+    {
+        if (_panel is null || e.Repeat || e.IsComposing ||
+            e.CtrlKey || e.AltKey || e.MetaKey || e.ShiftKey)
+            return;
+
+        if (e.Key == "ArrowRight")
+            await _panel.ExpandAsync();
+        else if (e.Key == "ArrowLeft")
+            await _panel.CollapseAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await KeyInterceptorService.UnsubscribeAsync(_rootId);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is gone; the browser drops the listener with the page.
+        }
+    }
 
     private void ApplyPreset(string topicFilter)
     {

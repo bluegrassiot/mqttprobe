@@ -8,6 +8,13 @@
     cursor: pointer;
 }
 
+/* The row is the tree's focus owner, so the ring sits inside it and the scroll owner
+   cannot clip it on the first or last row. */
+.topic-tree-row:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
 /* The indent SVG paints nothing, so pointer events fall through to the row. flex-basis:auto
    lets its width attribute drive the flex base size; flex-shrink:0 keeps it from collapsing. */
 .topic-tree-indent {
@@ -60,6 +67,12 @@
     min-height: 44px;
     margin: 0 2px 0 0;
     padding: 0;
+}
+
+/* The checkbox keeps its own 44px target; this wrapper only owns the stop for its keys. */
+.topic-select-checkbox-wrap {
+    display: flex;
+    flex: 0 0 auto;
 }
 
 .topic-tree-row ::deep .topic-select-checkbox .mud-button-root {

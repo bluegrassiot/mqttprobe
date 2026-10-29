@@ -39,3 +39,19 @@
     font-weight: 600;
     overflow-wrap: anywhere;
 }
+
+.quick-add-timeout-row {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+}
+
+.quick-add-timeout {
+    flex: 1 1 180px;
+    min-width: 0;
+}
+
+.quick-add-timeout-error {
+    flex: 1 1 100%;
+}

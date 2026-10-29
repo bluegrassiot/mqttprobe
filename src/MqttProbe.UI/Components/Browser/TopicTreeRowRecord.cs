@@ -54,6 +54,12 @@ public sealed record TopicTreeRowModel(
 
     public bool IsBulkSelectable => IsMessageTopic && SelectionPaths.Length > 0;
 
+    // A node reached by more than one exact spelling renders one row per spelling beside the node
+    // row, so the row key needs the raw spelling to stay unique.
+    public string RowKey => Kind == TopicTreeRowKind.Spelling
+        ? $"{FullPath}\u001f{string.Join('\u001f', SelectionPaths)}"
+        : FullPath;
+
     public ImmutableArray<string> SelectedTopics => SelectionTopics.IsDefaultOrEmpty
         ? [FullPath]
         : SelectionTopics;

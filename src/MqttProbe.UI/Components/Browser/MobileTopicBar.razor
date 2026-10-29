@@ -2,7 +2,9 @@
 @implements IAsyncDisposable
 
 <div class="mobile-topic-bar">
-    <div class="mobile-topic-bar__info" @onclick="OpenPicker">
+    <div class="mobile-topic-bar__info" role="button" tabindex="0"
+         aria-label="@InfoLabel" aria-disabled="@(HasTopics ? null : "true")"
+         @onclick="OpenPicker" @onkeydown="HandleInfoKeyDown">
         @if (BulkSelection is { IsActive: true })
         {
             <MudIcon Icon="@LucideIcons.CheckCircle" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
@@ -53,6 +55,27 @@
     private int _messageCount;
     private Timer? _updateTimer;
     private bool _disposed;
+
+    private string InfoLabel
+    {
+        get
+        {
+            if (BulkSelection is { IsActive: true } bulk)
+                return $"Change topics, {bulk.Summary}";
+
+            return _selectedTopic is null ? "Choose a topic" : $"Change topic, current topic {_selectedTopic}";
+        }
+    }
+
+    private async Task HandleInfoKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is not ("Enter" or " "))
+            return;
+        if (e.CtrlKey || e.AltKey || e.MetaKey)
+            return;
+
+        await OpenPicker();
+    }
 
     protected override void OnInitialized()
     {

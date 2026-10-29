@@ -1,9 +1,13 @@
+@using Microsoft.JSInterop
+@using MudBlazor.Services
+@implements IAsyncDisposable
 @inject ISnackbar Snackbar
+@inject IKeyInterceptorService KeyInterceptorService
 
-<div class="exclude-editor"
-     role="region" aria-label="Excluded topics list" tabindex="0">
+<div id="@_rootId" class="exclude-editor"
+     role="region" aria-label="Excluded topics list">
     <MudExpansionPanels Dense="true" Elevation="0">
-        <MudExpansionPanel @bind-Expanded="_expanded" Dense="true">
+        <MudExpansionPanel @ref="_panel" @bind-Expanded="_expanded" Dense="true">
             <TitleContent>
                 <div class="d-flex align-center gap-2">
                     <MudText Typo="Typo.subtitle2">Excluded topics</MudText>
@@ -84,10 +88,49 @@
     private bool _busy;
     private bool _expanded;
     private bool _initialStateSet;
+    private readonly string _rootId = $"exclude-editor-{Guid.NewGuid():N}";
+    private MudExpansionPanel? _panel;
 
     internal string TopicDraft { get => _topic; set => _topic = value; }
     internal Task AddForTests() => AddAsync();
     internal Task RemoveSelectedForTests() => RemoveSelectedAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await KeyInterceptorService.SubscribeAsync(
+            _rootId,
+            new KeyInterceptorOptions(
+                "mud-expand-panel-header",
+                new KeyOptions("ArrowRight", subscribeDown: true, ignoreDownRepeats: true),
+                new KeyOptions("ArrowLeft", subscribeDown: true, ignoreDownRepeats: true)),
+            HandleDisclosureKeyDown);
+    }
+
+    private async Task HandleDisclosureKeyDown(KeyboardEventArgs e)
+    {
+        if (_panel is null || e.Repeat || e.IsComposing ||
+            e.CtrlKey || e.AltKey || e.MetaKey || e.ShiftKey)
+            return;
+
+        if (e.Key == "ArrowRight")
+            await _panel.ExpandAsync();
+        else if (e.Key == "ArrowLeft")
+            await _panel.CollapseAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await KeyInterceptorService.UnsubscribeAsync(_rootId);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is gone; the browser drops the listener with the page.
+        }
+    }
 
     protected override void OnParametersSet()
     {

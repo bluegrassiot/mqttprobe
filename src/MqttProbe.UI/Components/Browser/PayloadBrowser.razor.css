@@ -1,8 +1,22 @@
+.payload-panel-shell {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
 .payload-detail-toolbar {
     position: sticky;
     top: 0;
     z-index: 3;
     background: var(--mud-palette-surface);
+}
+
+/* Opening a message moves focus here so the arrow keys, Escape and Tab continue from the detail. */
+.payload-detail-toolbar:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
 }
 
 /* Shrinks before the payload body does, and scrolls once it can no longer
@@ -75,14 +89,6 @@
     word-break: break-word;
 }
 
-.payload-list-body {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-
 /* Plain table replacing MudSimpleTable — no overflow container, no height:100%
    from FixedHeader, so it renders at natural height and never pushes the
    payload body off-screen. */
@@ -120,6 +126,26 @@
 ::deep .payload-row td {
     padding-top: 6px;
     padding-bottom: 6px;
+}
+
+/* The list is one tab stop; rows are reached with the arrow keys, so the ring frames the
+   whole history instead of every row. */
+.payload-message-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.payload-message-list:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+::deep .payload-row--active > td {
+    background-color: rgba(var(--mud-palette-primary-rgb), 0.12);
+    box-shadow: inset 2px 0 0 var(--mud-palette-primary);
 }
 
 /* Moved from an inline style so the mobile stacked layout below can override it. */
@@ -216,12 +242,19 @@
 ::deep colgroup col:nth-child(3) { width: 54%; }
 ::deep colgroup col:nth-child(4) { width: 5%; }
 
-::deep .sortable-th {
+.sortable-th {
     cursor: pointer;
     user-select: none;
     display: flex;
     align-items: center;
     gap: 4px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: inherit;
 }
 
 /* ── Detail meta table (static styling extracted from inline) ────────────── */

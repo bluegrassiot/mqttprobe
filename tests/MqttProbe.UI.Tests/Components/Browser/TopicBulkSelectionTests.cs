@@ -89,6 +89,24 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
         });
     }
 
+    [TestCase("Enter")]
+    [TestCase(" ")]
+    public void KeyboardActivation_InSelectionMode_ChecksTheRowInsteadOfSelectingTheTopic(string key)
+    {
+        _fixture.AddTopics(("sensors/temp", 1), ("sensors/humidity", 2));
+        var cut = RenderExpanded();
+        cut.Find(".topic-select-toggle").Click();
+
+        Row(cut, "sensors/temp").KeyDown(key);
+
+        cut.WaitForAssertion(() =>
+        {
+            var state = _fixture.Adapter.Store.GetSelectedTopicState();
+            state.Key.Should().StartWith("multi:");
+            state.Paths.Should().Equal("sensors/temp");
+        });
+    }
+
     [Test]
     public void LeavingSelectionMode_ClearsTheBulkFilter_AndRestoresOrdinaryRows()
     {

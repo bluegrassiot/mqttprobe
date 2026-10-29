@@ -92,10 +92,10 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     }
 
     [Test]
-    public void Footer_NeverShrinksBelowThePanel_AndTightensOnPhones()
+    public void PersistentHeader_NeverShrinksBelowThePanel_AndTightensOnPhones()
     {
-        ReadCssRule(DialogCss, ".connection-actions-footer").Should().Contain("flex-shrink: 0");
-        ReadPhoneMediaBlockContaining(DialogCss, ".connection-actions-footer {")
+        ReadCssRule(HeaderCss, ".connection-dialog-header").Should().Contain("flex-shrink: 0");
+        ReadPhoneMediaBlockContaining(HeaderCss, ".connection-dialog-header {")
             .Should().Contain("padding: 8px 12px");
     }
 
@@ -124,7 +124,7 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
         var cut = Render<ConnectionDialogHeader>(p => p
             .Add(x => x.Connections, new List<Connection> { new Connection { Name = "one" } }));
 
-        var flexItem = cut.FindAll("div.connection-dialog-header > *")
+        var flexItem = cut.FindAll("div.connection-dialog-header__main > *")
             .Single(element => element.ClassList.Contains("mud-select"));
         flexItem.Children.Should().Contain(element => element.ClassList.Contains("mud-input-control"),
             "the class MudSelect is given lands one level into its root");
@@ -154,7 +154,7 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     }
 
     [Test]
-    public void ViewportScript_RevealsTheFocusedControl_AboveTheStickyFooter_NotJustInsideTheCard()
+    public void ViewportScript_RevealsTheFocusedControl_InsideTheScrollOwner()
     {
         var script = ReadRepositoryFile(ViewportScript);
         var reveal = ExtractBracedBlockFromFirstBrace(
@@ -162,7 +162,8 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
 
         script.Should().Contain("const REVEAL_MARGIN = 8");
         script.Should().Contain("const scrollOwner = () =>");
-        reveal.Should().Contain("Math.min(footer.getBoundingClientRect().top, scrollerBox.bottom)");
+        reveal.Should().Contain("const bandBottom = scrollerBox.bottom");
+        reveal.Should().NotContain("connection-actions-footer");
         reveal.Should().Contain("const tallerThanBand = fieldBox.height > visibleBottom - visibleTop");
         reveal.Should().Contain("scroller.scrollTop = Math.max(0, scroller.scrollTop + (delta / scale))");
         reveal.Should().Contain("paperBox.width / paper.offsetWidth");
@@ -176,7 +177,7 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
         script.Should().Contain("new ResizeObserver(schedule)");
         script.Should().Contain("observer?.observe(paper)");
         script.Should().Contain("observer?.observe(contentElement)");
-        script.Should().Contain("observer?.observe(footer)");
+        script.Should().Contain("observer?.observe(notices)");
         script.Should().Contain("observer?.disconnect()");
         script.Should().NotContain("SETTLE_FRAMES");
     }
@@ -193,9 +194,10 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
         fit.Should().NotContain("getBoundingClientRect");
         fit.Should().Contain(".step-selector");
         fit.Should().Contain(".mud-dialog-title");
+        fit.Should().Contain(".connection-dialog-titlebar");
         fit.Should().Contain(".connection-dialog-header");
         fit.Should().Contain(".mud-tabs-tabbar");
-        fit.Should().Contain(".connection-actions-footer");
+        fit.Should().NotContain("connection-actions-footer");
         script.Should().Contain("const compact = panelHeight() < MIN_USABLE_PANEL_HEIGHT");
     }
 
@@ -256,7 +258,7 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     }
 
     [Test]
-    public void ViewportScript_CountsTheStepSelectorInTheChromeThePanelNeverGets()
+    public void ViewportScript_CountsEveryPersistentHeaderRowInTheChromeThePanelNeverGets()
     {
         var script = ReadRepositoryFile(ViewportScript);
         var chrome = ExtractBracedBlockFromFirstBrace(
@@ -264,9 +266,10 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
 
         chrome.Should().Contain(".step-selector");
         chrome.Should().Contain(".mud-dialog-title");
+        chrome.Should().Contain(".connection-dialog-titlebar");
         chrome.Should().Contain(".connection-dialog-header");
         chrome.Should().Contain(".mud-tabs-tabbar");
-        chrome.Should().Contain(".connection-actions-footer");
+        chrome.Should().NotContain("connection-actions-footer");
     }
 
     [Test]
@@ -400,32 +403,40 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     }
 
     [Test]
-    public void CompactFallback_TheCardScrollsTheWholeForm_WithAStickyFooter()
+    public void CompactFallback_TheFormScrollsTheFields_WhileTheHeaderStaysPut()
     {
         var css = ReadRepositoryFile(DialogCss);
 
         var compactContent = ExtractBracedBlockFromFirstBrace(
             css[css.IndexOf(".connection-dialog-content--compact {", StringComparison.Ordinal)..]);
-        compactContent.Should().Contain("overflow-y: auto");
-        css.Should().Contain(".connection-dialog-content--compact .connection-actions-footer {");
-        css.Should().Contain("position: sticky");
+        compactContent.Should().Contain("overflow: hidden",
+            "the card must not scroll, so the selector and action cannot scroll away");
+        compactContent.Should().NotContain("overflow-y: auto");
+        css.Should().NotContain("position: sticky");
+        css.Should().NotContain("connection-dialog-footer-height");
+
+        var compactForm = ExtractBracedBlockFromFirstBrace(
+            css[css.IndexOf(".connection-dialog-content--compact ::deep .mud-form {", StringComparison.Ordinal)..]);
+        compactForm.Should().Contain("flex: 1 1 0");
+        compactForm.Should().Contain("overflow-y: auto");
+        compactForm.Should().Contain("overflow-x: hidden");
 
         var compactPanel = ExtractBracedBlockFromFirstBrace(
             css[css.IndexOf(
                 ".connection-dialog-content--compact ::deep .connection-tabs .mud-tab-panel[role='tabpanel'].mud-tab-panel-active",
                 StringComparison.Ordinal)..]);
-        compactPanel.Should().Contain("padding-bottom: calc(16px + var(--connection-dialog-footer-height, 0px))");
+        compactPanel.Should().Contain("overflow: hidden");
         css.Should().Contain("::deep .connection-tabs .mud-tab-panel[role='tabpanel'].mud-tab-panel-active",
             "the panel stops being a second scroll owner in the fallback");
 
         var script = ReadRepositoryFile(ViewportScript);
         script.Should().Contain("MIN_USABLE_PANEL_HEIGHT");
         script.Should().Contain("container.classList.toggle(CONTAINER_KEYBOARD_CLASS, hidden)");
-        script.Should().Contain("container.style.setProperty(FOOTER_HEIGHT_VARIABLE");
+        script.Should().NotContain("FOOTER_HEIGHT_VARIABLE");
     }
 
     [Test]
-    public void CompactFallback_PanelClipsBothAxes_SoTheCardIsTheOnlyScrollOwner()
+    public void CompactFallback_PanelClipsBothAxes_SoTheFormIsTheOnlyScrollOwner()
     {
         var css = ReadRepositoryFile(DialogCss);
         var compactPanel = ExtractBracedBlockFromFirstBrace(
@@ -440,7 +451,7 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
         var compactStepSelector = ExtractBracedBlockFromFirstBrace(
             css[css.IndexOf(".connection-dialog-content--compact .step-selector", StringComparison.Ordinal)..]);
         compactStepSelector.Should().Contain("flex: 0 0 auto",
-            "a direct child of the scrolling card must not shrink away in the fallback");
+            "a direct child of the scrolling form must not shrink away in the fallback");
     }
 
     [Test]
@@ -448,40 +459,40 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     {
         var markup = ReadRepositoryFile(DialogMarkup);
 
+        var formClose = markup.IndexOf("</MudForm>", StringComparison.Ordinal);
         var host = markup.IndexOf("<div class=\"connection-dialog-notices\">", StringComparison.Ordinal);
         var collision = markup.IndexOf("@if (_nameCollisionError is not null)", StringComparison.Ordinal);
         var failure = markup.IndexOf("@if (_connectionState == ConnectionState.Failed)", StringComparison.Ordinal);
-        var actions = markup.IndexOf("class=\"connection-actions-footer\"", StringComparison.Ordinal);
 
-        host.Should().BeGreaterThanOrEqualTo(0);
+        host.Should().BeGreaterThan(formClose, "the alerts follow the scrolling form");
         collision.Should().BeGreaterThan(host, "the alerts belong inside the host");
         failure.Should().BeGreaterThan(host, "the alerts belong inside the host");
-        collision.Should().BeLessThan(actions);
-        failure.Should().BeLessThan(actions);
         markup[Math.Max(0, host - 120)..host].Should().NotContain("@if");
         markup[Math.Max(0, host - 120)..host].Should().NotContain("{");
     }
 
     [Test]
-    public void CompactFooter_IsASiblingOfTheForm_SoTheCardIsItsStickyContainingBlock()
+    public void PersistentHeader_SitsAboveTheScrollingForm()
     {
         var markup = ReadRepositoryFile(DialogMarkup);
 
-        var formClose = markup.IndexOf("</MudForm>", StringComparison.Ordinal);
         var contentOpen = markup.IndexOf("class=\"connection-dialog-content\"", StringComparison.Ordinal);
+        var titlebar = markup.IndexOf("class=\"connection-dialog-titlebar\"", StringComparison.Ordinal);
+        var header = markup.IndexOf("<ConnectionDialogHeader", StringComparison.Ordinal);
         var formOpen = markup.IndexOf("<MudForm", StringComparison.Ordinal);
-        var footer = markup.IndexOf("class=\"connection-actions-footer\"", StringComparison.Ordinal);
+        var formClose = markup.IndexOf("</MudForm>", StringComparison.Ordinal);
+        var notices = markup.IndexOf("class=\"connection-dialog-notices\"", StringComparison.Ordinal);
 
-        formOpen.Should().BeGreaterThanOrEqualTo(0);
-        formClose.Should().BeGreaterThan(formOpen);
         contentOpen.Should().BeGreaterThanOrEqualTo(0);
-        footer.Should().BeGreaterThan(formClose, "the footer must sit outside the form");
+        titlebar.Should().BeGreaterThan(contentOpen);
+        header.Should().BeGreaterThan(titlebar);
+        formOpen.Should().BeGreaterThan(header, "the selector and its action stay above the scrolling fields");
+        notices.Should().BeGreaterThan(formClose);
 
-        var betweenFormAndFooter = markup[(formClose + "</MudForm>".Length)..footer];
-        betweenFormAndFooter.Should().NotContain("<MudForm",
-            "the footer must sit outside the form");
-        (betweenFormAndFooter.Split("</div>").Length - 1).Should().BeLessThanOrEqualTo(1,
-            "the footer must be a sibling of the form and of the notices, not nested inside either");
+        var betweenHeaderAndForm = markup[header..formOpen];
+        betweenHeaderAndForm.Should().NotContain("data-testid=\"connection-connect\"",
+            "the primary action lives in the header component, not in a competing copy");
+        markup.Should().NotContain("connection-actions-footer");
     }
 
     private static IElement FindInputForLabel(IRenderedComponent<ConnectionFields> cut, string label)

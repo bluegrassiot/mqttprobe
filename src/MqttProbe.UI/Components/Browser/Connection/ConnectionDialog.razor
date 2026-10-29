@@ -21,122 +21,130 @@
 @inject ICertificateAssetStore CertStore
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
-<MudDialog Class="connection-dialog-paper" OnBackdropClick="OnBackdropClickAsync">
+<MudDialog Class="connection-dialog-paper" OnBackdropClick="OnBackdropClickAsync"
+           AriaLabelledBy="@_titleId">
     <DialogContent>
         <div class="connection-dialog-content" @onkeydown="HandleDialogKeyDown" tabindex="-1" @ref="_dialogContent">
-            <ConnectionDialogHeader Connections="@ConnectionSettings.Connections"
-                                     Selected="@_savedConnectionForSelector"
-                                     SelectedChanged="ConnectionChanged!"
-                                     SelectorKey="@_selectorGeneration"
-                                     CanSave="@_canSave"
-                                    CanCopy="@(!string.IsNullOrWhiteSpace(_selectedConnection.Name))"
-                                    CanDelete="@_canDelete"
-                                    OnAdd="@(async () => await Add())"
-                                    OnCopy="@(async () => await CopyConnection())"
-                                    OnSave="@(async () => await Save(closeDialog: false))"
-                                    OnDelete="@(async () => await Delete())" />
-            <MudForm Model="@_selectedConnection" @ref="@_form"
-                     Validation="@_connectionValidator.ValidateValue" ValidationDelay="0"
-                     IsValidChanged="@FormValidationChanged" FieldChanged="@FormChanged">
-                <div class="step-selector">
-                    <button class="step-btn @(_activeTabIndex == 0 ? "active" : "")"
-                            @onclick="() => _activeTabIndex = 0" type="button">Connection</button>
-                    <button class="step-btn @(_activeTabIndex == 1 ? "active" : "")"
-                            @onclick="() => _activeTabIndex = 1" type="button">Security</button>
-                    <button class="step-btn @(_activeTabIndex == 2 ? "active" : "")"
-                            @onclick="() => _activeTabIndex = 2" type="button">On Connect</button>
+            <div class="connection-dialog-body" @attributes="BodyAttributes">
+                <div class="connection-dialog-titlebar">
+                    <h2 id="@_titleId" class="connection-dialog-title" data-testid="connection-title">Setup Connection</h2>
+                    <MudIconButton Icon="@LucideIcons.X" Color="Color.Inherit"
+                                   Class="connection-dialog-close" aria-label="Close"
+                                   data-testid="connection-close"
+                                   OnClick="@(async () => await RequestClose())" />
                 </div>
-                <MudTabs @bind-ActivePanelIndex="_activeTabIndex"
-                         KeepPanelsAlive="true" Elevation="0" Class="connection-tabs">
-                    <MudTabPanel Text="Connection">
-                        @if (IsIosHost)
-                        {
-                            <div class="connection-dialog__lan-note" data-testid="ios-local-network-note">
-                                <button type="button"
-                                        class="connection-dialog__lan-note-toggle"
-                                        aria-expanded="@(_lanNoteExpanded ? "true" : "false")"
-                                        aria-controls="ios-local-network-note-details"
-                                        @onclick="ToggleLanNote">
-                                    <MudIcon Icon="@LucideIcons.Info" Size="Size.Small"
-                                             Class="connection-dialog__lan-note-icon" aria-hidden="true" />
-                                    <span class="connection-dialog__lan-note-label">Local network access</span>
-                                    <MudIcon Icon="@LucideIcons.ChevronDown" Size="Size.Small"
-                                             Class="@($"connection-dialog__lan-note-chevron{(_lanNoteExpanded ? " connection-dialog__lan-note-chevron--open" : string.Empty)}")"
-                                             aria-hidden="true" />
-                                </button>
-                                <div id="ios-local-network-note-details"
-                                     class="connection-dialog__lan-note-body"
-                                     hidden="@(!_lanNoteExpanded)">
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                        iOS asks for local network permission the first time you connect to a
-                                        broker on your Wi-Fi. If you denied it, turn Local Network back on for
-                                        MQTTProbe in iOS Settings. Brokers on the public internet don't need it.
-                                    </MudText>
+                <ConnectionDialogHeader Connections="@ConnectionSettings.Connections"
+                                        Selected="@_savedConnectionForSelector"
+                                        SelectedChanged="ConnectionChanged!"
+                                        SelectorKey="@_selectorGeneration"
+                                        CanSave="@_canSave"
+                                        CanCopy="@(!string.IsNullOrWhiteSpace(_selectedConnection.Name))"
+                                        CanDelete="@_canDelete"
+                                        OnAdd="@(async () => await Add())"
+                                        OnCopy="@(async () => await CopyConnection())"
+                                        OnSave="@(async () => await Save(closeDialog: false))"
+                                        OnDelete="@(async () => await Delete())"
+                                        IsConnecting="@(_connectionState == ConnectionState.Connecting)"
+                                        ConnectDisabled="@(!_canConnect || _operation is not null)"
+                                        OnConnect="Connect"
+                                        OnStop="CancelConnect" />
+                <MudForm Model="@_selectedConnection" @ref="@_form"
+                         Validation="@_connectionValidator.ValidateValue" ValidationDelay="0"
+                         IsValidChanged="@FormValidationChanged" FieldChanged="@FormChanged">
+                    <div class="step-selector">
+                        <button class="step-btn @(_activeTabIndex == 0 ? "active" : "")"
+                                @onclick="() => _activeTabIndex = 0" type="button">Connection</button>
+                        <button class="step-btn @(_activeTabIndex == 1 ? "active" : "")"
+                                @onclick="() => _activeTabIndex = 1" type="button">Security</button>
+                        <button class="step-btn @(_activeTabIndex == 2 ? "active" : "")"
+                                @onclick="() => _activeTabIndex = 2" type="button">On Connect</button>
+                    </div>
+                    <MudTabs @bind-ActivePanelIndex="_activeTabIndex"
+                             KeepPanelsAlive="true" Elevation="0" Class="connection-tabs">
+                        <MudTabPanel Text="Connection">
+                            @if (IsIosHost)
+                            {
+                                <div class="connection-dialog__lan-note" data-testid="ios-local-network-note">
+                                    <button type="button"
+                                            class="connection-dialog__lan-note-toggle"
+                                            aria-expanded="@(_lanNoteExpanded ? "true" : "false")"
+                                            aria-controls="ios-local-network-note-details"
+                                            @onclick="ToggleLanNote">
+                                        <MudIcon Icon="@LucideIcons.Info" Size="Size.Small"
+                                                 Class="connection-dialog__lan-note-icon" aria-hidden="true" />
+                                        <span class="connection-dialog__lan-note-label">Local network access</span>
+                                        <MudIcon Icon="@LucideIcons.ChevronDown" Size="Size.Small"
+                                                 Class="@($"connection-dialog__lan-note-chevron{(_lanNoteExpanded ? " connection-dialog__lan-note-chevron--open" : string.Empty)}")"
+                                                 aria-hidden="true" />
+                                    </button>
+                                    <div id="ios-local-network-note-details"
+                                         class="connection-dialog__lan-note-body"
+                                         hidden="@(!_lanNoteExpanded)">
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                            iOS asks for local network permission the first time you connect to a
+                                            broker on your Wi-Fi. If you denied it, turn Local Network back on for
+                                            MQTTProbe in iOS Settings. Brokers on the public internet don't need it.
+                                        </MudText>
+                                    </div>
                                 </div>
-                            </div>
-                        }
-                        <ConnectionFields Connection="@_selectedConnection" OnConnectionEdited="UpdateActionStates" />
-                    </MudTabPanel>
-                    <MudTabPanel Text="Security">
-                        <ConnectionSecurityFields Connection="@_selectedConnection" />
-                        <ConnectionCertificateSection @ref="_certSection"
-                                                       Connection="@_selectedConnection"
-                                                       Visible="_selectedConnection.UseTls"
-                                                       OnStateChanged="UpdateActionStates"
-                                                       OnRevertRequested="HandleCertRevert" />
-                    </MudTabPanel>
-                    <MudTabPanel Text="On Connect">
-                        <ConnectionOnConnectTab AutoResubscribe="@UiSettings.Ui.AutoResubscribe"
-                                                AutoResubscribeChanged="@OnAutoResubscribeChanged"
-                                                Items="@_selectedConnection.SubscribedTopics"
-                                                OnAdd="HandleOnConnectEditorAdd"
-                                                OnRemove="HandleOnConnectEditorRemove"
-                                                ExcludedItems="@_selectedConnection.TopicExcludes"
-                                                OnExcludeAdd="HandleOnConnectExcludeAdd"
-                                                OnExcludeRemove="HandleOnConnectExcludeRemove" />
-                    </MudTabPanel>
-                </MudTabs>
-            </MudForm>
-            <div class="connection-dialog-notices">
-                @* Feedback, not actions: it scrolls with the form, so a long alert takes room from the form rather than the fields. *@
-                @if (_nameCollisionError is not null)
-                {
-                    <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined">
-                        @_nameCollisionError
-                    </MudAlert>
-                }
-                @if (_connectionState == ConnectionState.Failed)
-                {
-                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
-                        Connection failed. Verify broker, credentials, and transport settings.
-                    </MudAlert>
-                }
+                            }
+                            <ConnectionFields Connection="@_selectedConnection" OnConnectionEdited="UpdateActionStates" />
+                        </MudTabPanel>
+                        <MudTabPanel Text="Security">
+                            <ConnectionSecurityFields Connection="@_selectedConnection" />
+                            <ConnectionCertificateSection @ref="_certSection"
+                                                         Connection="@_selectedConnection"
+                                                         Visible="_selectedConnection.UseTls"
+                                                         OnStateChanged="UpdateActionStates"
+                                                         OnRevertRequested="HandleCertRevert" />
+                        </MudTabPanel>
+                        <MudTabPanel Text="On Connect">
+                            <ConnectionOnConnectTab AutoResubscribe="@UiSettings.Ui.AutoResubscribe"
+                                                    AutoResubscribeChanged="@OnAutoResubscribeChanged"
+                                                    Items="@_selectedConnection.SubscribedTopics"
+                                                    OnAdd="HandleOnConnectEditorAdd"
+                                                    OnRemove="HandleOnConnectEditorRemove"
+                                                    ExcludedItems="@_selectedConnection.TopicExcludes"
+                                                    OnExcludeAdd="HandleOnConnectExcludeAdd"
+                                                    OnExcludeRemove="HandleOnConnectExcludeRemove" />
+                        </MudTabPanel>
+                    </MudTabs>
+                </MudForm>
+                <div class="connection-dialog-notices">
+                    @* Feedback, not actions: it scrolls with the form, so a long alert takes room from the form rather than the fields. *@
+                    @if (_nameCollisionError is not null)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined">
+                            @_nameCollisionError
+                        </MudAlert>
+                    }
+                    @if (_connectionState == ConnectionState.Failed)
+                    {
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                            Connection failed. Verify broker, credentials, and transport settings.
+                        </MudAlert>
+                    }
+                </div>
             </div>
-            @* A sibling of the form: the compact card scrolls, and a sticky footer is clamped to its containing block. *@
-            <div class="connection-actions-footer">
-                @if (_connectionState == ConnectionState.Connecting)
-                {
-                    <div class="connection-connecting-row" data-testid="connection-connecting-row">
-                        <div class="connection-connecting-indicator">
-                            <img class="signal-connecting-sm" width="26" height="26" src="/_content/MqttProbe.UI/img/signal-motif.svg" alt="" />
-                            <MudText Typo="Typo.subtitle1">Connecting...</MudText>
+            @if (_discardPromptVisible)
+            {
+                <div class="connection-dialog-confirm-layer" @onclick="CancelDiscardPrompt">
+                    <div class="connection-dialog-confirm" role="alertdialog" aria-modal="true"
+                         aria-labelledby="connection-discard-title" aria-describedby="connection-discard-copy"
+                         @onclick:stopPropagation="true">
+                        <h2 id="connection-discard-title" class="connection-dialog-confirm-title">Unsaved changes</h2>
+                        <p id="connection-discard-copy" class="connection-dialog-confirm-copy">
+                            You have unsaved changes that will be discarded.
+                        </p>
+                        <div class="connection-dialog-confirm-actions">
+                            <MudButton Variant="Variant.Text" OnClick="CancelDiscardPrompt"
+                                       @ref="_discardCancelButton">Cancel</MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Error"
+                                       OnClick="DiscardChanges">Discard</MudButton>
                         </div>
-                        <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@LucideIcons.Square"
-                                   Class="mr-2" data-testid="cancel-connect"
-                                   OnClick="@(async () => await CancelConnect())">Stop</MudButton>
                     </div>
-                }
-                else
-                {
-                    <div class="connection-actions-footer-cta">
-                        <MudButton Variant="Variant.Text" OnClick="@(async () => await RequestClose())"
-                                   Class="mr-2">Cancel</MudButton>
-                        <AppPrimaryButton title="Connect" MinWidth="true"
-                                    StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect || _operation is not null)"
-                                    OnClick="@(async () => await Connect())">Connect</AppPrimaryButton>
-                    </div>
-                }
-            </div>
+                </div>
+            }
         </div>
     </DialogContent>
 </MudDialog>
@@ -147,6 +155,7 @@
 
     private MudForm _form = new();
     private ElementReference _dialogContent;
+    private readonly string _titleId = $"connection-dialog-title-{Guid.NewGuid():N}";
     private ConnectionDialogViewportInterop? _viewport;
     private readonly ConnectionValidator _connectionValidator = new();
     private ConnectionState _connectionState;
@@ -270,6 +279,8 @@
             await _viewport.AttachAsync(_dialogContent);
         }
 
+        await RunDiscardPromptFocusStepAsync();
+
         await base.OnAfterRenderAsync(firstRender);
     }
 
@@ -305,6 +316,11 @@
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        _discardPromptVisible = false;
+        _focusDiscardConfirmation = false;
+        var pendingDecision = _discardDecision;
+        _discardDecision = null;
+        pendingDecision?.TrySetResult(false);
 
         // Captured before the first await: the attempt's own completion retires the operation,
         // so reading the field afterwards would leave that started connection running.
@@ -380,22 +396,15 @@
             : null;
     }
 
-    private async Task<bool> GuardIfDirty()
-    {
-        if (!IsDirty) return true;
-
-        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true };
-        var choice = await DialogService.ShowMessageBoxAsync(
-            "Unsaved changes",
-            "You have unsaved changes that will be discarded.",
-            yesText: "Discard", noText: "Cancel", options: options);
-
-        return choice is true;
-    }
-
     private async Task RequestClose()
     {
-        if (await GuardIfDirty())
+        if (_discardDecision is not null)
+        {
+            CancelDiscardPrompt();
+            return;
+        }
+
+        if (await GuardIfDirty(closingDialog: true))
             MudDialog.Cancel();
     }
 

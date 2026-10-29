@@ -1,20 +1,30 @@
 
 <div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsSelected || IsChecked ? "topic-tree-row--selected" : "") @(IsSelectionMode ? "topic-tree-row--selection" : "")"
-     title="@Title"
+     role="treeitem"
+     aria-level="@(Row.Depth + 1)"
+     aria-expanded="@ExpandedAttribute"
+     aria-selected="@SelectedAttribute"
+     tabindex="@(IsTabStop ? 0 : -1)"
+     data-topic-key="@Row.RowKey"
      data-topic-path="@Row.FullPath"
      data-message-topic="@(Row.IsMessageTopic ? "true" : null)"
      data-topic-spelling="@(Row.Kind == TopicTreeRowKind.Spelling ? "true" : null)"
      data-depth="@Row.Depth"
-     @onclick="OnRowClick">
+     title="@Title"
+     @onclick="OnRowClick"
+     @onfocus="OnRowFocused"
+     @onkeydown="OnKeyPressed">
     <svg class="topic-tree-indent" width="@IndentWidth" height="1" aria-hidden="true" focusable="false"></svg>
     @if (IsSelectionMode && Row.IsBulkSelectable)
     {
-        <MudCheckBox T="bool" Value="IsChecked" ValueChanged="OnCheckedChanged"
-                     Dense="true" StopClickPropagation="true"
-                     Color="Color.Primary" Class="topic-select-checkbox"
-                     aria-label="@SelectLabel">
-            <span class="topic-select-checkbox__name">@SelectLabel</span>
-        </MudCheckBox>
+        <span class="topic-select-checkbox-wrap" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+            <MudCheckBox T="bool" Value="IsChecked" ValueChanged="OnCheckedChanged"
+                         Dense="true" StopClickPropagation="true"
+                         Color="Color.Primary" Class="topic-select-checkbox"
+                         aria-label="@SelectLabel">
+                <span class="topic-select-checkbox__name">@SelectLabel</span>
+            </MudCheckBox>
+        </span>
     }
     @if (IsSelectionMode && Row.SpellingCount > 1)
     {
@@ -23,13 +33,14 @@
     }
     @if (Row.HasChildren)
     {
-        <span @onclick:stopPropagation="true">
+        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
             <MudIconButton Icon="@(Row.IsExpanded ? LucideIcons.ChevronDown : LucideIcons.ChevronRight)"
                            Size="Size.Small"
                            Class="topic-chevron topic-role--brand"
                            title="@ExpandLabel"
                            aria-label="@ExpandLabel"
                            aria-expanded="@(Row.IsExpanded ? "true" : "false")"
+                           tabindex="-1"
                            OnClick="OnToggleExpand"/>
         </span>
     }
@@ -65,9 +76,12 @@
     [Parameter] public bool IsSelected { get; set; }
     [Parameter] public bool IsSelectionMode { get; set; }
     [Parameter] public bool IsChecked { get; set; }
+    [Parameter] public bool IsTabStop { get; set; }
     [Parameter] public EventCallback<string> OnExpandToggled { get; set; }
     [Parameter] public EventCallback<TopicSelection> OnSelected { get; set; }
     [Parameter] public EventCallback<System.Collections.Immutable.ImmutableArray<string>> OnSelectionToggled { get; set; }
+    [Parameter] public EventCallback<KeyboardEventArgs> OnKeyPressed { get; set; }
+    [Parameter] public EventCallback<string> OnFocused { get; set; }
 
     private const int IndentStepWidth = 16;
     private const int MaxIndentDepth = 6;
@@ -75,6 +89,15 @@
     private string SelectLabel => Row.SelectionPaths.Length == 1
         ? $"Select topic {Row.SelectionPaths[0]}"
         : $"Select topics {string.Join(", ", Row.SelectionPaths)}";
+
+    private string? ExpandedAttribute => Row.HasChildren ? ExpandedText : null;
+
+    // In selection mode the checkbox is the row's state, so the row reports it as selected.
+    private bool IsRowSelected => IsSelectionMode ? IsChecked : IsSelected;
+
+    private string SelectedAttribute => IsRowSelected ? "true" : "false";
+
+    private string ExpandedText => Row.IsExpanded ? "true" : "false";
 
     // One SVG sized by its width attribute carries the whole indent, so a row costs the same DOM
     // at depth 1000 as at depth 0. The indent stops at six levels so a narrow pane cannot be
@@ -134,6 +157,9 @@
 
         await OnSelectionToggled.InvokeAsync(Row.SelectionPaths);
     }
+
+    private async Task OnRowFocused() =>
+        await OnFocused.InvokeAsync(Row.RowKey);
 
     private async Task OnToggleExpand() =>
         await OnExpandToggled.InvokeAsync(Row.FullPath);

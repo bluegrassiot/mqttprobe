@@ -1,17 +1,26 @@
 
 <div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsSelected ? "topic-tree-row--selected" : "")"
+     role="treeitem"
+     aria-level="@(Row.Depth + 1)"
+     aria-expanded="@ExpandedAttribute"
+     aria-selected="@(IsSelected ? "true" : "false")"
+     tabindex="@(IsTabStop ? 0 : -1)"
+     data-topic-key="@Row.FullPath"
      title="@Title"
-     @onclick="OnRowClick">
+     @onclick="OnRowClick"
+     @onfocus="OnRowFocused"
+     @onkeydown="OnKeyPressed">
     <svg class="topic-tree-indent" width="@IndentWidth" height="1" aria-hidden="true" focusable="false"></svg>
     @if (Row.HasChildren)
     {
-        <span @onclick:stopPropagation="true">
+        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
             <MudIconButton Icon="@(Row.IsExpanded ? LucideIcons.ChevronDown : LucideIcons.ChevronRight)"
                            Size="Size.Small"
                            Class="topic-chevron topic-role--brand"
                            title="@ExpandLabel"
                            aria-label="@ExpandLabel"
                            aria-expanded="@(Row.IsExpanded ? "true" : "false")"
+                           tabindex="-1"
                            OnClick="OnToggleExpand"/>
         </span>
     }
@@ -38,10 +47,17 @@
 @code {
     [Parameter] public TopicTreeRowModel Row { get; set; } = null!;
     [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public bool IsTabStop { get; set; }
     [Parameter] public EventCallback<string> OnExpandToggled { get; set; }
     [Parameter] public EventCallback<TopicSelection> OnSelected { get; set; }
+    [Parameter] public EventCallback<KeyboardEventArgs> OnKeyPressed { get; set; }
+    [Parameter] public EventCallback<string> OnFocused { get; set; }
 
     private const int IndentStepWidth = 16;
+
+    private string? ExpandedAttribute => Row.HasChildren ? ExpandedText : null;
+
+    private string ExpandedText => Row.IsExpanded ? "true" : "false";
 
     // One SVG sized by its width attribute carries the whole indent, so a row costs the same DOM
     // at depth 1000 as at depth 0, with no inline style and no depth-keyed classes.
@@ -83,6 +99,9 @@
     {
         await OnSelected.InvokeAsync(Row.ToSelection());
     }
+
+    private async Task OnRowFocused() =>
+        await OnFocused.InvokeAsync(Row.FullPath);
 
     private async Task OnToggleExpand() =>
         await OnExpandToggled.InvokeAsync(Row.FullPath);

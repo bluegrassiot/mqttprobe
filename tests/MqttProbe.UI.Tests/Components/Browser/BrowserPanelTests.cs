@@ -30,6 +30,7 @@ public class BrowserPanelTests : BunitTestContext
         Services.AddUiSettings(_mockConfig);
         Services.AddSingleton(_mockDialogService);
         Services.AddSingleton(_mockSnackbar);
+        Services.AddSingleton(Substitute.For<ITopicExcludeService>());
 
         ComponentFactories.AddStub<TopicBrowser>();
         ComponentFactories.AddStub<PayloadBrowser>();
@@ -107,6 +108,42 @@ public class BrowserPanelTests : BunitTestContext
         await cut.InvokeAsync(() => btn.Click());
 
         _ = _mockMsgStore.DidNotReceive().ClearAllMessages();
+    }
+
+    [Test]
+    public void ClearAllMessagesButton_NamesTheGlobalScope()
+    {
+        _mockMsgStore.RootTopicCount.Returns(1);
+
+        var cut = Render<BrowserPanel>();
+
+        cut.FindAll("button")
+            .Should().Contain(button => button.TextContent.Contains("Clear all messages"));
+    }
+
+    [Test]
+    public async Task ClearAllMessages_ConfirmsThatEveryStoredMessageIsRemoved()
+    {
+        _mockMsgStore.RootTopicCount.Returns(1);
+        _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask);
+        _mockDialogService.ShowMessageBoxAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
+            .Returns(Task.FromResult<bool?>(true));
+
+        var cut = Render<BrowserPanel>();
+        var btn = cut.FindAll("button")
+            .First(b => b.TextContent.Contains("Clear all messages"));
+
+        await cut.InvokeAsync(() => btn.Click());
+
+        await _mockDialogService.Received(1).ShowMessageBoxAsync(
+            "Clear all messages",
+            Arg.Is<string>(message => message.Contains("every stored topic and message")),
+            "Clear all messages",
+            null,
+            "Cancel",
+            Arg.Any<DialogOptions>());
     }
 
     [Test]

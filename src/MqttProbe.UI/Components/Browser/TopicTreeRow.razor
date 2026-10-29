@@ -1,8 +1,26 @@
 
-<div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsSelected ? "topic-tree-row--selected" : "")"
+<div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsSelected || IsChecked ? "topic-tree-row--selected" : "") @(IsSelectionMode ? "topic-tree-row--selection" : "")"
      title="@Title"
+     data-topic-path="@Row.FullPath"
+     data-message-topic="@(Row.IsMessageTopic ? "true" : null)"
+     data-topic-spelling="@(Row.Kind == TopicTreeRowKind.Spelling ? "true" : null)"
+     data-depth="@Row.Depth"
      @onclick="OnRowClick">
     <svg class="topic-tree-indent" width="@IndentWidth" height="1" aria-hidden="true" focusable="false"></svg>
+    @if (IsSelectionMode && Row.IsBulkSelectable)
+    {
+        <MudCheckBox T="bool" Value="IsChecked" ValueChanged="OnCheckedChanged"
+                     Dense="true" StopClickPropagation="true"
+                     Color="Color.Primary" Class="topic-select-checkbox"
+                     aria-label="@SelectLabel">
+            <span class="topic-select-checkbox__name">@SelectLabel</span>
+        </MudCheckBox>
+    }
+    @if (IsSelectionMode && Row.SpellingCount > 1)
+    {
+        <span class="topic-spelling-badge"
+              title="Exact spellings are listed below as separate choices">@Row.SpellingCount spellings</span>
+    }
     @if (Row.HasChildren)
     {
         <span @onclick:stopPropagation="true">
@@ -21,7 +39,11 @@
     }
     <MudIcon Icon="@TopicTreeIconLanguage.NodeGlyph(Row)" Size="Size.Small" Class="@TopicTreeIconLanguage.IconClass(Row)"/>
     <span class="flex-grow-1 topic-name-cell" title="@Row.DisplayName">
-        @if (Row.IsVirtualTopic)
+        @if (Row.Kind == TopicTreeRowKind.Spelling)
+        {
+            <span class="topic-name topic-name--spelling">@Row.DisplayName</span>
+        }
+        else if (Row.IsVirtualTopic)
         {
             <span class="topic-name topic-group-label">@Row.DisplayName</span>
         }
@@ -30,22 +52,34 @@
             <span class="topic-name">@Row.DisplayName</span>
         }
     </span>
-    <span class="topic-stat-text" title="@StatsLabel">
-        T @Row.TopicCount.ToString("N0") · M @Row.MessageCount.ToString("N0")
-    </span>
+    @if (Row.Kind != TopicTreeRowKind.Spelling)
+    {
+        <span class="topic-stat-text" title="@StatsLabel">
+            T @Row.TopicCount.ToString("N0") · M @Row.MessageCount.ToString("N0")
+        </span>
+    }
 </div>
 
 @code {
     [Parameter] public TopicTreeRowModel Row { get; set; } = null!;
     [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public bool IsSelectionMode { get; set; }
+    [Parameter] public bool IsChecked { get; set; }
     [Parameter] public EventCallback<string> OnExpandToggled { get; set; }
     [Parameter] public EventCallback<TopicSelection> OnSelected { get; set; }
+    [Parameter] public EventCallback<System.Collections.Immutable.ImmutableArray<string>> OnSelectionToggled { get; set; }
 
     private const int IndentStepWidth = 16;
+    private const int MaxIndentDepth = 6;
+
+    private string SelectLabel => Row.SelectionPaths.Length == 1
+        ? $"Select topic {Row.SelectionPaths[0]}"
+        : $"Select topics {string.Join(", ", Row.SelectionPaths)}";
 
     // One SVG sized by its width attribute carries the whole indent, so a row costs the same DOM
-    // at depth 1000 as at depth 0, with no inline style and no depth-keyed classes.
-    private int IndentWidth => Row.Depth * IndentStepWidth;
+    // at depth 1000 as at depth 0. The indent stops at six levels so a narrow pane cannot be
+    // pushed sideways; the path itself and the row order keep the hierarchy readable.
+    private int IndentWidth => Math.Min(Row.Depth, MaxIndentDepth) * IndentStepWidth;
 
     private string ExpandLabel => $"{(Row.IsExpanded ? "Collapse" : "Expand")} {Row.DisplayName}";
 
@@ -60,6 +94,7 @@
         TopicTreeRowKind.Devices => GroupingTitle("Sparkplug devices"),
         TopicTreeRowKind.SparkplugDevice => GroupingTitle("Sparkplug device"),
         TopicTreeRowKind.MessageType => GroupingTitle("Sparkplug message type"),
+        TopicTreeRowKind.Spelling => "Exact topic spelling · messages published at this exact path",
         _ => null
     };
 
@@ -81,7 +116,23 @@
 
     private async Task OnRowClick()
     {
+        if (IsSelectionMode)
+        {
+            if (Row.IsBulkSelectable)
+                await OnSelectionToggled.InvokeAsync(Row.SelectionPaths);
+
+            return;
+        }
+
         await OnSelected.InvokeAsync(Row.ToSelection());
+    }
+
+    private async Task OnCheckedChanged(bool value)
+    {
+        if (value == IsChecked)
+            return;
+
+        await OnSelectionToggled.InvokeAsync(Row.SelectionPaths);
     }
 
     private async Task OnToggleExpand() =>

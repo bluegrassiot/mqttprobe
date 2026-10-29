@@ -1,6 +1,7 @@
 @inject ITopicSelectionStore TopicSelectionStore
 @inject IUiSettings UiSettings
 @inject ILogger<TopicBrowser> Logger
+@using System.Collections.Immutable
 @using Microsoft.Extensions.Logging
 @using MqttProbe.Core.Services.Configuration
 @implements IAsyncDisposable
@@ -20,6 +21,15 @@
                        title="Icon key" aria-label="Icon key"
                        aria-expanded="@(_iconKeyOpen ? "true" : "false")" aria-controls="@IconKeyControls"
                        OnClick="ToggleIconKey"/>
+        <MudButton Variant="@(_bulkSelection.IsActive ? Variant.Filled : Variant.Outlined)"
+                   Color="Color.Primary" Size="Size.Small" Class="topic-select-toggle"
+                   StartIcon="@LucideIcons.CheckCircle"
+                   title="@(_bulkSelection.IsActive ? "Leave selection mode" : "Select topics")"
+                   aria-label="@(_bulkSelection.IsActive ? "Leave selection mode" : "Select topics")"
+                   aria-pressed="@(_bulkSelection.IsActive ? "true" : "false")"
+                   OnClick="ToggleBulkMode">
+            @(_bulkSelection.IsActive ? "Selecting" : "Select")
+        </MudButton>
     </div>
     <div class="topic-filter-wrap">
         <MudTextField @bind-Value="_searchFilter" @bind-Value:after="OnSearchChanged"
@@ -116,8 +126,12 @@
         }
         @if (_visibleRows.Count > 0)
         {
-            <Virtualize Items="@_visibleRows" Context="row" ItemSize="36">
-                <TopicTreeRow Row="row" IsSelected="@IsRowSelected(row)" OnExpandToggled="ToggleExpand" OnSelected="OnRowSelected"/>
+            <Virtualize Items="@_visibleRows" Context="row" ItemSize="@(_bulkSelection.IsActive ? 48 : 36)">
+                <TopicTreeRow Row="row" IsSelected="@IsRowSelected(row)"
+                              IsSelectionMode="_bulkSelection.IsActive"
+                              IsChecked="@IsBulkChecked(row)"
+                              OnExpandToggled="ToggleExpand" OnSelected="OnRowSelected"
+                              OnSelectionToggled="ToggleRowSelection"/>
             </Virtualize>
         }
         else if (_rootTopicCount > 0)
@@ -149,6 +163,7 @@
     // instance. It is generated once, which keeps aria-controls stable across renders.
     private readonly string _iconKeyId = $"topic-icon-key-{Guid.NewGuid():N}";
     private TopicSelectionSession? _selectionSession;
+    private TopicBulkSelection _bulkSelection = null!;
     private int _rootTopicCount;
     private List<TopicTreeRowModel> _visibleRows = [];
     private readonly HashSet<string> _expandedPaths = [];
@@ -168,6 +183,8 @@
 
     [Parameter] public EventCallback<SelectedTopicState> OnSelectedChanged { get; set; }
 
+    [CascadingParameter] private TopicBulkSelection? BulkSelectionHost { get; set; }
+
     private string? IconKeyControls => _iconKeyOpen ? _iconKeyId : null;
 
     // The app opens in dark mode, so a bare instance or a unit test that cannot cascade still
@@ -182,6 +199,8 @@
     {
         _groupSparkplugTopics = UiSettings.Ui.GroupSparkplugTopicsByNodeAndDevice;
         _selectionSession = new TopicSelectionSession(TopicSelectionStore);
+        _bulkSelection = BulkSelectionHost ?? new TopicBulkSelection(TopicSelectionStore);
+        _bulkSelection.Changed += OnBulkSelectionChanged;
         BuildVisibleRows();
         UiSettings.UiPreferencesChanged += OnUiPreferencesChanged;
         _updateTimer = new Timer(_ =>
@@ -221,9 +240,29 @@
 
     private TopicSelectionFrame? BuildVisibleRows(bool force = true)
     {
-        var frame = _selectionSession!.Refresh(_searchFilter, _expandedPaths, _groupSparkplugTopics, force);
+        var frame = RefreshFrame(force);
         ApplyFrame(frame);
         return frame;
+    }
+
+    private TopicSelectionFrame? RefreshFrame(bool force)
+    {
+        ReconcileBulkSelection();
+        IReadOnlyList<string>? selectionPaths = _bulkSelection.IsActive ? _bulkSelection.Paths : null;
+        return _selectionSession!.Refresh(_searchFilter, _expandedPaths, _groupSparkplugTopics, force,
+            selectionPaths, _bulkSelection.IsActive);
+    }
+
+    // A selection that outlived its rows would keep filtering on a topic nobody can see. Survivors
+    // stay checked, and losing every path clears the filter instead of holding the old union.
+    private void ReconcileBulkSelection()
+    {
+        if (!_bulkSelection.HasSelection)
+            return;
+
+        var roots = TopicSelectionStore.GetTopicTreeSnapshot().Roots;
+        _bulkSelection.Reconcile(path =>
+            TopicTreeProjection.RepresentsObservedPath(roots, _groupSparkplugTopics, path));
     }
 
     private void ApplyFrame(TopicSelectionFrame? frame)
@@ -232,6 +271,9 @@
         _visibleRows = frame.Rows.ToList();
         _rootTopicCount = frame.RootCount;
         _selectedKey = frame.Selection.Key;
+
+        if (_bulkSelection.IsActive && frame.Selection.Mode == TopicSelectionMode.MultipleTopics)
+            _bulkSelection.Adopt(frame.Selection.Paths);
     }
 
     internal async Task RefreshAsync()
@@ -242,7 +284,7 @@
             {
                 if (_disposed) return;
 
-                var frame = _selectionSession!.Refresh(_searchFilter, _expandedPaths, _groupSparkplugTopics);
+                var frame = RefreshFrame(force: false);
                 if (frame is null)
                     return;
                 ApplyFrame(frame);
@@ -256,12 +298,49 @@
     private bool IsRowSelected(TopicTreeRowModel row) =>
         string.Equals(row.FullPath, _selectedKey, StringComparison.Ordinal);
 
+    private bool IsBulkChecked(TopicTreeRowModel row) =>
+        row.IsBulkSelectable && _bulkSelection.ContainsAll(row.SelectionPaths);
+
     private void OnSearchChanged()
     {
-        _selectionSession!.Select(null);
+        if (!_bulkSelection.IsActive)
+            _selectionSession!.Select(null);
+
         BuildVisibleRows();
         StateHasChanged();
     }
+
+    private void OnBulkSelectionChanged() => _ = InvokeAsync(() =>
+    {
+        if (_disposed)
+            return;
+
+        BuildVisibleRows();
+        StateHasChanged();
+    });
+
+    private void ToggleBulkMode()
+    {
+        if (_bulkSelection.IsActive)
+        {
+            _bulkSelection.Exit();
+            return;
+        }
+
+        _bulkSelection.Enter(ConcreteSelectionSeed());
+    }
+
+    // Entering the mode from a concrete topic keeps that topic checked; a grouping or parent row
+    // is not a concrete topic, so the mode starts from an empty filter instead.
+    private ImmutableArray<string> ConcreteSelectionSeed() =>
+        _selectedKey is { } key
+        && _visibleRows.FirstOrDefault(row => row.IsBulkSelectable
+            && (row.SelectionPaths.Contains(key, StringComparer.Ordinal)
+                || string.Equals(row.FullPath, key, StringComparison.Ordinal))) is { } row
+            ? row.SelectionPaths
+            : [];
+
+    private void ToggleRowSelection(ImmutableArray<string> paths) => _bulkSelection.ToggleAll(paths);
 
     private async Task OnRowSelected(TopicSelection request)
     {
@@ -304,6 +383,7 @@
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        _bulkSelection.Changed -= OnBulkSelectionChanged;
         UiSettings.UiPreferencesChanged -= OnUiPreferencesChanged;
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();

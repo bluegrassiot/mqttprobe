@@ -152,12 +152,64 @@ public sealed class TopicTreeProjectionTests
             "a collapsed literal tree must not be cloned node by node");
     }
 
+    [Test]
+    public void SelectionMode_SplitsSpellingsOfOneLeafIntoIndependentExactRows()
+    {
+        var roots = ImmutableArray.Create(
+            Node("a", "a", children:
+            [
+                Node("b", "a/b", messageCount: 2, hasDirectMessages: true,
+                    observedPaths: ["a/b", "a//b"])
+            ]));
+
+        var normal = TopicTreeProjection.CreateRows(
+            roots, null, new HashSet<string> { "a" }, groupSparkplugTopics: false);
+        normal.Should().ContainSingle(row => row.FullPath == "a/b")
+            .Which.IsBulkSelectable.Should().BeTrue();
+
+        var bulk = TopicTreeProjection.CreateRows(
+            roots, null, new HashSet<string> { "a" }, groupSparkplugTopics: false,
+            selectionPath: null, out _, selectionMode: true);
+
+        var spellings = bulk.Where(row => row.Kind == TopicTreeRowKind.Spelling).ToList();
+        spellings.Select(row => row.FullPath).Should().Equal("a//b", "a/b");
+        spellings.Should().OnlyContain(row => row.IsBulkSelectable && row.SelectionPaths.Length == 1);
+        spellings.Select(row => row.Depth).Should().OnlyContain(depth => depth == 1);
+        spellings.Should().NotContain(row => row.FullPath == "a/b" && row.HasChildren);
+    }
+
+    [Test]
+    public void SelectionMode_KeepsTheNodeRowForStructureWhenItHasChildren()
+    {
+        var roots = ImmutableArray.Create(
+            Node("a", "a", children:
+            [
+                Node("b", "a/b", messageCount: 2, hasDirectMessages: true,
+                    observedPaths: ["a/b", "a//b"],
+                    children: [Node("c", "a/b/c")])
+            ]));
+
+        var bulk = TopicTreeProjection.CreateRows(
+            roots, null, new HashSet<string> { "a", "a/b" }, groupSparkplugTopics: false,
+            selectionPath: null, out _, selectionMode: true);
+
+        var parent = bulk.Single(row => row.FullPath == "a/b" && row.Kind == TopicTreeRowKind.Topic);
+        parent.IsBulkSelectable.Should().BeFalse("a node with several spellings is not a bulk target");
+        parent.HasChildren.Should().BeTrue();
+        bulk.Where(row => row.Kind == TopicTreeRowKind.Spelling)
+            .Select(row => row.FullPath).Should().Equal("a//b", "a/b");
+    }
+
     private static TopicNodeSnapshot Node(
         string topic,
         string fullTopic,
         int topicCount = 1,
         int messageCount = 0,
         bool hasDirectMessages = false,
+        ImmutableArray<string> observedPaths = default,
         params TopicNodeSnapshot[] children) =>
-        new(topic, fullTopic, topicCount, messageCount, hasDirectMessages, children.ToImmutableArray());
+        new(topic, fullTopic, topicCount, messageCount, hasDirectMessages, children.ToImmutableArray())
+        {
+            ObservedTopicPaths = observedPaths.IsDefaultOrEmpty ? [] : observedPaths
+        };
 }

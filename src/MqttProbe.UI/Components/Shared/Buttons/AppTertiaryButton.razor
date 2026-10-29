@@ -1,6 +1,7 @@
 @namespace MqttProbe.UI.Components.Shared
 
-<MudButton Variant="Variant.Text"
+<MudButton @ref="_button"
+           Variant="Variant.Text"
            Color="Color.Default"
            OnClick="@OnClick"
            Disabled="@Disabled"
@@ -40,6 +41,11 @@
     [Parameter] public string? Href { get; set; }
 
     [Parameter] public bool MinWidth { get; set; }
+
+    private MudButton? _button;
+
+    public ValueTask FocusAsync() =>
+        _button?.FocusAsync() ?? ValueTask.CompletedTask;
 
     [Parameter(CaptureUnmatchedValues = true)]
     public Dictionary<string, object> AdditionalAttributes { get; set; } = new();

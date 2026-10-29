@@ -40,6 +40,18 @@
     margin-left: 4px;
 }
 
+.mobile-topic-bar__name--selection {
+    font-family: var(--font-sans);
+    font-weight: 600;
+}
+
+.mobile-topic-bar__select {
+    flex-shrink: 0;
+    text-transform: none;
+    min-height: 44px;
+    padding: 0 10px;
+}
+
 .mobile-topic-bar__btn {
     flex-shrink: 0;
     text-transform: none;

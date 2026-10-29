@@ -139,6 +139,26 @@ public class MobileTopicBarTests : BunitTestContext
     }
 
     [Test]
+    public async Task BulkSelection_ShowsTheCount_AndSelectStartsSelecting()
+    {
+        var started = false;
+        var selection = new TopicBulkSelection(TopicTreeSelectionTestAdapter.Create());
+        selection.Enter(["sensors/temp", "sensors/humidity"]);
+
+        var cut = Render<MobileTopicBar>(p => p
+            .AddCascadingValue(selection)
+            .Add(x => x.HasTopics, true)
+            .Add(x => x.OnSelectTopics, () => { started = true; return Task.CompletedTask; }));
+
+        cut.Markup.Should().Contain("2 topics selected");
+
+        await cut.InvokeAsync(() =>
+            cut.Find(".mobile-topic-bar__select").Click());
+
+        started.Should().BeTrue();
+    }
+
+    [Test]
     public async Task DisposeAsync_DoesNotThrow()
     {
         var cut = Render<MobileTopicBar>();

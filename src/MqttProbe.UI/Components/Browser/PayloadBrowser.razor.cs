@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Logging;
 using MqttProbe.Core.Models.Mqtt;
@@ -16,8 +17,26 @@ public partial class PayloadBrowser
     protected override Task OnInitializedAsync()
     {
         _filterFunc = FilterFunc;
+        if (BulkSelection is not null)
+            BulkSelection.MessagesCleared += OnMessagesCleared;
         _updateTimer = new Timer(OnTimerTick, null, 0, 500);
         return Task.CompletedTask;
+    }
+
+    private void OnMessagesCleared(ImmutableArray<string> topics)
+    {
+        if (_selectedMessage?.Topic is not { } topic
+            || !topics.Contains(topic, StringComparer.Ordinal))
+            return;
+
+        _ = InvokeAsync(() =>
+        {
+            if (Disposed)
+                return;
+
+            _selectedMessage = null;
+            StateHasChanged();
+        });
     }
 
     private void OnTimerTick(object? state) => _ = RefreshSafelyAsync();

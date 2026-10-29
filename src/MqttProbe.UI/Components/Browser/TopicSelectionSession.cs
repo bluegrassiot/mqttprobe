@@ -47,7 +47,9 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
         string? filter,
         IReadOnlySet<string> expandedPaths,
         bool grouped,
-        bool force = false)
+        bool force = false,
+        IReadOnlyList<string>? selectionPaths = null,
+        bool selectionMode = false)
     {
         var snapshot = store.GetTopicTreeSnapshot();
         var selection = store.GetSelectedTopicState();
@@ -58,8 +60,22 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
             && selection.Token.IsSameSelection(acceptedSelection))
             return null;
 
-        var rows = TopicTreeProjection.CreateRows(
-            snapshot.Roots, filter, expandedPaths, grouped, selection.Key, out var selectionRepresented);
+        List<TopicTreeRowModel> rows;
+        bool selectionRepresented;
+        if (selectionMode)
+        {
+            rows = TopicTreeProjection.CreateRows(
+                snapshot.Roots, filter, expandedPaths, grouped,
+                selectionPath: null, out _, selectionMode: true);
+            selectionRepresented = selectionPaths is not { Count: > 0 }
+                || selectionPaths.Any(path =>
+                    TopicTreeProjection.RepresentsObservedPath(snapshot.Roots, grouped, path));
+        }
+        else
+        {
+            rows = TopicTreeProjection.CreateRows(
+                snapshot.Roots, filter, expandedPaths, grouped, selection.Key, out selectionRepresented);
+        }
 
         if (selection.Key is not null && !selectionRepresented)
         {

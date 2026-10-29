@@ -20,6 +20,8 @@
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
+    [CascadingParameter] private TopicBulkSelection? BulkSelection { get; set; }
+
     private async Task CloseWithoutSelection()
     {
         await OnClose.InvokeAsync();
@@ -27,6 +29,9 @@
 
     private async Task OnTopicSelected(SelectedTopicState _)
     {
+        if (BulkSelection is { IsActive: true })
+            return;
+
         await OnClose.InvokeAsync();
     }
 }

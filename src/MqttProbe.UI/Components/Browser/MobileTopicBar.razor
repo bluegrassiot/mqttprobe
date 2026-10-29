@@ -3,7 +3,12 @@
 
 <div class="mobile-topic-bar">
     <div class="mobile-topic-bar__info" @onclick="OpenPicker">
-        @if (_selectedTopic is not null)
+        @if (BulkSelection is { IsActive: true })
+        {
+            <MudIcon Icon="@LucideIcons.CheckCircle" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
+            <span class="mobile-topic-bar__name mobile-topic-bar__name--selection">@BulkSelection.Summary</span>
+        }
+        else if (_selectedTopic is not null)
         {
             <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
             <span class="mobile-topic-bar__name" title="@_selectedTopic">@_selectedTopic</span>
@@ -21,6 +26,13 @@
             <span class="mobile-topic-bar__name mobile-topic-bar__name--empty">Choose a topic</span>
         }
     </div>
+    <AppSecondaryButton Size="Size.Small"
+                        StartIcon="@LucideIcons.CheckCircle"
+                        OnClick="StartSelecting"
+                        Disabled="@(!HasTopics)"
+                        Class="mobile-topic-bar__select">
+        Select
+    </AppSecondaryButton>
     <AppPrimaryButton Size="Size.Small"
                 StartIcon="@LucideIcons.ChevronDown"
                 OnClick="OpenPicker"
@@ -33,6 +45,9 @@
 @code {
     [Parameter] public bool HasTopics { get; set; }
     [Parameter] public EventCallback OnOpenPicker { get; set; }
+    [Parameter] public EventCallback OnSelectTopics { get; set; }
+
+    [CascadingParameter] private TopicBulkSelection? BulkSelection { get; set; }
 
     private string? _selectedTopic;
     private int _messageCount;
@@ -42,6 +57,8 @@
     protected override void OnInitialized()
     {
         SyncFromManager();
+        if (BulkSelection is not null)
+            BulkSelection.Changed += OnBulkSelectionChanged;
         _updateTimer = new Timer(async _ =>
         {
             if (_disposed) return;
@@ -49,6 +66,8 @@
             await RequestRenderSafelyAsync();
         }, null, 0, 1_000);
     }
+
+    private void OnBulkSelectionChanged() => _ = RequestRenderSafelyAsync();
 
     private async Task RequestRenderSafelyAsync()
     {
@@ -75,9 +94,17 @@
         await OnOpenPicker.InvokeAsync();
     }
 
+    private async Task StartSelecting()
+    {
+        if (!HasTopics) return;
+        await OnSelectTopics.InvokeAsync();
+    }
+
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        if (BulkSelection is not null)
+            BulkSelection.Changed -= OnBulkSelectionChanged;
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();
     }

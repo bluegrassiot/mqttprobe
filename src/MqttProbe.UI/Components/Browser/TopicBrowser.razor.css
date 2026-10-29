@@ -122,6 +122,13 @@
     margin-left: auto;
 }
 
+.topic-header-row ::deep .topic-select-toggle {
+    flex-shrink: 0;
+    text-transform: none;
+    min-height: 36px;
+    padding: 0 10px;
+}
+
 .topic-icon-key-header {
     display: flex;
     align-items: center;

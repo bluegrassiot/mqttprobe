@@ -1,5 +1,6 @@
 @using MqttProbe.Core.Services.Configuration
 @inject IMessageStoreManager MessageStoreManager
+@inject ITopicSelectionStore TopicSelectionStore
 @inject IUiSettings UiSettings
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -11,10 +12,12 @@
     <HeaderChips>
         @if (MessageStoreManager.RootTopicCount > 0)
         {
-            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
-                     Style="height:20px; font-size:0.7rem; padding:0 6px;">
-                @MessageStoreManager.RootTopicCount
-            </MudChip>
+            <span class="browser-root-count-chip-host">
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                         Class="browser-root-count-chip">
+                    @MessageStoreManager.RootTopicCount
+                </MudChip>
+            </span>
         }
     </HeaderChips>
     <HeaderActions>
@@ -23,11 +26,13 @@
                    MinWidth="true"
                    Disabled="@(MessageStoreManager.RootTopicCount == 0)"
                    OnClick="ClearAllMessages">
-            Clear
+            Clear all messages
         </AppDestructiveButton>
     </HeaderActions>
 </TabPanelHeader>
+<CascadingValue Value="_bulkSelection" IsFixed="true">
 <div class="tab-panel-content">
+    <TopicBulkToolbar/>
     @if (MessageStoreManager.RootTopicCount == 0 && !UiSettings.IsHintDismissed("browser"))
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-2"
@@ -55,7 +60,8 @@
                 @* Phone layout: topic bar + payload (CSS media query hides the split) *@
                 <div class="browser-mobile-layout">
                     <MobileTopicBar HasTopics="@(MessageStoreManager.RootTopicCount > 0)"
-                                    OnOpenPicker="OpenMobilePicker"/>
+                                    OnOpenPicker="OpenMobilePicker"
+                                    OnSelectTopics="OpenMobileSelection"/>
                     <div class="browser-mobile-payload">
                         <PayloadBrowser/>
                     </div>
@@ -78,10 +84,12 @@
         <TopicPickerOverlay IsOpen="@_mobilePickerOpen" OnClose="CloseMobilePicker"/>
     </ErrorBoundary>
 </div>
+</CascadingValue>
 
 @code {
     private readonly RenderFragment<Exception> _sectionError = _ => @<SectionError />;
 
+    private TopicBulkSelection _bulkSelection = null!;
     private Timer? _updateTimer;
     private bool _disposed;
     private int _lastCount;
@@ -90,8 +98,15 @@
     internal void OpenMobilePicker() => _mobilePickerOpen = true;
     internal void CloseMobilePicker() => _mobilePickerOpen = false;
 
+    internal void OpenMobileSelection()
+    {
+        _bulkSelection.Enter([]);
+        _mobilePickerOpen = true;
+    }
+
     protected override void OnInitialized()
     {
+        _bulkSelection = new TopicBulkSelection(TopicSelectionStore);
         _lastCount = MessageStoreManager.RootTopicCount;
         _updateTimer = CreateUpdateTimer();
     }
@@ -132,9 +147,9 @@
     private async Task ClearAllMessages()
     {
         var confirmed = await DialogService.ShowMessageBoxAsync(
-            "Clear All Messages",
-            "This will remove all stored topics and messages. Continue?",
-            yesText: "Clear all", cancelText: "Cancel",
+            "Clear all messages",
+            "This removes every stored topic and message. Selected topics are cleared too. Continue?",
+            yesText: "Clear all messages", cancelText: "Cancel",
             options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
         if (confirmed != true)
             return;

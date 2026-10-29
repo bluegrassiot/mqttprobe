@@ -36,6 +36,19 @@ public class SubscriptionsTests : BunitTestContext
         EnsureMudProviders();
     }
 
+    [Test]
+    public void ExcludeEditor_ReflectsAnAdditionMadeWhileThePanelWasKeptAlive()
+    {
+        _mockExcludeService.TopicExcludes.Returns(new[] { "existing" });
+        var cut = Render<Subscriptions>();
+        Assert.That(cut.Markup, Does.Contain("existing"));
+
+        _mockExcludeService.TopicExcludes.Returns(new[] { "existing", "accept//alias" });
+        _mockExcludeService.TopicExcluded += Raise.Event<Action<string>>("accept//alias");
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("accept//alias"));
+    }
+
     private void AuthorizeAsOperator()
     {
         AuthorizationContext.SetAuthorized("testuser").SetRoles(AppRoles.Operator);

@@ -1,0 +1,45 @@
+@using System.Collections.Immutable
+@inherits ComponentBase
+
+<MudDialog DefaultFocus="DefaultFocus.None">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Exclude selected topics</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="topic-target-dialog__lead">
+            These full topic paths are added to this connection's excluded topics. Existing entries stay.
+            Stored messages for them are removed, and new messages on them are ignored.
+        </MudText>
+        <TopicTargetList Topics="Topics"/>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="topic-target-dialog__note">
+            @CountLabel will be added. No wildcard is created.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <AppTertiaryButton @ref="_cancelButton" Class="topic-target-dialog__cancel" OnClick="Cancel">Cancel</AppTertiaryButton>
+        <AppDestructiveButton Class="topic-target-dialog__confirm" OnClick="Confirm"
+                              StartIcon="@LucideIcons.EyeOff">
+            Exclude @CountLabel
+        </AppDestructiveButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public ImmutableArray<string> Topics { get; set; }
+
+    private AppTertiaryButton? _cancelButton;
+
+    private string CountLabel => Topics.Length == 1 ? "1 topic" : $"{Topics.Length} topics";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _cancelButton is not null)
+            await _cancelButton.FocusAsync();
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(Topics));
+}

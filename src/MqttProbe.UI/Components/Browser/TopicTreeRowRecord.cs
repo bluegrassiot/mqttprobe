@@ -11,7 +11,8 @@ public enum TopicTreeRowKind
     SparkplugNode,
     Devices,
     SparkplugDevice,
-    MessageType
+    MessageType,
+    Spelling
 }
 
 // A node or device owns the message-type rows grouped beneath it and shares its colour with them.
@@ -33,11 +34,25 @@ public sealed record TopicTreeRowModel(
     TopicTreeRowKind Kind = TopicTreeRowKind.Topic,
     ImmutableArray<string> SelectionTopics = default,
     SparkplugSelectionScope? Scope = null,
-    TopicTreeOwner? Owner = null)
+    TopicTreeOwner? Owner = null,
+    bool IsMessageTopic = false,
+    ImmutableArray<string> ObservedPaths = default,
+    int SpellingCount = 0)
 {
     public bool IsVirtualTopic => Kind is not (TopicTreeRowKind.Topic
+        or TopicTreeRowKind.Spelling
         or TopicTreeRowKind.SparkplugNamespace
         or TopicTreeRowKind.SparkplugGroup);
+
+    // The exact raw spellings this row selects. A node with no observed spelling is not a
+    // concrete selection target, and a virtual grouping row never is.
+    public ImmutableArray<string> SelectionPaths => ObservedPaths.IsDefaultOrEmpty
+        ? FallbackPaths()
+        : ObservedPaths;
+
+    private ImmutableArray<string> FallbackPaths() => IsMessageTopic ? [FullPath] : [];
+
+    public bool IsBulkSelectable => IsMessageTopic && SelectionPaths.Length > 0;
 
     public ImmutableArray<string> SelectedTopics => SelectionTopics.IsDefaultOrEmpty
         ? [FullPath]

@@ -4,6 +4,7 @@
 @inject ISubscriptionManager SubscriptionManager
 @inject ITopicExcludeService TopicExcludeService
 @inject ISnackbar Snackbar
+@implements IDisposable
 
 <TabPanelHeader Title="Subscriptions" Icon="@LucideIcons.Layers" />
 
@@ -37,6 +38,22 @@
 </div>
 
 @code {
+    private Action<string>? _exclusionAdded;
+
+    protected override void OnInitialized()
+    {
+        _exclusionAdded = topic => _ = InvokeAsync(StateHasChanged);
+        TopicExcludeService.TopicExcluded += _exclusionAdded;
+    }
+
+    // The browser can add exclusions while this panel is kept alive on another tab, so the
+    // editor follows the service rather than a snapshot taken when the panel first rendered.
+    public void Dispose()
+    {
+        if (_exclusionAdded is not null)
+            TopicExcludeService.TopicExcluded -= _exclusionAdded;
+    }
+
     private async Task HandleAdd((string Topic, MqttQualityOfServiceLevel Qos) request)
     {
         try
@@ -104,6 +121,10 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to remove excludes: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
         }
     }
 

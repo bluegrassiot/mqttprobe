@@ -7,7 +7,8 @@ using MqttProbe.UI.Tests.TestHelpers;
 namespace MqttProbe.UI.Tests.Components.Browser;
 
 // A row draws its whole indent with one SVG, so its element count must not grow with depth: the
-// old spacer-per-level markup cost thousands of nodes per row on a deep topic.
+// old spacer-per-level markup cost thousands of nodes per row on a deep topic. The indent itself
+// is bounded so a 360px pane never needs a horizontal scrollbar.
 [TestFixture]
 public class TopicTreeRowIndentRenderingTests : BunitTestContext
 {
@@ -49,10 +50,12 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
 
     [TestCase(0, 0)]
     [TestCase(1, 16)]
-    [TestCase(7, 112)]
-    [TestCase(1000, 16000)]
-    [TestCase(4096, 65536)]
-    public void IndentIsOneElementSizedByDepth(int depth, int expectedWidth)
+    [TestCase(6, 96)]
+    [TestCase(7, 96)]
+    [TestCase(12, 96)]
+    [TestCase(1000, 96)]
+    [TestCase(4096, 96)]
+    public void IndentIsBoundedSoNarrowPanesNeverScrollSideways(int depth, int expectedWidth)
     {
         var cut = RenderRow(Row(depth));
 
@@ -60,6 +63,7 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
         indent.Should().ContainSingle();
         indent[0].GetAttribute("width").Should().Be(expectedWidth.ToString(CultureInfo.InvariantCulture));
         indent[0].GetAttribute("aria-hidden").Should().Be("true");
+        cut.Find(".topic-tree-row").GetAttribute("data-depth").Should().Be(depth.ToString(CultureInfo.InvariantCulture));
     }
 
     [TestCase(0)]

@@ -64,9 +64,26 @@
             @if (_mode == ChartMode.CreateNew)
             {
                 <MudTextField @bind-Value="_newChartName" Label="Chart Name" Variant="Variant.Outlined"
-                              Margin="Margin.Dense"
+                              Margin="Margin.Dense" Class="quick-add-chart-name"
                               Immediate="true" MaxLength="100" AutoFocus="true"
                               HelperText="A new line chart will be created with this field as its first series." />
+                <div class="quick-add-timeout-row">
+                    <MudNumericField @bind-Value="_staleTimeoutSeconds"
+                                     Label="Stale timeout (seconds)"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                     Min="0" Step="1" Disabled="_staleTimeoutOff"
+                                     Error="@(!StaleTimeoutValid)"
+                                     HelperText="A series turns stale after this long without a new point. Choose Off for change-only topics."
+                                     Class="quick-add-timeout" />
+                    <MudSwitch T="bool" @bind-Value="_staleTimeoutOff" Label="Off"
+                               Color="Color.Primary" Class="quick-add-timeout-off" />
+                    @if (!StaleTimeoutValid)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Error" Class="quick-add-timeout-error">
+                            Enter a timeout greater than zero seconds.
+                        </MudText>
+                    }
+                </div>
             }
         </div>
     </DialogContent>
@@ -94,6 +111,11 @@
     private Guid _selectedChartId;
     private string _newChartName = "";
     private string _displayName = "";
+    private double? _staleTimeoutSeconds = ChartConfiguration.DefaultStaleTimeoutSeconds;
+    private bool _staleTimeoutOff;
+
+    private bool StaleTimeoutValid => _staleTimeoutOff
+        || (_staleTimeoutSeconds is { } seconds && ChartFreshnessEvaluator.IsValidTimeout(seconds));
 
     protected override void OnInitialized()
     {
@@ -113,7 +135,7 @@
     }
 
     private bool CanSubmit => _mode == ChartMode.CreateNew
-        ? !string.IsNullOrWhiteSpace(_newChartName)
+        ? !string.IsNullOrWhiteSpace(_newChartName) && StaleTimeoutValid
         : _selectedChartId != Guid.Empty;
 
     internal static string DefaultChartName(string topic, string seriesName) =>
@@ -147,6 +169,8 @@
 
     private async Task Submit()
     {
+        if (!CanSubmit) return;
+
         if (_mode == ChartMode.CreateNew)
         {
             var series = new ChartSeries
@@ -159,6 +183,7 @@
             var newChart = new ChartConfiguration
             {
                 Name = _newChartName.Trim(),
+                StaleTimeoutSeconds = _staleTimeoutOff ? null : _staleTimeoutSeconds,
                 Series = [series]
             };
             await ChartSettings.AddChartAsync(SessionState.SelectedConnection.Id, newChart);
@@ -186,6 +211,7 @@
                 Type = chart.Type,
                 MaxPoints = chart.MaxPoints,
                 TimeWindowMinutes = chart.TimeWindowMinutes,
+                StaleTimeoutSeconds = chart.StaleTimeoutSeconds,
                 Series = [.. chart.Series, newSeries]
             };
             await ChartSettings.UpdateChartAsync(SessionState.SelectedConnection.Id, updated);

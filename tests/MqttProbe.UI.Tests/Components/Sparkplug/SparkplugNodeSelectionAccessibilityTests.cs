@@ -139,7 +139,6 @@ public class SparkplugNodeSelectionAccessibilityTests : BunitTestContext
         cut.FindAll("button.spb-node-select").Should().ContainSingle("a health change must not add a second tab stop");
         cut.Find("button.spb-node-select").TextContent.Should().Contain("OFFLINE");
         cut.Find("button.spb-node-select").GetAttribute("aria-current").Should().Be("true");
-        cut.Find("button.spb-node-select").GetAttribute("aria-current").Should().Be("true");
         cut.Find(".spb-node-remove").Should().NotBeNull();
     }
 

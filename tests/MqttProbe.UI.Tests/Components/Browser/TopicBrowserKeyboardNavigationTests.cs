@@ -414,4 +414,3 @@ public class TopicBrowserKeyboardNavigationTests : BunitTestContext
         return tabStops[0].GetAttribute("data-topic-key");
     }
 }
-

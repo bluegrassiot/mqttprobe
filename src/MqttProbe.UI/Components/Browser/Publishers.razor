@@ -114,18 +114,15 @@
             return;
         }
 
-        if (_properties.Any)
+        if (_properties.ValidationError is { } validationError)
         {
-            if (!IsV5Connection)
-            {
-                Snackbar.Add("MQTT 5 properties need an MQTT 5 connection. Clear them or reconnect with MQTT version 5.0.", Severity.Warning);
-                return;
-            }
-            if (_properties.ValidationError is { } validationError)
-            {
-                Snackbar.Add(validationError, Severity.Warning);
-                return;
-            }
+            Snackbar.Add(validationError, Severity.Warning);
+            return;
+        }
+        if (_properties.Any && !IsV5Connection)
+        {
+            Snackbar.Add("MQTT 5 properties need an MQTT 5 connection. Clear them or reconnect with MQTT version 5.0.", Severity.Warning);
+            return;
         }
 
         var appMsg = OutboundMessageMapper.Build(_properties.ToMessage(_message));

@@ -1,5 +1,6 @@
 using MQTTnet.Protocol;
 using MqttProbe.Core.Models.Mqtt;
+using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Utilities;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
@@ -217,5 +218,88 @@ public class PublishPropertiesDraftTests
 
         draft.UserProperties.Should().HaveCount(PublishPropertiesDraft.MaxUserProperties + 1, "nothing is dropped silently");
         draft.ValidationError.Should().Contain("Remove 1");
+    }
+
+
+    [Test]
+    public void ContentTypeError_FlagsNulAndOverLength()
+    {
+        new PublishPropertiesDraft { ContentType = "text/\0plain" }.ContentTypeError.Should().Contain("NUL");
+        new PublishPropertiesDraft { ContentType = new string('a', MqttStringRules.MaxUtf8Bytes + 1) }.ContentTypeError.Should().Contain("65,535");
+        new PublishPropertiesDraft { ContentType = new string('a', MqttStringRules.MaxUtf8Bytes) }.ContentTypeError.Should().BeNull();
+        new PublishPropertiesDraft { ContentType = "text/\0plain" }.ValidationError.Should().Contain("Content type");
+    }
+
+    [Test]
+    public void UserPropertyError_FlagsNulAndOverLengthByPositionAndField()
+    {
+        var draft = new PublishPropertiesDraft();
+        draft.UserProperties.Add(new MqttMessageUserProperty("ok", string.Concat(Enumerable.Repeat("€", MqttStringRules.MaxUtf8Bytes / 3))));
+        draft.UserProperties.Add(new MqttMessageUserProperty("trace\0id", "v"));
+        draft.UserProperties.Add(new MqttMessageUserProperty("k", new string('v', MqttStringRules.MaxUtf8Bytes + 1)));
+
+        draft.UserPropertyError.Should().Be("User property 2 name cannot contain NUL or exceed 65,535 bytes of UTF-8. Remove it.");
+
+        draft.UserProperties.RemoveAt(1);
+
+        draft.UserPropertyError.Should().Be("User property 2 value cannot contain NUL or exceed 65,535 bytes of UTF-8. Remove it.");
+
+        draft.UserProperties.RemoveAt(1);
+
+        draft.UserPropertyError.Should().BeNull("a multibyte value of exactly 65,535 bytes is allowed");
+    }
+
+    [Test]
+    public void From_KeepsInvalidImportedValueAndReportsIt()
+    {
+        var message = new MqttMessage("{}", "t", false, MqttQualityOfServiceLevel.AtMostOnce)
+        {
+            UserProperties = [new MqttMessageUserProperty("k", "a\0b")]
+        };
+
+        var draft = PublishPropertiesDraft.From(message);
+
+        draft.UserProperties.Should().Equal(message.UserProperties!);
+        draft.ValidationError.Should().Contain("User property 1 value");
+    }
+
+    [Test]
+    public void Expiry_ZeroOrEmpty_IsNotSentAndNotAnError()
+    {
+        foreach (var text in new[] { null, "", "  ", "0", " 0 " })
+        {
+            var draft = new PublishPropertiesDraft { ExpiryText = text };
+            draft.ExpirySeconds.Should().BeNull(text);
+            draft.ExpiryError.Should().BeNull(text);
+            draft.SetCount.Should().Be(0, text);
+        }
+    }
+
+    [TestCase("abc")]
+    [TestCase("-5")]
+    [TestCase("1.5")]
+    [TestCase("4294967296")]
+    [TestCase("1e3")]
+    public void Expiry_InvalidText_IsAnErrorAndNeverSent(string text)
+    {
+        var draft = new PublishPropertiesDraft { ExpiryText = text };
+
+        draft.ExpiryError.Should().Be(PublishPropertiesDraft.ExpiryErrorText);
+        draft.ValidationError.Should().Be(PublishPropertiesDraft.ExpiryErrorText);
+        draft.ExpirySeconds.Should().BeNull();
+        draft.ToMessage(new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce)).MessageExpiryInterval.Should().BeNull();
+    }
+
+    [Test]
+    public void Expiry_MaxValueAccepted_AndSetterRoundTrips()
+    {
+        new PublishPropertiesDraft { ExpiryText = "4294967295" }.ExpirySeconds.Should().Be(uint.MaxValue);
+
+        var draft = new PublishPropertiesDraft { ExpirySeconds = 42 };
+        draft.ExpiryText.Should().Be("42");
+        draft.ExpiryError.Should().BeNull();
+
+        draft.Clear();
+        draft.ExpiryText.Should().BeNull();
     }
 }

@@ -25,6 +25,7 @@
                 <div class="publish-props-grid">
                     <MudTextField T="string" Label="Content type" Variant="Variant.Outlined" Margin="Margin.Dense"
                                   @bind-Value="Draft.ContentType" Immediate="true" Clearable="true" Disabled="@Disabled"
+                                  Error="@(Draft.ContentTypeError is not null)" ErrorText="@Draft.ContentTypeError"
                                   HelperText="Not sent when empty"/>
                     <MudSelect T="MqttPayloadFormatIndicator" Label="Payload format" Variant="Variant.Outlined"
                                Margin="Margin.Dense" @bind-Value="Draft.PayloadFormat" Disabled="@Disabled">
@@ -35,9 +36,11 @@
                             @MqttMessagePropertyDisplay.FormatPayloadFormat(MqttPayloadFormatIndicator.CharacterData)
                         </MudSelectItem>
                     </MudSelect>
-                    <MudNumericField T="uint?" Label="Message expiry (seconds)" Variant="Variant.Outlined"
-                                     Margin="Margin.Dense" @bind-Value="Draft.ExpirySeconds" Min="1" Max="uint.MaxValue"
-                                     Clearable="true" Disabled="@Disabled" HelperText="Not sent when empty"/>
+                    <MudTextField T="string" Label="Message expiry (seconds)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  @bind-Value="Draft.ExpiryText" Immediate="true" Clearable="true" Disabled="@Disabled"
+                                  InputMode="InputMode.numeric"
+                                  Error="@(Draft.ExpiryError is not null)" ErrorText="@Draft.ExpiryError"
+                                  HelperText="Whole seconds. Empty or 0 sends no expiry"/>
                     <MudTextField T="string" Label="Response topic" Variant="Variant.Outlined" Margin="Margin.Dense"
                                   @bind-Value="Draft.ResponseTopic" Immediate="true" Clearable="true" Disabled="@Disabled"
                                   Error="@(Draft.ResponseTopicError is not null)" ErrorText="@Draft.ResponseTopicError"/>
@@ -61,7 +64,7 @@
                         <MudText Typo="Typo.caption" Color="Color.Secondary">@Draft.UserProperties.Count / @PublishPropertiesDraft.MaxUserProperties</MudText>
                         <MudSpacer/>
                         <AppTertiaryButton StartIcon="@LucideIcons.X" title="Clear properties"
-                                           Disabled="@(!Draft.Any)" OnClick="@ClearAll">
+                                           Disabled="@(!Draft.Any && Draft.ValidationError is null)" OnClick="@ClearAll">
                             Clear
                         </AppTertiaryButton>
                     </div>
@@ -181,7 +184,14 @@
             return;
         }
 
-        Draft.UserProperties.Add(new MqttMessageUserProperty(_name, _value));
+        var property = new MqttMessageUserProperty(_name, _value);
+        if (PublishPropertiesDraft.DescribeUserProperty(Draft.UserProperties.Count, property) is { } problem)
+        {
+            Snackbar.Add(problem, Severity.Warning);
+            return;
+        }
+
+        Draft.UserProperties.Add(property);
         _name = string.Empty;
         _value = string.Empty;
         if (_nameField is not null)

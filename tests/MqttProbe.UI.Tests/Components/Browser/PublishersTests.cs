@@ -459,4 +459,88 @@ public class PublishersTests : BunitTestContext
         await _mockClient.Received(1).EnqueueAsync(Arg.Is<MqttApplicationMessage>(m =>
             m!.Topic == "test/topic" && m.ContentType == null && (m.UserProperties == null || m.UserProperties.Count == 0)));
     }
+
+
+    private static IRenderedComponent<MudTextField<string>> ExpiryField(IRenderedComponent<Publishers> cut) =>
+        cut.FindComponents<MudTextField<string>>().First(f => f.Instance.Label == "Message expiry (seconds)");
+
+    [Test]
+    public async Task Publish_ExpiryZero_PublishesWithoutExpiryAndKeepsZero()
+    {
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        cut.FindAll("input")[0].Change("test/topic");
+        ExpiryField(cut).Find("input").Input("0");
+        ExpiryField(cut).Find("input").Blur();
+
+        cut.Find("button[title='Publish']").Click();
+
+        await _mockClient.Received(1).EnqueueAsync(Arg.Is<MqttApplicationMessage>(m => m!.Topic == "test/topic" && m.MessageExpiryInterval == 0));
+        cut.Instance.PropertiesForTests.ExpiryText.Should().Be("0", "zero is never rewritten to one");
+        ExpiryField(cut).FindAll(".mud-input-error").Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Publish_WithInvalidExpiry_WarnsAndDoesNotEnqueue()
+    {
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        cut.FindAll("input")[0].Change("test/topic");
+        ExpiryField(cut).Find("input").Input("abc");
+
+        cut.Find("button[title='Publish']").Click();
+
+        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+        _mockSnackbar.Received(1).Add(PublishPropertiesDraft.ExpiryErrorText, Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+        ExpiryField(cut).FindAll(".mud-input-error").Should().NotBeEmpty();
+    }
+
+    [Test]
+    public async Task Publish_WithNulContentType_WarnsAndDoesNotEnqueue()
+    {
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        cut.FindAll("input")[0].Change("test/topic");
+        cut.Instance.PropertiesForTests.ContentType = "text/\0plain";
+
+        cut.Find("button[title='Publish']").Click();
+
+        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+        _mockSnackbar.Received(1).Add(Arg.Is<string>(m => m!.StartsWith("Content type")), Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public async Task Publish_WithOversizedCorrelationText_WarnsAndDoesNotEnqueue()
+    {
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        cut.FindAll("input")[0].Change("test/topic");
+        cut.Instance.PropertiesForTests.CorrelationText = new string('c', MqttStringRules.MaxBinaryBytes + 1);
+
+        cut.Find("button[title='Publish']").Click();
+
+        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+        _mockSnackbar.Received(1).Add(CorrelationDataCodec.LengthError, Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public async Task Clipboard_WithNulUserPropertyValue_IsKeptAndBlockedAtPublish()
+    {
+        var copied = new MqttMessage("{}", "t/1", false, MqttQualityOfServiceLevel.AtMostOnce)
+        {
+            UserProperties = [new MqttMessageUserProperty("trace", "a\0b")]
+        };
+        var clipboard = Services.GetRequiredService<IClipboardService>();
+        clipboard.GetTextAsync().Returns(JsonSerializer.Serialize(copied));
+        AuthorizationContext.SetAuthorized("op").SetRoles(AppRoles.Operator);
+        var cut = Render<Publishers>();
+        await cut.InvokeAsync(() => cut.Instance.SetMessageFromClipBoard());
+        cut.FindAll("input")[0].Change("test/topic");
+
+        cut.Find("button[title='Publish']").Click();
+
+        cut.Instance.PropertiesForTests.UserProperties.Should().Equal(copied.UserProperties!);
+        await _mockClient.DidNotReceive().EnqueueAsync(Arg.Any<MqttApplicationMessage>());
+        _mockSnackbar.Received(1).Add(Arg.Is<string>(m => m!.Contains("User property 1 value")), Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
 }

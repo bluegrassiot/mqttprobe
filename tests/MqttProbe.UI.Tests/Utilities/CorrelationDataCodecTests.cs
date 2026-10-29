@@ -1,3 +1,4 @@
+using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Utilities;
 
 namespace MqttProbe.UI.Tests.Utilities;
@@ -67,5 +68,52 @@ public class CorrelationDataCodecTests
 
         CorrelationDataCodec.TryParse(text, encoding, out var bytes).Should().BeTrue();
         bytes.Should().Equal(original);
+    }
+
+
+    [Test]
+    public void TryParse_Text_AcceptsExactly65535Bytes()
+    {
+        CorrelationDataCodec.TryParse(new string('a', MqttStringRules.MaxBinaryBytes), CorrelationDataEncoding.Text, out var bytes, out var error).Should().BeTrue();
+        bytes.Should().HaveCount(MqttStringRules.MaxBinaryBytes);
+        error.Should().BeNull();
+    }
+
+    [Test]
+    public void TryParse_Text_Rejects65536Bytes()
+    {
+        CorrelationDataCodec.TryParse(new string('a', MqttStringRules.MaxBinaryBytes + 1), CorrelationDataEncoding.Text, out var bytes, out var error).Should().BeFalse();
+        bytes.Should().BeEmpty();
+        error.Should().Be(CorrelationDataCodec.LengthError);
+    }
+
+    [Test]
+    public void TryParse_Text_CountsUtf8BytesNotCharacters()
+    {
+        var euros = MqttStringRules.MaxBinaryBytes / 3;
+
+        CorrelationDataCodec.TryParse(string.Concat(Enumerable.Repeat("€", euros)), CorrelationDataEncoding.Text, out _, out var ok).Should().BeTrue();
+        ok.Should().BeNull();
+        CorrelationDataCodec.TryParse(string.Concat(Enumerable.Repeat("€", euros + 1)), CorrelationDataEncoding.Text, out _, out var error).Should().BeFalse();
+        error.Should().Be(CorrelationDataCodec.LengthError);
+    }
+
+    [Test]
+    public void TryParse_Hex_Boundary()
+    {
+        CorrelationDataCodec.TryParse(new string('f', MqttStringRules.MaxBinaryBytes * 2), CorrelationDataEncoding.Hex, out var bytes, out var ok).Should().BeTrue();
+        bytes.Should().HaveCount(MqttStringRules.MaxBinaryBytes);
+        ok.Should().BeNull();
+
+        CorrelationDataCodec.TryParse(new string('f', (MqttStringRules.MaxBinaryBytes + 1) * 2), CorrelationDataEncoding.Hex, out bytes, out var error).Should().BeFalse();
+        bytes.Should().BeEmpty();
+        error.Should().Be(CorrelationDataCodec.LengthError);
+    }
+
+    [Test]
+    public void TryParse_Hex_ReportsHexErrorBeforeLength()
+    {
+        CorrelationDataCodec.TryParse("abc", CorrelationDataEncoding.Hex, out _, out var error).Should().BeFalse();
+        error.Should().Be(CorrelationDataCodec.HexError);
     }
 }

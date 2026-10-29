@@ -1,5 +1,7 @@
+using System.Globalization;
 using MQTTnet.Protocol;
 using MqttProbe.Core.Models.Mqtt;
+using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Plugins.Protobuf;
 using MqttProbe.UI.Utilities;
 
@@ -8,10 +10,18 @@ namespace MqttProbe.UI.Components.Browser;
 public sealed class PublishPropertiesDraft
 {
     public const int MaxUserProperties = 50;
+    public const string ExpiryErrorText = "Message expiry must be a whole number of seconds from 0 to 4,294,967,295.";
+    private const string Utf8Rule = "cannot contain NUL or exceed 65,535 bytes of UTF-8";
 
     public string? ContentType { get; set; }
     public MqttPayloadFormatIndicator PayloadFormat { get; set; } = MqttPayloadFormatIndicator.Unspecified;
-    public uint? ExpirySeconds { get; set; }
+    public string? ExpiryText { get; set; }
+
+    public uint? ExpirySeconds
+    {
+        get => TryParseExpiry(ExpiryText, out var seconds) && seconds > 0 ? seconds : null;
+        set => ExpiryText = value?.ToString(CultureInfo.InvariantCulture);
+    }
     public string? ResponseTopic { get; set; }
     public string? CorrelationText { get; set; }
     public CorrelationDataEncoding CorrelationEncoding { get; set; } = CorrelationDataEncoding.Text;
@@ -35,18 +45,40 @@ public sealed class PublishPropertiesDraft
             : "Response topic must be a topic name without + or # wildcards.";
 
     public string? CorrelationError =>
-        CorrelationDataCodec.TryParse(CorrelationText, CorrelationEncoding, out _)
+        CorrelationDataCodec.TryParse(CorrelationText, CorrelationEncoding, out _, out var error) ? null : error;
+
+    public string? ContentTypeError =>
+        string.IsNullOrEmpty(ContentType) || MqttStringRules.IsValidUtf8String(ContentType)
             ? null
-            : "Correlation data must be an even number of hex digits.";
+            : $"Content type {Utf8Rule}.";
+
+    public string? ExpiryError =>
+        string.IsNullOrWhiteSpace(ExpiryText) || TryParseExpiry(ExpiryText, out _) ? null : ExpiryErrorText;
 
     public string? UserPropertyError =>
         UserProperties.Count > MaxUserProperties
             ? $"At most {MaxUserProperties} user properties can be sent. Remove {UserProperties.Count - MaxUserProperties}."
             : UserProperties
-                .Select((property, index) => string.IsNullOrWhiteSpace(property.Name) ? $"User property {index + 1} has a blank name. Remove it." : null)
+                .Select((property, index) => DescribeUserProperty(index, property))
                 .FirstOrDefault(error => error is not null);
 
-    public string? ValidationError => ResponseTopicError ?? CorrelationError ?? UserPropertyError;
+    public string? ValidationError =>
+        ResponseTopicError ?? CorrelationError ?? ContentTypeError ?? ExpiryError ?? UserPropertyError;
+
+    public static string? DescribeUserProperty(int index, MqttMessageUserProperty property)
+    {
+        var position = index + 1;
+        if (string.IsNullOrWhiteSpace(property.Name))
+            return $"User property {position} has a blank name. Remove it.";
+        if (!MqttStringRules.IsValidUtf8String(property.Name))
+            return $"User property {position} name {Utf8Rule}. Remove it.";
+        if (!MqttStringRules.IsValidUtf8String(property.Value))
+            return $"User property {position} value {Utf8Rule}. Remove it.";
+        return null;
+    }
+
+    private static bool TryParseExpiry(string? text, out uint seconds) =>
+        uint.TryParse(text?.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out seconds);
 
     public static PublishPropertiesDraft From(MqttMessage message)
     {
@@ -84,7 +116,7 @@ public sealed class PublishPropertiesDraft
     {
         ContentType = null;
         PayloadFormat = MqttPayloadFormatIndicator.Unspecified;
-        ExpirySeconds = null;
+        ExpiryText = null;
         ResponseTopic = null;
         CorrelationText = null;
         CorrelationEncoding = CorrelationDataEncoding.Text;

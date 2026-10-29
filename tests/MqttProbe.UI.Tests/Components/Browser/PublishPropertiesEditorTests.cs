@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Mqtt;
+using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Tests.TestHelpers;
 using MqttProbe.UI.Utilities;
 using MudBlazor;
@@ -259,5 +260,88 @@ public class PublishPropertiesEditorTests : BunitTestContext
         cut.Markup.Should().Contain("At most 50 user properties can be sent. Remove 1.");
         cut.Find(".count-chip").ClassList.Should().Contain("mud-chip-color-error");
         cut.Find("button[title='Add user property']").HasAttribute("disabled").Should().BeTrue();
+    }
+
+
+    private static IRenderedComponent<MudTextField<string>> ExpiryField(IRenderedComponent<PublishPropertiesEditor> cut) =>
+        cut.FindComponents<MudTextField<string>>().First(f => f.Instance.Label == "Message expiry (seconds)");
+
+    [Test]
+    public void Expiry_Zero_StaysZeroAndShowsNoError()
+    {
+        var draft = new PublishPropertiesDraft();
+        var cut = RenderEditor(draft);
+
+        ExpiryField(cut).Find("input").Input("0");
+        ExpiryField(cut).Find("input").Blur();
+
+        draft.ExpiryText.Should().Be("0");
+        draft.ExpirySeconds.Should().BeNull();
+        ExpiryField(cut).FindAll(".mud-input-error").Should().BeEmpty();
+        cut.Markup.Should().Contain("Empty or 0 sends no expiry");
+    }
+
+    [TestCase("abc")]
+    [TestCase("-5")]
+    public void Expiry_InvalidText_ShowsFieldError(string text)
+    {
+        var cut = RenderEditor(new PublishPropertiesDraft { ExpiryText = text });
+
+        cut.FindAll(".mud-input-error").Should().NotBeEmpty();
+        cut.Markup.Should().Contain(PublishPropertiesDraft.ExpiryErrorText);
+    }
+
+    [Test]
+    public void ContentTypeWithNul_ShowsFieldError()
+    {
+        var cut = RenderEditor(new PublishPropertiesDraft { ContentType = "text/\0plain" });
+
+        cut.FindAll(".mud-input-error").Should().NotBeEmpty();
+        cut.Markup.Should().Contain("Content type cannot contain NUL");
+    }
+
+    [Test]
+    public async Task Add_RejectsNulValueAndOverLengthName()
+    {
+        var draft = new PublishPropertiesDraft();
+        var cut = RenderEditor(draft);
+
+        cut.Instance.NameDraft = "k";
+        cut.Instance.ValueDraft = "a\0b";
+        await cut.InvokeAsync(() => cut.Instance.AddForTests());
+
+        cut.Instance.NameDraft = new string('n', MqttStringRules.MaxUtf8Bytes + 1);
+        cut.Instance.ValueDraft = "v";
+        await cut.InvokeAsync(() => cut.Instance.AddForTests());
+
+        draft.UserProperties.Should().BeEmpty();
+        _mockSnackbar.Received(1).Add(Arg.Is<string>(m => m!.Contains("value cannot contain NUL")), Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+        _mockSnackbar.Received(1).Add(Arg.Is<string>(m => m!.Contains("name cannot contain NUL")), Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public void OverLengthImportedValue_ShowsAlertAndErrorChip()
+    {
+        var draft = new PublishPropertiesDraft();
+        draft.UserProperties.Add(new MqttMessageUserProperty("k", new string('v', MqttStringRules.MaxUtf8Bytes + 1)));
+
+        var cut = RenderEditor(draft);
+
+        cut.Markup.Should().Contain("User property 1 value cannot contain NUL or exceed 65,535 bytes of UTF-8. Remove it.");
+        cut.Find(".count-chip").ClassList.Should().Contain("mud-chip-color-error");
+    }
+
+    [Test]
+    public void Clear_IsEnabledWhenOnlyInvalidExpiryTextIsPresent()
+    {
+        var draft = new PublishPropertiesDraft { ExpiryText = "abc" };
+        var cut = RenderEditor(draft);
+
+        var clear = cut.Find("button[title='Clear properties']");
+        clear.HasAttribute("disabled").Should().BeFalse("invalid text counts as something to clear");
+        clear.Click();
+
+        draft.ExpiryText.Should().BeNull();
+        draft.ValidationError.Should().BeNull();
     }
 }

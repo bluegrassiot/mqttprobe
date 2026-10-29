@@ -1,4 +1,5 @@
 using System.Text;
+using MqttProbe.Core.Services.Mqtt;
 
 namespace MqttProbe.UI.Utilities;
 
@@ -10,8 +11,15 @@ public enum CorrelationDataEncoding
 
 public static class CorrelationDataCodec
 {
-    public static bool TryParse(string? text, CorrelationDataEncoding encoding, out byte[] bytes)
+    public const string HexError = "Correlation data must be an even number of hex digits.";
+    public const string LengthError = "Correlation data cannot exceed 65,535 bytes.";
+
+    public static bool TryParse(string? text, CorrelationDataEncoding encoding, out byte[] bytes) =>
+        TryParse(text, encoding, out bytes, out _);
+
+    public static bool TryParse(string? text, CorrelationDataEncoding encoding, out byte[] bytes, out string? error)
     {
+        error = null;
         if (string.IsNullOrEmpty(text))
         {
             bytes = [];
@@ -21,18 +29,26 @@ public static class CorrelationDataCodec
         if (encoding == CorrelationDataEncoding.Text)
         {
             bytes = Encoding.UTF8.GetBytes(text);
-            return true;
         }
-
-        var digits = NormalizeHex(text);
-        if (digits.Length == 0 || digits.Length % 2 != 0 || !digits.All(char.IsAsciiHexDigit))
+        else
         {
-            bytes = [];
-            return false;
+            var digits = NormalizeHex(text);
+            if (digits.Length == 0 || digits.Length % 2 != 0 || !digits.All(char.IsAsciiHexDigit))
+            {
+                bytes = [];
+                error = HexError;
+                return false;
+            }
+
+            bytes = Convert.FromHexString(digits);
         }
 
-        bytes = Convert.FromHexString(digits);
-        return true;
+        if (bytes.Length <= MqttStringRules.MaxBinaryBytes)
+            return true;
+
+        bytes = [];
+        error = LengthError;
+        return false;
     }
 
     public static (CorrelationDataEncoding Encoding, string Text) Format(byte[]? bytes)

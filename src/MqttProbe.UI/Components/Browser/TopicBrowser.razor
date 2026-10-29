@@ -116,9 +116,14 @@
         }
         @if (_visibleRows.Count > 0)
         {
-            <Virtualize Items="@_visibleRows" Context="row" ItemSize="36">
-                <TopicTreeRow Row="row" IsSelected="@IsRowSelected(row)" OnExpandToggled="ToggleExpand" OnSelected="OnRowSelected"/>
-            </Virtualize>
+            <div class="topic-tree" role="tree" aria-label="Topics" id="@_treeId" @ref="_treeElement">
+                <Virtualize Items="@_visibleRows" Context="row" ItemSize="@RowHeight">
+                    <TopicTreeRow @key="row.FullPath" Row="row" IsSelected="@IsRowSelected(row)" IsTabStop="@IsActiveRow(row)"
+                                  OnExpandToggled="ToggleExpand" OnSelected="OnRowSelected"
+                                  OnKeyPressed="args => OnRowKeyPressed(row, args)"
+                                  OnFocused="OnRowFocused"/>
+                </Virtualize>
+            </div>
         }
         else if (_rootTopicCount > 0)
         {
@@ -226,14 +231,6 @@
         return frame;
     }
 
-    private void ApplyFrame(TopicSelectionFrame? frame)
-    {
-        if (frame is null) return;
-        _visibleRows = frame.Rows.ToList();
-        _rootTopicCount = frame.RootCount;
-        _selectedKey = frame.Selection.Key;
-    }
-
     internal async Task RefreshAsync()
     {
         try
@@ -266,6 +263,8 @@
     private async Task OnRowSelected(TopicSelection request)
     {
         if (_selectionSession!.Select(request) is null) return;
+        _activeKey = request.Key;
+        _focusedKey = request.Key;
         var frame = BuildVisibleRows();
         StateHasChanged();
         if (frame is not null
@@ -307,5 +306,6 @@
         UiSettings.UiPreferencesChanged -= OnUiPreferencesChanged;
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();
+        await ReleaseInteropAsync();
     }
 }

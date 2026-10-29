@@ -1,5 +1,7 @@
 using System.Text.Json;
+using AngleSharp.Dom;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using MqttProbe.Core.Models.Chart;
 using MqttProbe.UI.Tests.TestHelpers;
 
@@ -155,6 +157,123 @@ public class JsonTreeViewTests : BunitTestContext
         cut.Render(p => p.Add(x => x.Json, """{"name":"Bob"}"""));
         cut.Markup.Should().Contain("Bob");
         cut.FindAll(".json-preview").Should().BeEmpty();
+    }
+
+    private static IElement CollapsedToggle(IRenderedComponent<JsonTreeView> cut) =>
+        cut.FindAll(".json-toggle").First(toggle => toggle.GetAttribute("aria-expanded") == "false");
+
+    [Test]
+    public void ArrowRight_ExpandsACollapsedObject()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":{"b":{"c":"deep"}}}"""));
+
+        CollapsedToggle(cut).KeyDown("ArrowRight");
+
+        cut.FindAll(".json-preview").Should().BeEmpty();
+        cut.FindAll(".json-key").Select(e => e.TextContent).Should().Contain("\"c\"");
+    }
+
+    [Test]
+    public void ArrowLeft_CollapsesAnExpandedObject()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"name":"Alice"}"""));
+
+        cut.Find(".json-toggle").KeyDown("ArrowLeft");
+
+        cut.Find(".json-toggle").GetAttribute("aria-expanded").Should().Be("false");
+        cut.FindAll(".json-string").Should().BeEmpty();
+        cut.FindAll(".json-preview").Should().ContainSingle();
+    }
+
+    [Test]
+    public void ArrowRight_OnAnExpandedNode_IsIdempotent()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"name":"Alice"}"""));
+
+        cut.Find(".json-toggle").KeyDown("ArrowRight");
+        cut.Find(".json-toggle").KeyDown("ArrowRight");
+
+        cut.Find(".json-toggle").GetAttribute("aria-expanded").Should().Be("true");
+        cut.FindAll(".json-preview").Should().BeEmpty();
+    }
+
+    [Test]
+    public void ArrowLeft_OnACollapsedNode_IsIdempotent()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":{"b":{"c":"deep"}}}"""));
+
+        CollapsedToggle(cut).KeyDown("ArrowLeft");
+
+        CollapsedToggle(cut).GetAttribute("aria-expanded").Should().Be("false");
+        cut.FindAll(".json-preview").Should().ContainSingle();
+    }
+
+    [Test]
+    public void ArrowKeys_ToggleACollapsedArray()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":{"b":[1,2]}}"""));
+        cut.FindAll(".json-preview").Should().ContainSingle();
+
+        CollapsedToggle(cut).KeyDown("ArrowRight");
+        cut.FindAll(".json-preview").Should().BeEmpty();
+        cut.FindAll(".json-number").Should().HaveCount(2);
+
+        cut.FindAll(".json-toggle").Last().KeyDown("ArrowLeft");
+        cut.FindAll(".json-preview").Should().ContainSingle();
+        cut.FindAll(".json-number").Should().BeEmpty();
+    }
+
+    [Test]
+    public void RenderedTree_LoadsTheExpanderKeyboardModule()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":1}"""));
+
+        cut.FindAll(".json-tree-root").Should().ContainSingle();
+        JSInterop.Invocations.Should().Contain(invocation =>
+            invocation.Identifier == "import"
+            && Equals(invocation.Arguments[0], "./_content/MqttProbe.UI/js/json-tree-keyboard.js"));
+    }
+
+    [TestCase("Control")]
+    [TestCase("Alt")]
+    [TestCase("Meta")]
+    [TestCase("Shift")]
+    public void ModifiedArrow_DoesNotToggle(string modifier)
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":{"b":{"c":"deep"}}}"""));
+
+        CollapsedToggle(cut).KeyDown(new KeyboardEventArgs
+        {
+            Key = "ArrowRight",
+            CtrlKey = modifier == "Control",
+            AltKey = modifier == "Alt",
+            MetaKey = modifier == "Meta",
+            ShiftKey = modifier == "Shift"
+        });
+
+        cut.FindAll(".json-preview").Should().ContainSingle();
+    }
+
+    [Test]
+    public void ArrowKey_DuringImeComposition_DoesNotToggle()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":{"b":{"c":"deep"}}}"""));
+
+        CollapsedToggle(cut).KeyDown(new KeyboardEventArgs { Key = "ArrowRight", IsComposing = true });
+
+        cut.FindAll(".json-preview").Should().ContainSingle();
+    }
+
+    [TestCase("Enter")]
+    [TestCase(" ")]
+    [TestCase("Tab")]
+    public void OtherKeys_LeaveExpansionToTheNativeButton(string key)
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":{"b":{"c":"deep"}}}"""));
+
+        CollapsedToggle(cut).KeyDown(key);
+
+        cut.FindAll(".json-preview").Should().ContainSingle();
     }
 
     [Test]

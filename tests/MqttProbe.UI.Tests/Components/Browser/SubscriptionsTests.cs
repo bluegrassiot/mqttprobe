@@ -396,11 +396,11 @@ public class SubscriptionsTests : BunitTestContext
         var subEditor = cut.Find(".subscription-editor");
         subEditor.GetAttribute("role").Should().Be("region");
         subEditor.GetAttribute("aria-label").Should().Be("Subscriptions list");
-        subEditor.GetAttribute("tabindex").Should().Be("0");
+        subEditor.HasAttribute("tabindex").Should().BeFalse();
 
         var excEditor = cut.Find(".exclude-editor");
         excEditor.GetAttribute("role").Should().Be("region");
         excEditor.GetAttribute("aria-label").Should().Be("Excluded topics list");
-        excEditor.GetAttribute("tabindex").Should().Be("0");
+        excEditor.HasAttribute("tabindex").Should().BeFalse();
     }
 }

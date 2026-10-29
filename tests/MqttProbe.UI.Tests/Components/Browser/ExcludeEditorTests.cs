@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
+using MudBlazor.Services;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
@@ -329,7 +330,7 @@ public class ExcludeEditorTests : BunitTestContext
     }
 
     [Test]
-    public void Root_HasRegionRole_AndTabIndex()
+    public void Root_HasLabelledRegion_WithoutDeadTabStop()
     {
         var cut = Render<ExcludeEditor>(p => p
             .Add(x => x.Items, Array.Empty<string>())
@@ -339,7 +340,9 @@ public class ExcludeEditorTests : BunitTestContext
         var root = cut.Find(".exclude-editor");
         root.GetAttribute("role").Should().Be("region");
         root.GetAttribute("aria-label").Should().Be("Excluded topics list");
-        root.GetAttribute("tabindex").Should().Be("0");
+        root.HasAttribute("tabindex").Should().BeFalse("the Mud panel header is the keyboard entry point");
+
+        cut.Find(".mud-expand-panel-header").GetAttribute("tabindex").Should().Be("0");
     }
 
     [Test]
@@ -430,5 +433,68 @@ public class ExcludeEditorTests : BunitTestContext
 
         cut.InvokeAsync(() => cut.Instance.RemoveSelectedForTests()).Wait();
         removed.Should().BeFalse();
+    }
+
+    [TestCase("Enter")]
+    [TestCase(" ")]
+    public async Task EmptyCollapsedHeader_NativeActivation_ExpandsWithoutAdding(string key)
+    {
+        var addCalls = 0;
+        var cut = Render<ExcludeEditor>(p => p
+            .Add(x => x.Items, Array.Empty<string>())
+            .Add(x => x.OnAdd, _ => { addCalls++; return Task.FromResult(true); })
+            .Add(x => x.OnRemove, NoRemove()));
+
+        cut.FindComponent<MudExpansionPanel>().Instance.Expanded.Should().BeFalse();
+        cut.Find(".mud-collapse-container").ClassList.Should().Contain("invisible");
+
+        await cut.InvokeAsync(() => cut.Find(".mud-expand-panel-header").KeyDown(key));
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindComponent<MudExpansionPanel>().Instance.Expanded.Should().BeTrue();
+            cut.Find(".mud-collapse-container").ClassList.Should().NotContain("invisible");
+        });
+        addCalls.Should().Be(0);
+    }
+
+    [Test]
+    public async Task DraftField_Enter_StillAdds()
+    {
+        string? captured = null;
+
+        var cut = Render<ExcludeEditor>(p => p
+            .Add(x => x.Items, new List<string> { "$SYS/#" })
+            .Add(x => x.OnAdd, CapturingAdd(v => captured = v))
+            .Add(x => x.OnRemove, NoRemove()));
+
+        var topicInput = cut.FindAll("input")
+            .First(e => !e.HasAttribute("readonly") && e.GetAttribute("type") != "checkbox");
+        topicInput.Input(new ChangeEventArgs { Value = "sensors/+/temp" });
+
+        await cut.InvokeAsync(() => topicInput.KeyDown("Enter"));
+
+        captured.Should().Be("sensors/+/temp");
+    }
+
+    [Test]
+    public void HeaderArrowKeys_AreWiredToTheMudHeaderTargetClass()
+    {
+        var cut = Render<ExcludeEditor>(p => p
+            .Add(x => x.Items, Array.Empty<string>())
+            .Add(x => x.OnAdd, NoAdd())
+            .Add(x => x.OnRemove, NoRemove()));
+
+        var rootId = cut.Find(".exclude-editor").Id;
+        var invocation = JSInterop.Invocations
+            .Single(i => i.Identifier == "mudKeyInterceptor.connect"
+                && i.Arguments.Count > 1 && Equals(i.Arguments[1], rootId));
+
+        var options = invocation.Arguments[2].Should().BeOfType<KeyInterceptorOptions>().Subject;
+        options.TargetClass.Should().Be("mud-expand-panel-header");
+        options.Keys.Select(k => k.Key).Should().BeEquivalentTo(new[] { "ArrowRight", "ArrowLeft" });
+        options.Keys.Should().OnlyContain(k => k.SubscribeDown && k.IgnoreDownRepeats
+            && k.PreventDown == "none" && k.StopDown == "none");
+        options.Keys.Should().NotContain(k => k.Key == "Enter" || k.Key == " ");
     }
 }

@@ -98,13 +98,56 @@
 }
 
 ::deep .spb-node-row {
+    position: relative;
     display: flex;
     flex-direction: column;
-    padding: 10px 12px;
-    cursor: pointer;
     border-bottom: 1px solid var(--mud-palette-divider);
     transition: background 0.1s;
     box-shadow: inset 3px 0 0 transparent;
+}
+
+/* The row and the selection button cover the full width, so a click anywhere except the
+   delete control still selects; the native button adds the tab stop, role and Enter/Space. */
+::deep .spb-node-select {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 12px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+/* Inset so the list's scroll owner cannot clip the ring on the first or last row. */
+::deep .spb-node-select:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+::deep .spb-node-row--removable .spb-node-head {
+    padding-right: 44px;
+}
+
+/* Overlaid rather than a sibling column: the row underneath stays one full-width click target. */
+::deep .spb-node-remove {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: flex;
+    padding: 10px 12px 0 0;
+}
+
+::deep .spb-node-remove .mud-icon-button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
 }
 
 ::deep .spb-node-row:hover { background: var(--mud-palette-action-default-hover); }
@@ -128,9 +171,45 @@
     align-items: center;
     flex-wrap: wrap;
     row-gap: 4px;
-    padding: 8px 16px;
-    cursor: pointer;
     border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+/* The row keeps pointer selection anywhere outside the rebirth control; the native button
+   supplies the tab stop, role and Enter/Space activation. */
+::deep .spb-device-select {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    row-gap: 4px;
+    padding: 8px 16px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+/* Inset so the detail pane's scroll owner cannot clip the ring on the first or last row. */
+::deep .spb-device-select:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+::deep .spb-device-rebirth {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    padding: 8px 16px 8px 0;
+}
+
+::deep .spb-device-rebirth .mud-button-root:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
 }
 
 ::deep .spb-device-row:hover { background: var(--mud-palette-action-default-hover); }
@@ -311,6 +390,7 @@
 }
 
 ::deep .spb-node-secondary {
+    display: block;
     font-size: 12px;
     color: var(--mud-palette-text-secondary);
     margin-top: 2px;

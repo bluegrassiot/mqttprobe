@@ -8,6 +8,31 @@
     min-height: 0;
 }
 
+.connection-dialog-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px 0;
+    background: var(--mud-palette-surface);
+    flex-shrink: 0;
+}
+
+.connection-dialog-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    color: var(--mud-palette-text-primary);
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.connection-dialog-titlebar ::deep .connection-dialog-close {
+    flex-shrink: 0;
+}
 
 .connection-dialog-content ::deep .mud-form {
     display: flex;
@@ -55,42 +80,6 @@
     margin: 12px 16px 0;
 }
 
-.connection-actions-footer {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 12px 16px;
-    background: var(--mud-palette-surface);
-    border-top: 1px solid var(--mud-palette-divider);
-    flex-shrink: 0;
-}
-
-.connection-actions-footer-cta {
-    display: flex;
-    justify-content: flex-end;
-}
-
-.connection-connecting-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.connection-connecting-indicator {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-}
-
-.signal-connecting-sm {
-    width: 26px;
-    height: 26px;
-    animation: signal-breathe 1.6s ease-in-out infinite;
-}
-
 .step-selector {
     display: none;
 }
@@ -136,20 +125,18 @@
         display: none;
     }
 
-    .connection-actions-footer {
-        padding: 8px 12px;
-        gap: 8px;
+    .connection-dialog-titlebar {
+        padding: 10px 12px 0;
     }
 }
 
-/* Compact fallback: the card scrolls, so the chain inside it must not clip or scroll on its own. */
+/* Compact fallback: the form scrolls, so the chain inside it must not clip or scroll on its own. */
 .connection-dialog-content--compact {
-    overflow-y: auto;
-    scrollbar-gutter: stable;
+    overflow: hidden;
 }
 
 .connection-dialog-content--compact ::deep .connection-dialog-header,
-.connection-dialog-content--compact ::deep .mud-form,
+.connection-dialog-content--compact .connection-dialog-titlebar,
 .connection-dialog-content--compact ::deep .connection-tabs,
 .connection-dialog-content--compact ::deep .connection-tabs .mud-tabs-panels,
 .connection-dialog-content--compact .connection-dialog-notices {
@@ -158,18 +145,20 @@
     overflow: visible;
 }
 
+/* The form is the only scroll owner in the fallback; the title bar and header above it stay put. */
+.connection-dialog-content--compact ::deep .mud-form {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+}
+
 /* overflow, not overflow-y: a visible axis beside a hidden one computes to auto, a second scroll container. */
-/* The trailing padding is the stuck footer's height, so the last control can clear it. */
 .connection-dialog-content--compact ::deep .connection-tabs .mud-tab-panel[role='tabpanel'].mud-tab-panel-active {
     flex: 0 0 auto;
     min-height: 0;
     overflow: hidden;
-    padding-bottom: calc(16px + var(--connection-dialog-footer-height, 0px));
-}
-
-.connection-dialog-content--compact .connection-actions-footer {
-    position: sticky;
-    bottom: 0;
 }
 
 .connection-dialog-content--compact .step-selector {
@@ -248,5 +237,92 @@
 
     .connection-dialog__lan-note-body {
         padding: 0 10px 10px;
+    }
+}
+
+/* Guards the dirty form without opening a second dialog, which would compete with
+   the dialog's own focus trap when Discard closes it. */
+.connection-dialog-body {
+    display: contents;
+}
+
+.connection-dialog-confirm-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.32);
+    animation: connection-dialog-confirm-fade 120ms ease-out;
+}
+
+.connection-dialog-confirm {
+    width: min(100%, 360px);
+    padding: 20px;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: 12px;
+    background: var(--mud-palette-surface);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+    animation: connection-dialog-confirm-rise 150ms ease-out;
+}
+
+.connection-dialog-confirm-title {
+    margin: 0;
+    color: var(--mud-palette-text-primary);
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.connection-dialog-confirm-copy {
+    margin: 8px 0 0;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.connection-dialog-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: 16px;
+}
+
+@keyframes connection-dialog-confirm-fade {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes connection-dialog-confirm-rise {
+    from {
+        opacity: 0;
+        transform: translateY(6px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@media (max-width: 599px) {
+    .connection-dialog-confirm-layer {
+        padding: 12px;
+    }
+
+    .connection-dialog-confirm {
+        padding: 16px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .connection-dialog-confirm-layer,
+    .connection-dialog-confirm {
+        animation: none;
     }
 }

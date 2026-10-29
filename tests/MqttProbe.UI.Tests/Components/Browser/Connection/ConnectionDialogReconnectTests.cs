@@ -128,7 +128,7 @@ public class ConnectionDialogReconnectTests : BunitTestContext
         _mockUi.Ui.Returns(config.Ui);
         var dialogService = Services.GetRequiredService<IDialogService>();
         await _dialogProvider.InvokeAsync(async () =>
-            await dialogService.ShowAsync<ConnectionDialog>("Connection Setup"));
+            await dialogService.ShowAsync<ConnectionDialog>("Connection Setup", ConnectionDialogTestOptions.Production));
     }
 
     private Task SelectConnection(Connection conn) =>

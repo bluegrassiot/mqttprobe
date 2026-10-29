@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
@@ -146,5 +147,59 @@ public class MobileTopicBarTests : BunitTestContext
         var act = async () => await cut.Instance.DisposeAsync();
 
         await act.Should().NotThrowAsync();
+    }
+
+    [Test]
+    public void InfoArea_IsAKeyboardReachableButton()
+    {
+        var cut = Render<MobileTopicBar>(p => p.Add(x => x.HasTopics, true));
+
+        var info = cut.Find(".mobile-topic-bar__info");
+        info.GetAttribute("role").Should().Be("button");
+        info.GetAttribute("tabindex").Should().Be("0");
+        info.GetAttribute("aria-label").Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Test]
+    public async Task PressingEnterOnInfoArea_InvokesOnOpenPicker()
+    {
+        var opened = false;
+
+        var cut = Render<MobileTopicBar>(
+            p => p.Add(x => x.HasTopics, true)
+                  .Add(x => x.OnOpenPicker, () => { opened = true; return Task.CompletedTask; }));
+
+        await cut.InvokeAsync(() => cut.Find(".mobile-topic-bar__info").KeyDown("Enter"));
+
+        opened.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task PressingSpaceOnInfoArea_InvokesOnOpenPicker()
+    {
+        var opened = false;
+
+        var cut = Render<MobileTopicBar>(
+            p => p.Add(x => x.HasTopics, true)
+                  .Add(x => x.OnOpenPicker, () => { opened = true; return Task.CompletedTask; }));
+
+        await cut.InvokeAsync(() => cut.Find(".mobile-topic-bar__info").KeyDown(" "));
+
+        opened.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task ModifiedEnterOnInfoArea_DoesNotOpenThePicker()
+    {
+        var opened = false;
+
+        var cut = Render<MobileTopicBar>(
+            p => p.Add(x => x.HasTopics, true)
+                  .Add(x => x.OnOpenPicker, () => { opened = true; return Task.CompletedTask; }));
+
+        await cut.InvokeAsync(() => cut.Find(".mobile-topic-bar__info")
+            .KeyDown(new KeyboardEventArgs { Key = "Enter", CtrlKey = true }));
+
+        opened.Should().BeFalse();
     }
 }

@@ -140,14 +140,14 @@ public class ConnectionDialogTests : BunitTestContext
         _mockUi.Ui.Returns(cfg.Ui);
         var dialogService = Services.GetRequiredService<IDialogService>();
         await _dialogProvider.InvokeAsync(async () =>
-            await dialogService.ShowAsync<ConnectionDialog>("Connection Setup"));
+            await dialogService.ShowAsync<ConnectionDialog>("Connection Setup", ConnectionDialogTestOptions.Production));
     }
 
     private async Task OpenIosDialog()
     {
         var dialogService = Services.GetRequiredService<IDialogService>();
         await _dialogProvider.InvokeAsync(async () =>
-            await dialogService.ShowAsync<IosConnectionDialog>("Connection Setup"));
+            await dialogService.ShowAsync<IosConnectionDialog>("Connection Setup", ConnectionDialogTestOptions.Production));
     }
 
     private Task SelectConnection(Connection conn) =>
@@ -426,7 +426,7 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task ConnectingFooter_ShowsStopBesideIndicator_AndHidesConnect()
+    public async Task ConnectingHeader_ShowsStopBesideStatus_AndHidesConnect()
     {
         var cfg = new AppConfiguration
         {
@@ -437,11 +437,11 @@ public class ConnectionDialogTests : BunitTestContext
 
         ConnectSavedConnectionAndWaitForPending();
 
-        var row = _dialogProvider.Find("[data-testid=connection-connecting-row]");
-        row.TextContent.Should().Contain("Connecting...");
-        var stop = row.QuerySelector("[data-testid=cancel-connect]");
-        stop.Should().NotBeNull("the stop action stays visible beside the connecting indicator");
-        stop!.TextContent.Trim().Should().Be("Stop",
+        var status = _dialogProvider.Find("[data-testid=connection-connecting-status]");
+        status.TextContent.Should().Contain("Connecting...");
+        status.GetAttribute("role").Should().Be("status");
+        var stop = _dialogProvider.Find(".connection-dialog-header [data-testid=cancel-connect]");
+        stop.TextContent.Trim().Should().Be("Stop",
             "the connecting action carries the emulation Stop label");
         stop.GetAttribute("type").Should().Be("button");
         stop.ClassList.Should().Contain("mud-button-filled");
@@ -906,7 +906,7 @@ public class ConnectionDialogTests : BunitTestContext
             await FlushDispatcherAsync();
 
             _dialogProvider.FindAll("[data-testid=cancel-connect]").Should().NotBeEmpty(
-                "the connecting footer owns Cancel while startup waits on the previous shutdown");
+                "the persistent header owns Stop while startup waits on the previous shutdown");
 
             _dialogProvider.Find("[data-testid=cancel-connect]").Click();
 
@@ -1144,7 +1144,7 @@ public class ConnectionDialogTests : BunitTestContext
 
         var dialogService = Services.GetRequiredService<IDialogService>();
         await _dialogProvider.InvokeAsync(async () =>
-            await dialogService.ShowAsync<ConnectionDialog>("Connection Setup"));
+            await dialogService.ShowAsync<ConnectionDialog>("Connection Setup", ConnectionDialogTestOptions.Production));
         var dialogB = _dialogProvider.FindComponents<ConnectionDialog>()
             .Single(rendered => !ReferenceEquals(rendered.Instance, dialogA));
         await dialogB.InvokeAsync(async () => await dialogB.Instance.ConnectionChanged(cfg.Connections[0]));
@@ -1177,10 +1177,10 @@ public class ConnectionDialogTests : BunitTestContext
         await OpenDialog(cfg);
         await SelectConnection(conn);
 
-        _dialogProvider.FindAll("button").First(b => b.TextContent.Trim() == "Cancel").Click();
+        _dialogProvider.Find("[data-testid=connection-close]").Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("Cancel closes the clean dialog"));
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("the close control closes the clean dialog"));
         await _mockSessionLifecycle.DidNotReceive().StopActiveConnectionAsync();
     }
 
@@ -3431,15 +3431,17 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task CancelButton_ClosesDialog_WhenNotDirty()
+    public async Task CloseControl_ClosesDialog_WhenNotDirty()
     {
         await OpenDialog(new AppConfiguration());
-        _dialogProvider.Markup.Should().Contain("Cancel");
 
-        _dialogProvider.FindAll("button").First(b => b.TextContent.Trim() == "Cancel").Click();
+        var close = _dialogProvider.Find("[data-testid=connection-close]");
+        close.GetAttribute("aria-label").Should().Be("Close");
+
+        close.Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
-            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("Cancel on clean form should close dialog"));
+            _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty("Close on a clean form should close the dialog"));
     }
 
     [Test]
@@ -5166,7 +5168,7 @@ public class ConnectionDialogTests : BunitTestContext
         _dialogProvider.Find("button.client-cert-revert-btn").Click();
 
         // Close - should NOT warn
-        _dialogProvider.FindAll("button").First(b => b.TextContent.Trim() == "Cancel").Click();
+        _dialogProvider.Find("[data-testid=connection-close]").Click();
 
         await _dialogProvider.WaitForAssertionAsync(() =>
             _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty(

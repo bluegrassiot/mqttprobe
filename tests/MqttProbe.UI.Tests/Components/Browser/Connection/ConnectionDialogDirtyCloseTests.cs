@@ -226,7 +226,7 @@ public class ConnectionDialogDirtyCloseTests : BunitTestContext
 
         var dialogService = Services.GetRequiredService<IDialogService>();
         await _dialogProvider.InvokeAsync(async () =>
-            await dialogService.ShowAsync<ConnectionDialog>("Connection Setup"));
+            await dialogService.ShowAsync<ConnectionDialog>("Connection Setup", ConnectionDialogTestOptions.Production));
         await _dialogProvider.InvokeAsync(async () =>
             await _dialogProvider.FindComponent<ConnectionDialog>().Instance.ConnectionChanged(connection));
 

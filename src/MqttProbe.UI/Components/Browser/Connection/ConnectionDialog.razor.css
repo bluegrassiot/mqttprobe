@@ -8,6 +8,31 @@
     min-height: 0;
 }
 
+.connection-dialog-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px 0;
+    background: var(--mud-palette-surface);
+    flex-shrink: 0;
+}
+
+.connection-dialog-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    color: var(--mud-palette-text-primary);
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.connection-dialog-titlebar ::deep .connection-dialog-close {
+    flex-shrink: 0;
+}
 
 .connection-dialog-content ::deep .mud-form {
     display: flex;
@@ -55,42 +80,6 @@
     margin: 12px 16px 0;
 }
 
-.connection-actions-footer {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 12px 16px;
-    background: var(--mud-palette-surface);
-    border-top: 1px solid var(--mud-palette-divider);
-    flex-shrink: 0;
-}
-
-.connection-actions-footer-cta {
-    display: flex;
-    justify-content: flex-end;
-}
-
-.connection-connecting-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.connection-connecting-indicator {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-}
-
-.signal-connecting-sm {
-    width: 26px;
-    height: 26px;
-    animation: signal-breathe 1.6s ease-in-out infinite;
-}
-
 .step-selector {
     display: none;
 }
@@ -136,20 +125,18 @@
         display: none;
     }
 
-    .connection-actions-footer {
-        padding: 8px 12px;
-        gap: 8px;
+    .connection-dialog-titlebar {
+        padding: 10px 12px 0;
     }
 }
 
-/* Compact fallback: the card scrolls, so the chain inside it must not clip or scroll on its own. */
+/* Compact fallback: the form scrolls, so the chain inside it must not clip or scroll on its own. */
 .connection-dialog-content--compact {
-    overflow-y: auto;
-    scrollbar-gutter: stable;
+    overflow: hidden;
 }
 
 .connection-dialog-content--compact ::deep .connection-dialog-header,
-.connection-dialog-content--compact ::deep .mud-form,
+.connection-dialog-content--compact .connection-dialog-titlebar,
 .connection-dialog-content--compact ::deep .connection-tabs,
 .connection-dialog-content--compact ::deep .connection-tabs .mud-tabs-panels,
 .connection-dialog-content--compact .connection-dialog-notices {
@@ -158,18 +145,20 @@
     overflow: visible;
 }
 
+/* The form is the only scroll owner in the fallback; the title bar and header above it stay put. */
+.connection-dialog-content--compact ::deep .mud-form {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+}
+
 /* overflow, not overflow-y: a visible axis beside a hidden one computes to auto, a second scroll container. */
-/* The trailing padding is the stuck footer's height, so the last control can clear it. */
 .connection-dialog-content--compact ::deep .connection-tabs .mud-tab-panel[role='tabpanel'].mud-tab-panel-active {
     flex: 0 0 auto;
     min-height: 0;
     overflow: hidden;
-    padding-bottom: calc(16px + var(--connection-dialog-footer-height, 0px));
-}
-
-.connection-dialog-content--compact .connection-actions-footer {
-    position: sticky;
-    bottom: 0;
 }
 
 .connection-dialog-content--compact .step-selector {

@@ -21,10 +21,18 @@
 @inject ICertificateAssetStore CertStore
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
-<MudDialog Class="connection-dialog-paper" OnBackdropClick="OnBackdropClickAsync">
+<MudDialog Class="connection-dialog-paper" OnBackdropClick="OnBackdropClickAsync"
+           AriaLabelledBy="@_titleId">
     <DialogContent>
         <div class="connection-dialog-content" @onkeydown="HandleDialogKeyDown" tabindex="-1" @ref="_dialogContent">
             <div class="connection-dialog-body" @attributes="BodyAttributes">
+                <div class="connection-dialog-titlebar">
+                    <h2 id="@_titleId" class="connection-dialog-title" data-testid="connection-title">Setup Connection</h2>
+                    <MudIconButton Icon="@LucideIcons.X" Color="Color.Inherit"
+                                   Class="connection-dialog-close" aria-label="Close"
+                                   data-testid="connection-close"
+                                   OnClick="@(async () => await RequestClose())" />
+                </div>
                 <ConnectionDialogHeader Connections="@ConnectionSettings.Connections"
                                         Selected="@_savedConnectionForSelector"
                                         SelectedChanged="ConnectionChanged!"
@@ -35,7 +43,11 @@
                                         OnAdd="@(async () => await Add())"
                                         OnCopy="@(async () => await CopyConnection())"
                                         OnSave="@(async () => await Save(closeDialog: false))"
-                                        OnDelete="@(async () => await Delete())" />
+                                        OnDelete="@(async () => await Delete())"
+                                        IsConnecting="@(_connectionState == ConnectionState.Connecting)"
+                                        ConnectDisabled="@(!_canConnect || _operation is not null)"
+                                        OnConnect="Connect"
+                                        OnStop="CancelConnect" />
                 <MudForm Model="@_selectedConnection" @ref="@_form"
                          Validation="@_connectionValidator.ValidateValue" ValidationDelay="0"
                          IsValidChanged="@FormValidationChanged" FieldChanged="@FormChanged">
@@ -113,31 +125,6 @@
                         </MudAlert>
                     }
                 </div>
-                @* A sibling of the form: the compact card scrolls, and a sticky footer is clamped to its containing block. *@
-                <div class="connection-actions-footer">
-                    @if (_connectionState == ConnectionState.Connecting)
-                    {
-                        <div class="connection-connecting-row" data-testid="connection-connecting-row">
-                            <div class="connection-connecting-indicator">
-                                <img class="signal-connecting-sm" width="26" height="26" src="/_content/MqttProbe.UI/img/signal-motif.svg" alt="" />
-                                <MudText Typo="Typo.subtitle1">Connecting...</MudText>
-                            </div>
-                            <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@LucideIcons.Square"
-                                       Class="mr-2" data-testid="cancel-connect"
-                                       OnClick="@(async () => await CancelConnect())">Stop</MudButton>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="connection-actions-footer-cta">
-                            <MudButton Variant="Variant.Text" OnClick="@(async () => await RequestClose())"
-                                       Class="mr-2">Cancel</MudButton>
-                            <AppPrimaryButton title="Connect" MinWidth="true"
-                                        StartIcon="@LucideIcons.Power" Disabled="@(!_canConnect || _operation is not null)"
-                                        OnClick="@(async () => await Connect())">Connect</AppPrimaryButton>
-                        </div>
-                    }
-                </div>
             </div>
             @if (_discardPromptVisible)
             {
@@ -168,6 +155,7 @@
 
     private MudForm _form = new();
     private ElementReference _dialogContent;
+    private readonly string _titleId = $"connection-dialog-title-{Guid.NewGuid():N}";
     private ConnectionDialogViewportInterop? _viewport;
     private readonly ConnectionValidator _connectionValidator = new();
     private ConnectionState _connectionState;

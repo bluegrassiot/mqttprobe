@@ -138,8 +138,8 @@ public sealed class TopicBrowserGroupedSelectionTests : BunitTestContext
 
         await cut.InvokeAsync(() => RowWith(cut, "node1").Click());
 
-        _manager.GetSelectedTopicState().Token.Generation.Should().Be(selected.Token.Generation,
-            "clicking the already-selected row must not restart the message list");
+        _manager.GetSelectedTopicState().Key.Should().BeNull(
+            "clicking a checked row unchecks its branch");
     }
 
     [Test]

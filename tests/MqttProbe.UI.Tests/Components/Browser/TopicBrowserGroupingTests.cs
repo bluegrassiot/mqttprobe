@@ -109,7 +109,7 @@ public class TopicBrowserGroupingTests : BunitTestContext
     }
 
     [Test]
-    public async Task GroupingRows_AreMarkedAndOnlyTheSelectedRowIsHighlighted()
+    public async Task GroupingRows_AreMarkedAndACheckedScopeHighlightsItsMembers()
     {
         var cut = RenderGrouped(grouped: true);
         RowWith(cut, "node1").Click();
@@ -118,13 +118,15 @@ public class TopicBrowserGroupingTests : BunitTestContext
         var groupingRows = cut.FindAll(".topic-tree-row--group");
         var selectedRows = cut.FindAll(".topic-tree-row--selected");
 
-        selectedRows.Should().ContainSingle()
-            .Which.ClassList.Should().Contain("topic-tree-row--group");
-        groupingRows.Should().Contain(row => row.ClassList.Contains("topic-tree-row--selected"));
+        groupingRows.Should().Contain(row => row.ClassList.Contains("topic-tree-row--selected"),
+            "the node scope itself is checked");
+        selectedRows.Should().Contain(row => row.TextContent.Contains("node1"),
+            "and so is every row the scope covers");
+        selectedRows.Should().Contain(row => row.TextContent.Contains(NodeTip));
     }
 
     [Test]
-    public void ClickingRealTopicRow_SelectsThatTopicAndPublishesIt()
+    public void ClickingRealTopicRow_ChecksThatBranchAndPublishesIt()
     {
         SelectedTopicState? callbackState = null;
         var cut = RenderGrouped(grouped: true, onSelected: state =>
@@ -136,9 +138,11 @@ public class TopicBrowserGroupingTests : BunitTestContext
         RowWith(cut, NodeTip).Click();
 
         _mockMsgStore.Received(1).SelectTopics(Arg.Is<TopicSelection>(selection =>
-            selection.Key == NodeTip && selection.Topics.SequenceEqual(new[] { NodeTip })));
+            selection.Mode == TopicSelectionMode.Branches
+            && selection.Branches.Length == 1
+            && selection.Branches[0].Path == NodeTip));
         callbackState.Should().NotBeNull();
-        callbackState!.Key.Should().Be(NodeTip);
+        callbackState!.Branches.Should().ContainSingle().Which.Path.Should().Be(NodeTip);
     }
 
     [Test]
@@ -236,10 +240,9 @@ public class TopicBrowserGroupingTests : BunitTestContext
     public void ARawVerbBranch_KeepsItsMessages_AndChecksTheGroupedTypeRowItCovers()
     {
         var cut = RenderGrouped(grouped: false);
-        cut.Find(".topic-select-toggle").Click();
         cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().NotBeEmpty());
 
-        RowByPath(cut, "spBv1.0/plant1/NDATA").QuerySelector(".topic-select-checkbox input")!.Change(true);
+        RowByPath(cut, "spBv1.0/plant1/NDATA").QuerySelector(".topic-select-checkbox-wrap")!.Click();
 
         var selected = _fixture.Adapter.Store.GetSelectedTopicState();
         selected.Branches.Should().ContainSingle().Which.Path.Should().Be("spBv1.0/plant1/NDATA");

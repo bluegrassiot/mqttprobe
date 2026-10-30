@@ -18,21 +18,38 @@ internal sealed class TopicBulkSelection(ITopicSelectionStore store)
     public void NotifyMessagesCleared(ImmutableArray<TopicBranchTarget> branches) =>
         MessagesCleared?.Invoke(branches);
 
-    public bool IsActive { get; private set; }
-
     public int Count => _targets.Count;
 
     public bool HasSelection => _targets.Count > 0;
 
+    private bool _coversWholeTree;
+
+    // Set by the browser once it knows the current roots: the checked set then covers the whole
+    // tree rather than only the branches that were picked one by one. The strip is a sibling of
+    // the tree, so a change here has to notify it the same way a change of targets does.
+    public bool CoversWholeTree
+    {
+        get => _coversWholeTree;
+        set
+        {
+            if (_coversWholeTree == value)
+                return;
+
+            _coversWholeTree = value;
+            Changed?.Invoke();
+        }
+    }
+
     public ImmutableArray<TopicBranchTarget> Branches =>
         [.. _targets.Values.OrderBy(TargetKey, StringComparer.Ordinal)];
 
-    public ImmutableArray<string> RawPaths =>
-        [.. Branches
-            .Where(target => target.Kind == TopicBranchKind.Raw && target.Path is not null)
-            .Select(target => target.Path!)];
-
-    public string Summary => Count == 1 ? "1 topic selected" : $"{Count} topics selected";
+    public string Summary => Count switch
+    {
+        0 => "No topics selected",
+        _ when CoversWholeTree => "All topics selected",
+        1 => "1 topic selected",
+        _ => $"{Count} topics selected"
+    };
 
     public bool Contains(TopicBranchTarget target) => _targets.ContainsKey(TargetKey(target));
 
@@ -43,27 +60,20 @@ internal sealed class TopicBulkSelection(ITopicSelectionStore store)
             .Select(TopicBranchTargetDisplay.Label)
             .FirstOrDefault();
 
-    public void Enter(IEnumerable<TopicBranchTarget> seed)
+    // Replaces the checked set with the given roots, which is what the global checkbox asks for.
+    public void SelectAll(IEnumerable<TopicBranchTarget> targets)
     {
-        _targets.Clear();
-        foreach (var target in seed)
-            _targets[TargetKey(target)] = target;
+        var next = new Dictionary<string, TopicBranchTarget>(StringComparer.Ordinal);
+        foreach (var target in targets)
+            next[TargetKey(target)] = target;
 
-        IsActive = true;
-        ApplySelection();
-        Changed?.Invoke();
-    }
-
-    public void Exit()
-    {
-        IsActive = false;
-        if (_targets.Count == 0)
-        {
-            Changed?.Invoke();
+        if (next.Count == _targets.Count && next.Keys.All(_targets.ContainsKey))
             return;
-        }
 
         _targets.Clear();
+        foreach (var (key, target) in next)
+            _targets[key] = target;
+
         ApplySelection();
         Changed?.Invoke();
     }

@@ -3,7 +3,7 @@
 .topic-tree-row {
     min-width: 0;
     max-width: 100%;
-    min-height: 36px;
+    min-height: 48px;
     padding-left: 8px;
     cursor: pointer;
 }
@@ -55,18 +55,14 @@
     border-left: 2px solid var(--topic-role-brand, #f97316);
 }
 
-/* Selection mode needs a comfortable touch target, so rows grow from the 36px reading height to
-   48px. The browser's virtualizer item size follows the same flag, which keeps scrolling exact. */
-.topic-tree-row--selection {
-    min-height: 48px;
-}
-
 .topic-tree-row ::deep .topic-select-checkbox {
     flex: 0 0 auto;
     min-width: 44px;
     min-height: 44px;
     margin: 0;
     padding: 0;
+    /* The wrapper owns the click, so the checkbox never takes focus from the row. */
+    pointer-events: none;
 }
 
 .topic-select-checkbox-wrap {

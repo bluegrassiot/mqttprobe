@@ -12,7 +12,7 @@
                                    OnClick="CloseWithoutSelection"/>
                 </div>
                 <div class="topic-picker-overlay__body">
-                    <TopicBrowser OnSelectedChanged="OnTopicSelected"/>
+                    <TopicBrowser/>
                 </div>
             </MudPaper>
         </div>
@@ -25,8 +25,6 @@
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
-    [CascadingParameter] private TopicBulkSelection? BulkSelection { get; set; }
-
     private async Task CloseWithoutSelection()
     {
         await OnClose.InvokeAsync();
@@ -36,13 +34,5 @@
     {
         if (e.Key == "Escape")
             await CloseWithoutSelection();
-    }
-
-    private async Task OnTopicSelected(SelectedTopicState _)
-    {
-        if (BulkSelection is { IsActive: true })
-            return;
-
-        await OnClose.InvokeAsync();
     }
 }

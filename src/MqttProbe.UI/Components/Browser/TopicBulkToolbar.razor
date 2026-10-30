@@ -5,7 +5,7 @@
 @inject IMessageStoreManager MessageStoreManager
 @implements IDisposable
 
-@if (Selection.IsActive)
+@if (Selection.HasSelection || _outcome is not null)
 {
     <div class="topic-bulk-toolbar @ThemeClass" role="region" aria-label="Selected topics">
         <div class="topic-bulk-toolbar__summary">
@@ -13,11 +13,6 @@
             <span class="topic-bulk-toolbar__count" aria-live="polite">@Selection.Summary</span>
         </div>
         <div class="topic-bulk-toolbar__actions">
-            <AppSecondaryButton Size="Size.Small" Class="topic-bulk-toolbar__clear-selection"
-                                title="Uncheck all topics. Messages are kept."
-                                Disabled="@(!Selection.HasSelection)" OnClick="ClearSelection">
-                Deselect all
-            </AppSecondaryButton>
             <AppDestructiveButton Size="Size.Small" Class="topic-bulk-toolbar__clear-messages"
                                   StartIcon="@LucideIcons.Trash2"
                                   title="Clears stored messages for the selected topics. New messages still arrive."
@@ -41,11 +36,6 @@
                     </AppSecondaryButton>
                 </NotAuthorized>
             </AuthorizeView>
-            <AppPrimaryButton Size="Size.Small" Class="topic-bulk-toolbar__done"
-                              title="Leave selection mode and clear the topic filter."
-                              OnClick="LeaveSelectionMode">
-                Done
-            </AppPrimaryButton>
         </div>
         @if (_outcome is { } outcome)
         {
@@ -81,18 +71,6 @@
     private void OnSelectionChanged() => _ = InvokeAsync(StateHasChanged);
 
     public void Dispose() => Selection.Changed -= OnSelectionChanged;
-
-    private void ClearSelection()
-    {
-        DismissOutcome();
-        Selection.Clear();
-    }
-
-    private void LeaveSelectionMode()
-    {
-        DismissOutcome();
-        Selection.Exit();
-    }
 
     private void DismissOutcome() => _outcome = null;
 

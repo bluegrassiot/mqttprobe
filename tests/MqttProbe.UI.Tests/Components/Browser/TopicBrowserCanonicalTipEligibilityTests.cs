@@ -187,11 +187,17 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
             .Single(row => row.QuerySelector(".flex-grow-1")?.TextContent.Trim() == CanonicalNodeTip);
         await cut.InvokeAsync(() => tipRow.Click());
 
-        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().ContainSingle());
-        _manager.GetSelectedTopicState().Key.Should().Be(CanonicalNodeTip,
-            "the selection is the clicked row's own path, not the empty-level spelling");
-        var selected = cut.Find(".topic-tree-row--selected");
-        RowLabel(selected).Should().Be(CanonicalNodeTip,
-            "the marked row is the tip, not the empty-level spelling");
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".topic-tree-row--selected")
+                .Select(row => row.QuerySelector(".flex-grow-1")?.TextContent.Trim())
+                .Should().BeEquivalentTo(new[] { CanonicalNodeTip, "NDATA" },
+                    "the tip and the message-type row that names exactly it");
+            cut.FindAll(".topic-tree-row--selected")
+                .Should().NotContain(row => row.GetAttribute("data-topic-path") == AliasNodeTip);
+        });
+        _manager.GetSelectedTopicState().Branches.Should().ContainSingle()
+            .Which.Path.Should().Be(CanonicalNodeTip,
+                "the branch is the clicked row's own path, not the empty-level spelling");
     }
 }

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
 
@@ -34,7 +35,8 @@ internal sealed class MessageStoreSelectionAdapter(IMessageStoreManager manager)
 internal sealed record TopicSelectionFrame(
     IReadOnlyList<TopicTreeRowModel> Rows,
     SelectedTopicState Selection,
-    int RootCount);
+    int RootCount,
+    ImmutableArray<TopicNodeSnapshot> Roots);
 
 internal sealed class TopicSelectionSession(ITopicSelectionStore store)
 {
@@ -86,17 +88,10 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
             selection = store.GetSelectedTopicState();
         }
 
-        var frame = new TopicSelectionFrame(rows, selection, snapshot.Roots.Length);
+        var frame = new TopicSelectionFrame(rows, selection, snapshot.Roots.Length, snapshot.Roots);
         _acceptedTreeVersion = snapshot.Version;
         _acceptedSelection = selection.Token;
         Frame = frame;
         return frame;
-    }
-
-    public SelectedTopicState? Select(TopicSelection? request)
-    {
-        store.SelectTopics(request);
-        var selected = store.GetSelectedTopicState();
-        return string.Equals(selected.Key, request?.Key, StringComparison.Ordinal) ? selected : null;
     }
 }

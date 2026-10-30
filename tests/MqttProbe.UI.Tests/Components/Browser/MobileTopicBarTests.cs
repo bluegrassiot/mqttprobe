@@ -140,23 +140,20 @@ public class MobileTopicBarTests : BunitTestContext
     }
 
     [Test]
-    public async Task BulkSelection_ShowsTheCount_AndSelectStartsSelecting()
+    public void BulkSelection_ShowsTheCountWithoutAModeButton()
     {
-        var started = false;
         var selection = new TopicBulkSelection(TopicTreeSelectionTestAdapter.Create());
-        selection.Enter([Raw("sensors/temp"), Raw("sensors/humidity")]);
+        selection.SelectAll([Raw("sensors/temp"), Raw("sensors/humidity")]);
 
         var cut = Render<MobileTopicBar>(p => p
             .AddCascadingValue(selection)
-            .Add(x => x.HasTopics, true)
-            .Add(x => x.OnSelectTopics, () => { started = true; return Task.CompletedTask; }));
+            .Add(x => x.HasTopics, true));
 
         cut.Markup.Should().Contain("2 topics selected");
-
-        await cut.InvokeAsync(() =>
-            cut.Find(".mobile-topic-bar__select").Click());
-
-        started.Should().BeTrue();
+        cut.FindAll(".mobile-topic-bar__select").Should().BeEmpty(
+            "selection is always on, so the bar carries no mode button");
+        cut.Find(".mobile-topic-bar__info").GetAttribute("aria-label")
+            .Should().Be("Change topics, 2 topics selected");
     }
 
     [Test]
@@ -181,10 +178,10 @@ public class MobileTopicBarTests : BunitTestContext
     }
 
     [Test]
-    public void InfoArea_InSelectionMode_NamesTheSelection()
+    public void InfoArea_NamesTheSelectionWhenThereIsOne()
     {
         var selection = new TopicBulkSelection(TopicTreeSelectionTestAdapter.Create());
-        selection.Enter([Raw("sensors/temp"), Raw("sensors/humidity")]);
+        selection.SelectAll([Raw("sensors/temp"), Raw("sensors/humidity")]);
 
         var cut = Render<MobileTopicBar>(p => p
             .AddCascadingValue(selection)

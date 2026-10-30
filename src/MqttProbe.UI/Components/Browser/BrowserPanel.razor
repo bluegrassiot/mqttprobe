@@ -2,8 +2,6 @@
 @inject IMessageStoreManager MessageStoreManager
 @inject ITopicSelectionStore TopicSelectionStore
 @inject IUiSettings UiSettings
-@inject IDialogService DialogService
-@inject ISnackbar Snackbar
 @inject ILogger<BrowserPanel> Logger
 @using Microsoft.Extensions.Logging
 @implements IAsyncDisposable
@@ -20,15 +18,6 @@
             </span>
         }
     </HeaderChips>
-    <HeaderActions>
-        <AppDestructiveButton Size="Size.Medium"
-                   StartIcon="@LucideIcons.Trash2"
-                   MinWidth="true"
-                   Disabled="@(MessageStoreManager.RootTopicCount == 0)"
-                   OnClick="ClearAllMessages">
-            Clear all messages
-        </AppDestructiveButton>
-    </HeaderActions>
 </TabPanelHeader>
 <CascadingValue Value="_bulkSelection" IsFixed="true">
 <div class="tab-panel-content">
@@ -60,8 +49,7 @@
                 @* Phone layout: topic bar + payload (CSS media query hides the split) *@
                 <div class="browser-mobile-layout">
                     <MobileTopicBar HasTopics="@(MessageStoreManager.RootTopicCount > 0)"
-                                    OnOpenPicker="OpenMobilePicker"
-                                    OnSelectTopics="OpenMobileSelection"/>
+                                    OnOpenPicker="OpenMobilePicker"/>
                     <div class="browser-mobile-payload">
                         <PayloadBrowser/>
                     </div>
@@ -97,12 +85,6 @@
 
     internal void OpenMobilePicker() => _mobilePickerOpen = true;
     internal void CloseMobilePicker() => _mobilePickerOpen = false;
-
-    internal void OpenMobileSelection()
-    {
-        _bulkSelection.Enter([]);
-        _mobilePickerOpen = true;
-    }
 
     protected override void OnInitialized()
     {
@@ -142,21 +124,6 @@
         {
             Logger.LogWarning(ex, "BrowserPanel timer render update failed");
         }
-    }
-
-    private async Task ClearAllMessages()
-    {
-        var confirmed = await DialogService.ShowMessageBoxAsync(
-            "Clear all messages",
-            "This removes every stored topic and message. Selected topics are cleared too. Continue?",
-            yesText: "Clear all messages", cancelText: "Cancel",
-            options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
-        if (confirmed != true)
-            return;
-
-        await MessageStoreManager.ClearAllMessages();
-        _lastCount = MessageStoreManager.RootTopicCount;
-        Snackbar.Add("All stored messages cleared.", Severity.Success);
     }
 
     private async Task DismissHint()

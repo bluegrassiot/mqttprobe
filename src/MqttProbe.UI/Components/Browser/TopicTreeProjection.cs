@@ -55,6 +55,20 @@ internal static partial class TopicTreeProjection
         return rows;
     }
 
+    // The branches the global checkbox spans: every root of the whole tree, independent of the
+    // filter and of what is expanded. The empty first level is its own root, so it only ever
+    // stands for the slash-leading topics.
+    public static ImmutableArray<TopicBranchTarget> RootTargets(
+        ImmutableArray<TopicNodeSnapshot> roots, bool groupSparkplugTopics)
+    {
+        if (roots.IsDefaultOrEmpty)
+            return [];
+
+        return groupSparkplugTopics
+            ? [.. BuildRoots(roots, groupSparkplugTopics: true).Select(node => node.Target)]
+            : [.. roots.Select(root => new TopicBranchTarget(TopicBranchKind.Raw, Path: root.FullTopic))];
+    }
+
     public static void AddExpandablePaths(
         ImmutableArray<TopicNodeSnapshot> roots,
         bool groupSparkplugTopics,

@@ -5,10 +5,10 @@
     <div class="mobile-topic-bar__info" role="button" tabindex="0"
          aria-label="@InfoLabel" aria-disabled="@(HasTopics ? null : "true")"
          @onclick="OpenPicker" @onkeydown="HandleInfoKeyDown">
-        @if (BulkSelection is { IsActive: true })
+        @if (BulkSelection is { HasSelection: true } bulk)
         {
             <MudIcon Icon="@LucideIcons.CheckCircle" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
-            <span class="mobile-topic-bar__name mobile-topic-bar__name--selection">@BulkSelection.Summary</span>
+            <span class="mobile-topic-bar__name mobile-topic-bar__name--selection">@bulk.Summary</span>
         }
         else if (_selectedTopic is not null)
         {
@@ -28,13 +28,6 @@
             <span class="mobile-topic-bar__name mobile-topic-bar__name--empty">Choose a topic</span>
         }
     </div>
-    <AppSecondaryButton Size="Size.Small"
-                        StartIcon="@LucideIcons.CheckCircle"
-                        OnClick="StartSelecting"
-                        Disabled="@(!HasTopics)"
-                        Class="mobile-topic-bar__select">
-        Select
-    </AppSecondaryButton>
     <AppPrimaryButton Size="Size.Small"
                 StartIcon="@LucideIcons.ChevronDown"
                 OnClick="OpenPicker"
@@ -47,7 +40,6 @@
 @code {
     [Parameter] public bool HasTopics { get; set; }
     [Parameter] public EventCallback OnOpenPicker { get; set; }
-    [Parameter] public EventCallback OnSelectTopics { get; set; }
 
     [CascadingParameter] private TopicBulkSelection? BulkSelection { get; set; }
 
@@ -60,7 +52,7 @@
     {
         get
         {
-            if (BulkSelection is { IsActive: true } bulk)
+            if (BulkSelection is { HasSelection: true } bulk)
                 return $"Change topics, {bulk.Summary}";
 
             return _selectedTopic is null ? "Choose a topic" : $"Change topic, current topic {_selectedTopic}";
@@ -115,12 +107,6 @@
     {
         if (!HasTopics) return;
         await OnOpenPicker.InvokeAsync();
-    }
-
-    private async Task StartSelecting()
-    {
-        if (!HasTopics) return;
-        await OnSelectTopics.InvokeAsync();
     }
 
     public async ValueTask DisposeAsync()

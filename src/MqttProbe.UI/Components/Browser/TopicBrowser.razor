@@ -8,6 +8,14 @@
 
 <MudPaper Elevation="1" Class="pa-2 app-chrome-panel topic-browser-panel">
     <div class="topic-header-row">
+        <span class="topic-select-all-wrap" title="@GlobalSelectTitle">
+            <MudCheckBox T="bool?" Value="@GlobalCheckboxValue" ValueChanged="OnGlobalCheckboxChanged"
+                         TriState="true" Dense="true" Color="Color.Primary"
+                         Class="topic-select-all"
+                         Disabled="@(_rootTopicCount == 0)">
+                <span class="topic-select-all__name">@GlobalSelectLabel</span>
+            </MudCheckBox>
+        </span>
         <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary"/>
         <MudText Typo="Typo.subtitle2" Class="topic-title">Topics</MudText>
         @if (_rootTopicCount > 0)
@@ -21,15 +29,6 @@
                        title="Icon key" aria-label="Icon key"
                        aria-expanded="@(_iconKeyOpen ? "true" : "false")" aria-controls="@IconKeyControls"
                        OnClick="ToggleIconKey"/>
-        <MudButton Variant="@(_bulkSelection.IsActive ? Variant.Filled : Variant.Outlined)"
-                   Color="Color.Primary" Size="Size.Small" Class="topic-select-toggle"
-                   StartIcon="@LucideIcons.CheckCircle"
-                   title="@(_bulkSelection.IsActive ? "Leave selection mode" : "Select topics")"
-                   aria-label="@(_bulkSelection.IsActive ? "Leave selection mode" : "Select topics")"
-                   aria-pressed="@(_bulkSelection.IsActive ? "true" : "false")"
-                   OnClick="ToggleBulkMode">
-            @(_bulkSelection.IsActive ? "Selecting" : "Select")
-        </MudButton>
     </div>
     <div class="topic-filter-wrap">
         <MudTextField @ref="_filterField" @bind-Value="_searchFilter" @bind-Value:after="OnSearchChanged"
@@ -126,14 +125,14 @@
         }
         @if (_visibleRows.Count > 0)
         {
-            <div class="topic-tree" role="tree" aria-label="Topics" id="@_treeId" @ref="_treeElement">
-                <Virtualize Items="@_visibleRows" Context="row" ItemSize="@EffectiveRowHeight">
-                    <TopicTreeRow @key="row.RowKey" Row="row" IsSelected="@IsRowSelected(row)"
-                                  IsSelectionMode="_bulkSelection.IsActive"
-                                  SelectionState="@SelectionStateOf(row)"
+            <div class="topic-tree" role="tree" aria-label="Topics" aria-multiselectable="true"
+                 id="@_treeId" @ref="_treeElement">
+                <Virtualize Items="@_visibleRows" Context="row" ItemSize="@RowHeight">
+                    <TopicTreeRow @key="row.RowKey" Row="row"
+                                  SelectionState="@SelectionStateOf(row.Branch)"
                                   InheritedSelectionLabel="@InheritedSelectionLabel(row)"
                                   IsTabStop="@IsActiveRow(row)"
-                                  OnExpandToggled="ToggleExpand" OnActivated="OnRowSelected"
+                                  OnExpandToggled="ToggleExpand"
                                   OnSelectionToggled="ToggleRowSelection"
                                   OnKeyPressed="args => OnRowKeyPressed(row, args)"
                                   OnFocused="OnRowFocused"/>
@@ -173,7 +172,8 @@
     private int _rootTopicCount;
     private List<TopicTreeRowModel> _visibleRows = [];
     private readonly HashSet<string> _expandedPaths = [];
-    private string? _selectedKey;
+    private ImmutableArray<TopicBranchTarget> _rootBranches = [];
+    private TopicTreeSelectionState _globalState = TopicTreeSelectionState.Unchecked;
 
     // The key explains the glyphs of both tree modes from one place, so it names every Sparkplug
     // role the grouping view can show. A message type keeps its own hue from its owner rather than
@@ -244,18 +244,16 @@
         catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser preference refresh failed"); }
     }
 
-    private TopicSelectionFrame? BuildVisibleRows(bool force = true)
+    private void BuildVisibleRows(bool force = true)
     {
-        var frame = RefreshFrame(force);
-        ApplyFrame(frame);
-        return frame;
+        ApplyFrame(RefreshFrame(force));
     }
 
     private TopicSelectionFrame? RefreshFrame(bool force)
     {
         ReconcileBulkSelection();
         return _selectionSession!.Refresh(_searchFilter, _expandedPaths, _groupSparkplugTopics, force,
-            _bulkSelection.IsActive);
+            selectionMode: true);
     }
 
     private void ReconcileBulkSelection()
@@ -304,34 +302,80 @@
         catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser refresh render failed"); }
     }
 
-    private bool IsRowSelected(TopicTreeRowModel row) =>
-        _selectedBranches.Contains(row.Branch)
-        || string.Equals(row.FullPath, _selectedKey, StringComparison.Ordinal);
-
     // A row checked only through a branch above it is not its own target, so its checkbox is
     // read-only and names the branch that covers it.
     private string? InheritedSelectionLabel(TopicTreeRowModel row) =>
-        _bulkSelection.IsActive && !_bulkSelection.Contains(row.Branch)
+        !_bulkSelection.Contains(row.Branch)
             ? _bulkSelection.CoveringLabel(row.Branch)
             : null;
 
-    private TopicTreeSelectionState SelectionStateOf(TopicTreeRowModel row)
+    private TopicTreeSelectionState SelectionStateOf(TopicBranchTarget branch)
     {
         var branches = _bulkSelection.Branches;
-        if (branches.Any(selected => TopicBranchTargetRelations.Covers(selected, row.Branch)))
+        if (branches.Any(selected => TopicBranchTargetRelations.Covers(selected, branch)))
             return TopicTreeSelectionState.Checked;
         if (branches.Any(selected =>
-                TopicBranchTargetRelations.IsUnder(selected, row.Branch)
-                || TopicBranchTargetRelations.PartiallyOverlaps(selected, row.Branch)))
+                TopicBranchTargetRelations.IsUnder(selected, branch)
+                || TopicBranchTargetRelations.PartiallyOverlaps(selected, branch)))
             return TopicTreeSelectionState.Mixed;
         return TopicTreeSelectionState.Unchecked;
     }
 
+    private TopicTreeSelectionState GlobalSelectionState()
+    {
+        if (_rootBranches.IsDefaultOrEmpty)
+            return TopicTreeSelectionState.Unchecked;
+
+        var checkedRoots = 0;
+        var uncheckedRoots = 0;
+        foreach (var branch in _rootBranches)
+        {
+            switch (SelectionStateOf(branch))
+            {
+                case TopicTreeSelectionState.Checked:
+                    checkedRoots++;
+                    break;
+                case TopicTreeSelectionState.Unchecked:
+                    uncheckedRoots++;
+                    break;
+            }
+        }
+
+        if (checkedRoots == _rootBranches.Length)
+            return TopicTreeSelectionState.Checked;
+        return uncheckedRoots == _rootBranches.Length
+            ? TopicTreeSelectionState.Unchecked
+            : TopicTreeSelectionState.Mixed;
+    }
+
+    private bool? GlobalCheckboxValue => _globalState switch
+    {
+        TopicTreeSelectionState.Checked => true,
+        TopicTreeSelectionState.Mixed => null,
+        _ => false
+    };
+
+    private static string GlobalSelectLabel => "Select all topics";
+
+    private static string GlobalSelectTitle =>
+        "Selects every topic. When every topic is selected, clicking clears the selection.";
+
+    private void OnGlobalCheckboxChanged(bool? _)
+    {
+        if (_rootBranches.IsDefaultOrEmpty)
+            return;
+
+        if (_globalState == TopicTreeSelectionState.Checked)
+        {
+            _bulkSelection.Clear();
+            return;
+        }
+
+        _bulkSelection.SelectAll(_rootBranches);
+    }
+
     private void OnSearchChanged()
     {
-        if (!_bulkSelection.IsActive)
-            _selectionSession!.Select(null);
-
         BuildVisibleRows();
         StateHasChanged();
     }
@@ -345,39 +389,16 @@
         StateHasChanged();
     });
 
-    private void ToggleBulkMode()
-    {
-        if (_bulkSelection.IsActive)
-        {
-            _bulkSelection.Exit();
-            return;
-        }
-
-        _bulkSelection.Enter(ConcreteSelectionSeed());
-    }
-
-    private ImmutableArray<TopicBranchTarget> ConcreteSelectionSeed() => _selectedBranches;
-
-    private void ToggleRowSelection(TopicTreeRowModel row)
+    private async Task ToggleRowSelection(TopicTreeRowModel row)
     {
         if (InheritedSelectionLabel(row) is not null)
             return;
 
         _bulkSelection.Toggle(row.Branch);
-    }
-
-    private async Task OnRowSelected(TopicTreeRowModel row)
-    {
-        var request = row.ToSelection();
-        if (_selectionSession!.Select(request) is null) return;
         _activeKey = row.RowKey;
         _focusedKey = row.RowKey;
-        var frame = BuildVisibleRows();
-        StateHasChanged();
-        if (frame is not null
-            && string.Equals(frame.Selection.Key, request.Key, StringComparison.Ordinal)
-            && OnSelectedChanged.HasDelegate)
-            await OnSelectedChanged.InvokeAsync(frame.Selection);
+        if (OnSelectedChanged.HasDelegate)
+            await OnSelectedChanged.InvokeAsync(TopicSelectionStore.GetSelectedTopicState());
     }
 
     private Task ToggleExpand(string path)

@@ -139,7 +139,7 @@ public class TopicBrowserKeyboardNavigationTests : BunitTestContext
 
     [TestCase("Enter")]
     [TestCase(" ")]
-    public async Task ActivationKeys_SelectTheFocusedRowThroughTheExistingSelectionPath(string key)
+    public async Task ActivationKeys_CheckTheFocusedRow(string key)
     {
         SelectedTopicState? published = null;
         var cut = RenderTopics(expandAll: true, onSelected: state =>
@@ -161,9 +161,9 @@ public class TopicBrowserKeyboardNavigationTests : BunitTestContext
         });
 
         var selected = published.Should().BeOfType<SelectedTopicState>().Which;
-        selected.Key.Should().Be("sensors/temp/room1");
+        selected.Branches.Should().ContainSingle().Which.Path.Should().Be("sensors/temp/room1");
         _mockMsgStore.Received().SelectTopics(
-            Arg.Is<TopicSelection>(selection => selection.Key == "sensors/temp/room1"));
+            Arg.Is<TopicSelection>(selection => selection.Mode == TopicSelectionMode.Branches));
     }
 
     [Test]

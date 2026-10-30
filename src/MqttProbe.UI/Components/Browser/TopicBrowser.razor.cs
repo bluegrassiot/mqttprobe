@@ -12,12 +12,9 @@ namespace MqttProbe.UI.Components.Browser;
 // the user on a row that is no longer rendered.
 public partial class TopicBrowser
 {
-    private const float RowHeight = 36;
-    private const float BulkRowHeight = 48;
-
-    // Selection mode grows the rows for their checkboxes, so focus and scroll math has to follow
-    // the same height the virtualizer uses.
-    private float EffectiveRowHeight => _bulkSelection.IsActive ? BulkRowHeight : RowHeight;
+    // Every row carries a checkbox, so the reading height and the virtualizer item size are one
+    // value: focus and scroll math cannot drift from what is rendered.
+    private const float RowHeight = 48;
 
     // Distinguishes this instance's key interceptor from the other mounted browser's.
     private readonly string _treeId = $"topic-tree-{Guid.NewGuid():N}";
@@ -34,7 +31,6 @@ public partial class TopicBrowser
     private int _pendingFocusIndex = -1;
     private bool _pendingFocusRestore;
     private bool _interceptorSubscribed;
-    private ImmutableArray<TopicBranchTarget> _selectedBranches = [];
     private bool _focusFilterWhenEmpty;
     private MudTextField<string>? _filterField;
 
@@ -118,15 +114,17 @@ public partial class TopicBrowser
             && !frame.Rows.Any(row => string.Equals(row.RowKey, previousActive, StringComparison.Ordinal));
         _visibleRows = frame.Rows.ToList();
         _rootTopicCount = frame.RootCount;
-        _selectedKey = frame.Selection.Key;
         var branches = frame.Selection.Branches.IsDefault
             ? ImmutableArray<TopicBranchTarget>.Empty
             : frame.Selection.Branches;
-        _selectedBranches = branches;
-        EnsureActiveRow(previousRows, previousActive);
 
-        if (_bulkSelection.IsActive && frame.Selection.Mode == TopicSelectionMode.Branches)
-            _bulkSelection.Adopt(branches);
+        // The store's selection is the checked set, so an external clear empties the tree too.
+        _bulkSelection.Adopt(branches);
+
+        _rootBranches = TopicTreeProjection.RootTargets(frame.Roots, _groupSparkplugTopics);
+        _globalState = GlobalSelectionState();
+        _bulkSelection.CoversWholeTree = _globalState == TopicTreeSelectionState.Checked;
+        EnsureActiveRow(previousRows, previousActive);
 
         if (previousRows.Count > 0 && _visibleRows.Count == 0 && _focusedKey is not null)
             _focusFilterWhenEmpty = true;
@@ -149,8 +147,8 @@ public partial class TopicBrowser
 
         if (ContainsRow(_activeKey)) return;
 
-        if (_selectedBranches.Length > 0
-            && _visibleRows.FirstOrDefault(row => _selectedBranches.Contains(row.Branch)) is { } selectedRow)
+        if (_visibleRows.FirstOrDefault(row => SelectionStateOf(row.Branch) == TopicTreeSelectionState.Checked)
+            is { } selectedRow)
         {
             _activeKey = selectedRow.RowKey;
             return;
@@ -200,9 +198,9 @@ public partial class TopicBrowser
         try
         {
             if (restore)
-                await Keyboard.RestoreFocusAsync(_treeElement, key, _pendingFocusIndex, EffectiveRowHeight);
+                await Keyboard.RestoreFocusAsync(_treeElement, key, _pendingFocusIndex, RowHeight);
             else
-                await Keyboard.MoveFocusAsync(_treeElement, key, _pendingFocusIndex, EffectiveRowHeight);
+                await Keyboard.MoveFocusAsync(_treeElement, key, _pendingFocusIndex, RowHeight);
         }
         catch (JSDisconnectedException)
         {
@@ -221,7 +219,7 @@ public partial class TopicBrowser
 
         try
         {
-            await Keyboard.RetainFocusAsync(_treeElement, key, index, EffectiveRowHeight);
+            await Keyboard.RetainFocusAsync(_treeElement, key, index, RowHeight);
         }
         catch (JSDisconnectedException)
         {
@@ -239,7 +237,7 @@ public partial class TopicBrowser
 
         try
         {
-            await Keyboard.RestoreFocusAsync(_treeElement, key, index, EffectiveRowHeight);
+            await Keyboard.RestoreFocusAsync(_treeElement, key, index, RowHeight);
         }
         catch (JSDisconnectedException)
         {
@@ -388,15 +386,6 @@ public partial class TopicBrowser
         return Task.CompletedTask;
     }
 
-    // Selection mode reuses the row as its checkbox, so activating a row there toggles it rather
-    // than replacing the selection the mode is building.
-    private Task ActivateRow(TopicTreeRowModel row)
-    {
-        if (!_bulkSelection.IsActive)
-            return OnRowSelected(row);
-
-        ToggleRowSelection(row);
-
-        return Task.CompletedTask;
-    }
+    // The row is its own checkbox, so activating it toggles the branch it stands for.
+    private Task ActivateRow(TopicTreeRowModel row) => ToggleRowSelection(row);
 }

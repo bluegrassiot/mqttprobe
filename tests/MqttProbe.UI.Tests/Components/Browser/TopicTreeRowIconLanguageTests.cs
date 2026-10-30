@@ -44,13 +44,15 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
         string label = "temp") =>
         new("sensors/temp", label, Depth: 2, HasChildren: hasChildren, TopicCount: topicCount,
             MessageCount: messageCount, IsExpanded: expanded, IsValueBearer: hasDirectMessages, Kind: kind,
-            Owner: owner);
+            Owner: owner)
+        {
+            Branch = new TopicBranchTarget(TopicBranchKind.Raw, Path: "sensors/temp")
+        };
 
     private IRenderedComponent<TopicTreeRow> RenderRow(TopicTreeRowModel row) =>
         Render<TopicTreeRow>(parameters => parameters
             .Add(component => component.Row, row)
-            .Add(component => component.OnExpandToggled, (string p) => { })
-            .Add(component => component.OnActivated, (TopicTreeRowModel r) => { }));
+            .Add(component => component.OnExpandToggled, (string p) => { }));
 
     private static IElement NodeGlyph(IRenderedComponent<TopicTreeRow> cut) =>
         cut.Find(".topic-node-icon");

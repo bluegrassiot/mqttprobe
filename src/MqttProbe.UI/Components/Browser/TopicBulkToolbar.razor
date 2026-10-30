@@ -1,0 +1,236 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ITopicExcludeService ExcludeService
+@inject IMessageStoreManager MessageStoreManager
+@implements IDisposable
+
+@if (Selection.HasSelection || _outcome is not null)
+{
+    <div class="topic-bulk-toolbar @ThemeClass" role="region" aria-label="Selected topics">
+        <div class="topic-bulk-toolbar__summary">
+            <MudIcon Icon="@LucideIcons.CheckCircle" Size="Size.Small" Color="Color.Primary"/>
+            <span class="topic-bulk-toolbar__count" aria-live="polite">@Selection.Summary</span>
+        </div>
+        <div class="topic-bulk-toolbar__actions">
+            <AppDestructiveButton Size="Size.Small" Class="topic-bulk-toolbar__clear-messages"
+                                  StartIcon="@LucideIcons.Trash2"
+                                  title="Clears stored messages for the selected topics. New messages still arrive."
+                                  Disabled="@(!Selection.HasSelection)" OnClick="ConfirmClearMessagesAsync">
+                Clear messages
+            </AppDestructiveButton>
+            <AuthorizeView Roles="Admin,Operator">
+                <Authorized>
+                    <AppSecondaryButton Size="Size.Small" Class="topic-bulk-toolbar__exclude"
+                                        StartIcon="@LucideIcons.EyeOff"
+                                        title="Adds the selected topics to this connection's excluded topics."
+                                        Disabled="@(!Selection.HasSelection)" OnClick="ConfirmExcludeAsync">
+                        Exclude topics
+                    </AppSecondaryButton>
+                </Authorized>
+                <NotAuthorized>
+                    <AppSecondaryButton Size="Size.Small" Class="topic-bulk-toolbar__exclude"
+                                        StartIcon="@LucideIcons.EyeOff" Disabled="true"
+                                        title="Connect as Operator or Admin to manage exclusions">
+                        Exclude topics
+                    </AppSecondaryButton>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+        @if (_outcome is { } outcome)
+        {
+            <div class="topic-bulk-outcome" role="status">
+                <div class="topic-bulk-outcome__head">
+                    <span class="topic-bulk-outcome__title">@outcome.Title</span>
+                    <MudIconButton Icon="@LucideIcons.X" Size="Size.Small"
+                                   title="Dismiss result" aria-label="Dismiss result"
+                                   OnClick="DismissOutcome"/>
+                </div>
+                <ul class="topic-bulk-outcome__lines">
+                    @foreach (var line in outcome.Lines)
+                    {
+                        <li>@line</li>
+                    }
+                </ul>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] private TopicBulkSelection Selection { get; set; } = null!;
+
+    [CascadingParameter(Name = "IsDarkMode")] private bool? DarkMode { get; set; }
+
+    private string ThemeClass => (DarkMode ?? true) ? "topic-bulk-toolbar--dark" : "topic-bulk-toolbar--light";
+
+    private BulkOutcome? _outcome;
+
+    protected override void OnInitialized() => Selection.Changed += OnSelectionChanged;
+
+    private void OnSelectionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Selection.Changed -= OnSelectionChanged;
+
+    private void DismissOutcome() => _outcome = null;
+
+    private async Task ConfirmExcludeAsync()
+    {
+        var targets = Selection.Branches;
+        if (targets.IsDefaultOrEmpty)
+            return;
+
+        var token = ExcludeService.CaptureConnectionToken();
+        var parameters = new DialogParameters<ExcludeTopicsDialog>
+        {
+            { dialog => dialog.Topics, targets }
+        };
+        var dialog = await DialogService.ShowAsync<ExcludeTopicsDialog>(
+            "Exclude selected topics", parameters,
+            new DialogOptions
+            {
+                MaxWidth = MaxWidth.Medium,
+                FullWidth = true,
+                CloseOnEscapeKey = true
+            });
+        var result = await dialog.Result;
+        if (result is not { Canceled: false, Data: IReadOnlyList<TopicBranchTarget> confirmed }
+            || confirmed.Count == 0)
+            return;
+
+        await ApplyExcludesAsync(confirmed, token);
+    }
+
+    private async Task ApplyExcludesAsync(
+        IReadOnlyList<TopicBranchTarget> targets, TopicExcludeConnectionToken token)
+    {
+        var batch = await ExcludeService.AddBranches(targets, token);
+        var added = batch.AddedTargets.ToList();
+        var purgeFailures = batch.Results
+            .Where(result => result.Outcome == TopicExcludeAddOutcome.AppliedWithPurgeFailure)
+            .ToList();
+        var already = batch.Results
+            .Where(result => result.Outcome == TopicExcludeAddOutcome.AlreadyExcluded)
+            .Select(result => result.Target)
+            .ToList();
+        var failed = batch.Results
+            .Where(result => result.Outcome is TopicExcludeAddOutcome.LimitReached
+                or TopicExcludeAddOutcome.Invalid
+                or TopicExcludeAddOutcome.Failed
+                or TopicExcludeAddOutcome.ConnectionChanged)
+            .Select(DescribeFailure)
+            .ToList();
+
+        var handled = batch.AppliedTargets.Concat(already).ToList();
+        if (handled.Count > 0)
+            Selection.Remove(handled);
+
+        _outcome = new BulkOutcome("Exclude finished",
+            BuildExcludeLines(added, purgeFailures, already, failed));
+        string message;
+        Severity severity;
+        if (failed.Count > 0)
+        {
+            message = $"Excluded {batch.AppliedTargets.Length} of {targets.Count} topics. See the report for the rest.";
+            severity = Severity.Warning;
+        }
+        else if (purgeFailures.Count > 0)
+        {
+            message = $"Excluded {batch.AppliedTargets.Length} topics. Stored history cleanup did not finish.";
+            severity = Severity.Warning;
+        }
+        else
+        {
+            message = $"Excluded {batch.AppliedTargets.Length} topics.";
+            severity = Severity.Success;
+        }
+
+        Snackbar.Add(message, severity);
+        StateHasChanged();
+    }
+
+    private static string DescribeFailure(TopicBranchExcludeResult result) => result.Outcome switch
+    {
+        TopicExcludeAddOutcome.LimitReached => $"{TopicBranchTargetDisplay.Label(result.Target)}: limit reached",
+        TopicExcludeAddOutcome.ConnectionChanged =>
+            $"{TopicBranchTargetDisplay.Label(result.Target)}: connection changed",
+        _ when result.Feedback is { Message.Length: > 0 } feedback =>
+            $"{TopicBranchTargetDisplay.Label(result.Target)}: {feedback.Message}",
+        _ => $"{TopicBranchTargetDisplay.Label(result.Target)}: not added"
+    };
+
+    private static string DescribePurgeFailure(TopicBranchExcludeResult result) =>
+        result.Feedback is { Message.Length: > 0 } feedback
+            ? $"{TopicBranchTargetDisplay.Label(result.Target)}: {feedback.Message}"
+            : $"{TopicBranchTargetDisplay.Label(result.Target)}: stored history was not cleaned up";
+
+    private static List<string> BuildExcludeLines(
+        IReadOnlyCollection<TopicBranchTarget> added,
+        IReadOnlyCollection<TopicBranchExcludeResult> purgeFailures,
+        IReadOnlyCollection<TopicBranchTarget> already,
+        IReadOnlyCollection<string> failed)
+    {
+        var lines = new List<string>();
+        if (added.Count > 0)
+            lines.Add($"Excluded ({added.Count}): {string.Join(", ", added.Select(TopicBranchTargetDisplay.Label))}");
+        if (purgeFailures.Count > 0)
+            lines.Add("Excluded, history cleanup incomplete " +
+                $"({purgeFailures.Count}): {string.Join(", ", purgeFailures.Select(DescribePurgeFailure))}");
+        if (already.Count > 0)
+            lines.Add($"Already excluded ({already.Count}): {string.Join(", ", already.Select(TopicBranchTargetDisplay.Label))}");
+        if (failed.Count > 0)
+            lines.Add($"Not added ({failed.Count}): {string.Join(", ", failed)}");
+
+        return lines;
+    }
+
+    private async Task ConfirmClearMessagesAsync()
+    {
+        var targets = Selection.Branches;
+        if (targets.IsDefaultOrEmpty)
+            return;
+
+        // The exclusion service owns the connection generation, so this token also rejects a
+        // confirmation that comes back to the connection it started on.
+        var token = ExcludeService.CaptureConnectionToken();
+        var parameters = new DialogParameters<ClearSelectedMessagesDialog>
+        {
+            { dialog => dialog.Topics, targets }
+        };
+        var dialog = await DialogService.ShowAsync<ClearSelectedMessagesDialog>(
+            "Clear messages for selected topics", parameters,
+            new DialogOptions
+            {
+                MaxWidth = MaxWidth.Medium,
+                FullWidth = true,
+                CloseOnEscapeKey = true
+            });
+        var result = await dialog.Result;
+        if (result is not { Canceled: false, Data: IReadOnlyList<TopicBranchTarget> confirmed }
+            || confirmed.Count == 0)
+            return;
+
+        // The store applies the same token, so a connection that changed while the dialog was
+        // open leaves the new connection's messages untouched.
+        var cleared = await MessageStoreManager.ClearMessagesForBranchesAsync(confirmed, token);
+        if (!cleared.Applied)
+        {
+            _outcome = new BulkOutcome("Clear cancelled",
+                ["The connection changed before the clear was confirmed. Nothing was cleared."]);
+            Snackbar.Add("The connection changed. Nothing was cleared.", Severity.Warning);
+            StateHasChanged();
+            return;
+        }
+
+        Selection.NotifyMessagesCleared([.. confirmed]);
+        _outcome = new BulkOutcome("Clear finished", [
+            $"{cleared.ClearedMessages:N0} stored {(cleared.ClearedMessages == 1 ? "message" : "messages")} cleared from {TopicCount(confirmed.Count)}.",
+            "Topics left with no messages are removed from the tree."
+        ]);
+        StateHasChanged();
+    }
+
+    private static string TopicCount(int count) => count == 1 ? "1 topic" : $"{count} topics";
+
+    private sealed record BulkOutcome(string Title, IReadOnlyList<string> Lines);
+}

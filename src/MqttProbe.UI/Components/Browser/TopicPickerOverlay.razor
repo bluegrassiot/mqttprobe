@@ -12,7 +12,7 @@
                                    OnClick="CloseWithoutSelection"/>
                 </div>
                 <div class="topic-picker-overlay__body">
-                    <TopicBrowser OnSelectedChanged="OnTopicSelected"/>
+                    <TopicBrowser/>
                 </div>
             </MudPaper>
         </div>
@@ -34,10 +34,5 @@
     {
         if (e.Key == "Escape")
             await CloseWithoutSelection();
-    }
-
-    private async Task OnTopicSelected(SelectedTopicState _)
-    {
-        await OnClose.InvokeAsync();
     }
 }

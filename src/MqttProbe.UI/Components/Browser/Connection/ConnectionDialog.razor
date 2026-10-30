@@ -105,8 +105,10 @@
                                                     OnAdd="HandleOnConnectEditorAdd"
                                                     OnRemove="HandleOnConnectEditorRemove"
                                                     ExcludedItems="@_selectedConnection.TopicExcludes"
+                                                    ExcludedSparkplugItems="@_selectedConnection.SparkplugTopicExcludes"
                                                     OnExcludeAdd="HandleOnConnectExcludeAdd"
-                                                    OnExcludeRemove="HandleOnConnectExcludeRemove" />
+                                                    OnExcludeRemove="HandleOnConnectExcludeRemove"
+                                                    OnExcludeSparkplugRemove="HandleOnConnectSparkplugExcludeRemove" />
                         </MudTabPanel>
                     </MudTabs>
                 </MudForm>
@@ -248,7 +250,8 @@
                 CleanStart = snapshot.CleanStart,
                 SessionExpiryIntervalSeconds = snapshot.SessionExpiryIntervalSeconds,
                 SubscribedTopics = snapshot.SubscribedTopics.Select(t => new SubscribedTopic { Topic = t.Topic, QualityOfServiceLevel = t.QualityOfServiceLevel }).ToList(),
-                TopicExcludes = [.. snapshot.TopicExcludes]
+                TopicExcludes = [.. snapshot.TopicExcludes],
+                SparkplugTopicExcludes = [.. snapshot.SparkplugTopicExcludes]
             };
             _canDelete = false;
             preselected = true;

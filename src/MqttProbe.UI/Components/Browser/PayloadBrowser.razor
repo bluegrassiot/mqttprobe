@@ -252,7 +252,7 @@ else
             <div class="d-flex align-center px-3 py-1 payload-section-divider">
                 <MudIcon Icon="@LucideIcons.Inbox" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
                 <MudText Typo="Typo.subtitle2" Class="payload-topic-title">
-                    @_messageList.FirstOrDefault()?.Topic
+                    @SelectionHeading
                 </MudText>
                 <MudSpacer/>
                 @if (_messageList.Count >= MaxMessageCount)
@@ -322,7 +322,11 @@ else
                 <NoRecordsContent>
                     <div class="d-flex flex-column align-center pa-6">
                         <MudIcon Icon="@LucideIcons.Inbox" Size="Size.Large" Color="Color.Secondary"/>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">Select a topic to see messages</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                            @(HasSelection
+                                ? "No stored messages for the selected topics"
+                                : "Select a topic to see messages")
+                        </MudText>
                     </div>
                 </NoRecordsContent>
             </MudTable>
@@ -345,9 +349,28 @@ else
     private bool CanNavigatePrevious => SelectedIndex() >= 1;
     private bool CanNavigateNext => SelectedIndex() >= 0 && SelectedIndex() < VisibleMessages().Count - 1;
 
+    [CascadingParameter] private TopicBulkSelection? BulkSelection { get; set; }
+
+    private bool HasSelection => !string.IsNullOrEmpty(MessageStoreManager.GetSelectedTopicState().Key);
+
+    // A scoped clear can leave the selection in place while removing the open message. The list
+    // heading then names the selection, not one of its topics.
+    private string? SelectionHeading
+    {
+        get
+        {
+            var state = MessageStoreManager.GetSelectedTopicState();
+            return state.Mode == TopicSelectionMode.MultipleTopics
+                ? state.Label
+                : _messageList.FirstOrDefault()?.Topic;
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         Disposed = true;
+        if (BulkSelection is not null)
+            BulkSelection.MessagesCleared -= OnMessagesCleared;
         Metrics.SetDisplayedMessageCount(0);
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();

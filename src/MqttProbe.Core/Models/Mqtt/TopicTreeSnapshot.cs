@@ -17,6 +17,8 @@ public sealed record TopicNodeSnapshot(
     // Narrower than HasObservedDirectTopic: the message was published at this node's own
     // normalized path, not at an alias spelling that normalizes onto it.
     public bool HasObservedCanonicalTopic { get; init; } = HasDirectMessages;
+
+    public ImmutableArray<string> ObservedTopicPaths { get; init; } = ImmutableArray<string>.Empty;
 }
 
 public sealed record TopicTreeSnapshot(long Version, ImmutableArray<TopicNodeSnapshot> Roots);

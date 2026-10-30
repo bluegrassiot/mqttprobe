@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.Logging;
@@ -47,8 +48,26 @@ public partial class PayloadBrowser
     protected override Task OnInitializedAsync()
     {
         _filterFunc = FilterFunc;
+        if (BulkSelection is not null)
+            BulkSelection.MessagesCleared += OnMessagesCleared;
         _updateTimer = new Timer(OnTimerTick, null, 0, 500);
         return Task.CompletedTask;
+    }
+
+    private void OnMessagesCleared(ImmutableArray<TopicBranchTarget> branches)
+    {
+        if (_selectedMessage?.Topic is not { } topic
+            || !branches.Any(branch => TopicBranchMatcher.Matches(branch, topic)))
+            return;
+
+        _ = InvokeAsync(() =>
+        {
+            if (Disposed)
+                return;
+
+            // The detail view is gone, so the list takes focus and the keyboard state with it.
+            ClearSelection();
+        });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

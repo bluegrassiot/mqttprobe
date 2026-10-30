@@ -1,0 +1,7 @@
+::deep .topic-clear-dialog__lead {
+    margin-bottom: 4px;
+}
+
+::deep .topic-clear-dialog__note {
+    margin-top: 4px;
+}

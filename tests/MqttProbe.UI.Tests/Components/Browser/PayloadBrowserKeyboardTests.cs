@@ -452,6 +452,25 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
         JSInterop.VerifyFocusAsyncInvoke(1, "refreshing content must leave focus where it is");
     }
 
+    [Test]
+    public void ScopedClearOfTheOpenMessage_ClosesTheDetailAndReturnsFocusToTheList()
+    {
+        var selection = new TopicBulkSelection(TopicTreeSelectionTestAdapter.Create());
+        var cut = Render<PayloadBrowser>(parameters => parameters.AddCascadingValue(selection));
+        cut.WaitForAssertion(() => cut.FindAll(".payload-row").Should().HaveCount(3));
+
+        FocusedList(cut).KeyDown("ArrowDown");
+        FocusedList(cut).KeyDown("Enter");
+        cut.Markup.Should().Contain("Message Details");
+
+        cut.InvokeAsync(() => selection.NotifyMessagesCleared(
+            [new TopicBranchTarget(TopicBranchKind.Raw, Path: "sensor/temp")]));
+
+        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Message Details"));
+        cut.FindAll(".payload-message-list").Should().ContainSingle();
+        LastFocusTarget().ShouldBeElementReferenceTo(cut.Find(".payload-message-list"));
+    }
+
     private object LastFocusTarget() =>
         JSInterop.Invocations.Last(invocation => invocation.Identifier == "Blazor._internal.domWrapper.focus").Arguments[0]!;
 

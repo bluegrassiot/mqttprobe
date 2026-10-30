@@ -8,19 +8,19 @@ using MqttProbe.UI.Tests.TestHelpers;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
+// Changing how the tree is presented must never drop what is checked: the checked set is branch
+// based, so it survives grouping, collapse and filtering, and Core is never asked to clear it.
 [TestFixture]
 public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
 {
     private const string NodeTip = "spBv1.0/plant1/NDATA/node1";
     private const string NodeVerb = "spBv1.0/plant1/NDATA";
-    private const string DeviceLevel = "spBv1.0/plant1/DDATA/node1";
     private const string GroupedMarker = "Grouped by node and device";
 
     private IMessageStoreManager _mockMsgStore = null!;
     private TopicBrowserTestFixture _fixture = null!;
     private IUiSettings _mockUi = null!;
     private readonly UiPreferences _preferences = new();
-    private readonly Guid _storeId = Guid.NewGuid();
 
     [SetUp]
     public void SetupMocks()
@@ -44,30 +44,34 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         ("sensors/temp", 2)
     ];
 
-    private IRenderedComponent<TopicBrowser> RenderWithSelection(
-        bool grouped,
-        string? selectedPath,
-        Func<SelectedTopicState, Task>? onSelected = null) =>
-        RenderTopics(Topics(), grouped, selectedPath, onSelected);
+    private IRenderedComponent<TopicBrowser> RenderWithBranch(bool grouped, string branchPath) =>
+        RenderTopics(Topics(), grouped, branchPath);
 
     private IRenderedComponent<TopicBrowser> RenderTopics(
         IEnumerable<(string Topic, int Messages)> topics,
         bool grouped,
-        string? selectedPath,
-        Func<SelectedTopicState, Task>? onSelected = null)
+        string? branchPath)
     {
         _preferences.GroupSparkplugTopicsByNodeAndDevice = grouped;
         _fixture.AddTopics([.. topics]);
-        if (selectedPath is not null)
-            _fixture.SetSelection(TopicSelection.ForTopic(selectedPath));
-        var cut = Render<TopicBrowser>(parameters =>
-        {
-            if (onSelected is not null)
-                parameters.Add(component => component.OnSelectedChanged, onSelected);
-        });
+        if (branchPath is not null)
+            SeedBranch(branchPath);
+        var cut = Render<TopicBrowser>();
         EnsureMudProviders();
         return cut;
     }
+
+    private void SeedBranch(string path) =>
+        _fixture.Adapter.Store.SelectTopics(
+            TopicSelection.ForBranches([new TopicBranchTarget(TopicBranchKind.Raw, Path: path)]));
+
+    private static bool CheckedRow(IRenderedComponent<TopicBrowser> cut, string path) =>
+        cut.FindAll(".topic-tree-row")
+            .Single(row => string.Equals(row.GetAttribute("data-topic-path"), path, StringComparison.Ordinal))
+            .GetAttribute("aria-selected") == "true";
+
+    private string? SelectedBranchPath() =>
+        _fixture.Adapter.Store.GetSelectedTopicState().Branches.Single().Path;
 
     private void ApplyPreference(bool grouped)
     {
@@ -91,46 +95,66 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     }
 
     [Test]
-    public void TurningGroupingOn_ClearsASelectionTheGroupedViewCannotShow()
+    public void TurningGroupingOn_KeepsACheckedVerbBranchAndItsMessages()
     {
-        SelectedTopicState? callbackState = null;
-        var cut = RenderWithSelection(grouped: false, NodeVerb, state =>
-        {
-            callbackState = state;
-            return Task.CompletedTask;
-        });
+        var cut = RenderWithBranch(grouped: false, NodeVerb);
         ExpandAll(cut);
         RowFor(cut, "NDATA").ClassName.Should().Contain("topic-tree-row--selected");
 
         ApplyPreference(true);
 
-        cut.WaitForAssertion(() => _mockMsgStore.Received(1)
-            .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
+        ExpandAll(cut);
+        cut.WaitForAssertion(() =>
+        {
+            RowFor(cut, "NDATA").ClassName.Should().Contain("topic-tree-row--selected");
+            _fixture.Adapter.Store.GetSelectedTopicState().Branches.Should().ContainSingle()
+                .Which.Path.Should().Be(NodeVerb);
+            _fixture.Adapter.Store.GetSelectedMessages(
+                    _fixture.Adapter.Store.GetSelectedTopicState().Token, 10)!.Messages
+                .Should().HaveCount(4, "the branch still resolves its messages");
+        });
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        callbackState.Should().BeNull("the preference change must not raise the selection callback");
-        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().BeEmpty());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
     }
 
     [Test]
-    public void TurningGroupingOn_ClearsADeviceIntermediateSelection()
+    public void TurningGroupingOn_KeepsACheckedGroupBranch()
     {
-        var cut = RenderWithSelection(grouped: false, DeviceLevel);
-        ExpandAll(cut);
+        var cut = RenderWithBranch(grouped: false, "spBv1.0/plant1");
 
         ApplyPreference(true);
 
-        cut.WaitForAssertion(() => _mockMsgStore.Received(1)
-            .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        cut.FindAll(".topic-tree-row--selected").Should().BeEmpty();
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
+        ExpandAll(cut);
+        cut.WaitForAssertion(() =>
+        {
+            RowFor(cut, "node1").ClassName.Should().Contain("topic-tree-row--selected");
+            RowFor(cut, "dev1").ClassName.Should().Contain("topic-tree-row--selected");
+        });
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
     }
 
     [Test]
-    public void TurningGroupingOn_KeepsASelectionHiddenOnlyByCollapse()
+    public void TurningGroupingOff_KeepsACheckedTip()
     {
-        var cut = RenderWithSelection(grouped: true, NodeTip);
+        var cut = RenderWithBranch(grouped: true, NodeTip);
+        ExpandAll(cut);
 
-        // Collapsed: the row is off screen, but the topic is still represented.
+        ApplyPreference(false);
+
+        cut.WaitForAssertion(() => cut.Markup.Should().NotContain(GroupedMarker));
+        ExpandAll(cut);
+        cut.WaitForAssertion(() => RowFor(cut, NodeTip).ClassName.Should().Contain("topic-tree-row--selected"));
+        _fixture.Adapter.Store.GetSelectedTopicState().Branches.Select(branch => branch.Path)
+            .Should().Equal(NodeTip);
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
+    }
+
+    [Test]
+    public void TurningGroupingOn_KeepsACheckedSelectionHiddenOnlyByCollapse()
+    {
+        var cut = RenderWithBranch(grouped: true, NodeTip);
         CollapseAll(cut);
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row").Should().HaveCount(2));
 
@@ -138,66 +162,87 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
         ApplyPreference(true);
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
         ExpandAll(cut);
         cut.WaitForAssertion(() => RowFor(cut, NodeTip).ClassName.Should().Contain("topic-tree-row--selected"));
     }
 
     [Test]
-    public void TurningGroupingOn_KeepsASelectionHiddenOnlyByTheFilter()
+    public void TurningGroupingOn_KeepsACheckedSelectionHiddenOnlyByTheFilter()
     {
-        var cut = RenderWithSelection(grouped: true, selectedPath: null);
-
-        // The filter clears selections by design, so this one is set behind the filter and the
-        // toggle must leave it alone.
+        var cut = RenderTopics(Topics(), grouped: true, branchPath: null);
         cut.Find(".topic-filter-field input").Input("sensors");
         cut.WaitForAssertion(() => cut.Markup.Should().NotContain("NDATA"));
-        _fixture.SetSelection(TopicSelection.ForTopic(NodeTip));
-        _mockMsgStore.ClearReceivedCalls();
 
+        SeedBranch(NodeTip);
+        _mockMsgStore.ClearReceivedCalls();
         ApplyPreference(false);
         ApplyPreference(true);
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedKey.Should().Be(NodeTip);
+        cut.Find(".topic-filter-field input").Input(string.Empty);
+        ExpandAll(cut);
+        cut.WaitForAssertion(() => RowFor(cut, NodeTip).ClassName.Should().Contain("topic-tree-row--selected"));
     }
 
+    [Test]
+    public void TurningGroupingOn_KeepsAZeroMessageTipChecked()
+    {
+        UseRetentionStore();
+        (string Topic, int Messages)[] retained =
+        [
+            (NodeTip, 3),
+            ("spBv1.0/plant1/STATE/zero-host", 1)
+        ];
+        const string kept = "spBv1.0/plant1/STATE/zero-host";
+
+        var cut = RenderTopics(retained, grouped: false, kept);
+
+        ApplyPreference(true);
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
+        ExpandAll(cut);
+        cut.WaitForAssertion(() => RowFor(cut, kept).ClassName.Should().Contain("topic-tree-row--selected"));
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
+    }
+
+    [Test]
     [TestCase("spBv1.0")]
-    [TestCase("spBv1.0/plant1")]
     [TestCase("spBv1.0/STATE/scada-host")]
     [TestCase("spBv1.0/plant1/STATE/scada")]
     [TestCase("spBv1.0/plant1/NDATA/node1/extra")]
     [TestCase("sensors/temp")]
-    public void TurningGroupingOn_KeepsSelectionsTheGroupedViewStillShows(string selectedPath)
+    public void TogglingGrouping_KeepsACheckedRawBranchAndItsRow(string branchPath)
     {
-        var cut = RenderWithSelection(grouped: false, selectedPath);
+        var cut = RenderWithBranch(grouped: false, branchPath);
+        ExpandAll(cut);
+        CheckedRow(cut, branchPath).Should().BeTrue();
 
         ApplyPreference(true);
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
-
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-    }
-
-    [Test]
-    public void TurningGroupingOff_KeepsTheSelectionForALiteralRow()
-    {
-        var cut = RenderWithSelection(grouped: true, NodeTip);
+        ExpandAll(cut);
+        cut.WaitForAssertion(() =>
+        {
+            CheckedRow(cut, branchPath).Should().BeTrue();
+            SelectedBranchPath().Should().Be(branchPath);
+        });
 
         ApplyPreference(false);
         cut.WaitForAssertion(() => cut.Markup.Should().NotContain(GroupedMarker));
+        ExpandAll(cut);
+        cut.WaitForAssertion(() =>
+        {
+            CheckedRow(cut, branchPath).Should().BeTrue();
+            SelectedBranchPath().Should().Be(branchPath);
+        });
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        ExpandAll(cut);
-        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().NotBeEmpty());
     }
 
     [Test]
-    public void TurningGroupingOn_KeepsTheSelectionForARetainedFallbackAggregate()
+    public void TurningGroupingOn_KeepsACheckedRetainedFallbackAggregate()
     {
         (string Topic, int Messages)[] mixed =
         [
@@ -210,50 +255,21 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
 
         ApplyPreference(true);
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
-
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedKey.Should().Be(NodeVerb);
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
         {
-            var selected = cut.FindAll(".topic-tree-row--selected");
-            selected.Should().ContainSingle();
-            selected[0].TextContent.Should().Contain("NDATA");
-            selected[0].TextContent.Should().NotContain("ghosttip");
+            SelectedBranchPath().Should().Be(NodeVerb);
+            CheckedRow(cut, NodeTip).Should().BeTrue("the verb branch still covers the grouped node");
+            CheckedRow(cut, "spBv1.0/plant1/NDATA/ghosttip/leaf")
+                .Should().BeTrue("the verb branch still covers every topic beneath it");
         });
         RowFor(cut, "ghosttip").ClassName.Should().NotContain("topic-tree-row--group");
-    }
-
-    [Test]
-    public void TurningGroupingOn_KeepsTheSelectionForARetainedZeroMessageTopic()
-    {
-        UseRetentionStore();
-        (string Topic, int Messages)[] retained =
-        [
-            (NodeTip, 3),
-            ("spBv1.0/plant1/STATE/zero-host", 1)
-        ];
-
-        var cut = RenderTopics(retained, grouped: false, "spBv1.0/plant1/STATE/zero-host");
-
-        ApplyPreference(true);
-        cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
-
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedKey.Should().Be("spBv1.0/plant1/STATE/zero-host");
-        ExpandAll(cut);
-        cut.WaitForAssertion(() =>
-        {
-            var selected = cut.FindAll(".topic-tree-row--selected");
-            selected.Should().ContainSingle();
-            selected[0].TextContent.Should().Contain("zero-host");
-        });
     }
 
     [Test]
-    public void TurningGroupingOn_KeepsTheSelectionForARetainedChildlessTip()
+    public void TurningGroupingOn_KeepsACheckedRetainedChildlessTip()
     {
         UseRetentionStore();
         const string keptNode = "spBv1.0/plant1/NDATA/keptnode";
@@ -267,28 +283,25 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
 
         ApplyPreference(true);
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
-
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedKey.Should().Be(keptNode);
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
         {
-            var selected = cut.FindAll(".topic-tree-row--selected");
-            selected.Should().ContainSingle();
-            selected[0].TextContent.Should().Contain(keptNode);
+            SelectedBranchPath().Should().Be(keptNode);
+            CheckedRow(cut, keptNode).Should().BeTrue();
         });
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
     }
 
     [Test]
     public void TurningGroupingOn_WithNoSelectionDoesNotTouchTheStore()
     {
-        var cut = RenderWithSelection(grouped: false, selectedPath: null);
+        var cut = RenderTopics(Topics(), grouped: false, branchPath: null);
 
         ApplyPreference(true);
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
 
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
+        cut.FindAll(".topic-tree-row--selected").Should().BeEmpty();
     }
 }

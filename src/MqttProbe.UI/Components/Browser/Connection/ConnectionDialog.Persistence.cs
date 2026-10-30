@@ -229,7 +229,8 @@ public partial class ConnectionDialog
             CleanStart = source.CleanStart,
             SessionExpiryIntervalSeconds = source.SessionExpiryIntervalSeconds,
             SubscribedTopics = source.SubscribedTopics.Select(t => new SubscribedTopic { Topic = t.Topic, QualityOfServiceLevel = t.QualityOfServiceLevel }).ToList(),
-            TopicExcludes = [.. source.TopicExcludes]
+            TopicExcludes = [.. source.TopicExcludes],
+            SparkplugTopicExcludes = [.. source.SparkplugTopicExcludes]
         };
 
         string? newCopyAssetId = null;

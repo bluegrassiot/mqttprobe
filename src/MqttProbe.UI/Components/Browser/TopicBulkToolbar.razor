@@ -224,8 +224,7 @@
 
         Selection.NotifyMessagesCleared([.. confirmed]);
         _outcome = new BulkOutcome("Clear finished", [
-            $"{cleared.ClearedMessages:N0} stored {(cleared.ClearedMessages == 1 ? "message" : "messages")} cleared from {TopicCount(confirmed.Count)}.",
-            "Topics left with no messages are removed from the tree."
+            $"{cleared.ClearedMessages:N0} stored {(cleared.ClearedMessages == 1 ? "message" : "messages")} cleared from {TopicCount(confirmed.Count)}."
         ]);
         StateHasChanged();
     }

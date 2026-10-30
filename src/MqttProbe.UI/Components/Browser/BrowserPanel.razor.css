@@ -1,3 +1,14 @@
+/* MudChip renders its own root, so the wrapper only anchors the scoped deep rule. */
+.browser-root-count-chip-host {
+    display: contents;
+}
+
+.browser-root-count-chip-host ::deep .browser-root-count-chip {
+    height: 20px;
+    font-size: 0.7rem;
+    padding: 0 6px;
+}
+
 /* The app shell is locked to the viewport (components.css) and the tab panel is
    a flex column, so this content fills the space the tab gives it */
 .tab-panel-content {

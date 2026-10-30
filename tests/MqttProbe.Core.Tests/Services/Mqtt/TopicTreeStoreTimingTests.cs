@@ -161,6 +161,97 @@ public sealed class TopicTreeStoreTimingTests
     }
 
     [Test]
+    public void ClearingEveryMessageThroughBranchesResetsTimingHistory()
+    {
+        var store = CreateStore();
+        store.Add("a", Message("a", 100));
+        store.Add("b", Message("b", 200));
+        store.Add("a", Message("a", 600));
+
+        var removed = store.ClearMessagesForBranches(
+        [
+            new TopicBranchTarget(TopicBranchKind.Raw, "a"),
+            new TopicBranchTarget(TopicBranchKind.Raw, "b")
+        ]);
+
+        removed.Should().Be(3);
+        store.TotalStoredMessages.Should().Be(0);
+
+        var first = Message("b", 1000);
+        var second = Message("a", 1600);
+        store.Add("b", first);
+        store.Add("a", second);
+
+        first.ElapsedSinceBufferStart.Should().Be(TimeSpan.Zero);
+        first.SincePreviousAllTopics.Should().BeNull();
+        first.SincePreviousSameTopic.Should().BeNull();
+        second.ElapsedSinceBufferStart.Should().Be(TimeSpan.FromMilliseconds(600));
+        second.SincePreviousAllTopics.Should().Be(TimeSpan.FromMilliseconds(600));
+        second.SincePreviousSameTopic.Should().BeNull("the cleared topic history must restart");
+    }
+
+    [Test]
+    public void ClearingEveryMessageThroughExactTopicsResetsTimingHistory()
+    {
+        var store = CreateStore();
+        store.Add("a", Message("a", 100));
+        store.Add("b", Message("b", 200));
+
+        store.ClearMessagesForTopics(["a", "b"]).Should().Be(2);
+
+        var next = Message("a", 500);
+        store.Add("a", next);
+
+        next.ElapsedSinceBufferStart.Should().Be(TimeSpan.Zero);
+        next.SincePreviousAllTopics.Should().BeNull();
+        next.SincePreviousSameTopic.Should().BeNull();
+    }
+
+    [Test]
+    public void PartialBranchClearPreservesElapsedAndPredecessorHistory()
+    {
+        var store = CreateStore();
+        var first = Message("a", 100);
+        var removed = Message("b", 200);
+        var second = Message("a", 600);
+        store.Add("a", first);
+        store.Add("b", removed);
+        store.Add("a", second);
+
+        store.ClearMessagesForBranches([new TopicBranchTarget(TopicBranchKind.Raw, "b")])
+            .Should().Be(1);
+
+        second.ElapsedSinceBufferStart.Should().Be(TimeSpan.FromMilliseconds(500));
+        second.SincePreviousAllTopics.Should().Be(TimeSpan.FromMilliseconds(400));
+        second.SincePreviousSameTopic.Should().Be(TimeSpan.FromMilliseconds(500));
+
+        var next = Message("a", 900);
+        store.Add("a", next);
+
+        next.ElapsedSinceBufferStart.Should().Be(TimeSpan.FromMilliseconds(800));
+        next.SincePreviousAllTopics.Should().Be(TimeSpan.FromMilliseconds(300));
+        next.SincePreviousSameTopic.Should().Be(TimeSpan.FromMilliseconds(300));
+    }
+
+    [Test]
+    public void ClearingAnAlreadyEmptyBufferDoesNotResetTimingHistory()
+    {
+        var store = CreateStore(maxMessages: 0);
+        store.Add("a", Message("a", 100));
+        store.TotalStoredMessages.Should().Be(0);
+
+        store.ClearMessagesForBranches([new TopicBranchTarget(TopicBranchKind.Raw, "a")])
+            .Should().Be(0);
+
+        var next = Message("a", 300);
+        store.Add("a", next);
+
+        next.ElapsedSinceBufferStart.Should().Be(TimeSpan.FromMilliseconds(200));
+        next.SincePreviousAllTopics.Should().Be(TimeSpan.FromMilliseconds(200));
+        next.SincePreviousSameTopic.Should().Be(TimeSpan.FromMilliseconds(200));
+    }
+
+    [Test]
     public void ExcludePurgeDoesNotResetTimingHistory()
     {
         var store = CreateStore();

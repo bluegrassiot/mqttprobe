@@ -407,6 +407,44 @@ public class MessageTimeBrowserTests : BunitTestContext
     }
 
     [Test]
+    public void MultipleTopicSelection_ShowsItsLabelAlongsideTheTimeMenu()
+    {
+        _selection = new SelectedTopicState(
+            new SelectedTopicToken(_storeId, 1, 1), "multi:a\nb", 2, "2 topics selected")
+        {
+            Mode = TopicSelectionMode.MultipleTopics,
+            Paths = ImmutableArray.Create("a", "b")
+        };
+        _settings.Ui.MessageTime = new MessageTimePreferences { ClockFormat = MessageTimePreferences.ClockFormat12Hour };
+        _messages = [Message("first"), Message("second", 1_000)];
+
+        var (_, browser) = RenderBrowser();
+
+        Text(browser.Find(".payload-topic-title")).Should().Be("2 topics selected");
+        browser.Find("[data-time-header-meta]").Should().NotBeNull();
+        browser.Find("[data-time-mobile-readout]").Should().NotBeNull();
+        browser.Find("[data-time-trigger]").Should().NotBeNull();
+        RowTimes(browser).Should().OnlyContain(time => time.EndsWith(" AM") || time.EndsWith(" PM"));
+    }
+
+    [Test]
+    public void MultipleTopicSelection_WithNoMessages_KeepsTheSelectionLabelAndTimeMenu()
+    {
+        _selection = new SelectedTopicState(
+            new SelectedTopicToken(_storeId, 1, 0), "multi:a\nb", 0, "2 topics selected")
+        {
+            Mode = TopicSelectionMode.MultipleTopics,
+            Paths = ImmutableArray.Create("a", "b")
+        };
+
+        var (_, browser) = RenderBrowser();
+
+        Text(browser.Find(".payload-topic-title")).Should().Be("2 topics selected");
+        browser.Markup.Should().Contain("No stored messages for the selected topics");
+        browser.Find("[data-time-trigger]").Should().NotBeNull();
+    }
+
+    [Test]
     public void TimeMenuActivator_ExposesTheFullAccessibleName_AndOpensFromTheKeyboard()
     {
         _messages = [Message("first")];

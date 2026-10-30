@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MqttProbe.Core.Models.Chart;
+using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Plugins.Pipeline;
@@ -106,6 +107,8 @@ public class ChartDataService(
 
         _topicExcludeService.PurgeExcludedTopic += OnPurgeExcludedTopic;
         _topicExcludeService.TopicExcluded += OnTopicExcluded;
+        _topicExcludeService.PurgeExcludedSparkplug += OnPurgeExcludedSparkplug;
+        _topicExcludeService.SparkplugExcluded += OnSparkplugExcluded;
     }
 
     private void DetachExclusionHooks()
@@ -118,6 +121,8 @@ public class ChartDataService(
 
         _topicExcludeService.PurgeExcludedTopic -= OnPurgeExcludedTopic;
         _topicExcludeService.TopicExcluded -= OnTopicExcluded;
+        _topicExcludeService.PurgeExcludedSparkplug -= OnPurgeExcludedSparkplug;
+        _topicExcludeService.SparkplugExcluded -= OnSparkplugExcluded;
     }
 
     private Task MessageHandler(MqttApplicationMessageReceivedEventArgs e)
@@ -169,10 +174,15 @@ public class ChartDataService(
         return Task.CompletedTask;
     }
 
-    private void OnPurgeExcludedTopic(string filter)
-    {
-        var changed = PurgeChart(filter);
+    private void OnPurgeExcludedTopic(string filter) =>
+        MarkPurged(PurgeChart(topic => TopicExcludeService.Matches(topic, filter)));
 
+    private void OnPurgeExcludedSparkplug(SparkplugTopicExclude rule) =>
+        MarkPurged(PurgeChart(topic =>
+            TopicBranchMatcher.MatchesSparkplug(rule.Scope, rule.MessageType, topic)));
+
+    private void MarkPurged(bool changed)
+    {
         // Notification stays out of the purge itself: it runs while the exclude service
         // holds its locks. One coalesced flag is enough, and a purge whose observer never
         // runs cannot leave per-filter state behind to misfire on a later exclusion.
@@ -180,15 +190,14 @@ public class ChartDataService(
             Interlocked.Exchange(ref _purgedNotify, 1);
     }
 
-    private bool PurgeChart(string filter)
+    private bool PurgeChart(Func<string, bool> predicate)
     {
-        var changed = registry.RemoveMatchingTopic(filter);
+        var changed = registry.RemoveMatchingTopics(predicate);
         foreach (var config in chartSettings.GetCharts(_connectionId))
         {
             foreach (var series in config.Series)
             {
-                if (!TopicExcludeService.Matches(series.Topic, filter)
-                    || !_buffers.TryRemove(series.Id, out _))
+                if (!predicate(series.Topic) || !_buffers.TryRemove(series.Id, out _))
                     continue;
 
                 changed = true;
@@ -200,7 +209,11 @@ public class ChartDataService(
 
     // Runs right after the matching purge on the same thread, so consuming the flag here
     // notifies only when that purge actually changed chart state.
-    private void OnTopicExcluded(string filter)
+    private void OnTopicExcluded(string filter) => NotifyIfPurged();
+
+    private void OnSparkplugExcluded(SparkplugTopicExclude rule) => NotifyIfPurged();
+
+    private void NotifyIfPurged()
     {
         if (Interlocked.Exchange(ref _purgedNotify, 0) != 0)
             OnDataUpdated?.Invoke();

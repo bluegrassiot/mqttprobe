@@ -830,6 +830,24 @@ public class PayloadBrowserTests : BunitTestContext
     }
 
     [Test]
+    public void MultiTopicSelection_WithNoMessages_ShowsTheSelectedTopicsEmptyState()
+    {
+        _selection = new SelectedTopicState(
+            new SelectedTopicToken(_storeId, 1, 0), "multi:a\nb", 0, "2 topics selected")
+        {
+            Mode = TopicSelectionMode.MultipleTopics,
+            Paths = System.Collections.Immutable.ImmutableArray.Create("a", "b")
+        };
+        ReturnMessages([]);
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        cut.WaitForAssertion(() =>
+            cut.Markup.Should().Contain("No stored messages for the selected topics"));
+    }
+
+    [Test]
     public async Task SelectedMessage_WithJsonFormatId_StillShowsJsonContentChip()
     {
         var cut = Render<PayloadBrowser>();

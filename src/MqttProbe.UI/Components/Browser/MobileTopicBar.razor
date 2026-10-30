@@ -5,7 +5,12 @@
     <div class="mobile-topic-bar__info" role="button" tabindex="0"
          aria-label="@InfoLabel" aria-disabled="@(HasTopics ? null : "true")"
          @onclick="OpenPicker" @onkeydown="HandleInfoKeyDown">
-        @if (_selectedTopic is not null)
+        @if (BulkSelection is { HasSelection: true } bulk)
+        {
+            <MudIcon Icon="@LucideIcons.CheckCircle" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
+            <span class="mobile-topic-bar__name mobile-topic-bar__name--selection">@bulk.Summary</span>
+        }
+        else if (_selectedTopic is not null)
         {
             <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
             <span class="mobile-topic-bar__name" title="@_selectedTopic">@_selectedTopic</span>
@@ -36,12 +41,23 @@
     [Parameter] public bool HasTopics { get; set; }
     [Parameter] public EventCallback OnOpenPicker { get; set; }
 
+    [CascadingParameter] private TopicBulkSelection? BulkSelection { get; set; }
+
     private string? _selectedTopic;
     private int _messageCount;
     private Timer? _updateTimer;
     private bool _disposed;
 
-    private string InfoLabel => _selectedTopic is null ? "Choose a topic" : $"Change topic, current topic {_selectedTopic}";
+    private string InfoLabel
+    {
+        get
+        {
+            if (BulkSelection is { HasSelection: true } bulk)
+                return $"Change topics, {bulk.Summary}";
+
+            return _selectedTopic is null ? "Choose a topic" : $"Change topic, current topic {_selectedTopic}";
+        }
+    }
 
     private async Task HandleInfoKeyDown(KeyboardEventArgs e)
     {
@@ -56,6 +72,8 @@
     protected override void OnInitialized()
     {
         SyncFromManager();
+        if (BulkSelection is not null)
+            BulkSelection.Changed += OnBulkSelectionChanged;
         _updateTimer = new Timer(async _ =>
         {
             if (_disposed) return;
@@ -63,6 +81,8 @@
             await RequestRenderSafelyAsync();
         }, null, 0, 1_000);
     }
+
+    private void OnBulkSelectionChanged() => _ = RequestRenderSafelyAsync();
 
     private async Task RequestRenderSafelyAsync()
     {
@@ -92,6 +112,8 @@
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        if (BulkSelection is not null)
+            BulkSelection.Changed -= OnBulkSelectionChanged;
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();
     }

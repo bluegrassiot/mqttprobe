@@ -152,12 +152,35 @@ public sealed class TopicTreeProjectionTests
             "a collapsed literal tree must not be cloned node by node");
     }
 
+    [Test]
+    public void EveryProjectedRowCarriesItsBranchTarget()
+    {
+        var roots = ImmutableArray.Create(
+            Node("a", "a", children:
+            [
+                Node("b", "a/b", messageCount: 2, hasDirectMessages: true)
+            ]));
+
+        var rows = TopicTreeProjection.CreateRows(
+            roots, null, new HashSet<string> { "a" }, groupSparkplugTopics: false,
+            selectionPath: null, out _, selectionMode: true);
+
+        rows.Should().OnlyContain(row => row.Branch != null);
+        rows.Should().ContainSingle(row => row.FullPath == "a/b")
+            .Which.Branch.Path.Should().Be("a/b");
+        rows.Should().NotContain(row => row.Kind == TopicTreeRowKind.Spelling);
+    }
+
     private static TopicNodeSnapshot Node(
         string topic,
         string fullTopic,
         int topicCount = 1,
         int messageCount = 0,
         bool hasDirectMessages = false,
+        ImmutableArray<string> observedPaths = default,
         params TopicNodeSnapshot[] children) =>
-        new(topic, fullTopic, topicCount, messageCount, hasDirectMessages, children.ToImmutableArray());
+        new(topic, fullTopic, topicCount, messageCount, hasDirectMessages, children.ToImmutableArray())
+        {
+            ObservedTopicPaths = observedPaths.IsDefaultOrEmpty ? [] : observedPaths
+        };
 }

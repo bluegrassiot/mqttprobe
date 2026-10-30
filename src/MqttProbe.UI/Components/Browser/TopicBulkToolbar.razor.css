@@ -1,0 +1,132 @@
+.topic-bulk-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--mud-palette-primary) 7%, transparent);
+    flex-shrink: 0;
+}
+
+.topic-bulk-toolbar__summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 0 1 auto;
+}
+
+.topic-bulk-toolbar__count {
+    font-weight: 600;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.topic-bulk-toolbar__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+::deep .topic-bulk-toolbar__actions .mud-button-root {
+    min-height: 44px;
+    padding: 0 10px;
+}
+
+/* AA at normal size needs a darker red on the light surface and a lighter one on the dark. */
+.topic-bulk-toolbar--dark {
+    --topic-bulk-destructive: #F87171;
+    --topic-bulk-focus: #F1F5F9;
+}
+
+.topic-bulk-toolbar--light {
+    --topic-bulk-destructive: #B91C1C;
+    --topic-bulk-focus: #0F172A;
+}
+
+::deep .topic-bulk-toolbar__actions .topic-bulk-toolbar__clear-messages {
+    --mud-palette-error: var(--topic-bulk-destructive);
+}
+
+/* Light-surface primary labels need a darker orange; borders keep the app primary. */
+.topic-bulk-toolbar--light .topic-bulk-toolbar__actions ::deep .mud-button-outlined-primary:not(:disabled),
+.topic-bulk-toolbar--light .topic-bulk-toolbar__actions ::deep .mud-button-outlined-primary:not(:disabled):hover,
+.topic-bulk-toolbar--light .topic-bulk-toolbar__actions ::deep .mud-button-outlined-primary:not(:disabled):focus-visible {
+    color: #9A3412;
+}
+
+::deep .topic-bulk-toolbar__actions .mud-button-root:focus-visible {
+    outline: 2px solid var(--topic-bulk-focus);
+    outline-offset: 2px;
+}
+
+.topic-bulk-outcome {
+    flex-basis: 100%;
+    border-top: 1px dashed var(--mud-palette-lines-default);
+    padding-top: 6px;
+    margin-top: 2px;
+    font-size: 0.78rem;
+    min-width: 0;
+}
+
+.topic-bulk-outcome__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.topic-bulk-outcome__title {
+    font-weight: 600;
+}
+
+.topic-bulk-outcome__lines {
+    /* The only scroll owner in the outcome block: long full paths wrap instead of scrolling
+       sideways, and a long report scrolls vertically inside its own bounded box. */
+    margin: 2px 0 0;
+    padding-left: 18px;
+    max-height: 7.5rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overflow-wrap: anywhere;
+}
+
+.topic-bulk-outcome__lines li {
+    margin-bottom: 2px;
+}
+
+@media (max-width: 599.98px) {
+    .topic-bulk-toolbar {
+        padding: 6px 8px;
+    }
+
+    .topic-bulk-toolbar__actions {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    ::deep .topic-bulk-toolbar__actions .mud-button-root {
+        flex: 1 1 auto;
+    }
+}
+
+/* A short viewport has to keep room for the message list, so the report scrolls in a
+   smaller box and the toolbar tightens its spacing. */
+@media (max-height: 640px) {
+    .topic-bulk-toolbar {
+        gap: 4px 8px;
+        padding: 4px 8px;
+        margin-bottom: 6px;
+    }
+
+    .topic-bulk-outcome__lines {
+        max-height: 2.5rem;
+    }
+}

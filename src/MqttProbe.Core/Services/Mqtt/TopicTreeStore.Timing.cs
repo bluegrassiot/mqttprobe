@@ -33,6 +33,12 @@ internal sealed partial class TopicTreeStore
         _timingPreviousByTopic[topic] = received;
     }
 
+    private void ResetTimingIfBufferEmptied(int removed)
+    {
+        if (removed > 0 && _totalMessageCount == 0)
+            ResetTiming();
+    }
+
     private void ResetTiming()
     {
         _timingBufferStart = null;

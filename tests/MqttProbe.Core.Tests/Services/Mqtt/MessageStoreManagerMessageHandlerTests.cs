@@ -961,6 +961,79 @@ public partial class MessageStoreManagerMessageHandlerTests
     }
 
     [Test]
+    public async Task TopicExclusion_TypedNodePurgeKeepsEmptyVerbResidueAndRemovesDescendants()
+    {
+        var session = new SessionState { SelectedConnection = new Connection() };
+        using var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        var built = BuildManagerWithTopology(
+            Substitute.For<IUxMetricsService>(), new SparkplugTopologyService(), excludes: excludes);
+        using var manager = built.Manager;
+
+        await built.Fire(MakeArgs("spBv1.0/g//n", "residue"));
+        await built.Fire(MakeArgs("spBv1.0/g/NDATA/n", "node"));
+        await built.Fire(MakeArgs("spBv1.0/g/NDATA/n/extra", "descendant"));
+        await built.Fire(MakeArgs("spBv1.0/g/NDATA/n2", "sibling"));
+
+        var target = new TopicBranchTarget(TopicBranchKind.Sparkplug,
+            Scope: new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/g", "n"));
+        var result = await excludes.AddBranches([target], excludes.CaptureConnectionToken());
+
+        result.Results.Single().Outcome.Should().Be(TopicExcludeAddOutcome.Added);
+        (await MessageStoreReads.ReadMessagesAsync(manager, "spBv1.0/g//n", 10))
+            .Should().ContainSingle().Which.Payload.Should().Be("residue");
+        (await MessageStoreReads.ReadMessagesAsync(manager, "spBv1.0/g/NDATA/n", 10)).Should().BeEmpty();
+        (await MessageStoreReads.ReadMessagesAsync(manager, "spBv1.0/g/NDATA/n/extra", 10)).Should().BeEmpty();
+        (await MessageStoreReads.ReadMessagesAsync(manager, "spBv1.0/g/NDATA/n2", 10))
+            .Should().ContainSingle("the sibling node is outside the logical scope");
+    }
+
+    [Test]
+    public async Task TopicExclusion_TypedNodePurgeWaitsForInflightWriter()
+    {
+        var session = new SessionState { SelectedConnection = new Connection() };
+        using var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        var topology = new BarrierTopologyService();
+        var built = BuildManagerWithTopology(
+            Substitute.For<IUxMetricsService>(), topology, excludes: excludes);
+        using var manager = built.Manager;
+
+        const string topic = "spBv1.0/g/NBIRTH/n1";
+        var fireTask = built.Fire(MakeBinaryArgs(topic, SparkplugPayload()));
+        Task<TopicBranchExcludeBatchResult>? addTask = null;
+        var filterApplied = false;
+        var finishedWhileParked = false;
+        try
+        {
+            (await SatisfiesAsync(() => topology.Reached, TimeSpan.FromSeconds(5))).Should().BeTrue(
+                "the message has to be parked inside the exclusion read gate before Add starts");
+            var target = new TopicBranchTarget(TopicBranchKind.Sparkplug,
+                Scope: new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/g", "n1"));
+            addTask = excludes.AddBranches([target], excludes.CaptureConnectionToken());
+            filterApplied = await SatisfiesAsync(() => excludes.IsExcluded(topic), TimeSpan.FromSeconds(2));
+            finishedWhileParked = await SatisfiesAsync(
+                () => addTask.IsCompleted, TimeSpan.FromMilliseconds(250));
+        }
+        finally
+        {
+            topology.Release();
+        }
+
+        var result = await addTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        await fireTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        filterApplied.Should().BeTrue("the typed rule has to be live before the purge waits for readers");
+        finishedWhileParked.Should().BeFalse(
+            "the typed purge must not run while a matching message is still in flight");
+        result.Results.Single().Outcome.Should().Be(TopicExcludeAddOutcome.Added);
+        manager.RootTopicCount.Should().Be(0);
+        topology.Groups.Should().BeEmpty("the typed purge removes the matching topology node too");
+    }
+
+    [Test]
     public async Task MessageReceived_SubscriberAddsExclusion_CompletesWithoutDeadlock()
     {
         var client = Substitute.For<IMqttManagedClient>();
@@ -1305,7 +1378,13 @@ public partial class MessageStoreManagerMessageHandlerTests
 
         public int RemoveMatchingTopic(string filter) => _inner.RemoveMatchingTopic(filter);
 
+        public int RemoveMatchingTopics(Func<string, bool> predicate) =>
+            _inner.RemoveMatchingTopics(predicate);
+
         public int RemoveMatchingTopicSilent(string filter) => _inner.RemoveMatchingTopicSilent(filter);
+
+        public int RemoveMatchingTopicsSilent(Func<string, bool> predicate) =>
+            _inner.RemoveMatchingTopicsSilent(predicate);
 
         public void RaiseTopologyChanged() => _inner.RaiseTopologyChanged();
 

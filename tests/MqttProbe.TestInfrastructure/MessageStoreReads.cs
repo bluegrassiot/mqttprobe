@@ -13,9 +13,9 @@ public static class MessageStoreReads
         manager.SelectTopic(topic);
 
         var selection = manager.GetSelectedTopicState();
-        // Missing or invalid topics leave the previous selection active.
-        var normalizedTopic = string.Join('/', topic.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries));
-        if (!string.Equals(selection.Key, normalizedTopic, StringComparison.Ordinal))
+        // Missing or invalid topics leave the previous selection active; keys compare as published,
+        // so "a//b" and "a/b" stay distinct.
+        if (!string.Equals(selection.Key, topic, StringComparison.Ordinal))
             return [];
 
         var snapshot = await manager.GetSelectedMessagesAsync(selection.Token, limit);

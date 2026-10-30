@@ -16,16 +16,15 @@ Connect to any broker, browse/filter live topics, inspect payloads, chart payloa
 - Live topic tree
 - Payload browser
 - Native Decodable Payloads:
-  • JSON
-  • XML
-  • Plain text (UTF-8)
-  • MessagePack
-  • Sparkplug B
-  • Protobuf, when schemas and topic mappings are installed via plugins
-  • Hex-encoded text
-  • Base64-encoded text
-  • Binary, displayed as a hex dump
-  • Empty payloads
+  - JSON
+  - XML
+  - Plain text (UTF-8)
+  - MessagePack
+  - Sparkplug B
+  - Protobuf, when schemas and topic mappings are installed via plugins
+  - Hex-encoded text
+  - Base64-encoded text
+  - Binary, displayed as a hex dump
 - Extensible with plugins (payload formats, protobuf schemas)
 - Sparkplug B dashboard (with rebirth/reboot commands)
 - Sparkplug B EoN node and MQTT emulators

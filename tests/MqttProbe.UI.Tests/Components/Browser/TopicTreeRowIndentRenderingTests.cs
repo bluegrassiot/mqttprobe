@@ -19,15 +19,15 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
     private IRenderedComponent<TopicTreeRow> RenderRow(
         TopicTreeRowModel row,
         Action<string>? onExpandToggled = null,
-        Action<TopicSelection>? onSelected = null)
+        Action<TopicTreeRowModel>? onActivated = null)
     {
         Action<string> toggled = onExpandToggled ?? (_ => { });
-        Action<TopicSelection> selected = onSelected ?? (_ => { });
+        Action<TopicTreeRowModel> activated = onActivated ?? (_ => { });
 
         return Render<TopicTreeRow>(parameters => parameters
             .Add(component => component.Row, row)
             .Add(component => component.OnExpandToggled, toggled)
-            .Add(component => component.OnSelected, selected));
+            .Add(component => component.OnActivated, activated));
     }
 
     private static int ElementsIn(IRenderedComponent<TopicTreeRow> cut) =>
@@ -82,32 +82,38 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
     {
         var row = Row(1000, TopicTreeRowKind.Devices) with
         {
-            SelectionTopics = ["spBv1.0/plant1/node1/dev1", "spBv1.0/plant1/node1/dev2"],
+            TopicCount = 2,
+            Branch = new TopicBranchTarget(
+                TopicBranchKind.Sparkplug,
+                Scope: new SparkplugSelectionScope(SparkplugSelectionKind.Devices, "spBv1.0/plant1", "node1"))
         };
         string? toggled = null;
-        TopicSelection? selected = null;
-        var cut = RenderRow(row, path => toggled = path, request => selected = request);
+        TopicTreeRowModel? activated = null;
+        var cut = RenderRow(row, path => toggled = path, model => activated = model);
 
         cut.Find(".topic-tree-row").Click();
 
-        selected.Should().NotBeNull();
-        selected.Key.Should().Be(row.FullPath);
-        selected.Topics.Should().Equal(row.SelectionTopics);
+        activated.Should().BeSameAs(row);
+        row.ToSelection().Branches.Should().ContainSingle().Which.Should().Be(row.Branch);
         toggled.Should().BeNull("expansion belongs to the chevron");
     }
 
     [Test]
     public void DeepRealRowClickSelectsTheTopic()
     {
-        var row = Row(1000, TopicTreeRowKind.Topic);
-        TopicSelection? selected = null;
-        var cut = RenderRow(row, null, request => selected = request);
+        var row = Row(1000, TopicTreeRowKind.Topic) with
+        {
+            Branch = new TopicBranchTarget(
+                TopicBranchKind.Raw, Path: "spBv1.0/plant1/1000")
+        };
+        TopicTreeRowModel? activated = null;
+        var cut = RenderRow(row, null, model => activated = model);
 
         cut.Find(".topic-tree-row").Click();
 
-        selected.Should().NotBeNull();
-        selected.Key.Should().Be(row.FullPath);
-        selected.Topics.Should().Equal(row.FullPath);
+        activated.Should().BeSameAs(row);
+        row.ToSelection().Key.Should().Be("spBv1.0/plant1/1000");
+        row.ToSelection().Topics.Should().Equal("spBv1.0/plant1/1000");
     }
 
     [Test]
@@ -127,7 +133,7 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
     {
         var cut = RenderRow(Row(1000, TopicTreeRowKind.Devices) with
         {
-            SelectionTopics = ["spBv1.0/plant1/node1/dev1", "spBv1.0/plant1/node1/dev2"],
+            TopicCount = 2,
         });
 
         cut.Find(".topic-tree-row").GetAttribute("title")

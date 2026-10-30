@@ -155,13 +155,13 @@ public class TopicBrowserGroupingTests : BunitTestContext
         RowWith(cut, "node1").Click();
 
         _fixture.Adapter.Selections.Should().ContainSingle();
-        _fixture.Adapter.Selections[0]!.Topics.Should().BeEquivalentTo(
-        [
-            NodeTip,
-            "spBv1.0/plant1/NBIRTH/node1",
-            DeviceTip
-        ]);
+        var request = _fixture.Adapter.Selections[0]!;
+        request.Mode.Should().Be(TopicSelectionMode.Branches);
+        request.Branches.Should().ContainSingle().Which.Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"));
         callbackState.Should().NotBeNull();
+        callbackState!.MessageCount.Should().Be(6,
+            "the node scope covers every verb, device and future member");
         cut.Markup.Should().Contain("NDATA", "the click selected rather than collapsed");
     }
 
@@ -173,7 +173,8 @@ public class TopicBrowserGroupingTests : BunitTestContext
         RowWith(cut, "dev1").Click();
 
         _fixture.Adapter.Selections.Should().ContainSingle();
-        _fixture.Adapter.Selections[0]!.Topics.Should().BeEquivalentTo([DeviceTip]);
+        _fixture.Adapter.Selections[0]!.Branches.Should().ContainSingle().Which.Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Device, "spBv1.0/plant1", "node1", "dev1"));
     }
 
     [Test]
@@ -184,7 +185,10 @@ public class TopicBrowserGroupingTests : BunitTestContext
         RowWith(cut, "NBIRTH").Click();
 
         _fixture.Adapter.Selections.Should().ContainSingle();
-        _fixture.Adapter.Selections[0]!.Topics.Should().BeEquivalentTo(["spBv1.0/plant1/NBIRTH/node1"]);
+        var branch = _fixture.Adapter.Selections[0]!.Branches.Should().ContainSingle().Which;
+        branch.Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"));
+        branch.MessageType.Should().Be("NBIRTH");
     }
 
     [Test]
@@ -227,6 +231,43 @@ public class TopicBrowserGroupingTests : BunitTestContext
             cut.Markup.Should().NotContain(NodeTip);
         });
     }
+
+    [Test]
+    public void ARawVerbBranch_KeepsItsMessages_AndChecksTheGroupedTypeRowItCovers()
+    {
+        var cut = RenderGrouped(grouped: false);
+        cut.Find(".topic-select-toggle").Click();
+        cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().NotBeEmpty());
+
+        RowByPath(cut, "spBv1.0/plant1/NDATA").QuerySelector(".topic-select-checkbox input")!.Change(true);
+
+        var selected = _fixture.Adapter.Store.GetSelectedTopicState();
+        selected.Branches.Should().ContainSingle().Which.Path.Should().Be("spBv1.0/plant1/NDATA");
+        selected.MessageCount.Should().Be(3);
+
+        ApplyPreference(true);
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Grouped by node and device"));
+        ExpandAll(cut);
+        var after = _fixture.Adapter.Store.GetSelectedTopicState();
+        after.Branches.Should().ContainSingle().Which.Path.Should().Be("spBv1.0/plant1/NDATA",
+            "changing the presentation does not drop the selection");
+        _fixture.Adapter.Store.GetSelectedMessages(after.Token, 10)!.Messages.Should().HaveCount(3,
+            "the messages stay selected");
+
+        RowByLabel(cut, "NDATA").QuerySelector(".topic-select-checkbox input[checked]").Should().NotBeNull(
+            "every topic the NDATA row names is under the selected verb row");
+        RowByLabel(cut, "node1").QuerySelector(".topic-select-checkbox .mud-checkbox-null").Should().NotBeNull(
+            "the node row also names other verbs, so it is only partly selected");
+        RowByLabel(cut, "NBIRTH").QuerySelector(".topic-select-checkbox input[checked]").Should().BeNull();
+    }
+
+    private static IElement RowByPath(IRenderedComponent<TopicBrowser> cut, string path) =>
+        cut.FindAll(".topic-tree-row").First(row => row.GetAttribute("data-topic-path") == path);
+
+    private static IElement RowByLabel(IRenderedComponent<TopicBrowser> cut, string label) =>
+        cut.FindAll(".topic-tree-row")
+            .First(row => row.QuerySelector(".topic-name")?.TextContent.Trim() == label);
 
     [Test]
     public void UnrelatedPreferenceChange_DoesNotRegroupTheTree()

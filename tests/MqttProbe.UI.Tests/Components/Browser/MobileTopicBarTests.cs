@@ -144,7 +144,7 @@ public class MobileTopicBarTests : BunitTestContext
     {
         var started = false;
         var selection = new TopicBulkSelection(TopicTreeSelectionTestAdapter.Create());
-        selection.Enter(["sensors/temp", "sensors/humidity"]);
+        selection.Enter([Raw("sensors/temp"), Raw("sensors/humidity")]);
 
         var cut = Render<MobileTopicBar>(p => p
             .AddCascadingValue(selection)
@@ -184,7 +184,7 @@ public class MobileTopicBarTests : BunitTestContext
     public void InfoArea_InSelectionMode_NamesTheSelection()
     {
         var selection = new TopicBulkSelection(TopicTreeSelectionTestAdapter.Create());
-        selection.Enter(["sensors/temp", "sensors/humidity"]);
+        selection.Enter([Raw("sensors/temp"), Raw("sensors/humidity")]);
 
         var cut = Render<MobileTopicBar>(p => p
             .AddCascadingValue(selection)
@@ -236,4 +236,6 @@ public class MobileTopicBarTests : BunitTestContext
 
         opened.Should().BeFalse();
     }
+
+    private static TopicBranchTarget Raw(string path) => new(TopicBranchKind.Raw, Path: path);
 }

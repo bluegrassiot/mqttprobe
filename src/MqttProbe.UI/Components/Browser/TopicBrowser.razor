@@ -32,7 +32,7 @@
         </MudButton>
     </div>
     <div class="topic-filter-wrap">
-        <MudTextField @bind-Value="_searchFilter" @bind-Value:after="OnSearchChanged"
+        <MudTextField @ref="_filterField" @bind-Value="_searchFilter" @bind-Value:after="OnSearchChanged"
                       Placeholder="Filter&hellip;"
                       Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
                       Immediate="true" Clearable="true" Variant="Variant.Outlined"
@@ -130,9 +130,10 @@
                 <Virtualize Items="@_visibleRows" Context="row" ItemSize="@EffectiveRowHeight">
                     <TopicTreeRow @key="row.RowKey" Row="row" IsSelected="@IsRowSelected(row)"
                                   IsSelectionMode="_bulkSelection.IsActive"
-                                  IsChecked="@IsBulkChecked(row)"
+                                  SelectionState="@SelectionStateOf(row)"
+                                  InheritedSelectionLabel="@InheritedSelectionLabel(row)"
                                   IsTabStop="@IsActiveRow(row)"
-                                  OnExpandToggled="ToggleExpand" OnSelected="OnRowSelected"
+                                  OnExpandToggled="ToggleExpand" OnActivated="OnRowSelected"
                                   OnSelectionToggled="ToggleRowSelection"
                                   OnKeyPressed="args => OnRowKeyPressed(row, args)"
                                   OnFocused="OnRowFocused"/>
@@ -253,21 +254,35 @@
     private TopicSelectionFrame? RefreshFrame(bool force)
     {
         ReconcileBulkSelection();
-        IReadOnlyList<string>? selectionPaths = _bulkSelection.IsActive ? _bulkSelection.Paths : null;
         return _selectionSession!.Refresh(_searchFilter, _expandedPaths, _groupSparkplugTopics, force,
-            selectionPaths, _bulkSelection.IsActive);
+            _bulkSelection.IsActive);
     }
 
-    // A selection that outlived its rows would keep filtering on a topic nobody can see. Survivors
-    // stay checked, and losing every path clears the filter instead of holding the old union.
     private void ReconcileBulkSelection()
     {
         if (!_bulkSelection.HasSelection)
             return;
 
         var roots = TopicSelectionStore.GetTopicTreeSnapshot().Roots;
-        _bulkSelection.Reconcile(path =>
-            TopicTreeProjection.RepresentsObservedPath(roots, _groupSparkplugTopics, path));
+        _bulkSelection.Reconcile(target => ContainsBranch(roots, target));
+    }
+
+    private static bool ContainsBranch(
+        ImmutableArray<TopicNodeSnapshot> nodes, TopicBranchTarget target)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.FullTopic is { } path
+                && (TopicBranchMatcher.Matches(target, path)
+                    || (target.Kind == TopicBranchKind.Raw
+                        && string.Equals(path, target.Path, StringComparison.Ordinal))))
+                return true;
+
+            if (ContainsBranch(node.Children, target))
+                return true;
+        }
+
+        return false;
     }
 
     internal async Task RefreshAsync()
@@ -290,10 +305,27 @@
     }
 
     private bool IsRowSelected(TopicTreeRowModel row) =>
-        string.Equals(row.FullPath, _selectedKey, StringComparison.Ordinal);
+        _selectedBranches.Contains(row.Branch)
+        || string.Equals(row.FullPath, _selectedKey, StringComparison.Ordinal);
 
-    private bool IsBulkChecked(TopicTreeRowModel row) =>
-        row.IsBulkSelectable && _bulkSelection.ContainsAll(row.SelectionPaths);
+    // A row checked only through a branch above it is not its own target, so its checkbox is
+    // read-only and names the branch that covers it.
+    private string? InheritedSelectionLabel(TopicTreeRowModel row) =>
+        _bulkSelection.IsActive && !_bulkSelection.Contains(row.Branch)
+            ? _bulkSelection.CoveringLabel(row.Branch)
+            : null;
+
+    private TopicTreeSelectionState SelectionStateOf(TopicTreeRowModel row)
+    {
+        var branches = _bulkSelection.Branches;
+        if (branches.Any(selected => TopicBranchTargetRelations.Covers(selected, row.Branch)))
+            return TopicTreeSelectionState.Checked;
+        if (branches.Any(selected =>
+                TopicBranchTargetRelations.IsUnder(selected, row.Branch)
+                || TopicBranchTargetRelations.PartiallyOverlaps(selected, row.Branch)))
+            return TopicTreeSelectionState.Mixed;
+        return TopicTreeSelectionState.Unchecked;
+    }
 
     private void OnSearchChanged()
     {
@@ -324,23 +356,22 @@
         _bulkSelection.Enter(ConcreteSelectionSeed());
     }
 
-    // Entering the mode from a concrete topic keeps that topic checked; a grouping or parent row
-    // is not a concrete topic, so the mode starts from an empty filter instead.
-    private ImmutableArray<string> ConcreteSelectionSeed() =>
-        _selectedKey is { } key
-        && _visibleRows.FirstOrDefault(row => row.IsBulkSelectable
-            && (row.SelectionPaths.Contains(key, StringComparer.Ordinal)
-                || string.Equals(row.FullPath, key, StringComparison.Ordinal))) is { } row
-            ? row.SelectionPaths
-            : [];
+    private ImmutableArray<TopicBranchTarget> ConcreteSelectionSeed() => _selectedBranches;
 
-    private void ToggleRowSelection(ImmutableArray<string> paths) => _bulkSelection.ToggleAll(paths);
-
-    private async Task OnRowSelected(TopicSelection request)
+    private void ToggleRowSelection(TopicTreeRowModel row)
     {
+        if (InheritedSelectionLabel(row) is not null)
+            return;
+
+        _bulkSelection.Toggle(row.Branch);
+    }
+
+    private async Task OnRowSelected(TopicTreeRowModel row)
+    {
+        var request = row.ToSelection();
         if (_selectionSession!.Select(request) is null) return;
-        _activeKey = request.Key;
-        _focusedKey = request.Key;
+        _activeKey = row.RowKey;
+        _focusedKey = row.RowKey;
         var frame = BuildVisibleRows();
         StateHasChanged();
         if (frame is not null

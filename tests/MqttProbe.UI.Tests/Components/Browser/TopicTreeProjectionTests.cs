@@ -153,51 +153,22 @@ public sealed class TopicTreeProjectionTests
     }
 
     [Test]
-    public void SelectionMode_SplitsSpellingsOfOneLeafIntoIndependentExactRows()
+    public void EveryProjectedRowCarriesItsBranchTarget()
     {
         var roots = ImmutableArray.Create(
             Node("a", "a", children:
             [
-                Node("b", "a/b", messageCount: 2, hasDirectMessages: true,
-                    observedPaths: ["a/b", "a//b"])
+                Node("b", "a/b", messageCount: 2, hasDirectMessages: true)
             ]));
 
-        var normal = TopicTreeProjection.CreateRows(
-            roots, null, new HashSet<string> { "a" }, groupSparkplugTopics: false);
-        normal.Should().ContainSingle(row => row.FullPath == "a/b")
-            .Which.IsBulkSelectable.Should().BeTrue();
-
-        var bulk = TopicTreeProjection.CreateRows(
+        var rows = TopicTreeProjection.CreateRows(
             roots, null, new HashSet<string> { "a" }, groupSparkplugTopics: false,
             selectionPath: null, out _, selectionMode: true);
 
-        var spellings = bulk.Where(row => row.Kind == TopicTreeRowKind.Spelling).ToList();
-        spellings.Select(row => row.FullPath).Should().Equal("a//b", "a/b");
-        spellings.Should().OnlyContain(row => row.IsBulkSelectable && row.SelectionPaths.Length == 1);
-        spellings.Select(row => row.Depth).Should().OnlyContain(depth => depth == 1);
-        spellings.Should().NotContain(row => row.FullPath == "a/b" && row.HasChildren);
-    }
-
-    [Test]
-    public void SelectionMode_KeepsTheNodeRowForStructureWhenItHasChildren()
-    {
-        var roots = ImmutableArray.Create(
-            Node("a", "a", children:
-            [
-                Node("b", "a/b", messageCount: 2, hasDirectMessages: true,
-                    observedPaths: ["a/b", "a//b"],
-                    children: [Node("c", "a/b/c")])
-            ]));
-
-        var bulk = TopicTreeProjection.CreateRows(
-            roots, null, new HashSet<string> { "a", "a/b" }, groupSparkplugTopics: false,
-            selectionPath: null, out _, selectionMode: true);
-
-        var parent = bulk.Single(row => row.FullPath == "a/b" && row.Kind == TopicTreeRowKind.Topic);
-        parent.IsBulkSelectable.Should().BeFalse("a node with several spellings is not a bulk target");
-        parent.HasChildren.Should().BeTrue();
-        bulk.Where(row => row.Kind == TopicTreeRowKind.Spelling)
-            .Select(row => row.FullPath).Should().Equal("a//b", "a/b");
+        rows.Should().OnlyContain(row => row.Branch != null);
+        rows.Should().ContainSingle(row => row.FullPath == "a/b")
+            .Which.Branch.Path.Should().Be("a/b");
+        rows.Should().NotContain(row => row.Kind == TopicTreeRowKind.Spelling);
     }
 
     private static TopicNodeSnapshot Node(

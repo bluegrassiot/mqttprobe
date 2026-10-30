@@ -65,14 +65,22 @@
     flex: 0 0 auto;
     min-width: 44px;
     min-height: 44px;
-    margin: 0 2px 0 0;
+    margin: 0;
     padding: 0;
 }
 
-/* The checkbox keeps its own 44px target; this wrapper only owns the stop for its keys. */
 .topic-select-checkbox-wrap {
     display: flex;
-    flex: 0 0 auto;
+    flex: 0 0 44px;
+    align-items: center;
+    justify-content: center;
+}
+
+/* A row checked only through a branch above it cannot be toggled on its own, so the control
+   reads as fixed rather than as a disabled choice the user could re-enable. */
+.topic-select-checkbox-wrap--inherited {
+    cursor: default;
+    opacity: 0.7;
 }
 
 .topic-tree-row ::deep .topic-select-checkbox .mud-button-root {
@@ -95,7 +103,8 @@
     border: 0;
 }
 
-/* Grouping rows are navigation, not topics, so they get a default cursor. */.topic-tree-row.topic-tree-row--group {
+/* Grouping rows are navigation, not topics, so they get a default cursor. */
+.topic-tree-row.topic-tree-row--group {
     cursor: default;
 }
 
@@ -108,11 +117,11 @@
     border-bottom: 1px dotted rgba(148, 163, 184, 0.55);
 }
 
-/* An exact spelling row shows the whole raw path so two spellings of one node never look
-   identical; the name still ellipsizes instead of widening the pane. */
-.topic-tree-row .topic-name--spelling {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
+/* An empty MQTT level has no text of its own, so the row names it and the title carries the
+   raw path. */
+.topic-tree-row .topic-name--empty {
+    color: var(--mud-palette-text-secondary);
+    font-style: italic;
 }
 
 /* The name cell grows; only the name itself truncates, so a long value ellipsizes without
@@ -138,19 +147,5 @@
     white-space: nowrap;
     flex-shrink: 0;
     margin-left: 8px;
-    cursor: default;
-}
-
-/* Only a node that was reached by more than one exact spelling shows this badge; each spelling is
-   its own selectable row, so the badge explains why the node itself has no checkbox. */
-.topic-spelling-badge {
-    flex: 0 0 auto;
-    margin-left: 4px;
-    padding: 0 6px;
-    border: 1px solid var(--mud-palette-lines-default);
-    border-radius: 999px;
-    font-size: 0.62rem;
-    opacity: 0.8;
-    white-space: nowrap;
     cursor: default;
 }

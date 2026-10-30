@@ -18,8 +18,10 @@
                                 OnRemove="HandleRemove" />
 
             <ExcludeEditor Items="@TopicExcludeService.TopicExcludes"
+                           SparkplugItems="@TopicExcludeService.SparkplugExcludes"
                            OnAdd="HandleExcludeAdd"
-                           OnRemove="HandleExcludeRemove" />
+                           OnRemove="HandleExcludeRemove"
+                           OnRemoveSparkplug="HandleSparkplugExcludeRemove" />
         </Authorized>
         <NotAuthorized>
             <SubscriptionEditor Items="@SubscriptionManager.Subscriptions"
@@ -30,20 +32,25 @@
                                 OnRemove="HandleRemove" />
 
             <ExcludeEditor Items="@TopicExcludeService.TopicExcludes"
+                           SparkplugItems="@TopicExcludeService.SparkplugExcludes"
                            Disabled="true"
                            OnAdd="HandleExcludeAdd"
-                           OnRemove="HandleExcludeRemove" />
+                           OnRemove="HandleExcludeRemove"
+                           OnRemoveSparkplug="HandleSparkplugExcludeRemove" />
         </NotAuthorized>
     </AuthorizeView>
 </div>
 
 @code {
     private Action<string>? _exclusionAdded;
+    private Action<SparkplugTopicExclude>? _sparkplugExclusionAdded;
 
     protected override void OnInitialized()
     {
         _exclusionAdded = topic => _ = InvokeAsync(StateHasChanged);
+        _sparkplugExclusionAdded = exclude => _ = InvokeAsync(StateHasChanged);
         TopicExcludeService.TopicExcluded += _exclusionAdded;
+        TopicExcludeService.SparkplugExcluded += _sparkplugExclusionAdded;
     }
 
     // The browser can add exclusions while this panel is kept alive on another tab, so the
@@ -52,6 +59,8 @@
     {
         if (_exclusionAdded is not null)
             TopicExcludeService.TopicExcluded -= _exclusionAdded;
+        if (_sparkplugExclusionAdded is not null)
+            TopicExcludeService.SparkplugExcluded -= _sparkplugExclusionAdded;
     }
 
     private async Task HandleAdd((string Topic, MqttQualityOfServiceLevel Qos) request)
@@ -121,6 +130,26 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to remove excludes: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task HandleSparkplugExcludeRemove(SparkplugTopicExclude exclude)
+    {
+        try
+        {
+            var target = new TopicBranchTarget(
+                TopicBranchKind.Sparkplug, Scope: exclude.Scope, MessageType: exclude.MessageType);
+            var result = await TopicExcludeService.RemoveBranches([target]);
+            if (!result.IsValid && result.Feedback is { } feedback)
+                ShowExcludeFeedback(feedback);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to remove Sparkplug exclusion: {ex.Message}", Severity.Error);
         }
         finally
         {

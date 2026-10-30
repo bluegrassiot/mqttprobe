@@ -48,7 +48,6 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
         IReadOnlySet<string> expandedPaths,
         bool grouped,
         bool force = false,
-        IReadOnlyList<string>? selectionPaths = null,
         bool selectionMode = false)
     {
         var snapshot = store.GetTopicTreeSnapshot();
@@ -67,17 +66,19 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
             rows = TopicTreeProjection.CreateRows(
                 snapshot.Roots, filter, expandedPaths, grouped,
                 selectionPath: null, out _, selectionMode: true);
-            selectionRepresented = selectionPaths is not { Count: > 0 }
-                || selectionPaths.Any(path =>
-                    TopicTreeProjection.RepresentsObservedPath(snapshot.Roots, grouped, path));
+            selectionRepresented = true;
         }
         else
         {
+            // Only a single-topic key names a real path. A branch or multi key is an identity,
+            // so treating it as a path would find no row and clear a live selection.
+            var selectionPath = selection.Mode == TopicSelectionMode.SingleTopic ? selection.Key : null;
             rows = TopicTreeProjection.CreateRows(
-                snapshot.Roots, filter, expandedPaths, grouped, selection.Key, out selectionRepresented);
+                snapshot.Roots, filter, expandedPaths, grouped, selectionPath, out selectionRepresented);
         }
 
-        if (selection.Key is not null && !selectionRepresented)
+        if (selection.Mode == TopicSelectionMode.SingleTopic
+            && selection.Key is not null && !selectionRepresented)
         {
             if (!store.TryClearSelection(snapshot.Version, selection))
                 return null;

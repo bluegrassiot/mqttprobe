@@ -1,5 +1,4 @@
 @using Microsoft.AspNetCore.Components.Authorization
-@using System.Collections.Immutable
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject ITopicExcludeService ExcludeService
@@ -99,10 +98,11 @@
 
     private async Task ConfirmExcludeAsync()
     {
-        var targets = Selection.Paths;
+        var targets = Selection.Branches;
         if (targets.IsDefaultOrEmpty)
             return;
 
+        var token = ExcludeService.CaptureConnectionToken();
         var parameters = new DialogParameters<ExcludeTopicsDialog>
         {
             { dialog => dialog.Topics, targets }
@@ -116,31 +116,34 @@
                 CloseOnEscapeKey = true
             });
         var result = await dialog.Result;
-        if (result is not { Canceled: false, Data: ImmutableArray<string> confirmed } || confirmed.IsDefaultOrEmpty)
+        if (result is not { Canceled: false, Data: IReadOnlyList<TopicBranchTarget> confirmed }
+            || confirmed.Count == 0)
             return;
 
-        await ApplyExcludesAsync(confirmed);
+        await ApplyExcludesAsync(confirmed, token);
     }
 
-    private async Task ApplyExcludesAsync(ImmutableArray<string> targets)
+    private async Task ApplyExcludesAsync(
+        IReadOnlyList<TopicBranchTarget> targets, TopicExcludeConnectionToken token)
     {
-        var batch = await ExcludeService.AddMany(targets);
-        var added = batch.AddedTopics.ToList();
+        var batch = await ExcludeService.AddBranches(targets, token);
+        var added = batch.AddedTargets.ToList();
         var purgeFailures = batch.Results
             .Where(result => result.Outcome == TopicExcludeAddOutcome.AppliedWithPurgeFailure)
             .ToList();
         var already = batch.Results
             .Where(result => result.Outcome == TopicExcludeAddOutcome.AlreadyExcluded)
-            .Select(result => result.Topic)
+            .Select(result => result.Target)
             .ToList();
         var failed = batch.Results
             .Where(result => result.Outcome is TopicExcludeAddOutcome.LimitReached
                 or TopicExcludeAddOutcome.Invalid
-                or TopicExcludeAddOutcome.Failed)
+                or TopicExcludeAddOutcome.Failed
+                or TopicExcludeAddOutcome.ConnectionChanged)
             .Select(DescribeFailure)
             .ToList();
 
-        var handled = batch.AppliedTopics.Concat(already).ToList();
+        var handled = batch.AppliedTargets.Concat(already).ToList();
         if (handled.Count > 0)
             Selection.Remove(handled);
 
@@ -150,17 +153,17 @@
         Severity severity;
         if (failed.Count > 0)
         {
-            message = $"Excluded {batch.AppliedTopics.Length} of {targets.Length} topics. See the report for the rest.";
+            message = $"Excluded {batch.AppliedTargets.Length} of {targets.Count} topics. See the report for the rest.";
             severity = Severity.Warning;
         }
         else if (purgeFailures.Count > 0)
         {
-            message = $"Excluded {batch.AppliedTopics.Length} topics. Stored history cleanup did not finish.";
+            message = $"Excluded {batch.AppliedTargets.Length} topics. Stored history cleanup did not finish.";
             severity = Severity.Warning;
         }
         else
         {
-            message = $"Excluded {batch.AppliedTopics.Length} topics.";
+            message = $"Excluded {batch.AppliedTargets.Length} topics.";
             severity = Severity.Success;
         }
 
@@ -168,32 +171,35 @@
         StateHasChanged();
     }
 
-    private static string DescribeFailure(TopicExcludeAddResult result) => result.Outcome switch
+    private static string DescribeFailure(TopicBranchExcludeResult result) => result.Outcome switch
     {
-        TopicExcludeAddOutcome.LimitReached => $"{result.Topic}: limit reached",
-        _ when result.Feedback is { Message.Length: > 0 } feedback => $"{result.Topic}: {feedback.Message}",
-        _ => $"{result.Topic}: not added"
+        TopicExcludeAddOutcome.LimitReached => $"{TopicBranchTargetDisplay.Label(result.Target)}: limit reached",
+        TopicExcludeAddOutcome.ConnectionChanged =>
+            $"{TopicBranchTargetDisplay.Label(result.Target)}: connection changed",
+        _ when result.Feedback is { Message.Length: > 0 } feedback =>
+            $"{TopicBranchTargetDisplay.Label(result.Target)}: {feedback.Message}",
+        _ => $"{TopicBranchTargetDisplay.Label(result.Target)}: not added"
     };
 
-    private static string DescribePurgeFailure(TopicExcludeAddResult result) =>
+    private static string DescribePurgeFailure(TopicBranchExcludeResult result) =>
         result.Feedback is { Message.Length: > 0 } feedback
-            ? $"{result.Topic}: {feedback.Message}"
-            : $"{result.Topic}: stored history was not cleaned up";
+            ? $"{TopicBranchTargetDisplay.Label(result.Target)}: {feedback.Message}"
+            : $"{TopicBranchTargetDisplay.Label(result.Target)}: stored history was not cleaned up";
 
     private static List<string> BuildExcludeLines(
-        IReadOnlyCollection<string> added,
-        IReadOnlyCollection<TopicExcludeAddResult> purgeFailures,
-        IReadOnlyCollection<string> already,
+        IReadOnlyCollection<TopicBranchTarget> added,
+        IReadOnlyCollection<TopicBranchExcludeResult> purgeFailures,
+        IReadOnlyCollection<TopicBranchTarget> already,
         IReadOnlyCollection<string> failed)
     {
         var lines = new List<string>();
         if (added.Count > 0)
-            lines.Add($"Excluded ({added.Count}): {string.Join(", ", added)}");
+            lines.Add($"Excluded ({added.Count}): {string.Join(", ", added.Select(TopicBranchTargetDisplay.Label))}");
         if (purgeFailures.Count > 0)
             lines.Add("Excluded, history cleanup incomplete " +
                 $"({purgeFailures.Count}): {string.Join(", ", purgeFailures.Select(DescribePurgeFailure))}");
         if (already.Count > 0)
-            lines.Add($"Already excluded ({already.Count}): {string.Join(", ", already)}");
+            lines.Add($"Already excluded ({already.Count}): {string.Join(", ", already.Select(TopicBranchTargetDisplay.Label))}");
         if (failed.Count > 0)
             lines.Add($"Not added ({failed.Count}): {string.Join(", ", failed)}");
 
@@ -202,10 +208,13 @@
 
     private async Task ConfirmClearMessagesAsync()
     {
-        var targets = Selection.Paths;
+        var targets = Selection.Branches;
         if (targets.IsDefaultOrEmpty)
             return;
 
+        // The exclusion service owns the connection generation, so this token also rejects a
+        // confirmation that comes back to the connection it started on.
+        var token = ExcludeService.CaptureConnectionToken();
         var parameters = new DialogParameters<ClearSelectedMessagesDialog>
         {
             { dialog => dialog.Topics, targets }
@@ -219,16 +228,27 @@
                 CloseOnEscapeKey = true
             });
         var result = await dialog.Result;
-        if (result is not { Canceled: false, Data: ImmutableArray<string> confirmed } || confirmed.IsDefaultOrEmpty)
+        if (result is not { Canceled: false, Data: IReadOnlyList<TopicBranchTarget> confirmed }
+            || confirmed.Count == 0)
             return;
 
-        var cleared = await MessageStoreManager.ClearMessagesForTopicsAsync(confirmed);
-        Selection.NotifyMessagesCleared(confirmed);
+        // The store applies the same token, so a connection that changed while the dialog was
+        // open leaves the new connection's messages untouched.
+        var cleared = await MessageStoreManager.ClearMessagesForBranchesAsync(confirmed, token);
+        if (!cleared.Applied)
+        {
+            _outcome = new BulkOutcome("Clear cancelled",
+                ["The connection changed before the clear was confirmed. Nothing was cleared."]);
+            Snackbar.Add("The connection changed. Nothing was cleared.", Severity.Warning);
+            StateHasChanged();
+            return;
+        }
+
+        Selection.NotifyMessagesCleared([.. confirmed]);
         _outcome = new BulkOutcome("Clear finished", [
-            $"{cleared:N0} stored {(cleared == 1 ? "message" : "messages")} cleared from {TopicCount(confirmed.Length)}.",
-            "Selected topics stay selected."
+            $"{cleared.ClearedMessages:N0} stored {(cleared.ClearedMessages == 1 ? "message" : "messages")} cleared from {TopicCount(confirmed.Count)}.",
+            "Topics left with no messages are removed from the tree."
         ]);
-        Snackbar.Add($"Cleared {cleared:N0} stored messages.", Severity.Success);
         StateHasChanged();
     }
 

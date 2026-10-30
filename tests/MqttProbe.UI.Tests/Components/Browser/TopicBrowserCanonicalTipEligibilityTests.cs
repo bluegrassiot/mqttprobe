@@ -115,32 +115,32 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
     }
 
     [Test]
-    public async Task AliasPublishedTopicIsStoredOnTheSupportedPathButNeverGrouped()
+    public async Task EmptyLevelPublishedTopicKeepsItsOwnPathAndIsNeverGrouped()
     {
         await PublishAsync(AliasNodeTip, "alias-node-value");
 
         var snapshot = _manager.GetTopicTreeSnapshot();
         snapshot.Roots.Should().ContainSingle();
-        var normalizedTip = FindNode(snapshot.Roots.Single(), "spBv1.0/plant1/NDATA/node1");
-        normalizedTip.HasObservedDirectTopic.Should().BeTrue("a message was accepted at this node");
-        normalizedTip.HasObservedCanonicalTopic.Should().BeFalse(
-            "the published spelling was an alias, not the node's own path");
+        var aliasTip = FindNode(snapshot.Roots.Single(), AliasNodeTip);
+        aliasTip.HasObservedDirectTopic.Should().BeTrue("a message was accepted at this node");
+        Descendant(snapshot.Roots.Single(), CanonicalNodeTip).Should().BeNull(
+            "the empty level is not the canonical node");
 
         var cut = await RenderGrouped();
 
         Labels(cut).Should().Contain(text => text.Contains("node1", StringComparison.Ordinal));
-        cut.FindAll(".topic-tree-row--group").Should().BeEmpty("no grouping row is invented for an alias tip");
+        cut.FindAll(".topic-tree-row--group").Should().BeEmpty("no grouping row is invented for an empty level");
         cut.FindAll(".topic-grouping-flag").Should().NotBeEmpty();
     }
 
     [Test]
-    public async Task AliasPublishedDeviceTopicIsNeverGrouped()
+    public async Task EmptyLevelPublishedDeviceTopicIsNeverGrouped()
     {
         await PublishAsync(AliasDeviceTip, "alias-device-value");
 
         var snapshot = _manager.GetTopicTreeSnapshot();
-        FindNode(snapshot.Roots.Single(), "spBv1.0/plant1/DDATA/node1/dev1")
-            .HasObservedCanonicalTopic.Should().BeFalse();
+        Descendant(snapshot.Roots.Single(), "spBv1.0/plant1/DDATA/node1/dev1").Should().BeNull(
+            "the empty level is not the canonical device path");
 
         var cut = await RenderGrouped();
 
@@ -149,7 +149,7 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
     }
 
     [Test]
-    public async Task RepublishingTheCanonicalTipGroupsItAndKeepsTheAliasHistory()
+    public async Task RepublishingTheCanonicalTipGroupsOnlyThatPath()
     {
         await PublishAsync(AliasNodeTip, "alias-node-value");
         await PublishAsync(CanonicalNodeTip, "canonical-node-value");
@@ -165,15 +165,19 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
         cut.FindAll(".topic-tree-row--group").Should().NotBeEmpty();
         cut.FindAll(".topic-tree-row .flex-grow-1")
             .Count(element => element.TextContent.Trim() == CanonicalNodeTip)
-            .Should().Be(1, "one row for the tip, whichever spelling the messages arrived on");
+            .Should().Be(1, "the canonical tip is presented once");
 
         var tipRow = cut.FindAll(".topic-tree-row")
             .Single(row => row.QuerySelector(".flex-grow-1")?.TextContent.Trim() == CanonicalNodeTip);
-        tipRow.TextContent.Should().Contain("M 2");
+        tipRow.TextContent.Should().Contain("M 1", "the empty-level spelling is a different path");
+
+        var aliasRow = cut.FindAll(".topic-tree-row")
+            .Single(row => row.GetAttribute("data-topic-path") == AliasNodeTip);
+        aliasRow.ClassName.Should().NotContain("topic-tree-row--group");
     }
 
     [Test]
-    public async Task CanonicalTipSelectionSurvivesTheAliasMessagesBesideIt()
+    public async Task CanonicalTipSelectionSurvivesTheEmptyLevelMessagesBesideIt()
     {
         await PublishAsync(AliasNodeTip, "alias-node-value");
         await PublishAsync(CanonicalNodeTip, "canonical-node-value");
@@ -185,9 +189,9 @@ public sealed class TopicBrowserCanonicalTipEligibilityTests : BunitTestContext
 
         cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().ContainSingle());
         _manager.GetSelectedTopicState().Key.Should().Be(CanonicalNodeTip,
-            "the selection is the normalized path, not the alias spelling");
+            "the selection is the clicked row's own path, not the empty-level spelling");
         var selected = cut.Find(".topic-tree-row--selected");
         RowLabel(selected).Should().Be(CanonicalNodeTip,
-            "the marked row is the tip, not the alias spelling");
+            "the marked row is the tip, not the empty-level spelling");
     }
 }

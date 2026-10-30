@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core;
+using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Security;
 using MqttProbe.UI.Tests.TestHelpers;
@@ -59,7 +60,7 @@ public sealed class TopicBulkActionsTests : BunitTestContext
         AuthorizeAsOperator();
         _fixture.AddTopics((Alpha, 1), (Beta, 1));
         var selection = new TopicBulkSelection(_fixture.Adapter);
-        selection.Enter([Alpha, Beta]);
+        selection.Enter([Raw(Alpha), Raw(Beta)]);
         DialogParameters? captured = null;
         var dialogRef = Substitute.For<IDialogReference>();
         dialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Cancel()));
@@ -74,8 +75,9 @@ public sealed class TopicBulkActionsTests : BunitTestContext
         await cut.InvokeAsync(() => Task.CompletedTask);
 
         captured.Should().NotBeNull();
-        captured["Topics"].Should().BeEquivalentTo(new[] { Alpha, Beta });
-        await _excludes.DidNotReceive().AddMany(Arg.Any<IReadOnlyList<string>>());
+        captured["Topics"].Should().BeEquivalentTo(new[] { Raw(Alpha), Raw(Beta) });
+        await _excludes.DidNotReceive().AddBranches(
+            Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>());
     }
 
     [Test]
@@ -84,63 +86,69 @@ public sealed class TopicBulkActionsTests : BunitTestContext
         AuthorizeAsOperator();
         _fixture.AddTopics((Alpha, 1), (Beta, 1), (Gamma, 1));
         var selection = new TopicBulkSelection(_fixture.Adapter);
-        selection.Enter([Alpha, Beta, Gamma]);
-        _excludes.AddMany(Arg.Any<IReadOnlyList<string>>()).Returns(new TopicExcludeBatchResult([
-            new TopicExcludeAddResult(Alpha, TopicExcludeAddOutcome.Added),
-            new TopicExcludeAddResult(Beta, TopicExcludeAddOutcome.AlreadyExcluded),
-            new TopicExcludeAddResult(Gamma, TopicExcludeAddOutcome.LimitReached)
-        ]));
-        ReturnDialog(DialogResult.Ok(ImmutableArray.Create(Alpha, Beta, Gamma)));
+        selection.Enter([Raw(Alpha), Raw(Beta), Raw(Gamma)]);
+        _excludes.AddBranches(Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(new TopicBranchExcludeBatchResult([
+                new TopicBranchExcludeResult(Raw(Alpha), TopicExcludeAddOutcome.Added),
+                new TopicBranchExcludeResult(Raw(Beta), TopicExcludeAddOutcome.AlreadyExcluded),
+                new TopicBranchExcludeResult(Raw(Gamma), TopicExcludeAddOutcome.LimitReached)
+            ]));
+        ReturnDialog(DialogResult.Ok(ImmutableArray.Create(Raw(Alpha), Raw(Beta), Raw(Gamma))));
         var cut = Render<TopicBulkToolbar>(parameters =>
             parameters.AddCascadingValue(selection));
 
         cut.Find(".topic-bulk-toolbar__exclude").Click();
         await cut.InvokeAsync(() => Task.CompletedTask);
 
-        await _excludes.Received(1).AddMany(Arg.Is<IReadOnlyList<string>>(topics =>
-            topics.SequenceEqual(new[] { Alpha, Beta, Gamma })));
+        await _excludes.Received(1).AddBranches(
+            Arg.Is<IReadOnlyList<TopicBranchTarget>>(targets =>
+                targets.SequenceEqual(new[] { Raw(Alpha), Raw(Beta), Raw(Gamma) })),
+            Arg.Any<TopicExcludeConnectionToken>());
         cut.WaitForAssertion(() =>
         {
             var report = cut.Find(".topic-bulk-outcome").TextContent;
-            report.Should().Contain($"Excluded (1): {Alpha}");
-            report.Should().Contain($"Already excluded (1): {Beta}");
-            report.Should().Contain($"Not added (1): {Gamma}: limit reached");
+            report.Should().Contain($"Excluded (1): \"{Alpha}\"");
+            report.Should().Contain($"Already excluded (1): \"{Beta}\"");
+            report.Should().Contain($"Not added (1): \"{Gamma}\": limit reached");
         });
-        selection.Paths.Should().Equal(new[] { Gamma }, "only a path that was not added stays selected");
+        selection.RawPaths.Should().Equal(new[] { Gamma }, "only a path that was not added stays selected");
     }
 
     [Test]
-    public async Task ClearMessages_UsesTheConfirmedPaths_AndKeepsTheSelectionAtZero()
+    public async Task ClearMessages_UsesTheConfirmedBranches_AndPrunesEmptyRows()
     {
         _fixture.AddTopics((Alpha, 2), (Beta, 1), (Other, 1));
         var selection = new TopicBulkSelection(_fixture.Adapter);
-        selection.Enter([Alpha, Beta]);
-        var pinned = selection.Paths;
+        selection.Enter([Raw(Alpha), Raw(Beta)]);
+        var pinned = selection.Branches;
         ReturnDialog(DialogResult.Ok(pinned));
-        _manager.ClearMessagesForTopicsAsync(Arg.Any<IReadOnlyList<string>>())
-            .Returns(call => Task.FromResult(
-                _fixture.Adapter.Store.ClearMessagesForTopics(call.Arg<IReadOnlyList<string>>())));
+        _manager.ClearMessagesForBranchesAsync(
+                Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(call => Task.FromResult(new TopicBranchClearResult(true,
+                _fixture.Adapter.Store.ClearMessagesForBranches(
+                    call.Arg<IReadOnlyList<TopicBranchTarget>>()))));
         var cut = Render<TopicBulkToolbar>(parameters =>
             parameters.AddCascadingValue(selection));
 
         cut.Find(".topic-bulk-toolbar__clear-messages").Click();
         await cut.InvokeAsync(() => Task.CompletedTask);
 
-        await _manager.Received(1).ClearMessagesForTopicsAsync(Arg.Is<IReadOnlyList<string>>(topics =>
-            topics.SequenceEqual(pinned)));
+        await _manager.Received(1).ClearMessagesForBranchesAsync(
+            Arg.Is<IReadOnlyList<TopicBranchTarget>>(targets => targets.SequenceEqual(pinned)),
+            Arg.Any<TopicExcludeConnectionToken>());
         cut.WaitForAssertion(() =>
         {
             var report = cut.Find(".topic-bulk-outcome").TextContent;
             report.Should().Contain("3 stored messages cleared from 2 topics");
-            report.Should().Contain("Selected topics stay selected");
+            report.Should().Contain("Topics left with no messages are removed from the tree.");
         });
 
         var state = _fixture.Adapter.Store.GetSelectedTopicState();
-        state.Paths.Should().Equal(pinned);
+        state.Branches.Should().Equal(pinned);
         state.MessageCount.Should().Be(0);
         var roots = _fixture.Adapter.Store.GetTopicTreeSnapshot().Roots;
-        TopicTreeProjection.RepresentsRealPath(roots, groupSparkplugTopics: false, Alpha).Should().BeTrue();
-        TopicTreeProjection.RepresentsRealPath(roots, groupSparkplugTopics: false, Beta).Should().BeTrue();
+        TopicTreeProjection.RepresentsRealPath(roots, groupSparkplugTopics: false, Alpha).Should().BeFalse();
+        TopicTreeProjection.RepresentsRealPath(roots, groupSparkplugTopics: false, Beta).Should().BeFalse();
 
         _fixture.Adapter.Store.SelectTopic(Other);
         _fixture.Adapter.Store.GetSelectedTopicState().MessageCount.Should().Be(1,
@@ -162,7 +170,7 @@ public sealed class TopicBulkActionsTests : BunitTestContext
     {
         _fixture.AddTopics((Alpha, 2));
         var selection = new TopicBulkSelection(_fixture.Adapter);
-        selection.Enter([Alpha]);
+        selection.Enter([Raw(Alpha)]);
         ReturnDialog(DialogResult.Cancel());
         var cut = Render<TopicBulkToolbar>(parameters =>
             parameters.AddCascadingValue(selection));
@@ -170,8 +178,71 @@ public sealed class TopicBulkActionsTests : BunitTestContext
         cut.Find(".topic-bulk-toolbar__clear-messages").Click();
         await cut.InvokeAsync(() => Task.CompletedTask);
 
-        await _manager.DidNotReceive().ClearMessagesForTopicsAsync(Arg.Any<IReadOnlyList<string>>());
-        selection.Paths.Should().Equal(new[] { Alpha });
+        await _manager.DidNotReceive().ClearMessagesForBranchesAsync(
+            Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>());
+        selection.RawPaths.Should().Equal(new[] { Alpha });
+        _fixture.Adapter.Store.GetSelectedTopicState().MessageCount.Should().Be(2);
+    }
+
+    [Test]
+    public async Task ClearMessages_ClearsTheTargetsTheDialogConfirmed_NotALaterSelection()
+    {
+        _fixture.AddTopics((Alpha, 2), (Beta, 1));
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        selection.Enter([Raw(Alpha)]);
+        var confirmed = selection.Branches;
+        var resultSource = new TaskCompletionSource<DialogResult?>();
+        var dialogRef = Substitute.For<IDialogReference>();
+        dialogRef.Result.Returns(resultSource.Task);
+        _dialogs.ShowAsync<ClearSelectedMessagesDialog>(
+                Arg.Any<string>(), Arg.Any<DialogParameters>(), Arg.Any<DialogOptions>())
+            .Returns(dialogRef);
+        _manager.ClearMessagesForBranchesAsync(
+                Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(call => Task.FromResult(new TopicBranchClearResult(true,
+                _fixture.Adapter.Store.ClearMessagesForBranches(
+                    call.Arg<IReadOnlyList<TopicBranchTarget>>()))));
+        var cut = Render<TopicBulkToolbar>(parameters =>
+            parameters.AddCascadingValue(selection));
+
+        cut.Find(".topic-bulk-toolbar__clear-messages").Click();
+        selection.Enter([Raw(Alpha), Raw(Beta)]);
+        resultSource.SetResult(DialogResult.Ok(confirmed));
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        await _manager.Received(1).ClearMessagesForBranchesAsync(
+            Arg.Is<IReadOnlyList<TopicBranchTarget>>(targets => targets.SequenceEqual(confirmed)),
+            Arg.Any<TopicExcludeConnectionToken>());
+        var remainingState = _fixture.Adapter.Store.GetSelectedTopicState();
+        remainingState.MessageCount.Should().Be(1,
+            "only the confirmed branch was cleared, so the branch added afterwards keeps its message");
+        _fixture.Adapter.Store.GetSelectedMessages(remainingState.Token, 10)!.Messages
+            .Should().ContainSingle().Which.Topic.Should().Be(Beta);
+    }
+
+    [Test]
+    public async Task ClearMessages_WhenTheStoreRejectsTheToken_ReportsNothingWasCleared()
+    {
+        _fixture.AddTopics((Alpha, 2));
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        selection.Enter([Raw(Alpha)]);
+        ReturnDialog(DialogResult.Ok(selection.Branches));
+        _manager.ClearMessagesForBranchesAsync(
+                Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(Task.FromResult(new TopicBranchClearResult(Applied: false, ClearedMessages: 0)));
+        var cut = Render<TopicBulkToolbar>(parameters =>
+            parameters.AddCascadingValue(selection));
+
+        cut.Find(".topic-bulk-toolbar__clear-messages").Click();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        cut.WaitForAssertion(() =>
+        {
+            var report = cut.Find(".topic-bulk-outcome").TextContent;
+            report.Should().Contain(
+                "The connection changed before the clear was confirmed. Nothing was cleared.");
+        });
+        selection.RawPaths.Should().Equal(new[] { Alpha }, "a rejected clear keeps the selection");
         _fixture.Adapter.Store.GetSelectedTopicState().MessageCount.Should().Be(2);
     }
 
@@ -179,7 +250,7 @@ public sealed class TopicBulkActionsTests : BunitTestContext
     public void Toolbar_ThemeClassFollowsTheCascadingMode()
     {
         var selection = new TopicBulkSelection(_fixture.Adapter);
-        selection.Enter([Alpha]);
+        selection.Enter([Raw(Alpha)]);
 
         var light = Render<TopicBulkToolbar>(parameters => parameters
             .AddCascadingValue("IsDarkMode", false)
@@ -197,7 +268,7 @@ public sealed class TopicBulkActionsTests : BunitTestContext
     {
         _fixture.AddTopics((Alpha, 1), (Beta, 1));
         var selection = new TopicBulkSelection(_fixture.Adapter);
-        selection.Enter([Alpha, Beta]);
+        selection.Enter([Raw(Alpha), Raw(Beta)]);
         var cut = Render<TopicBulkToolbar>(parameters =>
             parameters.AddCascadingValue(selection));
 
@@ -228,7 +299,7 @@ public sealed class TopicBulkActionsTests : BunitTestContext
     {
         _fixture.AddTopics((Alpha, 2));
         var selection = new TopicBulkSelection(_fixture.Adapter);
-        selection.Enter([Alpha]);
+        selection.Enter([Raw(Alpha)]);
         var cut = Render<TopicBulkToolbar>(parameters =>
             parameters.AddCascadingValue(selection));
 
@@ -240,7 +311,8 @@ public sealed class TopicBulkActionsTests : BunitTestContext
         _fixture.Adapter.Store.GetSelectedTopicState().MessageCount.Should().Be(0);
         _fixture.Adapter.Store.GetTopicTreeSnapshot().Roots.Should().NotBeEmpty(
             "the topics and their stored messages are kept");
-        _manager.DidNotReceive().ClearMessagesForTopicsAsync(Arg.Any<IReadOnlyList<string>>());
+        _manager.DidNotReceive().ClearMessagesForBranchesAsync(
+            Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>());
     }
 
     [Test]
@@ -252,7 +324,7 @@ public sealed class TopicBulkActionsTests : BunitTestContext
 
         cut.Markup.Should().NotContain("topics selected");
 
-        selection.Enter([Alpha]);
+        selection.Enter([Raw(Alpha)]);
 
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("1 topic selected"));
     }
@@ -262,7 +334,7 @@ public sealed class TopicBulkActionsTests : BunitTestContext
     {
         _fixture.AddTopics((Alpha, 1), (Beta, 1));
         var selection = new TopicBulkSelection(_fixture.Adapter);
-        selection.Enter([Alpha, Beta]);
+        selection.Enter([Raw(Alpha), Raw(Beta)]);
         var cut = Render<TopicBulkToolbar>(parameters =>
             parameters.AddCascadingValue(selection));
 
@@ -270,7 +342,7 @@ public sealed class TopicBulkActionsTests : BunitTestContext
         await cut.InvokeAsync(() => Task.CompletedTask);
 
         selection.IsActive.Should().BeFalse();
-        selection.Paths.Should().BeEmpty();
+        selection.RawPaths.Should().BeEmpty();
         _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().BeNull();
         cut.Markup.Should().NotContain("topics selected");
     }
@@ -280,19 +352,22 @@ public sealed class TopicBulkActionsTests : BunitTestContext
     {
         AuthorizeAsOperator();
         var selection = new TopicBulkSelection(_fixture.Adapter);
-        selection.Enter(["accept//alias"]);
-        _excludes.AddMany(Arg.Any<IReadOnlyList<string>>()).Returns(new TopicExcludeBatchResult([
-            new TopicExcludeAddResult("accept//alias", TopicExcludeAddOutcome.Added)
-        ]));
-        ReturnDialog(DialogResult.Ok(ImmutableArray.Create("accept//alias")));
+        selection.Enter([Raw("accept//alias")]);
+        _excludes.AddBranches(Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(new TopicBranchExcludeBatchResult([
+                new TopicBranchExcludeResult(Raw("accept//alias"), TopicExcludeAddOutcome.Added)
+            ]));
+        ReturnDialog(DialogResult.Ok(ImmutableArray.Create(Raw("accept//alias"))));
         var cut = Render<TopicBulkToolbar>(parameters =>
             parameters.AddCascadingValue(selection));
 
         cut.Find(".topic-bulk-toolbar__exclude").Click();
         await cut.InvokeAsync(() => Task.CompletedTask);
 
-        await _excludes.Received(1).AddMany(Arg.Is<IReadOnlyList<string>>(topics =>
-            topics.SequenceEqual(new[] { "accept//alias" })));
+        await _excludes.Received(1).AddBranches(
+            Arg.Is<IReadOnlyList<TopicBranchTarget>>(targets =>
+                targets.SequenceEqual(new[] { Raw("accept//alias") })),
+            Arg.Any<TopicExcludeConnectionToken>());
     }
 
     [Test]
@@ -301,15 +376,16 @@ public sealed class TopicBulkActionsTests : BunitTestContext
         AuthorizeAsOperator();
         _fixture.AddTopics((Alpha, 1), (Beta, 1), (Gamma, 1));
         var selection = new TopicBulkSelection(_fixture.Adapter);
-        selection.Enter([Alpha, Beta, Gamma]);
-        _excludes.AddMany(Arg.Any<IReadOnlyList<string>>()).Returns(new TopicExcludeBatchResult([
-            new TopicExcludeAddResult(Alpha, TopicExcludeAddOutcome.Added),
-            new TopicExcludeAddResult(Beta, TopicExcludeAddOutcome.AppliedWithPurgeFailure,
-                new UserNotification(UserNotificationSeverity.Warning, "Stored history could not be cleared.")),
-            new TopicExcludeAddResult(Gamma, TopicExcludeAddOutcome.Failed,
-                new UserNotification(UserNotificationSeverity.Error, "Connection changed."))
-        ]));
-        ReturnDialog(DialogResult.Ok(ImmutableArray.Create(Alpha, Beta, Gamma)));
+        selection.Enter([Raw(Alpha), Raw(Beta), Raw(Gamma)]);
+        _excludes.AddBranches(Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(new TopicBranchExcludeBatchResult([
+                new TopicBranchExcludeResult(Raw(Alpha), TopicExcludeAddOutcome.Added),
+                new TopicBranchExcludeResult(Raw(Beta), TopicExcludeAddOutcome.AppliedWithPurgeFailure,
+                    new UserNotification(UserNotificationSeverity.Warning, "Stored history could not be cleared.")),
+                new TopicBranchExcludeResult(Raw(Gamma), TopicExcludeAddOutcome.Failed,
+                    new UserNotification(UserNotificationSeverity.Error, "Connection changed."))
+            ]));
+        ReturnDialog(DialogResult.Ok(ImmutableArray.Create(Raw(Alpha), Raw(Beta), Raw(Gamma))));
         var cut = Render<TopicBulkToolbar>(parameters =>
             parameters.AddCascadingValue(selection));
 
@@ -319,14 +395,14 @@ public sealed class TopicBulkActionsTests : BunitTestContext
         cut.WaitForAssertion(() =>
         {
             var report = cut.Find(".topic-bulk-outcome").TextContent;
-            report.Should().Contain($"Excluded (1): {Alpha}");
+            report.Should().Contain($"Excluded (1): \"{Alpha}\"");
             report.Should().Contain(
-                $"Excluded, history cleanup incomplete (1): {Beta}: Stored history could not be cleared.");
-            report.Should().Contain($"Not added (1): {Gamma}: Connection changed.");
+                $"Excluded, history cleanup incomplete (1): \"{Beta}\": Stored history could not be cleared.");
+            report.Should().Contain($"Not added (1): \"{Gamma}\": Connection changed.");
             report.Should().NotContain(
-                $"Not added (1): {Beta}", "an applied exclusion is never reported as not added");
+                $"Not added (1): \"{Beta}\"", "an applied exclusion is never reported as not added");
         });
-        selection.Paths.Should().Equal(new[] { Gamma }, "AppliedTopics reconciles the applied paths");
+        selection.RawPaths.Should().Equal(new[] { Gamma }, "AppliedTopics reconciles the applied paths");
         _snackbar.Received(1).Add(
             Arg.Is<string>(message => message.Contains("Excluded 2 of 3 topics")),
             Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
@@ -338,12 +414,13 @@ public sealed class TopicBulkActionsTests : BunitTestContext
         AuthorizeAsOperator();
         _fixture.AddTopics((Alpha, 1));
         var selection = new TopicBulkSelection(_fixture.Adapter);
-        selection.Enter([Alpha]);
-        _excludes.AddMany(Arg.Any<IReadOnlyList<string>>()).Returns(new TopicExcludeBatchResult([
-            new TopicExcludeAddResult(Alpha, TopicExcludeAddOutcome.AppliedWithPurgeFailure,
-                new UserNotification(UserNotificationSeverity.Warning, "History stayed in the buffer."))
-        ]));
-        ReturnDialog(DialogResult.Ok(ImmutableArray.Create(Alpha)));
+        selection.Enter([Raw(Alpha)]);
+        _excludes.AddBranches(Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(new TopicBranchExcludeBatchResult([
+                new TopicBranchExcludeResult(Raw(Alpha), TopicExcludeAddOutcome.AppliedWithPurgeFailure,
+                    new UserNotification(UserNotificationSeverity.Warning, "History stayed in the buffer."))
+            ]));
+        ReturnDialog(DialogResult.Ok(ImmutableArray.Create(Raw(Alpha))));
         var cut = Render<TopicBulkToolbar>(parameters =>
             parameters.AddCascadingValue(selection));
 
@@ -357,11 +434,13 @@ public sealed class TopicBulkActionsTests : BunitTestContext
             report.Should().Contain("History stayed in the buffer.");
             report.Should().NotContain("Not added");
         });
-        selection.Paths.Should().BeEmpty();
+        selection.RawPaths.Should().BeEmpty();
         _snackbar.Received(1).Add(
             Arg.Is<string>(message => message.Contains("Stored history cleanup did not finish")),
             Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
     }
+
+    private static TopicBranchTarget Raw(string path) => new(TopicBranchKind.Raw, Path: path);
 
     private void ReturnDialog(DialogResult result)
     {

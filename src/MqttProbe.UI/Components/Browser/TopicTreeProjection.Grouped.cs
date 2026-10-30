@@ -8,7 +8,12 @@ internal static partial class TopicTreeProjection
     {
         var built = RealRow(namespaceNode, TopicTreeRowKind.SparkplugNamespace);
         foreach (var group in namespaceNode.Children)
-            built.Children.Add(BuildGroup(group.FullTopic, group));
+        {
+            // An empty group id is not an endpoint, so its subtree keeps its literal levels.
+            built.Children.Add(group.Topic.Length == 0
+                ? BuildLiteral(group, TopicTreeRowKind.Topic)
+                : BuildGroup(group.FullTopic, group));
+        }
 
         return built;
     }
@@ -77,7 +82,7 @@ internal static partial class TopicTreeProjection
             // ever accepted at that exact path. Only the canonical spelling counts:
             // "spBv1.0/g/NDATA//n1" normalizes onto the shape but is not itself an endpoint, so
             // it stays a prefix to group under rather than a node with messages.
-            if (!tip.HasObservedCanonicalTopic)
+            if (!tip.HasObservedCanonicalTopic || tip.Topic.Length == 0)
                 continue;
 
             groupedTips.Add(tip.FullTopic);
@@ -85,7 +90,7 @@ internal static partial class TopicTreeProjection
 
             var typeRow = VirtualRow(
                 $"nm:{groupPath}/{tip.Topic}/{verb}", verb, TopicTreeRowKind.MessageType, MessageTypeOrder(verb),
-                owner: TopicTreeOwner.Node);
+                scope: branch.Node.Scope, owner: TopicTreeOwner.Node, messageType: verb);
             typeRow.Children.Add(GroupedTip(tip));
             branch.Node.Children.Add(typeRow);
         }
@@ -102,6 +107,11 @@ internal static partial class TopicTreeProjection
         {
             foreach (var deviceNode in nodeLevel.Children)
             {
+                // An empty node or device id is not an endpoint, so it stays a literal level
+                // instead of becoming a grouping row with no name.
+                if (nodeLevel.Topic.Length == 0 || deviceNode.Topic.Length == 0)
+                    continue;
+
                 // As at the node level the device tip classifies by the canonical observed marker
                 // rather than its current messages, so a retention-emptied tip still groups and
                 // one reached only through an alias spelling does not.
@@ -124,7 +134,8 @@ internal static partial class TopicTreeProjection
 
                 var typeRow = VirtualRow(
                     $"devt:{groupPath}/{nodeLevel.Topic}/{deviceId}/{verb}",
-                    verb, TopicTreeRowKind.MessageType, MessageTypeOrder(verb), owner: TopicTreeOwner.Device);
+                    verb, TopicTreeRowKind.MessageType, MessageTypeOrder(verb),
+                    scope: deviceRow.Scope, owner: TopicTreeOwner.Device, messageType: verb);
                 typeRow.Children.Add(GroupedTip(deviceNode));
                 deviceRow.Children.Add(typeRow);
             }
@@ -153,7 +164,9 @@ internal static partial class TopicTreeProjection
         Id = node.FullTopic,
         Label = node.Topic,
         Kind = kind,
-        Source = node
+        Source = node,
+        Target = new TopicBranchTarget(TopicBranchKind.Raw, Path: node.FullTopic),
+        BranchLabel = node.FullTopic
     };
 
     // A grouped leaf shows the real topic rather than its bare last segment, because the
@@ -165,7 +178,9 @@ internal static partial class TopicTreeProjection
             Id = tip.FullTopic,
             Label = tip.FullTopic,
             Kind = TopicTreeRowKind.Topic,
-            Source = tip
+            Source = tip,
+            Target = new TopicBranchTarget(TopicBranchKind.Raw, Path: tip.FullTopic),
+            BranchLabel = tip.FullTopic
         };
 
         foreach (var child in tip.Children)
@@ -176,15 +191,32 @@ internal static partial class TopicTreeProjection
 
     private static ProjectionNode VirtualRow(
         string id, string label, TopicTreeRowKind kind, int order,
-        SparkplugSelectionScope? scope = null, TopicTreeOwner? owner = null) => new()
+        SparkplugSelectionScope? scope = null, TopicTreeOwner? owner = null,
+        string? messageType = null) => new()
         {
             Id = VirtualIdPrefix + id,
             Label = label,
             Kind = kind,
             Order = order,
             Scope = scope,
-            Owner = owner
+            Owner = owner,
+            Target = new TopicBranchTarget(TopicBranchKind.Sparkplug, Scope: scope, MessageType: messageType),
+            BranchLabel = SparkplugBranchLabel(scope, label, messageType)
         };
+
+    private static string SparkplugBranchLabel(
+        SparkplugSelectionScope? scope, string label, string? messageType)
+    {
+        if (scope is null)
+            return label;
+
+        var path = scope.Kind switch
+        {
+            SparkplugSelectionKind.Device => $"{scope.GroupPath}/{scope.NodeId}/{scope.DeviceId}",
+            _ => $"{scope.GroupPath}/{scope.NodeId}"
+        };
+        return messageType is null ? path : $"{path}/{messageType}";
+    }
 
     // Node message types sort by lifecycle ahead of the device rows, the node branch's other
     // children, so every node type sits above every device.

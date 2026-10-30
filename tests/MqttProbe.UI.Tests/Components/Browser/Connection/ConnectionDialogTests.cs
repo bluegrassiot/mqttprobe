@@ -2926,6 +2926,35 @@ public class ConnectionDialogTests : BunitTestContext
     }
 
     [Test]
+    public async Task OnConnectTab_ExcludeAdd_CountsTypedRulesAgainstTheLimit()
+    {
+        _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);
+        _mockUi.Ui.Returns(new AppConfiguration().Ui);
+        var conn = new Connection
+        {
+            Name = "TestConn",
+            Host = "localhost",
+            Port = 1883,
+            SparkplugTopicExcludes =
+            [
+                .. Enumerable.Range(0, 500).Select(index => new SparkplugTopicExclude(
+                    new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/g", $"n{index}")))
+            ]
+        };
+        var cfg = new AppConfiguration { Connections = [conn] };
+        await OpenDialog(cfg);
+        await SelectConnection(conn);
+        GoToOnConnectTab();
+
+        var editor = _dialogProvider.FindComponent<ExcludeEditor>().Instance;
+        editor.TopicDraft = "$SYS/#";
+        await _dialogProvider.InvokeAsync(() => editor.AddForTests());
+
+        await _mockConnections.DidNotReceive().AddConnectionAsync(Arg.Any<Connection>());
+        editor.TopicDraft.Should().Be("$SYS/#", "a rejected add keeps the draft so the user can correct it");
+    }
+
+    [Test]
     public async Task OnConnectTab_ExcludeRemove_WorksRegardlessOfAutoResubscribe()
     {
         _mockConnections.AddConnectionAsync(Arg.Any<Connection>()).Returns(Task.CompletedTask);

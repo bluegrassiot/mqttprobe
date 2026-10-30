@@ -54,10 +54,10 @@ public partial class PayloadBrowser
         return Task.CompletedTask;
     }
 
-    private void OnMessagesCleared(ImmutableArray<string> topics)
+    private void OnMessagesCleared(ImmutableArray<TopicBranchTarget> branches)
     {
         if (_selectedMessage?.Topic is not { } topic
-            || !topics.Contains(topic, StringComparer.Ordinal))
+            || !branches.Any(branch => TopicBranchMatcher.Matches(branch, topic)))
             return;
 
         _ = InvokeAsync(() =>

@@ -40,7 +40,7 @@ internal static partial class TopicTreeProjection
         {
             selectionRepresented = selectionPath is null || ContainsRealPath(roots, selectionPath);
             foreach (var root in roots.OrderBy(node => node.Topic, NaturalStringComparer.Instance))
-                AppendLiteralRows(root, 0, filter, hasFilter, expandedPaths, rows, selectionMode);
+                AppendLiteralRows(root, 0, filter, hasFilter, expandedPaths, rows);
 
             return rows;
         }
@@ -137,8 +137,7 @@ internal static partial class TopicTreeProjection
         string? filter,
         bool hasFilter,
         IReadOnlySet<string> expandedPaths,
-        List<TopicTreeRowModel> rows,
-        bool selectionMode)
+        List<TopicTreeRowModel> rows)
     {
         var matches = hasFilter && MatchesLiteralFilter(node, filter!);
         if (hasFilter && !matches)
@@ -146,52 +145,27 @@ internal static partial class TopicTreeProjection
 
         var hasChildren = !node.Children.IsDefaultOrEmpty;
         var isExpanded = expandedPaths.Contains(node.FullTopic);
-        var observed = node.ObservedTopicPaths;
-        var splitSpellings = selectionMode && !observed.IsDefaultOrEmpty && observed.Length > 1;
-        if (!splitSpellings || hasChildren)
+        rows.Add(new TopicTreeRowModel(
+            FullPath: node.FullTopic,
+            DisplayName: node.Topic,
+            Depth: depth,
+            HasChildren: hasChildren,
+            TopicCount: node.TopicCount,
+            MessageCount: node.MessageCount,
+            IsExpanded: isExpanded || (hasFilter && matches),
+            IsValueBearer: node.HasDirectMessages,
+            IsMessageTopic: node.HasObservedDirectTopic || node.HasDirectMessages)
         {
-            rows.Add(new TopicTreeRowModel(
-                FullPath: node.FullTopic,
-                DisplayName: node.Topic,
-                Depth: depth,
-                HasChildren: hasChildren,
-                TopicCount: node.TopicCount,
-                MessageCount: node.MessageCount,
-                IsExpanded: isExpanded || (hasFilter && matches),
-                IsValueBearer: node.HasDirectMessages,
-                IsMessageTopic: !splitSpellings
-                    && (node.HasObservedDirectTopic || node.HasDirectMessages),
-                ObservedPaths: splitSpellings ? default : node.ObservedTopicPaths,
-                SpellingCount: splitSpellings ? observed.Length : 0));
-        }
-
-        if (splitSpellings)
-        {
-            foreach (var rawPath in observed.OrderBy(path => path, StringComparer.Ordinal))
-                rows.Add(SpellingRow(rawPath, hasChildren ? depth + 1 : depth));
-        }
+            Branch = new TopicBranchTarget(TopicBranchKind.Raw, Path: node.FullTopic),
+            BranchLabel = node.FullTopic
+        });
 
         if (!hasChildren || (!isExpanded && !hasFilter))
             return;
 
         foreach (var child in node.Children.OrderBy(item => item.Topic, NaturalStringComparer.Instance))
-            AppendLiteralRows(child, depth + 1, filter, hasFilter, expandedPaths, rows, selectionMode);
+            AppendLiteralRows(child, depth + 1, filter, hasFilter, expandedPaths, rows);
     }
-
-    // One row per exact published spelling: the only way to act on a/b without also acting on
-    // a//b when both normalize to the same node. A spelling row is a leaf and never a parent.
-    private static TopicTreeRowModel SpellingRow(string rawPath, int depth) =>
-        new(FullPath: rawPath,
-            DisplayName: rawPath,
-            Depth: depth,
-            HasChildren: false,
-            TopicCount: 0,
-            MessageCount: 0,
-            IsExpanded: false,
-            IsValueBearer: false,
-            Kind: TopicTreeRowKind.Spelling,
-            IsMessageTopic: true,
-            ObservedPaths: [rawPath]);
 
     private static bool MatchesLiteralFilter(TopicNodeSnapshot node, string filter) =>
         node.Topic.Contains(filter, StringComparison.OrdinalIgnoreCase)
@@ -245,10 +219,6 @@ internal static partial class TopicTreeProjection
 
         var hasChildren = node.Children.Count > 0;
         var isExpanded = context.ExpandedPaths.Contains(node.Id) || (context.HasFilter && matches);
-        var observed = node.IsRealTopic ? node.Source!.ObservedTopicPaths : default;
-        var splitSpellings = context.SelectionMode
-            && !observed.IsDefaultOrEmpty
-            && observed.Length > 1;
 
         rows.Add(new TopicTreeRowModel(
             FullPath: node.Id,
@@ -260,19 +230,14 @@ internal static partial class TopicTreeProjection
             IsExpanded: isExpanded,
             IsValueBearer: node.IsRealTopic && node.Source!.HasDirectMessages,
             Kind: node.Kind,
-            SelectionTopics: node.SelectionTopics(),
             Scope: node.Scope,
             Owner: node.Owner,
-            IsMessageTopic: !splitSpellings && node.IsRealTopic
-                && (node.Source!.HasObservedDirectTopic || node.Source.HasDirectMessages),
-            ObservedPaths: splitSpellings ? default : observed,
-            SpellingCount: splitSpellings ? observed.Length : 0));
-
-        if (splitSpellings)
+            IsMessageTopic: node.IsRealTopic
+                && (node.Source!.HasObservedDirectTopic || node.Source.HasDirectMessages))
         {
-            foreach (var rawPath in observed.OrderBy(path => path, StringComparer.Ordinal))
-                rows.Add(SpellingRow(rawPath, hasChildren ? depth + 1 : depth));
-        }
+            Branch = node.Target,
+            BranchLabel = node.BranchLabel
+        });
 
         if (!hasChildren || (!isExpanded && !context.HasFilter))
             return;
@@ -356,13 +321,13 @@ internal static partial class TopicTreeProjection
 
         public TopicNodeSnapshot? Source { get; init; }
 
+        public TopicBranchTarget Target { get; init; } = null!;
+
+        public string BranchLabel { get; init; } = string.Empty;
+
         public List<ProjectionNode> Children { get; } = [];
 
         public bool IsRealTopic => Source is not null;
-
-        public ImmutableArray<string> SelectionTopics() => IsRealTopic
-            ? [Id]
-            : [.. Children.SelectMany(child => child.SelectionTopics())];
 
         public int RealTopicCount => IsRealTopic
             ? Source!.TopicCount + 1

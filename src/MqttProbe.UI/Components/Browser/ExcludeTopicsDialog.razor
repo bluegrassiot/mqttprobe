@@ -7,12 +7,13 @@
     </TitleContent>
     <DialogContent>
         <MudText Typo="Typo.body2" Class="topic-target-dialog__lead">
-            These full topic paths are added to this connection's excluded topics. Existing entries stay.
-            Stored messages for them are removed, and new messages on them are ignored.
+            These topics and everything below them are added to this connection's excluded topics.
+            Existing entries stay. Stored messages for them are removed, and new messages below them
+            are ignored, including devices or message types that appear later.
         </MudText>
-        <TopicTargetList Topics="Topics"/>
+        <TopicTargetList Topics="Labels"/>
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="topic-target-dialog__note">
-            @CountLabel will be added. No wildcard is created.
+            @CountLabel will be added. This is a logical scope, not an MQTT wildcard.
         </MudText>
     </DialogContent>
     <DialogActions>
@@ -27,11 +28,13 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
 
-    [Parameter] public ImmutableArray<string> Topics { get; set; }
+    [Parameter] public IReadOnlyList<TopicBranchTarget> Topics { get; set; } = [];
+
+    private ImmutableArray<string> Labels => [.. Topics.Select(TopicBranchTargetDisplay.Label)];
 
     private AppTertiaryButton? _cancelButton;
 
-    private string CountLabel => Topics.Length == 1 ? "1 topic" : $"{Topics.Length} topics";
+    private string CountLabel => Topics.Count == 1 ? "1 topic" : $"{Topics.Count} topics";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

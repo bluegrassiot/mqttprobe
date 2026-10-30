@@ -116,3 +116,17 @@
         flex: 1 1 auto;
     }
 }
+
+/* A short viewport has to keep room for the message list, so the report scrolls in a
+   smaller box and the toolbar tightens its spacing. */
+@media (max-height: 640px) {
+    .topic-bulk-toolbar {
+        gap: 4px 8px;
+        padding: 4px 8px;
+        margin-bottom: 6px;
+    }
+
+    .topic-bulk-outcome__lines {
+        max-height: 2.5rem;
+    }
+}

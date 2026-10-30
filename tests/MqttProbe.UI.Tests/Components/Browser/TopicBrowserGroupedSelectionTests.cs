@@ -68,7 +68,9 @@ public sealed class TopicBrowserGroupedSelectionTests : BunitTestContext
 
         var state = _manager.GetSelectedTopicState();
         state.Label.Should().Be("spBv1.0/plant1/node1", "the bar shows a name, not the projection id");
-        state.Key.Should().StartWith("\0spb:node:");
+        state.Key.Should().StartWith("branches:");
+        state.Branches.Should().ContainSingle().Which.Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"));
         state.MessageCount.Should().Be(2);
 
         var messages = await _manager.GetSelectedMessagesAsync(state.Token, 10);
@@ -141,7 +143,7 @@ public sealed class TopicBrowserGroupedSelectionTests : BunitTestContext
     }
 
     [Test]
-    public async Task AStaleMessageTypeRow_CannotReplaceOrPublishAnotherSelection()
+    public async Task AStaleMessageTypeRow_SelectsTheScopeItStandsFor()
     {
         await PublishAsync("spBv1.0/plant1/NBIRTH/node1", "birth");
         await PublishAsync("spBv1.0/plant1/NBIRTH/node1/extra", "residue");
@@ -154,7 +156,6 @@ public sealed class TopicBrowserGroupedSelectionTests : BunitTestContext
         });
 
         _manager.SelectTopic("sensors/temp");
-        var live = _manager.GetSelectedTopicState();
 
         await cut.InvokeAsync(() =>
         {
@@ -163,9 +164,13 @@ public sealed class TopicBrowserGroupedSelectionTests : BunitTestContext
         });
 
         var after = _manager.GetSelectedTopicState();
-        after.Key.Should().Be("sensors/temp", "the stale row's canonical marker is gone");
-        after.Token.Generation.Should().Be(live.Token.Generation, "a refused request cannot replace the selection");
-        published.Should().BeNull("a refused row must not be published");
+        var branch = after.Branches.Should().ContainSingle().Which;
+        branch.Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"));
+        branch.MessageType.Should().Be("NBIRTH");
+        after.MessageCount.Should().Be(1, "the purged topic is gone while its descendant remains");
+        published.Should().NotBeNull();
+        published!.Key.Should().Be(after.Key, "the published state is the one the row selected");
     }
 
     private async Task PublishAsync(string topic, string payload)

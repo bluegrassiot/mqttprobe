@@ -49,6 +49,21 @@ public class SubscriptionsTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("accept//alias"));
     }
 
+    [Test]
+    public void ExcludeEditor_ReflectsATypedRuleAddedWhileThePanelWasKeptAlive()
+    {
+        _mockExcludeService.SparkplugExcludes.Returns(Array.Empty<SparkplugTopicExclude>());
+        var cut = Render<Subscriptions>();
+        cut.Markup.Should().NotContain("spBv1.0/plant1/node1");
+
+        var rule = new SparkplugTopicExclude(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"));
+        _mockExcludeService.SparkplugExcludes.Returns(new[] { rule });
+        _mockExcludeService.SparkplugExcluded += Raise.Event<Action<SparkplugTopicExclude>>(rule);
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("spBv1.0/plant1/node1"));
+    }
+
     private void AuthorizeAsOperator()
     {
         AuthorizationContext.SetAuthorized("testuser").SetRoles(AppRoles.Operator);

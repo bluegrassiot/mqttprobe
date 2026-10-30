@@ -1,5 +1,4 @@
-
-<div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsSelected || IsChecked ? "topic-tree-row--selected" : "") @(IsSelectionMode ? "topic-tree-row--selection" : "")"
+<div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsSelected || (IsSelectionMode && SelectionState == TopicTreeSelectionState.Checked) ? "topic-tree-row--selected" : "") @(IsSelectionMode ? "topic-tree-row--selection" : "")"
      role="treeitem"
      aria-level="@(Row.Depth + 1)"
      aria-expanded="@ExpandedAttribute"
@@ -8,29 +7,12 @@
      data-topic-key="@Row.RowKey"
      data-topic-path="@Row.FullPath"
      data-message-topic="@(Row.IsMessageTopic ? "true" : null)"
-     data-topic-spelling="@(Row.Kind == TopicTreeRowKind.Spelling ? "true" : null)"
      data-depth="@Row.Depth"
      title="@Title"
      @onclick="OnRowClick"
      @onfocus="OnRowFocused"
      @onkeydown="OnKeyPressed">
     <svg class="topic-tree-indent" width="@IndentWidth" height="1" aria-hidden="true" focusable="false"></svg>
-    @if (IsSelectionMode && Row.IsBulkSelectable)
-    {
-        <span class="topic-select-checkbox-wrap" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-            <MudCheckBox T="bool" Value="IsChecked" ValueChanged="OnCheckedChanged"
-                         Dense="true" StopClickPropagation="true"
-                         Color="Color.Primary" Class="topic-select-checkbox"
-                         aria-label="@SelectLabel">
-                <span class="topic-select-checkbox__name">@SelectLabel</span>
-            </MudCheckBox>
-        </span>
-    }
-    @if (IsSelectionMode && Row.SpellingCount > 1)
-    {
-        <span class="topic-spelling-badge"
-              title="Exact spellings are listed below as separate choices">@Row.SpellingCount spellings</span>
-    }
     @if (Row.HasChildren)
     {
         <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
@@ -48,11 +30,24 @@
     {
         <div class="topic-tree-chevron-spacer" aria-hidden="true"></div>
     }
+    @if (IsSelectionMode)
+    {
+        <span class="topic-select-checkbox-wrap @(IsInherited ? "topic-select-checkbox-wrap--inherited" : null)"
+              title="@InheritedReason"
+              @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+            <MudCheckBox T="bool?" Value="@CheckboxValue" ValueChanged="OnCheckedChanged"
+                         TriState="true" Dense="true" StopClickPropagation="true"
+                         Color="Color.Primary" Class="topic-select-checkbox"
+                         Disabled="@IsInherited">
+                <span class="topic-select-checkbox__name">@CheckboxLabel</span>
+            </MudCheckBox>
+        </span>
+    }
     <MudIcon Icon="@TopicTreeIconLanguage.NodeGlyph(Row)" Size="Size.Small" Class="@TopicTreeIconLanguage.IconClass(Row)"/>
-    <span class="flex-grow-1 topic-name-cell" title="@Row.DisplayName">
-        @if (Row.Kind == TopicTreeRowKind.Spelling)
+    <span class="flex-grow-1 topic-name-cell" title="@(Row.IsEmptyLevel ? Row.EmptyLevelTitle : Row.DisplayName)">
+        @if (Row.IsEmptyLevel)
         {
-            <span class="topic-name topic-name--spelling">@Row.DisplayName</span>
+            <span class="topic-name topic-name--empty">(empty level)</span>
         }
         else if (Row.IsVirtualTopic)
         {
@@ -63,66 +58,86 @@
             <span class="topic-name">@Row.DisplayName</span>
         }
     </span>
-    @if (Row.Kind != TopicTreeRowKind.Spelling)
-    {
-        <span class="topic-stat-text" title="@StatsLabel">
-            T @Row.TopicCount.ToString("N0") · M @Row.MessageCount.ToString("N0")
-        </span>
-    }
+    <span class="topic-stat-text" title="@StatsLabel">
+        T @Row.TopicCount.ToString("N0") · M @Row.MessageCount.ToString("N0")
+    </span>
 </div>
 
 @code {
     [Parameter] public TopicTreeRowModel Row { get; set; } = null!;
     [Parameter] public bool IsSelected { get; set; }
     [Parameter] public bool IsSelectionMode { get; set; }
-    [Parameter] public bool IsChecked { get; set; }
+    [Parameter] public TopicTreeSelectionState SelectionState { get; set; }
     [Parameter] public bool IsTabStop { get; set; }
+    [Parameter] public string? InheritedSelectionLabel { get; set; }
     [Parameter] public EventCallback<string> OnExpandToggled { get; set; }
-    [Parameter] public EventCallback<TopicSelection> OnSelected { get; set; }
-    [Parameter] public EventCallback<System.Collections.Immutable.ImmutableArray<string>> OnSelectionToggled { get; set; }
+    [Parameter] public EventCallback<TopicTreeRowModel> OnActivated { get; set; }
+    [Parameter] public EventCallback<TopicTreeRowModel> OnSelectionToggled { get; set; }
     [Parameter] public EventCallback<KeyboardEventArgs> OnKeyPressed { get; set; }
     [Parameter] public EventCallback<string> OnFocused { get; set; }
 
     private const int IndentStepWidth = 16;
     private const int MaxIndentDepth = 6;
 
-    private string SelectLabel => Row.SelectionPaths.Length == 1
-        ? $"Select topic {Row.SelectionPaths[0]}"
-        : $"Select topics {string.Join(", ", Row.SelectionPaths)}";
-
     private string? ExpandedAttribute => Row.HasChildren ? ExpandedText : null;
 
-    // In selection mode the checkbox is the row's state, so the row reports it as selected.
-    private bool IsRowSelected => IsSelectionMode ? IsChecked : IsSelected;
+    private bool IsRowSelected =>
+        IsSelectionMode ? SelectionState == TopicTreeSelectionState.Checked : IsSelected;
 
     private string SelectedAttribute => IsRowSelected ? "true" : "false";
 
     private string ExpandedText => Row.IsExpanded ? "true" : "false";
+
+    private bool? CheckboxValue => SelectionState switch
+    {
+        TopicTreeSelectionState.Checked => true,
+        TopicTreeSelectionState.Mixed => null,
+        _ => false
+    };
+
+    private bool IsInherited => InheritedSelectionLabel is not null;
+
+    // A row checked only through a branch above it cannot be unchecked on its own: removing
+    // that branch would drop its other members too.
+    private string CheckboxLabel => InheritedSelectionLabel is { } inherited
+        ? $"Selected through {inherited}"
+        : Row.BranchAriaLabel;
+
+    private string? InheritedReason => InheritedSelectionLabel is { } inherited
+        ? $"Selected through {inherited}. Uncheck that topic to change this one."
+        : null;
 
     // One SVG sized by its width attribute carries the whole indent, so a row costs the same DOM
     // at depth 1000 as at depth 0. The indent stops at six levels so a narrow pane cannot be
     // pushed sideways; the path itself and the row order keep the hierarchy readable.
     private int IndentWidth => Math.Min(Row.Depth, MaxIndentDepth) * IndentStepWidth;
 
-    private string ExpandLabel => $"{(Row.IsExpanded ? "Collapse" : "Expand")} {Row.DisplayName}";
+    private string RowLabel => Row.IsEmptyLevel ? "empty level" : Row.DisplayName;
 
-    // Every Sparkplug row says which role it is and whether it stands for a real MQTT topic or an
-    // invented grouping, and a grouping row also says how much its selection covers. Plain topic
-    // rows carry no role, so they get no row tooltip.
-    private string? Title => Row.Kind switch
+    private string ExpandLabel => $"{(Row.IsExpanded ? "Collapse" : "Expand")} {RowLabel}";
+
+    private string? Title
     {
-        TopicTreeRowKind.SparkplugNamespace => "Sparkplug namespace · real MQTT topic",
-        TopicTreeRowKind.SparkplugGroup => "Sparkplug group · real MQTT topic",
-        TopicTreeRowKind.SparkplugNode => GroupingTitle("Sparkplug node"),
-        TopicTreeRowKind.Devices => GroupingTitle("Sparkplug devices"),
-        TopicTreeRowKind.SparkplugDevice => GroupingTitle("Sparkplug device"),
-        TopicTreeRowKind.MessageType => GroupingTitle("Sparkplug message type"),
-        TopicTreeRowKind.Spelling => "Exact topic spelling · messages published at this exact path",
-        _ => null
-    };
+        get
+        {
+            if (Row.IsEmptyLevel)
+                return Row.EmptyLevelTitle;
+
+            return Row.Kind switch
+            {
+                TopicTreeRowKind.SparkplugNamespace => "Sparkplug namespace · real MQTT topic",
+                TopicTreeRowKind.SparkplugGroup => "Sparkplug group · real MQTT topic",
+                TopicTreeRowKind.SparkplugNode => GroupingTitle("Sparkplug node"),
+                TopicTreeRowKind.Devices => GroupingTitle("Sparkplug devices"),
+                TopicTreeRowKind.SparkplugDevice => GroupingTitle("Sparkplug device"),
+                TopicTreeRowKind.MessageType => GroupingTitle("Sparkplug message type"),
+                _ => null
+            };
+        }
+    }
 
     private string GroupingTitle(string role) =>
-        $"{role} · grouping row, not a real MQTT topic · selects {Count(Row.SelectedTopics.Length, "topic")} beneath it";
+        $"{role} · grouping row, not a real MQTT topic · selects {Count(Row.TopicCount, "topic")} beneath it";
 
     // The T count is the topics below the row and the M count is the messages at the row's own
     // path plus the ones below it, so each tooltip says which total it is rather than implying
@@ -141,22 +156,15 @@
     {
         if (IsSelectionMode)
         {
-            if (Row.IsBulkSelectable)
-                await OnSelectionToggled.InvokeAsync(Row.SelectionPaths);
-
+            await OnSelectionToggled.InvokeAsync(Row);
             return;
         }
 
-        await OnSelected.InvokeAsync(Row.ToSelection());
+        await OnActivated.InvokeAsync(Row);
     }
 
-    private async Task OnCheckedChanged(bool value)
-    {
-        if (value == IsChecked)
-            return;
-
-        await OnSelectionToggled.InvokeAsync(Row.SelectionPaths);
-    }
+    private async Task OnCheckedChanged(bool? _) =>
+        await OnSelectionToggled.InvokeAsync(Row);
 
     private async Task OnRowFocused() =>
         await OnFocused.InvokeAsync(Row.RowKey);

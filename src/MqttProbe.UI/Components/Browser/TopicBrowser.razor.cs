@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
@@ -33,6 +34,9 @@ public partial class TopicBrowser
     private int _pendingFocusIndex = -1;
     private bool _pendingFocusRestore;
     private bool _interceptorSubscribed;
+    private ImmutableArray<TopicBranchTarget> _selectedBranches = [];
+    private bool _focusFilterWhenEmpty;
+    private MudTextField<string>? _filterField;
 
     // Unmodified presses only: the page must not scroll, and modified keys keep their shortcuts.
     private static readonly KeyInterceptorOptions _treeKeyOptions = new()
@@ -77,6 +81,14 @@ public partial class TopicBrowser
         await EnsureKeyboardAttachedAsync();
         await FocusPendingRowAsync();
         await RetainFocusedRowAsync();
+
+        if (_focusFilterWhenEmpty)
+        {
+            _focusFilterWhenEmpty = false;
+            _focusedKey = null;
+            if (_filterField is not null)
+                await _filterField.FocusAsync();
+        }
     }
 
     private static KeyOptions TreeKey(string key) => new()
@@ -107,10 +119,17 @@ public partial class TopicBrowser
         _visibleRows = frame.Rows.ToList();
         _rootTopicCount = frame.RootCount;
         _selectedKey = frame.Selection.Key;
+        var branches = frame.Selection.Branches.IsDefault
+            ? ImmutableArray<TopicBranchTarget>.Empty
+            : frame.Selection.Branches;
+        _selectedBranches = branches;
         EnsureActiveRow(previousRows, previousActive);
 
-        if (_bulkSelection.IsActive && frame.Selection.Mode == TopicSelectionMode.MultipleTopics)
-            _bulkSelection.Adopt(frame.Selection.Paths);
+        if (_bulkSelection.IsActive && frame.Selection.Mode == TopicSelectionMode.Branches)
+            _bulkSelection.Adopt(branches);
+
+        if (previousRows.Count > 0 && _visibleRows.Count == 0 && _focusedKey is not null)
+            _focusFilterWhenEmpty = true;
 
         if (!focusedRowVanished || _activeKey is null) return;
 
@@ -130,8 +149,8 @@ public partial class TopicBrowser
 
         if (ContainsRow(_activeKey)) return;
 
-        if (_selectedKey is { } selected
-            && _visibleRows.FirstOrDefault(row => string.Equals(row.FullPath, selected, StringComparison.Ordinal)) is { } selectedRow)
+        if (_selectedBranches.Length > 0
+            && _visibleRows.FirstOrDefault(row => _selectedBranches.Contains(row.Branch)) is { } selectedRow)
         {
             _activeKey = selectedRow.RowKey;
             return;
@@ -374,10 +393,9 @@ public partial class TopicBrowser
     private Task ActivateRow(TopicTreeRowModel row)
     {
         if (!_bulkSelection.IsActive)
-            return OnRowSelected(row.ToSelection());
+            return OnRowSelected(row);
 
-        if (row.IsBulkSelectable)
-            ToggleRowSelection(row.SelectionPaths);
+        ToggleRowSelection(row);
 
         return Task.CompletedTask;
     }

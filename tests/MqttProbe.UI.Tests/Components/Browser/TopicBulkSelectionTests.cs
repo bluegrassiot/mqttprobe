@@ -31,7 +31,7 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void Checkboxes_AppearOnlyOnConcreteTopicRows_InSelectionMode()
+    public void EveryDisplayedLevel_HasACheckbox_InSelectionMode()
     {
         _fixture.AddTopics(("sensors/temp", 1), ("sensors/temp/room1", 2), ("sensors/humidity", 2));
         var cut = RenderExpanded();
@@ -40,36 +40,56 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
 
         cut.Find(".topic-select-toggle").Click();
 
-        cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().HaveCount(3));
-        Row(cut, "sensors").QuerySelector(".topic-select-checkbox")
-            .Should().BeNull("a branch row is not a concrete topic");
+        cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().HaveCount(4));
+        Row(cut, "sensors").QuerySelector(".topic-select-checkbox").Should().NotBeNull();
         Row(cut, "sensors/temp").QuerySelector(".topic-select-checkbox").Should().NotBeNull();
         Row(cut, "sensors/temp/room1").QuerySelector(".topic-select-checkbox").Should().NotBeNull();
         Row(cut, "sensors/humidity").QuerySelector(".topic-select-checkbox").Should().NotBeNull();
     }
 
     [Test]
+    public void SelectionMode_PlacesTheCheckboxBesideTheNodeIcon_WithoutAPlaceholderSlot()
+    {
+        _fixture.AddTopics(("sensors/temp", 1), ("sensors/temp/room1", 2));
+        var cut = RenderExpanded();
+
+        cut.FindAll(".topic-select-checkbox").Should().BeEmpty("the mode is entered deliberately");
+
+        cut.Find(".topic-select-toggle").Click();
+        cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().HaveCount(3));
+
+        var grouping = Row(cut, "sensors");
+        grouping.QuerySelector(".topic-select-checkbox").Should().NotBeNull();
+        grouping.QuerySelector(".topic-select-slot").Should().BeNull("no blank gutter is reserved");
+        AssertColumnBesideIcon(grouping, cell => cell.QuerySelector(".topic-chevron") is not null);
+
+        AssertColumnBesideIcon(Row(cut, "sensors/temp"), cell => cell.QuerySelector(".topic-chevron") is not null);
+        AssertColumnBesideIcon(
+            Row(cut, "sensors/temp/room1"), cell => cell.ClassList.Contains("topic-tree-chevron-spacer"));
+    }
+
+    [Test]
     public void SelectingTwoTopics_FiltersTheirUnion_NewestFirst_WithoutDuplicates()
     {
         _fixture.Adapter.Add("sensors/temp", Message("temp-old", 10));
-        _fixture.Adapter.Add("sensors/temp/room1", Message("room-1", 20));
+        _fixture.Adapter.Add("sensors/humidity", Message("humid", 20));
         _fixture.Adapter.Add("sensors/temp", Message("temp-new", 30));
         _fixture.Adapter.Add("unrelated/topic", Message("unrelated", 40));
         var cut = RenderExpanded();
 
         cut.Find(".topic-select-toggle").Click();
-        cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().HaveCount(3));
+        cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().HaveCount(5));
 
         Check(cut, "sensors/temp");
-        Check(cut, "sensors/temp/room1");
+        Check(cut, "sensors/humidity");
 
         var state = _fixture.Adapter.Store.GetSelectedTopicState();
-        state.Key.Should().StartWith("multi:");
-        state.Label.Should().Be("2 topics selected");
+        state.Key.Should().StartWith("branches:");
+        state.Label.Should().Be("2 branches selected");
         state.MessageCount.Should().Be(3);
         var messages = _fixture.Adapter.Store.GetSelectedMessages(state.Token, 10)!;
         messages.Messages.Select(message => message.Payload)
-            .Should().Equal("temp-new", "room-1", "temp-old");
+            .Should().Equal("temp-new", "humid", "temp-old");
     }
 
     [Test]
@@ -84,8 +104,8 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
         cut.WaitForAssertion(() =>
         {
             var state = _fixture.Adapter.Store.GetSelectedTopicState();
-            state.Key.Should().StartWith("multi:");
-            state.Paths.Should().Equal("sensors/temp");
+            state.Key.Should().StartWith("branches:");
+            state.Branches.Select(branch => branch.Path).Should().Equal("sensors/temp");
         });
     }
 
@@ -102,8 +122,8 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
         cut.WaitForAssertion(() =>
         {
             var state = _fixture.Adapter.Store.GetSelectedTopicState();
-            state.Key.Should().StartWith("multi:");
-            state.Paths.Should().Equal("sensors/temp");
+            state.Key.Should().StartWith("branches:");
+            state.Branches.Select(branch => branch.Path).Should().Equal("sensors/temp");
         });
     }
 
@@ -115,7 +135,7 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
         cut.Find(".topic-select-toggle").Click();
         Check(cut, "sensors/temp");
         Check(cut, "sensors/humidity");
-        _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().StartWith("multi:");
+        _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().StartWith("branches:");
 
         cut.Find(".topic-select-toggle").Click();
 
@@ -141,8 +161,8 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
         cut.WaitForAssertion(() =>
         {
             var state = _fixture.Adapter.Store.GetSelectedTopicState();
-            state.Key.Should().StartWith("multi:");
-            state.Paths.Should().Equal("sensors/temp");
+            state.Key.Should().StartWith("branches:");
+            state.Branches.Select(branch => branch.Path).Should().Equal("sensors/temp");
             cut.FindAll(".topic-select-checkbox input[checked]").Should().ContainSingle();
         });
 
@@ -175,7 +195,7 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
         {
-            _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().StartWith("multi:");
+            _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().StartWith("branches:");
             cut.FindAll(".topic-select-checkbox input[checked]").Should().HaveCount(2);
         });
 
@@ -185,7 +205,16 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("Grouped by node and device"));
         ExpandAll(cut);
         cut.WaitForAssertion(() =>
-            cut.FindAll(".topic-select-checkbox input[checked]").Should().HaveCount(2));
+        {
+            _fixture.Adapter.Store.GetSelectedTopicState().Branches.Select(branch => branch.Path)
+                .Should().BeEquivalentTo("spBv1.0/plant1/NBIRTH/node1", "spBv1.0/plant1/NDATA/node1");
+            cut.FindAll(".topic-select-checkbox input[checked]").Should().HaveCount(4,
+                "the two tips and the two message-type rows that name exactly them");
+            cut.FindAll(".topic-tree-row")
+                .First(row => row.QuerySelector(".topic-name")?.TextContent.Trim() == "node1")
+                .QuerySelector(".topic-select-checkbox .mud-checkbox-null")
+                .Should().NotBeNull("the node row also names verbs that are not selected");
+        });
     }
 
     [Test]
@@ -199,7 +228,7 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
         ExpandAll(second);
 
         first.Find(".topic-select-toggle").Click();
-        second.WaitForAssertion(() => second.FindAll(".topic-select-checkbox").Should().HaveCount(2));
+        second.WaitForAssertion(() => second.FindAll(".topic-select-checkbox").Should().HaveCount(3));
         Check(first, "sensors/temp");
 
         second.WaitForAssertion(() =>
@@ -212,7 +241,7 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     {
         _fixture.AddTopics(("sensors/temp", 1), ("sensors/humidity", 2));
         var selection = new TopicBulkSelection(_fixture.Adapter);
-        selection.Enter(["sensors/temp", "sensors/humidity"]);
+        selection.Enter([Raw("sensors/temp"), Raw("sensors/humidity")]);
         var cut = Render<TopicBulkToolbar>(parameters => parameters.AddCascadingValue(selection));
 
         cut.Markup.Should().Contain("2 topics selected");
@@ -227,90 +256,118 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void AliasOnlyTopic_ChecksTheRawSpelling_NotTheNormalizedName()
-    {
-        _fixture.Adapter.Add("a//b", RawMessage("alias", "a//b"));
-        var cut = RenderExpanded();
-        cut.Find(".topic-select-toggle").Click();
-        cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().HaveCount(1));
-
-        Check(cut, "a/b");
-
-        var state = _fixture.Adapter.Store.GetSelectedTopicState();
-        state.Paths.Should().Equal("a//b");
-        state.Label.Should().Be("a//b");
-        state.MessageCount.Should().Be(1);
-        _fixture.Adapter.Store.GetSelectedMessages(state.Token, 10)!.Messages
-            .Should().ContainSingle().Which.Payload.Should().Be("alias");
-    }
-
-    [Test]
-    public void EachSpellingOfOneNode_IsIndependentlySelectable()
+    public void RawSlashLevelsAreDistinctBranches()
     {
         _fixture.Adapter.Add("a/b", RawMessage("canonical", "a/b"));
         _fixture.Adapter.Add("a//b", RawMessage("alias", "a//b"));
         var cut = RenderExpanded();
+
+        cut.FindAll(".topic-tree-row[data-topic-path='a/b']").Should().ContainSingle();
+        cut.FindAll(".topic-tree-row[data-topic-path='a//b']").Should().ContainSingle();
+
         cut.Find(".topic-select-toggle").Click();
-        cut.WaitForAssertion(() =>
-            cut.FindAll(".topic-select-checkbox").Should().HaveCount(2));
-        cut.FindAll(".topic-tree-row[data-topic-spelling]").Should().HaveCount(2);
-        cut.FindAll(".topic-tree-row:not([data-topic-spelling]) .topic-select-checkbox")
-            .Should().BeEmpty("only exact-spelling rows are bulk targets");
+        cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().HaveCount(4));
 
         Check(cut, "a//b");
 
         var state = _fixture.Adapter.Store.GetSelectedTopicState();
-        state.Paths.Should().Equal("a//b");
-        state.MessageCount.Should().Be(1);
-        _fixture.Adapter.Store.GetSelectedMessages(state.Token, 10)!.Messages
-            .Should().ContainSingle().Which.Payload.Should().Be("alias");
-        cut.FindAll(".topic-tree-row[data-topic-path=\"a/b\"] input[type=checkbox][checked]")
-            .Should().BeEmpty("the canonical spelling is a separate choice");
-
-        Check(cut, "a/b");
-        _fixture.Adapter.Store.GetSelectedTopicState().Paths.Should().Equal("a//b", "a/b");
+        state.Branches.Should().ContainSingle().Which.Path.Should().Be("a//b");
     }
 
     [Test]
-    public void ClearingOneSpelling_LeavesTheOtherSpellingIntact()
+    public void TheEmptyFirstLevel_SelectsOnlyTopicsThatStartWithASlash()
     {
-        _fixture.Adapter.Add("a/b", RawMessage("canonical", "a/b"));
-        _fixture.Adapter.Add("a//b", RawMessage("alias", "a//b"));
+        _fixture.Adapter.Add("a", RawMessage("plain", "a"));
+        _fixture.Adapter.Add("/b", RawMessage("leading", "/b"));
+        _fixture.Adapter.Add("/c", RawMessage("leading-2", "/c"));
         var cut = RenderExpanded();
-        cut.Find(".topic-select-toggle").Click();
-        Check(cut, "a//b");
 
-        _fixture.Adapter.Store.ClearMessagesForTopics(["a//b"]).Should().Be(1);
+        cut.Find(".topic-select-toggle").Click();
+        cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().HaveCount(4));
+
+        Row(cut, "").QuerySelector(".topic-name--empty").Should().NotBeNull();
+        Row(cut, "").QuerySelector(".topic-name--empty")!.TextContent.Should().Be("(empty level)");
+        Row(cut, "").GetAttribute("title").Should().Contain("Empty first MQTT level");
+        Check(cut, "");
 
         var state = _fixture.Adapter.Store.GetSelectedTopicState();
-        state.Paths.Should().Equal("a//b");
-        state.MessageCount.Should().Be(0);
-        _fixture.Adapter.Store.SelectTopics(TopicSelection.ForExactTopics(["a/b"]));
-        var remaining = _fixture.Adapter.Store.GetSelectedTopicState();
-        _fixture.Adapter.Store.GetSelectedMessages(remaining.Token, 10)!.Messages
-            .Should().ContainSingle().Which.Payload.Should().Be("canonical");
-        cut.InvokeAsync(() => cut.Instance.RefreshAsync());
-        cut.WaitForAssertion(() =>
-            cut.FindAll(".topic-tree-row[data-topic-path=\"a//b\"]").Should().ContainSingle(
-                "the cleared spelling's row remains visible"));
+        state.Branches.Should().ContainSingle().Which.Path.Should().BeEmpty();
+        state.MessageCount.Should().Be(2, "the empty first level is not every topic");
+        Row(cut, "").QuerySelector(".topic-select-checkbox input[checked]").Should().NotBeNull();
+        Row(cut, "a").QuerySelector(".topic-select-checkbox input[checked]").Should().BeNull();
     }
 
     [Test]
-    public async Task AliasSelection_SurvivesARefresh_AndClearsWhenTheNodeGoes()
+    public void ACoveredDescendant_CannotBeUncheckedOnItsOwn()
     {
-        _fixture.Adapter.Add("a//b", RawMessage("alias", "a//b"));
+        _fixture.AddTopics(("a/b", 1), ("a/c", 1), ("a", 1));
         var cut = RenderExpanded();
         cut.Find(".topic-select-toggle").Click();
+
+        Check(cut, "a");
+        var inherited = Row(cut, "a/b").QuerySelector(".topic-select-checkbox input");
+        inherited.Should().NotBeNull();
+        inherited!.HasAttribute("disabled").Should().BeTrue(
+            "removing the branch that covers this row would drop its siblings too");
+        Row(cut, "a/b").QuerySelector(".topic-select-checkbox__name")!.TextContent
+            .Should().Be("Selected through \"a\"");
+
+        Row(cut, "a/b").Click();
+        _fixture.Adapter.Store.GetSelectedTopicState().Branches.Should().ContainSingle()
+            .Which.Path.Should().Be("a", "the row cannot drop the branch that covers it");
+
+        Row(cut, "a").Click();
+        cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox input[checked]").Should().BeEmpty());
+    }
+
+    [Test]
+    public void AMixedAncestor_StaysEditable_AndWidensTheSelectionToItself()
+    {
+        _fixture.AddTopics(("a/b", 1), ("a/c", 1));
+        var cut = RenderExpanded();
+        cut.Find(".topic-select-toggle").Click();
+
         Check(cut, "a/b");
+        Row(cut, "a").QuerySelector(".topic-select-checkbox input")!.HasAttribute("disabled")
+            .Should().BeFalse("a partly covered ancestor is still its own choice");
 
-        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
-        _fixture.Adapter.Store.GetSelectedTopicState().Paths.Should().Equal("a//b");
+        Row(cut, "a").Click();
 
-        _fixture.Adapter.Store.RemoveMatchingTopic("a//b");
-        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
+        _fixture.Adapter.Store.GetSelectedTopicState().Branches.Should().ContainSingle()
+            .Which.Path.Should().Be("a", "the wider branch already covers the narrower one");
+    }
 
+    [Test]
+    public void ClickingARowInNormalMode_SelectsItsTopicAndKeepsIt()
+    {
+        _fixture.AddTopics(("sensors/temp", 1), ("sensors/humidity", 1));
+        var cut = RenderExpanded();
+
+        Row(cut, "sensors/temp").Click();
+
+        var state = _fixture.Adapter.Store.GetSelectedTopicState();
+        state.Key.Should().Be("sensors/temp", "a real row keeps the topic path as its identity");
+        state.Mode.Should().Be(TopicSelectionMode.SingleTopic);
         cut.WaitForAssertion(() =>
-            _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().BeNull());
+        {
+            Row(cut, "sensors/temp").ClassName.Should().Contain("topic-tree-row--selected");
+            cut.FindAll(".topic-tree-row--selected").Should().ContainSingle();
+        });
+    }
+
+    [Test]
+    public void TwoScopesThatDifferOnlyByFieldBoundary_StayDistinct()
+    {
+        var first = new TopicBranchTarget(TopicBranchKind.Sparkplug,
+            Scope: new SparkplugSelectionScope(SparkplugSelectionKind.Node, "a|b", "c"));
+        var second = new TopicBranchTarget(TopicBranchKind.Sparkplug,
+            Scope: new SparkplugSelectionScope(SparkplugSelectionKind.Node, "a", "b|c"));
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+
+        selection.Enter([first, second]);
+
+        selection.Count.Should().Be(2);
+        selection.Branches.Should().BeEquivalentTo(new[] { first, second });
     }
 
     private IRenderedComponent<TopicBrowser> RenderExpanded()
@@ -327,6 +384,19 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     private static IElement Row(IRenderedComponent<TopicBrowser> cut, string path) =>
         cut.FindAll(".topic-tree-row")
             .First(row => row.GetAttribute("data-topic-path") == path);
+
+    private static void AssertColumnBesideIcon(IElement row, Func<IElement, bool> precedesColumn)
+    {
+        var children = row.Children.ToList();
+        var checkbox = children.FindIndex(child => child.ClassList.Contains("topic-select-checkbox-wrap"));
+        var icon = children.FindIndex(child => child.ClassList.Contains("topic-node-icon"));
+
+        checkbox.Should().BeGreaterThan(0);
+        checkbox.Should().Be(icon - 1, "the checkbox sits immediately before the node icon");
+        precedesColumn(children[checkbox - 1]).Should().BeTrue("the column follows the chevron cell");
+    }
+
+    private static TopicBranchTarget Raw(string path) => new(TopicBranchKind.Raw, Path: path);
 
     private static void Check(IRenderedComponent<TopicBrowser> cut, string label)
     {

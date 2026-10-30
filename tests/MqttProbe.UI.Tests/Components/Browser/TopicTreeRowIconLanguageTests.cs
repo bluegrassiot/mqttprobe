@@ -50,7 +50,7 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
         Render<TopicTreeRow>(parameters => parameters
             .Add(component => component.Row, row)
             .Add(component => component.OnExpandToggled, (string p) => { })
-            .Add(component => component.OnSelected, (TopicSelection p) => { }));
+            .Add(component => component.OnActivated, (TopicTreeRowModel r) => { }));
 
     private static IElement NodeGlyph(IRenderedComponent<TopicTreeRow> cut) =>
         cut.Find(".topic-node-icon");
@@ -300,7 +300,7 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
     {
         var cut = RenderRow(Row(hasChildren: true, hasDirectMessages: false, kind: kind) with
         {
-            SelectionTopics = ["spBv1.0/plant1/node1/dev1", "spBv1.0/plant1/node1/dev2"],
+            TopicCount = 2,
         });
 
         cut.Find(".topic-tree-row").GetAttribute("title").Should().Be(
@@ -313,7 +313,7 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
         var cut = RenderRow(Row(hasChildren: true, hasDirectMessages: false,
             kind: TopicTreeRowKind.SparkplugNode) with
         {
-            SelectionTopics = ["spBv1.0/plant1/NDATA/node1"],
+            TopicCount = 1,
         });
 
         cut.Find(".topic-tree-row").GetAttribute("title").Should().Be(

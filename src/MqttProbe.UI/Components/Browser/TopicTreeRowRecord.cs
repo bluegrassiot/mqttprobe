@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using MqttProbe.Core.Models.Mqtt;
 
 namespace MqttProbe.UI.Components.Browser;
@@ -22,6 +21,13 @@ public enum TopicTreeOwner
     Device
 }
 
+public enum TopicTreeSelectionState
+{
+    Unchecked,
+    Mixed,
+    Checked
+}
+
 public sealed record TopicTreeRowModel(
     string FullPath,
     string DisplayName,
@@ -32,51 +38,60 @@ public sealed record TopicTreeRowModel(
     bool IsExpanded,
     bool IsValueBearer,
     TopicTreeRowKind Kind = TopicTreeRowKind.Topic,
-    ImmutableArray<string> SelectionTopics = default,
     SparkplugSelectionScope? Scope = null,
     TopicTreeOwner? Owner = null,
-    bool IsMessageTopic = false,
-    ImmutableArray<string> ObservedPaths = default,
-    int SpellingCount = 0)
+    bool IsMessageTopic = false)
 {
     public bool IsVirtualTopic => Kind is not (TopicTreeRowKind.Topic
         or TopicTreeRowKind.Spelling
         or TopicTreeRowKind.SparkplugNamespace
         or TopicTreeRowKind.SparkplugGroup);
 
-    // The exact raw spellings this row selects. A node with no observed spelling is not a
-    // concrete selection target, and a virtual grouping row never is.
-    public ImmutableArray<string> SelectionPaths => ObservedPaths.IsDefaultOrEmpty
-        ? FallbackPaths()
-        : ObservedPaths;
+    public string RowKey => FullPath;
 
-    private ImmutableArray<string> FallbackPaths() => IsMessageTopic ? [FullPath] : [];
+    // Every displayed level is a branch target. Virtual rows carry a Sparkplug scope instead of
+    // a raw path, so a virtual id never reaches topic matching.
+    public TopicBranchTarget Branch { get; init; } = null!;
 
-    public bool IsBulkSelectable => IsMessageTopic && SelectionPaths.Length > 0;
+    public string BranchLabel { get; init; } = string.Empty;
 
-    // A node reached by more than one exact spelling renders one row per spelling beside the node
-    // row, so the row key needs the raw spelling to stay unique.
-    public string RowKey => Kind == TopicTreeRowKind.Spelling
-        ? $"{FullPath}\u001f{string.Join('\u001f', SelectionPaths)}"
-        : FullPath;
+    public bool IsEmptyLevel => DisplayName.Length == 0;
 
-    public ImmutableArray<string> SelectedTopics => SelectionTopics.IsDefaultOrEmpty
-        ? [FullPath]
-        : SelectionTopics;
-
-    public string SelectionLabel => Scope is { } scope ? ScopedLabel(scope) : UnscopedLabel();
-
-    public TopicSelection ToSelection() => new(FullPath, SelectionLabel, SelectedTopics, Scope,
-        RequireCanonicalTopics: Kind is TopicTreeRowKind.MessageType);
-
-    private string UnscopedLabel() => SelectedTopics.Length == 1
-        ? SelectedTopics[0]
-        : $"{SelectedTopics[0]} and {SelectedTopics.Length - 1} more";
-
-    private static string ScopedLabel(SparkplugSelectionScope scope) => scope.Kind switch
+    public string BranchAriaLabel
     {
-        SparkplugSelectionKind.Device => $"{scope.GroupPath}/{scope.NodeId}/{scope.DeviceId}",
-        SparkplugSelectionKind.Devices => $"{scope.GroupPath}/{scope.NodeId}/Devices",
-        _ => $"{scope.GroupPath}/{scope.NodeId}"
-    };
+        get
+        {
+            if (Branch.Kind == TopicBranchKind.Sparkplug)
+                return HasChildren ? $"Select {BranchLabel} and everything below it" : $"Select {BranchLabel}";
+
+            if (!IsEmptyLevel)
+                return HasChildren ? $"Select \"{FullPath}\" and everything below it" : $"Select topic \"{FullPath}\"";
+
+            if (FullPath.Length == 0)
+                return "Select the empty first level and everything below it";
+
+            return HasChildren
+                ? $"Select the empty level at \"{FullPath}\" and everything below it"
+                : $"Select the empty level at \"{FullPath}\"";
+        }
+    }
+
+    public string EmptyLevelTitle
+    {
+        get
+        {
+            if (FullPath.Length == 0)
+                return "Empty first MQTT level · leading \"/\"";
+
+            return IsMessageTopic
+                ? $"Empty MQTT level · exact topic \"{FullPath}\""
+                : $"Empty MQTT level · structure only · \"{FullPath}\"";
+        }
+    }
+
+    // A real row opens its own topic path, so the selection keeps a path identity. A grouped
+    // row has no topic of its own, so it opens the logical scope it stands for.
+    public TopicSelection ToSelection() => Branch.Kind == TopicBranchKind.Raw && Branch.Path is { } path
+        ? TopicSelection.ForTopic(path)
+        : TopicSelection.ForBranches([Branch]);
 }

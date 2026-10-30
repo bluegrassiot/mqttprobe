@@ -463,7 +463,8 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
         FocusedList(cut).KeyDown("Enter");
         cut.Markup.Should().Contain("Message Details");
 
-        cut.InvokeAsync(() => selection.NotifyMessagesCleared(["sensor/temp"]));
+        cut.InvokeAsync(() => selection.NotifyMessagesCleared(
+            [new TopicBranchTarget(TopicBranchKind.Raw, Path: "sensor/temp")]));
 
         cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Message Details"));
         cut.FindAll(".payload-message-list").Should().ContainSingle();

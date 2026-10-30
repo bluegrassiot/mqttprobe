@@ -397,6 +397,7 @@
         _bulkSelection.Toggle(row.Branch);
         _activeKey = row.RowKey;
         _focusedKey = row.RowKey;
+        _tabStopFollowsFirstRow = false;
         if (OnSelectedChanged.HasDelegate)
             await OnSelectedChanged.InvokeAsync(TopicSelectionStore.GetSelectedTopicState());
     }

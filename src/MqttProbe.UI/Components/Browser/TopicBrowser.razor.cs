@@ -27,6 +27,9 @@ public partial class TopicBrowser
     // update still has to follow when the virtualizer unmounts it.
     private string? _activeKey;
     private string? _focusedKey;
+    // True while the tab stop is the first visible row the component picked, rather than a row the
+    // user or the page chose.
+    private bool _tabStopFollowsFirstRow;
     private string? _pendingFocusKey;
     private int _pendingFocusIndex = -1;
     private bool _pendingFocusRestore;
@@ -68,6 +71,7 @@ public partial class TopicBrowser
         if (string.Equals(_activeKey, key, StringComparison.Ordinal)) return;
 
         _activeKey = key;
+        _tabStopFollowsFirstRow = false;
         StateHasChanged();
     });
 
@@ -101,6 +105,7 @@ public partial class TopicBrowser
     {
         _activeKey = key;
         _focusedKey = key;
+        _tabStopFollowsFirstRow = false;
     }
 
     private void ApplyFrame(TopicSelectionFrame? frame)
@@ -132,29 +137,27 @@ public partial class TopicBrowser
         if (!focusedRowVanished || _activeKey is null) return;
 
         _focusedKey = _activeKey;
+        _tabStopFollowsFirstRow = false;
         RequestFocus(_activeKey, restore: true);
     }
 
     // The roving tab stop outlives a refresh, so only a row that is no longer visible needs
-    // a new one.
+    // a new one. Until the user or the page chooses a row, the stop follows the first visible row,
+    // so a root that sorts above the old one is still the row the first Tab reaches.
     private void EnsureActiveRow(List<TopicTreeRowModel> previousRows, string? previousActive)
     {
         if (_visibleRows.Count == 0)
         {
             _activeKey = null;
+            _tabStopFollowsFirstRow = false;
             return;
         }
 
-        if (ContainsRow(_activeKey)) return;
+        if (!_tabStopFollowsFirstRow && ContainsRow(_activeKey)) return;
 
-        if (_visibleRows.FirstOrDefault(row => SelectionStateOf(row.Branch) == TopicTreeSelectionState.Checked)
-            is { } selectedRow)
-        {
-            _activeKey = selectedRow.RowKey;
-            return;
-        }
-
-        _activeKey = NearestVisibleAncestor(previousRows, previousActive) ?? _visibleRows[0].RowKey;
+        var ancestor = NearestVisibleAncestor(previousRows, previousActive);
+        _activeKey = ancestor ?? _visibleRows[0].RowKey;
+        _tabStopFollowsFirstRow = ancestor is null;
     }
 
     private string? NearestVisibleAncestor(List<TopicTreeRowModel> previousRows, string? previousActive)
@@ -329,6 +332,7 @@ public partial class TopicBrowser
         if (index < 0) return Task.CompletedTask;
 
         _activeKey = row.RowKey;
+        _tabStopFollowsFirstRow = false;
         return e.Key switch
         {
             "ArrowDown" => MoveActiveRow(index + 1),

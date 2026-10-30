@@ -42,6 +42,7 @@ public class PayloadBrowserTests : BunitTestContext
 
         _mockMetrics = Substitute.For<IUxMetricsService>();
         Services.AddSingleton(_mockMetrics);
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
 
         Services.AddSingleton(Substitute.For<IDialogService>());
         Services.AddSingleton(Substitute.For<ISnackbar>());

@@ -106,6 +106,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         {
             _messageStores.Clear();
             InvalidateSelection();
+            ResetTiming();
             _totalNodeCount = 0;
             _rootTopicCount = 0;
             _totalMessageCount = 0;
@@ -217,6 +218,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
     private void StoreMessage(MessageStore store, MqttMessage message, string rawTopic)
     {
+        RecordTiming(message, rawTopic);
         (store.ObservedRawTopics ??= new HashSet<string>(StringComparer.Ordinal)).Add(rawTopic);
         if (!string.Equals(rawTopic, store.FullTopic, StringComparison.Ordinal)
             && _aliasSpellings.Add(rawTopic))

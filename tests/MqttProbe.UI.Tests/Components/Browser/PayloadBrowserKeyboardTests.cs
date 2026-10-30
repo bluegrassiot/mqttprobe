@@ -43,6 +43,7 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
 
         _metrics = Substitute.For<IUxMetricsService>();
         Services.AddSingleton(_metrics);
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
         Services.AddSingleton(Substitute.For<IDialogService>());
         Services.AddSingleton(Substitute.For<ISnackbar>());
 
@@ -87,8 +88,11 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
 
         cut.FindAll(".payload-row")[1].Click();
 
-        cut.Markup.Should().Contain("Message Details");
-        cut.Find(".payload-detail-body").TextContent.Should().Contain("second");
+        cut.WaitForAssertion(() =>
+        {
+            cut.Markup.Should().Contain("Message Details");
+            cut.Find(".payload-detail-body").TextContent.Should().Contain("second");
+        });
     }
 
     [Test]
@@ -261,10 +265,15 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
 
         FocusedList(cut).KeyDown("ArrowDown");
         FocusedList(cut).KeyDown("ArrowDown");
+        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle()
+            .Which.Should().Contain("second"));
         FocusedList(cut).KeyDown("Enter");
 
-        cut.Markup.Should().Contain("Message Details");
-        cut.Find(".payload-detail-body").TextContent.Should().Contain("second");
+        cut.WaitForAssertion(() =>
+        {
+            cut.Markup.Should().Contain("Message Details");
+            cut.Find(".payload-detail-body").TextContent.Should().Contain("second");
+        });
     }
 
     [Test]
@@ -273,10 +282,15 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
         var cut = RenderList();
 
         FocusedList(cut).KeyDown("End");
+        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle()
+            .Which.Should().Contain("third"));
         FocusedList(cut).KeyDown(" ");
 
-        cut.Markup.Should().Contain("Message Details");
-        cut.Find(".payload-detail-body").TextContent.Should().Contain("third");
+        cut.WaitForAssertion(() =>
+        {
+            cut.Markup.Should().Contain("Message Details");
+            cut.Find(".payload-detail-body").TextContent.Should().Contain("third");
+        });
     }
 
     [TestCase("Control")]
@@ -448,7 +462,7 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
         _messages = Recreated();
 
         cut.WaitForAssertion(() => _metrics.Received().SetDisplayedMessageCount(3));
-        cut.Markup.Should().Contain("Message Details");
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Message Details"));
         JSInterop.VerifyFocusAsyncInvoke(1, "refreshing content must leave focus where it is");
     }
 

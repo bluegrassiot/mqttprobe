@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Services.Configuration;
 
@@ -313,5 +314,114 @@ public class PreferenceSettingsTests
         await _preferences.SetMaxTopicNodesAsync(50);
 
         _document.Config.Performance.MaxTopicNodes.Should().Be(5000);
+    }
+
+    [Test]
+    public void MessageTime_DefaultsToUtcClockWith24HourFormatAndAllTopics()
+    {
+        var messageTime = _preferences.Ui.MessageTime;
+
+        messageTime.Mode.Should().Be("clock");
+        messageTime.Zone.Should().Be("utc");
+        messageTime.ClockFormat.Should().Be("24h");
+        messageTime.DeltaScope.Should().Be("all");
+    }
+
+    [Test]
+    public void MessageTimePreferences_UseValueEquality()
+    {
+        var left = new MessageTimePreferences
+        {
+            Mode = MessageTimePreferences.ModeDelta,
+            Zone = MessageTimePreferences.ZoneLocal,
+            ClockFormat = MessageTimePreferences.ClockFormat12Hour,
+            DeltaScope = MessageTimePreferences.DeltaScopeTopic
+        };
+        var right = new MessageTimePreferences
+        {
+            Mode = MessageTimePreferences.ModeDelta,
+            Zone = MessageTimePreferences.ZoneLocal,
+            ClockFormat = MessageTimePreferences.ClockFormat12Hour,
+            DeltaScope = MessageTimePreferences.DeltaScopeTopic
+        };
+
+        left.Should().Be(right);
+        left.GetHashCode().Should().Be(right.GetHashCode());
+    }
+
+    [Test]
+    public async Task SetMessageTimeAsync_PersistsTheCamelCaseJsonShape()
+    {
+        await _preferences.SetMessageTimeAsync(new MessageTimePreferences
+        {
+            Mode = MessageTimePreferences.ModeDelta,
+            Zone = MessageTimePreferences.ZoneLocal,
+            ClockFormat = MessageTimePreferences.ClockFormat12Hour,
+            DeltaScope = MessageTimePreferences.DeltaScopeTopic
+        });
+
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(_configPath));
+        var messageTime = document.RootElement.GetProperty("ui").GetProperty("messageTime");
+        messageTime.GetProperty("mode").GetString().Should().Be("delta");
+        messageTime.GetProperty("zone").GetString().Should().Be("local");
+        messageTime.GetProperty("clockFormat").GetString().Should().Be("12h");
+        messageTime.GetProperty("deltaScope").GetString().Should().Be("topic");
+    }
+
+    [Test]
+    public async Task SetMessageTimeAsync_PersistsAndRaisesUiPreferencesChanged()
+    {
+        var fired = false;
+        _preferences.UiPreferencesChanged += () => fired = true;
+
+        await _preferences.SetMessageTimeAsync(new MessageTimePreferences
+        {
+            Mode = "delta",
+            Zone = "local",
+            ClockFormat = "12h",
+            DeltaScope = "topic"
+        });
+
+        fired.Should().BeTrue();
+
+        using var reloaded = new SettingsDocument(_configPath);
+        await new SettingsLoader(reloaded, new ConnectionSecrets(null, null), false, null).LoadAsync();
+        var messageTime = reloaded.Config.Ui.MessageTime;
+        messageTime.Mode.Should().Be("delta");
+        messageTime.Zone.Should().Be("local");
+        messageTime.ClockFormat.Should().Be("12h");
+        messageTime.DeltaScope.Should().Be("topic");
+    }
+
+    [Test]
+    public async Task SetMessageTimeAsync_NormalizesInvalidValuesAndCopiesTheInput()
+    {
+        var requested = new MessageTimePreferences
+        {
+            Mode = "ELAPSED",
+            Zone = "browser",
+            ClockFormat = "13h",
+            DeltaScope = ""
+        };
+
+        await _preferences.SetMessageTimeAsync(requested);
+
+        requested.Mode = "delta";
+        var stored = _preferences.Ui.MessageTime;
+        stored.Mode.Should().Be("elapsed");
+        stored.Zone.Should().Be("utc");
+        stored.ClockFormat.Should().Be("24h");
+        stored.DeltaScope.Should().Be("all");
+    }
+
+    [Test]
+    public async Task SetMessageTimeAsync_NullPreferencesRestoreDefaults()
+    {
+        await _preferences.SetMessageTimeAsync(new MessageTimePreferences { Mode = "delta" });
+
+        await _preferences.SetMessageTimeAsync(null!);
+
+        _preferences.Ui.MessageTime.Mode.Should().Be("clock");
+        _preferences.Ui.MessageTime.Zone.Should().Be("utc");
     }
 }

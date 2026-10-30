@@ -12,6 +12,14 @@ internal static class ConfigDefaults
     {
         MigrateFontProfile(config, legacyJson);
         MigrateSparkplug(config, legacyJson);
+        NormalizeMessageTime(config);
+    }
+
+    private static void NormalizeMessageTime(AppConfiguration config)
+    {
+        if (config.Ui is null) return;
+
+        config.Ui.MessageTime = MessageTimePreferences.Normalize(config.Ui.MessageTime);
     }
 
     private static void MigrateFontProfile(AppConfiguration config, string? legacyJson)

@@ -46,6 +46,7 @@ public partial class PayloadBrowser
 
     protected override Task OnInitializedAsync()
     {
+        InitializeMessageTime();
         _filterFunc = FilterFunc;
         _updateTimer = new Timer(OnTimerTick, null, 0, 500);
         return Task.CompletedTask;
@@ -62,12 +63,14 @@ public partial class PayloadBrowser
                 await RevealActiveMessageAsync();
         }
 
-        if (_pendingFocus == FocusTarget.None)
-            return;
+        if (_pendingFocus != FocusTarget.None)
+        {
+            var target = _pendingFocus;
+            _pendingFocus = FocusTarget.None;
+            await FocusTargetAsync(target);
+        }
 
-        var target = _pendingFocus;
-        _pendingFocus = FocusTarget.None;
-        await FocusTargetAsync(target);
+        await FormatMessagesIfNeededAsync();
     }
 
     private async Task SyncListAttachmentAsync()
@@ -243,6 +246,7 @@ public partial class PayloadBrowser
         _selectedMessage = message;
         _activeMessageId = message.Id;
         _activeIndex = ActiveIndex();
+        _formatPending = true;
         if (focusDetail)
             _pendingFocus = FocusTarget.Detail;
         StateHasChanged();
@@ -350,6 +354,9 @@ public partial class PayloadBrowser
         _lastAppliedToken = null;
         _appliedState = null;
         _lastAppliedMaxCount = 0;
+        _clockItems.Clear();
+        _formatPending = false;
+        _formatVersion++;
         Metrics.SetDisplayedMessageCount(0);
 
         if (needsRefresh)
@@ -402,6 +409,7 @@ public partial class PayloadBrowser
         _lastAppliedToken = result.State.Token;
         _appliedState = result.State;
         _lastAppliedMaxCount = requestedLimit;
+        _formatPending = true;
         Metrics.SetDisplayedMessageCount(_messageList.Count);
         StateHasChanged();
     }

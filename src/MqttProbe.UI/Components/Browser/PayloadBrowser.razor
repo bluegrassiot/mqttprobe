@@ -2,6 +2,7 @@
 @using MqttProbe.Core.Services.Configuration
 @using MqttProbe.Core.Services.Plugins.Registry
 @inject ITopicSelectionStore MessageStoreManager
+@inject IUiSettings UiSettings
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IPerformanceSettings PerfSettings
@@ -15,6 +16,7 @@
 @if (_selectedMessage != null)
 {
     var msg = _selectedMessage;
+    var received = DetailItem(msg);
     <MudPaper Elevation="0" Class="pa-0 app-chrome-panel payload-browser-panel">
         <div class="d-flex align-center px-2 py-1 payload-detail-toolbar payload-section-divider"
              role="group" aria-label="Message details"
@@ -30,6 +32,7 @@
                            Disabled="@(!CanNavigateNext)" Color="Color.Primary"
                            title="Next message" OnClick="SelectNextMessage"/>
             <MudSpacer/>
+            <MessageTimeMenu Presentation="_presentation"/>
             <MudIconButton title="Copy full message" Size="Size.Small"
                            Icon="@LucideIcons.Copy" Color="Color.Primary"
                            @onclick="() => CopyToClipboard(JsonSerializer.Serialize(_selectedMessage))"/>
@@ -51,10 +54,32 @@
                     <tr>
                         <td class="pb-meta-label">Received</td>
                         <td class="pb-meta-value">
-                            @msg.DateTimeReceived.ToString("yyyy-MM-dd HH:mm:ss.fff")
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="payload-relative-time">
-                                @DisplayHelpers.GetRelativeTime(msg.DateTimeReceived)
-                            </MudText>
+                            @if (received is null)
+                            {
+                                <div class="pb-received-line">
+                                    <span class="pb-received-instant pb-clock-pending" data-time-pending
+                                          title="@MessageTimeDisplay.PendingTitle"
+                                          aria-label="@MessageTimeDisplay.PendingTitle">@MessageTimeDisplay.PendingMarker</span>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="payload-relative-time">
+                                        @DisplayHelpers.GetRelativeTime(msg.DateTimeReceived)
+                                    </MudText>
+                                </div>
+                                <div class="pb-received-zone-name pb-clock-pending">@MessageTimeDisplay.PendingTitle</div>
+                            }
+                            else
+                            {
+                                <div class="pb-received-line">
+                                    <span class="pb-received-instant"
+                                          title="@($"{received.FullText} ({received.ZoneName})")">
+                                        @received.DateText @received.TimeText
+                                    </span>
+                                    <span class="pb-received-zone" title="@received.ZoneName" data-received-zone>@received.ZoneAbbreviation</span>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="payload-relative-time">
+                                        @DisplayHelpers.GetRelativeTime(msg.DateTimeReceived)
+                                    </MudText>
+                                </div>
+                                <div class="pb-received-zone-name">@received.ZoneName · @received.OffsetLabel</div>
+                            }
                         </td>
                     </tr>
                     <tr>
@@ -247,23 +272,25 @@
 else
 {
     <MudPaper Elevation="0" Class="pa-0 app-chrome-panel payload-browser-panel">
-        @if (_messageList.Count > 0)
-        {
-            <div class="d-flex align-center px-3 py-1 payload-section-divider">
-                <MudIcon Icon="@LucideIcons.Inbox" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
-                <MudText Typo="Typo.subtitle2" Class="payload-topic-title">
-                    @_messageList.FirstOrDefault()?.Topic
+        <div class="d-flex align-center px-3 py-1 payload-section-divider payload-list-header">
+            <MudIcon Icon="@LucideIcons.Inbox" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
+            <MudText Typo="Typo.subtitle2" Class="payload-topic-title">
+                @(_messageList.FirstOrDefault()?.Topic ?? "Messages")
+            </MudText>
+            <span class="pb-mobile-time-readout" title="@HeaderMetaTitle" data-time-mobile-readout>
+                <span class="pb-mobile-time-readout__label">@HeaderLabel</span>
+                <span class="pb-mobile-time-readout__meta">@HeaderMeta</span>
+            </span>
+            <MudSpacer/>
+            @if (_messageList.Count >= MaxMessageCount)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Warning" Class="mr-2 payload-truncation-note">
+                    @MaxMessageCount msgs
                 </MudText>
-                <MudSpacer/>
-                @if (_messageList.Count >= MaxMessageCount)
-                {
-                    <MudText Typo="Typo.caption" Color="Color.Warning" Class="mr-2 payload-truncation-note">
-                        @MaxMessageCount msgs
-                    </MudText>
-                }
-            </div>
-        }
-        <div class="payload-message-list" tabindex="0"
+            }
+            <MessageTimeMenu Presentation="_presentation"/>
+        </div>
+        <div class="payload-message-list @TimeColumnClass" tabindex="0"
              role="group" aria-label="Message history"
              aria-activedescendant="@ActiveDescendantId"
              data-applied-topic-key="@AppliedTopicKey"
@@ -294,9 +321,12 @@ else
                         <button type="button" class="sortable-th" @onclick="ToggleSortOrder"
                                 aria-label="Sort messages by time"
                                 title="@(_newestFirst ? "Sort: oldest first" : "Sort: newest first")">
-                            Time
-                            <MudIcon Icon="@(_newestFirst ? Icons.Material.Filled.ArrowDownward : Icons.Material.Filled.ArrowUpward)"
-                                     Size="Size.Small" Color="Color.Inherit" />
+                            <span class="pb-th-label">
+                                @HeaderLabel
+                                <MudIcon Icon="@(_newestFirst ? Icons.Material.Filled.ArrowDownward : Icons.Material.Filled.ArrowUpward)"
+                                         Size="Size.Small" Color="Color.Inherit" />
+                            </span>
+                            <span class="pb-th-meta" title="@HeaderMetaTitle" data-time-header-meta>@HeaderMeta</span>
                         </button>
                     </MudTh>
                     <MudTh>Topic</MudTh>
@@ -304,9 +334,18 @@ else
                     <MudTh></MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd DataLabel="Time" Class="metrics-time pb-cell-time"
+                    @{
+                        var timeTitle = RowTitle(context);
+                        var timeText = RowText(context);
+                        var timePending = ClockIsPending(context);
+                    }
+                    <MudTd DataLabel="@HeaderLabel" Class="metrics-time pb-cell-time"
                            id="@RowDomId(context)" data-message-index="@RowIndex(context)">
-                        @context.DateTimeReceived.ToString("HH:mm:ss.fff")
+                        <span class="pb-time-value @(timePending ? "pb-time-value--pending" : "")"
+                              title="@timeTitle" aria-label="@timeTitle"
+                              data-time-value data-time-pending="@(timePending ? "true" : null)">
+                            @timeText
+                        </span>
                     </MudTd>
                     <MudTd DataLabel="Topic" Class="metrics-mono metrics-compact pb-cell-topic">@context.Topic</MudTd>
                     <MudTd DataLabel="Payload" Class="metrics-mono metrics-compact pb-cell-payload">
@@ -348,6 +387,8 @@ else
     public async ValueTask DisposeAsync()
     {
         Disposed = true;
+        _formatVersion++;
+        UiSettings.UiPreferencesChanged -= OnUiPreferencesChanged;
         Metrics.SetDisplayedMessageCount(0);
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();

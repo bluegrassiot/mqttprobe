@@ -49,6 +49,97 @@
     white-space: nowrap;
 }
 
+.payload-list-header ::deep .payload-topic-title {
+    flex: 1 1 auto;
+}
+
+.pb-mobile-time-readout {
+    display: none;
+    flex: 0 0 auto;
+    align-items: baseline;
+    gap: 4px;
+    margin-left: 8px;
+    font-size: 0.68rem;
+    color: var(--mud-palette-text-secondary);
+    white-space: nowrap;
+}
+
+.pb-mobile-time-readout__label {
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+}
+
+.pb-mobile-time-readout__meta {
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pb-th-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pb-th-meta {
+    display: block;
+    max-width: 100%;
+    margin-top: 1px;
+    overflow: hidden;
+    font-size: 0.62rem;
+    font-weight: 400;
+    line-height: 1.1;
+    color: var(--mud-palette-text-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pb-time-value {
+    display: inline-block;
+    white-space: nowrap;
+}
+
+.pb-time-value--pending {
+    color: var(--mud-palette-text-secondary);
+    letter-spacing: 0.12em;
+}
+
+.pb-clock-pending {
+    color: var(--mud-palette-text-secondary);
+}
+
+.pb-received-line {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+}
+
+.pb-received-instant {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.pb-received-zone {
+    padding: 0 4px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 3px;
+    font-size: 0.66rem;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--mud-palette-text-secondary);
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+    cursor: help;
+}
+
+.pb-received-zone-name {
+    margin-top: 1px;
+    font-size: 0.68rem;
+    color: var(--mud-palette-text-secondary);
+}
+
 ::deep .payload-relative-time {
     display: inline;
     margin-left: 6px;
@@ -128,6 +219,13 @@
     padding-bottom: 6px;
 }
 
+/* The time column is sized to its digits, so trim the table's default 16px gutters
+   instead of widening it further. */
+::deep .pb-cell-time {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
 /* The list is one tab stop; rows are reached with the arrow keys, so the ring frames the
    whole history instead of every row. */
 .payload-message-list {
@@ -166,6 +264,10 @@
    entry instead: time + retained flag on top, topic on one ellipsized line,
    payload preview clamped to two lines. Desktop table is untouched. */
 @media (max-width: 599.98px) {
+    .pb-mobile-time-readout {
+        display: inline-flex;
+    }
+
     ::deep .mud-table-container thead {
         display: none;
     }
@@ -237,17 +339,30 @@
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
-::deep colgroup col:nth-child(1) { width: 13%; }
-::deep colgroup col:nth-child(2) { width: 28%; }
-::deep colgroup col:nth-child(3) { width: 54%; }
+.payload-message-list {
+    --pb-time-column: 112px;
+}
+
+.payload-message-list--clock-12h {
+    --pb-time-column: 140px;
+}
+
+.payload-message-list--durations {
+    --pb-time-column: 156px;
+}
+
+::deep colgroup col:nth-child(1) { width: var(--pb-time-column); }
+::deep colgroup col:nth-child(2) { width: 26%; }
+::deep colgroup col:nth-child(3) { width: auto; }
 ::deep colgroup col:nth-child(4) { width: 5%; }
 
 .sortable-th {
     cursor: pointer;
     user-select: none;
     display: flex;
-    align-items: center;
-    gap: 4px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
     margin: 0;
     padding: 0;
     border: 0;

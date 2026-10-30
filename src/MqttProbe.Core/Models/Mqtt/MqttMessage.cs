@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MQTTnet.Protocol;
 
 namespace MqttProbe.Core.Models.Mqtt;
@@ -36,6 +37,15 @@ public class MqttMessage
         get => _dateTimeReceived;
         init => _dateTimeReceived = value == default ? DateTime.UtcNow : value;
     }
+
+    [JsonIgnore]
+    public TimeSpan? ElapsedSinceBufferStart { get; internal set; }
+
+    [JsonIgnore]
+    public TimeSpan? SincePreviousAllTopics { get; internal set; }
+
+    [JsonIgnore]
+    public TimeSpan? SincePreviousSameTopic { get; internal set; }
 
     public IReadOnlyDictionary<ulong, string>? AliasNames { get; init; }
     public string? FormatId { get; init; }

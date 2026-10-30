@@ -203,21 +203,22 @@ public sealed class TopicTreeStoreScopedSelectionTests
     }
 
     [Test]
-    public void NodeScope_ExcludesAnEndpointReachedOnlyThroughAnAlias()
+    public void NodeScope_IgnoresAMessageWhoseTopicDoesNotMatchThePath()
     {
         var store = CreateStore();
-        store.Add("spBv1.0/plant1/NDATA/node1", Message("aliased", 1, "spBv1.0/plant1//NDATA/node1"));
+        store.Add("spBv1.0/plant1/NDATA/node1", Message("mismatched", 1, "spBv1.0/plant1//NDATA/node1"));
 
         store.SelectTopics(NodeScope("node1"));
 
-        store.GetSelectedTopicState().Key.Should().BeNull("the endpoint has no canonical spelling yet");
+        store.GetSelectedTopicState().Key.Should().BeNull("the mismatched topic is rejected, so no endpoint exists");
+        store.TotalStoredMessages.Should().Be(0);
 
         AddCanonical(store, "spBv1.0/plant1/NDATA/node1", "canonical", 2);
         store.SelectTopics(NodeScope("node1"));
 
         var state = store.GetSelectedTopicState();
         state.Key.Should().Be(NodeKey);
-        state.MessageCount.Should().Be(2);
+        state.MessageCount.Should().Be(1, "only the canonical publication was stored");
     }
 
     [Test]

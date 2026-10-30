@@ -580,8 +580,12 @@ public class ChartDataServiceMessageHandlerTests
 
         excludes.Received(1).PurgeExcludedTopic += Arg.Any<Action<string>>();
         excludes.Received(1).TopicExcluded += Arg.Any<Action<string>>();
+        excludes.Received(1).PurgeExcludedSparkplug += Arg.Any<Action<SparkplugTopicExclude>>();
+        excludes.Received(1).SparkplugExcluded += Arg.Any<Action<SparkplugTopicExclude>>();
         excludes.Received(1).PurgeExcludedTopic -= Arg.Any<Action<string>>();
         excludes.Received(1).TopicExcluded -= Arg.Any<Action<string>>();
+        excludes.Received(1).PurgeExcludedSparkplug -= Arg.Any<Action<SparkplugTopicExclude>>();
+        excludes.Received(1).SparkplugExcluded -= Arg.Any<Action<SparkplugTopicExclude>>();
     }
 
     [Test]

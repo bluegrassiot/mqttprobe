@@ -21,5 +21,7 @@ public sealed record SelectedTopicState(
 {
     public ImmutableArray<string> Paths { get; init; } = ImmutableArray<string>.Empty;
 
+    public ImmutableArray<TopicBranchTarget> Branches { get; init; } = ImmutableArray<TopicBranchTarget>.Empty;
+
     public TopicSelectionMode Mode { get; init; } = TopicSelectionMode.SingleTopic;
 }

@@ -13,7 +13,7 @@ using MqttProbe.PluginContracts;
 
 namespace MqttProbe.Core.Services.Mqtt;
 
-public class MessageStoreManager : IMessageStoreManager
+public partial class MessageStoreManager : IMessageStoreManager
 {
     private readonly IMqttManagedClient _client;
     private readonly ILogger<MessageStoreManager> _logger;
@@ -56,6 +56,8 @@ public class MessageStoreManager : IMessageStoreManager
         {
             _topicExcludeService.PurgeExcludedTopic += OnPurgeExcludedTopic;
             _topicExcludeService.TopicExcluded += OnTopicExcluded;
+            _topicExcludeService.PurgeExcludedSparkplug += OnPurgeExcludedSparkplug;
+            _topicExcludeService.SparkplugExcluded += OnSparkplugExcluded;
         }
     }
 
@@ -113,6 +115,8 @@ public class MessageStoreManager : IMessageStoreManager
             {
                 _topicExcludeService.PurgeExcludedTopic -= OnPurgeExcludedTopic;
                 _topicExcludeService.TopicExcluded -= OnTopicExcluded;
+                _topicExcludeService.PurgeExcludedSparkplug -= OnPurgeExcludedSparkplug;
+                _topicExcludeService.SparkplugExcluded -= OnSparkplugExcluded;
             }
 
             // Never raise TopologyChanged from teardown. A purge can still be mid-flight,
@@ -239,6 +243,22 @@ public class MessageStoreManager : IMessageStoreManager
 
     public Task<int> ClearMessagesForTopicsAsync(IReadOnlyList<string> fullTopics) =>
         Task.FromResult(_store.ClearMessagesForTopics(fullTopics));
+
+    public Task<int> ClearMessagesForBranchesAsync(IReadOnlyList<TopicBranchTarget> branches) =>
+        Task.FromResult(_store.ClearMessagesForBranches(branches));
+
+    public Task<TopicBranchClearResult> ClearMessagesForBranchesAsync(
+        IReadOnlyList<TopicBranchTarget> branches, TopicExcludeConnectionToken token)
+    {
+        if (_topicExcludeService is null)
+            return Task.FromResult(new TopicBranchClearResult(false, 0));
+
+        var applied = _topicExcludeService.TryExecuteForConnection(
+            token, () => _store.ClearMessagesForBranches(branches), out var removed);
+        return Task.FromResult(applied
+            ? new TopicBranchClearResult(true, removed)
+            : new TopicBranchClearResult(false, 0));
+    }
 
     internal void AddMessage(string fullTopic, MqttMessage message) => _store.Add(fullTopic, message);
 
@@ -433,38 +453,6 @@ public class MessageStoreManager : IMessageStoreManager
                                     && Array.IndexOf(segments, "#") <= 4;
         return (deviceWildcard || broadTerminalWildcard)
                && MqttTopicMatcher.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}/__sequence_probe__", filter);
-    }
-
-    // Trusted purger: runs while the exclude service holds its lock, so topology removal
-    // must stay silent here. A purge running inline with Add/Remove also holds the operation
-    // semaphore; a purge finished later from a reader release holds no semaphore at all.
-    private void OnPurgeExcludedTopic(string filter)
-    {
-        _store.RemoveMatchingTopic(filter);
-        // ReSharper disable once InconsistentlySynchronizedField
-        if (_topologyService?.RemoveMatchingTopicSilent(filter) > 0)
-            Interlocked.Exchange(ref _topologyChangedPending, 1);
-    }
-
-    // Observer phase: no locks and no semaphore held, so a TopologyChanged subscriber may
-    // re-enter the exclude service.
-    private void OnTopicExcluded(string filter) => FlushTopologyChanged();
-
-    // Teardown never gets here: it drops its pending notification instead of raising
-    // publicly while a purge may still be in flight.
-    private void FlushTopologyChanged()
-    {
-        if (Interlocked.Exchange(ref _topologyChangedPending, 0) == 0)
-            return;
-
-        try
-        {
-            _topologyService?.RaiseTopologyChanged();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "TopologyChanged subscriber failed after an excluded topic purge");
-        }
     }
 
     private void LogPipelineDiagnostics(string topic, IReadOnlyList<string> diagnostics)

@@ -121,17 +121,17 @@ public sealed class TopicTreeStoreScopedClearTests
     }
 
     [Test]
-    public void Clear_RemovesOnlyTheConfirmedRawSpelling()
+    public void Clear_RemovesOnlyTheNamedRawPath()
     {
         var store = CreateStore();
         AddCanonical(store, "a/b", "canonical", 1);
-        store.Add("a/b", Message("alias", 2, "a//b"));
+        AddCanonical(store, "a//b", "slashed", 2);
 
         var removed = store.ClearMessagesForTopics(["a/b"]);
 
         removed.Should().Be(1);
         store.TotalStoredMessages.Should().Be(1);
-        Payloads(store, "a//b").Should().Equal("alias");
+        Payloads(store, "a//b").Should().Equal("slashed");
         Payloads(store, "a/b").Should().BeEmpty();
     }
 
@@ -140,7 +140,7 @@ public sealed class TopicTreeStoreScopedClearTests
     {
         var store = CreateStore();
         AddCanonical(store, "a/b", "canonical", 1);
-        store.Add("a/b", Message("alias", 2, "a//b"));
+        AddCanonical(store, "a//b", "slashed", 2);
         store.SelectTopics(TopicSelection.ForExactTopics(["a/b"]));
         var selected = store.GetSelectedTopicState();
 
@@ -150,8 +150,8 @@ public sealed class TopicTreeStoreScopedClearTests
         store.SelectTopics(TopicSelection.ForExactTopics(["a/b"]));
         selected = store.GetSelectedTopicState();
 
-        store.Add("a/b", Message("alias-later", 3, "a//b"));
-        Payloads(store, selected).Should().BeEmpty("the alias spelling is not the selected topic");
+        AddCanonical(store, "a//b", "slashed-later", 3);
+        Payloads(store, selected).Should().BeEmpty("the sibling spelling is not the selected topic");
 
         AddCanonical(store, "a/b", "canonical-later", 4);
         Payloads(store, selected).Should().Equal("canonical-later");

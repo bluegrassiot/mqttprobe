@@ -227,11 +227,11 @@ public sealed class TopicTreeStoreMultiSelectionTests
     }
 
     [Test]
-    public void ExactSelection_KeepsDistinctRawSpellingsOnTheSameNodeApart()
+    public void ExactSelection_KeepsRawSpellingsOnDistinctNodesApart()
     {
         var store = CreateStore();
         AddCanonical(store, "a/b", "canonical", 1);
-        store.Add("a/b", Message("alias", 2, "a//b"));
+        AddCanonical(store, "a//b", "slashed", 2);
 
         store.SelectTopics(TopicSelection.ForExactTopics(["a/b"]));
         var canonical = store.GetSelectedTopicState();
@@ -239,9 +239,9 @@ public sealed class TopicTreeStoreMultiSelectionTests
         Payloads(store, canonical).Should().Equal("canonical");
 
         store.SelectTopics(TopicSelection.ForExactTopics(["a//b"]));
-        var alias = store.GetSelectedTopicState();
-        alias.Paths.Should().Equal("a//b");
-        Payloads(store, alias).Should().Equal("alias");
+        var slashed = store.GetSelectedTopicState();
+        slashed.Paths.Should().Equal("a//b");
+        Payloads(store, slashed).Should().Equal("slashed");
     }
 
     [Test]
@@ -249,7 +249,7 @@ public sealed class TopicTreeStoreMultiSelectionTests
     {
         var store = CreateStore();
         AddCanonical(store, "a/b", "bare", 1);
-        store.Add("a/b", Message("slashed", 2, "/a/b/"));
+        AddCanonical(store, "/a/b/", "slashed", 2);
 
         store.SelectTopics(TopicSelection.ForExactTopics(["/a/b/"]));
 
@@ -259,11 +259,11 @@ public sealed class TopicTreeStoreMultiSelectionTests
     }
 
     [Test]
-    public void ExactSelection_PrunesASelectedSpellingRetiredByExclusionEvenWhenAnAliasKeepsTheNode()
+    public void ExactSelection_PrunesASelectedSpellingRetiredByExclusion()
     {
         var store = CreateStore();
         AddCanonical(store, "a/b", "canonical", 1);
-        store.Add("a/b", Message("alias", 2, "a//b"));
+        AddCanonical(store, "a//b", "slashed", 2);
         store.SelectTopics(TopicSelection.ForExactTopics(["a/b"]));
 
         store.RemoveMatchingTopic("a/b");
@@ -274,17 +274,16 @@ public sealed class TopicTreeStoreMultiSelectionTests
     }
 
     [Test]
-    public void ExactSelection_ExposesEveryObservedSpellingOnTheSnapshotRow()
+    public void SnapshotRow_ExposesTheRawSpellingOfItsOwnNode()
     {
         var store = CreateStore();
         AddCanonical(store, "a/b", "canonical", 1);
-        store.Add("a/b", Message("alias", 2, "a//b"));
+        AddCanonical(store, "a//b", "slashed", 2);
 
-        var row = store.GetTopicTreeSnapshot().Roots
-            .SelectMany(Flatten)
-            .Single(node => node.FullTopic == "a/b");
+        var rows = store.GetTopicTreeSnapshot().Roots.SelectMany(Flatten).ToList();
 
-        row.ObservedTopicPaths.Should().Equal("a//b", "a/b");
+        rows.Single(node => node.FullTopic == "a/b").ObservedTopicPaths.Should().Equal("a/b");
+        rows.Single(node => node.FullTopic == "a//b").ObservedTopicPaths.Should().Equal("a//b");
     }
 
     private static IEnumerable<TopicNodeSnapshot> Flatten(TopicNodeSnapshot node) =>

@@ -12,6 +12,7 @@ internal sealed partial class TopicTreeStore
     private string? _selectionLabel;
     private SparkplugSelectionScope? _selectionScope;
     private ImmutableArray<string> _selectionPaths = ImmutableArray<string>.Empty;
+    private ImmutableArray<TopicBranchTarget> _selectionBranches = ImmutableArray<TopicBranchTarget>.Empty;
     private TopicSelectionMode _selectionMode;
     private bool _selectionRequiresCanonical;
     private long _selectionGeneration;
@@ -48,16 +49,23 @@ internal sealed partial class TopicTreeStore
             return CaptureSelectedTopicState();
     }
 
-    // A selection that resolves to nothing is refused, so a stale row cannot clear a live one.
+    // A node selection that resolves to nothing is refused, so a stale row cannot clear a live one.
+    // A branch selection is kept even when it matches nothing, so later arrivals are picked up.
     public void SelectTopics(TopicSelection? selection)
     {
         lock (_storeSync)
         {
             if (selection is null)
             {
-                if (_selectedRoots.Count > 0)
+                if (HasSelection())
                     InvalidateSelection();
 
+                return;
+            }
+
+            if (selection.Mode == TopicSelectionMode.Branches)
+            {
+                ApplyBranchSelection(selection);
                 return;
             }
 
@@ -66,7 +74,7 @@ internal sealed partial class TopicTreeStore
                 var exact = ResolveExactPaths(selection.Topics);
                 if (exact.Count == 0)
                 {
-                    if (_selectedRoots.Count > 0)
+                    if (HasSelection())
                         InvalidateSelection();
 
                     return;
@@ -111,11 +119,7 @@ internal sealed partial class TopicTreeStore
             return;
         }
 
-        var normalized = Normalize(fullTopic);
-        if (normalized is null)
-            return;
-
-        SelectTopics(TopicSelection.ForTopic(normalized));
+        SelectTopics(TopicSelection.ForTopic(fullTopic));
     }
 
     public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection)
@@ -146,12 +150,10 @@ internal sealed partial class TopicTreeStore
                 || expectedSelection.Generation != _selectionGeneration)
                 return null;
 
-            state = CaptureSelectedTopicState();
-            if (_selectedRoots.Count == 0 || limit == 0)
-                messages = [];
-            else
+            var collected = new List<MqttMessage>();
+            int? branchCount = null;
+            if (HasSelection() && limit != 0)
             {
-                var collected = new List<MqttMessage>();
                 if (_selectionMode == TopicSelectionMode.MultipleTopics)
                 {
                     foreach (var path in _selectionPaths)
@@ -163,14 +165,20 @@ internal sealed partial class TopicTreeStore
                         collected.AddRange(nodeMessages.Where(message => MatchesExactSpelling(message, node, path)));
                     }
                 }
+                else if (_selectionMode == TopicSelectionMode.Branches)
+                {
+                    CollectBranchMessages(collected);
+                    branchCount = collected.Count;
+                }
                 else
                 {
                     foreach (var store in _selectedRoots)
                         CollectMessages(store, collected);
                 }
-
-                messages = collected.ToArray();
             }
+
+            state = CaptureSelectedTopicState(branchCount);
+            messages = collected.ToArray();
         }
 
         Array.Sort(messages, static (left, right) => right.DateTimeReceived.CompareTo(left.DateTimeReceived));
@@ -180,12 +188,15 @@ internal sealed partial class TopicTreeStore
         return new SelectedMessagesSnapshot(state, limit, ImmutableArray.CreateRange(messages));
     }
 
-    private SelectedTopicState CaptureSelectedTopicState()
+    private SelectedTopicState CaptureSelectedTopicState(int? branchMessageCount = null)
     {
         var paths = _selectionPaths;
-        var messageCount = _selectionMode == TopicSelectionMode.MultipleTopics
-            ? CountExactMessages()
-            : _selectedRoots.Sum(store => store.MessageCount);
+        var messageCount = _selectionMode switch
+        {
+            TopicSelectionMode.MultipleTopics => CountExactMessages(),
+            TopicSelectionMode.Branches => branchMessageCount ?? CountBranchMessages(),
+            _ => _selectedRoots.Sum(store => store.MessageCount)
+        };
 
         return new SelectedTopicState(
             new SelectedTopicToken(_storeId, _selectionGeneration, _selectionContentVersion),
@@ -194,7 +205,8 @@ internal sealed partial class TopicTreeStore
             _selectionLabel)
         {
             Paths = paths,
-            Mode = _selectionMode
+            Mode = _selectionMode,
+            Branches = _selectionBranches
         };
     }
 
@@ -205,16 +217,7 @@ internal sealed partial class TopicTreeStore
         var resolved = new List<MessageStore>(topics.Length);
         foreach (var topic in topics)
         {
-            var normalized = Normalize(topic);
-            if (normalized is null)
-            {
-                if (requiresCanonical)
-                    return [];
-
-                continue;
-            }
-
-            var node = FindNode(normalized);
+            var node = FindNode(topic);
             if (node is null)
             {
                 if (requiresCanonical)
@@ -241,11 +244,10 @@ internal sealed partial class TopicTreeStore
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var topic in topics)
         {
-            var normalized = Normalize(topic);
-            if (normalized is null || !seen.Add(topic))
+            if (!seen.Add(topic))
                 continue;
 
-            var node = FindNode(normalized);
+            var node = FindNode(topic);
             if (node?.ObservedRawTopics?.Contains(topic) != true)
                 continue;
 
@@ -279,8 +281,7 @@ internal sealed partial class TopicTreeStore
         return count;
     }
 
-    private MessageStore? FindExactNode(string path) =>
-        Normalize(path) is { } normalized ? FindNode(normalized) : null;
+    private MessageStore? FindExactNode(string path) => FindNode(path);
 
     private static bool MatchesExactSpelling(MqttMessage message, MessageStore store, string path) =>
         string.Equals(message.Topic ?? store.FullTopic ?? string.Empty, path, StringComparison.Ordinal);
@@ -367,6 +368,7 @@ internal sealed partial class TopicTreeStore
         _selectionLabel = label;
         _selectionScope = scope;
         _selectionPaths = exactPaths.IsDefault ? SnapshotPaths(resolved) : exactPaths;
+        _selectionBranches = ImmutableArray<TopicBranchTarget>.Empty;
         _selectionMode = mode;
         _selectionRequiresCanonical = requiresCanonical;
         _selectionGeneration++;
@@ -411,6 +413,7 @@ internal sealed partial class TopicTreeStore
         _selectionLabel = null;
         _selectionScope = null;
         _selectionPaths = ImmutableArray<string>.Empty;
+        _selectionBranches = ImmutableArray<TopicBranchTarget>.Empty;
         _selectionMode = TopicSelectionMode.SingleTopic;
         _selectionRequiresCanonical = false;
         _selectionGeneration++;

@@ -21,10 +21,10 @@ public sealed partial class TopicExcludeService
         try
         {
             if (TryPrepareAdd(topic, boundConnection, boundGeneration,
-                    out var activeConnection, out var generation, out var candidate) is { } failure)
+                    out var activeConnection, out var generation, out var candidate, out var candidateRules) is { } failure)
                 return failure;
 
-            var persistenceError = await PersistTopicsAsync(activeConnection, candidate);
+            var persistenceError = await PersistTopicsAsync(activeConnection, candidate, candidateRules);
             if (persistenceError is not null)
                 return (TopicExcludeAddOutcome.Failed, PersistenceFailure().Feedback);
 
@@ -56,9 +56,11 @@ public sealed partial class TopicExcludeService
 
     private (TopicExcludeAddOutcome Outcome, UserNotification? Feedback)? TryPrepareAdd(
         string topic, Connection? boundConnection, long boundGeneration,
-        out Connection activeConnection, out long generation, out string[] candidate)
+        out Connection activeConnection, out long generation, out string[] candidate,
+        out SparkplugTopicExclude[] candidateRules)
     {
         candidate = [];
+        candidateRules = [];
         lock (_sync)
         {
             activeConnection = boundConnection ?? _sessionState.SelectedConnection;
@@ -75,6 +77,7 @@ public sealed partial class TopicExcludeService
                 return ClassifyValidationLocked(topic, validation);
 
             candidate = [.. _topics, topic];
+            candidateRules = [.. _sparkplugRules];
             return null;
         }
     }
@@ -95,7 +98,7 @@ public sealed partial class TopicExcludeService
         if (_topics.Contains(topic))
             return (TopicExcludeAddOutcome.AlreadyExcluded, validation.Feedback);
 
-        return _topics.Count >= MaxTopicExcludes
+        return _topics.Count + _sparkplugRules.Count >= MaxTopicExcludes
             ? (TopicExcludeAddOutcome.LimitReached, validation.Feedback)
             : (TopicExcludeAddOutcome.Invalid, validation.Feedback);
     }

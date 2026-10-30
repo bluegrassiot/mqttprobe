@@ -1,3 +1,4 @@
+using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Chart;
 
 namespace MqttProbe.Core.Tests.Services.Chart;
@@ -139,5 +140,22 @@ public class ChartFieldRegistryTests
         _registry.RemoveMatchingTopic("sensors/#").Should().BeTrue();
 
         _registry.GetTopics().Should().Equal("devices/temp");
+    }
+
+    [Test]
+    public void RemoveMatchingTopics_UsesTheTypedPredicateWithoutEmptyVerbResidue()
+    {
+        _registry.Update("spBv1.0/g/NDATA/n", Fields(("value", 1.0)));
+        _registry.Update("spBv1.0/g/NDATA/n/extra", Fields(("value", 2.0)));
+        _registry.Update("spBv1.0/g//n", Fields(("value", 3.0)));
+
+        var removed = _registry.RemoveMatchingTopics(topic =>
+            TopicBranchMatcher.MatchesSparkplug(
+                new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/g", "n"),
+                null,
+                topic));
+
+        removed.Should().BeTrue();
+        _registry.GetTopics().Should().Equal("spBv1.0/g//n");
     }
 }

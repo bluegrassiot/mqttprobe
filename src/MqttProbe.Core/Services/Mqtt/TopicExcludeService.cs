@@ -16,6 +16,7 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     private readonly Lock _sync = new();
     private readonly HashSet<string> _topics = new(StringComparer.Ordinal);
+    private readonly List<SparkplugTopicExclude> _sparkplugRules = [];
     private readonly Dictionary<string, int> _inFlightReaders = new(StringComparer.Ordinal);
     private readonly List<PendingPurge> _pendingPurges = [];
     private long _connectionGeneration;
@@ -24,6 +25,8 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
 
     public event Action<string>? PurgeExcludedTopic;
     public event Action<string>? TopicExcluded;
+    public event Action<SparkplugTopicExclude>? PurgeExcludedSparkplug;
+    public event Action<SparkplugTopicExclude>? SparkplugExcluded;
 
     public TopicExcludeService(ILogger<TopicExcludeService> logger,
         IConnectionSettings connectionSettings, ISessionState sessionState,
@@ -48,6 +51,15 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
         }
     }
 
+    public IReadOnlyList<SparkplugTopicExclude> SparkplugExcludes
+    {
+        get
+        {
+            lock (_sync)
+                return [.. _sparkplugRules];
+        }
+    }
+
     public bool IsExcluded(string topic)
     {
         lock (_sync)
@@ -67,7 +79,8 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
     }
 
     private bool IsExcludedLocked(string topic) =>
-        _topics.Any(filter => Matches(topic, filter));
+        _topics.Any(filter => Matches(topic, filter))
+        || _sparkplugRules.Any(rule => TopicBranchMatcher.MatchesSparkplug(rule.Scope, rule.MessageType, topic));
 
     public static bool Matches(string topic, string filter) => string.Equals(filter, "#", StringComparison.Ordinal) || MqttTopicMatcher.Matches(topic, filter);
 
@@ -94,15 +107,17 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
         {
             Connection activeConnection;
             string[] candidate;
+            SparkplugTopicExclude[] candidateRules;
             long generation;
             lock (_sync)
             {
                 activeConnection = _sessionState.SelectedConnection;
                 generation = _connectionGeneration;
                 candidate = [.. _topics.Where(topic => !topics.Contains(topic, StringComparer.Ordinal))];
+                candidateRules = [.. _sparkplugRules];
             }
 
-            var persistenceError = await PersistTopicsAsync(activeConnection, candidate);
+            var persistenceError = await PersistTopicsAsync(activeConnection, candidate, candidateRules);
             if (persistenceError is not null)
                 return PersistenceFailure();
 
@@ -116,6 +131,8 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
                 _topics.Clear();
                 foreach (var topic in candidate)
                     _topics.Add(topic);
+                _sparkplugRules.Clear();
+                _sparkplugRules.AddRange(candidateRules);
 
                 // Remove can overtake a purge parked on an in-flight reader; completing it
                 // here gives Add its outcome now instead of after an unrelated reader ends.
@@ -136,6 +153,7 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
             _connectionGeneration++;
             DropPendingPurgesLocked();
             _topics.Clear();
+            _sparkplugRules.Clear();
         }
     }
 
@@ -158,11 +176,28 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
             _loadedConnection = connection;
             DropPendingPurgesLocked();
             _topics.Clear();
+            _sparkplugRules.Clear();
             foreach (var topic in (connection.TopicExcludes).Where(IsValid).Take(MaxTopicExcludes))
                 _topics.Add(topic);
+            foreach (var rule in connection.SparkplugTopicExcludes)
+            {
+                if (_topics.Count + _sparkplugRules.Count >= MaxTopicExcludes)
+                    break;
+                if (!IsValidSparkplugExclude(rule) || _sparkplugRules.Contains(rule))
+                    continue;
+                _sparkplugRules.Add(rule);
+            }
+
             foreach (var topic in _topics)
             {
                 var purge = RequestPurgeLocked(topic, _connectionGeneration, out var deferred);
+                if (!deferred)
+                    purges.Add(purge);
+            }
+
+            foreach (var rule in _sparkplugRules)
+            {
+                var purge = RequestPurgeLocked(rule, _connectionGeneration, out var deferred);
                 if (!deferred)
                     purges.Add(purge);
             }
@@ -175,10 +210,16 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
 
     // A reader admitted before the filter went live can still write, so the purge is parked
     // until the matching readers leave; a superseded generation drops it instead.
-    private PendingPurge RequestPurgeLocked(string filter, long generation, out bool deferred)
+    private PendingPurge RequestPurgeLocked(string filter, long generation, out bool deferred) =>
+        RequestPurgeLocked(PendingPurge.ForFilter(filter, generation), out deferred);
+
+    private PendingPurge RequestPurgeLocked(
+        SparkplugTopicExclude rule, long generation, out bool deferred) =>
+        RequestPurgeLocked(PendingPurge.ForSparkplug(rule, generation), out deferred);
+
+    private PendingPurge RequestPurgeLocked(PendingPurge purge, out bool deferred)
     {
-        var purge = new PendingPurge(filter, generation);
-        if (HasMatchingReaderLocked(filter))
+        if (HasMatchingReaderLocked(purge))
         {
             _pendingPurges.Add(purge);
             deferred = true;
@@ -188,121 +229,6 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
         RunPurgersLocked(purge);
         deferred = false;
         return purge;
-    }
-
-    // Purgers always run with _sync held; only a purge running inline with Add or Remove
-    // also holds the operation semaphore, never a purge finished later (reader release,
-    // connection load). They may mutate state but must not notify observers: a subscriber
-    // re-entering Add from here deadlocks against the lock or the semaphore still held.
-    private void RunPurgersLocked(PendingPurge purge)
-    {
-        if (PurgeExcludedTopic is not { } purgers)
-            return;
-
-        foreach (var purger in purgers.GetInvocationList().Cast<Action<string>>())
-        {
-            try
-            {
-                purger(purge.Filter);
-            }
-            catch (Exception ex)
-            {
-                purge.Failed = true;
-                _logger.LogError(ex, "Failed to purge excluded topic data for {Filter}", purge.Filter);
-            }
-        }
-    }
-
-    private PurgeOutcome FinishPurge(PendingPurge purge)
-    {
-        var outcome = purge.Failed ? PurgeOutcome.Failed : PurgeOutcome.Completed;
-        try
-        {
-            if (TopicExcluded is { } observers)
-            {
-                foreach (var observer in observers.GetInvocationList().Cast<Action<string>>())
-                {
-                    try
-                    {
-                        observer(purge.Filter);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Topic exclusion observer failed for {Filter}", purge.Filter);
-                    }
-                }
-            }
-        }
-        finally
-        {
-            purge.Completion.TrySetResult(outcome);
-        }
-
-        return outcome;
-    }
-
-    private bool HasMatchingReaderLocked(string filter) =>
-        _inFlightReaders.Keys.Any(topic => Matches(topic, filter));
-
-    private void DropPendingPurgesLocked()
-    {
-        foreach (var purge in _pendingPurges)
-            purge.Completion.TrySetResult(PurgeOutcome.Superseded);
-
-        _pendingPurges.Clear();
-    }
-
-    // A parked purge whose filter is gone no longer has anything to clear, so it settles
-    // here with the outcome the caller can act on instead of waiting for a reader release.
-    private void DropRemovedPendingPurgesLocked()
-    {
-        for (var i = _pendingPurges.Count - 1; i >= 0; i--)
-        {
-            var purge = _pendingPurges[i];
-            if (_topics.Contains(purge.Filter))
-                continue;
-
-            _pendingPurges.RemoveAt(i);
-            purge.Completion.TrySetResult(PurgeOutcome.Removed);
-        }
-    }
-
-    // Parked purges publish here: the write they were waiting for has now happened.
-    private void ReleaseRead(string topic)
-    {
-        List<PendingPurge>? purges = null;
-        lock (_sync)
-        {
-            if (_inFlightReaders.TryGetValue(topic, out var readers))
-            {
-                if (readers > 1)
-                    _inFlightReaders[topic] = readers - 1;
-                else
-                    _inFlightReaders.Remove(topic);
-            }
-
-            for (var i = _pendingPurges.Count - 1; i >= 0; i--)
-            {
-                var purge = _pendingPurges[i];
-                if (purge.Generation != _connectionGeneration || !_topics.Contains(purge.Filter))
-                {
-                    _pendingPurges.RemoveAt(i);
-                    purge.Completion.TrySetResult(PurgeOutcome.Superseded);
-                }
-                else if (!HasMatchingReaderLocked(purge.Filter))
-                {
-                    _pendingPurges.RemoveAt(i);
-                    RunPurgersLocked(purge);
-                    (purges ??= []).Add(purge);
-                }
-            }
-        }
-
-        if (purges is null)
-            return;
-
-        foreach (var purge in purges)
-            FinishPurge(purge);
     }
 
     // The operation semaphore is never disposed: a queued operation has to be able to enter
@@ -323,15 +249,18 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
 
     private void ReleaseOperationLock() => _operationLock.Release();
 
-    private async Task<Exception?> PersistTopicsAsync(Connection sessionConn, IReadOnlyList<string> topics)
+    private async Task<Exception?> PersistTopicsAsync(
+        Connection sessionConn, IReadOnlyList<string> topics, IReadOnlyList<SparkplugTopicExclude> rules)
     {
         try
         {
             var stored = _connectionSettings.Connections.FirstOrDefault(c => c.Id == sessionConn.Id);
             var toSave = (stored ?? sessionConn).Clone();
             toSave.TopicExcludes = [.. topics];
+            toSave.SparkplugTopicExcludes = [.. rules];
             await _connectionSettings.AddConnectionAsync(toSave);
             sessionConn.TopicExcludes = [.. topics];
+            sessionConn.SparkplugTopicExcludes = [.. rules];
             return null;
         }
         catch (Exception ex)
@@ -349,7 +278,7 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
         if (_topics.Contains(topic))
             return Invalid($"Already excluding {topic}");
 
-        if (_topics.Count >= MaxTopicExcludes)
+        if (_topics.Count + _sparkplugRules.Count >= MaxTopicExcludes)
             return Invalid($"Topic exclusion limit ({MaxTopicExcludes}) reached");
 
         return new(true);
@@ -377,25 +306,6 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
 
     private bool IsCurrentConnectionLocked(Connection connection, long generation) =>
         generation == _connectionGeneration && ReferenceEquals(_sessionState.SelectedConnection, connection);
-
-    private enum PurgeOutcome
-    {
-        Superseded,
-        Completed,
-        Failed,
-
-        // The filter was removed again before its purge could run.
-        Removed
-    }
-
-    private sealed class PendingPurge(string filter, long generation)
-    {
-        public string Filter { get; } = filter;
-        public long Generation { get; } = generation;
-        public bool Failed { get; set; }
-        public TaskCompletionSource<PurgeOutcome> Completion { get; } =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
-    }
 
     private sealed class ReadGate(TopicExcludeService service, string topic) : IDisposable
     {

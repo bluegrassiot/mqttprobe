@@ -138,7 +138,11 @@
             else if (payloadType == PayloadType.Number)
             {
                 <div class="d-flex justify-center align-center pa-4">
-                    <MudText Typo="Typo.h5" Style="font-family:var(--font-mono); color:var(--mud-palette-success); letter-spacing:0.05em">@msg.Payload?.Trim()</MudText>
+                    <MudText Typo="Typo.h5" Class="payload-number-value">@NumberDisplay(msg.Payload!)</MudText>
+                    @if (ChartFieldPaths.TryParseRootNumber(msg.Payload, out _))
+                    {
+                        <AddToChartButton JsonPath="@ChartFieldPaths.Root" SeriesName="value" OnAddToChart="HandleAddToChart"/>
+                    }
                 </div>
             }
             else if (payloadType == PayloadType.Boolean)
@@ -280,6 +284,7 @@ else
         if (IsJson(trimmed)) return PayloadType.Json;
         if (trimmed.StartsWith('<')) return PayloadType.Xml;
         if (bool.TryParse(trimmed, out _)) return PayloadType.Boolean;
+        if (ChartFieldPaths.TryParseRootNumber(trimmed, out _)) return PayloadType.Number;
         if (double.TryParse(trimmed, NumberStyles.Any, CultureInfo.InvariantCulture, out _)) return PayloadType.Number;
         return PayloadType.Text;
     }
@@ -290,8 +295,17 @@ else
         catch { return null; }
     }
 
+    internal static string NumberDisplay(string payload)
+    {
+        var trimmed = payload.Trim();
+        return trimmed.StartsWith('"') && ChartFieldPaths.TryParseRootNumber(trimmed, out _)
+            ? JsonSerializer.Deserialize<string>(trimmed)!.Trim()
+            : trimmed;
+    }
+
     internal static string ChartShortLabel(string jsonPath)
     {
+        if (jsonPath == ChartFieldPaths.Root) return "value";
         var dot = jsonPath.LastIndexOf('.');
         return dot >= 0 ? jsonPath[(dot + 1)..] : jsonPath;
     }

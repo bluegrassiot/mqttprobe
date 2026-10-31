@@ -168,6 +168,7 @@
 
     internal static string GetShortLabel(string jsonPath)
     {
+        if (jsonPath == ChartFieldPaths.Root) return "value";
         var lastDot = jsonPath.LastIndexOf('.');
         return lastDot >= 0 ? jsonPath[(lastDot + 1)..] : jsonPath;
     }

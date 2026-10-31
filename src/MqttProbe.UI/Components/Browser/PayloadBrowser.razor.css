@@ -153,6 +153,13 @@
     word-break: break-all;
 }
 
+/* MudText renders outside this component's CSS-isolation scope. */
+::deep .payload-number-value {
+    font-family: var(--font-mono);
+    color: var(--mud-palette-success);
+    letter-spacing: 0.05em;
+}
+
 /* ── MudTable flex height fix ──────────────────────────────────────────────
    MudTable's outer .mud-table div is a block element with height:auto by
    default, so .mud-table-container's height:100% resolves to auto and the

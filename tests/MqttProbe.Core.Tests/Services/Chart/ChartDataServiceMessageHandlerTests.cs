@@ -77,6 +77,38 @@ public class ChartDataServiceMessageHandlerTests
     }
 
     [Test]
+    public async Task RootScalarPayload_WithRootJsonPath_AddsPointAndRegistersField()
+    {
+        var seriesId = Guid.NewGuid();
+        _mockChartSettings.GetCharts(Arg.Any<Guid>()).Returns(
+        [
+            ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "sensor/plain", JsonPath = ChartFieldPaths.Root })
+        ]);
+
+        await Fire("sensor/plain", "0.00");
+
+        _service.GetPoints(seriesId).Should().ContainSingle()
+            .Which.Value.Should().Be(0.0);
+        _registry.GetFields("sensor/plain").Should().ContainSingle()
+            .Which.JsonPath.Should().Be(ChartFieldPaths.Root);
+    }
+
+    [TestCase("NaN")]
+    [TestCase("not a number")]
+    public async Task NonNumericRootPayload_WithRootJsonPath_NoPointAdded(string payload)
+    {
+        var seriesId = Guid.NewGuid();
+        _mockChartSettings.GetCharts(Arg.Any<Guid>()).Returns(
+        [
+            ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "sensor/plain", JsonPath = ChartFieldPaths.Root })
+        ]);
+
+        await Fire("sensor/plain", payload);
+
+        _service.GetPoints(seriesId).Should().BeEmpty();
+    }
+
+    [Test]
     public async Task NonMatchingTopic_NoPointAdded()
     {
         var seriesId = Guid.NewGuid();

@@ -17,6 +17,7 @@ public class ChartFieldPickerTests
     [TestCase("a.b.c.d", ExpectedResult = "d", TestName = "Multi-level nesting returns leaf")]
     [TestCase("readings[0]", ExpectedResult = "readings[0]", TestName = "Indexed array with no dot returns full path")]
     [TestCase("data.values[2]", ExpectedResult = "values[2]", TestName = "Array under object returns array segment")]
+    [TestCase("$", ExpectedResult = "value", TestName = "Root payload path maps to value")]
     public string GetShortLabel_ReturnsExpected(string jsonPath)
         => ChartFieldPicker.GetShortLabel(jsonPath);
 

@@ -51,6 +51,14 @@ internal sealed class TopicBulkSelection(ITopicSelectionStore store)
         _ => $"{Count} topics selected"
     };
 
+    public string CompactSummary => Count switch
+    {
+        0 => "None selected",
+        _ when CoversWholeTree => "All selected",
+        1 => "1 selected",
+        _ => $"{Count} selected"
+    };
+
     public bool Contains(TopicBranchTarget target) => _targets.ContainsKey(TargetKey(target));
 
     // Names the selected branch that covers a row, or null when the row stands for itself.

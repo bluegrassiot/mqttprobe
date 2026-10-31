@@ -140,7 +140,7 @@ public sealed class TopicBulkActionsTests : BunitTestContext
         {
             var report = cut.Find(".topic-bulk-outcome").TextContent;
             report.Should().Contain("3 stored messages cleared from 2 topics");
-            report.Should().Contain("Topics left with no messages are removed from the tree.");
+            report.Should().NotContain("Topics left with no messages are removed from the tree.");
         });
 
         var state = _fixture.Adapter.Store.GetSelectedTopicState();

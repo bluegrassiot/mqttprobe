@@ -2,7 +2,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 8px;
+    padding: 0 8px;
     background: var(--mud-palette-surface);
     border-bottom: 1px solid var(--mud-palette-divider);
     min-height: 44px;
@@ -46,11 +46,6 @@
     margin-left: 4px;
 }
 
-.mobile-topic-bar__name--selection {
-    font-family: var(--font-sans);
-    font-weight: 600;
-}
-
 .mobile-topic-bar__select {
     flex-shrink: 0;
     text-transform: none;
@@ -58,8 +53,6 @@
     padding: 0 10px;
 }
 
-.mobile-topic-bar__btn {
+::deep .mobile-topic-bar__btn {
     flex-shrink: 0;
-    text-transform: none;
-    min-height: 44px;
 }

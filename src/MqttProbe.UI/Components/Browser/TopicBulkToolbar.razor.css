@@ -35,6 +35,30 @@
     margin-left: auto;
 }
 
+.topic-bulk-toolbar__mobile {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+}
+
+.topic-bulk-toolbar__mobile-count {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+::deep .topic-bulk-toolbar__actions-menu:focus-visible {
+    outline: 2px solid var(--topic-bulk-focus);
+    outline-offset: 2px;
+}
+
 ::deep .topic-bulk-toolbar__actions .mud-button-root {
     min-height: 44px;
     padding: 0 10px;
@@ -102,18 +126,72 @@
     margin-bottom: 2px;
 }
 
+.topic-bulk-outcome-compact {
+    display: none;
+    flex-basis: 100%;
+    border-top: 1px dashed var(--mud-palette-lines-default);
+    padding-top: 6px;
+    margin-top: 2px;
+    font-size: 0.78rem;
+    min-width: 0;
+}
+
+.topic-bulk-outcome-compact__line {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 44px;
+    min-width: 0;
+}
+
+.topic-bulk-outcome-compact__text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+::deep .topic-bulk-outcome-compact__details {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 0 6px;
+    color: var(--mud-palette-primary);
+}
+
+::deep .topic-bulk-outcome-compact__dismiss {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 44px;
+}
+
+::deep .topic-bulk-outcome-compact__details:focus-visible,
+::deep .topic-bulk-outcome-compact__dismiss:focus-visible {
+    outline: 2px solid var(--topic-bulk-focus);
+    outline-offset: 2px;
+}
+
+.topic-bulk-outcome-compact .topic-bulk-outcome__lines {
+    max-height: none;
+    overflow: visible;
+}
+
 @media (max-width: 599.98px) {
     .topic-bulk-toolbar {
-        padding: 6px 8px;
+        padding: 0 8px;
     }
 
-    .topic-bulk-toolbar__actions {
-        margin-left: 0;
-        width: 100%;
+    .topic-bulk-toolbar__summary,
+    .topic-bulk-toolbar__actions,
+    .topic-bulk-outcome {
+        display: none;
     }
 
-    ::deep .topic-bulk-toolbar__actions .mud-button-root {
-        flex: 1 1 auto;
+    .topic-bulk-toolbar__mobile {
+        display: flex;
+    }
+
+    .topic-bulk-outcome-compact {
+        display: block;
+        padding-bottom: 6px;
     }
 }
 
@@ -128,5 +206,12 @@
 
     .topic-bulk-outcome__lines {
         max-height: 2.5rem;
+    }
+}
+
+/* A short viewport must not add vertical padding back to the phone row. */
+@media (max-width: 599.98px) and (max-height: 640px) {
+    .topic-bulk-toolbar {
+        padding: 0 8px;
     }
 }

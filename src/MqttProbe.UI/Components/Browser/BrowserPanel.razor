@@ -21,7 +21,7 @@
 </TabPanelHeader>
 <CascadingValue Value="_bulkSelection" IsFixed="true">
 <div class="tab-panel-content">
-    <TopicBulkToolbar/>
+    <TopicBulkToolbar OnOpenTopicPicker="OpenMobilePicker"/>
     @if (MessageStoreManager.RootTopicCount == 0 && !UiSettings.IsHintDismissed("browser"))
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-2"

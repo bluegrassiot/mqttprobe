@@ -89,6 +89,8 @@ public class MobileTopicBarTests : BunitTestContext
 
         var btn = cut.FindAll("button").First(b => b.TextContent.Contains("Topics"));
         btn.HasAttribute("disabled").Should().BeFalse();
+        btn.ClassList.Should().Contain("app-mobile-bar-btn",
+            "the shared phone-row class keeps the 44px touch height");
     }
 
     [Test]
@@ -140,7 +142,7 @@ public class MobileTopicBarTests : BunitTestContext
     }
 
     [Test]
-    public void BulkSelection_ShowsTheCountWithoutAModeButton()
+    public void BulkSelection_HidesTheBarBecauseTheToolbarRowCarriesTheStatus()
     {
         var selection = new TopicBulkSelection(TopicTreeSelectionTestAdapter.Create());
         selection.SelectAll([Raw("sensors/temp"), Raw("sensors/humidity")]);
@@ -149,11 +151,31 @@ public class MobileTopicBarTests : BunitTestContext
             .AddCascadingValue(selection)
             .Add(x => x.HasTopics, true));
 
-        cut.Markup.Should().Contain("2 topics selected");
-        cut.FindAll(".mobile-topic-bar__select").Should().BeEmpty(
-            "selection is always on, so the bar carries no mode button");
-        cut.Find(".mobile-topic-bar__info").GetAttribute("aria-label")
-            .Should().Be("Change topics, 2 topics selected");
+        cut.FindAll(".mobile-topic-bar").Should().BeEmpty(
+            "the selection row shows the status and the picker once, so this bar steps aside");
+        cut.Markup.Should().NotContain("topics selected");
+    }
+
+    [Test]
+    public void ClearingTheSelection_BringsTheBarBack()
+    {
+        var selection = new TopicBulkSelection(TopicTreeSelectionTestAdapter.Create());
+        selection.SelectAll([Raw("sensors/temp")]);
+
+        var cut = Render<MobileTopicBar>(p => p
+            .AddCascadingValue(selection)
+            .Add(x => x.HasTopics, true));
+        cut.FindAll(".mobile-topic-bar").Should().BeEmpty();
+
+        selection.Clear();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find(".mobile-topic-bar__info").GetAttribute("aria-label").Should().Be("Choose a topic");
+            cut.FindAll("button").First(b => b.TextContent.Contains("Topics"))
+                .ClassList.Should().Contain("app-mobile-bar-btn",
+                    "the bar's Topics button keeps the same touch height as the selection row's");
+        });
     }
 
     [Test]
@@ -175,20 +197,6 @@ public class MobileTopicBarTests : BunitTestContext
         info.GetAttribute("role").Should().Be("button");
         info.GetAttribute("tabindex").Should().Be("0");
         info.GetAttribute("aria-label").Should().NotBeNullOrWhiteSpace();
-    }
-
-    [Test]
-    public void InfoArea_NamesTheSelectionWhenThereIsOne()
-    {
-        var selection = new TopicBulkSelection(TopicTreeSelectionTestAdapter.Create());
-        selection.SelectAll([Raw("sensors/temp"), Raw("sensors/humidity")]);
-
-        var cut = Render<MobileTopicBar>(p => p
-            .AddCascadingValue(selection)
-            .Add(x => x.HasTopics, true));
-
-        cut.Find(".mobile-topic-bar__info").GetAttribute("aria-label")
-            .Should().Be("Change topics, 2 topics selected");
     }
 
     [Test]

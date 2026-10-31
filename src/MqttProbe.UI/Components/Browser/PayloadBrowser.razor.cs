@@ -1,8 +1,10 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
+using MqttProbe.Core.Models.Chart;
 using MqttProbe.Core.Models.Mqtt;
 
 namespace MqttProbe.UI.Components.Browser;
@@ -431,6 +433,14 @@ public partial class PayloadBrowser
         _formatPending = true;
         Metrics.SetDisplayedMessageCount(_messageList.Count);
         StateHasChanged();
+    }
+
+    internal static string NumberDisplay(string payload)
+    {
+        var trimmed = payload.Trim();
+        return trimmed.StartsWith('"') && ChartFieldPaths.TryParseRootNumber(trimmed, out _)
+            ? JsonSerializer.Deserialize<string>(trimmed)!.Trim()
+            : trimmed;
     }
 
 }

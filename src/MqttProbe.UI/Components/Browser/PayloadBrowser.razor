@@ -244,7 +244,11 @@
                 else if (payloadType == PayloadType.Number)
                 {
                     <div class="d-flex justify-center align-center pa-4">
-                        <MudText Typo="Typo.h5" Class="payload-number-value">@msg.Payload?.Trim()</MudText>
+                        <MudText Typo="Typo.h5" Class="payload-number-value">@NumberDisplay(msg.Payload!)</MudText>
+                        @if (ChartFieldPaths.TryParseRootNumber(msg.Payload, out _))
+                        {
+                            <AddToChartButton JsonPath="@ChartFieldPaths.Root" SeriesName="value" OnAddToChart="HandleAddToChart"/>
+                        }
                     </div>
                 }
                 else if (payloadType == PayloadType.Boolean)
@@ -444,6 +448,7 @@ else
         if (IsJson(trimmed)) return PayloadType.Json;
         if (trimmed.StartsWith('<')) return PayloadType.Xml;
         if (bool.TryParse(trimmed, out _)) return PayloadType.Boolean;
+        if (ChartFieldPaths.TryParseRootNumber(trimmed, out _)) return PayloadType.Number;
         if (double.TryParse(trimmed, NumberStyles.Any, CultureInfo.InvariantCulture, out _)) return PayloadType.Number;
         return PayloadType.Text;
     }

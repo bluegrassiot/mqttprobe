@@ -75,6 +75,29 @@
     text-overflow: ellipsis;
 }
 
+.pb-mobile-time-readout__full {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.pb-list-header-title {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.pb-list-header-time {
+    display: contents;
+}
+
 .pb-th-label {
     display: inline-flex;
     align-items: center;
@@ -112,26 +135,17 @@
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
-    gap: 4px 6px;
+    gap: 3px 6px;
+}
+
+.pb-meta-table .pb-received-row td {
+    vertical-align: top;
 }
 
 .pb-received-instant {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-}
-
-.pb-received-zone {
-    padding: 0 4px;
-    border: 1px solid var(--mud-palette-lines-default);
-    border-radius: 3px;
-    font-size: 0.66rem;
-    font-weight: 600;
-    line-height: 1.5;
-    color: var(--mud-palette-text-secondary);
-    text-decoration: underline dotted;
-    text-underline-offset: 2px;
-    cursor: help;
 }
 
 .pb-received-zone-name {
@@ -142,7 +156,7 @@
 
 ::deep .payload-relative-time {
     display: inline;
-    margin-left: 6px;
+    margin-left: 0;
 }
 
 ::deep .payload-retained-chip {
@@ -264,8 +278,49 @@
    entry instead: time + retained flag on top, topic on one ellipsized line,
    payload preview clamped to two lines. Desktop table is untouched. */
 @media (max-width: 599.98px) {
+    /* Two clear lines: the topic gets the full width, then one row carries the
+       current time mode, its short zone, and the settings trigger. */
+    .payload-list-header {
+        flex-wrap: wrap;
+        row-gap: 6px;
+    }
+
+    .pb-list-header-title {
+        flex: 1 1 100%;
+    }
+
+    .pb-list-header-time {
+        display: flex;
+        align-items: center;
+        flex: 1 1 100%;
+        gap: 8px;
+        min-width: 0;
+    }
+
     .pb-mobile-time-readout {
         display: inline-flex;
+        flex: 0 1 auto;
+        min-width: 0;
+        margin-left: 0;
+        gap: 6px;
+        align-items: baseline;
+    }
+
+    .pb-mobile-time-readout__meta {
+        max-width: none;
+        min-width: 0;
+        flex: 0 1 auto;
+    }
+
+    .pb-list-header-time ::deep .pb-time-trigger {
+        justify-content: center;
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0 10px;
+    }
+
+    .pb-list-header-time ::deep .pb-time-trigger__label {
+        display: none;
     }
 
     ::deep .mud-table-container thead {

@@ -131,16 +131,39 @@ public class MessageTimeBrowserTests : BunitTestContext
     }
 
     [Test]
-    public void Details_ShowReceivedZoneOffsetAndFullZoneName()
+    public void Details_ShowOneCompactZoneTokenWithFullZoneOnDemand()
     {
         _messages = [Message("first")];
-        var (_, browser) = RenderBrowser();
+        var (provider, browser) = RenderBrowser();
 
         browser.FindAll(".payload-row")[0].Click();
 
         Text(browser.Find(".pb-received-instant")).Should().Be("2026-10-29 22:41:07.123");
         Text(browser.Find("[data-received-zone]")).Should().Be("UTC");
-        Text(browser.Find(".pb-received-zone-name")).Should().Be("Coordinated Universal Time · UTC+00:00");
+        browser.FindAll(".pb-received-zone-name").Should().BeEmpty("the full zone name waits for a tap");
+        browser.Find("[data-received-zone]").GetAttribute("aria-label").Should()
+            .Be("UTC: Coordinated Universal Time, UTC+00:00");
+        provider.FindAll(".mud-tooltip.mud-popover-open").Should().BeEmpty();
+
+        browser.Find("[data-received-zone]").Click();
+
+        provider.WaitForAssertion(() => Text(provider.Find(".mud-tooltip.mud-popover-open"))
+            .Should().Be("Coordinated Universal Time · UTC+00:00"));
+    }
+
+    [Test]
+    public void ReceivedZoneDetail_OpensOnKeyboardFocusAndClosesWhenFocusLeaves()
+    {
+        _messages = [Message("first")];
+        var (provider, browser) = RenderBrowser();
+        browser.FindAll(".payload-row")[0].Click();
+
+        var zone = browser.Find("[data-received-zone]");
+        zone.Focus();
+        provider.WaitForAssertion(() => provider.FindAll(".mud-tooltip.mud-popover-open").Should().ContainSingle());
+
+        zone.Blur();
+        provider.WaitForAssertion(() => provider.FindAll(".mud-tooltip.mud-popover-open").Should().BeEmpty());
     }
 
     [Test]
@@ -281,10 +304,12 @@ public class MessageTimeBrowserTests : BunitTestContext
                     "UTC-04:00")
             ]));
 
-        var (_, browser) = RenderBrowser();
+        var (provider, browser) = RenderBrowser();
 
         browser.WaitForAssertion(() => RowTimes(browser).Should().Equal("06:41:07.123 PM"));
         Text(browser.Find("[data-time-header-meta]")).Should().Be("America/New_York");
+        Text(browser.Find("[data-time-mobile-readout] .pb-mobile-time-readout__meta")).Should().Be("New York");
+        Text(browser.Find("[data-time-mobile-readout] .pb-mobile-time-readout__full")).Should().Be("America/New_York");
         module.Invocations.Count(invocation => invocation.Identifier == "formatMessages")
             .Should().Be(1, "one batch formats the visible rows and must not loop on its own render");
 
@@ -292,7 +317,10 @@ public class MessageTimeBrowserTests : BunitTestContext
 
         Text(browser.Find(".pb-received-instant")).Should().Be("2026-10-29 06:41:07.123 PM");
         Text(browser.Find("[data-received-zone]")).Should().Be("EDT");
-        Text(browser.Find(".pb-received-zone-name")).Should().Be("Eastern Daylight Time · UTC-04:00");
+        browser.FindAll(".pb-received-zone-name").Should().BeEmpty();
+        browser.Find("[data-received-zone]").Click();
+        provider.WaitForAssertion(() => Text(provider.Find(".mud-tooltip.mud-popover-open"))
+            .Should().Be("Eastern Daylight Time · UTC-04:00"));
     }
 
     [Test]
@@ -376,7 +404,7 @@ public class MessageTimeBrowserTests : BunitTestContext
         var message = Message("first");
         _messages = [message];
 
-        var (_, browser) = RenderBrowser();
+        var (provider, browser) = RenderBrowser();
         browser.WaitForAssertion(() => formatter.Calls.Should().ContainSingle());
 
         browser.FindAll(".payload-row")[0].Click();
@@ -402,7 +430,10 @@ public class MessageTimeBrowserTests : BunitTestContext
         browser.WaitForAssertion(() => Text(browser.Find(".pb-received-instant"))
             .Should().Be("2026-10-30 09:41:07.123 AM"));
         Text(browser.Find("[data-received-zone]")).Should().Be("GMT+9");
-        Text(browser.Find(".pb-received-zone-name")).Should().Be("Japan Standard Time · UTC+09:00");
+        browser.FindAll(".pb-received-zone-name").Should().BeEmpty();
+        browser.Find("[data-received-zone]").Click();
+        provider.WaitForAssertion(() => Text(provider.Find(".mud-tooltip.mud-popover-open"))
+            .Should().Be("Japan Standard Time · UTC+09:00"));
         browser.FindAll("[data-time-pending]").Should().BeEmpty();
     }
 
@@ -567,6 +598,14 @@ public class MessageTimeBrowserTests : BunitTestContext
         saved.ClockFormat.Should().Be(MessageTimePreferences.ClockFormat12Hour,
             "the menu must start from the latest stored settings, not its rendered snapshot");
     }
+
+    [TestCase("America/Kentucky/Louisville", "Louisville")]
+    [TestCase("America/New_York", "New York")]
+    [TestCase("Asia/Tokyo", "Tokyo")]
+    [TestCase("UTC", "UTC")]
+    [TestCase("all topics", "all topics")]
+    public void CompactZoneLabel_KeepsTheRecognizableTail(string label, string expected) =>
+        PayloadBrowser.CompactZoneLabel(label).Should().Be(expected);
 
     private void AdvanceSelection() =>
         _selection = _selection with { Token = new SelectedTopicToken(_storeId, 1, _selection.Token.ContentVersion + 1) };

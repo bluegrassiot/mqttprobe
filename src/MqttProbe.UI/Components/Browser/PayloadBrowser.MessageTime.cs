@@ -24,6 +24,16 @@ public partial class PayloadBrowser
 
     private string HeaderMeta => _presentation.HeaderMeta ?? ClockZoneLabel;
 
+    private string HeaderMetaCompact => CompactZoneLabel(HeaderMeta);
+
+    // The mobile header has one short line for the zone, so an IANA path keeps only
+    // its recognizable tail; the full value stays in the readout's accessible text.
+    internal static string CompactZoneLabel(string label)
+    {
+        var slash = label.LastIndexOf('/');
+        return slash >= 0 ? label[(slash + 1)..].Replace('_', ' ') : label;
+    }
+
     private string ClockZoneLabel =>
         _presentation.IsLocal && !_zoneFromBrowser
             ? "Pending"

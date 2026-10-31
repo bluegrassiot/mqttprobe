@@ -51,7 +51,7 @@
                             </div>
                         </td>
                     </tr>
-                    <tr>
+                    <tr class="pb-received-row">
                         <td class="pb-meta-label">Received</td>
                         <td class="pb-meta-value">
                             @if (received is null)
@@ -73,12 +73,14 @@
                                           title="@($"{received.FullText} ({received.ZoneName})")">
                                         @received.DateText @received.TimeText
                                     </span>
-                                    <span class="pb-received-zone" title="@received.ZoneName" data-received-zone>@received.ZoneAbbreviation</span>
+                                    <ReceivedZoneToken @key="msg.Id"
+                                                       Abbreviation="@received.ZoneAbbreviation"
+                                                       ZoneName="@received.ZoneName"
+                                                       OffsetLabel="@received.OffsetLabel"/>
                                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="payload-relative-time">
                                         @DisplayHelpers.GetRelativeTime(msg.DateTimeReceived)
                                     </MudText>
                                 </div>
-                                <div class="pb-received-zone-name">@received.ZoneName · @received.OffsetLabel</div>
                             }
                         </td>
                     </tr>
@@ -273,22 +275,27 @@ else
 {
     <MudPaper Elevation="0" Class="pa-0 app-chrome-panel payload-browser-panel">
         <div class="d-flex align-center px-3 py-1 payload-section-divider payload-list-header">
-            <MudIcon Icon="@LucideIcons.Inbox" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
-            <MudText Typo="Typo.subtitle2" Class="payload-topic-title">
-                @(SelectionHeading ?? "Messages")
-            </MudText>
-            <span class="pb-mobile-time-readout" title="@HeaderMetaTitle" data-time-mobile-readout>
-                <span class="pb-mobile-time-readout__label">@HeaderLabel</span>
-                <span class="pb-mobile-time-readout__meta">@HeaderMeta</span>
-            </span>
-            <MudSpacer/>
-            @if (_messageList.Count >= MaxMessageCount)
-            {
-                <MudText Typo="Typo.caption" Color="Color.Warning" Class="mr-2 payload-truncation-note">
-                    @MaxMessageCount msgs
+            <div class="pb-list-header-title">
+                <MudIcon Icon="@LucideIcons.Inbox" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
+                <MudText Typo="Typo.subtitle2" Class="payload-topic-title">
+                    @(SelectionHeading ?? "Messages")
                 </MudText>
-            }
-            <MessageTimeMenu Presentation="_presentation"/>
+            </div>
+            <div class="pb-list-header-time">
+                <span class="pb-mobile-time-readout" title="@HeaderMetaTitle" data-time-mobile-readout>
+                    <span class="pb-mobile-time-readout__label">@HeaderLabel</span>
+                    <span class="pb-mobile-time-readout__meta" aria-hidden="true">@HeaderMetaCompact</span>
+                    <span class="pb-mobile-time-readout__full">@HeaderMeta</span>
+                </span>
+                <MudSpacer/>
+                @if (_messageList.Count >= MaxMessageCount)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Warning" Class="mr-2 payload-truncation-note">
+                        @MaxMessageCount msgs
+                    </MudText>
+                }
+                <MessageTimeMenu Presentation="_presentation"/>
+            </div>
         </div>
         <div class="payload-message-list @TimeColumnClass" tabindex="0"
              role="group" aria-label="Message history"

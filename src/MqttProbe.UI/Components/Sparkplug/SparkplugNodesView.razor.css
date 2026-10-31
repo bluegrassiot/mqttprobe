@@ -48,10 +48,18 @@
    the panel keeps MudSplitPanel's own 220px floor. flex-basis stays fixed so a
    split mounted inside a hidden tab still renders at its initial width. The
    trailing 6px is the split's PanelGap, matching the drag bound in the companion
-   script. */
+   script. The 8px gutter keeps the native scrollbar, which sits flush against the
+   pane edge, clear of the divider's hover target. */
 .spb-split-wrap ::deep .spb-panel-nodes {
     flex: 0 0 auto;
     max-width: min(var(--spb-list-max-share), calc(100% - var(--spb-detail-min) - 6px));
+    padding-right: 8px;
+}
+
+/* MudSplitPanel's divider overlay reaches 12px into the list, past the gutter. Pull
+   its left edge back so the scrollbar is never part of the resize drag target. */
+.spb-split-wrap ::deep .divider::before {
+    left: -4px;
 }
 
 /* Stacked and phone layouts: the plain split, no divider, no resizing. */

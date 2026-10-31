@@ -13,6 +13,11 @@
     min-width: 96px;
 }
 
+/* The phone rows share one 44px line, so their buttons share this height. */
+.app-mobile-bar-btn {
+    min-height: 44px;
+}
+
 /* ── Brand button colors (BRAND_GUIDE §6) ──────────────────────────────────── */
 
 /* These rules MUST live in the global stylesheet (not in MainLayout.razor.css

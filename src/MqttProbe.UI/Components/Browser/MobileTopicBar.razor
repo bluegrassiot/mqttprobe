@@ -1,41 +1,40 @@
 @inject IMessageStoreManager MessageStoreManager
 @implements IAsyncDisposable
 
-<div class="mobile-topic-bar">
-    <div class="mobile-topic-bar__info" role="button" tabindex="0"
-         aria-label="@InfoLabel" aria-disabled="@(HasTopics ? null : "true")"
-         @onclick="OpenPicker" @onkeydown="HandleInfoKeyDown">
-        @if (BulkSelection is { HasSelection: true } bulk)
-        {
-            <MudIcon Icon="@LucideIcons.CheckCircle" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
-            <span class="mobile-topic-bar__name mobile-topic-bar__name--selection">@bulk.Summary</span>
-        }
-        else if (_selectedTopic is not null)
-        {
-            <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
-            <span class="mobile-topic-bar__name" title="@_selectedTopic">@_selectedTopic</span>
-            @if (_messageCount > 0)
+@* The toolbar's selection row carries the status and the picker, so this bar steps aside. *@
+@if (BulkSelection is not { HasSelection: true })
+{
+    <div class="mobile-topic-bar">
+        <div class="mobile-topic-bar__info" role="button" tabindex="0"
+             aria-label="@InfoLabel" aria-disabled="@(HasTopics ? null : "true")"
+             @onclick="OpenPicker" @onkeydown="HandleInfoKeyDown">
+            @if (_selectedTopic is not null)
             {
-                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
-                         Class="mobile-topic-bar__count-chip">
-                    @_messageCount
-                </MudChip>
+                <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Primary" Class="mr-1"/>
+                <span class="mobile-topic-bar__name" title="@_selectedTopic">@_selectedTopic</span>
+                @if (_messageCount > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                             Class="mobile-topic-bar__count-chip">
+                        @_messageCount
+                    </MudChip>
+                }
             }
-        }
-        else
-        {
-            <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Secondary" Class="mr-1"/>
-            <span class="mobile-topic-bar__name mobile-topic-bar__name--empty">Choose a topic</span>
-        }
+            else
+            {
+                <MudIcon Icon="@LucideIcons.Layers" Size="Size.Small" Color="Color.Secondary" Class="mr-1"/>
+                <span class="mobile-topic-bar__name mobile-topic-bar__name--empty">Choose a topic</span>
+            }
+        </div>
+        <AppPrimaryButton Size="Size.Small"
+                          StartIcon="@LucideIcons.ChevronDown"
+                          OnClick="OpenPicker"
+                          Disabled="@(!HasTopics)"
+                          Class="mobile-topic-bar__btn app-mobile-bar-btn">
+            Topics
+        </AppPrimaryButton>
     </div>
-    <AppPrimaryButton Size="Size.Small"
-                StartIcon="@LucideIcons.ChevronDown"
-                OnClick="OpenPicker"
-                Disabled="@(!HasTopics)"
-                Class="mobile-topic-bar__btn">
-        Topics
-    </AppPrimaryButton>
-</div>
+}
 
 @code {
     [Parameter] public bool HasTopics { get; set; }
@@ -48,16 +47,8 @@
     private Timer? _updateTimer;
     private bool _disposed;
 
-    private string InfoLabel
-    {
-        get
-        {
-            if (BulkSelection is { HasSelection: true } bulk)
-                return $"Change topics, {bulk.Summary}";
-
-            return _selectedTopic is null ? "Choose a topic" : $"Change topic, current topic {_selectedTopic}";
-        }
-    }
+    private string InfoLabel =>
+        _selectedTopic is null ? "Choose a topic" : $"Change topic, current topic {_selectedTopic}";
 
     private async Task HandleInfoKeyDown(KeyboardEventArgs e)
     {

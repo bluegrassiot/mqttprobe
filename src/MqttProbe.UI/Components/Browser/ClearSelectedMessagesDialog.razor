@@ -1,5 +1,4 @@
 @using System.Collections.Immutable
-@using MqttProbe.Core.Models.Mqtt
 
 <MudDialog DefaultFocus="DefaultFocus.None">
     <TitleContent>
@@ -7,8 +6,7 @@
     </TitleContent>
     <DialogContent>
         <MudText Typo="Typo.body2" Class="topic-clear-dialog__lead">
-            Stored messages for these topics and everything below them are removed. Other topics
-            stay, and new messages keep arriving.
+            Clear messages from the selected topics?
         </MudText>
         <TopicTargetList Topics="Labels"/>
     </DialogContent>

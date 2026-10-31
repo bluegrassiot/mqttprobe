@@ -102,6 +102,40 @@ public class SettingsLoaderTests
     }
 
     [Test]
+    public async Task LoadAsync_NormalizesInvalidMessageTimeAndKeepsOtherPreferences()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """
+            {"ui":{"theme":"light","messageTime":{
+                "mode":"bogus","zone":"mars","clockFormat":"12h","deltaScope":"topic","future":"ignored"}}}
+            """);
+
+        var loaded = await _loader.LoadAsync();
+
+        loaded.Should().BeTrue("invalid values must not fail the parse");
+        _document.Config.Ui.Theme.Should().Be("light");
+        var messageTime = _document.Config.Ui.MessageTime;
+        messageTime.Mode.Should().Be("clock");
+        messageTime.Zone.Should().Be("utc");
+        messageTime.ClockFormat.Should().Be("12h");
+        messageTime.DeltaScope.Should().Be("topic");
+    }
+
+    [Test]
+    public async Task LoadAsync_ExplicitNullMessageTimeUsesDefaults()
+    {
+        await File.WriteAllTextAsync(_configPath, """{"ui":{"messageTime":null}}""");
+
+        await _loader.LoadAsync();
+
+        var messageTime = _document.Config.Ui.MessageTime;
+        messageTime.Mode.Should().Be("clock");
+        messageTime.Zone.Should().Be("utc");
+        messageTime.ClockFormat.Should().Be("24h");
+        messageTime.DeltaScope.Should().Be("all");
+    }
+
+    [Test]
     public async Task LoadAsync_WhenMobileAndFileDoesNotExist_SeedsReducedPerformanceLimits()
     {
         var loader = new SettingsLoader(_document, new ConnectionSecrets(null, null), isMobile: true, null);

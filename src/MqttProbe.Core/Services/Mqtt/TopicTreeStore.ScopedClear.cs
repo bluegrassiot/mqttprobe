@@ -56,6 +56,7 @@ internal sealed partial class TopicTreeStore
                 return 0;
 
             _totalMessageCount -= removed;
+            ResetTimingIfBufferEmptied(removed);
             RemoveRetentionEntries(removedByStore);
             if (HasSelection())
                 _selectionContentVersion++;
@@ -95,6 +96,7 @@ internal sealed partial class TopicTreeStore
 
             RemoveRetentionEntries(removedByStore);
             RecalculateCounters();
+            ResetTimingIfBufferEmptied(removed);
             if (HasSelection())
                 _selectionContentVersion++;
             Interlocked.Increment(ref _globalVersion);

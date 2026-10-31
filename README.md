@@ -14,7 +14,7 @@ Connect to any broker, browse live topics, inspect payloads, chart JSON metrics.
 ![MQTTProbe interface](docs/images/screenshot-browser.png)
 
 - Live topic tree
-- Payload browser (JSON, MessagePack, binary)
+- Payload browser (JSON, MessagePack, CBOR, binary)
 - Sparkplug B decode and EoN dashboard
 - Node and MQTT emulator
 - Live charts from payload fields

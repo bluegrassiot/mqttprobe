@@ -755,6 +755,7 @@ public class PayloadBrowserTests : BunitTestContext
     [TestCase("empty", "Empty")]
     [TestCase("sparkplug-b", "Sparkplug B")]
     [TestCase("messagepack", "MessagePack")]
+    [TestCase("cbor", "CBOR")]
     [TestCase("binary", "Binary")]
     [TestCase("json", "JSON")]
     [TestCase("xml", "XML")]

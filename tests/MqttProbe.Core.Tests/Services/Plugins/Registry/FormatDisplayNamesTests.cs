@@ -164,6 +164,7 @@ public class FormatDisplayNamesTests
             ["empty"] = "Empty",
             ["sparkplug-b"] = "Sparkplug B",
             ["messagepack"] = "MessagePack",
+            ["cbor"] = "CBOR",
             ["binary"] = "Binary",
             ["json"] = "JSON",
             ["xml"] = "XML",

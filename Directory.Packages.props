@@ -17,6 +17,7 @@
     <PackageVersion Include="MessagePack" Version="3.1.12" />
     <PackageVersion Include="MudBlazor" Version="9.11.0" />
     <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.35.0.4138" />
+    <PackageVersion Include="System.Formats.Cbor" Version="10.0.14" />
     <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.14" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
     <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.14" />

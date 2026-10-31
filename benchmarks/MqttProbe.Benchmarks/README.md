@@ -256,6 +256,7 @@ Samples are crafted to win MqttProbe's first-match detector. Priority order is s
 | `Empty` | `benchmarks/payloads/empty` | Zero-length payload |
 | `Sparkplug` | `spBv1.0/bench/DDATA/publisher` | Sparkplug B protobuf with 4 metrics |
 | `MessagePack` | `benchmarks/payloads/msgpack` | MessagePack map with 4 fields |
+| `Cbor` | `benchmarks/payloads/cbor` | CBOR map with 4 fields |
 | `Binary` | `benchmarks/payloads/binary` | Invalid UTF-8 bytes that are not structured MessagePack |
 | `Json` | `benchmarks/payloads/json` | Compact JSON object |
 | `Xml` | `benchmarks/payloads/xml` | XML starting with `<` |
@@ -287,6 +288,9 @@ dotnet run --project benchmarks\MqttProbe.Benchmarks -c Release -- publish --for
 # Publish several formats
 dotnet run --project benchmarks\MqttProbe.Benchmarks -c Release -- publish --format Json,Base64,Hex
 
+# Publish only CBOR payloads
+dotnet run --project benchmarks\MqttProbe.Benchmarks -c Release -- publish --format Cbor
+
 # High throughput with concurrency
 dotnet run --project benchmarks\MqttProbe.Benchmarks -c Release -- publish --concurrency 8 --count 10000 --format Sparkplug
 ```
@@ -304,7 +308,9 @@ dotnet run --project benchmarks\MqttProbe.Benchmarks -c Release -- publish --con
 
 Available format names:
 
-`Empty`, `Sparkplug`, `MessagePack`, `Binary`, `Json`, `Xml`, `Hex`, `Base64`, `PlainText`, `Csv`, `ChirpStack`
+`Empty`, `Sparkplug`, `MessagePack`, `Binary`, `Json`, `Xml`, `Hex`, `Base64`, `PlainText`, `Csv`, `ChirpStack`, `Cbor`
+
+The default run publishes all 12 formats, and `--count` applies to each format.
 
 When `--concurrency 1`, publishes are sequential with accurate rate limiting.
 
@@ -318,7 +324,7 @@ Recommended filters for the payload publisher:
 
 | Subscription | Covers |
 |---|---|
-| `benchmarks/payloads/+` | Empty, MessagePack, Binary, Json, Xml, Hex, Base64, PlainText, Csv |
+| `benchmarks/payloads/+` | Empty, MessagePack, Cbor, Binary, Json, Xml, Hex, Base64, PlainText, Csv |
 | `spBv1.0/bench/DDATA/publisher` | Sparkplug |
 | `application/+/device/+/event/up` | ChirpStack |
 

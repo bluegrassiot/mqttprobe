@@ -1,3 +1,4 @@
+using System.Formats.Cbor;
 using System.Text;
 using Google.Protobuf;
 using MessagePack;
@@ -42,6 +43,7 @@ public static class PayloadFactory
                              1700000000,22.5,1013.25,active
                              """u8.ToArray(),
         PayloadFormat.ChirpStack => _chirpStackBytes,
+        PayloadFormat.Cbor => CreateCborPayload(),
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, null)
     };
 
@@ -74,6 +76,22 @@ public static class PayloadFactory
         FlowRate = 12.8,
         Status = "active"
     };
+
+    private static byte[] CreateCborPayload()
+    {
+        var writer = new CborWriter();
+        writer.WriteStartMap(4);
+        writer.WriteTextString("temperature");
+        writer.WriteDouble(22.5);
+        writer.WriteTextString("pressure");
+        writer.WriteDouble(1013.25);
+        writer.WriteTextString("flowRate");
+        writer.WriteDouble(12.8);
+        writer.WriteTextString("status");
+        writer.WriteTextString("active");
+        writer.WriteEndMap();
+        return writer.Encode();
+    }
 
     // ── Sparkplug B ──────────────────────────────────────────────────────────
 

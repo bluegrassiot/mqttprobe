@@ -49,13 +49,14 @@ public class BuiltInDecoderTests
     // --- Registry decoder registration ---
 
     [Test]
-    public void Registry_AllNineDecodersRegistered()
+    public void Registry_AllTenDecodersRegistered()
     {
         var registry = BuildRegistry();
-        registry.Decoders.Should().HaveCount(9);
+        registry.Decoders.Should().HaveCount(10);
         registry.FindDecoder("empty").Should().NotBeNull();
         registry.FindDecoder("sparkplug-b").Should().NotBeNull();
         registry.FindDecoder("messagepack").Should().NotBeNull();
+        registry.FindDecoder("cbor").Should().NotBeNull();
         registry.FindDecoder("binary").Should().NotBeNull();
         registry.FindDecoder("json").Should().NotBeNull();
         registry.FindDecoder("xml").Should().NotBeNull();
@@ -79,6 +80,7 @@ public class BuiltInDecoderTests
         new EmptyPayloadDecoder().FormatId.Should().Be("empty");
         new SparkplugPayloadDecoder().FormatId.Should().Be("sparkplug-b");
         new MessagePackPayloadDecoder().FormatId.Should().Be("messagepack");
+        new CborPayloadDecoder().FormatId.Should().Be("cbor");
         new BinaryPayloadDecoder().FormatId.Should().Be("binary");
         new JsonPayloadDecoder().FormatId.Should().Be("json");
         new XmlPayloadDecoder().FormatId.Should().Be("xml");

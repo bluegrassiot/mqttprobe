@@ -191,7 +191,8 @@ public class ChartsComponentTests : BunitTestContext
 public class ChartsRealCollectorComponentTests : BunitTestContext
 {
     private static readonly Guid _testConnectionId = Guid.NewGuid();
-    private IChartSettings _chartSettings = null!;
+    private ChartSettings _chartSettings = null!;
+    private FakeSettingsDocument _document = null!;
     private ISessionState _sessionState = null!;
     private IMqttManagedClient _client = null!;
     private ChartDataService _chartDataService = null!;
@@ -204,8 +205,9 @@ public class ChartsRealCollectorComponentTests : BunitTestContext
         const string deviceTopic = "spBv1.0/g/DDATA/node-1/device-1";
         _sessionState = Substitute.For<ISessionState>();
         _sessionState.SelectedConnection.Returns(new Connection { Id = _testConnectionId });
-        _chartSettings = Substitute.For<IChartSettings>();
-        _chartSettings.GetCharts(_testConnectionId).Returns(
+        _document = new FakeSettingsDocument();
+        _chartSettings = new ChartSettings(_document);
+        _document.Config.ChartsByConnection[_testConnectionId] =
         [
             new ChartConfiguration
             {
@@ -216,7 +218,7 @@ public class ChartsRealCollectorComponentTests : BunitTestContext
                     new ChartSeries { Id = Guid.NewGuid(), Topic = deviceTopic, JsonPath = "metrics.Device Temp" }
                 ]
             }
-        ]);
+        ];
         _client = Substitute.For<IMqttManagedClient>();
         _client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
             .Do(x => _handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
@@ -273,14 +275,14 @@ public class ChartsRealCollectorComponentTests : BunitTestContext
 
         var connectionB = Guid.NewGuid();
         var seriesBId = Guid.NewGuid();
-        _chartSettings.GetCharts(connectionB).Returns(
+        _document.Config.ChartsByConnection[connectionB] =
         [
             new ChartConfiguration
             {
                 Name = "Connection B chart",
                 Series = [new ChartSeries { Id = seriesBId, Topic = nodeTopic, JsonPath = "metrics.Set Point" }]
             }
-        ]);
+        ];
         var newConnection = new Connection { Id = connectionB };
         _sessionState.SelectedConnection.Returns(newConnection);
         _sessionState.SelectedConnectionChanged += Raise.Event<Action<Connection>>(newConnection);
@@ -295,10 +297,62 @@ public class ChartsRealCollectorComponentTests : BunitTestContext
             .Which.Instance.Items.Should().BeEmpty();
     }
 
+    [Test]
+    public async Task ChartRename_KeepsRenderedAndBufferedHistory()
+    {
+        const string nodeTopic = "spBv1.0/g/NDATA/node-1";
+        var config = _chartSettings.GetCharts(_testConnectionId).Single();
+        var nodeSeries = config.Series[0];
+        _chartDataService.SetConnection(_testConnectionId);
+        await _chartDataService.StartAsync();
+
+        var payload = new Payload();
+        payload.Metrics.Add(new Payload.Types.Metric { Name = "Set Point", Datatype = 10, DoubleValue = 22.5 });
+        await _handler!(MakeSparkplugArgs(nodeTopic, payload.ToByteArray()));
+
+        var cut = Render<ChartsComponent>();
+        cut.FindComponents<ApexPointSeries<ChartDataPoint>>()[0].Instance.Items.Should().ContainSingle()
+            .Which.Value.Should().Be(22.5);
+
+        await _chartSettings.UpdateChartAsync(_testConnectionId, new ChartConfiguration
+        {
+            Id = config.Id,
+            Name = "Renamed Chart",
+            Type = config.Type,
+            MaxPoints = config.MaxPoints,
+            TimeWindowMinutes = config.TimeWindowMinutes,
+            StaleTimeoutSeconds = config.StaleTimeoutSeconds,
+            Series = config.Series
+        });
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Markup.Should().Contain("Renamed Chart");
+            cut.FindComponents<ApexPointSeries<ChartDataPoint>>()[0].Instance.Items.Should().ContainSingle()
+                .Which.Value.Should().Be(22.5);
+        });
+        _chartDataService.GetPoints(nodeSeries.Id).Should().ContainSingle();
+    }
+
     private static MqttApplicationMessageReceivedEventArgs MakeSparkplugArgs(string topic, byte[] payload)
     {
         var message = new MqttApplicationMessageBuilder().WithTopic(topic).WithPayload(payload).Build();
         return new MqttApplicationMessageReceivedEventArgs("test-client", message,
             new MQTTnet.Packets.MqttPublishPacket { Topic = topic }, null);
+    }
+
+    private sealed class FakeSettingsDocument : ISettingsDocument
+    {
+        public AppConfiguration Config { get; } = new();
+
+        public Task MutateAndSaveAsync(Action<AppConfiguration> mutate)
+        {
+            mutate(Config);
+            return Task.CompletedTask;
+        }
+
+        public Task ExclusiveAsync(Func<Task> action) => action();
+
+        public Task SaveAsync() => Task.CompletedTask;
     }
 }

@@ -45,8 +45,8 @@
                     var isSelected = _selectedChartId == c.Id;
                     <div class="quick-add-chart-option pa-2 mb-1 rounded @(isSelected ? "quick-add-chart-option--selected" : "")"
                          role="button" tabindex="0"
-                         @onclick="() => _selectedChartId = c.Id"
-                         @onkeydown="(e => HandleChartKeySelection(e, c.Id))">
+                         @onclick="() => SelectChart(c)"
+                         @onkeydown="(e => HandleChartKeySelection(e, c))">
                         <div class="d-flex align-center gap-2">
                             <MudIcon Icon="@LucideIcons.Activity" Size="Size.Small"
                                      Color="@(isSelected ? Color.Primary : Color.Secondary)"/>
@@ -67,24 +67,25 @@
                               Margin="Margin.Dense" Class="quick-add-chart-name"
                               Immediate="true" MaxLength="100" AutoFocus="true"
                               HelperText="A new line chart will be created with this field as its first series." />
-                <div class="quick-add-timeout-row">
-                    <MudNumericField @bind-Value="_staleTimeoutSeconds"
-                                     Label="Stale timeout (seconds)"
-                                     Variant="Variant.Outlined" Margin="Margin.Dense"
-                                     Min="0" Step="1" Disabled="_staleTimeoutOff"
-                                     Error="@(!StaleTimeoutValid)"
-                                     HelperText="A series turns stale after this long without a new point. Choose Off for change-only topics."
-                                     Class="quick-add-timeout" />
-                    <MudSwitch T="bool" @bind-Value="_staleTimeoutOff" Label="Off"
-                               Color="Color.Primary" Class="quick-add-timeout-off" />
-                    @if (!StaleTimeoutValid)
-                    {
-                        <MudText Typo="Typo.caption" Color="Color.Error" Class="quick-add-timeout-error">
-                            Enter a timeout greater than zero seconds.
-                        </MudText>
-                    }
-                </div>
             }
+
+            <div class="quick-add-timeout-row">
+                <MudNumericField @bind-Value="_staleTimeoutSeconds"
+                                 Label="Stale timeout (seconds)"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 Min="0" Step="1" Disabled="_staleTimeoutOff"
+                                 Error="@(!StaleTimeoutValid)"
+                                 HelperText="A series turns stale after this long without a new point. Choose Off for change-only topics."
+                                 Class="quick-add-timeout" />
+                <MudSwitch T="bool" @bind-Value="_staleTimeoutOff" Label="Off"
+                           Color="Color.Primary" Class="quick-add-timeout-off" />
+                @if (!StaleTimeoutValid)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Error" Class="quick-add-timeout-error">
+                        Enter a timeout greater than zero seconds.
+                    </MudText>
+                }
+            </div>
         </div>
     </DialogContent>
     <DialogActions>
@@ -130,13 +131,22 @@
         {
             _mode = ChartMode.AddToExisting;
             if (charts.Count == 1)
-                _selectedChartId = charts[0].Id;
+                SelectChart(charts[0]);
         }
     }
 
     private bool CanSubmit => _mode == ChartMode.CreateNew
         ? !string.IsNullOrWhiteSpace(_newChartName) && StaleTimeoutValid
-        : _selectedChartId != Guid.Empty;
+        : _selectedChartId != Guid.Empty && StaleTimeoutValid;
+
+    private void SelectChart(ChartConfiguration chart)
+    {
+        if (_selectedChartId == chart.Id) return;
+
+        _selectedChartId = chart.Id;
+        _staleTimeoutSeconds = chart.StaleTimeoutSeconds ?? ChartConfiguration.DefaultStaleTimeoutSeconds;
+        _staleTimeoutOff = chart.StaleTimeoutSeconds is null;
+    }
 
     internal static string DefaultChartName(string topic, string seriesName) =>
         TryGetSparkplugTopicTitle(topic, out var topicTitle) ? topicTitle : seriesName;
@@ -161,10 +171,10 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    private void HandleChartKeySelection(KeyboardEventArgs e, Guid chartId)
+    private void HandleChartKeySelection(KeyboardEventArgs e, ChartConfiguration chart)
     {
         if (e.Key is "Enter" or " ")
-            _selectedChartId = chartId;
+            SelectChart(chart);
     }
 
     private async Task Submit()
@@ -211,7 +221,7 @@
                 Type = chart.Type,
                 MaxPoints = chart.MaxPoints,
                 TimeWindowMinutes = chart.TimeWindowMinutes,
-                StaleTimeoutSeconds = chart.StaleTimeoutSeconds,
+                StaleTimeoutSeconds = _staleTimeoutOff ? null : _staleTimeoutSeconds,
                 Series = [.. chart.Series, newSeries]
             };
             await ChartSettings.UpdateChartAsync(SessionState.SelectedConnection.Id, updated);

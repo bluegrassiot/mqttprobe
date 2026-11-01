@@ -82,8 +82,18 @@ public class ChartDataService(
         try
         {
             if (IsListening) return;
-            client.ApplicationMessageReceivedAsync += MessageHandler;
+
             chartSettings.ChartsChanged += OnChartsChanged;
+
+            lock (_stateLock)
+            {
+                // Without a snapshot the first message captures current charts and sees
+                // stopped-time edits anyway; only a captured map can be stale.
+                if (_sourcesInitialized)
+                    _sources = ReconcileSources(_connectionId);
+            }
+
+            client.ApplicationMessageReceivedAsync += MessageHandler;
             AttachExclusionHooks();
             IsListening = true;
         }

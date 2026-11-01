@@ -53,6 +53,9 @@ public class ChartCardTests : BunitTestContext
     private static string SummaryText(IRenderedComponent<ChartCardComponent> cut) =>
         cut.Find(".chart-card-status .mud-chip").TextContent.Trim();
 
+    private static string HeaderText(IRenderedComponent<ChartCardComponent> cut) =>
+        cut.Find(".mud-card-header-content > .mud-typography-caption").TextContent;
+
     private static string RowText(IRenderedComponent<ChartCardComponent> cut, string seriesName) =>
         cut.FindAll(".chart-series-status__row")
             .Single(row => row.QuerySelector(".chart-series-status__name")!.TextContent.Trim() == seriesName)
@@ -155,8 +158,53 @@ public class ChartCardTests : BunitTestContext
         var cut = RenderCard(Chart(null, a));
 
         SummaryText(cut).Should().Be("Freshness off");
+        HeaderText(cut).Should().Contain("Freshness off").And.NotContain("stale after");
         RowText(cut, "Temp").Should().Contain("Not checked").And.Contain("5m 0s ago");
         cut.Markup.Should().NotContain("Stale");
+    }
+
+    [Test]
+    public void DetectionOff_WithoutData_ShowsFreshnessOffInTheHeader_AndKeepsWaitingChip()
+    {
+        var a = new ChartSeries { DisplayName = "Temp" };
+
+        var cut = RenderCard(Chart(null, a));
+
+        HeaderText(cut).Should().Contain("Freshness off").And.NotContain("stale after");
+        SummaryText(cut).Should().Be("Waiting for data");
+    }
+
+    [Test]
+    public void TurningDetectionOff_OnARenderedCard_UpdatesTheHeaderWithoutReload()
+    {
+        var a = new ChartSeries { DisplayName = "Temp" };
+        Record(a, 300);
+        var cut = RenderCard(Chart(10, a));
+        HeaderText(cut).Should().Contain("stale after 10s");
+        SummaryText(cut).Should().Be("Stale");
+
+        cut.Render(parameters => parameters
+            .Add(c => c.Configuration, Chart(null, a))
+            .Add(c => c.Clock, _clock));
+
+        HeaderText(cut).Should().Contain("Freshness off").And.NotContain("stale after 10s");
+        SummaryText(cut).Should().Be("Freshness off");
+        RowText(cut, "Temp").Should().Contain("Not checked");
+    }
+
+    [Test]
+    public void TurningDetectionOff_WithNoData_FlipsTheHeaderButStaysWaiting()
+    {
+        var a = new ChartSeries { DisplayName = "Temp" };
+        var cut = RenderCard(Chart(10, a));
+        HeaderText(cut).Should().Contain("stale after 10s");
+
+        cut.Render(parameters => parameters
+            .Add(c => c.Configuration, Chart(null, a))
+            .Add(c => c.Clock, _clock));
+
+        HeaderText(cut).Should().Contain("Freshness off");
+        SummaryText(cut).Should().Be("Waiting for data", "no data is still waiting, not fresh");
     }
 
     [Test]

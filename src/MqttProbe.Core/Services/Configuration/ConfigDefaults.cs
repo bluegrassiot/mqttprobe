@@ -115,9 +115,9 @@ internal static class ConfigDefaults
         },
         new()
         {
-            Name = "Mosquitto — WebSocket TLS 8081",
-            Host = "test.mosquitto.org",
-            Port = 8081,
+            Name = "EMQX — WebSocket TLS 8084",
+            Host = "broker.emqx.io",
+            Port = 8084,
             Protocol = Protocol.WebSocket,
             UseTls = true,
             AllowUntrustedCertificate = false,

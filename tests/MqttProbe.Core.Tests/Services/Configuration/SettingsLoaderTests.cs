@@ -40,7 +40,8 @@ public class SettingsLoaderTests
             c.Host == "broker.hivemq.com" && c.Port == 1883 &&
             c.Protocol == Protocol.Mqtt && !c.UseTls);
         conns.Should().Contain(c =>
-            c.Host == "test.mosquitto.org" && c.Port == 8081 &&
+            c.Name == "EMQX — WebSocket TLS 8084" &&
+            c.Host == "broker.emqx.io" && c.Port == 8084 &&
             c.Protocol == Protocol.WebSocket && c.UseTls &&
             !c.AllowUntrustedCertificate && c.WebsocketBasePath == "mqtt");
         conns.Should().Contain(c =>
@@ -69,6 +70,30 @@ public class SettingsLoaderTests
         await new SettingsLoader(document2, new ConnectionSecrets(null, null), false, null).LoadAsync();
 
         document2.Config.Connections.Should().HaveCount(3, "seeding happens only when the file is first created");
+    }
+
+    [Test]
+    public async Task LoadAsync_WhenSavedMosquittoWebSocketConnectionExists_KeepsItAndDoesNotReseed()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """
+            {"connections":[{"name":"Mosquitto — WebSocket TLS 8081","host":"test.mosquitto.org",
+             "port":8081,"protocol":"WebSocket","useTls":true,"websocketBasePath":"mqtt",
+             "subscribedTopics":[{"topic":"spBv1.0/#"}]}]}
+            """);
+
+        await _loader.LoadAsync();
+
+        var connections = _document.Config.Connections;
+        connections.Should().ContainSingle("an existing config is never reseeded");
+        var legacy = connections[0];
+        legacy.Name.Should().Be("Mosquitto — WebSocket TLS 8081");
+        legacy.Host.Should().Be("test.mosquitto.org");
+        legacy.Port.Should().Be(8081);
+        legacy.Protocol.Should().Be(Protocol.WebSocket);
+        legacy.UseTls.Should().BeTrue();
+        legacy.WebsocketBasePath.Should().Be("mqtt");
+        legacy.SubscribedTopics.Should().ContainSingle(s => s.Topic == "spBv1.0/#");
     }
 
     [Test]

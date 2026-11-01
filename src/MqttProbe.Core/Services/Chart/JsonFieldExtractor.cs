@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using MqttProbe.Core.Models.Chart;
 
 namespace MqttProbe.Core.Services.Chart;
 
@@ -24,7 +25,14 @@ public class JsonFieldExtractor : IJsonFieldExtractor
 
         // Skip any leading non-JSON prefix (e.g. "--" framing markers)
         var jsonStart = jsonPayload.IndexOfAny(['{', '[']);
-        if (jsonStart < 0) return result;
+        if (jsonStart < 0)
+        {
+            if (ChartFieldPaths.TryParseRootNumber(jsonPayload, out var rootValue))
+                result[ChartFieldPaths.Root] = new ExtractedField(rootValue);
+
+            return result;
+        }
+
         if (jsonStart > 0) jsonPayload = jsonPayload[jsonStart..];
 
         try

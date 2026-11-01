@@ -291,14 +291,16 @@ public class ChartDataService(
                     && string.Equals(existing.Topic, series.Topic, StringComparison.Ordinal)
                     && string.Equals(existing.JsonPath, series.JsonPath, StringComparison.Ordinal))
                 {
-                    builder[series.Id] = existing;
+                    builder[series.Id] = existing with { MaxPoints = config.MaxPoints };
+                    if (_buffers.TryGetValue(series.Id, out var buffer))
+                        TrimBuffer(buffer, config.MaxPoints);
                     continue;
                 }
 
                 if (existing is not null)
                     _buffers.TryRemove(series.Id, out _);
 
-                builder[series.Id] = new SeriesIdentity(new object(), series.Topic, series.JsonPath);
+                builder[series.Id] = new SeriesIdentity(new object(), series.Topic, series.JsonPath, config.MaxPoints);
             }
         }
 
@@ -317,7 +319,7 @@ public class ChartDataService(
         foreach (var config in chartSettings.GetCharts(connectionId))
         {
             foreach (var series in config.Series)
-                builder[series.Id] = new SeriesIdentity(new object(), series.Topic, series.JsonPath);
+                builder[series.Id] = new SeriesIdentity(new object(), series.Topic, series.JsonPath, config.MaxPoints);
         }
 
         return builder.ToImmutable();
@@ -342,7 +344,7 @@ public class ChartDataService(
         Guid ConnectionId,
         ImmutableDictionary<Guid, SeriesIdentity> Sources);
 
-    private sealed record SeriesIdentity(object Token, string Topic, string JsonPath);
+    private sealed record SeriesIdentity(object Token, string Topic, string JsonPath, int MaxPoints);
 
     private bool UpdateBuffers(
         HandlerState state,
@@ -375,11 +377,20 @@ public class ChartDataService(
                 continue;
 
             var point = new ChartDataPoint(timestamp, extracted.Value);
-            if (TryEnqueue(state, series.Id, series.Topic, series.JsonPath, config.MaxPoints, point))
+            if (TryEnqueue(state, series.Id, series.Topic, series.JsonPath, point))
                 updated = true;
         }
 
         return updated;
+    }
+
+    private static void TrimBuffer(ConcurrentQueue<ChartDataPoint> buffer, int maxPoints)
+    {
+        while (buffer.Count > maxPoints)
+        {
+            if (!buffer.TryDequeue(out _))
+                break;
+        }
     }
 
     private bool TryEnqueue(
@@ -387,7 +398,6 @@ public class ChartDataService(
         Guid seriesId,
         string topic,
         string jsonPath,
-        int maxPoints,
         ChartDataPoint point)
     {
         lock (_stateLock)
@@ -412,10 +422,8 @@ public class ChartDataService(
 
             var buffer = _buffers.GetOrAdd(seriesId, _ => new ConcurrentQueue<ChartDataPoint>());
 
-            while (buffer.Count >= maxPoints)
-                buffer.TryDequeue(out _);
-
             buffer.Enqueue(point);
+            TrimBuffer(buffer, current.MaxPoints);
             return true;
         }
     }

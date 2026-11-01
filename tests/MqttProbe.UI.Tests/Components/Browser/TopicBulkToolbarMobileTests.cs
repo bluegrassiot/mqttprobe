@@ -288,6 +288,84 @@ public sealed class TopicBulkToolbarMobileTests : BunitTestContext
     }
 
     [Test]
+    public async Task MobileOutcome_SavedButNotApplied_KeepsThePathCheckedAndReportsItBehindDetails()
+    {
+        AuthorizeAsOperator();
+        _fixture.AddTopics((Alpha, 1), (Beta, 1));
+        var selection = Select(Alpha, Beta);
+        _excludes.AddBranches(Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(new TopicBranchExcludeBatchResult([
+                new TopicBranchExcludeResult(Raw(Alpha), TopicExcludeAddOutcome.Added),
+                new TopicBranchExcludeResult(Raw(Beta), TopicExcludeAddOutcome.SavedButNotApplied,
+                    new UserNotification(UserNotificationSeverity.Warning, "Saved on the previous connection."))
+            ]));
+        ReturnDialog(DialogResult.Ok(selection.Branches));
+        var cut = RenderToolbar(selection);
+
+        cut.Find(".topic-bulk-toolbar__exclude").Click();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        cut.WaitForAssertion(() =>
+        {
+            var compact = cut.Find(".topic-bulk-outcome-compact");
+            compact.TextContent.Should().Contain("Excluded 1 of 2 topics.");
+            compact.TextContent.Should().Contain("1 saved but not applied here.");
+            compact.TextContent.Should().NotContain("not added.",
+                "a saved exclusion is not a failed one");
+            compact.QuerySelector(".topic-bulk-outcome-compact__details")!.GetAttribute("aria-expanded")
+                .Should().Be("false");
+        });
+
+        cut.Find(".topic-bulk-outcome-compact__details").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var details = cut.FindAll(".topic-bulk-outcome-compact .topic-bulk-outcome__lines li")
+                .Select(item => item.TextContent)
+                .ToList();
+            details.Should().Contain(line => line.Contains(
+                $"Saved, not applied to this connection (1): \"{Beta}\": Saved on the previous connection.",
+                StringComparison.Ordinal));
+            details.Should().NotContain(line => line.StartsWith("Not added", StringComparison.Ordinal));
+        });
+        selection.Branches.Select(branch => branch.Path).Should().Equal(new[] { Beta });
+        _snackbar.Received(1).Add(
+            Arg.Is<string>(message => message.Contains("saved but not applied to this connection")),
+            Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
+    public async Task MobileOutcome_SavedButNotAppliedOnly_SaysNothingExcludedHere()
+    {
+        AuthorizeAsOperator();
+        _fixture.AddTopics((Alpha, 1));
+        var selection = Select(Alpha);
+        _excludes.AddBranches(Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(new TopicBranchExcludeBatchResult([
+                new TopicBranchExcludeResult(Raw(Alpha), TopicExcludeAddOutcome.SavedButNotApplied)
+            ]));
+        ReturnDialog(DialogResult.Ok(selection.Branches));
+        var cut = RenderToolbar(selection);
+
+        cut.Find(".topic-bulk-toolbar__exclude").Click();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        cut.WaitForAssertion(() =>
+        {
+            var compact = cut.Find(".topic-bulk-outcome-compact");
+            compact.TextContent.Should().Contain("Nothing excluded here.");
+            compact.TextContent.Should().Contain("1 saved but not applied here.");
+            compact.QuerySelector(".topic-bulk-outcome-compact__details").Should().NotBeNull(
+                "the saved path still gets a full line");
+        });
+        selection.Branches.Select(branch => branch.Path).Should().Equal(new[] { Alpha });
+        _snackbar.Received(1).Add(
+            Arg.Is<string>(message => message.Contains("1 topic saved but not applied to this connection")
+                && !message.Contains("Excluded")),
+            Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
     public async Task MobileOutcome_ClearSuccess_IsOneLineWithoutDetails()
     {
         _fixture.AddTopics((Alpha, 2));

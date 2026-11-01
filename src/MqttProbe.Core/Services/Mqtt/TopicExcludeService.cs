@@ -292,6 +292,10 @@ public sealed partial class TopicExcludeService : ITopicExcludeService
         new(false, new UserNotification(UserNotificationSeverity.Warning,
             "Active connection changed; topic exclusion was not applied"));
 
+    private static TopicExcludeOperationResult SavedButNotAppliedFailure() =>
+        new(false, new UserNotification(UserNotificationSeverity.Warning,
+            "Connection changed while saving; the exclusion was saved but is not applied to the active connection"));
+
     private static TopicExcludeOperationResult PurgeFailure() =>
         new(false, new UserNotification(UserNotificationSeverity.Error,
             "Exclusion applied and future messages are now blocked, but clearing existing topic data failed"));

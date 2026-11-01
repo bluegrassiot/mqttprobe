@@ -43,7 +43,8 @@ public enum TopicExcludeAddOutcome
     Invalid,
     Failed,
     AppliedWithPurgeFailure,
-    ConnectionChanged
+    ConnectionChanged,
+    SavedButNotApplied
 }
 
 public sealed record TopicExcludeAddResult(

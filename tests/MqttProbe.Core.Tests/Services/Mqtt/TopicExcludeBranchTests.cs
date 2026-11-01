@@ -6,7 +6,7 @@ using MqttProbe.Core.Services.Mqtt;
 namespace MqttProbe.Core.Tests.Services.Mqtt;
 
 [TestFixture]
-public sealed class TopicExcludeBranchTests
+public sealed partial class TopicExcludeBranchTests
 {
     private const string Group = "spBv1.0/plant1";
 

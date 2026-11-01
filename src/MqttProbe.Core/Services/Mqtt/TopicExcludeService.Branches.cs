@@ -245,8 +245,8 @@ public sealed partial class TopicExcludeService
                 || !ReferenceEquals(_loadedConnection, activeConnection)
                 || !IsCurrentConnectionLocked(activeConnection, generation))
             {
-                failureOutcome = TopicExcludeAddOutcome.ConnectionChanged;
-                failureFeedback = ConnectionChangedFailure().Feedback;
+                failureOutcome = TopicExcludeAddOutcome.SavedButNotApplied;
+                failureFeedback = SavedButNotAppliedFailure().Feedback;
                 return null;
             }
 

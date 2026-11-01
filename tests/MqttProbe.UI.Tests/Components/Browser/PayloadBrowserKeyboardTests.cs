@@ -402,6 +402,7 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
         var cut = RenderList(2);
         cut.FindAll(".payload-row")[0].Click();
 
+        cut.WaitForAssertion(() => cut.FindAll(".json-toggle").Should().NotBeEmpty());
         cut.FindAll(".json-toggle").Last().KeyDown("ArrowRight");
         cut.FindAll(".json-toggle").Last().GetAttribute("aria-expanded").Should().Be("true");
 

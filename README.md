@@ -2,7 +2,7 @@
 
 **The MQTT diagnostic tool built for IIoT.**
 
-Connect to any broker, browse live topics, inspect payloads, chart JSON metrics. Native Sparkplug B decode and EoN emulation. Open source, no cloud required.
+Connect to any broker, browse/filter live topics, inspect payloads, chart payload fields. Native Sparkplug B dashboard and MQTT/SpB node emulation.
 
 [![CI](https://github.com/bluegrassiot/mqttprobe/actions/workflows/ci.yml/badge.svg)](https://github.com/bluegrassiot/mqttprobe/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
@@ -14,15 +14,27 @@ Connect to any broker, browse live topics, inspect payloads, chart JSON metrics.
 ![MQTTProbe interface](docs/images/screenshot-browser.png)
 
 - Live topic tree
-- Payload browser (JSON, MessagePack, CBOR, binary)
-- Sparkplug B decode and EoN dashboard
-- Node and MQTT emulator
-- Live charts from payload fields
-- Topic exclusions to ignore noisy filters
+- Payload browser
+- Native Decodable Payloads:
+  - JSON
+  - XML
+  - Plain text (UTF-8)
+  - MessagePack
+  - CBOR
+  - Sparkplug B
+  - Protobuf, when schemas and topic mappings are installed via plugins
+  - Hex-encoded text
+  - Base64-encoded text
+  - Binary, displayed as a hex dump
+- Extensible with plugins (payload formats, protobuf schemas)
+- Sparkplug B dashboard (with rebirth/reboot commands)
+- Sparkplug B EoN node and MQTT emulators
+- Live charts from payload fields/SpB metrics
+- Topic exclusions to ignore noisy topics
 - Multiple saved connections, TLS/MQTTS, WebSocket
-- Plugins (payload formats, protobuf schemas)
 - OIDC sign-in on the web host (Keycloak, Authentik, or any OIDC provider)
-- Runs local: desktop, Android, Docker, web
+- Runs local: Desktop (Windows/Linux), Android (sideload), Docker, Web, iOS (coming soon)
+- Updates directly available in the Desktop apps
 
 ## Get MQTTProbe
 
@@ -33,9 +45,9 @@ Connect to any broker, browse live topics, inspect payloads, chart JSON metrics.
 | Linux | [MQTTProbe.AppImage](https://github.com/bluegrassiot/mqttprobe/releases/latest/download/MQTTProbe.AppImage) | `chmod +x` and run. WebKit and GTK are bundled; needs `libfuse2` on Ubuntu 22.04+ |
 | Android | [APK on latest release](https://github.com/bluegrassiot/mqttprobe/releases/latest) | `mqttprobe-android-*.apk`; sideload, allow unknown apps if prompted |
 | Docker | [bluegrassiot/mqttprobe](https://hub.docker.com/r/bluegrassiot/mqttprobe) | See Docker section |
-| iOS | -- | Not available yet |
+| iOS | -- | coming soon |
 
-Portable zips and web self-host builds are on the [latest release page](https://github.com/bluegrassiot/mqttprobe/releases/latest).
+See all builds on the [latest release page](https://github.com/bluegrassiot/mqttprobe/releases/latest).
 
 ## Docker
 
@@ -49,15 +61,13 @@ Your configuration persists in the `mqttprobe-config` volume across restarts. Fo
 
 ## After install
 
-Create your admin password, add a broker connection, then subscribe to topics and browse. MQTTProbe connects to one broker at a time; save connection profiles to switch between brokers.
+Create your admin password, add a broker connection, then subscribe to topics and start probing.
 
 See [Getting Started](https://github.com/bluegrassiot/mqttprobe/wiki/01-Getting-Started) and [Connection Setup](https://github.com/bluegrassiot/mqttprobe/wiki/02-Connection-Setup).
 
-## Docs
+## Wiki
 
 - [Home](https://github.com/bluegrassiot/mqttprobe/wiki)
-- [Troubleshooting](https://github.com/bluegrassiot/mqttprobe/wiki/06-Troubleshooting)
-- [OIDC Authentication](https://github.com/bluegrassiot/mqttprobe/wiki/09-OIDC-Authentication)
 
 Website: https://mqttprobe.com
 

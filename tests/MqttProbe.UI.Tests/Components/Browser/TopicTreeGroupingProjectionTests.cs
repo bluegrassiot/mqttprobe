@@ -57,30 +57,28 @@ public sealed class TopicTreeGroupingProjectionTests
     }
 
     [Test]
-    public void EveryRowKind_ReportsTheTopicsSelectingItWouldShow()
+    public void EveryRowKind_CarriesItsBranchTarget()
     {
         var rows = Rows(SupportedTree());
 
-        Row(rows, "node1").SelectedTopics.Should().BeEquivalentTo(
-        [
-            "spBv1.0/plant1/NBIRTH/node1",
-            "spBv1.0/plant1/NDATA/node1",
-            "spBv1.0/plant1/DDATA/node1/dev1"
-        ], "a node shows every message type under it");
-        Row(rows, "dev1").SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/DDATA/node1/dev1"]);
-        Row(rows, "DDATA").SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/DDATA/node1/dev1"]);
-        Row(rows, "plant1").SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1"]);
-        Row(rows, "spBv1.0").SelectedTopics.Should().BeEquivalentTo(["spBv1.0"]);
+        Row(rows, "node1").Branch.Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"));
+        Row(rows, "dev1").Branch.Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Device, "spBv1.0/plant1", "node1", "dev1"));
+        Row(rows, "DDATA").Branch.MessageType.Should().Be("DDATA");
+        Row(rows, "plant1").Branch.Kind.Should().Be(TopicBranchKind.Raw);
+        Row(rows, "plant1").Branch.Path.Should().Be("spBv1.0/plant1");
+        Row(rows, "spBv1.0").Branch.Path.Should().Be("spBv1.0");
     }
 
     [Test]
-    public void SelectionLabel_NamesTheRowRatherThanItsSnapshot()
+    public void BranchLabel_NamesTheRowScope()
     {
         var rows = Rows(SupportedTree());
 
-        Row(rows, "NDATA").SelectionLabel.Should().Be("spBv1.0/plant1/NDATA/node1");
-        Row(rows, "node1").SelectionLabel.Should().Be("spBv1.0/plant1/node1");
-        Row(rows, "dev1").SelectionLabel.Should().Be("spBv1.0/plant1/node1/dev1");
+        Row(rows, "NDATA").BranchLabel.Should().Be("spBv1.0/plant1/node1/NDATA");
+        Row(rows, "node1").BranchLabel.Should().Be("spBv1.0/plant1/node1");
+        Row(rows, "dev1").BranchLabel.Should().Be("spBv1.0/plant1/node1/dev1");
     }
 
     [Test]
@@ -88,25 +86,28 @@ public sealed class TopicTreeGroupingProjectionTests
     {
         var rows = Rows(SupportedTree());
 
-        Row(rows, "node1").ToSelection().Scope.Should().Be(
+        Row(rows, "node1").Branch.Scope.Should().Be(
             new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"));
-        Row(rows, "dev1").ToSelection().Scope.Should().Be(
+        Row(rows, "dev1").Branch.Scope.Should().Be(
             new SparkplugSelectionScope(SparkplugSelectionKind.Device, "spBv1.0/plant1", "node1", "dev1"));
+        Row(rows, "NDATA").Branch.Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"),
+            "a node message type narrows its node scope by the verb");
+        Row(rows, "NDATA").Branch.MessageType.Should().Be("NDATA");
 
-        Row(rows, "NDATA").ToSelection().Scope.Should().BeNull();
-        Row(rows, "plant1").ToSelection().Scope.Should().BeNull();
-        Row(rows, "spBv1.0").ToSelection().Scope.Should().BeNull();
+        Row(rows, "plant1").Branch.Scope.Should().BeNull();
+        Row(rows, "spBv1.0").Branch.Scope.Should().BeNull();
     }
 
     [Test]
-    public void OnlyMessageTypeRows_RequireCanonicalTopics()
+    public void OnlyMessageTypeRows_CarryAMessageType()
     {
         var rows = Rows(SupportedTree());
 
         rows.Where(row => row.Kind == TopicTreeRowKind.MessageType)
-            .Should().OnlyContain(row => row.ToSelection().RequireCanonicalTopics);
+            .Should().OnlyContain(row => row.Branch.MessageType != null);
         rows.Where(row => row.Kind != TopicTreeRowKind.MessageType)
-            .Should().OnlyContain(row => !row.ToSelection().RequireCanonicalTopics);
+            .Should().OnlyContain(row => row.Branch.MessageType == null);
     }
 
     [Test]
@@ -116,11 +117,11 @@ public sealed class TopicTreeGroupingProjectionTests
 
         var prefix = rows.Find(row => row.FullPath == "spBv1.0/plant1/NDATA");
         prefix.Should().NotBeNull();
-        prefix!.SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/NDATA"]);
-        prefix.SelectionLabel.Should().Be("spBv1.0/plant1/NDATA");
+        prefix!.Branch.Path.Should().Be("spBv1.0/plant1/NDATA");
+        prefix.BranchLabel.Should().Be("spBv1.0/plant1/NDATA");
 
         var leaf = rows.Find(row => row.FullPath == "spBv1.0/plant1/NDATA/node1");
-        leaf!.SelectedTopics.Should().BeEquivalentTo(["spBv1.0/plant1/NDATA/node1"]);
+        leaf!.Branch.Path.Should().Be("spBv1.0/plant1/NDATA/node1");
     }
 
     [Test]
@@ -408,6 +409,36 @@ public sealed class TopicTreeGroupingProjectionTests
 
         rows.Should().OnlyContain(row => !row.IsVirtualTopic);
         rows.Select(row => row.DisplayName).Should().Equal("spBv1.0", "g", "DDATA", "n");
+    }
+
+    [Test]
+    public void GroupingOn_EmptyNodeIdStaysALiteralEmptyLevel()
+    {
+        var rows = Rows(TopicSnapshotBuilder.Build(("spBv1.0/g/NDATA/", 1)));
+
+        rows.Should().OnlyContain(row => !row.IsVirtualTopic);
+        rows.Select(row => (row.DisplayName, row.Depth)).Should().Equal(
+            ("spBv1.0", 0), ("g", 1), ("NDATA", 2), ("", 3));
+    }
+
+    [Test]
+    public void GroupingOn_EmptyDeviceIdStaysALiteralEmptyLevel()
+    {
+        var rows = Rows(TopicSnapshotBuilder.Build(("spBv1.0/g/DDATA/n/", 1)));
+
+        rows.Should().OnlyContain(row => !row.IsVirtualTopic);
+        rows.Select(row => (row.DisplayName, row.Depth)).Should().Equal(
+            ("spBv1.0", 0), ("g", 1), ("DDATA", 2), ("n", 3), ("", 4));
+    }
+
+    [Test]
+    public void GroupingOn_EmptyGroupIdStaysALiteralEmptyLevel()
+    {
+        var rows = Rows(TopicSnapshotBuilder.Build(("spBv1.0//NDATA/n", 1)));
+
+        rows.Should().OnlyContain(row => !row.IsVirtualTopic);
+        rows.Select(row => (row.DisplayName, row.Depth)).Should().Equal(
+            ("spBv1.0", 0), ("", 1), ("NDATA", 2), ("n", 3));
     }
 
     [Test]

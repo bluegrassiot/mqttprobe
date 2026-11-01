@@ -1,0 +1,132 @@
+@using MqttProbe.Core.Models.Configuration
+@using MqttProbe.Core.Services.Configuration
+@inject IUiSettings UiSettings
+
+<div class="pb-time-menu-host" @onkeydown="HandleKeyDown" @onkeydown:stopPropagation="true">
+    <MudMenu @ref="_menu" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+             PopoverFixed="true" Dense="true" Class="pb-time-menu" AriaLabel="Time display settings">
+        <ActivatorContent>
+            <span class="pb-time-trigger" data-time-trigger title="Time display settings" @onclick="() => context.ToggleAsync()">
+                <MudIcon Icon="@LucideIcons.Clock" Size="Size.Small"/>
+                <span class="pb-time-trigger__label" aria-hidden="true">Time</span>
+                <span class="pb-time-trigger__accessible">Time display settings</span>
+                <MudIcon Icon="@LucideIcons.ChevronDown" Size="Size.Small"/>
+            </span>
+        </ActivatorContent>
+        <ChildContent>
+            <div class="pb-time-panel" data-time-menu
+                 @onkeydown="HandleKeyDown" @onkeydown:stopPropagation="true">
+            <div class="pb-time-panel__header">
+                <div class="pb-time-panel__title">Time display</div>
+                <button type="button" class="pb-time-close" data-time-close
+                        aria-label="Close time display settings"
+                        title="Close" @onclick="CloseMenuAsync">
+                    <MudIcon Icon="@LucideIcons.X" Size="Size.Small"/>
+                </button>
+            </div>
+
+            <div class="pb-time-row">
+                <span class="pb-time-row__label">Mode</span>
+                <div class="pb-time-seg" role="group" aria-label="Time mode">
+                    <button type="button" class="pb-time-option" data-time-mode="clock"
+                            aria-pressed="@(IsClock ? "true" : "false")"
+                            @onclick="() => SetModeAsync(MessageTimePreferences.ModeClock)">Clock</button>
+                    <button type="button" class="pb-time-option" data-time-mode="elapsed"
+                            aria-pressed="@(IsElapsed ? "true" : "false")"
+                            @onclick="() => SetModeAsync(MessageTimePreferences.ModeElapsed)">Elapsed</button>
+                    <button type="button" class="pb-time-option" data-time-mode="delta"
+                            aria-pressed="@(IsDelta ? "true" : "false")"
+                            @onclick="() => SetModeAsync(MessageTimePreferences.ModeDelta)">Delta</button>
+                </div>
+            </div>
+
+            @if (IsClock)
+            {
+                <div class="pb-time-row">
+                    <span class="pb-time-row__label">Zone</span>
+                    <div class="pb-time-seg" role="group" aria-label="Time zone">
+                        <button type="button" class="pb-time-option" data-time-zone="utc"
+                                aria-pressed="@(IsUtc ? "true" : "false")"
+                                title="Coordinated Universal Time"
+                                @onclick="() => SetZoneAsync(MessageTimePreferences.ZoneUtc)">UTC</button>
+                        <button type="button" class="pb-time-option" data-time-zone="local"
+                                aria-pressed="@(IsLocal ? "true" : "false")"
+                                title="This device's time zone"
+                                @onclick="() => SetZoneAsync(MessageTimePreferences.ZoneLocal)">Local</button>
+                    </div>
+                </div>
+
+                <div class="pb-time-row">
+                    <span class="pb-time-row__label">Hours</span>
+                    <div class="pb-time-seg" role="group" aria-label="Clock format">
+                        <button type="button" class="pb-time-option" data-time-format="24h"
+                                aria-pressed="@(Is24Hour ? "true" : "false")"
+                                @onclick="() => SetClockFormatAsync(MessageTimePreferences.ClockFormat24Hour)">24-hour</button>
+                        <button type="button" class="pb-time-option" data-time-format="12h"
+                                aria-pressed="@(Is12Hour ? "true" : "false")"
+                                @onclick="() => SetClockFormatAsync(MessageTimePreferences.ClockFormat12Hour)">12-hour</button>
+                    </div>
+                </div>
+            }
+
+            @if (IsDelta)
+            {
+                <div class="pb-time-row">
+                    <span class="pb-time-row__label">Compare</span>
+                    <div class="pb-time-seg" role="group" aria-label="Delta scope">
+                        <button type="button" class="pb-time-option" data-delta-scope="all"
+                                aria-pressed="@(IsAllTopics ? "true" : "false")"
+                                @onclick="() => SetDeltaScopeAsync(MessageTimePreferences.DeltaScopeAll)">All topics</button>
+                        <button type="button" class="pb-time-option" data-delta-scope="topic"
+                                aria-pressed="@(IsSameTopic ? "true" : "false")"
+                                @onclick="() => SetDeltaScopeAsync(MessageTimePreferences.DeltaScopeTopic)">Same topic</button>
+                    </div>
+                </div>
+            }
+
+            <p class="pb-time-hint">@Hint</p>
+        </div>
+    </ChildContent>
+    </MudMenu>
+</div>
+
+@code {
+    [Parameter] public MessageTimePresentation Presentation { get; set; } =
+        MessageTimeDisplay.Describe(new MessageTimePreferences());
+
+    private MudMenu? _menu;
+
+    private bool IsClock => Presentation.IsClock;
+    private bool IsElapsed => Presentation.IsElapsed;
+    private bool IsDelta => Presentation.IsDelta;
+    private bool IsUtc => !Presentation.IsLocal;
+    private bool IsLocal => Presentation.IsLocal;
+    private bool Is24Hour => !Presentation.Is12Hour;
+    private bool Is12Hour => Presentation.Is12Hour;
+    private bool IsAllTopics => !Presentation.SameTopic;
+    private bool IsSameTopic => Presentation.SameTopic;
+
+    private string Hint => Presentation.MenuHint;
+
+    private Task CloseMenuAsync() => _menu?.CloseMenuAsync() ?? Task.CompletedTask;
+
+    private Task HandleKeyDown(KeyboardEventArgs args) =>
+        args.Key == "Escape" ? CloseMenuAsync() : Task.CompletedTask;
+
+    private Task SetModeAsync(string mode) => UpdateAsync(preferences => preferences.Mode = mode);
+
+    private Task SetZoneAsync(string zone) => UpdateAsync(preferences => preferences.Zone = zone);
+
+    private Task SetClockFormatAsync(string clockFormat) =>
+        UpdateAsync(preferences => preferences.ClockFormat = clockFormat);
+
+    private Task SetDeltaScopeAsync(string deltaScope) =>
+        UpdateAsync(preferences => preferences.DeltaScope = deltaScope);
+
+    private Task UpdateAsync(Action<MessageTimePreferences> mutate)
+    {
+        var next = MessageTimePreferences.Normalize(UiSettings.Ui.MessageTime);
+        mutate(next);
+        return UiSettings.SetMessageTimeAsync(next);
+    }
+}

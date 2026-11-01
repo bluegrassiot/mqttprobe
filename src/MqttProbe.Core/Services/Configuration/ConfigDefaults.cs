@@ -12,6 +12,14 @@ internal static class ConfigDefaults
     {
         MigrateFontProfile(config, legacyJson);
         MigrateSparkplug(config, legacyJson);
+        NormalizeMessageTime(config);
+    }
+
+    private static void NormalizeMessageTime(AppConfiguration config)
+    {
+        if (config.Ui is null) return;
+
+        config.Ui.MessageTime = MessageTimePreferences.Normalize(config.Ui.MessageTime);
     }
 
     private static void MigrateFontProfile(AppConfiguration config, string? legacyJson)
@@ -107,9 +115,9 @@ internal static class ConfigDefaults
         },
         new()
         {
-            Name = "Mosquitto — WebSocket TLS 8081",
-            Host = "test.mosquitto.org",
-            Port = 8081,
+            Name = "EMQX — WebSocket TLS 8084",
+            Host = "broker.emqx.io",
+            Port = 8084,
             Protocol = Protocol.WebSocket,
             UseTls = true,
             AllowUntrustedCertificate = false,

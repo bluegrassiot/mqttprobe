@@ -1,17 +1,28 @@
-
-<div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsSelected ? "topic-tree-row--selected" : "")"
+<div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsChecked ? "topic-tree-row--selected" : "")"
+     role="treeitem"
+     aria-level="@(Row.Depth + 1)"
+     aria-expanded="@ExpandedAttribute"
+     aria-selected="@SelectedAttribute"
+     tabindex="@(IsTabStop ? 0 : -1)"
+     data-topic-key="@Row.RowKey"
+     data-topic-path="@Row.FullPath"
+     data-message-topic="@(Row.IsMessageTopic ? "true" : null)"
+     data-depth="@Row.Depth"
      title="@Title"
-     @onclick="OnRowClick">
+     @onclick="OnRowClick"
+     @onfocus="OnRowFocused"
+     @onkeydown="OnKeyPressed">
     <svg class="topic-tree-indent" width="@IndentWidth" height="1" aria-hidden="true" focusable="false"></svg>
     @if (Row.HasChildren)
     {
-        <span @onclick:stopPropagation="true">
+        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
             <MudIconButton Icon="@(Row.IsExpanded ? LucideIcons.ChevronDown : LucideIcons.ChevronRight)"
                            Size="Size.Small"
                            Class="topic-chevron topic-role--brand"
                            title="@ExpandLabel"
                            aria-label="@ExpandLabel"
                            aria-expanded="@(Row.IsExpanded ? "true" : "false")"
+                           tabindex="-1"
                            OnClick="OnToggleExpand"/>
         </span>
     }
@@ -19,9 +30,24 @@
     {
         <div class="topic-tree-chevron-spacer" aria-hidden="true"></div>
     }
+    <span class="topic-select-checkbox-wrap @(IsInherited ? "topic-select-checkbox-wrap--inherited" : null)"
+          title="@InheritedReason"
+          @onclick="OnCheckboxClicked" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+        <MudCheckBox T="bool?" Value="@CheckboxValue"
+                     TriState="true" Dense="true" StopClickPropagation="true"
+                     Color="Color.Primary" Class="topic-select-checkbox"
+                     UserAttributes="@CheckboxInputAttributes"
+                     Disabled="@IsInherited">
+            <span class="topic-select-checkbox__name">@CheckboxLabel</span>
+        </MudCheckBox>
+    </span>
     <MudIcon Icon="@TopicTreeIconLanguage.NodeGlyph(Row)" Size="Size.Small" Class="@TopicTreeIconLanguage.IconClass(Row)"/>
-    <span class="flex-grow-1 topic-name-cell" title="@Row.DisplayName">
-        @if (Row.IsVirtualTopic)
+    <span class="flex-grow-1 topic-name-cell" title="@(Row.IsEmptyLevel ? Row.EmptyLevelTitle : Row.DisplayName)">
+        @if (Row.IsEmptyLevel)
+        {
+            <span class="topic-name topic-name--empty">(empty level)</span>
+        }
+        else if (Row.IsVirtualTopic)
         {
             <span class="topic-name topic-group-label">@Row.DisplayName</span>
         }
@@ -37,34 +63,82 @@
 
 @code {
     [Parameter] public TopicTreeRowModel Row { get; set; } = null!;
-    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public TopicTreeSelectionState SelectionState { get; set; }
+    [Parameter] public bool IsTabStop { get; set; }
+    [Parameter] public string? InheritedSelectionLabel { get; set; }
     [Parameter] public EventCallback<string> OnExpandToggled { get; set; }
-    [Parameter] public EventCallback<TopicSelection> OnSelected { get; set; }
+    [Parameter] public EventCallback<TopicTreeRowModel> OnSelectionToggled { get; set; }
+    [Parameter] public EventCallback<KeyboardEventArgs> OnKeyPressed { get; set; }
+    [Parameter] public EventCallback<string> OnFocused { get; set; }
 
     private const int IndentStepWidth = 16;
+    private const int MaxIndentDepth = 6;
 
-    // One SVG sized by its width attribute carries the whole indent, so a row costs the same DOM
-    // at depth 1000 as at depth 0, with no inline style and no depth-keyed classes.
-    private int IndentWidth => Row.Depth * IndentStepWidth;
-
-    private string ExpandLabel => $"{(Row.IsExpanded ? "Collapse" : "Expand")} {Row.DisplayName}";
-
-    // Every Sparkplug row says which role it is and whether it stands for a real MQTT topic or an
-    // invented grouping, and a grouping row also says how much its selection covers. Plain topic
-    // rows carry no role, so they get no row tooltip.
-    private string? Title => Row.Kind switch
+    // The tree keeps one tab stop, on the focused row, so the checkbox never joins the tab order;
+    // its row handles Space.
+    private static readonly Dictionary<string, object?> CheckboxInputAttributes = new()
     {
-        TopicTreeRowKind.SparkplugNamespace => "Sparkplug namespace · real MQTT topic",
-        TopicTreeRowKind.SparkplugGroup => "Sparkplug group · real MQTT topic",
-        TopicTreeRowKind.SparkplugNode => GroupingTitle("Sparkplug node"),
-        TopicTreeRowKind.Devices => GroupingTitle("Sparkplug devices"),
-        TopicTreeRowKind.SparkplugDevice => GroupingTitle("Sparkplug device"),
-        TopicTreeRowKind.MessageType => GroupingTitle("Sparkplug message type"),
-        _ => null
+        ["tabindex"] = "-1"
     };
 
+    private string? ExpandedAttribute => Row.HasChildren ? ExpandedText : null;
+
+    private bool IsChecked => SelectionState == TopicTreeSelectionState.Checked;
+
+    private string SelectedAttribute => IsChecked ? "true" : "false";
+
+    private string ExpandedText => Row.IsExpanded ? "true" : "false";
+
+    private bool? CheckboxValue => SelectionState switch
+    {
+        TopicTreeSelectionState.Checked => true,
+        TopicTreeSelectionState.Mixed => null,
+        _ => false
+    };
+
+    private bool IsInherited => InheritedSelectionLabel is not null;
+
+    // A row checked only through a branch above it cannot be unchecked on its own: removing
+    // that branch would drop its other members too.
+    private string CheckboxLabel => InheritedSelectionLabel is { } inherited
+        ? $"Selected through {inherited}"
+        : Row.BranchAriaLabel;
+
+    private string? InheritedReason => InheritedSelectionLabel is { } inherited
+        ? $"Selected through {inherited}. Uncheck that topic to change this one."
+        : null;
+
+    // One SVG sized by its width attribute carries the whole indent, so a row costs the same DOM
+    // at depth 1000 as at depth 0. The indent stops at six levels so a narrow pane cannot be
+    // pushed sideways; the path itself and the row order keep the hierarchy readable.
+    private int IndentWidth => Math.Min(Row.Depth, MaxIndentDepth) * IndentStepWidth;
+
+    private string RowLabel => Row.IsEmptyLevel ? "empty level" : Row.DisplayName;
+
+    private string ExpandLabel => $"{(Row.IsExpanded ? "Collapse" : "Expand")} {RowLabel}";
+
+    private string? Title
+    {
+        get
+        {
+            if (Row.IsEmptyLevel)
+                return Row.EmptyLevelTitle;
+
+            return Row.Kind switch
+            {
+                TopicTreeRowKind.SparkplugNamespace => "Sparkplug namespace · real MQTT topic",
+                TopicTreeRowKind.SparkplugGroup => "Sparkplug group · real MQTT topic",
+                TopicTreeRowKind.SparkplugNode => GroupingTitle("Sparkplug node"),
+                TopicTreeRowKind.Devices => GroupingTitle("Sparkplug devices"),
+                TopicTreeRowKind.SparkplugDevice => GroupingTitle("Sparkplug device"),
+                TopicTreeRowKind.MessageType => GroupingTitle("Sparkplug message type"),
+                _ => null
+            };
+        }
+    }
+
     private string GroupingTitle(string role) =>
-        $"{role} · grouping row, not a real MQTT topic · selects {Count(Row.SelectedTopics.Length, "topic")} beneath it";
+        $"{role} · grouping row, not a real MQTT topic · selects {Count(Row.TopicCount, "topic")} beneath it";
 
     // The T count is the topics below the row and the M count is the messages at the row's own
     // path plus the ones below it, so each tooltip says which total it is rather than implying
@@ -79,10 +153,16 @@
     private static string Count(int value, string noun) =>
         value == 1 ? $"1 {noun}" : $"{value:N0} {noun}s";
 
-    private async Task OnRowClick()
-    {
-        await OnSelected.InvokeAsync(Row.ToSelection());
-    }
+    private async Task OnRowClick() =>
+        await OnSelectionToggled.InvokeAsync(Row);
+
+    // The wrapper owns the pointer gesture so the checkbox never takes focus from the row; the
+    // checkbox itself stays a real, state-bearing control for assistive technology.
+    private async Task OnCheckboxClicked() =>
+        await OnSelectionToggled.InvokeAsync(Row);
+
+    private async Task OnRowFocused() =>
+        await OnFocused.InvokeAsync(Row.RowKey);
 
     private async Task OnToggleExpand() =>
         await OnExpandToggled.InvokeAsync(Row.FullPath);

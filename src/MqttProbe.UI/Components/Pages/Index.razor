@@ -125,7 +125,9 @@
                 {
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
                               ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("charts"))">
-                        <strong>Start here:</strong> open a JSON message in Browser and choose a numeric field to create your first chart.
+                        <strong>Start here:</strong> in Browser, open a JSON message and choose a numeric field. In Nodes, select a node or device, then choose the chart icon on a numeric, boolean, or datetime metric row.
+                        Nodes skips String-valued metrics because their values are not exposed under a stable metric name.
+                        Browser message details can still chart numeric strings by their indexed path.
                     </MudAlert>
                 }
                 <ErrorBoundary ErrorContent="_sectionError">
@@ -339,6 +341,14 @@
         MqttClient.ConnectionStateChangedAsync += _connectionStateChangedHandler;
 
         SessionLifecycle.ActiveConnectionStopped += OnActiveConnectionStopped;
+        ChartSettings.ChartsChanged += OnChartsChanged;
+    }
+
+    // Chart counts are a parent-tab label, so Charts cannot refresh them itself.
+    private void OnChartsChanged(Guid connectionId)
+    {
+        if (connectionId != SessionState.SelectedConnection.Id) return;
+        InvokeAsync(StateHasChanged);
     }
 
     // The broker thread only asks for a refresh; the dispatcher reconciles the active tab, then renders.
@@ -379,6 +389,7 @@
         if (_connectionStateChangedHandler is not null)
             MqttClient.ConnectionStateChangedAsync -= _connectionStateChangedHandler;
         SessionLifecycle.ActiveConnectionStopped -= OnActiveConnectionStopped;
+        ChartSettings.ChartsChanged -= OnChartsChanged;
         _refreshCoalescer?.Dispose();
     }
 

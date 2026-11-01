@@ -12,6 +12,9 @@ public class MqttTopicMatcherTests
     [TestCase("a/b/c", "a/b/c", true)]
     [TestCase("a/b", "a/b/c", false)]
     [TestCase("spBv1.0/group/NBIRTH/node", "application/+/device/+/event/up", false)]
+    [TestCase("us915_1/gateway/008000000001fdbd/event/up", "+/gateway/+/event/up", true)]
+    [TestCase("gateway/008000000001fdbd/event/up", "+/gateway/+/event/up", false)]
+    [TestCase("gateway/008000000001fdbd/event/up", "gateway/+/event/up", true)]
     public void Matches_Wildcards(string topic, string filter, bool expected)
     {
         MqttTopicMatcher.Matches(topic, filter).Should().Be(expected);
@@ -82,4 +85,28 @@ public class MqttTopicMatcherTests
 
         MqttTopicMatcher.Matches(topic, topic).Should().BeFalse();
     }
+
+    [TestCase("a/b/c")]
+    [TestCase("a")]
+    [TestCase("a b/c d")]
+    [TestCase("/leading/slash")]
+    [TestCase("trailing/slash/")]
+    [TestCase("benchmarks/v5/all-six/reply")]
+    public void IsValidTopicName_AllowsPlainNames(string topic) =>
+        MqttTopicMatcher.IsValidTopicName(topic).Should().BeTrue();
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("a/+/c")]
+    [TestCase("a/#")]
+    [TestCase("#")]
+    [TestCase("a+b")]
+    [TestCase("a\0b")]
+    public void IsValidTopicName_RejectsEmptyWildcardsAndNul(string? topic) =>
+        MqttTopicMatcher.IsValidTopicName(topic).Should().BeFalse();
+
+    [TestCase(65_535, true)]
+    [TestCase(65_536, false)]
+    public void IsValidTopicName_LimitsByUtf8ByteCount(int charCount, bool expected) =>
+        MqttTopicMatcher.IsValidTopicName(new string('a', charCount)).Should().Be(expected);
 }

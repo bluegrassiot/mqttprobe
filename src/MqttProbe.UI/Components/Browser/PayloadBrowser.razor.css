@@ -1,3 +1,11 @@
+.payload-panel-shell {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
 .payload-detail-toolbar {
     position: sticky;
     top: 0;
@@ -5,9 +13,185 @@
     background: var(--mud-palette-surface);
 }
 
+/* Opening a message moves focus here so the arrow keys, Escape and Tab continue from the detail. */
+.payload-detail-toolbar:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+/* Shrinks before the payload body does, and scrolls once it can no longer
+   fit, so long v5 property values cannot push the payload out of view. Its
+   own floor keeps the topic row reachable in very short panels. */
 .payload-detail-meta {
+    flex: 0 1 auto;
+    min-height: 25%;
+    overflow-y: auto;
     background: var(--mud-palette-surface);
     border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+/* The detail toolbar must never wrap: back, title, prev/next, copy stay on one
+   row at phone widths, with the title shrinking first. */
+::deep .payload-toolbar-title {
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A long topic in the list header stays on one line instead of growing the panel. */
+::deep .payload-topic-title {
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.payload-list-header ::deep .payload-topic-title {
+    flex: 1 1 auto;
+}
+
+.pb-mobile-time-readout {
+    display: none;
+    flex: 0 0 auto;
+    align-items: baseline;
+    gap: 4px;
+    margin-left: 8px;
+    font-size: 0.68rem;
+    color: var(--mud-palette-text-secondary);
+    white-space: nowrap;
+}
+
+.pb-mobile-time-readout__label {
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+}
+
+.pb-mobile-time-readout__meta {
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pb-mobile-time-readout__full {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.pb-list-header-title {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.pb-list-header-time {
+    display: contents;
+}
+
+.pb-th-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pb-th-meta {
+    display: block;
+    max-width: 100%;
+    margin-top: 1px;
+    overflow: hidden;
+    font-size: 0.62rem;
+    font-weight: 400;
+    line-height: 1.1;
+    color: var(--mud-palette-text-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pb-time-value {
+    display: inline-block;
+    white-space: nowrap;
+}
+
+.pb-time-value--pending {
+    color: var(--mud-palette-text-secondary);
+    letter-spacing: 0.12em;
+}
+
+.pb-clock-pending {
+    color: var(--mud-palette-text-secondary);
+}
+
+.pb-received-line {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 3px 6px;
+}
+
+.pb-meta-table .pb-received-row td {
+    vertical-align: top;
+}
+
+.pb-received-instant {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.pb-received-zone-name {
+    margin-top: 1px;
+    font-size: 0.68rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+::deep .payload-relative-time {
+    display: inline;
+    margin-left: 0;
+}
+
+::deep .payload-retained-chip {
+    height: 20px;
+    font-size: 0.72rem;
+}
+
+::deep .payload-type-chip {
+    height: 20px;
+    font-size: 0.72rem;
+    margin-left: 6px;
+}
+
+::deep .payload-number-value {
+    font-family: var(--font-mono);
+    color: var(--mud-palette-success);
+    letter-spacing: 0.05em;
+}
+
+::deep .payload-empty-text {
+    font-style: italic;
+}
+
+.payload-pre {
+    margin: 0;
+    padding: 8px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    font-size: 0.82rem;
+}
+
+.payload-pre--wrap {
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 /* Plain table replacing MudSimpleTable — no overflow container, no height:100%
@@ -23,13 +207,57 @@
     vertical-align: middle;
 }
 
-/* .payload-detail-body is styled inline in the razor markup: MudPaper renders
-   without this component's CSS-isolation scope attribute, so a scoped class
-   rule here never matches it. */
+/* Flex column that clips: the payload content (JSON tree / pre) flex-fills
+   it and becomes the bounded scroller, so its horizontal scrollbar sits at
+   the visible bottom of the panel. flex-basis 0 plus a min-height keeps the
+   body usable when the metadata block above is tall. The host div carries
+   the scope attribute; MudPaper renders without it, hence ::deep. */
+.payload-detail-body-host {
+    flex: 1 1 0;
+    min-height: max(160px, 40%);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.payload-detail-body-host ::deep .payload-detail-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
 
 ::deep .payload-row td {
     padding-top: 6px;
     padding-bottom: 6px;
+}
+
+/* The time column is sized to its digits, so trim the table's default 16px gutters
+   instead of widening it further. */
+::deep .pb-cell-time {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+/* The list is one tab stop; rows are reached with the arrow keys, so the ring frames the
+   whole history instead of every row. */
+.payload-message-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.payload-message-list:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+::deep .payload-row--active > td {
+    background-color: rgba(var(--mud-palette-primary-rgb), 0.12);
+    box-shadow: inset 2px 0 0 var(--mud-palette-primary);
 }
 
 /* Moved from an inline style so the mobile stacked layout below can override it. */
@@ -50,6 +278,51 @@
    entry instead: time + retained flag on top, topic on one ellipsized line,
    payload preview clamped to two lines. Desktop table is untouched. */
 @media (max-width: 599.98px) {
+    /* Two clear lines: the topic gets the full width, then one row carries the
+       current time mode, its short zone, and the settings trigger. */
+    .payload-list-header {
+        flex-wrap: wrap;
+        row-gap: 6px;
+    }
+
+    .pb-list-header-title {
+        flex: 1 1 100%;
+    }
+
+    .pb-list-header-time {
+        display: flex;
+        align-items: center;
+        flex: 1 1 100%;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .pb-mobile-time-readout {
+        display: inline-flex;
+        flex: 0 1 auto;
+        min-width: 0;
+        margin-left: 0;
+        gap: 6px;
+        align-items: baseline;
+    }
+
+    .pb-mobile-time-readout__meta {
+        max-width: none;
+        min-width: 0;
+        flex: 0 1 auto;
+    }
+
+    .pb-list-header-time ::deep .pb-time-trigger {
+        justify-content: center;
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0 10px;
+    }
+
+    .pb-list-header-time ::deep .pb-time-trigger__label {
+        display: none;
+    }
+
     ::deep .mud-table-container thead {
         display: none;
     }
@@ -121,17 +394,37 @@
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
-::deep colgroup col:nth-child(1) { width: 13%; }
-::deep colgroup col:nth-child(2) { width: 28%; }
-::deep colgroup col:nth-child(3) { width: 54%; }
+.payload-message-list {
+    --pb-time-column: 112px;
+}
+
+.payload-message-list--clock-12h {
+    --pb-time-column: 140px;
+}
+
+.payload-message-list--durations {
+    --pb-time-column: 156px;
+}
+
+::deep colgroup col:nth-child(1) { width: var(--pb-time-column); }
+::deep colgroup col:nth-child(2) { width: 26%; }
+::deep colgroup col:nth-child(3) { width: auto; }
 ::deep colgroup col:nth-child(4) { width: 5%; }
 
-::deep .sortable-th {
+.sortable-th {
     cursor: pointer;
     user-select: none;
     display: flex;
-    align-items: center;
-    gap: 4px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: inherit;
 }
 
 /* ── Detail meta table (static styling extracted from inline) ────────────── */
@@ -151,6 +444,28 @@
 .pb-topic {
     font-size: 0.85rem;
     word-break: break-all;
+}
+
+.pb-user-props {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.pb-user-props td {
+    padding: 1px 10px 1px 0;
+    font-size: 0.8rem;
+    vertical-align: top;
+    word-break: break-all;
+}
+
+.pb-user-prop-name {
+    width: 35%;
+    color: var(--mud-palette-text-secondary);
+}
+
+.pb-preserve-ws {
+    white-space: pre-wrap;
 }
 
 /* ── MudTable flex height fix ──────────────────────────────────────────────

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
+using MqttProbe.Core.Models.Chart;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Emulation;
 using MqttProbe.Core.Models.Mqtt;
@@ -40,6 +41,7 @@ public class IndexTests : BunitTestContext
     private IUiSettings _mockUi = null!;
     private IChartSettings _mockCharts = null!;
     private IConnectionSessionLifecycle _mockLifecycle = null!;
+    private Connection _selectedConnection = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -54,8 +56,9 @@ public class IndexTests : BunitTestContext
         _mockUi.IsHintDismissed(Arg.Any<string>()).Returns(false);
         _mockCharts = Substitute.For<IChartSettings>();
 
+        _selectedConnection = new Connection();
         var mockSessionState = Substitute.For<ISessionState>();
-        mockSessionState.SelectedConnection.Returns(new Connection());
+        mockSessionState.SelectedConnection.Returns(_selectedConnection);
 
         _mockMsgStore.RootTopicCount.Returns(0);
         _mockSubManager.Subscriptions.Returns(Array.Empty<SubscribedTopic>());
@@ -534,6 +537,84 @@ public class IndexTests : BunitTestContext
 
         coalescer.QueuedCount.Should().Be(0, "the pending refresh never reached the renderer");
         coalescer.ExecutedCount.Should().Be(0, "a disposed page renders nothing");
+    }
+
+    [Test]
+    public void ChartsChanged_ForSelectedConnection_UpdatesChartsLabelWithoutTopologyTraffic()
+    {
+        _mockCharts.GetCharts(_selectedConnection.Id).Returns([]);
+        var cut = Render<IndexPage>();
+        cut.Markup.Should().NotContain("Charts (");
+        var rendersBefore = cut.RenderCount;
+
+        _mockCharts.GetCharts(_selectedConnection.Id).Returns([new ChartConfiguration { Name = "Flow" }]);
+        _mockCharts.ChartsChanged += Raise.Event<Action<Guid>>(_selectedConnection.Id);
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Charts (1)"), TimeSpan.FromSeconds(5));
+        cut.RenderCount.Should().Be(rendersBefore + 1,
+            "the label refresh comes from the chart event alone, with no telemetry or topology event");
+    }
+
+    [Test]
+    public void ChartsChanged_WithNoSavedChart_KeepsPlainChartsLabel()
+    {
+        _mockCharts.GetCharts(_selectedConnection.Id).Returns([]);
+        var cut = Render<IndexPage>();
+
+        _mockCharts.ChartsChanged += Raise.Event<Action<Guid>>(_selectedConnection.Id);
+
+        cut.Markup.Should().NotContain("Charts (");
+        cut.Markup.Should().NotContain("Charts (0)");
+    }
+
+    [Test]
+    public void ChartsChanged_WhenSeriesAppendedToExistingChart_KeepsChartCount()
+    {
+        var chart = new ChartConfiguration { Name = "Flow" };
+        _mockCharts.GetCharts(_selectedConnection.Id).Returns([chart]);
+        var cut = Render<IndexPage>();
+        cut.Markup.Should().Contain("Charts (1)");
+
+        chart.Series.Add(new ChartSeries { Topic = "t", JsonPath = "$.v" });
+        _mockCharts.ChartsChanged += Raise.Event<Action<Guid>>(_selectedConnection.Id);
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Charts (1)"), TimeSpan.FromSeconds(5));
+        cut.Markup.Should().NotContain("Charts (2)");
+    }
+
+    [Test]
+    public void ChartsChanged_ForAnotherConnection_LeavesSelectedCountUntouched()
+    {
+        var chart = new ChartConfiguration { Name = "Flow" };
+        _mockCharts.GetCharts(_selectedConnection.Id).Returns([chart]);
+        var otherConnectionId = Guid.NewGuid();
+        _mockCharts.GetCharts(otherConnectionId).Returns(
+        [
+            new ChartConfiguration { Name = "Other A" },
+            new ChartConfiguration { Name = "Other B" }
+        ]);
+        var cut = Render<IndexPage>();
+        var rendersBefore = cut.RenderCount;
+
+        _mockCharts.ChartsChanged += Raise.Event<Action<Guid>>(otherConnectionId);
+
+        cut.RenderCount.Should().Be(rendersBefore,
+            "another connection's chart change cannot alter the selected connection's label");
+        cut.Markup.Should().Contain("Charts (1)");
+    }
+
+    [Test]
+    public void Dispose_UnsubscribesFromChartsChanged()
+    {
+        _mockCharts.GetCharts(_selectedConnection.Id).Returns([]);
+        var cut = Render<IndexPage>();
+        var rendersBefore = cut.RenderCount;
+
+        cut.Instance.Dispose();
+        _mockCharts.GetCharts(_selectedConnection.Id).Returns([new ChartConfiguration { Name = "Late" }]);
+        _mockCharts.ChartsChanged += Raise.Event<Action<Guid>>(_selectedConnection.Id);
+
+        cut.RenderCount.Should().Be(rendersBefore, "a disposed page must not react to chart events");
     }
 
     private void RaiseTopologyBurst(int count)

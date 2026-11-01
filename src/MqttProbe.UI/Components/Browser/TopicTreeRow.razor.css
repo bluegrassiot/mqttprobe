@@ -3,9 +3,16 @@
 .topic-tree-row {
     min-width: 0;
     max-width: 100%;
-    min-height: 36px;
+    min-height: 48px;
     padding-left: 8px;
     cursor: pointer;
+}
+
+/* The row is the tree's focus owner, so the ring sits inside it and the scroll owner
+   cannot clip it on the first or last row. */
+.topic-tree-row:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
 }
 
 /* The indent SVG paints nothing, so pointer events fall through to the row. flex-basis:auto
@@ -48,6 +55,50 @@
     border-left: 2px solid var(--topic-role-brand, #f97316);
 }
 
+.topic-tree-row ::deep .topic-select-checkbox {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 44px;
+    margin: 0;
+    padding: 0;
+    /* The wrapper owns the click, so the checkbox never takes focus from the row. */
+    pointer-events: none;
+}
+
+.topic-select-checkbox-wrap {
+    display: flex;
+    flex: 0 0 44px;
+    align-items: center;
+    justify-content: center;
+}
+
+/* A row checked only through a branch above it cannot be toggled on its own, so the control
+   reads as fixed rather than as a disabled choice the user could re-enable. */
+.topic-select-checkbox-wrap--inherited {
+    cursor: default;
+    opacity: 0.7;
+}
+
+.topic-tree-row ::deep .topic-select-checkbox .mud-button-root {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+}
+
+/* The checkbox is named by its full path for assistive tech, but the row already shows the
+   label, so the name stays out of the visual layout. */
+.topic-select-checkbox__name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 /* Grouping rows are navigation, not topics, so they get a default cursor. */
 .topic-tree-row.topic-tree-row--group {
     cursor: default;
@@ -60,6 +111,13 @@
 .topic-group-label {
     color: var(--mud-palette-text-secondary);
     border-bottom: 1px dotted rgba(148, 163, 184, 0.55);
+}
+
+/* An empty MQTT level has no text of its own, so the row names it and the title carries the
+   raw path. */
+.topic-tree-row .topic-name--empty {
+    color: var(--mud-palette-text-secondary);
+    font-style: italic;
 }
 
 /* The name cell grows; only the name itself truncates, so a long value ellipsizes without

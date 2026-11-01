@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Emulation;
 using MqttProbe.Core.Models.Mqtt;
@@ -309,16 +310,79 @@ public class EmulationPanelTests : BunitTestContext
     }
 
     [Test]
+    public void NodeToggle_ArrowKeysExpandAndCollapseIdempotently()
+    {
+        _nodes.Add(Node("Press-01"));
+        var cut = Render<EmulationPanel>();
+
+        cut.Find("button.emu-node-row__toggle").GetAttribute("aria-expanded").Should().Be("false");
+
+        cut.Find("button.emu-node-row__toggle").KeyDown("ArrowRight");
+        cut.FindAll(".emu-node-editor").Should().ContainSingle();
+        cut.Find("button.emu-node-row__toggle").GetAttribute("aria-expanded").Should().Be("true");
+
+        cut.Find("button.emu-node-row__toggle").KeyDown("ArrowRight");
+        cut.FindAll(".emu-node-editor").Should().ContainSingle("Right on an expanded node is a no-op");
+
+        cut.Find("button.emu-node-row__toggle").KeyDown("ArrowLeft");
+        cut.FindAll(".emu-node-editor").Should().BeEmpty();
+        cut.Find("button.emu-node-row__toggle").GetAttribute("aria-expanded").Should().Be("false");
+
+        cut.Find("button.emu-node-row__toggle").KeyDown("ArrowLeft");
+        cut.FindAll(".emu-node-editor").Should().BeEmpty("Left on a collapsed node is a no-op");
+
+        var toggle = cut.Find("button.emu-node-row__toggle");
+        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", CtrlKey = true });
+        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowLeft", AltKey = true });
+        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", ShiftKey = true });
+        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", MetaKey = true });
+        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", IsComposing = true });
+        cut.FindAll(".emu-node-editor").Should().BeEmpty("modifiers and IME composition stay untouched");
+    }
+
+    [Test]
+    public void DeviceToggle_ArrowKeysExpandAndCollapseIdempotently()
+    {
+        _nodes.Add(Node("Press-01"));
+        var cut = Render<EmulationPanel>();
+        cut.Find("button.emu-node-row__toggle").Click();
+
+        cut.Find("button.emu-device-row__toggle").GetAttribute("aria-expanded").Should().Be("false");
+
+        cut.Find("button.emu-device-row__toggle").KeyDown("ArrowRight");
+        cut.FindAll(".emu-device-detail").Should().ContainSingle();
+        cut.Find("button.emu-device-row__toggle").GetAttribute("aria-expanded").Should().Be("true");
+
+        cut.Find("button.emu-device-row__toggle").KeyDown("ArrowRight");
+        cut.FindAll(".emu-device-detail").Should().ContainSingle("Right on an expanded device is a no-op");
+
+        cut.Find("button.emu-device-row__toggle").KeyDown("ArrowLeft");
+        cut.FindAll(".emu-device-detail").Should().BeEmpty();
+        cut.Find("button.emu-device-row__toggle").GetAttribute("aria-expanded").Should().Be("false");
+
+        cut.Find("button.emu-device-row__toggle").KeyDown("ArrowLeft");
+        cut.FindAll(".emu-device-detail").Should().BeEmpty("Left on a collapsed device is a no-op");
+
+        var toggle = cut.Find("button.emu-device-row__toggle");
+        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", CtrlKey = true });
+        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", AltKey = true });
+        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", ShiftKey = true });
+        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", MetaKey = true });
+        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", IsComposing = true });
+        cut.FindAll(".emu-device-detail").Should().BeEmpty("modifiers and IME composition stay untouched");
+    }
+
+    [Test]
     public void ExpandedDevice_RendersExactlyItsOwnPreviews()
     {
         _nodes.Add(Node("Press-01", devices: 2, metricsPerDevice: 2));
         _nodes.Add(Node("Press-02", metricsPerDevice: 3));
         var cut = Render<EmulationPanel>();
 
-        cut.FindAll(".emu-node-row__main")[0].Click();
+        cut.FindAll(".emu-node-row__toggle")[0].Click();
         cut.FindAll(".emu-waveform").Should().BeEmpty();
 
-        cut.FindAll(".emu-device-row")[0].Click();
+        cut.FindAll(".emu-device-row__toggle")[0].Click();
 
         cut.FindAll(".emu-waveform").Should().HaveCount(2);
     }

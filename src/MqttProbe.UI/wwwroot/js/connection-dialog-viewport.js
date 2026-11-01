@@ -2,7 +2,6 @@
 
 const BOTTOM_INSET_VARIABLE = '--connection-dialog-keyboard-inset';
 const TOP_INSET_VARIABLE = '--connection-dialog-viewport-top-inset';
-const FOOTER_HEIGHT_VARIABLE = '--connection-dialog-footer-height';
 const NARROW_MEDIA_QUERY = '(max-width: 599px)';
 const COARSE_POINTER_MEDIA_QUERY = '(pointer: coarse)';
 
@@ -15,6 +14,36 @@ const ZOOM_SCALE_THRESHOLD = 1.01;
 
 const activeAttachments = new Map();
 let nextAttachment = 1;
+
+// Focus memory is per dialog content element, so a confirmation can hand focus back to the
+// control the user was editing without a second focus trap.
+const focusMemory = new WeakMap();
+
+export function rememberFocus(contentElement) {
+    const active = document.activeElement;
+    if (contentElement && active instanceof HTMLElement && contentElement.contains(active)) {
+        focusMemory.set(contentElement, active);
+    }
+}
+
+export function restoreFocus(contentElement) {
+    if (!contentElement) {
+        return false;
+    }
+
+    const previous = focusMemory.get(contentElement);
+    focusMemory.delete(contentElement);
+
+    if (previous && previous.isConnected && contentElement.contains(previous)) {
+        previous.focus();
+        if (document.activeElement === previous) {
+            return true;
+        }
+    }
+
+    contentElement.focus();
+    return false;
+}
 
 export function attach(contentElement) {
     if (!contentElement) {
@@ -59,11 +88,11 @@ export function attach(contentElement) {
             : 0;
         const chrome = [
             paper.querySelector('.mud-dialog-title'),
+            contentElement.querySelector('.connection-dialog-titlebar'),
             contentElement.querySelector('.connection-dialog-header'),
             contentElement.querySelector('.step-selector'),
             contentElement.querySelector('.mud-tabs-tabbar'),
             contentElement.querySelector('.connection-dialog-notices'),
-            contentElement.querySelector('.connection-actions-footer'),
         ].reduce((total, element) => total + (element ? element.offsetHeight : 0), 0);
 
         return paper.clientHeight
@@ -80,14 +109,15 @@ export function attach(contentElement) {
     // Mode picks the scroll owner, so a transient overflow reading cannot flip it.
     const scrollOwner = () => {
         if (contentElement.classList.contains(COMPACT_CLASS)) {
-            return contentElement.scrollHeight > contentElement.clientHeight + 1 ? contentElement : null;
+            const form = contentElement.querySelector('.mud-form');
+            return form && form.scrollHeight > form.clientHeight + 1 ? form : null;
         }
 
         const panel = contentElement.querySelector('.mud-tab-panel-active');
         return panel && panel.scrollHeight > panel.clientHeight + 1 ? panel : null;
     };
 
-    // The stuck footer ends the band a control may land in, not the scroll owner's box.
+    // The scroll owner's box ends the band a control may land in.
     const revealFocusedField = () => {
         const active = document.activeElement;
         if (!active || !contentElement.contains(active) || !isTextControl(active)) {
@@ -104,13 +134,9 @@ export function attach(contentElement) {
         const scale = paper.offsetWidth > 0 ? paperBox.width / paper.offsetWidth : 1;
         const scrollerBox = scroller.getBoundingClientRect();
         const fieldBox = active.getBoundingClientRect();
-        const footer = contentElement.querySelector('.connection-actions-footer');
-        const footerOverlays = footer !== null && scroller !== footer && scroller.contains(footer);
 
         const bandTop = scrollerBox.top;
-        const bandBottom = footerOverlays
-            ? Math.min(footer.getBoundingClientRect().top, scrollerBox.bottom)
-            : scrollerBox.bottom;
+        const bandBottom = scrollerBox.bottom;
 
         // The margins give way when the band is only just tall enough for the control.
         const margin = Math.min(REVEAL_MARGIN, Math.max(0, bandBottom - bandTop - fieldBox.height) / 2);
@@ -148,10 +174,6 @@ export function attach(contentElement) {
         // The container carries the band, not the card: a card out of flow paints under the backdrop and swallows taps.
         container.classList.toggle(CONTAINER_KEYBOARD_CLASS, hidden);
 
-        // The card reserves the stuck footer's height as trailing space so the last control can clear it.
-        const footer = contentElement.querySelector('.connection-actions-footer');
-        container.style.setProperty(FOOTER_HEIGHT_VARIABLE, `${footer ? footer.offsetHeight : 0}px`);
-
         const compact = panelHeight() < MIN_USABLE_PANEL_HEIGHT;
         setCompact(compact);
 
@@ -175,10 +197,6 @@ export function attach(contentElement) {
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
     observer?.observe(paper);
     observer?.observe(contentElement);
-    const footer = contentElement.querySelector('.connection-actions-footer');
-    if (footer) {
-        observer?.observe(footer);
-    }
 
     const notices = contentElement.querySelector('.connection-dialog-notices');
     if (notices) {

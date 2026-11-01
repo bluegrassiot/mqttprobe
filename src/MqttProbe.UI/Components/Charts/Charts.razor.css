@@ -13,3 +13,21 @@
     overflow-y: auto;
     overflow-x: hidden;
 }
+
+.charts-empty-state ::deep .charts-empty-icon {
+    font-size: 64px;
+    color: var(--mud-palette-text-disabled);
+}
+
+.charts-empty-state ::deep .charts-empty-copy {
+    max-width: 380px;
+}
+
+.charts-empty-state ::deep .charts-empty-alert {
+    max-width: 420px;
+}
+
+.charts-empty-state ::deep .charts-help-icon {
+    font-size: 14px;
+    vertical-align: middle;
+}

@@ -7,6 +7,9 @@ public interface ISessionState
 {
     public event Action<Connection>? SelectedConnectionChanged;
     public Connection SelectedConnection { get; set; }
+    public (Connection Connection, long Revision) CaptureSelectedConnection();
+    public bool TryExecuteForSelectedConnection<T>(
+        Guid connectionId, long revision, Func<T> mutation, out T result);
     public CertificateSessionResource? ActiveCertificateResource { get; set; }
     public CertificateSessionResource? TakeActiveCertificateResource();
     public CertificateSessionResource? TakeActiveCertificateResource(CertificateSessionResource expectedResource);
@@ -25,7 +28,9 @@ public class SessionState : ISessionState
     // One lock for the certificate fields: every publication bumps the version, every take
     // detaches without bumping it, and a fault is only marked for the version it observed.
     private readonly Lock _certificateLock = new();
+    private readonly Lock _selectionLock = new();
     private Connection _selectedConnection = new();
+    private long _selectionRevision;
     private CertificateSessionResource? _activeCertificateResource;
     private long _certificatePublicationVersion;
     private bool _certificateSessionFaulted;
@@ -34,14 +39,47 @@ public class SessionState : ISessionState
 
     public Connection SelectedConnection
     {
-        get => _selectedConnection;
+        get
+        {
+            lock (_selectionLock)
+                return _selectedConnection;
+        }
         set
         {
-            if (_selectedConnection.Equals(value))
-                return;
+            lock (_selectionLock)
+            {
+                if (_selectedConnection.Equals(value))
+                    return;
 
-            _selectedConnection = value;
+                _selectedConnection = value;
+                _selectionRevision++;
+            }
+
             SelectedConnectionChanged?.Invoke(value);
+        }
+    }
+
+    public (Connection Connection, long Revision) CaptureSelectedConnection()
+    {
+        lock (_selectionLock)
+            return (_selectedConnection, _selectionRevision);
+    }
+
+    public bool TryExecuteForSelectedConnection<T>(
+        Guid connectionId, long revision, Func<T> mutation, out T result)
+    {
+        ArgumentNullException.ThrowIfNull(mutation);
+
+        lock (_selectionLock)
+        {
+            if (_selectedConnection.Id != connectionId || _selectionRevision != revision)
+            {
+                result = default!;
+                return false;
+            }
+
+            result = mutation();
+            return true;
         }
     }
 

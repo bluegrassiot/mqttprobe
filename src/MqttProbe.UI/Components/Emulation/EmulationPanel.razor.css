@@ -89,19 +89,54 @@
 /* ── Node rows (rendered by child components → ::deep) ───────────────────── */
 
 ::deep .emu-node-row {
+    position: relative;
     border-bottom: 1px solid var(--mud-palette-divider);
     box-shadow: inset 3px 0 0 transparent;
     transition: background 0.15s;
 }
 
-::deep .emu-node-row__main {
+/* The toggle spans the whole header, so a click anywhere outside the action icons
+   still opens the card; the native button adds the tab stop, role and Enter/Space. */
+::deep .emu-node-row__toggle {
+    width: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
+    align-items: stretch;
     padding: 8px 12px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
     cursor: pointer;
 }
 
-::deep .emu-node-row__main:hover { background: var(--mud-palette-action-default-hover); }
+::deep .emu-node-row__toggle:hover { background: var(--mud-palette-action-default-hover); }
+
+/* Inset so the list's scroll owner cannot clip the ring on the first or last row. */
+::deep .emu-node-row__toggle:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+::deep .emu-node-row__heading { padding-right: 80px; }
+
+/* Overlaid rather than a sibling column: the header underneath stays one full-width click target. */
+::deep .emu-node-row__actions {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+}
+
+::deep .emu-node-row__actions .mud-icon-button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
 
 ::deep .emu-node-row--expanded {
     background: var(--mud-palette-action-default-hover);
@@ -119,6 +154,14 @@
 }
 
 ::deep .emu-status-dot--running { background: var(--mud-palette-success); }
+
+::deep .emu-node-status--connected { color: var(--mud-palette-success); }
+::deep .emu-node-status--error { color: var(--mud-palette-error); }
+::deep .emu-node-status--idle { color: var(--mud-palette-text-secondary); }
+
+::deep .emu-status-dot.emu-node-status--connected { background: var(--mud-palette-success); }
+::deep .emu-status-dot.emu-node-status--error { background: var(--mud-palette-error); }
+::deep .emu-status-dot.emu-node-status--idle { background: var(--mud-palette-text-secondary); }
 
 ::deep .emu-status-label { font-size: 12px; font-weight: 500; margin-left: 4px; }
 
@@ -175,9 +218,43 @@
 ::deep .emu-device-row {
     display: flex;
     align-items: center;
-    padding: 4px 8px;
-    cursor: pointer;
     border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+/* The toggle covers the header; duplicate and delete stay outside it, so Enter/Space
+   on the header only ever discloses the device. */
+::deep .emu-device-row__toggle {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+/* Inset so the detail pane's scroll owner cannot clip the ring. */
+::deep .emu-device-row__toggle:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+::deep .emu-device-row__actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    padding: 4px 8px 4px 0;
+}
+
+::deep .emu-device-row__actions .mud-icon-button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
 }
 
 ::deep .emu-device-row:hover { background: var(--mud-palette-action-default-hover); }

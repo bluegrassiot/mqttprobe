@@ -3,6 +3,53 @@
     overflow-y: auto;
 }
 
+.chart-field-topic-header ::deep .chart-field-topic-icon {
+    color: var(--mud-palette-text-secondary);
+    font-size: 14px;
+}
+
+.chart-field-topic-header ::deep .chart-field-topic-name {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--mud-palette-text-secondary);
+}
+
+.chart-field-option {
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.chart-field-option--selected {
+    background: var(--mud-palette-primary-lighten);
+    border-color: var(--mud-palette-primary);
+}
+
+.chart-field-main {
+    min-width: 0;
+}
+
+.chart-field-main ::deep .chart-field-label {
+    font-weight: 600;
+}
+
+.chart-field-main ::deep .chart-field-path {
+    display: block;
+    font-family: var(--font-mono);
+}
+
+.chart-field-value {
+    flex-shrink: 0;
+}
+
+.chart-field-value ::deep .chart-field-value-number {
+    font-family: var(--font-mono);
+    font-weight: 500;
+}
+
+.chart-field-value ::deep .chart-field-value-time {
+    display: block;
+}
+
 .chart-field-context-pre {
     font-size: 0.72rem;
     background: var(--mud-palette-background-grey);

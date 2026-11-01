@@ -1,0 +1,380 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ITopicExcludeService ExcludeService
+@inject IMessageStoreManager MessageStoreManager
+@implements IDisposable
+
+@if (Selection.HasSelection || _outcome is not null)
+{
+    <div class="topic-bulk-toolbar @ThemeClass" role="region" aria-label="Selected topics">
+        <div class="topic-bulk-toolbar__summary">
+            <MudIcon Icon="@LucideIcons.CheckCircle" Size="Size.Small" Color="Color.Primary"/>
+            <span class="topic-bulk-toolbar__count" aria-live="polite">@Selection.Summary</span>
+        </div>
+        <div class="topic-bulk-toolbar__actions">
+            <AppDestructiveButton Size="Size.Small" Class="topic-bulk-toolbar__clear-messages"
+                                  StartIcon="@LucideIcons.Trash2"
+                                  title="Clears stored messages for the selected topics. New messages still arrive."
+                                  Disabled="@(!Selection.HasSelection)" OnClick="ConfirmClearMessagesAsync">
+                Clear messages
+            </AppDestructiveButton>
+            <AuthorizeView Roles="Admin,Operator">
+                <Authorized>
+                    <AppSecondaryButton Size="Size.Small" Class="topic-bulk-toolbar__exclude"
+                                        StartIcon="@LucideIcons.EyeOff"
+                                        title="Adds the selected topics to this connection's excluded topics."
+                                        Disabled="@(!Selection.HasSelection)" OnClick="ConfirmExcludeAsync">
+                        Exclude topics
+                    </AppSecondaryButton>
+                </Authorized>
+                <NotAuthorized>
+                    <AppSecondaryButton Size="Size.Small" Class="topic-bulk-toolbar__exclude"
+                                        StartIcon="@LucideIcons.EyeOff" Disabled="true"
+                                        title="Connect as Operator or Admin to manage exclusions">
+                        Exclude topics
+                    </AppSecondaryButton>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+        @if (Selection.HasSelection)
+        {
+            <div class="topic-bulk-toolbar__mobile">
+                <span class="topic-bulk-toolbar__mobile-count" aria-live="polite">@Selection.CompactSummary</span>
+                <MudMenu Open="_actionsOpen"
+                         OpenChanged="OnActionsOpenChanged"
+                         AnchorOrigin="Origin.BottomRight"
+                         TransformOrigin="Origin.TopRight"
+                         PopoverClass="topic-bulk-actions-menu">
+                    <ActivatorContent>
+                        <AppSecondaryButton @ref="_actionsButton"
+                                            Size="Size.Small"
+                                            Class="topic-bulk-toolbar__actions-menu app-mobile-bar-btn"
+                                            EndIcon="@LucideIcons.ChevronDown"
+                                            aria-haspopup="menu"
+                                            aria-expanded="@(_actionsOpen ? "true" : "false")"
+                                            title="Clear messages or exclude the selected topics."
+                                            @onkeydown="DismissMenuOnEscape"
+                                            OnClick="context.ToggleAsync">
+                            Actions
+                        </AppSecondaryButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem @onkeydown="DismissMenuOnEscapeOrTab" OnClick="ConfirmClearMessagesAsync">
+                            <span class="topic-bulk-actions-menu__clear">Clear messages</span>
+                        </MudMenuItem>
+                        <AuthorizeView Roles="Admin,Operator">
+                            <Authorized>
+                                <MudMenuItem @onkeydown="DismissMenuOnEscapeOrTab"
+                                             Label="Exclude topics"
+                                             OnClick="ConfirmExcludeAsync"
+                                             title="Adds the selected topics to this connection's excluded topics."/>
+                            </Authorized>
+                            <NotAuthorized>
+                                <MudMenuItem @onkeydown="DismissMenuOnEscapeOrTab"
+                                             Label="Exclude topics" Disabled="true"
+                                             title="Connect as Operator or Admin to manage exclusions"/>
+                            </NotAuthorized>
+                        </AuthorizeView>
+                    </ChildContent>
+                </MudMenu>
+                <AppPrimaryButton Size="Size.Small"
+                                  Class="topic-bulk-toolbar__topics app-mobile-bar-btn"
+                                  StartIcon="@LucideIcons.ChevronDown"
+                                  OnClick="OnOpenTopicPicker">
+                    Topics
+                </AppPrimaryButton>
+            </div>
+        }
+        @if (_outcome is { } outcome)
+        {
+            <div class="topic-bulk-outcome" role="status">
+                <div class="topic-bulk-outcome__head">
+                    <span class="topic-bulk-outcome__title">@outcome.Title</span>
+                    <MudIconButton Icon="@LucideIcons.X" Size="Size.Small"
+                                   title="Dismiss result" aria-label="Dismiss result"
+                                   OnClick="DismissOutcome"/>
+                </div>
+                <ul class="topic-bulk-outcome__lines">
+                    @foreach (var line in outcome.Lines)
+                    {
+                        <li>@line</li>
+                    }
+                </ul>
+            </div>
+            <div class="topic-bulk-outcome-compact" role="status">
+                <div class="topic-bulk-outcome-compact__line">
+                    <span class="topic-bulk-outcome-compact__text">@outcome.CompactSummary</span>
+                    @if (outcome.HasDetails)
+                    {
+                        <AppTertiaryButton Size="Size.Small"
+                                           Class="topic-bulk-outcome-compact__details"
+                                           aria-expanded="@(_detailsOpen ? "true" : "false")"
+                                           aria-controls="@(_detailsOpen ? _detailsId : null)"
+                                           OnClick="ToggleDetails">
+                            Details
+                        </AppTertiaryButton>
+                    }
+                    <MudIconButton Icon="@LucideIcons.X" Size="Size.Small"
+                                   Class="topic-bulk-outcome-compact__dismiss"
+                                   title="Dismiss result" aria-label="Dismiss result"
+                                   OnClick="DismissOutcome"/>
+                </div>
+                @if (outcome.HasDetails && _detailsOpen)
+                {
+                    <ul class="topic-bulk-outcome__lines" id="@_detailsId">
+                        @foreach (var line in outcome.Lines)
+                        {
+                            <li>@line</li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] private TopicBulkSelection Selection { get; set; } = null!;
+
+    [CascadingParameter(Name = "IsDarkMode")] private bool? DarkMode { get; set; }
+
+    [Parameter] public EventCallback OnOpenTopicPicker { get; set; }
+
+    private string ThemeClass => (DarkMode ?? true) ? "topic-bulk-toolbar--dark" : "topic-bulk-toolbar--light";
+
+    private BulkOutcome? _outcome;
+    private bool _actionsOpen;
+    private AppSecondaryButton? _actionsButton;
+    private bool _detailsOpen;
+    private readonly string _detailsId = $"topic-bulk-outcome-details-{Guid.NewGuid():N}";
+
+    protected override void OnInitialized() => Selection.Changed += OnSelectionChanged;
+
+    private void OnSelectionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Selection.Changed -= OnSelectionChanged;
+
+    private void OnActionsOpenChanged(bool open) => _actionsOpen = open;
+
+    // MudMenu routes Escape from its list only, so the trigger closes through the bound Open value.
+    private Task DismissMenuOnEscape(KeyboardEventArgs e) =>
+        e.Key is "Escape" ? CloseActionsMenuAsync() : Task.CompletedTask;
+
+    // Tab is MudMenu's other keyboard dismissal, and it also returns focus to the activator.
+    private Task DismissMenuOnEscapeOrTab(KeyboardEventArgs e) =>
+        e.Key is "Escape" or "Tab" ? CloseActionsMenuAsync() : Task.CompletedTask;
+
+    private async Task CloseActionsMenuAsync()
+    {
+        // Take focus before the popover unmounts, so the close never drops focus onto the page.
+        if (_actionsButton is not null)
+            await _actionsButton.FocusAsync();
+        _actionsOpen = false;
+    }
+
+    private void DismissOutcome()
+    {
+        _outcome = null;
+        _detailsOpen = false;
+    }
+
+    private void ToggleDetails() => _detailsOpen = !_detailsOpen;
+
+    private void ShowOutcome(BulkOutcome outcome)
+    {
+        _outcome = outcome;
+        _detailsOpen = false;
+    }
+
+    private async Task ConfirmExcludeAsync()
+    {
+        var targets = Selection.Branches;
+        if (targets.IsDefaultOrEmpty)
+            return;
+
+        var token = ExcludeService.CaptureConnectionToken();
+        var parameters = new DialogParameters<ExcludeTopicsDialog>
+        {
+            { dialog => dialog.Topics, targets }
+        };
+        var dialog = await DialogService.ShowAsync<ExcludeTopicsDialog>(
+            "Exclude selected topics", parameters,
+            new DialogOptions
+            {
+                MaxWidth = MaxWidth.Medium,
+                FullWidth = true,
+                CloseOnEscapeKey = true
+            });
+        var result = await dialog.Result;
+        if (result is not { Canceled: false, Data: IReadOnlyList<TopicBranchTarget> confirmed }
+            || confirmed.Count == 0)
+            return;
+
+        await ApplyExcludesAsync(confirmed, token);
+    }
+
+    private async Task ApplyExcludesAsync(
+        IReadOnlyList<TopicBranchTarget> targets, TopicExcludeConnectionToken token)
+    {
+        var batch = await ExcludeService.AddBranches(targets, token);
+        var added = batch.AddedTargets.ToList();
+        var purgeFailures = batch.Results
+            .Where(result => result.Outcome == TopicExcludeAddOutcome.AppliedWithPurgeFailure)
+            .ToList();
+        var already = batch.Results
+            .Where(result => result.Outcome == TopicExcludeAddOutcome.AlreadyExcluded)
+            .Select(result => result.Target)
+            .ToList();
+        var failed = batch.Results
+            .Where(result => result.Outcome is TopicExcludeAddOutcome.LimitReached
+                or TopicExcludeAddOutcome.Invalid
+                or TopicExcludeAddOutcome.Failed
+                or TopicExcludeAddOutcome.ConnectionChanged)
+            .Select(DescribeFailure)
+            .ToList();
+
+        var handled = batch.AppliedTargets.Concat(already).ToList();
+        if (handled.Count > 0)
+            Selection.Remove(handled);
+
+        ShowOutcome(new BulkOutcome("Exclude finished",
+            BuildExcludeCompactSummary(batch, targets, purgeFailures, already, failed),
+            BuildExcludeLines(added, purgeFailures, already, failed),
+            HasDetails: true));
+        string message;
+        Severity severity;
+        if (failed.Count > 0)
+        {
+            message = $"Excluded {batch.AppliedTargets.Length} of {targets.Count} topics. See the report for the rest.";
+            severity = Severity.Warning;
+        }
+        else if (purgeFailures.Count > 0)
+        {
+            message = $"Excluded {batch.AppliedTargets.Length} topics. Stored history cleanup did not finish.";
+            severity = Severity.Warning;
+        }
+        else
+        {
+            message = $"Excluded {batch.AppliedTargets.Length} topics.";
+            severity = Severity.Success;
+        }
+
+        Snackbar.Add(message, severity);
+        StateHasChanged();
+    }
+
+    private static string DescribeFailure(TopicBranchExcludeResult result) => result.Outcome switch
+    {
+        TopicExcludeAddOutcome.LimitReached => $"{TopicBranchTargetDisplay.Label(result.Target)}: limit reached",
+        TopicExcludeAddOutcome.ConnectionChanged =>
+            $"{TopicBranchTargetDisplay.Label(result.Target)}: connection changed",
+        _ when result.Feedback is { Message.Length: > 0 } feedback =>
+            $"{TopicBranchTargetDisplay.Label(result.Target)}: {feedback.Message}",
+        _ => $"{TopicBranchTargetDisplay.Label(result.Target)}: not added"
+    };
+
+    private static string DescribePurgeFailure(TopicBranchExcludeResult result) =>
+        result.Feedback is { Message.Length: > 0 } feedback
+            ? $"{TopicBranchTargetDisplay.Label(result.Target)}: {feedback.Message}"
+            : $"{TopicBranchTargetDisplay.Label(result.Target)}: stored history was not cleaned up";
+
+    private static List<string> BuildExcludeLines(
+        IReadOnlyCollection<TopicBranchTarget> added,
+        IReadOnlyCollection<TopicBranchExcludeResult> purgeFailures,
+        IReadOnlyCollection<TopicBranchTarget> already,
+        IReadOnlyCollection<string> failed)
+    {
+        var lines = new List<string>();
+        if (added.Count > 0)
+            lines.Add($"Excluded ({added.Count}): {string.Join(", ", added.Select(TopicBranchTargetDisplay.Label))}");
+        if (purgeFailures.Count > 0)
+            lines.Add("Excluded, history cleanup incomplete " +
+                $"({purgeFailures.Count}): {string.Join(", ", purgeFailures.Select(DescribePurgeFailure))}");
+        if (already.Count > 0)
+            lines.Add($"Already excluded ({already.Count}): {string.Join(", ", already.Select(TopicBranchTargetDisplay.Label))}");
+        if (failed.Count > 0)
+            lines.Add($"Not added ({failed.Count}): {string.Join(", ", failed)}");
+
+        return lines;
+    }
+
+    private static string BuildExcludeCompactSummary(
+        TopicBranchExcludeBatchResult batch,
+        IReadOnlyCollection<TopicBranchTarget> targets,
+        IReadOnlyCollection<TopicBranchExcludeResult> purgeFailures,
+        IReadOnlyCollection<TopicBranchTarget> already,
+        IReadOnlyCollection<string> failed)
+    {
+        var applied = batch.AppliedTargets.Length;
+        var parts = new List<string>();
+        if (failed.Count > 0)
+            parts.Add(applied > 0 ? $"Excluded {applied} of {targets.Count} topics." : "No topics excluded.");
+        else if (applied > 0)
+            parts.Add($"Excluded {applied} {(applied == 1 ? "topic" : "topics")}.");
+        else if (already.Count > 0)
+            parts.Add("No new topics excluded.");
+        else
+            parts.Add("Nothing excluded.");
+
+        if (already.Count > 0 && (applied > 0 || failed.Count > 0))
+            parts.Add($"{already.Count} already excluded.");
+        if (purgeFailures.Count > 0)
+            parts.Add($"History cleanup incomplete for {purgeFailures.Count}.");
+        if (failed.Count > 0)
+            parts.Add($"{failed.Count} not added.");
+
+        return string.Join(" ", parts);
+    }
+
+    private async Task ConfirmClearMessagesAsync()
+    {
+        var targets = Selection.Branches;
+        if (targets.IsDefaultOrEmpty)
+            return;
+
+        // The exclusion service owns the connection generation, so this token also rejects a
+        // confirmation that comes back to the connection it started on.
+        var token = ExcludeService.CaptureConnectionToken();
+        var parameters = new DialogParameters<ClearSelectedMessagesDialog>
+        {
+            { dialog => dialog.Topics, targets }
+        };
+        var dialog = await DialogService.ShowAsync<ClearSelectedMessagesDialog>(
+            "Clear messages for selected topics", parameters,
+            new DialogOptions
+            {
+                MaxWidth = MaxWidth.Medium,
+                FullWidth = true,
+                CloseOnEscapeKey = true
+            });
+        var result = await dialog.Result;
+        if (result is not { Canceled: false, Data: IReadOnlyList<TopicBranchTarget> confirmed }
+            || confirmed.Count == 0)
+            return;
+
+        // The store applies the same token, so a connection that changed while the dialog was
+        // open leaves the new connection's messages untouched.
+        var cleared = await MessageStoreManager.ClearMessagesForBranchesAsync(confirmed, token);
+        if (!cleared.Applied)
+        {
+            ShowOutcome(new BulkOutcome("Clear cancelled",
+                "Nothing cleared. Connection changed.",
+                ["The connection changed before the clear was confirmed. Nothing was cleared."],
+                HasDetails: true));
+            Snackbar.Add("The connection changed. Nothing was cleared.", Severity.Warning);
+            StateHasChanged();
+            return;
+        }
+
+        Selection.NotifyMessagesCleared([.. confirmed]);
+        var summary = $"{cleared.ClearedMessages:N0} stored {(cleared.ClearedMessages == 1 ? "message" : "messages")} cleared from {TopicCount(confirmed.Count)}.";
+        ShowOutcome(new BulkOutcome("Clear finished", summary, [summary]));
+        StateHasChanged();
+    }
+
+    private static string TopicCount(int count) => count == 1 ? "1 topic" : $"{count} topics";
+
+    private sealed record BulkOutcome(
+        string Title, string CompactSummary, IReadOnlyList<string> Lines, bool HasDetails = false);
+}

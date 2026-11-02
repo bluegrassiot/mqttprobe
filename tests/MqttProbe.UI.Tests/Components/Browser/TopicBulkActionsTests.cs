@@ -398,6 +398,42 @@ public sealed class TopicBulkActionsTests : BunitTestContext
     }
 
     [Test]
+    public async Task Exclude_SavedButNotApplied_IsReportedApartFromNotAdded_AndStaysChecked()
+    {
+        AuthorizeAsOperator();
+        _fixture.AddTopics((Alpha, 1), (Beta, 1));
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        selection.SelectAll([Raw(Alpha), Raw(Beta)]);
+        _excludes.AddBranches(Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(new TopicBranchExcludeBatchResult([
+                new TopicBranchExcludeResult(Raw(Alpha), TopicExcludeAddOutcome.Added),
+                new TopicBranchExcludeResult(Raw(Beta), TopicExcludeAddOutcome.SavedButNotApplied,
+                    new UserNotification(UserNotificationSeverity.Warning, "Saved on the previous connection."))
+            ]));
+        ReturnDialog(DialogResult.Ok(ImmutableArray.Create(Raw(Alpha), Raw(Beta))));
+        var cut = Render<TopicBulkToolbar>(parameters =>
+            parameters.AddCascadingValue(selection));
+
+        cut.Find(".topic-bulk-toolbar__exclude").Click();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        cut.WaitForAssertion(() =>
+        {
+            var report = cut.Find(".topic-bulk-outcome").TextContent;
+            report.Should().Contain($"Excluded (1): \"{Alpha}\"");
+            report.Should().Contain(
+                $"Saved, not applied to this connection (1): \"{Beta}\": Saved on the previous connection.");
+            report.Should().NotContain("Not added", "an exclusion that was saved is not a failed one");
+        });
+        selection.Branches.Select(branch => branch.Path).Should().Equal(new[] { Beta },
+            "the path stays checked because its exclusion did not reach this connection");
+        _snackbar.Received(1).Add(
+            Arg.Is<string>(message => message.Contains("Excluded 1 of 2 topics")
+                && message.Contains("1 topic saved but not applied to this connection")),
+            Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+    }
+
+    [Test]
     public async Task Exclude_PurgeFailureOnly_HasNoNotAddedLine()
     {
         AuthorizeAsOperator();

@@ -226,6 +226,9 @@
             .Where(result => result.Outcome == TopicExcludeAddOutcome.AlreadyExcluded)
             .Select(result => result.Target)
             .ToList();
+        var savedOnly = batch.Results
+            .Where(result => result.Outcome == TopicExcludeAddOutcome.SavedButNotApplied)
+            .ToList();
         var failed = batch.Results
             .Where(result => result.Outcome is TopicExcludeAddOutcome.LimitReached
                 or TopicExcludeAddOutcome.Invalid
@@ -239,14 +242,24 @@
             Selection.Remove(handled);
 
         ShowOutcome(new BulkOutcome("Exclude finished",
-            BuildExcludeCompactSummary(batch, targets, purgeFailures, already, failed),
-            BuildExcludeLines(added, purgeFailures, already, failed),
+            BuildExcludeCompactSummary(batch, targets, purgeFailures, already, savedOnly, failed),
+            BuildExcludeLines(added, purgeFailures, already, savedOnly, failed),
             HasDetails: true));
         string message;
         Severity severity;
         if (failed.Count > 0)
         {
             message = $"Excluded {batch.AppliedTargets.Length} of {targets.Count} topics. See the report for the rest.";
+            severity = Severity.Warning;
+        }
+        else if (savedOnly.Count > 0)
+        {
+            message = batch.AppliedTargets.Length > 0
+                ? $"Excluded {batch.AppliedTargets.Length} of {targets.Count} topics. " +
+                    $"{TopicCount(savedOnly.Count)} saved but not applied to this connection."
+                : $"{TopicCount(savedOnly.Count)} saved but not applied to this connection.";
+            if (purgeFailures.Count > 0)
+                message += " Stored history cleanup did not finish.";
             severity = Severity.Warning;
         }
         else if (purgeFailures.Count > 0)
@@ -279,10 +292,16 @@
             ? $"{TopicBranchTargetDisplay.Label(result.Target)}: {feedback.Message}"
             : $"{TopicBranchTargetDisplay.Label(result.Target)}: stored history was not cleaned up";
 
+    private static string DescribeSaved(TopicBranchExcludeResult result) =>
+        result.Feedback is { Message.Length: > 0 } feedback
+            ? $"{TopicBranchTargetDisplay.Label(result.Target)}: {feedback.Message}"
+            : $"{TopicBranchTargetDisplay.Label(result.Target)}: saved but not applied to this connection";
+
     private static List<string> BuildExcludeLines(
         IReadOnlyCollection<TopicBranchTarget> added,
         IReadOnlyCollection<TopicBranchExcludeResult> purgeFailures,
         IReadOnlyCollection<TopicBranchTarget> already,
+        IReadOnlyCollection<TopicBranchExcludeResult> savedOnly,
         IReadOnlyCollection<string> failed)
     {
         var lines = new List<string>();
@@ -293,6 +312,9 @@
                 $"({purgeFailures.Count}): {string.Join(", ", purgeFailures.Select(DescribePurgeFailure))}");
         if (already.Count > 0)
             lines.Add($"Already excluded ({already.Count}): {string.Join(", ", already.Select(TopicBranchTargetDisplay.Label))}");
+        if (savedOnly.Count > 0)
+            lines.Add("Saved, not applied to this connection " +
+                $"({savedOnly.Count}): {string.Join(", ", savedOnly.Select(DescribeSaved))}");
         if (failed.Count > 0)
             lines.Add($"Not added ({failed.Count}): {string.Join(", ", failed)}");
 
@@ -304,12 +326,18 @@
         IReadOnlyCollection<TopicBranchTarget> targets,
         IReadOnlyCollection<TopicBranchExcludeResult> purgeFailures,
         IReadOnlyCollection<TopicBranchTarget> already,
+        IReadOnlyCollection<TopicBranchExcludeResult> savedOnly,
         IReadOnlyCollection<string> failed)
     {
         var applied = batch.AppliedTargets.Length;
         var parts = new List<string>();
-        if (failed.Count > 0)
-            parts.Add(applied > 0 ? $"Excluded {applied} of {targets.Count} topics." : "No topics excluded.");
+        if (failed.Count > 0 || savedOnly.Count > 0)
+        {
+            if (applied > 0)
+                parts.Add($"Excluded {applied} of {targets.Count} topics.");
+            else
+                parts.Add(savedOnly.Count > 0 ? "Nothing excluded here." : "No topics excluded.");
+        }
         else if (applied > 0)
             parts.Add($"Excluded {applied} {(applied == 1 ? "topic" : "topics")}.");
         else if (already.Count > 0)
@@ -317,8 +345,10 @@
         else
             parts.Add("Nothing excluded.");
 
-        if (already.Count > 0 && (applied > 0 || failed.Count > 0))
+        if (already.Count > 0 && (applied > 0 || failed.Count > 0 || savedOnly.Count > 0))
             parts.Add($"{already.Count} already excluded.");
+        if (savedOnly.Count > 0)
+            parts.Add($"{savedOnly.Count} saved but not applied here.");
         if (purgeFailures.Count > 0)
             parts.Add($"History cleanup incomplete for {purgeFailures.Count}.");
         if (failed.Count > 0)

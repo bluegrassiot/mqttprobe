@@ -30,47 +30,49 @@ else
         @foreach (var node in grp.OrderBy(n => n.NodeId, NaturalStringComparer.Instance))
         {
             var sequence = node.Sequence;
-            <div @key="@($"{node.GroupId}/{node.NodeId}")" class="spb-node-row @(SelectedNode == node ? "spb-node-row--selected" : "")"
+            <div @key="@($"{node.GroupId}/{node.NodeId}")" class="spb-node-row @(node.Status == SpbNodeStatus.Offline ? "spb-node-row--removable" : "") @(SelectedNode == node ? "spb-node-row--selected" : "")"
                  @onclick="() => OnSelect.InvokeAsync(node)">
-                <div class="d-flex align-center justify-space-between">
-                    <div class="d-flex align-center gap-1">
+                <button type="button" class="spb-node-select"
+                        aria-current="@(SelectedNode == node ? "true" : null)">
+                    <span class="spb-node-head d-flex align-center gap-1">
                         <span class="spb-status-dot @NodeStatusClass(node)"></span>
                         <span class="spb-node-id">@node.NodeId</span>
                         <span class="spb-status-label spb-status-label--node @NodeStatusClass(node)">
                             @SparkplugNodeDisplay.NodeStatusLabel(node)
                         </span>
-                    </div>
-                    @if (node.Status == SpbNodeStatus.Offline)
+                    </span>
+                    <span class="spb-node-secondary">
+                        @SparkplugNodeDisplay.NodeSecondaryText(node)
+                    </span>
+                    @if (sequence.State is SpbSequenceState.Reordering or SpbSequenceState.GapDetected or SpbSequenceState.Invalid)
                     {
-                        <span @onclick:stopPropagation="true">
-                            <MudIconButton Icon="@LucideIcons.Trash2"
-                                           Color="Color.Error"
-                                           Size="Size.Small"
-                                           title="Remove node from view"
-                                           OnClick="@(() => OnRemove.InvokeAsync(node))" />
+                        <span class="spb-sequence-warning spb-sequence-warning--@sequence.State.ToString().ToLowerInvariant()">
+                            <MudIcon Icon="@LucideIcons.AlertTriangle" Size="Size.Small" />
+                            @if (sequence.State == SpbSequenceState.Reordering)
+                            {
+                                <span>Sequence gap · waiting</span>
+                            }
+                            else if (sequence.State == SpbSequenceState.GapDetected)
+                            {
+                                <span>Unresolved sequence gap · @sequence.MissingSequences.Count missing</span>
+                            }
+                            else
+                            {
+                                <span>Invalid sequence</span>
+                            }
                         </span>
                     }
-                </div>
-                <div class="spb-node-secondary">
-                    @SparkplugNodeDisplay.NodeSecondaryText(node)
-                </div>
-                @if (sequence.State is SpbSequenceState.Reordering or SpbSequenceState.GapDetected or SpbSequenceState.Invalid)
+                </button>
+                @if (node.Status == SpbNodeStatus.Offline)
                 {
-                    <div class="spb-sequence-warning spb-sequence-warning--@sequence.State.ToString().ToLowerInvariant()">
-                        <MudIcon Icon="@LucideIcons.AlertTriangle" Size="Size.Small" />
-                        @if (sequence.State == SpbSequenceState.Reordering)
-                        {
-                            <span>Sequence gap · waiting</span>
-                        }
-                        else if (sequence.State == SpbSequenceState.GapDetected)
-                        {
-                            <span>Unresolved sequence gap · @sequence.MissingSequences.Count missing</span>
-                        }
-                        else
-                        {
-                            <span>Invalid sequence</span>
-                        }
-                    </div>
+                    <span class="spb-node-remove" @onclick:stopPropagation="true">
+                        <MudIconButton Icon="@LucideIcons.Trash2"
+                                       Color="Color.Error"
+                                       Size="Size.Small"
+                                       title="Remove node from view"
+                                       aria-label="@($"Remove {node.NodeId} from view")"
+                                       OnClick="@(() => OnRemove.InvokeAsync(node))" />
+                    </span>
                 }
             </div>
         }

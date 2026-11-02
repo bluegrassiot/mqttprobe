@@ -23,6 +23,8 @@ public class ChartSeries
 
 public class ChartConfiguration
 {
+    public const double DefaultStaleTimeoutSeconds = 10;
+
     private const int DefaultMaxPoints = 500;
 
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -41,6 +43,8 @@ public class ChartConfiguration
         get;
         set => field = value is > 0 ? value : null;
     }
+
+    public double? StaleTimeoutSeconds { get; set; } = DefaultStaleTimeoutSeconds;
 
     public List<ChartSeries> Series { get; set; } = [];
 }

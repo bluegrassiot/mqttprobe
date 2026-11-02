@@ -24,15 +24,17 @@
     @if (!charts.Any())
     {
         <div class="d-flex flex-column align-center justify-center charts-empty-state">
-            <MudIcon Icon="@LucideIcons.Activity" Style="font-size:64px; color:var(--mud-palette-text-disabled)"/>
+            <MudIcon Icon="@LucideIcons.Activity" Class="charts-empty-icon"/>
             <MudText Typo="Typo.h6" Color="Color.Secondary">No charts yet</MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Style="max-width:380px">
-                Open a JSON message in the <strong>Browse</strong> tab, then click a numeric field
-                to create a chart or add it to an existing one.
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="charts-empty-copy">
+                In the <strong>Nodes</strong> tab, select a node or device, then choose the chart icon on a numeric, boolean, or datetime metric row.
+                In the <strong>Browser</strong> tab, open a JSON message and choose a numeric field.
             </MudText>
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Style="max-width:420px">
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="charts-empty-alert">
                 <MudText Typo="Typo.caption">
-                    Look for the <MudIcon Icon="@LucideIcons.ChartLine" Style="font-size:14px; vertical-align:middle"/> icon next to numeric fields in the payload viewer.
+                    Look for the <MudIcon Icon="@LucideIcons.ChartLine" Class="charts-help-icon"/> icon next to chartable values.
+                    In Nodes, String-valued metrics are skipped because their values are not exposed under a stable metric name.
+                    In Browser message details, numeric strings can still be charted by their indexed path.
                 </MudText>
             </MudAlert>
             <MudText Typo="Typo.caption" Color="Color.Secondary">

@@ -6,6 +6,7 @@ using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
+using MudBlazor.Extensions;
 
 namespace MqttProbe.UI.Tests.Components.Charts;
 
@@ -128,8 +129,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
             jsonPath: "metrics.Metric-1",
             seriesName: "Metric-1");
 
-        var chartNameInput = _dialogProvider.FindAll("input").Last();
-        chartNameInput.GetAttribute("value").Should().Be("Plant1 Node-2 Device-1");
+        ChartNameInput().GetAttribute("value").Should().Be("Plant1 Node-2 Device-1");
     }
 
     [Test]
@@ -144,8 +144,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
 
         _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Create New Chart")).Click();
 
-        var chartNameInput = _dialogProvider.FindAll("input").Last();
-        chartNameInput.GetAttribute("value").Should().Be("Plant1 Node-2 Device-1");
+        ChartNameInput().GetAttribute("value").Should().Be("Plant1 Node-2 Device-1");
     }
 
     [Test]
@@ -174,9 +173,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
 
         await OpenDialog(seriesName: "myField");
 
-        // Type a chart name to enable submit
-        var inputs = _dialogProvider.FindAll("input");
-        inputs[inputs.Count - 1].Input("My Chart");
+        ChartNameInput().Input("My Chart");
         _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Create Chart")).Click();
 
         await _mockChartStore.Received(1).AddChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>());
@@ -233,6 +230,144 @@ public class QuickAddToChartDialogTests : BunitTestContext
         }
 
         existingChart.Series.Should().BeEmpty();
+    }
+
+    private AngleSharp.Dom.IElement ChartNameInput() =>
+        _dialogProvider.Find(".quick-add-chart-name input");
+
+    private AngleSharp.Dom.IElement TimeoutInput() =>
+        _dialogProvider.Find(".quick-add-timeout input");
+
+    private AngleSharp.Dom.IElement OffSwitch() =>
+        _dialogProvider.Find(".quick-add-timeout-row input[type='checkbox']");
+
+    private async Task<ChartConfiguration> CreateNewChart(string? timeoutInput = null, bool off = false)
+    {
+        _mockChartStore.GetCharts(_testConnectionId).Returns([]);
+        ChartConfiguration? captured = null;
+        _mockChartStore.AddChartAsync(Arg.Any<Guid>(), Arg.Do<ChartConfiguration>(c => captured = c))
+            .Returns(Task.CompletedTask);
+        await OpenDialog(seriesName: "myField");
+
+        if (off)
+            OffSwitch().Change(true);
+        if (timeoutInput is not null)
+            TimeoutInput().Change(timeoutInput);
+
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Create Chart")).Click();
+        await _mockChartStore.Received(1).AddChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>());
+        return captured!;
+    }
+
+    [TestCase("")]
+    [TestCase("0")]
+    public async Task SwitchingBackToAddToExisting_AfterInvalidNewChartTimeout_StillAppendsSeries(string invalidTimeout)
+    {
+        var existingChart = new ChartConfiguration { Name = "Existing Chart", StaleTimeoutSeconds = 45 };
+        _mockChartStore.GetCharts(_testConnectionId).Returns([existingChart]);
+        ChartConfiguration? captured = null;
+        _mockChartStore.UpdateChartAsync(Arg.Any<Guid>(), Arg.Do<ChartConfiguration>(c => captured = c))
+            .Returns(Task.CompletedTask);
+
+        await OpenDialog();
+
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Create New Chart")).Click();
+        TimeoutInput().Change(invalidTimeout);
+        _dialogProvider.Markup.Should().Contain("Enter a timeout greater than zero seconds.");
+
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Add to Existing Chart")).Click();
+
+        _dialogProvider.Markup.Should().NotContain("Stale timeout (seconds)");
+        var addSeries = _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Add Series"));
+        addSeries.GetAttribute("disabled").Should().BeNull(
+            "append mode does not use the new-chart timeout, so an invalid one must not block it");
+
+        addSeries.Click();
+        await _mockChartStore.Received(1).UpdateChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>());
+        captured!.Series.Should().ContainSingle()
+            .Which.Topic.Should().Be("sensors/temp");
+        captured.StaleTimeoutSeconds.Should().Be(45, "the existing chart keeps its configured timeout");
+    }
+
+    [Test]
+    public async Task CreateNew_ShowsStaleTimeoutAtTenSecondsByDefault()
+    {
+        _mockChartStore.GetCharts(_testConnectionId).Returns([]);
+
+        await OpenDialog();
+
+        _dialogProvider.Markup.Should().Contain("Stale timeout (seconds)");
+        _dialogProvider.Markup.Should().Contain("Off");
+        _dialogProvider.FindComponent<MudNumericField<double?>>().Instance.GetState(x => x.Value).Should().Be(10);
+    }
+
+    [Test]
+    public async Task CreateNew_DoesNotShowStaleTimeoutWhenAddingToExistingChart()
+    {
+        _mockChartStore.GetCharts(_testConnectionId).Returns([new ChartConfiguration { Name = "Existing Chart" }]);
+
+        await OpenDialog();
+
+        _dialogProvider.Markup.Should().NotContain("Stale timeout (seconds)");
+    }
+
+    [Test]
+    public async Task Submit_CreateNew_SavesConfiguredTimeout()
+    {
+        var chart = await CreateNewChart(timeoutInput: "30");
+
+        chart.StaleTimeoutSeconds.Should().Be(30);
+    }
+
+    [Test]
+    public async Task Submit_CreateNew_WithDetectionOff_SavesNoTimeout()
+    {
+        var chart = await CreateNewChart(off: true);
+
+        chart.StaleTimeoutSeconds.Should().BeNull();
+    }
+
+    [Test]
+    public async Task Submit_CreateNew_WithEmptyTimeout_KeepsSubmitDisabled()
+    {
+        _mockChartStore.GetCharts(_testConnectionId).Returns([]);
+        await OpenDialog(seriesName: "myField");
+
+        TimeoutInput().Change("");
+
+        _dialogProvider.Markup.Should().Contain("Enter a timeout greater than zero seconds.");
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Create Chart"))
+            .GetAttribute("disabled").Should().NotBeNull("a timeout is required unless detection is Off");
+    }
+
+    [Test]
+    public async Task Submit_AddToExisting_PreservesConfiguredTimeout()
+    {
+        var existingChart = new ChartConfiguration { Name = "Existing Chart", StaleTimeoutSeconds = 45 };
+        _mockChartStore.GetCharts(_testConnectionId).Returns([existingChart]);
+        ChartConfiguration? captured = null;
+        _mockChartStore.UpdateChartAsync(Arg.Any<Guid>(), Arg.Do<ChartConfiguration>(c => captured = c))
+            .Returns(Task.CompletedTask);
+
+        await OpenDialog();
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Add Series")).Click();
+
+        captured!.StaleTimeoutSeconds.Should().Be(45);
+    }
+
+    [Test]
+    public async Task Submit_AddToExisting_PreservesDisabledTimeout()
+    {
+        var existingChart = new ChartConfiguration { Name = "Existing Chart", StaleTimeoutSeconds = null };
+        _mockChartStore.GetCharts(_testConnectionId).Returns([existingChart]);
+        ChartConfiguration? captured = null;
+        _mockChartStore.UpdateChartAsync(Arg.Any<Guid>(), Arg.Do<ChartConfiguration>(c => captured = c))
+            .Returns(Task.CompletedTask);
+
+        await OpenDialog();
+        _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Add Series")).Click();
+
+        captured!.StaleTimeoutSeconds.Should().BeNull();
     }
 
     [Test]

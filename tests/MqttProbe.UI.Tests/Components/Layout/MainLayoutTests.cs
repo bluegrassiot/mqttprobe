@@ -247,7 +247,10 @@ public class MainLayoutTests : BunitTestContext
 
         await _mockDialogService.Received(1).ShowAsync<ConnectionDialog>(
             Arg.Any<string>(),
-            Arg.Is<DialogOptions>(o => o!.MaxWidth == MaxWidth.Small && o.FullWidth == true));
+            Arg.Is<DialogOptions>(o => o!.MaxWidth == MaxWidth.Small
+                && o.FullWidth == true
+                && o.NoHeader == true
+                && o.CloseButton == false));
     }
 
     [Test]

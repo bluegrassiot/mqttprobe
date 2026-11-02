@@ -1,0 +1,27 @@
+.pb-received-zone {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 5px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--mud-palette-text-secondary);
+    font: inherit;
+    font-size: 0.66rem;
+    font-weight: 600;
+    line-height: 1.4;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+    cursor: help;
+}
+
+.pb-received-zone:hover {
+    border-color: var(--mud-palette-text-secondary);
+    color: var(--mud-palette-text-primary);
+}
+
+.pb-received-zone:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 1px;
+}

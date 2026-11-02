@@ -54,6 +54,7 @@ public class UiPreferences
     public string Theme { get; set; } = "dark";
     public bool AutoResubscribe { get; set; } = true;
     public bool GroupSparkplugTopicsByNodeAndDevice { get; set; } = true;
+    public MessageTimePreferences MessageTime { get; set; } = new();
 
     public List<string> DismissedHints { get; set; } = [];
 }

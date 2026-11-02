@@ -3,6 +3,7 @@ using MQTTnet.Protocol;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
+using MudBlazor.Services;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
@@ -55,8 +56,8 @@ public class SubscriptionEditorTests : BunitTestContext
         cut.Find("button[title='Add subscription']").Click();
 
         captured.Should().NotBeNull();
-        captured!.Value.Topic.Should().Be("sensors/#");
-        captured.Value.Qos.Should().Be(MqttQualityOfServiceLevel.AtLeastOnce);
+        captured.GetValueOrDefault().Topic.Should().Be("sensors/#");
+        captured.GetValueOrDefault().Qos.Should().Be(MqttQualityOfServiceLevel.AtLeastOnce);
         await Task.CompletedTask;
     }
 
@@ -141,7 +142,7 @@ public class SubscriptionEditorTests : BunitTestContext
         cut.Find("button[title='Add subscription']").Click();
 
         captured.Should().NotBeNull();
-        captured!.Value.Topic.Should().Be("sensors/#");
+        captured.GetValueOrDefault().Topic.Should().Be("sensors/#");
     }
 
     [Test]
@@ -161,8 +162,8 @@ public class SubscriptionEditorTests : BunitTestContext
         await cut.InvokeAsync(() => cut.Instance.AddForTests());
 
         captured.Should().NotBeNull();
-        captured!.Value.Topic.Should().Be("factory/#");
-        captured.Value.Qos.Should().Be(MqttQualityOfServiceLevel.ExactlyOnce);
+        captured.GetValueOrDefault().Topic.Should().Be("factory/#");
+        captured.GetValueOrDefault().Qos.Should().Be(MqttQualityOfServiceLevel.ExactlyOnce);
     }
 
     [Test]
@@ -270,7 +271,7 @@ public class SubscriptionEditorTests : BunitTestContext
     }
 
     [Test]
-    public void Root_HasRegionRole_AndTabIndex()
+    public void Root_HasLabelledRegion_WithoutDeadTabStop()
     {
         var cut = Render<SubscriptionEditor>(p => p
             .Add(x => x.Items, Array.Empty<SubscribedTopic>())
@@ -280,7 +281,9 @@ public class SubscriptionEditorTests : BunitTestContext
         var root = cut.Find(".subscription-editor");
         root.GetAttribute("role").Should().Be("region");
         root.GetAttribute("aria-label").Should().Be("Subscriptions list");
-        root.GetAttribute("tabindex").Should().Be("0");
+        root.HasAttribute("tabindex").Should().BeFalse("the Mud panel header is the keyboard entry point");
+
+        cut.Find(".mud-expand-panel-header").GetAttribute("tabindex").Should().Be("0");
     }
 
     [Test]
@@ -347,5 +350,75 @@ public class SubscriptionEditorTests : BunitTestContext
             .Add(x => x.OnRemove, NoRemove()));
 
         cut.Markup.Should().Contain("2 · Exactly once");
+    }
+
+    [TestCase("Enter")]
+    [TestCase(" ")]
+    public async Task Header_NativeActivation_TogglesOnce_WithoutAddingDraft(string key)
+    {
+        var addCalls = 0;
+        var cut = Render<SubscriptionEditor>(p => p
+            .Add(x => x.Items, new List<SubscribedTopic> { new() { Topic = "a/#" } })
+            .Add(x => x.OnAdd, EventCallback.Factory.Create<(string Topic, MqttQualityOfServiceLevel Qos)>(this,
+                _ => addCalls++))
+            .Add(x => x.OnRemove, NoRemove()));
+
+        cut.Instance.TopicDraft = "pending/#";
+        cut.FindComponent<MudExpansionPanel>().Instance.Expanded.Should().BeTrue();
+
+        await cut.InvokeAsync(() => cut.Find(".mud-expand-panel-header").KeyDown(key));
+
+        cut.WaitForAssertion(() =>
+            cut.FindComponent<MudExpansionPanel>().Instance.Expanded.Should().BeFalse());
+        addCalls.Should().Be(0);
+        cut.Instance.TopicDraft.Should().Be("pending/#");
+
+        await cut.InvokeAsync(() => cut.Find(".mud-expand-panel-header").KeyDown(key));
+
+        cut.WaitForAssertion(() =>
+            cut.FindComponent<MudExpansionPanel>().Instance.Expanded.Should().BeTrue());
+        addCalls.Should().Be(0);
+    }
+
+    [Test]
+    public async Task DraftField_Enter_StillAdds()
+    {
+        (string Topic, MqttQualityOfServiceLevel Qos)? captured = null;
+
+        var cut = Render<SubscriptionEditor>(p => p
+            .Add(x => x.Items, Array.Empty<SubscribedTopic>())
+            .Add(x => x.OnAdd, EventCallback.Factory.Create<(string Topic, MqttQualityOfServiceLevel Qos)>(this,
+                v => captured = v))
+            .Add(x => x.OnRemove, NoRemove()));
+
+        var topicInput = cut.FindAll("input")
+            .First(e => !e.HasAttribute("readonly") && e.GetAttribute("type") != "checkbox");
+        topicInput.Input(new ChangeEventArgs { Value = "sensors/#" });
+
+        await cut.InvokeAsync(() => topicInput.KeyDown("Enter"));
+
+        captured.Should().NotBeNull();
+        captured.GetValueOrDefault().Topic.Should().Be("sensors/#");
+    }
+
+    [Test]
+    public void HeaderArrowKeys_AreWiredToTheMudHeaderTargetClass()
+    {
+        var cut = Render<SubscriptionEditor>(p => p
+            .Add(x => x.Items, Array.Empty<SubscribedTopic>())
+            .Add(x => x.OnAdd, NoAdd())
+            .Add(x => x.OnRemove, NoRemove()));
+
+        var rootId = cut.Find(".subscription-editor").Id;
+        var invocation = JSInterop.Invocations
+            .Single(i => i.Identifier == "mudKeyInterceptor.connect"
+                && i.Arguments.Count > 1 && Equals(i.Arguments[1], rootId));
+
+        var options = invocation.Arguments[2].Should().BeOfType<KeyInterceptorOptions>().Subject;
+        options.TargetClass.Should().Be("mud-expand-panel-header");
+        options.Keys.Select(k => k.Key).Should().BeEquivalentTo(new[] { "ArrowRight", "ArrowLeft" });
+        options.Keys.Should().OnlyContain(k => k.SubscribeDown && k.IgnoreDownRepeats
+            && k.PreventDown == "none" && k.StopDown == "none");
+        options.Keys.Should().NotContain(k => k.Key == "Enter" || k.Key == " ");
     }
 }

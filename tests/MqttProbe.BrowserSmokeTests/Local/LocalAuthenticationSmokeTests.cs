@@ -18,7 +18,7 @@ public sealed class LocalAuthenticationSmokeTests
     private const string LogoutControl =
         "form.logout-action-form button[type='submit'], form.logout-menu-form button[type='submit']";
     private const string ConnectionDialog = ".connection-dialog-content";
-    private const string DialogCancel = ".mud-dialog .connection-dialog-content button:has-text('Cancel')";
+    private const string DialogClose = ".mud-dialog .connection-dialog-content [data-testid='connection-close']";
 
     private string _stage = "startup";
 
@@ -140,7 +140,7 @@ public sealed class LocalAuthenticationSmokeTests
                 State = WaitForSelectorState.Visible,
                 Timeout = ActionTimeoutMs,
             }).WaitAsync(scenarioToken);
-            await page.Locator(DialogCancel).First.ClickAsync(new LocatorClickOptions { Timeout = ActionTimeoutMs })
+            await page.Locator(DialogClose).First.ClickAsync(new LocatorClickOptions { Timeout = ActionTimeoutMs })
                 .WaitAsync(scenarioToken);
             await dialog.WaitForAsync(new LocatorWaitForOptions
             {
@@ -201,7 +201,7 @@ public sealed class LocalAuthenticationSmokeTests
                 State = WaitForSelectorState.Visible,
                 Timeout = ActionTimeoutMs,
             }).WaitAsync(scenarioToken);
-            await page.Locator(DialogCancel).First.ClickAsync(new LocatorClickOptions { Timeout = ActionTimeoutMs })
+            await page.Locator(DialogClose).First.ClickAsync(new LocatorClickOptions { Timeout = ActionTimeoutMs })
                 .WaitAsync(scenarioToken);
             await dialog2.WaitForAsync(new LocatorWaitForOptions
             {

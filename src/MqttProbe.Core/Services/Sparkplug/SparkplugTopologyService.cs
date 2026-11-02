@@ -11,11 +11,13 @@ public interface ISparkplugTopologyService
     public event Action? TopologyChanged;
     public bool RemoveNode(string groupId, string nodeId);
     public int RemoveMatchingTopic(string filter);
+    public int RemoveMatchingTopics(Func<string, bool> predicate);
 
     // Exclusion purgers run while the exclude service holds its locks; a subscriber that
     // re-enters the service from TopologyChanged would deadlock, so the purge removes
     // silently and the caller raises the event later through RaiseTopologyChanged.
     public int RemoveMatchingTopicSilent(string filter);
+    public int RemoveMatchingTopicsSilent(Func<string, bool> predicate);
     public void RaiseTopologyChanged();
 
     public int RemoveOfflineNodes();
@@ -81,20 +83,27 @@ public sealed partial class SparkplugTopologyService(
         return removed;
     }
 
-    public int RemoveMatchingTopic(string filter)
+    public int RemoveMatchingTopic(string filter) =>
+        RemoveMatchingTopics(topic => TopicExcludeService.Matches(topic, filter));
+
+    public int RemoveMatchingTopics(Func<string, bool> predicate)
     {
-        var removed = RemoveMatchingTopicCore(filter);
+        var removed = RemoveMatchingTopicsCore(predicate);
         if (removed > 0)
             TopologyChanged?.Invoke();
 
         return removed;
     }
 
-    public int RemoveMatchingTopicSilent(string filter) => RemoveMatchingTopicCore(filter);
+    public int RemoveMatchingTopicSilent(string filter) =>
+        RemoveMatchingTopicsSilent(topic => TopicExcludeService.Matches(topic, filter));
+
+    public int RemoveMatchingTopicsSilent(Func<string, bool> predicate) =>
+        RemoveMatchingTopicsCore(predicate);
 
     public void RaiseTopologyChanged() => TopologyChanged?.Invoke();
 
-    private int RemoveMatchingTopicCore(string filter)
+    private int RemoveMatchingTopicsCore(Func<string, bool> predicate)
     {
         var removed = 0;
 
@@ -104,14 +113,14 @@ public sealed partial class SparkplugTopologyService(
             {
                 foreach (var (deviceId, _) in node.Devices)
                 {
-                    if (TopicMatchesDevice(filter, groupId, nodeId, deviceId)
+                    if (TopicMatchesDevice(predicate, groupId, nodeId, deviceId)
                         && node.Devices.TryRemove(deviceId, out _))
                     {
                         removed++;
                     }
                 }
 
-                if (TopicMatchesNode(filter, groupId, nodeId)
+                if (TopicMatchesNode(predicate, groupId, nodeId)
                     && group.Nodes.TryRemove(nodeId, out _))
                 {
                     removed++;
@@ -133,13 +142,12 @@ public sealed partial class SparkplugTopologyService(
             TopologyChanged?.Invoke();
     }
 
-    private static bool TopicMatchesNode(string filter, string groupId, string nodeId) =>
-        _nodeVerbs
-            .Any(verb => TopicExcludeService.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}", filter));
+    private static bool TopicMatchesNode(Func<string, bool> predicate, string groupId, string nodeId) =>
+        _nodeVerbs.Any(verb => predicate($"spBv1.0/{groupId}/{verb}/{nodeId}"));
 
-    private static bool TopicMatchesDevice(string filter, string groupId, string nodeId, string deviceId) =>
-        _deviceVerbs
-            .Any(verb => TopicExcludeService.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}/{deviceId}", filter));
+    private static bool TopicMatchesDevice(
+        Func<string, bool> predicate, string groupId, string nodeId, string deviceId) =>
+        _deviceVerbs.Any(verb => predicate($"spBv1.0/{groupId}/{verb}/{nodeId}/{deviceId}"));
 
     internal static bool TryParseTopic(string topic, out string group, out string verb, out string node, out string? device)
     {
@@ -355,12 +363,15 @@ public sealed partial class SparkplugTopologyService(
         {
             if (index.TryGetValue(snapshot.Name, out var idx))
             {
-                metrics[idx] = snapshot;
+                var dataType = snapshot.DataType;
+                if (dataType.Length == 0)
+                    dataType = metrics[idx].DataType.Length > 0 ? metrics[idx].DataType : "unknown";
+                metrics[idx] = snapshot with { DataType = dataType };
             }
             else
             {
                 index[snapshot.Name] = metrics.Count;
-                metrics.Add(snapshot);
+                metrics.Add(snapshot.DataType.Length > 0 ? snapshot : snapshot with { DataType = "unknown" });
             }
         }
 

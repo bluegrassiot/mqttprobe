@@ -30,6 +30,7 @@ internal static class TopicTreeIconLanguage
         TopicTreeRowKind.SparkplugNode => LucideIcons.Router,
         TopicTreeRowKind.SparkplugDevice => LucideIcons.Network,
         TopicTreeRowKind.MessageType => LucideIcons.Hash,
+        TopicTreeRowKind.Spelling => LeafGlyph,
         TopicTreeRowKind.Devices => BranchGlyph(isExpanded),
         _ => hasChildren ? BranchGlyph(isExpanded) : LeafGlyph
     };
@@ -54,6 +55,7 @@ internal static class TopicTreeIconLanguage
         TopicTreeRowKind.SparkplugNode => NodeRole,
         TopicTreeRowKind.SparkplugDevice or TopicTreeRowKind.Devices => DeviceRole,
         TopicTreeRowKind.MessageType => owner == TopicTreeOwner.Device ? DeviceRole : NodeRole,
+        TopicTreeRowKind.Spelling => LeafRole,
         _ => hasChildren ? BranchRole : LeafRole
     };
 }

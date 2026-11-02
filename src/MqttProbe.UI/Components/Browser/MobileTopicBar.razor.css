@@ -2,7 +2,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 8px;
+    padding: 0 8px;
     background: var(--mud-palette-surface);
     border-bottom: 1px solid var(--mud-palette-divider);
     min-height: 44px;
@@ -27,6 +27,12 @@
     font-family: var(--font-mono);
 }
 
+.mobile-topic-bar__info:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+    border-radius: 6px;
+}
+
 .mobile-topic-bar__name--empty {
     font-weight: 400;
     opacity: 0.6;
@@ -40,8 +46,13 @@
     margin-left: 4px;
 }
 
-.mobile-topic-bar__btn {
+.mobile-topic-bar__select {
     flex-shrink: 0;
     text-transform: none;
     min-height: 44px;
+    padding: 0 10px;
+}
+
+::deep .mobile-topic-bar__btn {
+    flex-shrink: 0;
 }

@@ -27,6 +27,26 @@
                 <MudSelectItem Value="@((int?)60)">Last 1 hour</MudSelectItem>
                 <MudSelectItem Value="@((int?)null)">All retained points</MudSelectItem>
             </MudSelect>
+            <div class="chart-dialog-timeout-row">
+                <MudNumericField @bind-Value="_staleTimeoutSeconds"
+                                 Label="Stale timeout (seconds)"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 Min="0" Step="1" Disabled="_staleTimeoutOff"
+                                 Error="@(!StaleTimeoutValid)"
+                                 HelperText="A series turns stale when its last point is older than this."
+                                 Class="chart-dialog-timeout" />
+                <MudSwitch T="bool" @bind-Value="_staleTimeoutOff" Label="Off"
+                           Color="Color.Primary" />
+                @if (!StaleTimeoutValid)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Error" Class="chart-dialog-timeout-error">
+                        Enter a timeout greater than zero seconds.
+                    </MudText>
+                }
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="chart-dialog-timeout-note">
+                    Choose Off for topics that publish only when a value changes.
+                </MudText>
+            </div>
 
             <MudDivider />
             <MudText Typo="Typo.subtitle2">Series review (@_series.Count selected)</MudText>
@@ -37,13 +57,13 @@
             @foreach (var series in _series)
             {
                 var s = series;
-                <MudPaper Elevation="0" Class="pa-2 app-chrome-panel">
+                <MudPaper Elevation="0" Class="pa-2 app-chrome-panel chart-dialog-series">
                     <div class="d-flex align-center gap-2">
-                        <div style="width:16px; height:16px; border-radius:3px; background:@s.Color; flex-shrink:0"></div>
+                        <span class="chart-dialog-series-swatch" style="background:@s.Color"></span>
                         <div class="flex-grow-1">
                             <MudTextField @bind-Value="s.DisplayName" Variant="Variant.Text"
                                           Margin="Margin.Dense" Immediate="true"
-                                          Placeholder="Series name" Style="font-weight:600"/>
+                                          Placeholder="Series name" Class="chart-dialog-series-name"/>
                             <MudText Typo="Typo.caption" Color="Color.Secondary"
                                      Class="app-mono">
                                 @s.Topic › @s.JsonPath
@@ -67,7 +87,7 @@
     <DialogActions>
         <AppTertiaryButton MinWidth="true" OnClick="Cancel">Cancel</AppTertiaryButton>
         <AppPrimaryButton MinWidth="true"
-                   Disabled="@(string.IsNullOrWhiteSpace(_name))"
+                   Disabled="@(string.IsNullOrWhiteSpace(_name) || !StaleTimeoutValid)"
                    OnClick="Submit">
             @(Configuration == null ? "Create Chart" : "Save Chart")
         </AppPrimaryButton>
@@ -82,7 +102,12 @@
     private AppChartType _type = AppChartType.Line;
     private int _maxPoints = 500;
     private int? _timeWindow;
+    private double? _staleTimeoutSeconds = ChartConfiguration.DefaultStaleTimeoutSeconds;
+    private bool _staleTimeoutOff;
     private List<ChartSeries> _series = [];
+
+    private bool StaleTimeoutValid => _staleTimeoutOff
+        || (_staleTimeoutSeconds is { } seconds && ChartFreshnessEvaluator.IsValidTimeout(seconds));
 
     protected override void OnParametersSet()
     {
@@ -92,6 +117,8 @@
             _type = Configuration.Type;
             _maxPoints = Configuration.MaxPoints;
             _timeWindow = Configuration.TimeWindowMinutes;
+            _staleTimeoutSeconds = Configuration.StaleTimeoutSeconds ?? ChartConfiguration.DefaultStaleTimeoutSeconds;
+            _staleTimeoutOff = Configuration.StaleTimeoutSeconds is null;
             _series = [.. Configuration.Series.Select(s => new ChartSeries
             {
                 Id = s.Id,
@@ -107,12 +134,15 @@
 
     private void Submit()
     {
+        if (!StaleTimeoutValid) return;
+
         var config = new ChartConfiguration
         {
             Name = _name,
             Type = _type,
             MaxPoints = _maxPoints,
             TimeWindowMinutes = _timeWindow,
+            StaleTimeoutSeconds = _staleTimeoutOff ? null : _staleTimeoutSeconds,
             Series = _series
         };
         if (Configuration != null)

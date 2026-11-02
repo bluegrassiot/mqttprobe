@@ -156,6 +156,14 @@ dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~GenericEmulatorPubli
 dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~SparkplugEmulatorPublishesDecodedDataAndStateText
 ```
 
+`LiveFlows/MqttLiveFlowsBulkSelectionTests.cs` covers the topic tree once bulk selection and keyboard
+navigation are both present: 36px ordinary rows, 48px selection rows, Space on a checkbox checking
+exactly one topic, and End revealing and focusing the last row.
+
+```powershell
+dotnet test tests/MqttProbe.BrowserSmokeTests --filter Name~BulkSelectionRowsKeepTheirHeightAndKeyboardFocus
+```
+
 ## Sparkplug grouped-selection smoke tests
 
 `LiveFlows/MqttLiveFlowsSparkplugGroupingTests.cs` and

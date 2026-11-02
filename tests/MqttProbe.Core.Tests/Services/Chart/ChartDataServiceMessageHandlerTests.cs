@@ -77,6 +77,38 @@ public class ChartDataServiceMessageHandlerTests
     }
 
     [Test]
+    public async Task RootScalarPayload_WithRootJsonPath_AddsPointAndRegistersField()
+    {
+        var seriesId = Guid.NewGuid();
+        _mockChartSettings.GetCharts(Arg.Any<Guid>()).Returns(
+        [
+            ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "sensor/plain", JsonPath = ChartFieldPaths.Root })
+        ]);
+
+        await Fire("sensor/plain", "0.00");
+
+        _service.GetPoints(seriesId).Should().ContainSingle()
+            .Which.Value.Should().Be(0.0);
+        _registry.GetFields("sensor/plain").Should().ContainSingle()
+            .Which.JsonPath.Should().Be(ChartFieldPaths.Root);
+    }
+
+    [TestCase("NaN")]
+    [TestCase("not a number")]
+    public async Task NonNumericRootPayload_WithRootJsonPath_NoPointAdded(string payload)
+    {
+        var seriesId = Guid.NewGuid();
+        _mockChartSettings.GetCharts(Arg.Any<Guid>()).Returns(
+        [
+            ConfigWith(100, new ChartSeries { Id = seriesId, Topic = "sensor/plain", JsonPath = ChartFieldPaths.Root })
+        ]);
+
+        await Fire("sensor/plain", payload);
+
+        _service.GetPoints(seriesId).Should().BeEmpty();
+    }
+
+    [Test]
     public async Task NonMatchingTopic_NoPointAdded()
     {
         var seriesId = Guid.NewGuid();
@@ -201,6 +233,52 @@ public class ChartDataServiceMessageHandlerTests
 
         _service.GetPoints(id1).Should().ContainSingle().Which.Value.Should().BeApproximately(22.0, 0.001);
         _service.GetPoints(id2).Should().ContainSingle().Which.Value.Should().BeApproximately(65.0, 0.001);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task SeparateMatchingCharts_EachReceivesPointAndNotifiesOnce(bool reverseOrder)
+    {
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
+        var charts = new List<ChartConfiguration>
+        {
+            ConfigWith(100, new ChartSeries { Id = firstId, Topic = "sensors/test", JsonPath = "temperature" }),
+            ConfigWith(100, new ChartSeries { Id = secondId, Topic = "sensors/test", JsonPath = "temperature" }),
+            ConfigWith(100, new ChartSeries { Id = otherId, Topic = "sensors/other", JsonPath = "temperature" })
+        };
+        if (reverseOrder)
+            charts.Reverse();
+        _mockChartSettings.GetCharts(Arg.Any<Guid>()).Returns(charts);
+
+        var notifications = 0;
+        _service.OnDataUpdated += () => notifications++;
+
+        await Fire("sensors/test", """{"temperature": 21.0}""");
+
+        _service.GetPoints(firstId).Should().ContainSingle().Which.Value.Should().BeApproximately(21.0, 0.001);
+        _service.GetPoints(secondId).Should().ContainSingle().Which.Value.Should().BeApproximately(21.0, 0.001);
+        _service.GetPoints(otherId).Should().BeEmpty();
+        notifications.Should().Be(1);
+    }
+
+    [Test]
+    public async Task SeparateMatchingChartsWithDifferentLimits_EachBufferKeepsItsOwnLimit()
+    {
+        var shortId = Guid.NewGuid();
+        var longId = Guid.NewGuid();
+        _mockChartSettings.GetCharts(Arg.Any<Guid>()).Returns(
+        [
+            ConfigWith(2, new ChartSeries { Id = shortId, Topic = "sensors/test", JsonPath = "temperature" }),
+            ConfigWith(3, new ChartSeries { Id = longId, Topic = "sensors/test", JsonPath = "temperature" })
+        ]);
+
+        for (var i = 1; i <= 4; i++)
+            await Fire("sensors/test", $$"""{"temperature": {{i}}.0}""");
+
+        _service.GetPoints(shortId).Select(p => p.Value).Should().Equal(3.0, 4.0);
+        _service.GetPoints(longId).Select(p => p.Value).Should().Equal(2.0, 3.0, 4.0);
     }
 
     [Test]
@@ -534,8 +612,12 @@ public class ChartDataServiceMessageHandlerTests
 
         excludes.Received(1).PurgeExcludedTopic += Arg.Any<Action<string>>();
         excludes.Received(1).TopicExcluded += Arg.Any<Action<string>>();
+        excludes.Received(1).PurgeExcludedSparkplug += Arg.Any<Action<SparkplugTopicExclude>>();
+        excludes.Received(1).SparkplugExcluded += Arg.Any<Action<SparkplugTopicExclude>>();
         excludes.Received(1).PurgeExcludedTopic -= Arg.Any<Action<string>>();
         excludes.Received(1).TopicExcluded -= Arg.Any<Action<string>>();
+        excludes.Received(1).PurgeExcludedSparkplug -= Arg.Any<Action<SparkplugTopicExclude>>();
+        excludes.Received(1).SparkplugExcluded -= Arg.Any<Action<SparkplugTopicExclude>>();
     }
 
     [Test]

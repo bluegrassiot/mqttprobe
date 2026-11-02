@@ -72,6 +72,7 @@ public partial class ConnectionDialog
         var previousSelector = _savedConnectionForSelector;
         if (!await GuardIfDirty())
         {
+            if (_disposed) return;
             _savedConnectionForSelector = previousSelector;
             _selectorGeneration++;
             await InvokeAsync(StateHasChanged);
@@ -228,7 +229,8 @@ public partial class ConnectionDialog
             CleanStart = source.CleanStart,
             SessionExpiryIntervalSeconds = source.SessionExpiryIntervalSeconds,
             SubscribedTopics = source.SubscribedTopics.Select(t => new SubscribedTopic { Topic = t.Topic, QualityOfServiceLevel = t.QualityOfServiceLevel }).ToList(),
-            TopicExcludes = [.. source.TopicExcludes]
+            TopicExcludes = [.. source.TopicExcludes],
+            SparkplugTopicExcludes = [.. source.SparkplugTopicExcludes]
         };
 
         string? newCopyAssetId = null;

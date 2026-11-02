@@ -36,6 +36,34 @@ public class SubscriptionsTests : BunitTestContext
         EnsureMudProviders();
     }
 
+    [Test]
+    public void ExcludeEditor_ReflectsAnAdditionMadeWhileThePanelWasKeptAlive()
+    {
+        _mockExcludeService.TopicExcludes.Returns(new[] { "existing" });
+        var cut = Render<Subscriptions>();
+        Assert.That(cut.Markup, Does.Contain("existing"));
+
+        _mockExcludeService.TopicExcludes.Returns(new[] { "existing", "accept//alias" });
+        _mockExcludeService.TopicExcluded += Raise.Event<Action<string>>("accept//alias");
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("accept//alias"));
+    }
+
+    [Test]
+    public void ExcludeEditor_ReflectsATypedRuleAddedWhileThePanelWasKeptAlive()
+    {
+        _mockExcludeService.SparkplugExcludes.Returns(Array.Empty<SparkplugTopicExclude>());
+        var cut = Render<Subscriptions>();
+        cut.Markup.Should().NotContain("spBv1.0/plant1/node1");
+
+        var rule = new SparkplugTopicExclude(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"));
+        _mockExcludeService.SparkplugExcludes.Returns(new[] { rule });
+        _mockExcludeService.SparkplugExcluded += Raise.Event<Action<SparkplugTopicExclude>>(rule);
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("spBv1.0/plant1/node1"));
+    }
+
     private void AuthorizeAsOperator()
     {
         AuthorizationContext.SetAuthorized("testuser").SetRoles(AppRoles.Operator);
@@ -396,11 +424,11 @@ public class SubscriptionsTests : BunitTestContext
         var subEditor = cut.Find(".subscription-editor");
         subEditor.GetAttribute("role").Should().Be("region");
         subEditor.GetAttribute("aria-label").Should().Be("Subscriptions list");
-        subEditor.GetAttribute("tabindex").Should().Be("0");
+        subEditor.HasAttribute("tabindex").Should().BeFalse();
 
         var excEditor = cut.Find(".exclude-editor");
         excEditor.GetAttribute("role").Should().Be("region");
         excEditor.GetAttribute("aria-label").Should().Be("Excluded topics list");
-        excEditor.GetAttribute("tabindex").Should().Be("0");
+        excEditor.HasAttribute("tabindex").Should().BeFalse();
     }
 }

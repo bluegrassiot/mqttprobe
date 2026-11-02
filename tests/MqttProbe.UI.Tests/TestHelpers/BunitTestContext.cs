@@ -21,6 +21,8 @@ public abstract class BunitTestContext : BunitContext
             provider.GetService<MqttProbe.Core.Services.Mqtt.IMessageStoreManager>() is { } manager
                 ? new MqttProbe.UI.Components.Browser.MessageStoreSelectionAdapter(manager)
                 : MqttProbe.UI.Tests.Components.Browser.TopicTreeSelectionTestAdapter.Create());
+        Services.AddScoped<MqttProbe.UI.Components.Browser.IMessageTimeFormatter,
+            MqttProbe.UI.Components.Browser.MessageTimeFormatterInterop>();
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         // Auth support (user is unauthenticated by default)

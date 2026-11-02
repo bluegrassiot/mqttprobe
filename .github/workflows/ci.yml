@@ -214,7 +214,6 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -223,33 +222,12 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Resolve image tag
-        id: tag
-        run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            # latest is the multiarch release image; CI here is amd64-only, so it gets its own tag
-            echo "value=main" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "value=pr-${{ github.event.number }}" >> "$GITHUB_OUTPUT"
-          else
-            # Docker tags cannot contain slashes (e.g. release/v1.0.1)
-            echo "value=$(echo "${{ github.ref_name }}" | tr '/' '-')" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build and push
+      - name: Build
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
-          push: ${{ github.event_name == 'push' }}
-          tags: ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.value }}
+          push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

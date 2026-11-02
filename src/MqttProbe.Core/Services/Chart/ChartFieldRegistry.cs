@@ -11,6 +11,7 @@ public interface IChartFieldRegistry
     public IReadOnlyList<DiscoveredField> GetFields(string topic);
     public IReadOnlyList<DiscoveredField> GetAllFields();
     public bool RemoveMatchingTopic(string filter);
+    public bool RemoveMatchingTopics(Func<string, bool> predicate);
 }
 
 public class ChartFieldRegistry : IChartFieldRegistry
@@ -56,12 +57,15 @@ public class ChartFieldRegistry : IChartFieldRegistry
             .OrderBy(f => f.Topic, StringComparer.Ordinal)
             .ThenBy(f => f.JsonPath, StringComparer.Ordinal)];
 
-    public bool RemoveMatchingTopic(string filter)
+    public bool RemoveMatchingTopic(string filter) =>
+        RemoveMatchingTopics(topic => TopicExcludeService.Matches(topic, filter));
+
+    public bool RemoveMatchingTopics(Func<string, bool> predicate)
     {
         var removed = false;
         foreach (var topic in _registry.Keys)
         {
-            if (!TopicExcludeService.Matches(topic, filter))
+            if (!predicate(topic))
                 continue;
 
             removed |= _registry.TryRemove(topic, out _);

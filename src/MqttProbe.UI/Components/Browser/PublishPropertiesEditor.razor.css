@@ -1,0 +1,95 @@
+.publish-props {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: var(--mud-default-borderradius);
+    background: var(--mud-palette-surface);
+    overflow: hidden;
+}
+
+.publish-props:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
+.publish-props ::deep .mud-expand-panel-header {
+    background: var(--mud-palette-action-default-hover);
+}
+
+.publish-props-alert {
+    margin-bottom: 8px;
+}
+
+.publish-props-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 4px 12px;
+    align-items: start;
+}
+
+.publish-props-user {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 12px;
+}
+
+.publish-props-add-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.publish-props-name {
+    flex: 1 1 10rem;
+    min-width: 8rem;
+}
+
+.publish-props-value {
+    flex: 2 1 14rem;
+    min-width: 10rem;
+}
+
+.publish-props-add {
+    flex: 0 0 auto;
+}
+
+.publish-props-empty {
+    padding: 8px 0;
+}
+
+/* The tab's .tab-panel-scroll owns vertical scrolling; the table must not add a second scroller. */
+.publish-props-table-wrap ::deep .mud-table,
+.publish-props-table-wrap ::deep .mud-table-container {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.publish-props-table-wrap ::deep .mud-table-container {
+    overflow: visible;
+}
+
+.publish-props-table-wrap ::deep table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.publish-props-col-check {
+    width: 3rem;
+}
+
+.publish-props-col-name {
+    width: 35%;
+}
+
+.publish-props-table-wrap ::deep td.publish-props-cell {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 0.8rem;
+}
+
+.publish-props-table-wrap ::deep td.publish-props-cell-name {
+    color: var(--mud-palette-text-secondary);
+}

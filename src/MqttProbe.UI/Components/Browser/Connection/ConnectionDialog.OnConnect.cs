@@ -38,6 +38,7 @@ public partial class ConnectionDialog
         if (_selectedConnection.Id == active.Id)
         {
             active.TopicExcludes = [.. _selectedConnection.TopicExcludes];
+            active.SparkplugTopicExcludes = [.. _selectedConnection.SparkplugTopicExcludes];
         }
     }
 
@@ -61,6 +62,7 @@ public partial class ConnectionDialog
     private void RefreshExcludeBaseline()
     {
         _baselineConnection.TopicExcludes = [.. _selectedConnection.TopicExcludes];
+        _baselineConnection.SparkplugTopicExcludes = [.. _selectedConnection.SparkplugTopicExcludes];
     }
 
     private bool IsConnectionSaved() =>
@@ -76,6 +78,7 @@ public partial class ConnectionDialog
             .Select(t => new SubscribedTopic { Topic = t.Topic, QualityOfServiceLevel = t.QualityOfServiceLevel })
             .ToList();
         candidate.TopicExcludes = [.. _selectedConnection.TopicExcludes];
+        candidate.SparkplugTopicExcludes = [.. _selectedConnection.SparkplugTopicExcludes];
         return candidate;
     }
 
@@ -113,7 +116,8 @@ public partial class ConnectionDialog
             return false;
         }
         const int maxExcludes = 500;
-        if (_selectedConnection.TopicExcludes.Count >= maxExcludes)
+        var excludeCount = _selectedConnection.TopicExcludes.Count + _selectedConnection.SparkplugTopicExcludes.Count;
+        if (excludeCount >= maxExcludes)
         {
             Snackbar.Add($"Exclude limit ({maxExcludes}) reached", Severity.Warning);
             return false;
@@ -366,6 +370,61 @@ public partial class ConnectionDialog
             await RemoveExcludeLiveAsync(topics);
         else
             await RemoveExcludeOfflineAsync(topics);
+    }
+
+    private async Task HandleOnConnectSparkplugExcludeRemove(SparkplugTopicExclude exclude)
+    {
+        if (ShouldApplyLiveSubscriptions())
+            await RemoveSparkplugExcludeLiveAsync(exclude);
+        else
+            await RemoveSparkplugExcludeOfflineAsync(exclude);
+    }
+
+    private async Task RemoveSparkplugExcludeLiveAsync(SparkplugTopicExclude exclude)
+    {
+        if (!await EnsureReadyForCollectionEdit("managing excludes", requireSaved: false)) return;
+
+        try
+        {
+            var target = new TopicBranchTarget(
+                TopicBranchKind.Sparkplug, Scope: exclude.Scope, MessageType: exclude.MessageType);
+            var result = await TopicExcludeService.RemoveBranches([target]);
+            if (!result.IsValid)
+            {
+                if (result.Feedback is { } feedback)
+                    ShowExcludeFeedback(feedback);
+                return;
+            }
+
+            _selectedConnection.SparkplugTopicExcludes.RemoveAll(item => item == exclude);
+            SyncSessionStateTopicExcludes();
+            RefreshExcludeBaseline();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to remove Sparkplug exclusion: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RemoveSparkplugExcludeOfflineAsync(SparkplugTopicExclude exclude)
+    {
+        if (!await EnsureReadyForCollectionEdit("managing excludes", requireSaved: true)) return;
+
+        var candidate = BuildCollectionOnlyCandidate();
+        candidate.SparkplugTopicExcludes.RemoveAll(item => item == exclude);
+        try
+        {
+            await ConnectionSettings.AddConnectionAsync(candidate);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to remove Sparkplug exclusion: {ex.Message}", Severity.Error);
+            return;
+        }
+
+        _selectedConnection.SparkplugTopicExcludes.RemoveAll(item => item == exclude);
+        SyncSessionStateTopicExcludes();
+        RefreshExcludeBaseline();
     }
 
     private void ShowExcludeFeedback(Core.UserNotification feedback) =>

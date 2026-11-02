@@ -408,6 +408,9 @@ jobs:
         with:
           name: desktop-linux-third-party-sources
 
+      - name: Package ChirpStack schema plugin
+        run: python3 scripts/ci/package-schema-plugin.py --output-dir .
+
       - name: Fail on duplicate release asset names
         run: |
           DUPES=$(find velopack* -type f -printf '%f\n' 2>/dev/null | sort | uniq -d)

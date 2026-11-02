@@ -42,6 +42,7 @@ public class PayloadBrowserTests : BunitTestContext
 
         _mockMetrics = Substitute.For<IUxMetricsService>();
         Services.AddSingleton(_mockMetrics);
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
 
         Services.AddSingleton(Substitute.For<IDialogService>());
         Services.AddSingleton(Substitute.For<ISnackbar>());
@@ -751,10 +752,20 @@ public class PayloadBrowserTests : BunitTestContext
         PayloadBrowser.GetPayloadType("OK").Should().Be(PayloadBrowser.PayloadType.Text);
     }
 
+    [Test]
+    public void GetPayloadType_QuotedNumeric_ReturnsNumber()
+    {
+        Render<PayloadBrowser>();
+
+        PayloadBrowser.GetPayloadType("\"12.5\"").Should().Be(PayloadBrowser.PayloadType.Number);
+        PayloadBrowser.GetPayloadType("\"-5e3\"").Should().Be(PayloadBrowser.PayloadType.Number);
+    }
+
 
     [TestCase("empty", "Empty")]
     [TestCase("sparkplug-b", "Sparkplug B")]
     [TestCase("messagepack", "MessagePack")]
+    [TestCase("cbor", "CBOR")]
     [TestCase("binary", "Binary")]
     [TestCase("json", "JSON")]
     [TestCase("xml", "XML")]
@@ -829,6 +840,24 @@ public class PayloadBrowserTests : BunitTestContext
     }
 
     [Test]
+    public void MultiTopicSelection_WithNoMessages_ShowsTheSelectedTopicsEmptyState()
+    {
+        _selection = new SelectedTopicState(
+            new SelectedTopicToken(_storeId, 1, 0), "multi:a\nb", 0, "2 topics selected")
+        {
+            Mode = TopicSelectionMode.MultipleTopics,
+            Paths = System.Collections.Immutable.ImmutableArray.Create("a", "b")
+        };
+        ReturnMessages([]);
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        cut.WaitForAssertion(() =>
+            cut.Markup.Should().Contain("No stored messages for the selected topics"));
+    }
+
+    [Test]
     public async Task SelectedMessage_WithJsonFormatId_StillShowsJsonContentChip()
     {
         var cut = Render<PayloadBrowser>();
@@ -866,8 +895,73 @@ public class PayloadBrowserTests : BunitTestContext
     [TestCase("temperature", ExpectedResult = "temperature")]
     [TestCase("metrics.value", ExpectedResult = "value")]
     [TestCase("a.b.c", ExpectedResult = "c")]
+    [TestCase("$", ExpectedResult = "value")]
     public string ChartShortLabel_ReturnsLastSegment(string path)
         => PayloadBrowser.ChartShortLabel(path);
+
+    [TestCase("42", "42")]
+    [TestCase("0.00", "0.00")]
+    [TestCase("-5.0", "-5.0")]
+    [TestCase("+3.25", "+3.25")]
+    [TestCase("1e6", "1e6")]
+    [TestCase("-1.5E-3", "-1.5E-3")]
+    public async Task NumberPayload_ShowsChartButtonAndPreservesDisplayedValue(string payload, string expectedDisplay)
+    {
+        var cut = Render<PayloadBrowser>();
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(
+            new MqttMessage { Topic = "sensor/value", Payload = payload }));
+
+        cut.Find(".payload-detail-body").TextContent.Should().Contain("Number");
+        cut.Find(".payload-detail-body .mud-typography-h5").TextContent.Should().Be(expectedDisplay);
+        cut.FindAll(".json-chart-btn").Should().ContainSingle();
+    }
+
+    [Test]
+    public async Task QuotedNumericPayload_ShowsChartButtonAndUnquotedValue()
+    {
+        var cut = Render<PayloadBrowser>();
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(
+            new MqttMessage { Topic = "sensor/value", Payload = "\"12.50\"" }));
+
+        cut.Find(".payload-detail-body .mud-typography-h5").TextContent.Should().Be("12.50");
+        cut.FindAll(".json-chart-btn").Should().ContainSingle();
+    }
+
+    [TestCase("NaN")]
+    [TestCase("Infinity")]
+    [TestCase("-Infinity")]
+    [TestCase("hello")]
+    [TestCase("12px")]
+    public async Task PayloadWithoutRootNumber_DoesNotShowChartButton(string payload)
+    {
+        var cut = Render<PayloadBrowser>();
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(
+            new MqttMessage { Topic = "sensor/value", Payload = payload }));
+
+        cut.FindAll(".json-chart-btn").Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task NumberPayload_ChartButtonAddsRootFieldWithValueLabel()
+    {
+        var mockDialogService = Services.GetRequiredService<IDialogService>();
+        var mockDialogRef = Substitute.For<IDialogReference>();
+        mockDialogRef.Result.Returns(Task.FromResult<DialogResult?>(DialogResult.Cancel()));
+        DialogParameters? captured = null;
+        mockDialogService
+            .ShowAsync<QuickAddToChartDialog>(Arg.Any<string>(), Arg.Do<DialogParameters>(p => captured = p), Arg.Any<DialogOptions>())
+            .Returns(Task.FromResult(mockDialogRef));
+
+        var cut = Render<PayloadBrowser>();
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(
+            new MqttMessage { Topic = "sensor/value", Payload = "0.00" }));
+
+        await cut.Find(".json-chart-btn").ClickAsync(new());
+
+        cut.WaitForAssertion(() => captured.Should().NotBeNull());
+        captured!["JsonPath"].Should().Be(ChartFieldPaths.Root);
+        captured["SeriesName"].Should().Be("value");
+    }
 
     [Test]
     public void ChartLabel_WithSuggestedSeriesName_ReturnsSeriesName()
@@ -1068,5 +1162,116 @@ public class PayloadBrowserTests : BunitTestContext
         var meta = cut.Find(".payload-detail-meta");
         meta.TextContent.Should().Contain("0 · At most once");
         meta.TextContent.Should().NotContain("AtMostOnce");
+    }
+
+    [Test]
+    public async Task SelectedMessage_WithUserProperties_RendersNameValueRows()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            UserProperties = [new MqttMessageUserProperty("source", "paho"), new MqttMessageUserProperty("site", "lab")]
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var labels = cut.FindAll(".payload-detail-meta td.pb-meta-label").Select(td => td.TextContent.Trim());
+        labels.Should().Contain("User properties");
+        var names = cut.FindAll(".pb-user-prop-name").Select(td => td.TextContent.Trim());
+        names.Should().Equal("source", "site");
+        var values = cut.FindAll(".pb-user-prop-value").Select(td => td.TextContent.Trim());
+        values.Should().Equal("paho", "lab");
+        cut.Find(".payload-detail-body-host .payload-detail-body").Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task SelectedMessage_WithPresentButEmptyV5Values_ShowsExplicitEmptyState()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            ContentType = string.Empty,
+            ResponseTopic = string.Empty,
+            CorrelationData = []
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var labels = cut.FindAll(".payload-detail-meta td.pb-meta-label").Select(td => td.TextContent.Trim()).ToList();
+        labels.Should().Contain("Content type").And.Contain("Response topic").And.Contain("Correlation data");
+        cut.FindAll(".payload-detail-meta td.pb-meta-value")
+            .Count(td => td.TextContent.Trim() == "(empty)")
+            .Should().Be(3);
+    }
+
+    [TestCase("order 42")]
+    [TestCase("order  42")]
+    [TestCase("  order 42")]
+    public async Task SelectedMessage_CorrelationData_PreservesWhitespaceInCell(string text)
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            CorrelationData = System.Text.Encoding.UTF8.GetBytes(text)
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var cell = cut.Find(".payload-detail-meta td.pb-preserve-ws");
+        cell.TextContent.Should().Be(text);
+    }
+
+    [Test]
+    public async Task SelectedMessage_WithV5Metadata_RendersEachRow()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}""",
+            ContentType = "application/json",
+            ResponseTopic = "reply/here",
+            CorrelationData = "corr-42"u8.ToArray(),
+            MessageExpiryInterval = 90,
+            PayloadFormatIndicator = MQTTnet.Protocol.MqttPayloadFormatIndicator.CharacterData
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var meta = cut.Find(".payload-detail-meta").TextContent;
+        meta.Should().Contain("Content type").And.Contain("application/json");
+        meta.Should().Contain("Response topic").And.Contain("reply/here");
+        meta.Should().Contain("Correlation data").And.Contain("corr-42");
+        meta.Should().Contain("Expiry").And.Contain("90 s (1m 30s)");
+        meta.Should().Contain("Payload format").And.Contain("UTF-8 text");
+    }
+
+    [Test]
+    public async Task SelectedMessage_WithoutV5Metadata_OmitsV5Rows()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}"""
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var labels = cut.FindAll(".payload-detail-meta td.pb-meta-label")
+            .Select(td => td.TextContent.Trim())
+            .ToList();
+        labels.Should().NotContain("Content type");
+        labels.Should().NotContain("Payload format");
+        labels.Should().NotContain("Expiry");
+        labels.Should().NotContain("Response topic");
+        labels.Should().NotContain("Correlation data");
+        labels.Should().NotContain("User properties");
     }
 }

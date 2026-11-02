@@ -151,6 +151,77 @@ public class SparkplugNodesChartCollectionTests : BunitTestContext
     }
 
     [Test]
+    public async Task NodeMetricQuickAdd_CreateNewChart_PreservesExistingHistoryAndCollectsNewSeries()
+    {
+        var existing = ExistingNodeChart("metrics.Existing");
+        await _chartSettings.AddChartAsync(_connectionId, existing);
+
+        await FireNamed("spBv1.0/factory/NDATA/edge-01", "Existing", 11.5);
+
+        var cut = RenderTopology(out var dialogProvider);
+
+        var click = MetricRow(cut, "Flow Rate (L/min)").QuerySelector(ChartButtonSelector)!.ClickAsync(new());
+        dialogProvider.WaitForAssertion(() => dialogProvider.Markup.Should().Contain("Add field to chart"));
+        dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Create New Chart")).Click();
+        dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Create Chart")).Click();
+        dialogProvider.WaitForAssertion(() => _chartSettings.GetCharts(_connectionId).Should().HaveCount(2));
+        await click;
+
+        var charts = _chartSettings.GetCharts(_connectionId);
+        charts.Should().ContainSingle(c => c.Id == existing.Id);
+        var newSeries = charts.Single(c => c.Id != existing.Id).Series.Should().ContainSingle().Subject;
+        newSeries.Topic.Should().Be("spBv1.0/factory/NDATA/edge-01");
+        newSeries.JsonPath.Should().Be("metrics.Flow Rate (L/min)");
+
+        _chartData.GetPoints(existing.Series[0].Id).Should().ContainSingle("creating another chart must not drop existing history")
+            .Which.Value.Should().BeApproximately(11.5, 0.001);
+
+        await FireAliasOnly("spBv1.0/factory/NDATA/edge-01",
+            new Payload.Types.Metric { Alias = 42, DoubleValue = 26.5 });
+
+        _chartData.GetPoints(newSeries.Id).Should().ContainSingle()
+            .Which.Value.Should().BeApproximately(26.5, 0.001);
+        _chartData.GetPoints(existing.Series[0].Id).Should().ContainSingle()
+            .Which.Value.Should().BeApproximately(11.5, 0.001);
+    }
+
+    [Test]
+    public async Task NodeMetricQuickAdd_ToExistingChart_PreservesHistoryAndCollectsNewSeries()
+    {
+        var existing = ExistingNodeChart("metrics.Existing");
+        await _chartSettings.AddChartAsync(_connectionId, existing);
+
+        await FireNamed("spBv1.0/factory/NDATA/edge-01", "Existing", 11.5);
+
+        var cut = RenderTopology(out var dialogProvider);
+
+        var click = MetricRow(cut, "Flow Rate (L/min)").QuerySelector(ChartButtonSelector)!.ClickAsync(new());
+        dialogProvider.WaitForAssertion(() => dialogProvider.Markup.Should().Contain("Add field to chart"));
+        dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Add Series")).Click();
+        dialogProvider.WaitForAssertion(() => _chartSettings.GetCharts(_connectionId).Single().Series.Should().HaveCount(2));
+        await click;
+
+        var stored = _chartSettings.GetCharts(_connectionId).Should().ContainSingle().Subject;
+        stored.Id.Should().Be(existing.Id);
+        stored.Series[0].Id.Should().Be(existing.Series[0].Id);
+        stored.Series[0].JsonPath.Should().Be("metrics.Existing");
+        var newSeries = stored.Series[1];
+        newSeries.Topic.Should().Be("spBv1.0/factory/NDATA/edge-01");
+        newSeries.JsonPath.Should().Be("metrics.Flow Rate (L/min)");
+
+        _chartData.GetPoints(existing.Series[0].Id).Should().ContainSingle("adding a series must not drop existing history")
+            .Which.Value.Should().BeApproximately(11.5, 0.001);
+
+        await FireAliasOnly("spBv1.0/factory/NDATA/edge-01",
+            new Payload.Types.Metric { Alias = 42, DoubleValue = 26.5 });
+
+        _chartData.GetPoints(newSeries.Id).Should().ContainSingle()
+            .Which.Value.Should().BeApproximately(26.5, 0.001);
+        _chartData.GetPoints(existing.Series[0].Id).Should().ContainSingle()
+            .Which.Value.Should().BeApproximately(11.5, 0.001);
+    }
+
+    [Test]
     public async Task CancelledQuickAdd_LeavesStoredChartsUnchangedAndCollectsNothing()
     {
         var existing = new ChartConfiguration
@@ -203,7 +274,12 @@ public class SparkplugNodesChartCollectionTests : BunitTestContext
         cut.FindAll("tr.spb-metric-row").Single(row =>
             row.QuerySelector(".spb-td-name")?.TextContent.Trim() == metricName);
 
-    private async Task FireAliasOnly(string topic, Payload.Types.Metric metric)
+    private Task FireAliasOnly(string topic, Payload.Types.Metric metric) => Fire(topic, metric);
+
+    private Task FireNamed(string topic, string name, double value) =>
+        Fire(topic, new Payload.Types.Metric { Name = name, Datatype = 10, DoubleValue = value });
+
+    private async Task Fire(string topic, Payload.Types.Metric metric)
     {
         var payload = new Payload { Timestamp = 2 };
         payload.Metrics.Add(metric);
@@ -212,6 +288,20 @@ public class SparkplugNodesChartCollectionTests : BunitTestContext
         var packet = new MQTTnet.Packets.MqttPublishPacket { Topic = topic };
         await _handler!(new MqttApplicationMessageReceivedEventArgs("test-client", message, packet, null));
     }
+
+    private static ChartConfiguration ExistingNodeChart(string jsonPath) => new()
+    {
+        Name = "Existing Node Chart",
+        Series =
+        [
+            new ChartSeries
+            {
+                DisplayName = "Existing",
+                Topic = "spBv1.0/factory/NDATA/edge-01",
+                JsonPath = jsonPath
+            }
+        ]
+    };
 
     private static PayloadPipeline BuildPipeline()
     {

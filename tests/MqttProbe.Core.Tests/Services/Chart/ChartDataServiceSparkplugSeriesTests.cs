@@ -366,6 +366,83 @@ public class ChartDataServiceSparkplugSeriesTests
         _service.GetPoints(aliasSeriesId).Select(point => point.Value).Should().Equal(0.0, 1.0);
     }
 
+    [Test]
+    public async Task SettingsChange_WhenOnlyPresentationChanges_PreservesAliasResolvedSeriesPoints()
+    {
+        var topology = new SparkplugTopologyService();
+        await topology.ApplyTopologyEventsAsync(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/eon1",
+                GroupId = "g",
+                NodeId = "eon1",
+                Metrics = [new MetricSnapshot { Name = "Flow Rate", DataType = "double", Value = "0", Alias = 42 }]
+            }
+        ]);
+
+        var connectionId = Guid.NewGuid();
+        var series = new ChartSeries
+        {
+            Id = Guid.NewGuid(),
+            Topic = "spBv1.0/g/NDATA/eon1",
+            JsonPath = "metrics.Flow Rate"
+        };
+        var config = new ChartConfiguration { MaxPoints = 100, Series = [series] };
+        var settings = Substitute.For<IChartSettings>();
+        settings.GetCharts(Arg.Any<Guid>()).Returns([config]);
+
+        await BuildServiceAsync(settings, SparkplugWith(enrichAliasNames: true), topology);
+        _service!.SetConnection(connectionId);
+        await FireAsync("spBv1.0/g/NDATA/eon1", PayloadWith((null, 42, 24.5)));
+
+        series.DisplayName = "Renamed";
+        series.Color = "#000000";
+        config.Type = ChartType.Area;
+
+        settings.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
+
+        _service.GetPoints(series.Id).Should().ContainSingle()
+            .Which.Value.Should().BeApproximately(24.5, 0.001);
+    }
+
+    [Test]
+    public async Task SettingsChange_WhenSparkplugJsonPathChanges_ResetsOnlyThatSeries()
+    {
+        var connectionId = Guid.NewGuid();
+        var changedSeries = new ChartSeries
+        {
+            Id = Guid.NewGuid(),
+            Topic = "spBv1.0/g/NDATA/eon1",
+            JsonPath = "metrics.Flow Rate"
+        };
+        var untouchedSeries = new ChartSeries
+        {
+            Id = Guid.NewGuid(),
+            Topic = "spBv1.0/g/NDATA/eon1",
+            JsonPath = "metrics.Pressure"
+        };
+        var config = new ChartConfiguration { MaxPoints = 100, Series = [changedSeries, untouchedSeries] };
+        var settings = Substitute.For<IChartSettings>();
+        settings.GetCharts(Arg.Any<Guid>()).Returns([config]);
+
+        await BuildServiceAsync(settings, SparkplugWith(enrichAliasNames: true));
+        _service!.SetConnection(connectionId);
+        await FireAsync("spBv1.0/g/NDATA/eon1", PayloadWith(("Flow Rate", 0, 12.5), ("Pressure", 0, 7.25)));
+
+        _service.GetPoints(changedSeries.Id).Should().ContainSingle();
+        _service.GetPoints(untouchedSeries.Id).Should().ContainSingle();
+
+        changedSeries.JsonPath = "metrics.Other";
+
+        settings.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
+
+        _service.GetPoints(changedSeries.Id).Should().BeEmpty();
+        _service.GetPoints(untouchedSeries.Id).Should().ContainSingle()
+            .Which.Value.Should().BeApproximately(7.25, 0.001);
+    }
+
     private async Task BuildServiceAsync(
         IChartSettings chartSettings,
         ISparkplugSettings sparkplugSettings,

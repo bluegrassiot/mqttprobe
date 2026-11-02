@@ -222,7 +222,7 @@ public class ChartDataServiceTests
     }
 
     [Test]
-    public async Task OnChartsChanged_ClearsBuffersAndFiresOnDataUpdatedForMatchingConnectionId()
+    public async Task OnChartsChanged_UnchangedSeries_PreservesPointsAndFiresOnDataUpdated()
     {
         var connectionId = Guid.NewGuid();
         var seriesId = Guid.NewGuid();
@@ -239,22 +239,160 @@ public class ChartDataServiceTests
 
         await _handler!(MakeArgs("test/topic", """{"value": 42}"""));
 
-        _service.GetPoints(seriesId).Should().NotBeEmpty();
+        _service.GetPoints(seriesId).Should().ContainSingle();
 
         var onUpdated = false;
         _service.OnDataUpdated += () => onUpdated = true;
 
         _mockChartSettings.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
 
-        _service.GetPoints(seriesId).Should().BeEmpty();
+        _service.GetPoints(seriesId).Should().ContainSingle().Which.Value.Should().Be(42);
         onUpdated.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task OnChartsChanged_WhenSeriesRemoved_DropsOnlyRemovedSeriesPoints()
+    {
+        var connectionId = Guid.NewGuid();
+        var keptSeries = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/kept", JsonPath = "value" };
+        var removedSeries = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/removed", JsonPath = "value" };
+        _mockChartSettings.GetCharts(connectionId).Returns([ConfigWith(keptSeries, removedSeries)]);
+
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/kept", """{"value": 1}"""));
+        await _handler!(MakeArgs("test/removed", """{"value": 2}"""));
+
+        _mockChartSettings.GetCharts(connectionId).Returns([ConfigWith(keptSeries)]);
+
+        _mockChartSettings.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
+
+        _service.GetPoints(keptSeries.Id).Should().ContainSingle().Which.Value.Should().Be(1);
+        _service.GetPoints(removedSeries.Id).Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task OnChartsChanged_WhenSeriesJsonPathChangesInPlace_ResetsOnlyChangedSeries()
+    {
+        var connectionId = Guid.NewGuid();
+        var changedSeries = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/topic", JsonPath = "value" };
+        var untouchedSeries = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/topic", JsonPath = "other" };
+        _mockChartSettings.GetCharts(connectionId).Returns([ConfigWith(changedSeries, untouchedSeries)]);
+
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/topic", """{"value": 1, "other": 2}"""));
+
+        changedSeries.JsonPath = "other";
+
+        _mockChartSettings.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
+
+        _service.GetPoints(changedSeries.Id).Should().BeEmpty();
+        _service.GetPoints(untouchedSeries.Id).Should().ContainSingle().Which.Value.Should().Be(2);
+    }
+
+    [Test]
+    public async Task OnChartsChanged_WhenSeriesTopicChangesInPlace_ResetsOnlyChangedSeries()
+    {
+        var connectionId = Guid.NewGuid();
+        var changedSeries = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/topic", JsonPath = "value" };
+        var untouchedSeries = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/other", JsonPath = "value" };
+        _mockChartSettings.GetCharts(connectionId).Returns([ConfigWith(changedSeries, untouchedSeries)]);
+
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/topic", """{"value": 1}"""));
+        await _handler!(MakeArgs("test/other", """{"value": 2}"""));
+
+        changedSeries.Topic = "test/moved";
+
+        _mockChartSettings.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
+
+        _service.GetPoints(changedSeries.Id).Should().BeEmpty();
+        _service.GetPoints(untouchedSeries.Id).Should().ContainSingle().Which.Value.Should().Be(2);
+    }
+
+    [Test]
+    public async Task OnChartsChanged_WhenSeriesAdded_PreservesExistingPointsAndStartsNewSeriesEmpty()
+    {
+        var connectionId = Guid.NewGuid();
+        var existingSeries = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/topic", JsonPath = "value" };
+        var addedSeries = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/added", JsonPath = "value" };
+        _mockChartSettings.GetCharts(connectionId).Returns([ConfigWith(existingSeries)]);
+
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/topic", """{"value": 1}"""));
+
+        _mockChartSettings.GetCharts(connectionId)
+            .Returns([ConfigWith(existingSeries), ConfigWith(addedSeries)]);
+
+        _mockChartSettings.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
+
+        _service.GetPoints(existingSeries.Id).Should().ContainSingle().Which.Value.Should().Be(1);
+        _service.GetPoints(addedSeries.Id).Should().BeEmpty();
+
+        await _handler!(MakeArgs("test/added", """{"value": 2}"""));
+
+        _service.GetPoints(existingSeries.Id).Should().ContainSingle().Which.Value.Should().Be(1);
+        _service.GetPoints(addedSeries.Id).Should().ContainSingle().Which.Value.Should().Be(2);
+    }
+
+    [Test]
+    public async Task OnChartsChanged_WhenOnlyPresentationChanges_PreservesPoints()
+    {
+        var connectionId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        var chart = new ChartConfiguration
+        {
+            Name = "Before",
+            Type = ChartType.Line,
+            MaxPoints = 100,
+            TimeWindowMinutes = 5,
+            Series = [new ChartSeries { Id = seriesId, Topic = "test/topic", JsonPath = "value" }]
+        };
+        _mockChartSettings.GetCharts(connectionId).Returns([chart]);
+
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/topic", """{"value": 42}"""));
+
+        chart.Name = "After";
+        chart.Type = ChartType.Area;
+        chart.MaxPoints = 250;
+        chart.TimeWindowMinutes = 30;
+        chart.Series[0].DisplayName = "Renamed";
+        chart.Series[0].Color = "#000000";
+
+        _mockChartSettings.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
+
+        _service.GetPoints(seriesId).Should().ContainSingle().Which.Value.Should().Be(42);
+    }
+
+    [Test]
+    public async Task OnChartsChanged_WhenSeriesMovesToAnotherChart_PreservesPoints()
+    {
+        var connectionId = Guid.NewGuid();
+        var series = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/topic", JsonPath = "value" };
+        var firstChart = ConfigWith(series);
+        _mockChartSettings.GetCharts(connectionId).Returns([firstChart]);
+
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/topic", """{"value": 42}"""));
+
+        firstChart.Series.Clear();
+        _mockChartSettings.GetCharts(connectionId).Returns([firstChart, ConfigWith(series)]);
+
+        _mockChartSettings.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
+
+        _service.GetPoints(series.Id).Should().ContainSingle().Which.Value.Should().Be(42);
     }
 
     [Test]
     public async Task ClearBuffers_WithPopulatedBuffers_ClearsAllSeriesData()
     {
         var connId = Guid.NewGuid();
-        _service.SetConnection(connId);
 
         var seriesId = Guid.NewGuid();
         var config = new ChartConfiguration
@@ -263,6 +401,7 @@ public class ChartDataServiceTests
             Series = [new ChartSeries { Id = seriesId, Topic = "data/temp", JsonPath = "value" }]
         };
         _mockChartSettings.GetCharts(connId).Returns([config]);
+        _service.SetConnection(connId);
 
         await _service.StartAsync();
 
@@ -323,6 +462,9 @@ public class ChartDataServiceTests
 
         _mockChartSettings.Received(1).GetCharts(connId);
     }
+
+    private static ChartConfiguration ConfigWith(params ChartSeries[] series) =>
+        new() { MaxPoints = 100, Series = [.. series] };
 
     private static MqttApplicationMessageReceivedEventArgs MakeArgs(string topic, string payload)
     {

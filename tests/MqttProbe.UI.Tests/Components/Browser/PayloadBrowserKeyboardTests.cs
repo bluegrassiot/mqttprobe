@@ -416,16 +416,23 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     }
 
     [Test]
-    public void Escape_InMessageDetail_ReturnsToTheMessageList()
+    public async Task Escape_InMessageDetail_ReturnsToTheMessageList()
     {
         var cut = RenderList();
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("Enter");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle()
+            .Which.Should().Contain("first"));
 
-        cut.Find(".payload-detail-toolbar").KeyDown("Escape");
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
+        var toolbar = cut.WaitForElement(".payload-detail-toolbar");
+        await toolbar.KeyDownAsync(new KeyboardEventArgs { Key = "Escape" });
 
-        cut.FindAll(".payload-message-list").Should().ContainSingle();
-        cut.Markup.Should().NotContain("Message Details");
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".payload-message-list").Should().ContainSingle();
+            cut.Markup.Should().NotContain("Message Details");
+        });
     }
 
     [Test]

@@ -9,65 +9,15 @@ public class MessageListKeyboardInteropTests
     private const string ModuleUrl = "./_content/MqttProbe.UI/js/message-list-keyboard.js";
 
     [Test]
-    public async Task Attach_ImportsTheModuleAndTakesAnAttachment()
-    {
-        var runtime = new FakeJSRuntime();
-        var interop = new MessageListKeyboardInterop(runtime);
-
-        await interop.AttachAsync(default);
-
-        runtime.ImportedPaths.Should().Equal(ModuleUrl);
-        runtime.Module.Identifiers.Should().Equal("attach");
-        await interop.DetachAsync();
-        runtime.Module.Identifiers.Should().Equal("attach", "detach");
-    }
-
-    [Test]
-    public async Task Attach_Twice_KeepsTheFirstAttachment()
-    {
-        var runtime = new FakeJSRuntime();
-        var interop = new MessageListKeyboardInterop(runtime);
-
-        await interop.AttachAsync(default);
-        await interop.AttachAsync(default);
-
-        runtime.Module.Identifiers.Should().Equal("attach");
-    }
-
-    [Test]
-    public async Task Detach_WithoutAnAttachment_DoesNothing()
-    {
-        var runtime = new FakeJSRuntime();
-        var interop = new MessageListKeyboardInterop(runtime);
-
-        await interop.DetachAsync();
-
-        runtime.Module.Identifiers.Should().BeEmpty();
-    }
-
-    [Test]
-    public async Task Detach_Twice_ReleasesTheAttachmentOnce()
-    {
-        var runtime = new FakeJSRuntime();
-        var interop = new MessageListKeyboardInterop(runtime);
-        await interop.AttachAsync(default);
-
-        await interop.DetachAsync();
-        await interop.DetachAsync();
-
-        runtime.Module.Identifiers.Should().Equal("attach", "detach");
-        runtime.Module.Arguments[1].Should().Equal(1);
-    }
-
-    [Test]
     public async Task Reveal_PassesTheListAndIndex()
     {
-        var runtime = new FakeJSRuntime();
+        var runtime = new FakeKeyboardJSRuntime();
         var interop = new MessageListKeyboardInterop(runtime);
         var list = new ElementReference("message-list");
 
         await interop.RevealAsync(list, 7);
 
+        runtime.ImportedPaths.Should().Equal(ModuleUrl);
         runtime.Module.Identifiers.Should().Equal("reveal");
         runtime.Module.Arguments[0].Should().Equal(list, 7);
     }
@@ -75,96 +25,52 @@ public class MessageListKeyboardInteropTests
     [Test]
     public async Task Reveal_ForNoRow_DoesNothing()
     {
-        var runtime = new FakeJSRuntime();
+        var runtime = new FakeKeyboardJSRuntime();
         var interop = new MessageListKeyboardInterop(runtime);
 
         await interop.RevealAsync(default, -1);
 
+        runtime.ImportedPaths.Should().BeEmpty();
         runtime.Module.Identifiers.Should().BeEmpty();
     }
 
     [Test]
-    public async Task Attach_WhenTheRuntimeCannotImport_IsANoOp()
+    public async Task Reveal_ImportsTheModuleWithoutAttaching()
     {
-        var runtime = new FakeJSRuntime { ModuleUnavailable = true };
+        var runtime = new FakeKeyboardJSRuntime();
         var interop = new MessageListKeyboardInterop(runtime);
 
-        await interop.AttachAsync(default);
-        await interop.DetachAsync();
-
-        runtime.ImportedPaths.Should().Equal(ModuleUrl);
-        runtime.Module.Identifiers.Should().BeEmpty();
-    }
-
-    [Test]
-    public async Task Dispose_ReleasesTheListenerAndTheModuleOnce()
-    {
-        var runtime = new FakeJSRuntime();
-        var interop = new MessageListKeyboardInterop(runtime);
-        await interop.AttachAsync(default);
-
+        await interop.RevealAsync(default, 0);
         await interop.DisposeAsync();
-        await interop.DisposeAsync();
-        await interop.AttachAsync(default);
 
-        runtime.Module.Identifiers.Should().Equal("attach", "detach");
+        runtime.Module.Identifiers.Should().Equal("reveal");
         runtime.Module.DisposeCount.Should().Be(1);
     }
 
-    private sealed class FakeJSRuntime : IJSRuntime
+    [Test]
+    public async Task Reveal_AfterDispose_DoesNothing()
     {
-        internal FakeModule Module { get; } = new();
+        var runtime = new FakeKeyboardJSRuntime();
+        var interop = new MessageListKeyboardInterop(runtime);
+        await interop.RevealAsync(default, 0);
+        await interop.DisposeAsync();
 
-        internal List<string?> ImportedPaths { get; } = [];
+        await interop.RevealAsync(default, 0);
 
-        internal bool ModuleUnavailable { get; init; }
-
-        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args) =>
-            InvokeAsync<TValue>(identifier, CancellationToken.None, args);
-
-        public ValueTask<TValue> InvokeAsync<TValue>(
-            string identifier, CancellationToken cancellationToken, object?[]? args)
-        {
-            if (identifier != "import")
-                return default;
-
-            ImportedPaths.Add(args is { Length: > 0 } ? args[0] as string : null);
-            if (ModuleUnavailable)
-                return new ValueTask<TValue>(Task.FromResult(default(TValue)!));
-
-            return new ValueTask<TValue>(Task.FromResult((TValue)(object)Module));
-        }
+        runtime.Module.Identifiers.Should().Equal("reveal");
+        runtime.Module.DisposeCount.Should().Be(1);
     }
 
-    private sealed class FakeModule : IJSObjectReference
+    [Test]
+    public async Task Reveal_WhenImportDisconnects_Propagates()
     {
-        private int _nextAttachment = 1;
+        var runtime = new FakeKeyboardJSRuntime { DisconnectedOnImport = true };
+        var interop = new MessageListKeyboardInterop(runtime);
 
-        internal List<string> Identifiers { get; } = [];
+        Func<Task> reveal = () => interop.RevealAsync(default, 0);
 
-        internal List<object?[]> Arguments { get; } = [];
-
-        internal int DisposeCount { get; private set; }
-
-        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)
-        {
-            Identifiers.Add(identifier);
-            Arguments.Add(args ?? []);
-
-            if (identifier == "attach")
-                return new ValueTask<TValue>(Task.FromResult((TValue)(object)(int?)_nextAttachment++));
-
-            return default;
-        }
-
-        public ValueTask<TValue> InvokeAsync<TValue>(
-            string identifier, CancellationToken cancellationToken, object?[]? args) =>
-            InvokeAsync<TValue>(identifier, args);
-
-        public ValueTask DisposeAsync()
-        {
-            DisposeCount++;
-            return default;
-        }
+        await reveal.Should().ThrowAsync<JSDisconnectedException>();
+        runtime.ImportedPaths.Should().Equal(ModuleUrl);
+        runtime.Module.Identifiers.Should().BeEmpty();
     }
 }

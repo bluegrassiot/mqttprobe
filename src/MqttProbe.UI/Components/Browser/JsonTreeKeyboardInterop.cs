@@ -3,66 +3,15 @@ using Microsoft.JSInterop;
 
 namespace MqttProbe.UI.Components.Browser;
 
-// Owns the JSON tree's keyboard module; releases are attachment-scoped, so a stale detach cannot remove a newer tree's listener.
 internal sealed class JsonTreeKeyboardInterop(IJSRuntime js) : IAsyncDisposable
 {
     private const string ModulePath = "./_content/MqttProbe.UI/js/json-tree-keyboard.js";
 
-    private IJSObjectReference? _module;
-    private int? _attachment;
-    private bool _disposed;
+    private readonly KeyboardInteropLifecycle _lifecycle = new(js, ModulePath);
 
-    internal async Task AttachAsync(ElementReference root)
-    {
-        if (_disposed || _attachment is not null)
-            return;
+    internal Task AttachAsync(ElementReference root) => _lifecycle.AttachAsync(root);
 
-        var module = await ModuleAsync();
-        if (module is null || _disposed)
-            return;
+    internal Task DetachAsync() => _lifecycle.DetachAsync();
 
-        _attachment = await module.InvokeAsync<int?>("attach", root);
-    }
-
-    internal async Task DetachAsync()
-    {
-        if (_module is null || _attachment is not { } attachment)
-            return;
-
-        _attachment = null;
-        await _module.InvokeVoidAsync("detach", attachment);
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (_disposed)
-            return;
-
-        _disposed = true;
-        var module = _module;
-        var attachment = _attachment;
-        _module = null;
-        _attachment = null;
-        if (module is null)
-            return;
-
-        try
-        {
-            // The module outlives the component, so the module-level attachment has to be released by hand.
-            if (attachment is { } token)
-                await module.InvokeVoidAsync("detach", token);
-
-            await module.DisposeAsync();
-        }
-        catch (JSDisconnectedException)
-        {
-            // The circuit is gone; the browser drops the listeners with the page.
-        }
-    }
-
-    private async Task<IJSObjectReference?> ModuleAsync()
-    {
-        _module ??= await js.InvokeAsync<IJSObjectReference?>("import", ModulePath);
-        return _module;
-    }
+    public ValueTask DisposeAsync() => _lifecycle.DisposeAsync();
 }

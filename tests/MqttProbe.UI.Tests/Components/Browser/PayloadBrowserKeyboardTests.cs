@@ -436,8 +436,11 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
         FocusedList(cut).KeyDown("ArrowDown");
         FocusedList(cut).KeyDown("Enter");
 
-        JSInterop.VerifyFocusAsyncInvoke(1, "opening a message moves focus once");
-        LastFocusTarget().ShouldBeElementReferenceTo(cut.Find(".payload-detail-toolbar"));
+        cut.WaitForAssertion(() =>
+        {
+            JSInterop.VerifyFocusAsyncInvoke(1, "opening a message moves focus once");
+            LastFocusTarget().ShouldBeElementReferenceTo(cut.Find(".payload-detail-toolbar"));
+        });
     }
 
     [Test]
@@ -446,11 +449,16 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
         var cut = RenderList();
         FocusedList(cut).KeyDown("ArrowDown");
         FocusedList(cut).KeyDown("Enter");
+        cut.WaitForAssertion(() =>
+            JSInterop.VerifyFocusAsyncInvoke(1, "opening a message moves focus once"));
 
         cut.Find("button[title='Back to message list']").Click();
 
-        JSInterop.VerifyFocusAsyncInvoke(2, "returning to the list moves focus back");
-        LastFocusTarget().ShouldBeElementReferenceTo(cut.Find(".payload-message-list"));
+        cut.WaitForAssertion(() =>
+        {
+            JSInterop.VerifyFocusAsyncInvoke(2, "returning to the list moves focus back");
+            LastFocusTarget().ShouldBeElementReferenceTo(cut.Find(".payload-message-list"));
+        });
     }
 
     [Test]

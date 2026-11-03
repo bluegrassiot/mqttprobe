@@ -45,15 +45,18 @@
             }
         </MudToolBar>
         <div class="topic-select-strip">
-            <span class="topic-select-all-wrap" title="@GlobalSelectTitle">
-                <MudCheckBox T="bool?" Value="@GlobalCheckboxValue" ValueChanged="OnGlobalCheckboxChanged"
-                             TriState="true" Dense="true" Color="Color.Primary"
-                             Class="topic-select-all"
-                             UserAttributes="@GlobalCheckboxAttributes"
-                             Disabled="@(_rootTopicCount == 0)">
-                    <span class="topic-select-all__label">Select all</span>
-                </MudCheckBox>
-            </span>
+            @if (_multiSelect)
+            {
+                <span class="topic-select-all-wrap" title="@GlobalSelectTitle">
+                    <MudCheckBox T="bool?" Value="@GlobalCheckboxValue" ValueChanged="OnGlobalCheckboxChanged"
+                                 TriState="true" Dense="true" Color="Color.Primary"
+                                 Class="topic-select-all"
+                                 UserAttributes="@GlobalCheckboxAttributes"
+                                 Disabled="@(_rootTopicCount == 0)">
+                        <span class="topic-select-all__label">Select all</span>
+                    </MudCheckBox>
+                </span>
+            }
             <span class="topic-stat-legend">T = topics · M = messages</span>
         </div>
     </div>
@@ -130,15 +133,17 @@
         }
         @if (_visibleRows.Count > 0)
         {
-            <div class="topic-tree" role="tree" aria-label="Topics" aria-multiselectable="true"
+            <div class="topic-tree" role="tree" aria-label="Topics"
+                 aria-multiselectable="@(_multiSelect ? "true" : "false")"
                  id="@_treeId" @ref="_treeElement">
                 <Virtualize Items="@_visibleRows" Context="row" ItemSize="@RowHeight">
                     <TopicTreeRow @key="row.RowKey" Row="row"
-                                  SelectionState="@SelectionStateOf(row.Branch)"
+                                  ShowCheckbox="_multiSelect"
+                                  SelectionState="@RowSelectionState(row)"
                                   InheritedSelectionLabel="@InheritedSelectionLabel(row)"
                                   IsTabStop="@IsActiveRow(row)"
                                   OnExpandToggled="ToggleExpand"
-                                  OnSelectionToggled="ToggleRowSelection"
+                                  OnSelectionToggled="OnRowActivated"
                                   OnKeyPressed="args => OnRowKeyPressed(row, args)"
                                   OnFocused="OnRowFocused"/>
                 </Virtualize>
@@ -167,6 +172,7 @@
     private Timer? _updateTimer;
     private bool _disposed;
     private bool _groupSparkplugTopics;
+    private bool _multiSelect;
     private bool _iconKeyOpen;
 
     // A responsive layout can mount two browsers at once, so the panel id must belong to this
@@ -174,6 +180,7 @@
     private readonly string _iconKeyId = $"topic-icon-key-{Guid.NewGuid():N}";
     private TopicSelectionSession? _selectionSession;
     private TopicBulkSelection _bulkSelection = null!;
+    private SelectedTopicState? _singleSelection;
     private int _rootTopicCount;
     private List<TopicTreeRowModel> _visibleRows = [];
     private readonly HashSet<string> _expandedPaths = [];
@@ -216,6 +223,7 @@
     protected override void OnInitialized()
     {
         _groupSparkplugTopics = UiSettings.Ui.GroupSparkplugTopicsByNodeAndDevice;
+        _multiSelect = UiSettings.Ui.TopicTreeMultiSelect;
         _selectionSession = new TopicSelectionSession(TopicSelectionStore);
         _bulkSelection = BulkSelectionHost ?? new TopicBulkSelection(TopicSelectionStore);
         _bulkSelection.Changed += OnBulkSelectionChanged;
@@ -230,32 +238,6 @@
         }, null, 0, 1_000);
     }
 
-    // Only the grouping flag alters the tree, and it applies at once rather than on the next tick.
-    private void OnUiPreferencesChanged() => _ = ApplyGroupingPreferenceAsync();
-
-    private async Task ApplyGroupingPreferenceAsync()
-    {
-        try
-        {
-            await InvokeAsync(() =>
-            {
-                if (_disposed) return;
-
-                var grouped = UiSettings.Ui.GroupSparkplugTopicsByNodeAndDevice;
-                if (grouped == _groupSparkplugTopics) return;
-
-                _groupSparkplugTopics = grouped;
-                if (!grouped)
-                    _expandedPaths.RemoveWhere(TopicTreeProjection.IsVirtualExpansionId);
-
-                BuildVisibleRows();
-                StateHasChanged();
-            });
-        }
-        catch (ObjectDisposedException) when (_disposed) { /* component torn down before the preference was applied */ }
-        catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser preference refresh failed"); }
-    }
-
     private void BuildVisibleRows(bool force = true)
     {
         ApplyFrame(RefreshFrame(force));
@@ -265,7 +247,7 @@
     {
         ReconcileBulkSelection();
         return _selectionSession!.Refresh(_searchFilter, _expandedPaths, _groupSparkplugTopics, force,
-            selectionMode: true);
+            selectionMode: _multiSelect);
     }
 
     private void ReconcileBulkSelection()

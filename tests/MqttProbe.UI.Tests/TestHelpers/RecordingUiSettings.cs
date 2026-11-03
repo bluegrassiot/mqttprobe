@@ -48,6 +48,13 @@ public sealed class RecordingUiSettings : IUiSettings
         return Task.CompletedTask;
     }
 
+    public Task SetTopicTreeMultiSelectAsync(bool value)
+    {
+        Ui.TopicTreeMultiSelect = value;
+        UiPreferencesChanged?.Invoke();
+        return Task.CompletedTask;
+    }
+
     public Task DismissHintAsync(string hintId)
     {
         if (!Ui.DismissedHints.Contains(hintId))

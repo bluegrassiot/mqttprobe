@@ -5,6 +5,7 @@ using MqttProbe.UI.Components.Layout;
 using MqttProbe.UI.Components.Settings;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
+using MudBlazor.Extensions;
 
 namespace MqttProbe.UI.Tests.Components.Settings;
 
@@ -51,6 +52,35 @@ public class AppearanceSectionTests : BunitTestContext
         cut.InvokeAsync(() => fontSelect.Instance.ValueChanged.InvokeAsync(FontProfiles.Accessible));
 
         _themes.FontProfile.Should().Be(FontProfiles.Accessible);
+    }
+
+    [Test]
+    public async Task MultiSelect_Toggle_CallsSetter()
+    {
+        _mockStore.SetTopicTreeMultiSelectAsync(Arg.Any<bool>()).Returns(Task.CompletedTask);
+        var cut = Render<AppearanceSection>();
+
+        var toggle = cut.FindComponents<MudSwitch<bool>>()
+            .First(s => s.Instance.Label == "Enable multi-select in the topic tree");
+        await cut.InvokeAsync(() => toggle.Instance.ValueChanged.InvokeAsync(false));
+
+        await _mockStore.Received(1).SetTopicTreeMultiSelectAsync(false);
+    }
+
+    [Test]
+    public void MultiSelect_Toggle_ReflectsSavedPreference()
+    {
+        _mockStore.Ui.TopicTreeMultiSelect = false;
+        var rendered = Render<AppearanceSection>();
+        rendered.FindComponents<MudSwitch<bool>>()
+            .First(s => s.Instance.Label == "Enable multi-select in the topic tree")
+            .Instance.GetState(x => x.Value).Should().BeFalse();
+
+        _mockStore.Ui.TopicTreeMultiSelect = true;
+        var restored = Render<AppearanceSection>();
+        restored.FindComponents<MudSwitch<bool>>()
+            .First(s => s.Instance.Label == "Enable multi-select in the topic tree")
+            .Instance.GetState(x => x.Value).Should().BeTrue();
     }
 
     [Test]

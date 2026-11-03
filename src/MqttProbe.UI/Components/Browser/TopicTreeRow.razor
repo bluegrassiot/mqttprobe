@@ -30,17 +30,20 @@
     {
         <div class="topic-tree-chevron-spacer" aria-hidden="true"></div>
     }
-    <span class="topic-select-checkbox-wrap @(IsInherited ? "topic-select-checkbox-wrap--inherited" : null)"
-          title="@InheritedReason"
-          @onclick="OnCheckboxClicked" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-        <MudCheckBox T="bool?" Value="@CheckboxValue"
-                     TriState="true" Dense="true" StopClickPropagation="true"
-                     Color="Color.Primary" Class="topic-select-checkbox"
-                     UserAttributes="@CheckboxInputAttributes"
-                     Disabled="@IsInherited">
-            <span class="topic-select-checkbox__name">@CheckboxLabel</span>
-        </MudCheckBox>
-    </span>
+    @if (ShowCheckbox)
+    {
+        <span class="topic-select-checkbox-wrap @(IsInherited ? "topic-select-checkbox-wrap--inherited" : null)"
+              title="@InheritedReason"
+              @onclick="OnCheckboxClicked" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+            <MudCheckBox T="bool?" Value="@CheckboxValue"
+                         TriState="true" Dense="true" StopClickPropagation="true"
+                         Color="Color.Primary" Class="topic-select-checkbox"
+                         UserAttributes="@CheckboxInputAttributes"
+                         Disabled="@IsInherited">
+                <span class="topic-select-checkbox__name">@CheckboxLabel</span>
+            </MudCheckBox>
+        </span>
+    }
     <MudIcon Icon="@TopicTreeIconLanguage.NodeGlyph(Row)" Size="Size.Small" Class="@TopicTreeIconLanguage.IconClass(Row)"/>
     <span class="flex-grow-1 topic-name-cell" title="@(Row.IsEmptyLevel ? Row.EmptyLevelTitle : Row.DisplayName)">
         @if (Row.IsEmptyLevel)
@@ -63,6 +66,7 @@
 
 @code {
     [Parameter] public TopicTreeRowModel Row { get; set; } = null!;
+    [Parameter] public bool ShowCheckbox { get; set; } = true;
     [Parameter] public TopicTreeSelectionState SelectionState { get; set; }
     [Parameter] public bool IsTabStop { get; set; }
     [Parameter] public string? InheritedSelectionLabel { get; set; }

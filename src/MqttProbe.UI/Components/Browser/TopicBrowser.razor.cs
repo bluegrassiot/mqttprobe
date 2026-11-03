@@ -119,16 +119,21 @@ public partial class TopicBrowser
             && !frame.Rows.Any(row => string.Equals(row.RowKey, previousActive, StringComparison.Ordinal));
         _visibleRows = frame.Rows.ToList();
         _rootTopicCount = frame.RootCount;
-        var branches = frame.Selection.Branches.IsDefault
-            ? ImmutableArray<TopicBranchTarget>.Empty
-            : frame.Selection.Branches;
+        _singleSelection = frame.Selection;
 
-        // The store's selection is the checked set, so an external clear empties the tree too.
-        _bulkSelection.Adopt(branches);
+        if (_multiSelect)
+        {
+            var branches = frame.Selection.Branches.IsDefault
+                ? ImmutableArray<TopicBranchTarget>.Empty
+                : frame.Selection.Branches;
 
-        _rootBranches = TopicTreeProjection.RootTargets(frame.Roots, _groupSparkplugTopics);
-        _globalState = GlobalSelectionState();
-        _bulkSelection.CoversWholeTree = _globalState == TopicTreeSelectionState.Checked;
+            // The store's selection is the checked set, so an external clear empties the tree too.
+            _bulkSelection.Adopt(branches);
+
+            _rootBranches = TopicTreeProjection.RootTargets(frame.Roots, _groupSparkplugTopics);
+            _globalState = GlobalSelectionState();
+            _bulkSelection.CoversWholeTree = _globalState == TopicTreeSelectionState.Checked;
+        }
         EnsureActiveRow(previousRows, previousActive);
 
         if (previousRows.Count > 0 && _visibleRows.Count == 0 && _focusedKey is not null)
@@ -390,6 +395,47 @@ public partial class TopicBrowser
         return Task.CompletedTask;
     }
 
-    // The row is its own checkbox, so activating it toggles the branch it stands for.
-    private Task ActivateRow(TopicTreeRowModel row) => ToggleRowSelection(row);
+    private Task ActivateRow(TopicTreeRowModel row) => OnRowActivated(row);
+
+    private async Task OnRowActivated(TopicTreeRowModel row)
+    {
+        if (_multiSelect)
+        {
+            await ToggleRowSelection(row);
+            return;
+        }
+
+        await SelectSingleTopic(row);
+    }
+
+    private async Task SelectSingleTopic(TopicTreeRowModel row)
+    {
+        var request = row.ToSelection();
+        TopicSelectionStore.SelectTopics(request);
+        BuildVisibleRows();
+        StateHasChanged();
+
+        var selection = TopicSelectionStore.GetSelectedTopicState();
+        if (string.Equals(selection.Key, request.Key, StringComparison.Ordinal)
+            && OnSelectedChanged.HasDelegate)
+            await OnSelectedChanged.InvokeAsync(selection);
+    }
+
+    private TopicTreeSelectionState RowSelectionState(TopicTreeRowModel row) =>
+        _multiSelect ? SelectionStateOf(row.Branch) : SingleSelectionState(row);
+
+    private TopicTreeSelectionState SingleSelectionState(TopicTreeRowModel row)
+    {
+        if (_singleSelection is not { } selection)
+            return TopicTreeSelectionState.Unchecked;
+
+        if (selection.Mode == TopicSelectionMode.Branches)
+            return selection.Branches.Any(branch => TopicBranchTargetRelations.Covers(branch, row.Branch))
+                ? TopicTreeSelectionState.Checked
+                : TopicTreeSelectionState.Unchecked;
+
+        return string.Equals(row.FullPath, selection.Key, StringComparison.Ordinal)
+            ? TopicTreeSelectionState.Checked
+            : TopicTreeSelectionState.Unchecked;
+    }
 }

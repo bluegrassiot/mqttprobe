@@ -27,6 +27,9 @@ internal sealed class PreferenceSettings(ISettingsDocument document)
     public Task SetGroupSparkplugTopicsByNodeAndDeviceAsync(bool value) =>
         SetUiAsync(ui => ui.GroupSparkplugTopicsByNodeAndDevice = value);
 
+    public Task SetTopicTreeMultiSelectAsync(bool value) =>
+        SetUiAsync(ui => ui.TopicTreeMultiSelect = value);
+
     public Task SetMessageTimeAsync(MessageTimePreferences preferences) =>
         SetUiAsync(ui => ui.MessageTime = MessageTimePreferences.Normalize(preferences));
 

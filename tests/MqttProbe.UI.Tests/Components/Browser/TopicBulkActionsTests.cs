@@ -115,6 +115,95 @@ public sealed class TopicBulkActionsTests : BunitTestContext
     }
 
     [Test]
+    public async Task Exclude_AllAdded_ShowsTheSuccessSnackbarWithoutAReportToDismiss()
+    {
+        AuthorizeAsOperator();
+        _fixture.AddTopics((Alpha, 1), (Beta, 1));
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        selection.SelectAll([Raw(Alpha), Raw(Beta)]);
+        _excludes.AddBranches(Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(new TopicBranchExcludeBatchResult([
+                new TopicBranchExcludeResult(Raw(Alpha), TopicExcludeAddOutcome.Added),
+                new TopicBranchExcludeResult(Raw(Beta), TopicExcludeAddOutcome.Added)
+            ]));
+        ReturnDialog(DialogResult.Ok(ImmutableArray.Create(Raw(Alpha), Raw(Beta))));
+        var cut = Render<TopicBulkToolbar>(parameters =>
+            parameters.AddCascadingValue(selection));
+
+        cut.Find(".topic-bulk-toolbar__exclude").Click();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        _snackbar.Received(1).Add(
+            "Excluded 2 topics.",
+            Severity.Success, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+        cut.Markup.Should().NotContain("Exclude finished");
+        cut.FindAll(".topic-bulk-outcome").Should().BeEmpty();
+        cut.FindAll(".topic-bulk-outcome-compact").Should().BeEmpty();
+        cut.FindAll("[aria-label='Dismiss result']").Should().BeEmpty(
+            "a clean success needs no dismissal");
+        selection.Branches.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Exclude_CleanSuccess_ClearsAnEarlierReport()
+    {
+        AuthorizeAsOperator();
+        _fixture.AddTopics((Alpha, 1), (Beta, 1));
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        selection.SelectAll([Raw(Alpha), Raw(Beta)]);
+        _excludes.AddBranches(Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(
+                new TopicBranchExcludeBatchResult([
+                    new TopicBranchExcludeResult(Raw(Alpha), TopicExcludeAddOutcome.Added),
+                    new TopicBranchExcludeResult(Raw(Beta), TopicExcludeAddOutcome.Failed,
+                        new UserNotification(UserNotificationSeverity.Error, "Connection changed."))
+                ]),
+                new TopicBranchExcludeBatchResult([
+                    new TopicBranchExcludeResult(Raw(Beta), TopicExcludeAddOutcome.Added)
+                ]));
+        ReturnDialog(DialogResult.Ok(ImmutableArray.Create(Raw(Alpha), Raw(Beta))));
+        var cut = Render<TopicBulkToolbar>(parameters =>
+            parameters.AddCascadingValue(selection));
+
+        cut.Find(".topic-bulk-toolbar__exclude").Click();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+        cut.WaitForAssertion(() => cut.Find(".topic-bulk-outcome").TextContent
+            .Should().Contain("Not added (1)"));
+
+        cut.Find(".topic-bulk-toolbar__exclude").Click();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".topic-bulk-outcome").Should().BeEmpty();
+            cut.Markup.Should().NotContain("Exclude finished");
+        });
+    }
+
+    [Test]
+    public async Task Exclude_OnlyAlreadyExcluded_KeepsTheReport()
+    {
+        AuthorizeAsOperator();
+        _fixture.AddTopics((Alpha, 1));
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        selection.SelectAll([Raw(Alpha)]);
+        _excludes.AddBranches(Arg.Any<IReadOnlyList<TopicBranchTarget>>(), Arg.Any<TopicExcludeConnectionToken>())
+            .Returns(new TopicBranchExcludeBatchResult([
+                new TopicBranchExcludeResult(Raw(Alpha), TopicExcludeAddOutcome.AlreadyExcluded)
+            ]));
+        ReturnDialog(DialogResult.Ok(ImmutableArray.Create(Raw(Alpha))));
+        var cut = Render<TopicBulkToolbar>(parameters =>
+            parameters.AddCascadingValue(selection));
+
+        cut.Find(".topic-bulk-toolbar__exclude").Click();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        cut.WaitForAssertion(() => cut.Find(".topic-bulk-outcome").TextContent
+            .Should().Contain("Already excluded (1)"));
+        selection.Branches.Should().BeEmpty();
+    }
+
+    [Test]
     public async Task ClearMessages_UsesTheConfirmedBranches_AndPrunesEmptyRows()
     {
         _fixture.AddTopics((Alpha, 2), (Beta, 1), (Other, 1));

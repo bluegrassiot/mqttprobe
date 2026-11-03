@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+GLOBAL_JSON = REPO_ROOT / "global.json"
 ACTION = REPO_ROOT / ".github/actions/setup-dotnet-workload/action.yml"
 WORKFLOWS = REPO_ROOT / ".github/workflows"
 CALLERS = {
@@ -22,7 +23,15 @@ CALLERS = {
 
 POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
 SDK_VERIFICATION_STEP = "Verify selected SDK matches global.json"
-PINNED_SDK = "10.0.402"
+WORKLOAD_SET_VERSION = "10.0.403"
+SDK_VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
+
+
+def expected_sdk_version():
+    version = json.loads(GLOBAL_JSON.read_text(encoding="utf-8"))["sdk"].get("version")
+    if not isinstance(version, str) or not SDK_VERSION_PATTERN.match(version):
+        raise AssertionError(f"global.json sdk.version is not a valid SDK version: {version!r}")
+    return version
 
 
 def action_text():
@@ -102,7 +111,8 @@ class WorkflowIntegrationTests(unittest.TestCase):
                 with self.subTest(path=path.name):
                     self.assertIn("global-json-file: global.json", block.split("\n      - ", 1)[0])
 
-    def test_every_caller_pins_the_workload_and_omits_the_removed_xcode_input(self):
+    def test_every_caller_pins_the_workload_set(self):
+        self.assertEqual(WORKLOAD_SET_VERSION, "10.0.403")
         count = 0
         for filename, jobs in CALLERS.items():
             text = (WORKFLOWS / filename).read_text(encoding="utf-8")
@@ -111,27 +121,29 @@ class WorkflowIntegrationTests(unittest.TestCase):
                 with self.subTest(file=filename, job=job):
                     self.assertIn("uses: ./.github/actions/setup-dotnet-workload", section)
                     self.assertIn(f"workload: {workload}", section)
-                    self.assertIn("workload-version: '10.0.402'", section)
+                    self.assertIn(f"workload-version: '{WORKLOAD_SET_VERSION}'", section)
                     self.assertNotIn("xcode-version:", section)
                     self.assertNotIn("dotnet workload list", section)
                 count += 1
         self.assertEqual(count, 6)
 
-    def test_apple_jobs_select_and_identify_xcode_27(self):
+    def test_apple_jobs_select_and_identify_xcode_27_1(self):
         for filename, job in (("build-macos.yml", "build-maui-macos"), ("build-ios.yml", "build-ios-archive")):
             section = job_section((WORKFLOWS / filename).read_text(encoding="utf-8"), job)
             with self.subTest(file=filename):
                 self.assertIn("runs-on: xcode-27", section)
-                self.assertIn("/Applications/Xcode_27.0.app", section)
+                self.assertIn("name: Select and identify Xcode 27.1", section)
+                self.assertIn("/Applications/Xcode_27.1.app", section)
                 self.assertIn("sudo xcode-select -s", section)
                 self.assertIn("xcodebuild -version", section)
-                self.assertIn('== "Xcode 27.0"', section)
+                self.assertIn('== "Xcode 27.1"', section)
                 self.assertIn("version=$xcode_version ($xcode_build)", section)
 
-    def test_global_sdk_pin_disables_roll_forward(self):
-        sdk = json.loads((REPO_ROOT / "global.json").read_text(encoding="utf-8"))["sdk"]
-        self.assertEqual(sdk["version"], "10.0.402")
+    def test_global_sdk_pin_is_valid_and_disables_roll_forward(self):
+        sdk = json.loads(GLOBAL_JSON.read_text(encoding="utf-8"))["sdk"]
+        self.assertRegex(sdk["version"], SDK_VERSION_PATTERN)
         self.assertEqual(sdk["rollForward"], "disable")
+        self.assertEqual(expected_sdk_version(), sdk["version"])
 
     def test_apple_xcode_parser_runs_under_bash_and_rejects_bad_output(self):
         if os.name == "nt":
@@ -143,10 +155,11 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertNotIn("mapfile", section)
         parser_lines = textwrap.dedent(section.split('xcode_info="$(xcodebuild -version)"\n', 1)[1].split("\n\n      - uses:", 1)[0])
         for value, expected, success in (
-            ("Xcode 27.0\nBuild version 18A123", "version=Xcode 27.0 (18A123)", True),
+            ("Xcode 27.1\nBuild version 18A123", "version=Xcode 27.1 (18A123)", True),
+            ("Xcode 27.0\nBuild version 18A123", "", False),
             ("Xcode 26.6\nBuild version 18A123", "", False),
-            ("Xcode 27.0\n", "", False),
-            ("Xcode 27.0\nBuild version ", "", False),
+            ("Xcode 27.1\n", "", False),
+            ("Xcode 27.1\nBuild version ", "", False),
         ):
             with self.subTest(value=value):
                 encoded = base64.b64encode(value.encode("utf-8")).decode("ascii")
@@ -188,13 +201,25 @@ class SdkVerificationBehaviorTests(unittest.TestCase):
 
     @staticmethod
     def pinned_global_json():
-        return f'{{"sdk": {{"version": "{PINNED_SDK}", "rollForward": "disable"}}}}'
+        return json.dumps({"sdk": {"version": expected_sdk_version(), "rollForward": "disable"}})
 
     def test_matching_sdk_pin_succeeds(self):
+        sdk = expected_sdk_version()
         result, invoked = self.invoke(
-            sdk_verification_block(), self.pinned_global_json(), PINNED_SDK, 0)
+            sdk_verification_block(), self.pinned_global_json(), sdk, 0)
         self.assertTrue(invoked)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_workload_set_version_is_not_accepted_as_the_sdk_pin(self):
+        result, invoked = self.invoke(
+            sdk_verification_block(),
+            '{"sdk": {"version": "10.0.999", "rollForward": "disable"}}',
+            WORKLOAD_SET_VERSION,
+            0,
+        )
+        self.assertTrue(invoked)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("does not match global.json pin", result.stdout)
 
     def test_mismatched_sdk_fails_with_exit_code_one(self):
         result, invoked = self.invoke(
@@ -205,13 +230,13 @@ class SdkVerificationBehaviorTests(unittest.TestCase):
 
     def test_failed_dotnet_version_propagates_its_exit_code(self):
         result, invoked = self.invoke(
-            sdk_verification_block(), self.pinned_global_json(), PINNED_SDK, 3)
+            sdk_verification_block(), self.pinned_global_json(), expected_sdk_version(), 3)
         self.assertTrue(invoked)
         self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
 
     def test_missing_sdk_pin_fails_without_invoking_dotnet(self):
         result, invoked = self.invoke(
-            sdk_verification_block(), '{"sdk": {"rollForward": "disable"}}', PINNED_SDK, 0)
+            sdk_verification_block(), '{"sdk": {"rollForward": "disable"}}', expected_sdk_version(), 0)
         self.assertFalse(invoked)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("does not contain an sdk.version pin", result.stdout)

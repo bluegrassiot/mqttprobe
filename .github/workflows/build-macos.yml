@@ -59,17 +59,17 @@ jobs:
         with:
           submodules: true
 
-      - name: Select and identify Xcode 27
+      - name: Select and identify Xcode 27.1
         id: xcode
         run: |
-          XCODE_APP=/Applications/Xcode_27.0.app
+          XCODE_APP=/Applications/Xcode_27.1.app
           [[ -d "$XCODE_APP" ]] || { echo "::error::Xcode not found at $XCODE_APP"; exit 1; }
           sudo xcode-select -s "$XCODE_APP"
           xcode_info="$(xcodebuild -version)"
           newline=$'\n'
           xcode_version=${xcode_info%%"$newline"*}
           xcode_build=${xcode_info#*"$newline"}
-          [[ "$xcode_version" == "Xcode 27.0" ]] || { echo "::error::Unexpected Xcode version: ${xcode_version:-missing}"; exit 1; }
+          [[ "$xcode_version" == "Xcode 27.1" ]] || { echo "::error::Unexpected Xcode version: ${xcode_version:-missing}"; exit 1; }
           [[ "$xcode_build" == "Build version "* ]] || { echo "::error::Xcode build version unavailable"; exit 1; }
           xcode_build="${xcode_build#Build version }"
           [[ -n "$xcode_build" && "$xcode_build" != *"$newline"* ]] || { echo "::error::Xcode build version unavailable"; exit 1; }
@@ -78,7 +78,7 @@ jobs:
       - uses: ./.github/actions/setup-dotnet-workload
         with:
           workload: maui-maccatalyst
-          workload-version: '10.0.402'
+          workload-version: '10.0.403'
 
       - name: Extract and validate version
         id: version

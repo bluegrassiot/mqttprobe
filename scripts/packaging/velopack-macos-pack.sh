@@ -67,8 +67,8 @@ command -v vpk >/dev/null 2>&1 || die "vpk not found on PATH. Install it with:
     dotnet tool install -g vpk --version 1.2.0"
 
 _xcode_ver="$(xcodebuild -version 2>/dev/null | head -1 | awk '{print $2}' || true)"
-if [[ -n "$_xcode_ver" && "$_xcode_ver" != "26.6" ]]; then
-    info "xcodebuild version is $_xcode_ver (CI pins 26.6); mismatched Xcode may cause build failures"
+if [[ -n "$_xcode_ver" && "$_xcode_ver" != "27.1" ]]; then
+    info "xcodebuild version is $_xcode_ver (CI pins 27.1); mismatched Xcode may cause build failures"
 fi
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

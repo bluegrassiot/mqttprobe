@@ -61,7 +61,7 @@ Output lands in `publish/clean-linux-<timestamp>/` with the AppImage, releases m
 2. Source snapshot extracted; archive hash compared to PS1-provided metadata
 3. Submodules initialized at exact pinned commits (JSON metadata, verified against gitlinks from same frozen SHA)
 4. Tracked changes applied via `git apply --binary` (if `-IncludeWorkingTreeChanges`)
-5. .NET SDK installed from the snapshot's `global.json` (currently 10.0.401)
+5. .NET SDK installed from the snapshot's `global.json` (currently 10.0.403)
 6. Velopack CLI (vpk 1.2.161) installed
 7. `dotnet publish` with Release config, linux-x64, self-contained
 8. `check-scoped-css.py` gate from frozen tooling (fails build if rejects)

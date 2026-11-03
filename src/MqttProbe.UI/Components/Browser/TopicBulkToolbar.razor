@@ -241,10 +241,19 @@
         if (handled.Count > 0)
             Selection.Remove(handled);
 
-        ShowOutcome(new BulkOutcome("Exclude finished",
-            BuildExcludeCompactSummary(batch, targets, purgeFailures, already, savedOnly, failed),
-            BuildExcludeLines(added, purgeFailures, already, savedOnly, failed),
-            HasDetails: true));
+        var needsReport = failed.Count > 0 || savedOnly.Count > 0 || purgeFailures.Count > 0 || already.Count > 0;
+        if (needsReport)
+        {
+            ShowOutcome(new BulkOutcome("Exclude finished",
+                BuildExcludeCompactSummary(batch, targets, purgeFailures, already, savedOnly, failed),
+                BuildExcludeLines(added, purgeFailures, already, savedOnly, failed),
+                HasDetails: true));
+        }
+        else
+        {
+            DismissOutcome();
+        }
+
         string message;
         Severity severity;
         if (failed.Count > 0)

@@ -38,8 +38,20 @@ def find_bash():
 
 BASH = find_bash()
 SDK_VERIFICATION_STEP = "Verify selected SDK matches global.json"
+WORKLOAD_SET_STEP = "Restore pinned .NET workload set"
 WORKLOAD_INSTALL_STEP = "Install .NET workload"
 XCODE_STEP = "Select pinned Xcode"
+SHARED_SETUP = "uses: ./.github/actions/setup-dotnet-workload"
+DOTNET_COMMAND = re.compile(r"(?m)^\s*(?:-\s*)?(?:run:\s*(?:\||>|-)?\s*)?dotnet\s+\S")
+SDK_ONLY_JOBS = (
+    ("ci.yml", "test"),
+    ("ci.yml", "test-integration"),
+    ("ci.yml", "build-web"),
+    ("ci.yml", "build-desktop-linux"),
+    ("release.yml", "build-web"),
+    ("build-linux-desktop.yml", "build-desktop-linux"),
+    ("build-macos-desktop.yml", "build-desktop-macos"),
+)
 SDK_VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
 WORKLOAD_VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 XCODE_VERSION_PATTERN = re.compile(r"^\d+(?:\.\d+)+$")
@@ -102,6 +114,19 @@ def job_section(text, job):
     return match.group(1)
 
 
+def job_sections(text):
+    parts = text.split("\njobs:\n", 1)
+    if len(parts) != 2:
+        return []
+    body = parts[1]
+    headers = list(re.finditer(r"(?m)^  ([A-Za-z0-9_-]+):\s*$", body))
+    sections = []
+    for index, match in enumerate(headers):
+        end = headers[index + 1].start() if index + 1 < len(headers) else len(body)
+        sections.append((match.group(1), body[match.start():end]))
+    return sections
+
+
 def version_stub(version, exit_code, marker):
     if os.name == "nt":
         return "dotnet.cmd", (
@@ -142,24 +167,45 @@ def write_stub(bindir, name, text):
 class ActionContractTests(unittest.TestCase):
     def test_setup_action_installs_global_json_workload_from_pin(self):
         action = SETUP_ACTION.read_text(encoding="utf-8")
+        self.assertEqual(action.count("actions/setup-dotnet@v6"), 1)
         setup = action.split("actions/setup-dotnet@v6", 1)[1].split("\n    - name:", 1)[0]
         self.assertIn("global-json-file: global.json", setup)
         self.assertIn('dotnet workload install "$env:WORKLOAD_ID" --source https://api.nuget.org/v3/index.json', action)
-        self.assertNotIn("--version", action.split("- name: Install .NET workload", 1)[1])
-        self.assertEqual(action.count("required: true"), 1)
+        self.assertIn("dotnet workload update --source https://api.nuget.org/v3/index.json", action)
+        for step in (WORKLOAD_SET_STEP, WORKLOAD_INSTALL_STEP):
+            with self.subTest(step=step):
+                self.assertNotIn("--version", run_block(SETUP_ACTION, step))
         self.assertNotIn("workload-version", action)
         self.assertNotIn("actions/cache", action)
         self.assertNotIn("dotnet workload repair", action)
 
+    def test_setup_action_workload_input_is_optional(self):
+        action = SETUP_ACTION.read_text(encoding="utf-8")
+        inputs = action.split("inputs:", 1)[1].split("runs:", 1)[0]
+        self.assertIn("required: false", inputs)
+        self.assertIn("default: ''", inputs)
+        self.assertNotIn("required: true", inputs)
+
+    def test_setup_action_selects_bootstrap_by_input(self):
+        restore = run_block(SETUP_ACTION, WORKLOAD_SET_STEP)
+        install = run_block(SETUP_ACTION, WORKLOAD_INSTALL_STEP)
+        self.assertIn("workload update", restore)
+        self.assertNotIn("workload install", restore)
+        self.assertIn("workload install", install)
+        self.assertNotIn("workload update", install)
+        self.assertNotIn('"$env:WORKLOAD_ID"', restore)
+
     def test_setup_action_validates_pins_before_install(self):
         action = SETUP_ACTION.read_text(encoding="utf-8")
         pin_check = action.index("sdk.workloadVersion")
-        install = action.index("- name: Install .NET workload")
+        restore = action.index(f"- name: {WORKLOAD_SET_STEP}")
+        install = action.index(f"- name: {WORKLOAD_INSTALL_STEP}")
         self.assertLess(action.index("actions/setup-dotnet@v6"), pin_check)
+        self.assertLess(pin_check, restore)
         self.assertLess(pin_check, install)
-        self.assertIn("dotnet --version", action[pin_check:install])
-        self.assertIn("does not match global.json pin", action[pin_check:install])
-        self.assertIn("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }", action[pin_check:install])
+        self.assertIn("dotnet --version", action[pin_check:restore])
+        self.assertIn("does not match global.json pin", action[pin_check:restore])
+        self.assertIn("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }", action[pin_check:restore])
 
     def test_xcode_action_exposes_version_output(self):
         text = XCODE_ACTION.read_text(encoding="utf-8")
@@ -168,13 +214,33 @@ class ActionContractTests(unittest.TestCase):
 
 
 class WorkflowIntegrationTests(unittest.TestCase):
-    def test_workflows_select_global_sdk_without_explicit_workload_versions(self):
-        for path in WORKFLOWS.glob("*.yml"):
-            text = path.read_text(encoding="utf-8")
-            self.assertNotIn("workload-version", text)
-            for block in text.split("- uses: actions/setup-dotnet@v6")[1:]:
-                with self.subTest(path=path.name):
-                    self.assertIn("global-json-file: global.json", block.split("\n      - ", 1)[0])
+    def test_workflows_never_bootstrap_the_sdk_directly(self):
+        for path in sorted(WORKFLOWS.glob("*.yml")):
+            with self.subTest(path=path.name):
+                text = path.read_text(encoding="utf-8")
+                self.assertNotIn("setup-dotnet@", text)
+                self.assertNotIn("workload-version", text)
+
+    def test_every_dotnet_job_bootstraps_before_first_dotnet_command(self):
+        checked = 0
+        for path in sorted(WORKFLOWS.glob("*.yml")):
+            for job, section in job_sections(path.read_text(encoding="utf-8")):
+                commands = list(DOTNET_COMMAND.finditer(section))
+                if not commands:
+                    continue
+                with self.subTest(path=path.name, job=job):
+                    shared = section.find(SHARED_SETUP)
+                    self.assertGreaterEqual(shared, 0, "job runs dotnet without the shared setup action")
+                    self.assertLess(shared, commands[0].start())
+                checked += 1
+        self.assertEqual(checked, 13)
+
+    def test_sdk_only_jobs_use_shared_setup_without_a_workload(self):
+        for filename, job in SDK_ONLY_JOBS:
+            section = job_section(workflow_text(filename), job)
+            with self.subTest(file=filename, job=job):
+                self.assertIn(SHARED_SETUP, section)
+                self.assertIsNone(re.search(r"(?m)^\s+workload:", section))
 
     def test_every_caller_installs_a_workload_without_version_override(self):
         count = 0
@@ -314,6 +380,44 @@ class SdkPinBehaviorTests(unittest.TestCase):
                           workloadVersion=expected_workload_version()),
             expected_sdk_version(), 3)
         self.assertTrue(invoked)
+        self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+
+
+class WorkloadSetRestoreBehaviorTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if POWERSHELL is None:
+            raise unittest.SkipTest("PowerShell is unavailable on this platform")
+        cls.block = run_block(SETUP_ACTION, WORKLOAD_SET_STEP)
+
+    def invoke(self, exit_code):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bindir = root / "bin"
+            bindir.mkdir()
+            marker = root / "dotnet-args"
+            name, stub = recording_stub(exit_code, marker)
+            write_stub(bindir, name, stub)
+            script = root / "restore.ps1"
+            script.write_text(self.block, encoding="utf-8")
+            env = dict(os.environ, PATH=str(bindir))
+            result = subprocess.run(
+                [POWERSHELL, "-NoProfile", "-NonInteractive", "-File", str(script)],
+                cwd=str(root), env=env, capture_output=True, text=True,
+            )
+            return result, marker.read_text(encoding="utf-8") if marker.exists() else ""
+
+    def test_restore_updates_pinned_workload_set_without_install_or_version(self):
+        result, arguments = self.invoke(0)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("workload update", arguments)
+        self.assertIn("--source https://api.nuget.org/v3/index.json", arguments)
+        self.assertNotIn("workload install", arguments)
+        self.assertNotIn("--version", arguments)
+        self.assertIn("Workload set restore elapsed", result.stdout)
+
+    def test_restore_failure_propagates_exit_code(self):
+        result, _ = self.invoke(3)
         self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
 
 

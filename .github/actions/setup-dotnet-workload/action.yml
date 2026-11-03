@@ -1,9 +1,10 @@
-name: Setup .NET workload
-description: Set up the global.json SDK and install the pinned workload set
+name: Setup .NET SDK
+description: Select the global.json SDK, verify its pins, and restore or install workloads
 inputs:
   workload:
-    description: Workload ID to install
-    required: true
+    description: Workload ID to install; leave empty to only restore the pinned workload set
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -29,7 +30,16 @@ runs:
           Write-Host "::error::Selected .NET SDK $selected does not match global.json pin $($sdk.version)"
           exit 1
         }
+    - name: Restore pinned .NET workload set
+      if: inputs.workload == ''
+      shell: pwsh
+      run: |
+        $started = [System.Diagnostics.Stopwatch]::StartNew()
+        dotnet workload update --source https://api.nuget.org/v3/index.json
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        Write-Host "Workload set restore elapsed: $($started.Elapsed)"
     - name: Install .NET workload
+      if: inputs.workload != ''
       shell: pwsh
       env:
         WORKLOAD_ID: ${{ inputs.workload }}

@@ -35,9 +35,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       - name: Restore NuGet cache
         uses: actions/cache@v6
@@ -131,9 +129,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       # Testcontainers reads the Docker config written by this login, so an
       # untrusted or unauthenticated run just falls back to anonymous pulls.
@@ -182,9 +178,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       - name: Restore NuGet cache
         uses: actions/cache@v6
@@ -347,9 +341,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       - name: Restore NuGet cache
         uses: actions/cache@v6

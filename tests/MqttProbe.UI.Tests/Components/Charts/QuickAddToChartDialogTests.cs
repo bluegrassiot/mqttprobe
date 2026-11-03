@@ -238,14 +238,17 @@ public class QuickAddToChartDialogTests : BunitTestContext
     private AngleSharp.Dom.IElement TimeoutInput() =>
         _dialogProvider.Find(".quick-add-timeout input");
 
-    private AngleSharp.Dom.IElement OffSwitch() =>
+    private AngleSharp.Dom.IElement ChecksSwitch() =>
         _dialogProvider.Find(".quick-add-timeout-row input[type='checkbox']");
+
+    private string? ChecksSwitchLabel() =>
+        _dialogProvider.FindComponent<MudSwitch<bool>>().Instance.Label;
 
     private AngleSharp.Dom.IElement ChartOption(string chartName) =>
         _dialogProvider.FindAll(".quick-add-chart-option")
             .Single(option => option.TextContent.Contains(chartName));
 
-    private async Task<ChartConfiguration> CreateNewChart(string? timeoutInput = null, bool off = false)
+    private async Task<ChartConfiguration> CreateNewChart(string? timeoutInput = null, bool checksOff = false)
     {
         _mockChartStore.GetCharts(_testConnectionId).Returns([]);
         ChartConfiguration? captured = null;
@@ -253,8 +256,8 @@ public class QuickAddToChartDialogTests : BunitTestContext
             .Returns(Task.CompletedTask);
         await OpenDialog(seriesName: "myField");
 
-        if (off)
-            OffSwitch().Change(true);
+        if (checksOff)
+            ChecksSwitch().Change(false);
         if (timeoutInput is not null)
             TimeoutInput().Change(timeoutInput);
 
@@ -290,8 +293,10 @@ public class QuickAddToChartDialogTests : BunitTestContext
         await OpenDialog();
 
         _dialogProvider.Markup.Should().Contain("Stale timeout (seconds)");
-        _dialogProvider.Markup.Should().Contain("Off");
+        ChecksSwitch().HasAttribute("checked").Should().BeTrue("staleness checks are on by default");
+        ChecksSwitchLabel().Should().Be("Check for stale data");
         _dialogProvider.FindComponent<MudNumericField<double?>>().Instance.GetState(x => x.Value).Should().Be(10);
+        TimeoutInput().HasAttribute("disabled").Should().BeFalse();
     }
 
     [Test]
@@ -304,19 +309,19 @@ public class QuickAddToChartDialogTests : BunitTestContext
 
         _dialogProvider.Markup.Should().Contain("Stale timeout (seconds)");
         _dialogProvider.FindComponent<MudNumericField<double?>>().Instance.GetState(x => x.Value).Should().Be(45);
-        OffSwitch().HasAttribute("checked").Should().BeFalse();
+        ChecksSwitch().HasAttribute("checked").Should().BeTrue();
     }
 
     [Test]
-    public async Task AddToExisting_ShowsOffWhenTheSelectedChartHasNoTimeout()
+    public async Task AddToExisting_ShowsChecksOffWhenTheSelectedChartHasNoTimeout()
     {
         _mockChartStore.GetCharts(_testConnectionId)
             .Returns([new ChartConfiguration { Name = "On change only", StaleTimeoutSeconds = null }]);
 
         await OpenDialog();
 
-        OffSwitch().HasAttribute("checked").Should().BeTrue();
-        TimeoutInput().HasAttribute("disabled").Should().BeTrue("an Off chart has no timeout to edit");
+        ChecksSwitch().HasAttribute("checked").Should().BeFalse();
+        TimeoutInput().HasAttribute("disabled").Should().BeTrue("a chart without a timeout has nothing to edit");
     }
 
     [Test]
@@ -329,11 +334,11 @@ public class QuickAddToChartDialogTests : BunitTestContext
         await OpenDialog();
         ChartOption("Second").Click();
 
-        OffSwitch().HasAttribute("checked").Should().BeTrue();
+        ChecksSwitch().HasAttribute("checked").Should().BeFalse();
 
         ChartOption("First").Click();
 
-        OffSwitch().HasAttribute("checked").Should().BeFalse();
+        ChecksSwitch().HasAttribute("checked").Should().BeTrue();
         TimeoutInput().HasAttribute("disabled").Should().BeFalse();
         _dialogProvider.FindComponent<MudNumericField<double?>>().Instance.GetState(x => x.Value).Should().Be(45);
     }
@@ -355,7 +360,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task AddToExisting_AfterOffChosenInCreateNew_AppliesOffToTheSelectedChart()
+    public async Task AddToExisting_AfterChecksTurnedOffInCreateNew_AppliesNoTimeout()
     {
         var existingChart = new ChartConfiguration { Name = "Existing Chart", StaleTimeoutSeconds = 45 };
         _mockChartStore.GetCharts(_testConnectionId).Returns([existingChart]);
@@ -366,10 +371,10 @@ public class QuickAddToChartDialogTests : BunitTestContext
         await OpenDialog();
 
         _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Create New Chart")).Click();
-        OffSwitch().Change(true);
+        ChecksSwitch().Change(false);
         _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Add to Existing Chart")).Click();
 
-        OffSwitch().HasAttribute("checked").Should().BeTrue("the Off choice must stay visible before appending");
+        ChecksSwitch().HasAttribute("checked").Should().BeFalse("the choice must stay visible before appending");
         _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Add Series")).Click();
 
         await _mockChartStore.Received(1).UpdateChartAsync(Arg.Any<Guid>(), Arg.Any<ChartConfiguration>());
@@ -386,9 +391,9 @@ public class QuickAddToChartDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task Submit_CreateNew_WithDetectionOff_SavesNoTimeout()
+    public async Task Submit_CreateNew_WithChecksTurnedOff_SavesNoTimeout()
     {
-        var chart = await CreateNewChart(off: true);
+        var chart = await CreateNewChart(checksOff: true);
 
         chart.StaleTimeoutSeconds.Should().BeNull();
     }
@@ -403,7 +408,7 @@ public class QuickAddToChartDialogTests : BunitTestContext
 
         _dialogProvider.Markup.Should().Contain("Enter a timeout greater than zero seconds.");
         _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Create Chart"))
-            .GetAttribute("disabled").Should().NotBeNull("a timeout is required unless detection is Off");
+            .GetAttribute("disabled").Should().NotBeNull("a timeout is required while checks are on");
     }
 
     [Test]

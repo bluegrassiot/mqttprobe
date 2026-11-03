@@ -128,12 +128,13 @@ public class AddEditChartDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task StaleTimeout_NewChart_DefaultsTo10SecondsAndDetectionOn()
+    public async Task StaleTimeout_NewChart_DefaultsTo10SecondsAndChecksEnabled()
     {
         await OpenDialog();
 
         _dialogProvider.Markup.Should().Contain("Stale timeout (seconds)");
-        _dialogProvider.Markup.Should().Contain("Off");
+        ChecksSwitch().HasAttribute("checked").Should().BeTrue("staleness checks are on by default");
+        ChecksSwitchLabel().Should().Be("Check for stale data");
         _dialogProvider.FindComponent<MudNumericField<double?>>().Instance.GetState(x => x.Value).Should().Be(10);
         TimeoutInput().HasAttribute("disabled").Should().BeFalse();
     }
@@ -144,6 +145,7 @@ public class AddEditChartDialogTests : BunitTestContext
         await OpenDialog(new ChartConfiguration { Name = "Flow", StaleTimeoutSeconds = 25 });
 
         _dialogProvider.FindComponent<MudNumericField<double?>>().Instance.GetState(x => x.Value).Should().Be(25);
+        ChecksSwitch().HasAttribute("checked").Should().BeTrue();
     }
 
     [Test]
@@ -152,6 +154,7 @@ public class AddEditChartDialogTests : BunitTestContext
         await OpenDialog(new ChartConfiguration { Name = "Legacy" });
 
         _dialogProvider.FindComponent<MudNumericField<double?>>().Instance.GetState(x => x.Value).Should().Be(10);
+        ChecksSwitch().HasAttribute("checked").Should().BeTrue("a chart without a stored timeout keeps the enabled default");
     }
 
     [Test]
@@ -169,11 +172,12 @@ public class AddEditChartDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task Submit_WithDetectionOff_SavesNoTimeout()
+    public async Task Submit_WithStalenessChecksTurnedOff_SavesNoTimeout()
     {
         var dialogRef = await OpenDialog(new ChartConfiguration { Name = "On change only", StaleTimeoutSeconds = 30 });
 
-        OffSwitch().Change(true);
+        ChecksSwitch().Change(false);
+        TimeoutInput().HasAttribute("disabled").Should().BeTrue("the timeout has no effect when checks are off");
         _dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Save")).Click();
 
         var result = await dialogRef.Result;
@@ -182,12 +186,12 @@ public class AddEditChartDialogTests : BunitTestContext
     }
 
     [Test]
-    public async Task EditingChartWithDetectionOff_ShowsOffAndDisabledTimeout()
+    public async Task EditingChartWithoutStoredTimeout_ShowsChecksOffAndDisabledTimeout()
     {
         await OpenDialog(new ChartConfiguration { Name = "On change only", StaleTimeoutSeconds = null });
 
-        TimeoutInput().HasAttribute("disabled").Should().BeTrue("an Off chart has no timeout to edit");
-        OffSwitch().HasAttribute("checked").Should().BeTrue();
+        TimeoutInput().HasAttribute("disabled").Should().BeTrue("a chart without a timeout has nothing to edit");
+        ChecksSwitch().HasAttribute("checked").Should().BeFalse();
     }
 
     [Test]
@@ -218,6 +222,9 @@ public class AddEditChartDialogTests : BunitTestContext
     private AngleSharp.Dom.IElement TimeoutInput() =>
         _dialogProvider.Find(".chart-dialog-timeout input");
 
-    private AngleSharp.Dom.IElement OffSwitch() =>
+    private AngleSharp.Dom.IElement ChecksSwitch() =>
         _dialogProvider.Find(".chart-dialog-timeout-row input[type='checkbox']");
+
+    private string? ChecksSwitchLabel() =>
+        _dialogProvider.FindComponent<MudSwitch<bool>>().Instance.Label;
 }

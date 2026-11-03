@@ -31,11 +31,11 @@
                 <MudNumericField @bind-Value="_staleTimeoutSeconds"
                                  Label="Stale timeout (seconds)"
                                  Variant="Variant.Outlined" Margin="Margin.Dense"
-                                 Min="0" Step="1" Disabled="_staleTimeoutOff"
+                                 Min="0" Step="1" Disabled="@(!_stalenessEnabled)"
                                  Error="@(!StaleTimeoutValid)"
                                  HelperText="A series turns stale when its last point is older than this."
                                  Class="chart-dialog-timeout" />
-                <MudSwitch T="bool" @bind-Value="_staleTimeoutOff" Label="Off"
+                <MudSwitch T="bool" @bind-Value="_stalenessEnabled" Label="Check for stale data"
                            Color="Color.Primary" />
                 @if (!StaleTimeoutValid)
                 {
@@ -44,7 +44,7 @@
                     </MudText>
                 }
                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="chart-dialog-timeout-note">
-                    Choose Off for topics that publish only when a value changes.
+                    Turn this off for topics that publish only when a value changes.
                 </MudText>
             </div>
 
@@ -103,10 +103,10 @@
     private int _maxPoints = 500;
     private int? _timeWindow;
     private double? _staleTimeoutSeconds = ChartConfiguration.DefaultStaleTimeoutSeconds;
-    private bool _staleTimeoutOff;
+    private bool _stalenessEnabled = true;
     private List<ChartSeries> _series = [];
 
-    private bool StaleTimeoutValid => _staleTimeoutOff
+    private bool StaleTimeoutValid => !_stalenessEnabled
         || (_staleTimeoutSeconds is { } seconds && ChartFreshnessEvaluator.IsValidTimeout(seconds));
 
     protected override void OnParametersSet()
@@ -118,7 +118,7 @@
             _maxPoints = Configuration.MaxPoints;
             _timeWindow = Configuration.TimeWindowMinutes;
             _staleTimeoutSeconds = Configuration.StaleTimeoutSeconds ?? ChartConfiguration.DefaultStaleTimeoutSeconds;
-            _staleTimeoutOff = Configuration.StaleTimeoutSeconds is null;
+            _stalenessEnabled = Configuration.StaleTimeoutSeconds is not null;
             _series = [.. Configuration.Series.Select(s => new ChartSeries
             {
                 Id = s.Id,
@@ -142,7 +142,7 @@
             Type = _type,
             MaxPoints = _maxPoints,
             TimeWindowMinutes = _timeWindow,
-            StaleTimeoutSeconds = _staleTimeoutOff ? null : _staleTimeoutSeconds,
+            StaleTimeoutSeconds = _stalenessEnabled ? _staleTimeoutSeconds : null,
             Series = _series
         };
         if (Configuration != null)

@@ -96,29 +96,34 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     }
 
     [Test]
-    public void FilteredList_WalksOnlyMatchingMessages()
+    public async Task FilteredList_WalksOnlyMatchingMessages()
     {
         var cut = RenderList();
         List(cut).QuerySelector("input")!.Input("third");
         cut.WaitForAssertion(() => cut.FindAll(".payload-row").Should().ContainSingle());
 
-        FocusedList(cut).KeyDown("End");
-        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("third");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "End" });
+        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("third"));
 
-        FocusedList(cut).KeyDown("Enter");
-        cut.Find(".payload-detail-body").TextContent.Should().Contain("third");
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
+        cut.WaitForAssertion(() => cut.Find(".payload-detail-body").TextContent.Should().Contain("third"));
     }
 
     [Test]
-    public void ActiveMessage_IsExposedToAssistiveTechnology()
+    public async Task ActiveMessage_IsExposedToAssistiveTechnology()
     {
         var cut = RenderList();
 
-        FocusedList(cut).KeyDown("ArrowDown");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
 
-        var activeId = List(cut).GetAttribute("aria-activedescendant");
-        activeId.Should().NotBeNullOrWhiteSpace();
-        cut.Find($"#{activeId}").GetAttribute("data-message-index").Should().Be("0");
+        cut.WaitForAssertion(() =>
+        {
+            var activeId = List(cut).GetAttribute("aria-activedescendant");
+            activeId.Should().NotBeNullOrWhiteSpace();
+            cut.Find($"#{activeId}").GetAttribute("data-message-index").Should().Be("0");
+        });
     }
 
     [Test]
@@ -174,86 +179,90 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     }
 
     [Test]
-    public void ArrowKeys_OnlyNavigateWhileTheListItselfHasFocus()
+    public async Task ArrowKeys_OnlyNavigateWhileTheListItselfHasFocus()
     {
         var cut = RenderList();
-        var list = List(cut);
 
-        list.Focus();
-        list.KeyDown("ArrowDown");
-        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first"));
 
         // Focus moves into a nested control, such as the message search field.
-        list.Blur();
-        list.KeyDown("ArrowDown");
+        await List(cut).BlurAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
 
         ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first");
     }
 
     [Test]
-    public void ArrowDown_MarksTheFirstMessageAsActive()
+    public async Task ArrowDown_MarksTheFirstMessageAsActive()
     {
         var cut = RenderList();
 
-        FocusedList(cut).KeyDown("ArrowDown");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
 
-        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first");
+        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first"));
     }
 
     [Test]
-    public void ArrowDown_ThenArrowDown_MovesToTheSecondMessage()
+    public async Task ArrowDown_ThenArrowDown_MovesToTheSecondMessage()
     {
         var cut = RenderList();
 
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("ArrowDown");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
 
-        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("second");
+        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("second"));
     }
 
     [Test]
-    public void ArrowUp_AtTheFirstMessage_StaysOnTheFirstMessage()
+    public async Task ArrowUp_AtTheFirstMessage_StaysOnTheFirstMessage()
     {
         var cut = RenderList();
 
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("ArrowUp");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowUp" });
 
-        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first");
+        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first"));
     }
 
     [Test]
-    public void End_ThenHome_MoveBetweenTheLastAndFirstMessage()
+    public async Task End_ThenHome_MoveBetweenTheLastAndFirstMessage()
     {
         var cut = RenderList();
 
-        FocusedList(cut).KeyDown("End");
-        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("third");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "End" });
+        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("third"));
 
-        FocusedList(cut).KeyDown("Home");
-        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first");
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Home" });
+        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first"));
     }
 
     [Test]
-    public void ArrowKeys_DuringImeComposition_DoNotMoveTheCursor()
+    public async Task ArrowKeys_DuringImeComposition_DoNotMoveTheCursor()
     {
         var cut = RenderList();
-        var list = FocusedList(cut);
 
-        list.KeyDown(new KeyboardEventArgs { Key = "ArrowDown", IsComposing = true });
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown", IsComposing = true });
 
         ActiveRowText(cut).Should().BeEmpty();
     }
 
     [TestCase("Enter")]
     [TestCase(" ")]
-    public void AutoRepeatedOpenKey_DoesNotOpenTheActiveMessage(string key)
+    public async Task AutoRepeatedOpenKey_DoesNotOpenTheActiveMessage(string key)
     {
         var cut = RenderList();
-        var list = FocusedList(cut);
-        list.KeyDown("ArrowDown");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first"));
 
-        list.KeyDown(new KeyboardEventArgs { Key = key, Repeat = true });
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = key, Repeat = true });
 
         cut.Markup.Should().NotContain("Message Details");
     }
@@ -296,7 +305,7 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     [TestCase("Control")]
     [TestCase("Alt")]
     [TestCase("Meta")]
-    public void ModifiedArrow_DoesNotMoveTheActiveMessage(string modifier)
+    public async Task ModifiedArrow_DoesNotMoveTheActiveMessage(string modifier)
     {
         var cut = RenderList();
         var args = new KeyboardEventArgs
@@ -307,41 +316,47 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
             MetaKey = modifier == "Meta"
         };
 
-        FocusedList(cut).KeyDown(args);
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(args);
 
         ActiveRowText(cut).Should().BeEmpty();
         cut.Markup.Should().NotContain("Message Details");
     }
 
     [Test]
-    public void ArrowKeyFromTheSearchField_DoesNotMoveTheActiveMessage()
+    public async Task ArrowKeyFromTheSearchField_DoesNotMoveTheActiveMessage()
     {
         var cut = RenderList();
 
-        List(cut).QuerySelector("input")!.KeyDown("ArrowDown");
+        await List(cut).QuerySelector("input")!.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
 
         ActiveRowText(cut).Should().BeEmpty();
     }
 
     [Test]
-    public void ArrowDown_WhenNoMessages_DoesNothing()
+    public async Task ArrowDown_WhenNoMessages_DoesNothing()
     {
         _messages = [];
         var cut = Render<PayloadBrowser>();
         cut.WaitForAssertion(() => cut.FindAll(".payload-row").Should().BeEmpty());
 
-        var act = () => FocusedList(cut).KeyDown("ArrowDown");
+        var act = async () =>
+        {
+            await List(cut).FocusAsync(new FocusEventArgs());
+            await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        };
 
-        act.Should().NotThrow();
+        await act.Should().NotThrowAsync();
         cut.Markup.Should().NotContain("Message Details");
     }
 
     [Test]
-    public void ActiveMessage_KeepsItsRow_WhenLiveContentReplacesTheMessages()
+    public async Task ActiveMessage_KeepsItsRow_WhenLiveContentReplacesTheMessages()
     {
         var cut = RenderList();
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("ArrowDown");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
 
         _messages = Recreated();
 
@@ -351,12 +366,14 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     }
 
     [Test]
-    public void Enter_ThenLiveContentReplace_KeepsPreviousAndNextAvailable()
+    public async Task Enter_ThenLiveContentReplace_KeepsPreviousAndNextAvailable()
     {
         var cut = RenderList();
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("Enter");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
+        cut.WaitForElement(".payload-detail-toolbar");
         cut.Find("button[title='Previous message']").HasAttribute("disabled").Should().BeFalse();
         cut.Find("button[title='Next message']").HasAttribute("disabled").Should().BeFalse();
 
@@ -371,48 +388,52 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     }
 
     [Test]
-    public void ArrowRight_InMessageDetail_OpensTheNextMessage()
+    public async Task ArrowRight_InMessageDetail_OpensTheNextMessage()
     {
         var cut = RenderList();
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("Enter");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
 
-        cut.Find(".payload-detail-toolbar").KeyDown("ArrowRight");
+        var toolbar = cut.WaitForElement(".payload-detail-toolbar");
+        await toolbar.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight" });
 
-        cut.Find(".payload-detail-body").TextContent.Should().Contain("second");
+        cut.WaitForAssertion(() => cut.Find(".payload-detail-body").TextContent.Should().Contain("second"));
     }
 
     [Test]
-    public void ArrowLeft_InMessageDetail_OpensThePreviousMessage()
+    public async Task ArrowLeft_InMessageDetail_OpensThePreviousMessage()
     {
         var cut = RenderList();
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("Enter");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
 
-        cut.Find(".payload-detail-toolbar").KeyDown("ArrowLeft");
+        var toolbar = cut.WaitForElement(".payload-detail-toolbar");
+        await toolbar.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowLeft" });
 
-        cut.Find(".payload-detail-body").TextContent.Should().Contain("first");
+        cut.WaitForAssertion(() => cut.Find(".payload-detail-body").TextContent.Should().Contain("first"));
     }
 
     [Test]
-    public void ArrowKeys_InTheJsonTree_ToggleNodesWithoutChangingTheSelectedMessage()
+    public async Task ArrowKeys_InTheJsonTree_ToggleNodesWithoutChangingTheSelectedMessage()
     {
         _messages = Payloads("""{"a":{"b":{"c":1}}}""", "third");
         var cut = RenderList(2);
         cut.FindAll(".payload-row")[0].Click();
 
         cut.WaitForAssertion(() => cut.FindAll(".json-toggle").Should().NotBeEmpty());
-        cut.FindAll(".json-toggle").Last().KeyDown("ArrowRight");
-        cut.FindAll(".json-toggle").Last().GetAttribute("aria-expanded").Should().Be("true");
+        await cut.FindAll(".json-toggle").Last().KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight" });
+        cut.WaitForAssertion(() => cut.FindAll(".json-toggle").Last().GetAttribute("aria-expanded").Should().Be("true"));
 
-        cut.FindAll(".json-toggle").Last().KeyDown("ArrowLeft");
-        cut.FindAll(".json-toggle").Last().GetAttribute("aria-expanded").Should().Be("false");
+        await cut.FindAll(".json-toggle").Last().KeyDownAsync(new KeyboardEventArgs { Key = "ArrowLeft" });
+        cut.WaitForAssertion(() => cut.FindAll(".json-toggle").Last().GetAttribute("aria-expanded").Should().Be("false"));
 
         cut.Find(".payload-detail-body").TextContent.Should().Contain("\"c\"");
 
-        cut.Find(".payload-detail-toolbar").KeyDown("ArrowRight");
-        cut.Find(".payload-detail-body").TextContent.Should().Contain("third");
+        await cut.Find(".payload-detail-toolbar").KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight" });
+        cut.WaitForAssertion(() => cut.Find(".payload-detail-body").TextContent.Should().Contain("third"));
     }
 
     [Test]
@@ -483,17 +504,18 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     }
 
     [Test]
-    public void ScopedClearOfTheOpenMessage_ClosesTheDetailAndReturnsFocusToTheList()
+    public async Task ScopedClearOfTheOpenMessage_ClosesTheDetailAndReturnsFocusToTheList()
     {
         var selection = new TopicBulkSelection(TopicTreeSelectionTestAdapter.Create());
         var cut = Render<PayloadBrowser>(parameters => parameters.AddCascadingValue(selection));
         cut.WaitForAssertion(() => cut.FindAll(".payload-row").Should().HaveCount(3));
 
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("Enter");
-        cut.Markup.Should().Contain("Message Details");
+        await List(cut).FocusAsync(new FocusEventArgs());
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Message Details"));
 
-        cut.InvokeAsync(() => selection.NotifyMessagesCleared(
+        await cut.InvokeAsync(() => selection.NotifyMessagesCleared(
             [new TopicBranchTarget(TopicBranchKind.Raw, Path: "sensor/temp")]));
 
         cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Message Details"));

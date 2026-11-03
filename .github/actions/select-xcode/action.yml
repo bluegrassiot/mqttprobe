@@ -1,0 +1,31 @@
+name: Select Xcode
+description: Select and identify the Xcode version pinned in .github/xcode-version
+outputs:
+  version:
+    description: Selected Xcode version and build
+    value: ${{ steps.select.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - name: Select pinned Xcode
+      id: select
+      shell: bash
+      run: |
+        pin="$(cat "$GITHUB_WORKSPACE/.github/xcode-version")"
+        pin="${pin%$'\r'}"
+        if [[ "$pin" == *$'\n'* || ! "$pin" =~ ^[0-9]+(\.[0-9]+)+$ ]]; then
+          echo "::error::Invalid Xcode version pin in .github/xcode-version"
+          exit 1
+        fi
+        XCODE_APP="/Applications/Xcode_${pin}.app"
+        [[ -d "$XCODE_APP" ]] || { echo "::error::Xcode not found at $XCODE_APP"; exit 1; }
+        sudo xcode-select -s "$XCODE_APP"
+        xcode_info="$(xcodebuild -version)"
+        newline=$'\n'
+        xcode_version=${xcode_info%%"$newline"*}
+        xcode_build=${xcode_info#*"$newline"}
+        [[ "$xcode_version" == "Xcode $pin" ]] || { echo "::error::Unexpected Xcode version: ${xcode_version:-missing}"; exit 1; }
+        [[ "$xcode_build" == "Build version "* ]] || { echo "::error::Xcode build version unavailable"; exit 1; }
+        xcode_build="${xcode_build#Build version }"
+        [[ -n "$xcode_build" && "$xcode_build" != *"$newline"* ]] || { echo "::error::Xcode build version unavailable"; exit 1; }
+        echo "version=$xcode_version ($xcode_build)" >> "$GITHUB_OUTPUT"

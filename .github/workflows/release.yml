@@ -153,7 +153,6 @@ jobs:
       - uses: ./.github/actions/setup-dotnet-workload
         with:
           workload: maui-windows
-          workload-version: '10.0.403'
 
       - name: Extract version
         id: version
@@ -246,7 +245,6 @@ jobs:
       - uses: ./.github/actions/setup-dotnet-workload
         with:
           workload: maui-android
-          workload-version: '10.0.403'
 
       - name: Extract version
         id: version

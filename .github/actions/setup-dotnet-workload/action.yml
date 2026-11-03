@@ -1,11 +1,8 @@
 name: Setup .NET workload
-description: Set up the global.json SDK and install a pinned workload set
+description: Set up the global.json SDK and install the pinned workload set
 inputs:
   workload:
     description: Workload ID to install
-    required: true
-  workload-version:
-    description: Workload set version to install
     required: true
 runs:
   using: composite
@@ -16,25 +13,28 @@ runs:
     - name: Verify selected SDK matches global.json
       shell: pwsh
       run: |
-        $expected = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
-        if (-not $expected) {
+        $sdk = (Get-Content global.json -Raw | ConvertFrom-Json).sdk
+        if (-not $sdk.version) {
           Write-Host "::error::global.json does not contain an sdk.version pin"
+          exit 1
+        }
+        if ($sdk.workloadVersion -isnot [string] -or $sdk.workloadVersion -notmatch '^\d+\.\d+\.\d+$') {
+          Write-Host "::error::global.json does not contain a valid sdk.workloadVersion pin"
           exit 1
         }
         $selected = (dotnet --version)
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $selected = $selected.Trim()
-        if ($selected -ne $expected) {
-          Write-Host "::error::Selected .NET SDK $selected does not match global.json pin $expected"
+        if ($selected -ne $sdk.version) {
+          Write-Host "::error::Selected .NET SDK $selected does not match global.json pin $($sdk.version)"
           exit 1
         }
     - name: Install .NET workload
       shell: pwsh
       env:
         WORKLOAD_ID: ${{ inputs.workload }}
-        WORKLOAD_VERSION: ${{ inputs.workload-version }}
       run: |
         $started = [System.Diagnostics.Stopwatch]::StartNew()
-        dotnet workload install "$env:WORKLOAD_ID" --version "$env:WORKLOAD_VERSION" --source https://api.nuget.org/v3/index.json
+        dotnet workload install "$env:WORKLOAD_ID" --source https://api.nuget.org/v3/index.json
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         Write-Host "Workload install elapsed: $($started.Elapsed)"

@@ -58,6 +58,14 @@ if ! [[ "$_major" =~ ^[0-9]+$ && "$_minor" =~ ^[0-9]+$ && "$_patch" =~ ^[0-9]+$ 
 fi
 CODE=$(( _major * 10000 + _minor * 100 + _patch ))
 
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Walk up to repo root (MqttProbe.slnx).
+while [[ ! -f MqttProbe.slnx ]]; do
+    _prev="$PWD"
+    cd .. || die "Could not find repo root (MqttProbe.slnx)"
+    [[ "$PWD" != "$_prev" ]] || die "Could not find repo root (MqttProbe.slnx)"
+done
+
 # --- preflight ----------------------------------------------------------------
 
 [[ "$(uname -s)" == "Darwin" ]] || die "this script must run on macOS"
@@ -66,18 +74,16 @@ command -v dotnet >/dev/null 2>&1 || die "dotnet not found on PATH — install t
 command -v vpk >/dev/null 2>&1 || die "vpk not found on PATH. Install it with:
     dotnet tool install -g vpk --version 1.2.0"
 
-_xcode_ver="$(xcodebuild -version 2>/dev/null | head -1 | awk '{print $2}' || true)"
-if [[ -n "$_xcode_ver" && "$_xcode_ver" != "27.1" ]]; then
-    info "xcodebuild version is $_xcode_ver (CI pins 27.1); mismatched Xcode may cause build failures"
+[[ -f .github/xcode-version ]] || die ".github/xcode-version not found"
+_xcode_expected="$(tr -d '\r' < .github/xcode-version)"
+if [[ ! "$_xcode_expected" =~ ^[0-9]+(\.[0-9]+)+$ ]]; then
+    die ".github/xcode-version must contain a single Xcode version (got '$_xcode_expected')"
 fi
 
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Walk up to repo root (MqttProbe.slnx).
-while [[ ! -f MqttProbe.slnx ]]; do
-    _prev="$PWD"
-    cd .. || die "Could not find repo root (MqttProbe.slnx)"
-    [[ "$PWD" != "$_prev" ]] || die "Could not find repo root (MqttProbe.slnx)"
-done
+_xcode_ver="$(xcodebuild -version 2>/dev/null | head -1 | awk '{print $2}' || true)"
+if [[ -n "$_xcode_ver" && "$_xcode_ver" != "$_xcode_expected" ]]; then
+    info "xcodebuild version is $_xcode_ver (CI pins $_xcode_expected); mismatched Xcode may cause build failures"
+fi
 
 # --- notarize requires sign ---------------------------------------------------
 

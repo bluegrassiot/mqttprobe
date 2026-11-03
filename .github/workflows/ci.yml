@@ -35,9 +35,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       - name: Restore NuGet cache
         uses: actions/cache@v6
@@ -131,9 +129,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       # Testcontainers reads the Docker config written by this login, so an
       # untrusted or unauthenticated run just falls back to anonymous pulls.
@@ -182,9 +178,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       - name: Restore NuGet cache
         uses: actions/cache@v6
@@ -244,7 +238,6 @@ jobs:
       - uses: ./.github/actions/setup-dotnet-workload
         with:
           workload: maui-windows
-          workload-version: '10.0.402'
 
       - name: Publish
         run: >
@@ -294,7 +287,6 @@ jobs:
       - uses: ./.github/actions/setup-dotnet-workload
         with:
           workload: maui-android
-          workload-version: '10.0.402'
 
       # Release config exercises the trimmer/linker like a real release,
       # but AOT is disabled to keep the smoke build fast.
@@ -327,9 +319,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       - name: Restore NuGet cache
         uses: actions/cache@v6

@@ -91,8 +91,7 @@ projects. OpenDyslexic is used under the Bitstream Vera license.
   ApexCharts JavaScript library 6.5.0
     Bundled by Blazor-ApexCharts as a static web asset and served to the
     browser: js/apexcharts.esm.js (6.5.0) and js/blazor-apexcharts.js.
-    Licence: dual Community / Commercial license, not MIT. Upstream moved
-    away from MIT at version 5.3.0.
+    Licence: dual Community / Commercial license, not MIT.
     https://github.com/apexcharts/apexcharts.js/blob/v6.5.0/LICENSE
     The upstream 6.5.0 licence text is reproduced at the end of this file.
 

@@ -8,25 +8,47 @@
 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
     Version @_version
 </MudText>
-@if (IsIosHost)
-{
-    <div class="about-links">
+<div class="about-links">
+    <MudText Typo="Typo.subtitle1" HtmlTag="h6" Class="about-links__heading">Support</MudText>
+    <div class="about-links__items">
         <a class="about-links__link"
-           href="@PrivacyPolicyUri"
+           href="@ContactEmailUri"
+           data-testid="contact-email-link">
+            <MudIcon Icon="@LucideIcons.Send" Size="Size.Small" aria-hidden="true" />
+            <span class="about-links__label">@ContactEmailAddress</span>
+        </a>
+        <a class="about-links__link"
+           href="@SupportUri"
            target="_blank"
            rel="noopener noreferrer"
-           aria-label="Privacy policy (opens in a new tab)"
-           data-testid="privacy-policy-link">
-            <MudIcon Icon="@LucideIcons.ShieldCheck" Size="Size.Small" aria-hidden="true" />
-            <span class="about-links__label">Privacy policy</span>
+           aria-label="Support website (opens in a new tab)"
+           data-testid="support-website-link">
+            <MudIcon Icon="@LucideIcons.Info" Size="Size.Small" aria-hidden="true" />
+            <span class="about-links__label">Support website</span>
             <MudIcon Icon="@LucideIcons.ExternalLink" Size="Size.Small" Class="about-links__external"
                      aria-hidden="true" />
         </a>
-        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="about-links__hint">
-            What MQTTProbe stores and sends on your device.
-        </MudText>
     </div>
-}
+    @if (IsIosHost)
+    {
+        <div class="about-links__privacy">
+            <a class="about-links__link"
+               href="@PrivacyPolicyUri"
+               target="_blank"
+               rel="noopener noreferrer"
+               aria-label="Privacy policy (opens in a new tab)"
+               data-testid="privacy-policy-link">
+                <MudIcon Icon="@LucideIcons.ShieldCheck" Size="Size.Small" aria-hidden="true" />
+                <span class="about-links__label">Privacy policy</span>
+                <MudIcon Icon="@LucideIcons.ExternalLink" Size="Size.Small" Class="about-links__external"
+                         aria-hidden="true" />
+            </a>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="about-links__hint">
+                What MQTTProbe stores and sends on your device.
+            </MudText>
+        </div>
+    }
+</div>
 
 @if (UpdateService.IsSupported)
 {

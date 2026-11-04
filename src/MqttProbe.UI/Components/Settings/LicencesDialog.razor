@@ -5,18 +5,187 @@
         <h2 id="@_titleId" class="licences-dialog__title">Open-source licences</h2>
     </TitleContent>
     <DialogContent>
-        <div class="licences-dialog__body" tabindex="0" role="region" aria-label="Licence documents">
+        @{
+            var components = FilterComponents();
+        }
+        <div class="licences-dialog__body @(_mobileDetail ? "licences-dialog__body--detail" : null)">
             <p class="licences-dialog__intro">
-                Both documents are included in the app, so they read the same offline.
+                Browse the MQTTProbe licence and the licences for the components it includes. Licence texts stay in the app and read offline; source links open a website.
             </p>
-            <section class="licences-dialog__section">
-                <h3 class="licences-dialog__heading">MQTTProbe licence</h3>
-                <pre class="licences-dialog__text" data-testid="licence-text">@LicenseText</pre>
-            </section>
-            <section class="licences-dialog__section">
-                <h3 class="licences-dialog__heading">Third-party notices</h3>
-                <pre class="licences-dialog__text" data-testid="notices-text">@NoticesText</pre>
-            </section>
+
+            <div class="licences-dialog__workspace">
+                <aside class="licences-dialog__list-pane" aria-label="Licence components">
+                    <button type="button"
+                            class="licences-dialog__app-licence @(_selectedComponent is null ? "is-selected" : null)"
+                            data-testid="app-licence-button"
+                            aria-current="@(_selectedComponent is null ? "true" : null)"
+                            @onclick="SelectAppLicense">
+                        <span class="licences-dialog__app-name">MQTTProbe licence</span>
+                        <span class="licences-dialog__app-meta">This app · Apache License 2.0</span>
+                    </button>
+
+                    @if (_catalogueError is null)
+                    {
+                        <div class="licences-dialog__search">
+                            <MudIcon Icon="@LucideIcons.Search" Size="Size.Small" aria-hidden="true" />
+                            <input type="search"
+                                   @ref="_searchInput"
+                                   class="licences-dialog__search-input"
+                                   aria-label="Search components"
+                                   placeholder="Search components"
+                                   data-testid="licence-search"
+                                   @bind="_search"
+                                   @bind:event="oninput" />
+                            @if (_search.Length > 0)
+                            {
+                                <button type="button"
+                                        class="licences-dialog__search-clear"
+                                        aria-label="Clear search"
+                                        data-testid="licence-clear-search"
+                                        @onclick="ClearSearch">
+                                    <MudIcon Icon="@LucideIcons.X" Size="Size.Small" aria-hidden="true" />
+                                </button>
+                            }
+                        </div>
+
+                        <div class="licences-dialog__count" data-testid="licence-count">
+                            @CountText(components.Count, _catalogue?.Components.Count ?? 0)
+                        </div>
+
+                        @if (components.Count == 0)
+                        {
+                            <div class="licences-dialog__empty" data-testid="licence-no-results">
+                                <p>No components match your search.</p>
+                                <button type="button" class="licences-dialog__text-button"
+                                        data-testid="licence-clear-search-empty"
+                                        @onclick="ClearSearch">
+                                    Clear search
+                                </button>
+                            </div>
+                        }
+                        else
+                        {
+                            <ul class="licences-dialog__list">
+                                @foreach (var component in components)
+                                {
+                                    <li>
+                                        <button type="button"
+                                                class="licences-dialog__component @(IsSelected(component) ? "is-selected" : null)"
+                                                data-testid="licence-component"
+                                                aria-current="@(IsSelected(component) ? "true" : null)"
+                                                @onclick="() => SelectComponent(component)">
+                                            <span class="licences-dialog__component-name">@component.Name</span>
+                                            <span class="licences-dialog__component-meta">@ComponentMeta(component)</span>
+                                        </button>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    }
+                    else
+                    {
+                        <div class="licences-dialog__notice" role="alert" data-testid="licence-catalogue-error">
+                            @_catalogueError
+                        </div>
+                    }
+                </aside>
+
+                <section class="licences-dialog__detail-pane" aria-label="Licence detail">
+                    <div class="licences-dialog__detail-scroll"
+                         tabindex="0"
+                         role="region"
+                         aria-label="@DetailRegionLabel"
+                         @key="_selectionKey">
+                        <button type="button"
+                                class="licences-dialog__back"
+                                aria-label="Back to components"
+                                data-testid="licence-back"
+                                @onclick="ShowList">
+                            <MudIcon Icon="@LucideIcons.ArrowLeft" Size="Size.Small" aria-hidden="true" />
+                            <span>Back to components</span>
+                        </button>
+
+                        <h3 class="licences-dialog__detail-title"
+                            tabindex="-1"
+                            @ref="_detailHeading"
+                            data-testid="licence-detail-title">
+                            @DetailTitle
+                        </h3>
+
+                        @if (_selectedComponent is null)
+                        {
+                            <p class="licences-dialog__detail-note">This app · Apache License 2.0</p>
+                        }
+                        else
+                        {
+                            <dl class="licences-dialog__meta">
+                                @if (!string.IsNullOrWhiteSpace(_selectedComponent.License))
+                                {
+                                    <div class="licences-dialog__meta-row">
+                                        <dt>Licence</dt>
+                                        <dd>@_selectedComponent.License</dd>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_selectedComponent.Version))
+                                {
+                                    <div class="licences-dialog__meta-row">
+                                        <dt>Version</dt>
+                                        <dd>@_selectedComponent.Version</dd>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_selectedComponent.Copyright))
+                                {
+                                    <div class="licences-dialog__meta-row">
+                                        <dt>Copyright</dt>
+                                        <dd>@_selectedComponent.Copyright</dd>
+                                    </div>
+                                }
+                            </dl>
+
+                            @if (SelectedSourceUri is { } sourceUri)
+                            {
+                                <a class="licences-dialog__source"
+                                   href="@sourceUri"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   aria-label="Source for @_selectedComponent.Name (opens in a new tab)"
+                                   title="Opens an external website"
+                                   data-testid="licence-source-link">
+                                    <span>Source</span>
+                                    <MudIcon Icon="@LucideIcons.ExternalLink" Size="Size.Small" aria-hidden="true" />
+                                </a>
+                                <p class="licences-dialog__source-note">Source links open a website. Licence texts below stay in the app.</p>
+                            }
+                        }
+
+                        @if (_selectedDocuments.Count == 0)
+                        {
+                            <div class="licences-dialog__notice" data-testid="licence-no-documents">
+                                No licence text is listed for this component.
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var document in _selectedDocuments)
+                            {
+                                <section class="licences-dialog__document">
+                                    <h4 class="licences-dialog__document-title">@document.Title</h4>
+                                    @if (document.Error is not null)
+                                    {
+                                        <div class="licences-dialog__notice" role="alert" data-testid="licence-document-error">
+                                            @document.Error
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <pre class="licences-dialog__text" data-testid="licence-document-text">@document.Text</pre>
+                                    }
+                                </section>
+                            }
+                        }
+                    </div>
+                </section>
+            </div>
         </div>
     </DialogContent>
     <DialogActions>
@@ -27,10 +196,174 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
 
-    [Parameter] public string LicenseText { get; set; } = string.Empty;
-    [Parameter] public string NoticesText { get; set; } = string.Empty;
+    [Parameter] public LegalCatalogueReader Reader { get; set; } = LegalCatalogueReader.Default;
 
     private readonly string _titleId = $"licences-dialog-title-{Guid.NewGuid():N}";
+    private readonly Dictionary<string, LegalDocument> _documentsById = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, LegalDocumentLoadResult> _documentCache = new(StringComparer.OrdinalIgnoreCase);
+    private LegalCatalogue? _catalogue;
+    private string? _catalogueError;
+    private string _search = string.Empty;
+    private LegalComponent? _selectedComponent;
+    private List<LegalDocumentView> _selectedDocuments = [];
+    private bool _mobileDetail;
+    private bool _focusDetail;
+    private bool _focusSearch;
+    private string _selectionKey = "app";
+    private ElementReference _detailHeading;
+    private ElementReference _searchInput;
+
+    private IReadOnlyList<LegalComponent> FilterComponents()
+    {
+        if (_catalogue is null)
+            return [];
+
+        var term = _search.Trim();
+        if (term.Length == 0)
+            return _catalogue.Components;
+
+        return _catalogue.Components.Where(component => Matches(component, term)).ToList();
+    }
+
+    private string DetailTitle => _selectedComponent?.Name ?? "MQTTProbe licence";
+
+    private string DetailRegionLabel => _selectedComponent is null
+        ? "MQTTProbe licence"
+        : $"{_selectedComponent.Name} licence details";
+
+    private Uri? SelectedSourceUri => _selectedComponent is not null && TryGetHttpUri(_selectedComponent.SourceUrl, out var uri)
+        ? uri
+        : null;
+
+    protected override void OnInitialized()
+    {
+        var result = Reader.LoadCatalogue();
+        if (result.Catalogue is null)
+        {
+            _catalogueError = result.Error;
+        }
+        else
+        {
+            _catalogue = result.Catalogue;
+            foreach (var document in _catalogue.Documents)
+                _documentsById[document.Id] = document;
+        }
+
+        LoadAppLicense();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusDetail)
+        {
+            _focusDetail = false;
+            await _detailHeading.FocusAsync();
+        }
+
+        if (_focusSearch)
+        {
+            _focusSearch = false;
+            if (_catalogueError is null)
+                await _searchInput.FocusAsync();
+        }
+    }
+
+    private void SelectAppLicense()
+    {
+        _selectedComponent = null;
+        _selectionKey = "app";
+        _mobileDetail = true;
+        _focusDetail = true;
+        LoadAppLicense();
+    }
+
+    private void LoadAppLicense()
+    {
+        var result = Reader.LoadAppLicense();
+        _selectedDocuments = [new LegalDocumentView("Licence text", result.Text, result.Error)];
+    }
+
+    private void SelectComponent(LegalComponent component)
+    {
+        _selectedComponent = component;
+        _selectionKey = component.Id;
+        _selectedDocuments = component.DocumentIds.Select(LoadDocument).ToList();
+        _mobileDetail = true;
+        _focusDetail = true;
+    }
+
+    private LegalDocumentView LoadDocument(string documentId)
+    {
+        if (!_documentsById.TryGetValue(documentId, out var document))
+            return new LegalDocumentView("Licence text", null, "This document isn't listed in the licence catalogue.");
+
+        if (!_documentCache.TryGetValue(documentId, out var result))
+        {
+            result = Reader.LoadDocument(documentId);
+            _documentCache[documentId] = result;
+        }
+
+        return new LegalDocumentView(
+            string.IsNullOrWhiteSpace(document.Title) ? "Licence text" : document.Title,
+            result.Text,
+            result.Error);
+    }
+
+    private void ShowList()
+    {
+        _mobileDetail = false;
+        _focusSearch = true;
+    }
+
+    private void ClearSearch()
+    {
+        _search = string.Empty;
+        _focusSearch = true;
+    }
+
+    private bool IsSelected(LegalComponent component) =>
+        _selectedComponent is not null
+        && string.Equals(_selectedComponent.Id, component.Id, StringComparison.Ordinal);
+
+    private static bool Matches(LegalComponent component, string term) =>
+        component.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
+        || component.License.Contains(term, StringComparison.OrdinalIgnoreCase)
+        || component.Version.Contains(term, StringComparison.OrdinalIgnoreCase)
+        || component.Copyright.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    private static string ComponentMeta(LegalComponent component)
+    {
+        var parts = new List<string>(2);
+        if (!string.IsNullOrWhiteSpace(component.Version))
+            parts.Add(component.Version);
+        if (!string.IsNullOrWhiteSpace(component.License))
+            parts.Add(component.License);
+        return string.Join(" · ", parts);
+    }
+
+    private static string CountText(int shown, int total)
+    {
+        if (total == 0)
+            return "No components are listed.";
+        if (shown == total)
+            return total == 1 ? "1 component" : $"{total} components";
+        return $"Showing {shown} of {total} components";
+    }
+
+    private static bool TryGetHttpUri(string value, out Uri? uri)
+    {
+        if (Uri.TryCreate(value, UriKind.Absolute, out var parsed)
+            && (parsed.Scheme == Uri.UriSchemeHttp || parsed.Scheme == Uri.UriSchemeHttps))
+        {
+            uri = parsed;
+            return true;
+        }
+
+        uri = null;
+        return false;
+    }
 
     private void Close() => MudDialog.Cancel();
+
+    private sealed record LegalDocumentView(string Title, string? Text, string? Error);
 }

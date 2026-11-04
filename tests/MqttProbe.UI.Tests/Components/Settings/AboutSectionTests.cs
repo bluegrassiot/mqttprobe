@@ -43,7 +43,7 @@ public class AboutSectionTests : BunitTestContext
         var button = cut.Find("[data-testid=open-source-licences-button]");
         button.TextContent.Should().Contain("Open-source licences");
         button.GetAttribute("href").Should().BeNull();
-        cut.Markup.Should().Contain("notices for the components it includes");
+        cut.Markup.Should().Contain("Licences for MQTTProbe and the components it includes");
     }
 
     [Test]
@@ -58,8 +58,10 @@ public class AboutSectionTests : BunitTestContext
         {
             _dialogProvider.Find(".licences-dialog__title").TextContent.Trim()
                 .Should().Be("Open-source licences");
-            _dialogProvider.FindAll("[data-testid=licence-text]").Should().ContainSingle();
-            _dialogProvider.FindAll("[data-testid=notices-text]").Should().ContainSingle();
+            _dialogProvider.Find("[data-testid=app-licence-button]").TextContent
+                .Should().Contain("MQTTProbe licence");
+            _dialogProvider.Find("[data-testid=licence-detail-title]").TextContent.Trim()
+                .Should().Be("MQTTProbe licence");
         });
     }
 

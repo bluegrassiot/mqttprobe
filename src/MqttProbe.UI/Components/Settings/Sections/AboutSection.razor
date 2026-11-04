@@ -96,14 +96,12 @@
         <span class="about-legal__label">Open-source licences</span>
     </button>
     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="about-legal__hint">
-        The licence for MQTTProbe and the notices for the components it includes.
+        Licences for MQTTProbe and the components it includes.
     </MudText>
 </div>
 
 @code {
     private string _version = string.Empty;
-    private string _licenseText = string.Empty;
-    private string _noticesText = string.Empty;
     private bool _checkingForUpdate;
     private bool _applyingUpdate;
     private bool _updateError;
@@ -113,19 +111,12 @@
     protected override void OnInitialized()
     {
         _version = AppInfoService.GetVersion();
-        _licenseText = LegalDocuments.ReadLicense();
-        _noticesText = LegalDocuments.ReadNotices();
     }
 
     private async Task OpenLicencesAsync()
     {
-        var parameters = new DialogParameters<LicencesDialog>
-        {
-            { x => x.LicenseText, _licenseText },
-            { x => x.NoticesText, _noticesText }
-        };
-        await DialogService.ShowAsync<LicencesDialog>(null, parameters,
-            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        await DialogService.ShowAsync<LicencesDialog>(null, new DialogParameters<LicencesDialog>(),
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
     }
 
     private async Task CheckForUpdatesAsync()

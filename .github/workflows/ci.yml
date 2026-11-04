@@ -52,6 +52,9 @@ jobs:
       - name: Script tests
         run: python3 -m unittest discover -s scripts/ci/tests
 
+      - name: Legal notices
+        run: python3 scripts/legal/notices.py check
+
       # Same gate as .githooks/pre-commit. Keep --fail-on matching there so a commit
       # that passes locally cannot fail here. ~5s, so it runs before the slow steps.
       - name: Security scan
@@ -190,6 +193,11 @@ jobs:
       - name: Publish
         run: dotnet publish src\MqttProbe.Web\MqttProbe.Web.csproj -f:net10.0 -c:Release --output publish/web
 
+      - name: Verify legal notices
+        run: |
+          python scripts/legal/notices.py profiles-check --scenario web-framework-dependent
+          python scripts/legal/notices.py verify --scenario web-framework-dependent
+
       - name: Archive
         shell: pwsh
         run: Compress-Archive -Path publish/web/* -DestinationPath publish/web-app.zip -Force
@@ -247,6 +255,11 @@ jobs:
           -c:Debug
           --output publish/windows
 
+      - name: Verify legal notices
+        run: |
+          python scripts/legal/notices.py profiles-check --scenario maui-windows
+          python scripts/legal/notices.py verify --scenario maui-windows
+
       - name: Archive
         shell: pwsh
         run: |
@@ -300,6 +313,11 @@ jobs:
           -p:AndroidEnableProfiledAot=false
           --output publish/android
 
+      - name: Verify legal notices
+        run: |
+          python3 scripts/legal/notices.py profiles-check --scenario maui-android
+          python3 scripts/legal/notices.py verify --scenario maui-android
+
       - name: Upload Android artifact
         uses: actions/upload-artifact@v7
         with:
@@ -338,6 +356,11 @@ jobs:
           -r:linux-x64
           --self-contained
           --output publish/desktop
+
+      - name: Verify legal notices
+        run: |
+          python3 scripts/legal/notices.py profiles-check --scenario desktop-linux-x64
+          python3 scripts/legal/notices.py verify --scenario desktop-linux-x64
 
       - name: Archive
         run: |

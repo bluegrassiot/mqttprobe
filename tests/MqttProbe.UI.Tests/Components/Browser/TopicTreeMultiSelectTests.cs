@@ -140,6 +140,40 @@ public sealed class TopicTreeMultiSelectTests : BunitTestContext
     }
 
     [Test]
+    public async Task TurningMultiSelectOn_KeepsTheBrowsedTopicCheckedAndFiltered()
+    {
+        _fixture.AddTopics(("sensors/temp/room1", 2));
+        _preferences.TopicTreeMultiSelect = false;
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        var cut = Render<TopicBrowser>(parameters => parameters.AddCascadingValue(selection));
+        EnsureMudProviders();
+        cut.FindAll(".mud-toolbar button")[0].Click();
+
+        Row(cut, "sensors/temp").Click();
+        cut.WaitForAssertion(() =>
+            _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().Be("sensors/temp"));
+
+        _preferences.TopicTreeMultiSelect = true;
+        _uiSettings.UiPreferencesChanged += Raise.Event<Action>();
+        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
+
+        cut.WaitForAssertion(() =>
+        {
+            var state = _fixture.Adapter.Store.GetSelectedTopicState();
+            state.Mode.Should().Be(TopicSelectionMode.Branches);
+            state.Branches.Should().ContainSingle().Which.Path.Should().Be("sensors/temp");
+            state.MessageCount.Should().Be(3);
+            selection.Branches.Should().ContainSingle().Which.Path.Should().Be("sensors/temp");
+            Row(cut, "sensors/temp").ClassList.Should().Contain("topic-tree-row--selected");
+            Row(cut, "sensors/temp/room1").ClassList.Should().Contain("topic-tree-row--selected");
+        });
+
+        var toolbar = Render<TopicBulkToolbar>(parameters => parameters.AddCascadingValue(selection));
+        toolbar.WaitForAssertion(() => toolbar.Find(".topic-bulk-toolbar__count").TextContent
+            .Should().Be("1 topic selected"));
+    }
+
+    [Test]
     public void Disabled_ClickingATopic_DrivesTheSharedActionBanner()
     {
         _preferences.TopicTreeMultiSelect = false;

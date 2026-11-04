@@ -89,6 +89,94 @@ public sealed class TopicSingleSelectionTests
     }
 
     [Test]
+    public void TurningMultiSelectOff_NotifiesWhenNothingIsSelected()
+    {
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        var notified = 0;
+        selection.Changed += () => notified++;
+
+        selection.SetMultiSelect(false);
+
+        notified.Should().Be(1);
+    }
+
+    [Test]
+    public void TurningMultiSelectOff_NotifiesWhenOneBranchIsKept()
+    {
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        selection.SelectAll([SparkplugBranch(SparkplugSelectionKind.Node)]);
+        var notified = 0;
+        selection.Changed += () => notified++;
+
+        selection.SetMultiSelect(false);
+
+        notified.Should().Be(1);
+    }
+
+    [Test]
+    public void TurningMultiSelectOn_PromotesTheBrowsedTopicToTheSameBranchFilter()
+    {
+        _fixture.SetSelection(TopicSelection.ForTopic("sensors/temp"));
+        var stored = _fixture.Adapter.Store.GetSelectedTopicState();
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        selection.SetMultiSelect(false);
+        selection.AdoptSingle(stored);
+
+        selection.SetMultiSelect(true);
+
+        selection.IsPassive.Should().BeFalse();
+        selection.Branches.Should().ContainSingle().Which.Path.Should().Be("sensors/temp");
+        var current = _fixture.Adapter.Store.GetSelectedTopicState();
+        current.Mode.Should().Be(TopicSelectionMode.Branches);
+        current.Branches.Should().ContainSingle().Which.Path.Should().Be("sensors/temp");
+    }
+
+    [Test]
+    public void TurningMultiSelectOnAgain_DoesNotReapplyTheBranchSelection()
+    {
+        _fixture.SetSelection(TopicSelection.ForTopic("sensors/temp"));
+        var stored = _fixture.Adapter.Store.GetSelectedTopicState();
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        selection.SetMultiSelect(false);
+        selection.AdoptSingle(stored);
+        selection.SetMultiSelect(true);
+        var promoted = _fixture.Adapter.Store.GetSelectedTopicState().Token;
+
+        selection.SetMultiSelect(true);
+
+        _fixture.Adapter.Store.GetSelectedTopicState().Token.Should().Be(promoted);
+    }
+
+    [Test]
+    public void TurningMultiSelectOn_KeepsAGroupedBranchScopeUnchanged()
+    {
+        var branch = SparkplugBranch(SparkplugSelectionKind.Node);
+        _fixture.SetSelection(TopicSelection.ForBranches([branch]));
+        var stored = _fixture.Adapter.Store.GetSelectedTopicState();
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        selection.SetMultiSelect(false);
+        selection.AdoptSingle(stored);
+        var adopted = _fixture.Adapter.Store.GetSelectedTopicState().Token;
+
+        selection.SetMultiSelect(true);
+
+        selection.Branches.Should().ContainSingle().Which.Should().Be(branch);
+        _fixture.Adapter.Store.GetSelectedTopicState().Token.Should().Be(adopted);
+    }
+
+    [Test]
+    public void TurningMultiSelectOnWithoutABrowsedTopic_LeavesNoFilter()
+    {
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        selection.SetMultiSelect(false);
+
+        selection.SetMultiSelect(true);
+
+        selection.HasSelection.Should().BeFalse();
+        _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().BeNull();
+    }
+
+    [Test]
     public void PassiveSelection_IgnoresBulkToggles()
     {
         _fixture.SetSelection(TopicSelection.ForTopic("sensors/temp"));

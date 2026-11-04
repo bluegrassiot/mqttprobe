@@ -176,6 +176,11 @@ internal sealed class TopicBulkSelection(ITopicSelectionStore store)
             return;
         }
 
+        // Promote the browsed topic filter so the next refresh adopts a branch, not an empty set.
+        if (!passive && _targets.Count > 0
+            && store.GetSelectedTopicState().Mode == TopicSelectionMode.SingleTopic)
+            ApplySelection();
+
         Changed?.Invoke();
     }
 

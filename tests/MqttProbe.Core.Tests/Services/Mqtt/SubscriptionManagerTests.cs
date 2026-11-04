@@ -140,13 +140,13 @@ public class SubscriptionManagerTests
     }
 
     [Test]
-    public async Task Add_DefaultQos_IsAtLeastOnce()
+    public async Task Add_DefaultQos_IsAtMostOnce()
     {
         await _manager.Add("default/qos");
 
         await _mockClient.Received(1).SubscribeAsync(
             Arg.Is<IEnumerable<MQTTnet.Packets.MqttTopicFilter>>(filters =>
-                filters!.Any(f => f.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce)));
+                filters!.Any(f => f.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtMostOnce)));
     }
 
     [Test]

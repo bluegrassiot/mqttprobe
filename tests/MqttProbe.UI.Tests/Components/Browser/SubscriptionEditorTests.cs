@@ -57,7 +57,7 @@ public class SubscriptionEditorTests : BunitTestContext
 
         captured.Should().NotBeNull();
         captured.GetValueOrDefault().Topic.Should().Be("sensors/#");
-        captured.GetValueOrDefault().Qos.Should().Be(MqttQualityOfServiceLevel.AtLeastOnce);
+        captured.GetValueOrDefault().Qos.Should().Be(MqttQualityOfServiceLevel.AtMostOnce);
         await Task.CompletedTask;
     }
 
@@ -332,8 +332,7 @@ public class SubscriptionEditorTests : BunitTestContext
             .Add(x => x.OnAdd, NoAdd())
             .Add(x => x.OnRemove, NoRemove()));
 
-        // MudSelect in closed state shows the selected value (AtLeastOnce by default).
-        cut.Markup.Should().Contain("1 · At least once");
+        cut.Markup.Should().Contain("0 · At most once");
     }
 
     [Test]

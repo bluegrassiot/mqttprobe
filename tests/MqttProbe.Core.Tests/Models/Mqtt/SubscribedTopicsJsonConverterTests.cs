@@ -27,7 +27,7 @@ public class SubscribedTopicsJsonConverterTests
     }
 
     [Test]
-    public void Deserialize_LegacyStringArray_MapsToAtLeastOnce()
+    public void Deserialize_LegacyStringArray_MapsToAtMostOnce()
     {
         const string json = """{"subscribedTopics":["a/b","c/d"]}""";
 
@@ -36,8 +36,20 @@ public class SubscribedTopicsJsonConverterTests
         wrapper!.SubscribedTopics.Should().HaveCount(2);
         wrapper.SubscribedTopics[0].Topic.Should().Be("a/b");
         wrapper.SubscribedTopics[0].QualityOfServiceLevel.Should()
-            .Be(MqttQualityOfServiceLevel.AtLeastOnce);
+            .Be(MqttQualityOfServiceLevel.AtMostOnce);
         wrapper.SubscribedTopics[1].Topic.Should().Be("c/d");
+    }
+
+    [Test]
+    public void Deserialize_ObjectWithoutQos_UsesAtMostOnceDefault()
+    {
+        const string json = """{"subscribedTopics":[{"topic":"x/#"}]}""";
+
+        var wrapper = JsonSerializer.Deserialize<Wrapper>(json, _options);
+
+        wrapper!.SubscribedTopics.Should().ContainSingle();
+        wrapper.SubscribedTopics[0].QualityOfServiceLevel.Should()
+            .Be(MqttQualityOfServiceLevel.AtMostOnce);
     }
 
     [Test]

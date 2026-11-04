@@ -113,7 +113,7 @@
     [Parameter] public EventCallback<IReadOnlyList<string>> OnRemove { get; set; }
 
     private string _topic = string.Empty;
-    private MqttQualityOfServiceLevel _qos = MqttQualityOfServiceLevel.AtLeastOnce;
+    private MqttQualityOfServiceLevel _qos = MqttQualityOfServiceLevel.AtMostOnce;
     private HashSet<SubscribedTopic> _selected = [];
     private bool _busy;
     private bool _expanded = true;

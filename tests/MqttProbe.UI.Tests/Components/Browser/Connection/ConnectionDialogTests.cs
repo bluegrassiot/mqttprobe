@@ -1330,7 +1330,7 @@ public class ConnectionDialogTests : BunitTestContext
             Arg.Is<Connection>(c =>
                 c!.SubscribedTopics.Any(s =>
                     s.Topic == "factory/#" &&
-                    s.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce)));
+                    s.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtMostOnce)));
     }
 
     [Test]
@@ -1378,7 +1378,7 @@ public class ConnectionDialogTests : BunitTestContext
             Arg.Is<Connection>(c =>
                 c!.SubscribedTopics.Any(s =>
                     s.Topic == "factory/#" &&
-                    s.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce)));
+                    s.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtMostOnce)));
     }
 
     [Test]

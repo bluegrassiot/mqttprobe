@@ -1,4 +1,5 @@
 using AngleSharp.Dom;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using MQTTnet.Protocol;
 using MqttProbe.Core.Models.Configuration;
@@ -31,10 +32,10 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void EveryDisplayedLevel_HasACheckbox()
+    public async Task EveryDisplayedLevel_HasACheckbox()
     {
         _fixture.AddTopics(("sensors/temp", 1), ("sensors/temp/room1", 2), ("sensors/humidity", 2));
-        var cut = RenderExpanded();
+        var cut = await RenderExpandedAsync();
 
         cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().HaveCount(4));
         Row(cut, "sensors").QuerySelector(".topic-select-checkbox").Should().NotBeNull();
@@ -44,10 +45,10 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void TheCheckboxSitsBesideTheNodeIcon_WithoutAPlaceholderSlot()
+    public async Task TheCheckboxSitsBesideTheNodeIcon_WithoutAPlaceholderSlot()
     {
         _fixture.AddTopics(("sensors/temp", 1), ("sensors/temp/room1", 2));
-        var cut = RenderExpanded();
+        var cut = await RenderExpandedAsync();
 
         cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().HaveCount(3));
 
@@ -62,16 +63,16 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void SelectingTwoTopics_FiltersTheirUnion_NewestFirst_WithoutDuplicates()
+    public async Task SelectingTwoTopics_FiltersTheirUnion_NewestFirst_WithoutDuplicates()
     {
         _fixture.Adapter.Add("sensors/temp", Message("temp-old", 10));
         _fixture.Adapter.Add("sensors/humidity", Message("humid", 20));
         _fixture.Adapter.Add("sensors/temp", Message("temp-new", 30));
         _fixture.Adapter.Add("unrelated/topic", Message("unrelated", 40));
-        var cut = RenderExpanded();
+        var cut = await RenderExpandedAsync();
 
-        Check(cut, "sensors/temp");
-        Check(cut, "sensors/humidity");
+        await CheckAsync(cut, "sensors/temp");
+        await CheckAsync(cut, "sensors/humidity");
 
         var state = _fixture.Adapter.Store.GetSelectedTopicState();
         state.Key.Should().StartWith("branches:");
@@ -83,12 +84,12 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void RowClick_ChecksTheConcreteTopic()
+    public async Task RowClick_ChecksTheConcreteTopic()
     {
         _fixture.AddTopics(("sensors/temp", 1), ("sensors/humidity", 2));
-        var cut = RenderExpanded();
+        var cut = await RenderExpandedAsync();
 
-        Row(cut, "sensors/temp").Click();
+        await Row(cut, "sensors/temp").ClickAsync();
 
         cut.WaitForAssertion(() =>
         {
@@ -100,12 +101,12 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
 
     [TestCase("Enter")]
     [TestCase(" ")]
-    public void KeyboardActivation_ChecksTheRowInsteadOfSelectingTheTopic(string key)
+    public async Task KeyboardActivation_ChecksTheRowInsteadOfSelectingTheTopic(string key)
     {
         _fixture.AddTopics(("sensors/temp", 1), ("sensors/humidity", 2));
-        var cut = RenderExpanded();
+        var cut = await RenderExpandedAsync();
 
-        Row(cut, "sensors/temp").KeyDown(key);
+        await Row(cut, "sensors/temp").KeyDownAsync(new KeyboardEventArgs { Key = key });
 
         cut.WaitForAssertion(() =>
         {
@@ -119,9 +120,9 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     public async Task ASelectedTopicThatVanishes_IsDropped_AndTheRemainingFilterStaysHonest()
     {
         _fixture.AddTopics(("sensors/temp", 1), ("sensors/humidity", 2));
-        var cut = RenderExpanded();
-        Check(cut, "sensors/temp");
-        Check(cut, "sensors/humidity");
+        var cut = await RenderExpandedAsync();
+        await CheckAsync(cut, "sensors/temp");
+        await CheckAsync(cut, "sensors/humidity");
 
         _fixture.Adapter.Store.RemoveMatchingTopic("sensors/humidity");
         await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
@@ -151,15 +152,15 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
         _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
         _fixture.Adapter.Add("spBv1.0/plant1/NBIRTH/node1", Message("birth", 10));
         _fixture.Adapter.Add("spBv1.0/plant1/NDATA/node1", Message("data", 20));
-        var cut = RenderExpanded();
-        Check(cut, "spBv1.0/plant1/NBIRTH/node1");
-        Check(cut, "spBv1.0/plant1/NDATA/node1");
+        var cut = await RenderExpandedAsync();
+        await CheckAsync(cut, "spBv1.0/plant1/NBIRTH/node1");
+        await CheckAsync(cut, "spBv1.0/plant1/NDATA/node1");
 
         _preferences.GroupSparkplugTopicsByNodeAndDevice = false;
         _uiSettings.UiPreferencesChanged += Raise.Event<Action>();
         await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
         cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Grouped by node and device"));
-        ExpandAll(cut);
+        await ExpandAllAsync(cut);
         cut.WaitForAssertion(() =>
         {
             _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().StartWith("branches:");
@@ -170,7 +171,7 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
         _uiSettings.UiPreferencesChanged += Raise.Event<Action>();
         await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("Grouped by node and device"));
-        ExpandAll(cut);
+        await ExpandAllAsync(cut);
         cut.WaitForAssertion(() =>
         {
             _fixture.Adapter.Store.GetSelectedTopicState().Branches.Select(branch => branch.Path)
@@ -185,17 +186,17 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void TwoMountedBrowsers_ShareTheSameCheckedSet()
+    public async Task TwoMountedBrowsers_ShareTheSameCheckedSet()
     {
         _fixture.AddTopics(("sensors/temp", 1), ("sensors/humidity", 2));
         var selection = new TopicBulkSelection(_fixture.Adapter);
         var first = Render<TopicBrowser>(parameters => parameters.AddCascadingValue(selection));
         var second = Render<TopicBrowser>(parameters => parameters.AddCascadingValue(selection));
-        ExpandAll(first);
-        ExpandAll(second);
+        await ExpandAllAsync(first);
+        await ExpandAllAsync(second);
 
         second.WaitForAssertion(() => second.FindAll(".topic-select-checkbox").Should().HaveCount(3));
-        Check(first, "sensors/temp");
+        await CheckAsync(first, "sensors/temp");
 
         second.WaitForAssertion(() =>
             Row(second, "sensors/temp").QuerySelector(".topic-select-checkbox input[checked]")
@@ -222,36 +223,36 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void RawSlashLevelsAreDistinctBranches()
+    public async Task RawSlashLevelsAreDistinctBranches()
     {
         _fixture.Adapter.Add("a/b", RawMessage("canonical", "a/b"));
         _fixture.Adapter.Add("a//b", RawMessage("alias", "a//b"));
-        var cut = RenderExpanded();
+        var cut = await RenderExpandedAsync();
 
         cut.FindAll(".topic-tree-row[data-topic-path='a/b']").Should().ContainSingle();
         cut.FindAll(".topic-tree-row[data-topic-path='a//b']").Should().ContainSingle();
         cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().HaveCount(4));
 
-        Check(cut, "a//b");
+        await CheckAsync(cut, "a//b");
 
         var state = _fixture.Adapter.Store.GetSelectedTopicState();
         state.Branches.Should().ContainSingle().Which.Path.Should().Be("a//b");
     }
 
     [Test]
-    public void TheEmptyFirstLevel_SelectsOnlyTopicsThatStartWithASlash()
+    public async Task TheEmptyFirstLevel_SelectsOnlyTopicsThatStartWithASlash()
     {
         _fixture.Adapter.Add("a", RawMessage("plain", "a"));
         _fixture.Adapter.Add("/b", RawMessage("leading", "/b"));
         _fixture.Adapter.Add("/c", RawMessage("leading-2", "/c"));
-        var cut = RenderExpanded();
+        var cut = await RenderExpandedAsync();
 
         cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().HaveCount(4));
 
         Row(cut, "").QuerySelector(".topic-name--empty").Should().NotBeNull();
         Row(cut, "").QuerySelector(".topic-name--empty")!.TextContent.Should().Be("(empty level)");
         Row(cut, "").GetAttribute("title").Should().Contain("Empty first MQTT level");
-        Check(cut, "");
+        await CheckAsync(cut, "");
 
         var state = _fixture.Adapter.Store.GetSelectedTopicState();
         state.Branches.Should().ContainSingle().Which.Path.Should().BeEmpty();
@@ -261,12 +262,12 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void ACoveredDescendant_CannotBeUncheckedOnItsOwn()
+    public async Task ACoveredDescendant_CannotBeUncheckedOnItsOwn()
     {
         _fixture.AddTopics(("a/b", 1), ("a/c", 1), ("a", 1));
-        var cut = RenderExpanded();
+        var cut = await RenderExpandedAsync();
 
-        Check(cut, "a");
+        await CheckAsync(cut, "a");
         var inherited = Row(cut, "a/b").QuerySelector(".topic-select-checkbox input");
         inherited.Should().NotBeNull();
         inherited!.HasAttribute("disabled").Should().BeTrue(
@@ -274,37 +275,37 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
         Row(cut, "a/b").QuerySelector(".topic-select-checkbox__name")!.TextContent
             .Should().Be("Selected through \"a\"");
 
-        Row(cut, "a/b").Click();
+        await Row(cut, "a/b").ClickAsync();
         _fixture.Adapter.Store.GetSelectedTopicState().Branches.Should().ContainSingle()
             .Which.Path.Should().Be("a", "the row cannot drop the branch that covers it");
 
-        Row(cut, "a").Click();
+        await Row(cut, "a").ClickAsync();
         cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox input[checked]").Should().BeEmpty());
     }
 
     [Test]
-    public void AMixedAncestor_StaysEditable_AndWidensTheSelectionToItself()
+    public async Task AMixedAncestor_StaysEditable_AndWidensTheSelectionToItself()
     {
         _fixture.AddTopics(("a/b", 1), ("a/c", 1));
-        var cut = RenderExpanded();
+        var cut = await RenderExpandedAsync();
 
-        Check(cut, "a/b");
+        await CheckAsync(cut, "a/b");
         Row(cut, "a").QuerySelector(".topic-select-checkbox input")!.HasAttribute("disabled")
             .Should().BeFalse("a partly covered ancestor is still its own choice");
 
-        Row(cut, "a").Click();
+        await Row(cut, "a").ClickAsync();
 
         _fixture.Adapter.Store.GetSelectedTopicState().Branches.Should().ContainSingle()
             .Which.Path.Should().Be("a", "the wider branch already covers the narrower one");
     }
 
     [Test]
-    public void ClickingARow_ChecksItsBranchAndKeepsIt()
+    public async Task ClickingARow_ChecksItsBranchAndKeepsIt()
     {
         _fixture.AddTopics(("sensors/temp", 1), ("sensors/humidity", 1));
-        var cut = RenderExpanded();
+        var cut = await RenderExpandedAsync();
 
-        Row(cut, "sensors/temp").Click();
+        await Row(cut, "sensors/temp").ClickAsync();
 
         var state = _fixture.Adapter.Store.GetSelectedTopicState();
         state.Key.Should().StartWith("branches:");
@@ -332,15 +333,15 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void GlobalCheckbox_IsUncheckedWithNoSelection_AndChecksEveryRoot()
+    public async Task GlobalCheckbox_IsUncheckedWithNoSelection_AndChecksEveryRoot()
     {
         _fixture.AddTopics(("sensors/temp", 1), ("sensors/humidity", 1), ("unrelated/topic", 1));
-        var (cut, selection) = RenderWithSelection();
+        var (cut, selection) = await RenderWithSelectionAsync();
 
         GlobalCheckbox(cut).HasAttribute("checked").Should().BeFalse();
         selection.CoversWholeTree.Should().BeFalse();
 
-        GlobalClick(cut);
+        await GlobalClickAsync(cut);
 
         cut.WaitForAssertion(() =>
         {
@@ -350,7 +351,7 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
             selection.Summary.Should().Be("All topics selected");
         });
 
-        GlobalClick(cut);
+        await GlobalClickAsync(cut);
 
         cut.WaitForAssertion(() =>
         {
@@ -361,18 +362,18 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void GlobalCheckbox_IsMixedWhenOnlySomeRootsAreChecked_AndAClickChecksAll()
+    public async Task GlobalCheckbox_IsMixedWhenOnlySomeRootsAreChecked_AndAClickChecksAll()
     {
         _fixture.AddTopics(("sensors/temp", 1), ("sensors/humidity", 1));
-        var (cut, selection) = RenderWithSelection();
+        var (cut, selection) = await RenderWithSelectionAsync();
 
-        Check(cut, "sensors/temp");
+        await CheckAsync(cut, "sensors/temp");
 
         cut.WaitForAssertion(() => cut.Find(".topic-select-all .mud-checkbox-null").Should().NotBeNull(
             "a partial selection is mixed, not unchecked"));
         selection.Summary.Should().Be("1 topic selected");
 
-        GlobalClick(cut);
+        await GlobalClickAsync(cut);
 
         cut.WaitForAssertion(() =>
         {
@@ -382,22 +383,22 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void GlobalCheckbox_SpansTheWholeTreeBeyondTheFilter()
+    public async Task GlobalCheckbox_SpansTheWholeTreeBeyondTheFilter()
     {
         _fixture.AddTopics(("sensors/temp", 1), ("sensors/humidity", 1), ("unrelated/topic", 1));
-        var (cut, selection) = RenderWithSelection();
+        var (cut, selection) = await RenderWithSelectionAsync();
 
-        cut.Find(".topic-filter-field input").Input("humidity");
+        await cut.Find(".topic-filter-field input").InputAsync("humidity");
         cut.WaitForAssertion(() =>
             cut.FindAll(".topic-tree-row").Should().HaveCount(2, "the match and its ancestor"));
 
-        GlobalClick(cut);
+        await GlobalClickAsync(cut);
 
         cut.WaitForAssertion(() =>
             selection.Branches.Select(branch => branch.Path)
                 .Should().BeEquivalentTo("sensors", "unrelated"));
 
-        cut.Find(".topic-filter-field input").Input(string.Empty);
+        await cut.Find(".topic-filter-field input").InputAsync(string.Empty);
         cut.WaitForAssertion(() =>
         {
             cut.FindAll(".topic-tree-row").Should().HaveCount(5);
@@ -410,8 +411,8 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
     public async Task GlobalCheckbox_TurnsMixedWhenANewRootArrives()
     {
         _fixture.AddTopics(("sensors/temp", 1));
-        var (cut, selection) = RenderWithSelection();
-        GlobalClick(cut);
+        var (cut, selection) = await RenderWithSelectionAsync();
+        await GlobalClickAsync(cut);
         cut.WaitForAssertion(() => selection.Summary.Should().Be("All topics selected"));
 
         _fixture.AddTopics(("other", 1));
@@ -424,7 +425,7 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
             selection.Branches.Should().ContainSingle().Which.Path.Should().Be("sensors");
         });
 
-        GlobalClick(cut);
+        await GlobalClickAsync(cut);
         cut.WaitForAssertion(() =>
         {
             cut.FindAll(".topic-select-checkbox input[checked]").Should().HaveCount(3);
@@ -442,34 +443,34 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
             "there is nothing to select");
     }
 
-    private IRenderedComponent<TopicBrowser> RenderExpanded()
+    private async Task<IRenderedComponent<TopicBrowser>> RenderExpandedAsync()
     {
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
-        ExpandAll(cut);
+        await ExpandAllAsync(cut);
         return cut;
     }
 
-    private (IRenderedComponent<TopicBrowser> Cut, TopicBulkSelection Selection) RenderWithSelection()
+    private async Task<(IRenderedComponent<TopicBrowser> Cut, TopicBulkSelection Selection)> RenderWithSelectionAsync()
     {
         var selection = new TopicBulkSelection(_fixture.Adapter);
         var cut = Render<TopicBrowser>(parameters => parameters.AddCascadingValue(selection));
         EnsureMudProviders();
-        ExpandAll(cut);
+        await ExpandAllAsync(cut);
         return (cut, selection);
     }
 
     private static IElement GlobalCheckbox(IRenderedComponent<TopicBrowser> cut) =>
         cut.Find(".topic-select-all input");
 
-    private static void GlobalClick(IRenderedComponent<TopicBrowser> cut)
+    private static async Task GlobalClickAsync(IRenderedComponent<TopicBrowser> cut)
     {
         var input = cut.Find(".topic-select-all input");
-        input.Change(!input.HasAttribute("checked"));
+        await input.ChangeAsync(!input.HasAttribute("checked"));
     }
 
-    private static void ExpandAll(IRenderedComponent<TopicBrowser> cut) =>
-        cut.FindAll(".mud-toolbar button")[0].Click();
+    private static async Task ExpandAllAsync(IRenderedComponent<TopicBrowser> cut) =>
+        await cut.FindAll(".mud-toolbar button")[0].ClickAsync();
 
     private static IElement Row(IRenderedComponent<TopicBrowser> cut, string path) =>
         cut.FindAll(".topic-tree-row")
@@ -488,7 +489,7 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
 
     private static TopicBranchTarget Raw(string path) => new(TopicBranchKind.Raw, Path: path);
 
-    private static void Check(IRenderedComponent<TopicBrowser> cut, string label)
+    private static async Task CheckAsync(IRenderedComponent<TopicBrowser> cut, string label)
     {
         var rows = cut.FindAll(".topic-tree-row")
             .Where(row => row.GetAttribute("data-topic-path") == label)
@@ -499,7 +500,7 @@ public sealed class TopicBulkSelectionTests : BunitTestContext
         if (checkbox is null)
             throw new InvalidOperationException(
                 $"no checkbox for {label}: " + string.Join(" | ", rows.Select(row => row.OuterHtml)));
-        checkbox.Click();
+        await checkbox.ClickAsync();
     }
 
     private static MqttMessage Message(string payload, int second) =>

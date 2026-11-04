@@ -1274,4 +1274,57 @@ public class PayloadBrowserTests : BunitTestContext
         labels.Should().NotContain("Correlation data");
         labels.Should().NotContain("User properties");
     }
+
+    [Test]
+    public async Task SelectedMessage_StacksMetadataAndPayloadInTheSharedSplit()
+    {
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}"""
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        var panel = cut.Find(".payload-detail-split-wrap .mud-split-panel");
+        panel.ClassList.Should().Contain("app-split-panel");
+
+        var divider = panel.QuerySelector(".divider")!;
+        divider.ClassList.Should().Contain("horizontal");
+        divider.GetAttribute("role").Should().Be("separator");
+        divider.GetAttribute("aria-orientation").Should().Be("horizontal");
+
+        panel.QuerySelectorAll(":scope > .child-panel").Should().HaveCount(2);
+        panel.QuerySelector(".payload-meta-pane > .payload-detail-meta")!.TextContent
+            .Should().Contain("test/topic");
+        panel.QuerySelector(".payload-body-pane .payload-detail-body-host > .payload-detail-body")
+            .Should().NotBeNull();
+    }
+
+    [Test]
+    public void MessageList_DoesNotRenderTheDetailSplit()
+    {
+        var cut = Render<PayloadBrowser>();
+
+        cut.FindAll(".payload-detail-split-wrap").Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task SelectedMessage_FitsTheSplitToTheMetadataContent()
+    {
+        var module = JSInterop.SetupModule("./_content/MqttProbe.UI/js/message-detail-split.js");
+        module.Setup<bool>("fitToContent", _ => true).SetResult(true);
+
+        var cut = Render<PayloadBrowser>();
+        var msg = new MqttMessage
+        {
+            Topic = "test/topic",
+            Payload = """{"a":1}"""
+        };
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(msg));
+
+        cut.WaitForAssertion(() => module.VerifyInvoke("fitToContent"));
+    }
 }

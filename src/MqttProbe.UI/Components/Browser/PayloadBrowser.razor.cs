@@ -20,6 +20,9 @@ public partial class PayloadBrowser
     private readonly string _domIdSuffix = Guid.NewGuid().ToString("N")[..8];
     private ElementReference _listElement;
     private ElementReference _detailElement;
+    private ElementReference _detailMetaPane;
+    private string? _fittedMetaPaneId;
+    private MessageDetailSplitInterop? _detailSplit;
     private MessageListKeyboardInterop? _keyboard;
     private Guid? _activeMessageId;
     private int _activeIndex = -1;
@@ -51,6 +54,7 @@ public partial class PayloadBrowser
     {
         InitializeMessageTime();
         _filterFunc = FilterFunc;
+        _detailSplit = new MessageDetailSplitInterop(Js);
         if (BulkSelection is not null)
             BulkSelection.MessagesCleared += OnMessagesCleared;
         _updateTimer = new Timer(OnTimerTick, null, 0, 500);
@@ -91,7 +95,35 @@ public partial class PayloadBrowser
             await FocusTargetAsync(target);
         }
 
+        await FitDetailSplitAsync();
         await FormatMessagesIfNeededAsync();
+    }
+
+    private async Task FitDetailSplitAsync()
+    {
+        if (_selectedMessage is null)
+        {
+            _fittedMetaPaneId = null;
+            return;
+        }
+
+        var paneId = _detailMetaPane.Id;
+        if (_detailSplit is null || string.IsNullOrEmpty(paneId) || paneId == _fittedMetaPaneId)
+            return;
+
+        try
+        {
+            if (await _detailSplit.FitToContentAsync(_detailMetaPane))
+                _fittedMetaPaneId = paneId;
+        }
+        catch (JSException ex)
+        {
+            Logger.LogDebug(ex, "Message detail split could not size itself to the metadata");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is gone; nothing to size.
+        }
     }
 
     private async Task SyncListAttachmentAsync()
@@ -296,6 +328,7 @@ public partial class PayloadBrowser
     {
         _selectedMessage = null;
         _jsonTreeView = null;
+        _fittedMetaPaneId = null;
         _pendingFocus = FocusTarget.List;
         StateHasChanged();
     }

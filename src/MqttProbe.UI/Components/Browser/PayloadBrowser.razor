@@ -21,257 +21,253 @@
         <div class="d-flex align-center px-2 py-1 payload-detail-toolbar payload-section-divider"
              role="group" aria-label="Message details"
              tabindex="-1" @ref="_detailElement" @onkeydown="HandleDetailKeyDown">
-            <MudIconButton Icon="@LucideIcons.ArrowLeft" Size="Size.Small"
-                           Color="Color.Primary" title="Back to message list"
-                           OnClick="ClearSelection"/>
+            <MudIconButton Icon="@LucideIcons.ArrowLeft" Size="Size.Small" Color="Color.Primary"
+                           title="Back to message list" OnClick="ClearSelection"/>
             <MudText Typo="Typo.subtitle2" Class="ml-1 payload-toolbar-title">Message Details</MudText>
-            <MudIconButton Icon="@LucideIcons.ChevronLeft" Size="Size.Small"
-                           Disabled="@(!CanNavigatePrevious)" Color="Color.Primary"
-                           title="Previous message" OnClick="SelectPreviousMessage"/>
-            <MudIconButton Icon="@LucideIcons.ChevronRight" Size="Size.Small"
-                           Disabled="@(!CanNavigateNext)" Color="Color.Primary"
-                           title="Next message" OnClick="SelectNextMessage"/>
+            <MudIconButton Icon="@LucideIcons.ChevronLeft" Size="Size.Small" Color="Color.Primary"
+                           Disabled="@(!CanNavigatePrevious)" title="Previous message" OnClick="SelectPreviousMessage"/>
+            <MudIconButton Icon="@LucideIcons.ChevronRight" Size="Size.Small" Color="Color.Primary"
+                           Disabled="@(!CanNavigateNext)" title="Next message" OnClick="SelectNextMessage"/>
             <MudSpacer/>
             <MessageTimeMenu Presentation="_presentation"/>
-            <MudIconButton title="Copy full message" Size="Size.Small"
-                           Icon="@LucideIcons.Copy" Color="Color.Primary"
-                           @onclick="() => CopyToClipboard(JsonSerializer.Serialize(_selectedMessage))"/>
+            <MudIconButton title="Copy full message" Size="Size.Small" Icon="@LucideIcons.Copy"
+                           Color="Color.Primary" @onclick="() => CopyToClipboard(JsonSerializer.Serialize(_selectedMessage))"/>
         </div>
-        <div class="payload-detail-meta">
-            <table class="pb-meta-table">
-                <tbody>
-                    <tr>
-                        <td class="pb-meta-label">Topic</td>
-                        <td>
-                            <div class="d-flex align-center gap-1">
-                                <span class="app-mono pb-topic">@msg.Topic</span>
-                                <MudIconButton title="Copy topic" Size="Size.Small"
-                                               Icon="@LucideIcons.Copy" Color="Color.Primary"
-                                               @onclick="() => CopyToClipboard(msg.Topic!)"/>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr class="pb-received-row">
-                        <td class="pb-meta-label">Received</td>
-                        <td class="pb-meta-value">
-                            @if (received is null)
-                            {
-                                <div class="pb-received-line">
-                                    <span class="pb-received-instant pb-clock-pending" data-time-pending
-                                          title="@MessageTimeDisplay.PendingTitle"
-                                          aria-label="@MessageTimeDisplay.PendingTitle">@MessageTimeDisplay.PendingMarker</span>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="payload-relative-time">
-                                        @DisplayHelpers.GetRelativeTime(msg.DateTimeReceived)
-                                    </MudText>
-                                </div>
-                                <div class="pb-received-zone-name pb-clock-pending">@MessageTimeDisplay.PendingTitle</div>
-                            }
-                            else
-                            {
-                                <div class="pb-received-line">
-                                    <span class="pb-received-instant"
-                                          title="@($"{received.FullText} ({received.ZoneName})")">
-                                        @received.DateText @received.TimeText
-                                    </span>
-                                    <ReceivedZoneToken @key="msg.Id"
-                                                       Abbreviation="@received.ZoneAbbreviation"
-                                                       ZoneName="@received.ZoneName"
-                                                       OffsetLabel="@received.OffsetLabel"/>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="payload-relative-time">
-                                        @DisplayHelpers.GetRelativeTime(msg.DateTimeReceived)
-                                    </MudText>
-                                </div>
-                            }
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="pb-meta-label">QoS</td>
-                        <td class="pb-meta-value">@MqttQosDisplay.Format(msg.QualityOfServiceLevel)</td>
-                    </tr>
-                    <tr>
-                        <td class="pb-meta-label">Retained</td>
-                        <td>
-                            @if (msg.RetainedMessage)
-                            {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
-                                         Class="payload-retained-chip">Retained</MudChip>
-                            }
-                            else
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">No</MudText>
-                            }
-                        </td>
-                    </tr>
-                    @{
-                        var formatName = FormatDisplayNames.GetDisplayName(msg.FormatId);
-                    }
-                    @if (formatName != null)
-                    {
-                        <tr>
-                            <td class="pb-meta-label">Format</td>
-                            <td class="pb-meta-value">@formatName</td>
-                        </tr>
-                    }
-                    @if (msg.ContentType != null)
-                    {
-                        <tr>
-                            <td class="pb-meta-label">Content type</td>
-                            <td class="pb-meta-value app-mono pb-topic">
-                                @if (msg.ContentType.Length == 0)
-                                {
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">(empty)</MudText>
-                                }
-                                else
-                                {
-                                    @msg.ContentType
-                                }
-                            </td>
-                        </tr>
-                    }
-                    @if (msg.PayloadFormatIndicator is { } payloadFormat)
-                    {
-                        <tr>
-                            <td class="pb-meta-label">Payload format</td>
-                            <td class="pb-meta-value">@MqttMessagePropertyDisplay.FormatPayloadFormat(payloadFormat)</td>
-                        </tr>
-                    }
-                    @if (msg.MessageExpiryInterval is { } expiry)
-                    {
-                        <tr>
-                            <td class="pb-meta-label">Expiry</td>
-                            <td class="pb-meta-value">@MqttMessagePropertyDisplay.FormatExpiry(expiry)</td>
-                        </tr>
-                    }
-                    @if (msg.ResponseTopic != null)
-                    {
-                        <tr>
-                            <td class="pb-meta-label">Response topic</td>
-                            <td class="pb-meta-value app-mono pb-topic">
-                                @if (msg.ResponseTopic.Length == 0)
-                                {
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">(empty)</MudText>
-                                }
-                                else
-                                {
-                                    @msg.ResponseTopic
-                                }
-                            </td>
-                        </tr>
-                    }
-                    @if (msg.CorrelationData != null)
-                    {
-                        <tr>
-                            <td class="pb-meta-label">Correlation data</td>
-                            <td class="pb-meta-value app-mono pb-topic pb-preserve-ws">
-                                @if (msg.CorrelationData.Length == 0)
-                                {
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">(empty)</MudText>
-                                }
-                                else
-                                {
-                                    @MqttMessagePropertyDisplay.FormatCorrelationData(msg.CorrelationData)
-                                }
-                            </td>
-                        </tr>
-                    }
-                    @if (msg.UserProperties is { Count: > 0 } userProperties)
-                    {
-                        <tr>
-                            <td class="pb-meta-label">User properties</td>
-                            <td>
-                                <table class="pb-user-props">
-                                    <tbody>
-                                        @foreach (var property in userProperties)
+        <div class="payload-detail-split-wrap">
+            <MudSplitPanel Horizontal="true" Class="payload-detail-split-panel app-split-panel"
+                           ClassFirstPanel="payload-meta-pane" ClassSecondPanel="payload-body-pane"
+                           FirstPanelInitialSize="180" MinPanelSize="80"
+                           PanelGap="6" ResetOnDoubleClick="true" Transparent="true">
+                <FirstPanel>
+                    <div class="payload-detail-meta" @ref="_detailMetaPane">
+                        <table class="pb-meta-table">
+                            <tbody>
+                                <tr>
+                                    <td class="pb-meta-label">Topic</td>
+                                    <td>
+                                        <div class="d-flex align-center gap-1">
+                                            <span class="app-mono pb-topic">@msg.Topic</span>
+                                            <MudIconButton title="Copy topic" Size="Size.Small" Icon="@LucideIcons.Copy"
+                                                           Color="Color.Primary" @onclick="() => CopyToClipboard(msg.Topic!)"/>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr class="pb-received-row">
+                                    <td class="pb-meta-label">Received</td>
+                                    <td class="pb-meta-value">
+                                        @if (received is null)
                                         {
-                                            <tr>
-                                                <td class="pb-user-prop-name app-mono">@property.Name</td>
-                                                <td class="pb-user-prop-value app-mono pb-preserve-ws">@property.Value</td>
-                                            </tr>
+                                            <div class="pb-received-line">
+                                                <span class="pb-received-instant pb-clock-pending" data-time-pending
+                                                      title="@MessageTimeDisplay.PendingTitle"
+                                                      aria-label="@MessageTimeDisplay.PendingTitle">@MessageTimeDisplay.PendingMarker</span>
+                                                <MudText Typo="Typo.caption" Class="payload-relative-time"
+                                                         Color="Color.Secondary">@DisplayHelpers.GetRelativeTime(msg.DateTimeReceived)</MudText>
+                                            </div>
+                                            <div class="pb-received-zone-name pb-clock-pending">@MessageTimeDisplay.PendingTitle</div>
                                         }
-                                    </tbody>
-                                </table>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-
-        <div class="payload-detail-body-host">
-            <MudPaper Outlined="true" Class="ma-2 pa-1 payload-detail-body">
-                @{
-                    var payloadType = GetPayloadType(msg.Payload);
-                    var (typeLabel, typeColor) = payloadType switch
-                    {
-                        PayloadType.Json    => ("JSON",    Color.Success),
-                        PayloadType.Xml     => ("XML",     Color.Info),
-                        PayloadType.Number  => ("Number",  Color.Warning),
-                        PayloadType.Boolean => ("Boolean", Color.Secondary),
-                        PayloadType.Empty   => ("Empty",   Color.Default),
-                        _                  => ("Text",    Color.Default)
-                    };
-                }
-                <div class="d-flex align-center px-1 py-1 payload-section-divider">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Payload</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="@typeColor" Variant="Variant.Text"
-                             Class="payload-type-chip">@typeLabel</MudChip>
-                    <MudSpacer/>
-                    @if (payloadType == PayloadType.Json && JsonTreeView.IsExpandableJson(msg.Payload))
-                    {
-                        <div class="d-flex align-center payload-action-group">
-                            <MudIconButton title="Expand all" Size="Size.Small"
-                                           Icon="@LucideIcons.Maximize2" Color="Color.Primary"
-                                           Class="json-expand-all-btn"
-                                           @onclick="() => _jsonTreeView!.ExpandAll()"/>
-                            <MudIconButton title="Collapse all" Size="Size.Small"
-                                           Icon="@LucideIcons.Minimize2" Color="Color.Primary"
-                                           Class="json-collapse-all-btn"
-                                           @onclick="() => _jsonTreeView!.CollapseAll()"/>
-                        </div>
-                    }
-                    <MudIconButton title="Copy payload" Size="Size.Small"
-                                   Icon="@LucideIcons.Copy" Color="Color.Primary"
-                                   @onclick="() => CopyToClipboard(msg.Payload ?? string.Empty)"/>
-                </div>
-                @if (payloadType == PayloadType.Json)
-                {
-                    <JsonTreeView @ref="_jsonTreeView" Json="@msg.Payload" AliasNames="@msg.AliasNames" OnAddToChart="HandleAddToChart"/>
-                }
-                else if (payloadType == PayloadType.Xml)
-                {
-                    <pre class="payload-pre"><code>@(TryFormatXml(msg.Payload!) ?? msg.Payload)</code></pre>
-                }
-                else if (payloadType == PayloadType.Number)
-                {
-                    <div class="d-flex justify-center align-center pa-4">
-                        <MudText Typo="Typo.h5" Class="payload-number-value">@NumberDisplay(msg.Payload!)</MudText>
-                        @if (ChartFieldPaths.TryParseRootNumber(msg.Payload, out _))
-                        {
-                            <AddToChartButton JsonPath="@ChartFieldPaths.Root" SeriesName="value" OnAddToChart="HandleAddToChart"/>
-                        }
+                                        else
+                                        {
+                                            <div class="pb-received-line">
+                                                <span class="pb-received-instant" title="@($"{received.FullText} ({received.ZoneName})")">
+                                                    @received.DateText @received.TimeText</span>
+                                                <ReceivedZoneToken @key="msg.Id" Abbreviation="@received.ZoneAbbreviation"
+                                                                   ZoneName="@received.ZoneName" OffsetLabel="@received.OffsetLabel"/>
+                                                <MudText Typo="Typo.caption" Class="payload-relative-time"
+                                                         Color="Color.Secondary">@DisplayHelpers.GetRelativeTime(msg.DateTimeReceived)</MudText>
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="pb-meta-label">QoS</td>
+                                    <td class="pb-meta-value">@MqttQosDisplay.Format(msg.QualityOfServiceLevel)</td>
+                                </tr>
+                                <tr>
+                                    <td class="pb-meta-label">Retained</td>
+                                    <td>
+                                        @if (msg.RetainedMessage)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                                                     Class="payload-retained-chip">Retained</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">No</MudText>
+                                        }
+                                    </td>
+                                </tr>
+                                @{
+                                    var formatName = FormatDisplayNames.GetDisplayName(msg.FormatId);
+                                }
+                                @if (formatName != null)
+                                {
+                                    <tr>
+                                        <td class="pb-meta-label">Format</td>
+                                        <td class="pb-meta-value">@formatName</td>
+                                    </tr>
+                                }
+                                @if (msg.ContentType != null)
+                                {
+                                    <tr>
+                                        <td class="pb-meta-label">Content type</td>
+                                        <td class="pb-meta-value app-mono pb-topic">
+                                            @if (msg.ContentType.Length == 0)
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">(empty)</MudText>
+                                            }
+                                            else
+                                            {
+                                                @msg.ContentType
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                                @if (msg.PayloadFormatIndicator is { } payloadFormat)
+                                {
+                                    <tr>
+                                        <td class="pb-meta-label">Payload format</td>
+                                        <td class="pb-meta-value">@MqttMessagePropertyDisplay.FormatPayloadFormat(payloadFormat)</td>
+                                    </tr>
+                                }
+                                @if (msg.MessageExpiryInterval is { } expiry)
+                                {
+                                    <tr>
+                                        <td class="pb-meta-label">Expiry</td>
+                                        <td class="pb-meta-value">@MqttMessagePropertyDisplay.FormatExpiry(expiry)</td>
+                                    </tr>
+                                }
+                                @if (msg.ResponseTopic != null)
+                                {
+                                    <tr>
+                                        <td class="pb-meta-label">Response topic</td>
+                                        <td class="pb-meta-value app-mono pb-topic">
+                                            @if (msg.ResponseTopic.Length == 0)
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">(empty)</MudText>
+                                            }
+                                            else
+                                            {
+                                                @msg.ResponseTopic
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                                @if (msg.CorrelationData != null)
+                                {
+                                    <tr>
+                                        <td class="pb-meta-label">Correlation data</td>
+                                        <td class="pb-meta-value app-mono pb-topic pb-preserve-ws">
+                                            @if (msg.CorrelationData.Length == 0)
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">(empty)</MudText>
+                                            }
+                                            else
+                                            {
+                                                @MqttMessagePropertyDisplay.FormatCorrelationData(msg.CorrelationData)
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                                @if (msg.UserProperties is { Count: > 0 } userProperties)
+                                {
+                                    <tr>
+                                        <td class="pb-meta-label">User properties</td>
+                                        <td>
+                                            <table class="pb-user-props">
+                                                <tbody>
+                                                    @foreach (var property in userProperties)
+                                                    {
+                                                        <tr>
+                                                            <td class="pb-user-prop-name app-mono">@property.Name</td>
+                                                            <td class="pb-user-prop-value app-mono pb-preserve-ws">@property.Value</td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
                     </div>
-                }
-                else if (payloadType == PayloadType.Boolean)
-                {
-                    var boolTrue = msg.Payload!.Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
-                    <div class="d-flex justify-center align-center pa-4">
-                        <MudChip T="string" Color="@(boolTrue ? Color.Success : Color.Error)"
-                                 Variant="Variant.Filled" Size="Size.Large">
-                            @msg.Payload.Trim().ToLowerInvariant()
-                        </MudChip>
+                </FirstPanel>
+                <SecondPanel>
+                    <div class="payload-detail-body-host">
+                        <MudPaper Outlined="true" Class="ma-2 pa-1 payload-detail-body">
+                            @{
+                                var payloadType = GetPayloadType(msg.Payload);
+                                var (typeLabel, typeColor) = payloadType switch
+                                {
+                                    PayloadType.Json    => ("JSON",    Color.Success),
+                                    PayloadType.Xml     => ("XML",     Color.Info),
+                                    PayloadType.Number  => ("Number",  Color.Warning),
+                                    PayloadType.Boolean => ("Boolean", Color.Secondary),
+                                    PayloadType.Empty   => ("Empty",   Color.Default),
+                                    _                  => ("Text",    Color.Default)
+                                };
+                            }
+                            <div class="d-flex align-center px-1 py-1 payload-section-divider">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Payload</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="@typeColor" Variant="Variant.Text" Class="payload-type-chip">@typeLabel</MudChip>
+                                <MudSpacer/>
+                                @if (payloadType == PayloadType.Json && JsonTreeView.IsExpandableJson(msg.Payload))
+                                {
+                                    <div class="d-flex align-center payload-action-group">
+                                        <MudIconButton title="Expand all" Size="Size.Small" Color="Color.Primary"
+                                                       Icon="@LucideIcons.Maximize2" Class="json-expand-all-btn"
+                                                       @onclick="() => _jsonTreeView!.ExpandAll()"/>
+                                        <MudIconButton title="Collapse all" Size="Size.Small" Color="Color.Primary"
+                                                       Icon="@LucideIcons.Minimize2" Class="json-collapse-all-btn"
+                                                       @onclick="() => _jsonTreeView!.CollapseAll()"/>
+                                    </div>
+                                }
+                                <MudIconButton title="Copy payload" Size="Size.Small" Icon="@LucideIcons.Copy"
+                                               Color="Color.Primary"
+                                               @onclick="() => CopyToClipboard(msg.Payload ?? string.Empty)"/>
+                            </div>
+                            @if (payloadType == PayloadType.Json)
+                            {
+                                <JsonTreeView @ref="_jsonTreeView" Json="@msg.Payload" AliasNames="@msg.AliasNames" OnAddToChart="HandleAddToChart"/>
+                            }
+                            else if (payloadType == PayloadType.Xml)
+                            {
+                                <pre class="payload-pre"><code>@(TryFormatXml(msg.Payload!) ?? msg.Payload)</code></pre>
+                            }
+                            else if (payloadType == PayloadType.Number)
+                            {
+                                <div class="d-flex justify-center align-center pa-4">
+                                    <MudText Typo="Typo.h5" Class="payload-number-value">@NumberDisplay(msg.Payload!)</MudText>
+                                    @if (ChartFieldPaths.TryParseRootNumber(msg.Payload, out _))
+                                    {
+                                        <AddToChartButton JsonPath="@ChartFieldPaths.Root" SeriesName="value" OnAddToChart="HandleAddToChart"/>
+                                    }
+                                </div>
+                            }
+                            else if (payloadType == PayloadType.Boolean)
+                            {
+                                var boolTrue = msg.Payload!.Trim().Equals("true", StringComparison.OrdinalIgnoreCase);
+                                <div class="d-flex justify-center align-center pa-4">
+                                    <MudChip T="string" Color="@(boolTrue ? Color.Success : Color.Error)"
+                                             Variant="Variant.Filled" Size="Size.Large">
+                                        @msg.Payload.Trim().ToLowerInvariant()
+                                    </MudChip>
+                                </div>
+                            }
+                            else if (payloadType == PayloadType.Empty)
+                            {
+                                <div class="d-flex justify-center align-center pa-4">
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="payload-empty-text">Empty payload</MudText>
+                                </div>
+                            }
+                            else
+                            {
+                                <pre class="payload-pre payload-pre--wrap"><code>@msg.Payload</code></pre>
+                            }
+                        </MudPaper>
                     </div>
-                }
-                else if (payloadType == PayloadType.Empty)
-                {
-                    <div class="d-flex justify-center align-center pa-4">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="payload-empty-text">Empty payload</MudText>
-                    </div>
-                }
-                else
-                {
-                    <pre class="payload-pre payload-pre--wrap"><code>@msg.Payload</code></pre>
-                }
-            </MudPaper>
+                </SecondPanel>
+            </MudSplitPanel>
         </div>
     </MudPaper>
 }
@@ -428,6 +424,11 @@ else
             await _updateTimer.DisposeAsync();
         if (_keyboard is not null)
             await _keyboard.DisposeAsync();
+        if (_detailSplit is not null)
+        {
+            await _detailSplit.DisposeAsync();
+            _detailSplit = null;
+        }
     }
 
     internal static bool IsJson(string value)

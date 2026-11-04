@@ -4,10 +4,30 @@
     border-top: 1px solid var(--mud-palette-divider);
 }
 
+.about-links ::deep .about-links__heading {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.about-links__items {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+}
+
+.about-links__privacy {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
 .about-links__link {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    padding: 0.25rem 0;
     color: var(--mud-palette-primary);
     font-weight: 500;
     text-decoration: none;

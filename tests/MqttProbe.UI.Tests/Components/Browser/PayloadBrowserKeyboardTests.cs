@@ -20,7 +20,6 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     private static readonly Guid _storeId = Guid.NewGuid();
 
     private IMessageStoreManager _store = null!;
-    private IUxMetricsService _metrics = null!;
     private SelectedTopicState _selection = null!;
     private List<MqttMessage> _messages = [];
 
@@ -41,8 +40,7 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
         performance.Performance.Returns(new AppConfiguration().Performance);
         Services.AddPerformanceSettings(performance);
 
-        _metrics = Substitute.For<IUxMetricsService>();
-        Services.AddSingleton(_metrics);
+        Services.AddSingleton(Substitute.For<IUxMetricsService>());
         Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
         Services.AddSingleton(Substitute.For<IDialogService>());
         Services.AddSingleton(Substitute.For<ISnackbar>());
@@ -71,22 +69,46 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
 
     private static IElement List(IRenderedComponent<PayloadBrowser> cut) => cut.Find(".payload-message-list");
 
-    private static IElement FocusedList(IRenderedComponent<PayloadBrowser> cut)
+    private static async Task<IElement> FocusedListAsync(IRenderedComponent<PayloadBrowser> cut)
     {
         var list = cut.Find(".payload-message-list");
-        list.Focus();
+        await list.FocusAsync(new FocusEventArgs());
         return list;
+    }
+
+    private static Task PressListKeyAsync(IRenderedComponent<PayloadBrowser> cut, string key) =>
+        PressListKeyAsync(cut, new KeyboardEventArgs { Key = key });
+
+    private static async Task PressListKeyAsync(IRenderedComponent<PayloadBrowser> cut, KeyboardEventArgs args)
+    {
+        var list = await FocusedListAsync(cut);
+        await list.KeyDownAsync(args);
+    }
+
+    private const string KeyboardModulePath = "./_content/MqttProbe.UI/js/message-list-keyboard.js";
+    private const string FocusIdentifier = "Blazor._internal.domWrapper.focus";
+
+    private Task<JSRuntimeInvocation> ExpectFocusAsync()
+    {
+        var invoked = new TaskCompletionSource<JSRuntimeInvocation>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = JSInterop.SetupVoid(FocusIdentifier, invocation =>
+        {
+            invoked.TrySetResult(invocation);
+            return true;
+        });
+        handler.SetVoidResult();
+        return invoked.Task;
     }
 
     private static IReadOnlyList<string> ActiveRowText(IRenderedComponent<PayloadBrowser> cut) =>
         cut.FindAll(".payload-row--active").Select(row => row.TextContent).ToList();
 
     [Test]
-    public void ClickingAMessageRow_StillOpensTheMessageDetail()
+    public async Task ClickingAMessageRow_StillOpensTheMessageDetail()
     {
         var cut = RenderList();
 
-        cut.FindAll(".payload-row")[1].Click();
+        await cut.FindAll(".payload-row")[1].ClickAsync();
 
         cut.WaitForAssertion(() =>
         {
@@ -99,14 +121,13 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     public async Task FilteredList_WalksOnlyMatchingMessages()
     {
         var cut = RenderList();
-        List(cut).QuerySelector("input")!.Input("third");
+        await List(cut).QuerySelector("input")!.InputAsync("third");
         cut.WaitForAssertion(() => cut.FindAll(".payload-row").Should().ContainSingle());
 
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "End" });
-        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("third"));
+        await PressListKeyAsync(cut, "End");
+        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("third");
 
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
+        await PressListKeyAsync(cut, "Enter");
         cut.WaitForAssertion(() => cut.Find(".payload-detail-body").TextContent.Should().Contain("third"));
     }
 
@@ -115,15 +136,11 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     {
         var cut = RenderList();
 
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await PressListKeyAsync(cut, "ArrowDown");
 
-        cut.WaitForAssertion(() =>
-        {
-            var activeId = List(cut).GetAttribute("aria-activedescendant");
-            activeId.Should().NotBeNullOrWhiteSpace();
-            cut.Find($"#{activeId}").GetAttribute("data-message-index").Should().Be("0");
-        });
+        var activeId = List(cut).GetAttribute("aria-activedescendant");
+        activeId.Should().NotBeNullOrWhiteSpace();
+        cut.Find($"#{activeId}").GetAttribute("data-message-index").Should().Be("0");
     }
 
     [Test]
@@ -136,7 +153,7 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     }
 
     [Test]
-    public void TimeSort_IsANativeButtonThatReflectsTheCurrentOrder()
+    public async Task TimeSort_IsANativeButtonThatReflectsTheCurrentOrder()
     {
         var cut = RenderList();
 
@@ -147,7 +164,7 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
         cut.Find("thead th").GetAttribute("aria-sort").Should().Be("descending");
         cut.FindAll(".payload-row")[0].TextContent.Should().Contain("first");
 
-        sort.Click();
+        await sort.ClickAsync();
 
         cut.WaitForAssertion(() => cut.FindAll(".payload-row")[0].TextContent.Should().Contain("third"));
         cut.Find("button.sortable-th").GetAttribute("title").Should().Be("Sort: newest first");
@@ -155,7 +172,7 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     }
 
     [Test]
-    public void End_WhileTheNewTopicIsStillPending_DoesNotActivateTheOldTopicMessage()
+    public async Task End_WhileTheNewTopicIsStillPending_DoesNotActivateTheOldTopicMessage()
     {
         _selection = Selection("root", generation: 1);
         _messages = Payloads("root-only");
@@ -164,7 +181,7 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
         _selection = Selection("/long80", generation: 2);
         _messages = Payloads("long-1", "long-2", "long-3");
 
-        FocusedList(cut).KeyDown("End");
+        await PressListKeyAsync(cut, "End");
 
         ActiveRowText(cut).Should().BeEmpty();
         List(cut).GetAttribute("aria-activedescendant").Should().BeNull();
@@ -182,14 +199,16 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     public async Task ArrowKeys_OnlyNavigateWhileTheListItselfHasFocus()
     {
         var cut = RenderList();
+        var list = List(cut);
 
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
-        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first"));
+        await list.FocusAsync(new FocusEventArgs());
+        await list.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first");
 
         // Focus moves into a nested control, such as the message search field.
-        await List(cut).BlurAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        list = List(cut);
+        await list.BlurAsync(new FocusEventArgs());
+        await list.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
 
         ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first");
     }
@@ -199,10 +218,9 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     {
         var cut = RenderList();
 
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await PressListKeyAsync(cut, "ArrowDown");
 
-        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first"));
+        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first");
     }
 
     [Test]
@@ -210,11 +228,10 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     {
         var cut = RenderList();
 
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await PressListKeyAsync(cut, "ArrowDown");
+        await PressListKeyAsync(cut, "ArrowDown");
 
-        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("second"));
+        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("second");
     }
 
     [Test]
@@ -222,11 +239,10 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     {
         var cut = RenderList();
 
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowUp" });
+        await PressListKeyAsync(cut, "ArrowDown");
+        await PressListKeyAsync(cut, "ArrowUp");
 
-        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first"));
+        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first");
     }
 
     [Test]
@@ -234,21 +250,20 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     {
         var cut = RenderList();
 
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "End" });
-        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("third"));
+        await PressListKeyAsync(cut, "End");
+        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("third");
 
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Home" });
-        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first"));
+        await PressListKeyAsync(cut, "Home");
+        ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first");
     }
 
     [Test]
     public async Task ArrowKeys_DuringImeComposition_DoNotMoveTheCursor()
     {
         var cut = RenderList();
+        var list = await FocusedListAsync(cut);
 
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown", IsComposing = true });
+        await list.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown", IsComposing = true });
 
         ActiveRowText(cut).Should().BeEmpty();
     }
@@ -258,25 +273,25 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     public async Task AutoRepeatedOpenKey_DoesNotOpenTheActiveMessage(string key)
     {
         var cut = RenderList();
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
-        cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle().Which.Should().Contain("first"));
+        var list = await FocusedListAsync(cut);
+        await list.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
 
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = key, Repeat = true });
+        list = List(cut);
+        await list.KeyDownAsync(new KeyboardEventArgs { Key = key, Repeat = true });
 
         cut.Markup.Should().NotContain("Message Details");
     }
 
     [Test]
-    public void Enter_OpensTheActiveMessage()
+    public async Task Enter_OpensTheActiveMessage()
     {
         var cut = RenderList();
 
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("ArrowDown");
+        await PressListKeyAsync(cut, "ArrowDown");
+        await PressListKeyAsync(cut, "ArrowDown");
         cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle()
             .Which.Should().Contain("second"));
-        FocusedList(cut).KeyDown("Enter");
+        await PressListKeyAsync(cut, "Enter");
 
         cut.WaitForAssertion(() =>
         {
@@ -286,14 +301,14 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     }
 
     [Test]
-    public void Space_OpensTheActiveMessage()
+    public async Task Space_OpensTheActiveMessage()
     {
         var cut = RenderList();
 
-        FocusedList(cut).KeyDown("End");
+        await PressListKeyAsync(cut, "End");
         cut.WaitForAssertion(() => ActiveRowText(cut).Should().ContainSingle()
             .Which.Should().Contain("third"));
-        FocusedList(cut).KeyDown(" ");
+        await PressListKeyAsync(cut, " ");
 
         cut.WaitForAssertion(() =>
         {
@@ -316,8 +331,7 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
             MetaKey = modifier == "Meta"
         };
 
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(args);
+        await PressListKeyAsync(cut, args);
 
         ActiveRowText(cut).Should().BeEmpty();
         cut.Markup.Should().NotContain("Message Details");
@@ -340,11 +354,7 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
         var cut = Render<PayloadBrowser>();
         cut.WaitForAssertion(() => cut.FindAll(".payload-row").Should().BeEmpty());
 
-        var act = async () =>
-        {
-            await List(cut).FocusAsync(new FocusEventArgs());
-            await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
-        };
+        var act = () => PressListKeyAsync(cut, "ArrowDown");
 
         await act.Should().NotThrowAsync();
         cut.Markup.Should().NotContain("Message Details");
@@ -354,9 +364,8 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     public async Task ActiveMessage_KeepsItsRow_WhenLiveContentReplacesTheMessages()
     {
         var cut = RenderList();
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
+        await PressListKeyAsync(cut, "ArrowDown");
+        await PressListKeyAsync(cut, "ArrowDown");
 
         _messages = Recreated();
 
@@ -369,10 +378,9 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     public async Task Enter_ThenLiveContentReplace_KeepsPreviousAndNextAvailable()
     {
         var cut = RenderList();
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
+        await PressListKeyAsync(cut, "ArrowDown");
+        await PressListKeyAsync(cut, "ArrowDown");
+        await PressListKeyAsync(cut, "Enter");
         cut.WaitForElement(".payload-detail-toolbar");
         cut.Find("button[title='Previous message']").HasAttribute("disabled").Should().BeFalse();
         cut.Find("button[title='Next message']").HasAttribute("disabled").Should().BeFalse();
@@ -391,12 +399,11 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     public async Task ArrowRight_InMessageDetail_OpensTheNextMessage()
     {
         var cut = RenderList();
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
+        await PressListKeyAsync(cut, "ArrowDown");
+        await PressListKeyAsync(cut, "Enter");
 
         var toolbar = cut.WaitForElement(".payload-detail-toolbar");
-        await toolbar.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight" });
+        toolbar.KeyDown("ArrowRight");
 
         cut.WaitForAssertion(() => cut.Find(".payload-detail-body").TextContent.Should().Contain("second"));
     }
@@ -405,13 +412,12 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     public async Task ArrowLeft_InMessageDetail_OpensThePreviousMessage()
     {
         var cut = RenderList();
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
+        await PressListKeyAsync(cut, "ArrowDown");
+        await PressListKeyAsync(cut, "ArrowDown");
+        await PressListKeyAsync(cut, "Enter");
 
         var toolbar = cut.WaitForElement(".payload-detail-toolbar");
-        await toolbar.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowLeft" });
+        toolbar.KeyDown("ArrowLeft");
 
         cut.WaitForAssertion(() => cut.Find(".payload-detail-body").TextContent.Should().Contain("first"));
     }
@@ -421,18 +427,21 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     {
         _messages = Payloads("""{"a":{"b":{"c":1}}}""", "third");
         var cut = RenderList(2);
-        cut.FindAll(".payload-row")[0].Click();
+        await cut.FindAll(".payload-row")[0].ClickAsync();
 
         cut.WaitForAssertion(() => cut.FindAll(".json-toggle").Should().NotBeEmpty());
-        await cut.FindAll(".json-toggle").Last().KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight" });
-        cut.WaitForAssertion(() => cut.FindAll(".json-toggle").Last().GetAttribute("aria-expanded").Should().Be("true"));
+        var toggle = cut.FindAll(".json-toggle").Last();
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight" });
+        cut.FindAll(".json-toggle").Last().GetAttribute("aria-expanded").Should().Be("true");
 
-        await cut.FindAll(".json-toggle").Last().KeyDownAsync(new KeyboardEventArgs { Key = "ArrowLeft" });
-        cut.WaitForAssertion(() => cut.FindAll(".json-toggle").Last().GetAttribute("aria-expanded").Should().Be("false"));
+        toggle = cut.FindAll(".json-toggle").Last();
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowLeft" });
+        cut.FindAll(".json-toggle").Last().GetAttribute("aria-expanded").Should().Be("false");
 
         cut.Find(".payload-detail-body").TextContent.Should().Contain("\"c\"");
 
-        await cut.Find(".payload-detail-toolbar").KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight" });
+        var toolbar = cut.WaitForElement(".payload-detail-toolbar");
+        toolbar.KeyDown("ArrowRight");
         cut.WaitForAssertion(() => cut.Find(".payload-detail-body").TextContent.Should().Contain("third"));
     }
 
@@ -457,49 +466,79 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
     }
 
     [Test]
-    public void Enter_MovesFocusIntoTheMessageDetail()
+    public async Task Enter_MovesFocusIntoTheMessageDetail()
     {
-        var cut = RenderList();
-
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("Enter");
-
-        cut.WaitForAssertion(() =>
+        var keyboard = JSInterop.SetupModule(KeyboardModulePath);
+        keyboard.Setup<int?>("attach", _ => true).SetResult(1);
+        var detachReached = new TaskCompletionSource<JSRuntimeInvocation>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var detach = keyboard.SetupVoid("detach", invocation =>
         {
-            JSInterop.VerifyFocusAsyncInvoke(1, "opening a message moves focus once");
-            LastFocusTarget().ShouldBeElementReferenceTo(cut.Find(".payload-detail-toolbar"));
+            detachReached.TrySetResult(invocation);
+            return true;
         });
+        var focusReached = ExpectFocusAsync();
+
+        var cut = RenderList();
+        await PressListKeyAsync(cut, "ArrowDown");
+
+        var enter = List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
+        await detachReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => cut.FindAll(".payload-detail-toolbar").Should().ContainSingle());
+        JSInterop.VerifyNotInvoke(FocusIdentifier, "focus must not be requested before the list detaches");
+
+        detach.SetVoidResult();
+        var focus = await focusReached.WaitAsync(TimeSpan.FromSeconds(5));
+        await enter;
+
+        JSInterop.VerifyFocusAsyncInvoke(1, "opening a message moves focus once");
+        focus.Arguments[0].ShouldBeElementReferenceTo(cut.Find(".payload-detail-toolbar"));
     }
 
     [Test]
-    public void BackToTheList_MovesFocusBackToTheMessageList()
+    public async Task BackToTheList_MovesFocusBackToTheMessageList()
     {
+        var keyboard = JSInterop.SetupModule(KeyboardModulePath);
+        keyboard.Setup<int?>("attach", _ => true).SetResult(1);
+        keyboard.SetupVoid("detach", _ => true).SetVoidResult();
+        var focusOpened = ExpectFocusAsync();
+
         var cut = RenderList();
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("Enter");
-        cut.WaitForAssertion(() =>
-            JSInterop.VerifyFocusAsyncInvoke(1, "opening a message moves focus once"));
+        await PressListKeyAsync(cut, "ArrowDown");
+        await PressListKeyAsync(cut, "Enter");
+        var openFocus = await focusOpened.WaitAsync(TimeSpan.FromSeconds(5));
+        openFocus.Arguments[0].ShouldBeElementReferenceTo(cut.Find(".payload-detail-toolbar"));
 
-        cut.Find("button[title='Back to message list']").Click();
-
-        cut.WaitForAssertion(() =>
+        var attachReached = new TaskCompletionSource<JSRuntimeInvocation>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attach = keyboard.Setup<int?>("attach", invocation =>
         {
-            JSInterop.VerifyFocusAsyncInvoke(2, "returning to the list moves focus back");
-            LastFocusTarget().ShouldBeElementReferenceTo(cut.Find(".payload-message-list"));
+            attachReached.TrySetResult(invocation);
+            return true;
         });
+        var focusReturned = ExpectFocusAsync();
+        var back = cut.Find("button[title='Back to message list']").ClickAsync();
+        await attachReached.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => cut.FindAll(".payload-message-list").Should().ContainSingle());
+        JSInterop.VerifyFocusAsyncInvoke(1, "the list cannot take focus until it is attached");
+
+        attach.SetResult(1);
+        var returnFocus = await focusReturned.WaitAsync(TimeSpan.FromSeconds(5));
+        await back;
+
+        JSInterop.VerifyFocusAsyncInvoke(2, "returning to the list moves focus back");
+        returnFocus.Arguments[0].ShouldBeElementReferenceTo(cut.Find(".payload-message-list"));
     }
 
     [Test]
-    public void LiveContentUpdate_DoesNotMoveFocus()
+    public async Task LiveContentUpdate_DoesNotMoveFocus()
     {
         var cut = RenderList();
-        FocusedList(cut).KeyDown("ArrowDown");
-        FocusedList(cut).KeyDown("Enter");
+        await PressListKeyAsync(cut, "ArrowDown");
+        await PressListKeyAsync(cut, "Enter");
+        cut.WaitForElement(".payload-detail-toolbar");
 
-        _messages = Recreated();
+        _messages = Recreated("first-refreshed");
 
-        cut.WaitForAssertion(() => _metrics.Received().SetDisplayedMessageCount(3));
-        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Message Details"));
+        cut.WaitForAssertion(() => cut.Find(".payload-detail-body").TextContent.Should().Contain("first-refreshed"));
         JSInterop.VerifyFocusAsyncInvoke(1, "refreshing content must leave focus where it is");
     }
 
@@ -510,23 +549,22 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
         var cut = Render<PayloadBrowser>(parameters => parameters.AddCascadingValue(selection));
         cut.WaitForAssertion(() => cut.FindAll(".payload-row").Should().HaveCount(3));
 
-        await List(cut).FocusAsync(new FocusEventArgs());
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "ArrowDown" });
-        await List(cut).KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
-        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Message Details"));
+        await PressListKeyAsync(cut, "ArrowDown");
+        await PressListKeyAsync(cut, "Enter");
+        cut.WaitForElement(".payload-detail-toolbar");
 
+        var focusReturned = ExpectFocusAsync();
         await cut.InvokeAsync(() => selection.NotifyMessagesCleared(
             [new TopicBranchTarget(TopicBranchKind.Raw, Path: "sensor/temp")]));
 
+        var focus = await focusReturned.WaitAsync(TimeSpan.FromSeconds(5));
         cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Message Details"));
         cut.FindAll(".payload-message-list").Should().ContainSingle();
-        LastFocusTarget().ShouldBeElementReferenceTo(cut.Find(".payload-message-list"));
+        JSInterop.VerifyFocusAsyncInvoke(2, "closing the detail returns focus to the list");
+        focus.Arguments[0].ShouldBeElementReferenceTo(cut.Find(".payload-message-list"));
     }
 
-    private object LastFocusTarget() =>
-        JSInterop.Invocations.Last(invocation => invocation.Identifier == "Blazor._internal.domWrapper.focus").Arguments[0]!;
-
-    private List<MqttMessage> Recreated()
+    private List<MqttMessage> Recreated(string? firstPayload = null)
     {
         _selection = _selection with { Token = new SelectedTopicToken(_storeId, 1, 2) };
         return _messages
@@ -534,7 +572,9 @@ public class PayloadBrowserKeyboardTests : BunitTestContext
             {
                 Id = message.Id,
                 Topic = message.Topic,
-                Payload = message.Payload,
+                Payload = message.Payload == "first" && firstPayload is not null
+                    ? firstPayload
+                    : message.Payload,
                 DateTimeReceived = message.DateTimeReceived
             })
             .ToList();

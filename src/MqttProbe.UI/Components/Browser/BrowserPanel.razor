@@ -80,6 +80,7 @@
     private TopicBulkSelection _bulkSelection = null!;
     private Timer? _updateTimer;
     private bool _disposed;
+    private bool _multiSelect;
     private int _lastCount;
     private bool _mobilePickerOpen;
 
@@ -89,8 +90,39 @@
     protected override void OnInitialized()
     {
         _bulkSelection = new TopicBulkSelection(TopicSelectionStore);
+        _multiSelect = UiSettings.Ui.TopicTreeMultiSelect;
+        _bulkSelection.SetMultiSelect(_multiSelect);
         _lastCount = MessageStoreManager.RootTopicCount;
+        UiSettings.UiPreferencesChanged += OnUiPreferencesChanged;
         _updateTimer = CreateUpdateTimer();
+    }
+
+    private void OnUiPreferencesChanged() => _ = ApplyMultiSelectPreferenceAsync();
+
+    private async Task ApplyMultiSelectPreferenceAsync()
+    {
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                if (_disposed) return;
+
+                var multiSelect = UiSettings.Ui.TopicTreeMultiSelect;
+                if (multiSelect == _multiSelect) return;
+
+                _multiSelect = multiSelect;
+                _bulkSelection.SetMultiSelect(multiSelect);
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException) when (_disposed)
+        {
+            // The circuit was torn down before the preference was applied.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "BrowserPanel preference refresh failed");
+        }
     }
 
     protected virtual Timer? CreateUpdateTimer() => new Timer(_ =>
@@ -135,6 +167,7 @@
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        UiSettings.UiPreferencesChanged -= OnUiPreferencesChanged;
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();
     }

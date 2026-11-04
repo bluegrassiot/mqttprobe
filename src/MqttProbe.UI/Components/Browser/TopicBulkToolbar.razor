@@ -15,7 +15,7 @@
         <div class="topic-bulk-toolbar__actions">
             <AppDestructiveButton Size="Size.Small" Class="topic-bulk-toolbar__clear-messages"
                                   StartIcon="@LucideIcons.Trash2"
-                                  title="Clears stored messages for the selected topics. New messages still arrive."
+                                  title="@ClearMessagesTitle"
                                   Disabled="@(!Selection.HasSelection)" OnClick="ConfirmClearMessagesAsync">
                 Clear messages
             </AppDestructiveButton>
@@ -23,9 +23,9 @@
                 <Authorized>
                     <AppSecondaryButton Size="Size.Small" Class="topic-bulk-toolbar__exclude"
                                         StartIcon="@LucideIcons.EyeOff"
-                                        title="Adds the selected topics to this connection's excluded topics."
+                                        title="@ExcludeTitle"
                                         Disabled="@(!Selection.HasSelection)" OnClick="ConfirmExcludeAsync">
-                        Exclude topics
+                        @ExcludeLabel
                     </AppSecondaryButton>
                 </Authorized>
                 <NotAuthorized>
@@ -66,13 +66,13 @@
                         <AuthorizeView Roles="Admin,Operator">
                             <Authorized>
                                 <MudMenuItem @onkeydown="DismissMenuOnEscapeOrTab"
-                                             Label="Exclude topics"
+                                             Label="@ExcludeLabel"
                                              OnClick="ConfirmExcludeAsync"
-                                             title="Adds the selected topics to this connection's excluded topics."/>
+                                             title="@ExcludeTitle"/>
                             </Authorized>
                             <NotAuthorized>
                                 <MudMenuItem @onkeydown="DismissMenuOnEscapeOrTab"
-                                             Label="Exclude topics" Disabled="true"
+                                             Label="@ExcludeLabel" Disabled="true"
                                              title="Connect as Operator or Admin to manage exclusions"/>
                             </NotAuthorized>
                         </AuthorizeView>
@@ -142,6 +142,22 @@
     [Parameter] public EventCallback OnOpenTopicPicker { get; set; }
 
     private string ThemeClass => (DarkMode ?? true) ? "topic-bulk-toolbar--dark" : "topic-bulk-toolbar--light";
+
+    private bool IsSingleSelection => Selection.IsPassive && Selection.Count == 1;
+
+    private bool IsSingleTopic => IsSingleSelection && Selection.Branches[0].Kind == TopicBranchKind.Raw;
+
+    private string PassiveScope => IsSingleTopic ? "topic and its subtopics" : "group of topics";
+
+    private string ExcludeLabel => IsSingleTopic ? "Exclude topic" : "Exclude topics";
+
+    private string ClearMessagesTitle => Selection.IsPassive
+        ? $"Clears stored messages for the selected {PassiveScope}. New messages still arrive."
+        : "Clears stored messages for the selected topics. New messages still arrive.";
+
+    private string ExcludeTitle => Selection.IsPassive
+        ? $"Adds the selected {PassiveScope} to this connection's excluded topics."
+        : "Adds the selected topics to this connection's excluded topics.";
 
     private BulkOutcome? _outcome;
     private bool _actionsOpen;
@@ -273,12 +289,12 @@
         }
         else if (purgeFailures.Count > 0)
         {
-            message = $"Excluded {batch.AppliedTargets.Length} topics. Stored history cleanup did not finish.";
+            message = $"Excluded {TopicCount(batch.AppliedTargets.Length)}. Stored history cleanup did not finish.";
             severity = Severity.Warning;
         }
         else
         {
-            message = $"Excluded {batch.AppliedTargets.Length} topics.";
+            message = $"Excluded {TopicCount(batch.AppliedTargets.Length)}.";
             severity = Severity.Success;
         }
 
@@ -392,23 +408,22 @@
             || confirmed.Count == 0)
             return;
 
+        var browsedBeforeClear = Selection.CaptureBrowsedTopicForClear();
         // The store applies the same token, so a connection that changed while the dialog was
         // open leaves the new connection's messages untouched.
         var cleared = await MessageStoreManager.ClearMessagesForBranchesAsync(confirmed, token);
         if (!cleared.Applied)
         {
-            ShowOutcome(new BulkOutcome("Clear cancelled",
-                "Nothing cleared. Connection changed.",
-                ["The connection changed before the clear was confirmed. Nothing was cleared."],
-                HasDetails: true));
-            Snackbar.Add("The connection changed. Nothing was cleared.", Severity.Warning);
+            Snackbar.Add("The connection changed before the clear was confirmed. Nothing was cleared.", Severity.Warning);
             StateHasChanged();
             return;
         }
 
         Selection.NotifyMessagesCleared([.. confirmed]);
+        if (ExcludeService.CaptureConnectionToken() == token)
+            Selection.PreserveBrowsedTopicAfterClear(browsedBeforeClear, confirmed);
         var summary = $"{cleared.ClearedMessages:N0} stored {(cleared.ClearedMessages == 1 ? "message" : "messages")} cleared from {TopicCount(confirmed.Count)}.";
-        ShowOutcome(new BulkOutcome("Clear finished", summary, [summary]));
+        Snackbar.Add(summary, Severity.Success);
         StateHasChanged();
     }
 

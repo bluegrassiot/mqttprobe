@@ -20,7 +20,7 @@ public class BrowserPanelTests : BunitTestContext
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _mockMsgStore.RootTopicCount.Returns(0);
 
-        _mockConfig = Substitute.For<IUiSettings>();
+        _mockConfig = SettingsSubstituteRegistration.CreateUiSettings();
         _mockConfig.IsHintDismissed(Arg.Any<string>()).Returns(false);
 
         _mockDialogService = Substitute.For<IDialogService>();
@@ -79,6 +79,25 @@ public class BrowserPanelTests : BunitTestContext
         var cut = Render<BrowserPanel>();
 
         cut.Markup.Should().NotContain("connect to a broker");
+    }
+
+    [Test]
+    public void BulkToolbar_IsRenderedWhileMultiSelectIsOn()
+    {
+        var cut = Render<BrowserPanel>();
+
+        cut.FindComponents<TopicBulkToolbar>().Should().ContainSingle();
+    }
+
+    [Test]
+    public void BulkToolbar_StaysAvailableWhenMultiSelectIsOff()
+    {
+        _mockConfig.Ui.TopicTreeMultiSelect = false;
+
+        var cut = Render<BrowserPanel>();
+
+        cut.FindComponents<TopicBulkToolbar>().Should().ContainSingle();
+        cut.FindAll(".topic-bulk-toolbar").Should().BeEmpty("nothing is selected yet");
     }
 
     [Test]

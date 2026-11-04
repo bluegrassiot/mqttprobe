@@ -29,6 +29,16 @@
     </MudSelect>
 </div>
 
+<div class="settings-field">
+    <MudSwitch T="bool" Value="@UiSettings.Ui.TopicTreeMultiSelect"
+               ValueChanged="@OnTopicTreeMultiSelectChanged"
+               Color="Color.Primary"
+               Label="Enable multi-select in the topic tree" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Adds checkboxes and bulk actions to the topic tree. When off, clicking a topic selects that topic alone.
+    </MudText>
+</div>
+
 @code {
     private void OnThemeSelectionChanged(string? value)
     {
@@ -38,5 +48,10 @@
     private void OnFontProfileChanged(string? value)
     {
         Themes.SetFontProfile(value ?? FontProfiles.Standard);
+    }
+
+    private async Task OnTopicTreeMultiSelectChanged(bool value)
+    {
+        await UiSettings.SetTopicTreeMultiSelectAsync(value);
     }
 }

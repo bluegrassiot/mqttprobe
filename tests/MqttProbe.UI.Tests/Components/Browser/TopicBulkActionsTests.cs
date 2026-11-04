@@ -225,12 +225,12 @@ public sealed class TopicBulkActionsTests : BunitTestContext
         await _manager.Received(1).ClearMessagesForBranchesAsync(
             Arg.Is<IReadOnlyList<TopicBranchTarget>>(targets => targets.SequenceEqual(pinned)),
             Arg.Any<TopicExcludeConnectionToken>());
-        cut.WaitForAssertion(() =>
-        {
-            var report = cut.Find(".topic-bulk-outcome").TextContent;
-            report.Should().Contain("3 stored messages cleared from 2 topics");
-            report.Should().NotContain("Topics left with no messages are removed from the tree.");
-        });
+        _snackbar.Received(1).Add(
+            "3 stored messages cleared from 2 topics.", Severity.Success,
+            Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+        cut.FindAll(".topic-bulk-outcome").Should().BeEmpty("a clear reports through the notifier");
+        cut.FindAll(".topic-bulk-outcome-compact").Should().BeEmpty();
+        cut.FindAll("[aria-label='Dismiss result']").Should().BeEmpty("a clear leaves nothing to dismiss");
 
         var state = _fixture.Adapter.Store.GetSelectedTopicState();
         state.Branches.Should().Equal(pinned);
@@ -325,12 +325,11 @@ public sealed class TopicBulkActionsTests : BunitTestContext
         cut.Find(".topic-bulk-toolbar__clear-messages").Click();
         await cut.InvokeAsync(() => Task.CompletedTask);
 
-        cut.WaitForAssertion(() =>
-        {
-            var report = cut.Find(".topic-bulk-outcome").TextContent;
-            report.Should().Contain(
-                "The connection changed before the clear was confirmed. Nothing was cleared.");
-        });
+        _snackbar.Received(1).Add(
+            "The connection changed before the clear was confirmed. Nothing was cleared.",
+            Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+        cut.FindAll(".topic-bulk-outcome").Should().BeEmpty("the failure is reported in the notifier");
+        cut.FindAll("[aria-label='Dismiss result']").Should().BeEmpty();
         selection.Branches.Select(branch => branch.Path).Should().Equal(new[] { Alpha }, "a rejected clear keeps the selection");
         _fixture.Adapter.Store.GetSelectedTopicState().MessageCount.Should().Be(2);
     }

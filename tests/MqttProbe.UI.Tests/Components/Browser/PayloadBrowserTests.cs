@@ -1276,6 +1276,26 @@ public class PayloadBrowserTests : BunitTestContext
     }
 
     [Test]
+    public async Task BranchClear_ClosesADescendantMessageDetail()
+    {
+        const string parent = "sensors/temp";
+        const string child = "sensors/temp/room1";
+        var childMessage = new MqttMessage { Topic = child, Payload = "child" };
+        var selection = new TopicBulkSelection(TopicTreeSelectionTestAdapter.Create());
+        ReturnMessages([childMessage]);
+        EnsureMudProviders();
+        var cut = Render<PayloadBrowser>(parameters => parameters.AddCascadingValue(selection));
+        cut.WaitForAssertion(() => cut.FindAll(".payload-row").Should().ContainSingle());
+
+        await cut.InvokeAsync(() => cut.Instance.MessageChanged(childMessage));
+        cut.WaitForAssertion(() => cut.Find(".payload-detail-body").TextContent.Should().Contain("child"));
+
+        await cut.InvokeAsync(() => selection.NotifyMessagesCleared(
+            [new TopicBranchTarget(TopicBranchKind.Raw, Path: parent)]));
+        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Message Details"));
+    }
+
+    [Test]
     public async Task SelectedMessage_StacksMetadataAndPayloadInTheSharedSplit()
     {
         var cut = Render<PayloadBrowser>();

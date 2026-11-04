@@ -1,0 +1,48 @@
+.licences-dialog__title {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.licences-dialog__intro {
+    margin: 0 0 1rem;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.licences-dialog__body {
+    max-width: 72ch;
+}
+
+.licences-dialog__body:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 4px;
+    border-radius: 4px;
+}
+
+.licences-dialog__section + .licences-dialog__section {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
+.licences-dialog__heading {
+    margin: 0 0 0.5rem;
+    color: var(--mud-palette-text-primary);
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.licences-dialog__text {
+    margin: 0;
+    color: var(--mud-palette-text-primary);
+    font-family: inherit;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}

@@ -1,0 +1,36 @@
+@namespace MqttProbe.UI.Components.Settings
+
+<MudDialog AriaLabelledBy="@_titleId">
+    <TitleContent>
+        <h2 id="@_titleId" class="licences-dialog__title">Open-source licences</h2>
+    </TitleContent>
+    <DialogContent>
+        <div class="licences-dialog__body" tabindex="0" role="region" aria-label="Licence documents">
+            <p class="licences-dialog__intro">
+                Both documents are included in the app, so they read the same offline.
+            </p>
+            <section class="licences-dialog__section">
+                <h3 class="licences-dialog__heading">MQTTProbe licence</h3>
+                <pre class="licences-dialog__text" data-testid="licence-text">@LicenseText</pre>
+            </section>
+            <section class="licences-dialog__section">
+                <h3 class="licences-dialog__heading">Third-party notices</h3>
+                <pre class="licences-dialog__text" data-testid="notices-text">@NoticesText</pre>
+            </section>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <AppSecondaryButton data-testid="licences-close" OnClick="Close">Close</AppSecondaryButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string LicenseText { get; set; } = string.Empty;
+    [Parameter] public string NoticesText { get; set; } = string.Empty;
+
+    private readonly string _titleId = $"licences-dialog-title-{Guid.NewGuid():N}";
+
+    private void Close() => MudDialog.Cancel();
+}

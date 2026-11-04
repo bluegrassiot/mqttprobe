@@ -56,4 +56,9 @@
         <ProjectReference Include="..\MqttProbe.Core\MqttProbe.Core.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <EmbeddedResource Include="..\..\LICENSE" LogicalName="MqttProbe.UI.Legal.LICENSE" Link="Legal\LICENSE" />
+        <EmbeddedResource Include="..\..\NOTICES" LogicalName="MqttProbe.UI.Legal.NOTICES" Link="Legal\NOTICES" />
+    </ItemGroup>
+
 </Project>

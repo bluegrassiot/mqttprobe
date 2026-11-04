@@ -414,11 +414,7 @@
         var cleared = await MessageStoreManager.ClearMessagesForBranchesAsync(confirmed, token);
         if (!cleared.Applied)
         {
-            ShowOutcome(new BulkOutcome("Clear cancelled",
-                "Nothing cleared. Connection changed.",
-                ["The connection changed before the clear was confirmed. Nothing was cleared."],
-                HasDetails: true));
-            Snackbar.Add("The connection changed. Nothing was cleared.", Severity.Warning);
+            Snackbar.Add("The connection changed before the clear was confirmed. Nothing was cleared.", Severity.Warning);
             StateHasChanged();
             return;
         }
@@ -427,7 +423,7 @@
         if (ExcludeService.CaptureConnectionToken() == token)
             Selection.PreserveBrowsedTopicAfterClear(browsedBeforeClear, confirmed);
         var summary = $"{cleared.ClearedMessages:N0} stored {(cleared.ClearedMessages == 1 ? "message" : "messages")} cleared from {TopicCount(confirmed.Count)}.";
-        ShowOutcome(new BulkOutcome("Clear finished", summary, [summary]));
+        Snackbar.Add(summary, Severity.Success);
         StateHasChanged();
     }
 

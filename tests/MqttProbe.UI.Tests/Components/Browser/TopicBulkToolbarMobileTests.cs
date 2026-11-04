@@ -366,7 +366,7 @@ public sealed class TopicBulkToolbarMobileTests : BunitTestContext
     }
 
     [Test]
-    public async Task MobileOutcome_ClearSuccess_IsOneLineWithoutDetails()
+    public async Task MobileClear_ReportsThroughTheNotifierAndLeavesNoBanner()
     {
         _fixture.AddTopics((Alpha, 2));
         var selection = Select(Alpha);
@@ -381,17 +381,18 @@ public sealed class TopicBulkToolbarMobileTests : BunitTestContext
         cut.Find(".topic-bulk-toolbar__clear-messages").Click();
         await cut.InvokeAsync(() => Task.CompletedTask);
 
-        cut.WaitForAssertion(() =>
-        {
-            var compact = cut.Find(".topic-bulk-outcome-compact");
-            compact.TextContent.Should().Contain("2 stored messages cleared from 1 topic.");
-            compact.QuerySelector(".topic-bulk-outcome-compact__details").Should().BeNull();
-            compact.QuerySelectorAll(".topic-bulk-outcome__lines li").Should().BeEmpty();
-        });
+        _snackbar.Received(1).Add(
+            "2 stored messages cleared from 1 topic.", Severity.Success,
+            Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+        cut.FindAll(".topic-bulk-outcome-compact").Should().BeEmpty("the phone row shows no result banner");
+        cut.FindAll(".topic-bulk-outcome").Should().BeEmpty();
+        cut.FindAll("[aria-label='Dismiss result']").Should().BeEmpty("a clean clear leaves nothing to dismiss");
+        cut.Find(".topic-bulk-toolbar__mobile-count").TextContent.Trim().Should().Be("1 selected",
+            "the row stays the plain selection row");
     }
 
     [Test]
-    public async Task MobileOutcome_ClearConnectionChange_ShowsShortLineAndFullDetailBehindDetails()
+    public async Task MobileClear_ConnectionChange_ReportsNothingClearedInTheNotifier()
     {
         _fixture.AddTopics((Alpha, 1));
         var selection = Select(Alpha);
@@ -404,18 +405,15 @@ public sealed class TopicBulkToolbarMobileTests : BunitTestContext
         cut.Find(".topic-bulk-toolbar__clear-messages").Click();
         await cut.InvokeAsync(() => Task.CompletedTask);
 
-        cut.WaitForAssertion(() =>
-        {
-            var compact = cut.Find(".topic-bulk-outcome-compact");
-            compact.TextContent.Should().Contain("Nothing cleared. Connection changed.");
-            compact.QuerySelector(".topic-bulk-outcome-compact__details").Should().NotBeNull();
-        });
-
-        cut.Find(".topic-bulk-outcome-compact__details").Click();
-
-        cut.WaitForAssertion(() =>
-            cut.Find(".topic-bulk-outcome-compact .topic-bulk-outcome__lines").TextContent.Should().Contain(
-                "The connection changed before the clear was confirmed. Nothing was cleared."));
+        _snackbar.Received(1).Add(
+            "The connection changed before the clear was confirmed. Nothing was cleared.",
+            Severity.Warning, Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
+        cut.FindAll(".topic-bulk-outcome-compact").Should().BeEmpty();
+        cut.FindAll(".topic-bulk-outcome").Should().BeEmpty();
+        cut.FindAll("[aria-label='Dismiss result']").Should().BeEmpty();
+        selection.Branches.Select(branch => branch.Path).Should().Equal(new[] { Alpha },
+            "a rejected clear keeps the selection");
+        _fixture.Adapter.Store.GetSelectedTopicState().MessageCount.Should().Be(1);
     }
 
     private TopicBulkSelection Select(params string[] paths)

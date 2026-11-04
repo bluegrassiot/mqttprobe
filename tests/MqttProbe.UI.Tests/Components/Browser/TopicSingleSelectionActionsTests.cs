@@ -67,8 +67,8 @@ public sealed class TopicSingleSelectionActionsTests : BunitTestContext
             Arg.Is<IReadOnlyList<TopicBranchTarget>>(targets => targets.SequenceEqual(selection.Branches)),
             Arg.Any<TopicExcludeConnectionToken>());
 
-        cut.WaitForAssertion(() => cut.Find(".topic-bulk-outcome").TextContent
-            .Should().Contain("3 stored messages cleared from 1 topic"));
+        cut.WaitForAssertion(() => VerifyClearSnackbar("3 stored messages cleared from 1 topic"));
+        cut.FindAll(".topic-bulk-outcome").Should().BeEmpty("a clear reports through the notifier");
         var state = _fixture.Adapter.Store.GetSelectedTopicState();
         state.Mode.Should().Be(TopicSelectionMode.Branches,
             "the cleared topic is kept as a branch so later arrivals stay selected");
@@ -121,8 +121,7 @@ public sealed class TopicSingleSelectionActionsTests : BunitTestContext
         _fixture.Adapter.Store.SelectTopics(null);
         await cut.InvokeAsync(() => result.SetResult(DialogResult.Ok(selection.Branches)));
 
-        cut.WaitForAssertion(() => cut.Find(".topic-bulk-outcome").TextContent
-            .Should().Contain("cleared from 1 topic"));
+        cut.WaitForAssertion(() => VerifyClearSnackbar("cleared from 1 topic"));
         _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().BeNull(
             "a topic deselected before the clear must stay deselected");
     }
@@ -141,8 +140,7 @@ public sealed class TopicSingleSelectionActionsTests : BunitTestContext
         _fixture.Adapter.Store.SelectTopics(TopicSelection.ForTopic(Child));
         await cut.InvokeAsync(() => result.SetResult(DialogResult.Ok(selection.Branches)));
 
-        cut.WaitForAssertion(() => cut.Find(".topic-bulk-outcome").TextContent
-            .Should().Contain("cleared from 1 topic"));
+        cut.WaitForAssertion(() => VerifyClearSnackbar("cleared from 1 topic"));
         var state = _fixture.Adapter.Store.GetSelectedTopicState();
         state.Mode.Should().Be(TopicSelectionMode.Branches);
         state.Branches.Should().ContainSingle().Which.Path.Should().Be(Child,
@@ -170,8 +168,7 @@ public sealed class TopicSingleSelectionActionsTests : BunitTestContext
         cut.Find(".topic-bulk-toolbar__clear-messages").Click();
         await cut.InvokeAsync(() => Task.CompletedTask);
 
-        cut.WaitForAssertion(() => cut.Find(".topic-bulk-outcome").TextContent
-            .Should().Contain("cleared from 1 topic"));
+        cut.WaitForAssertion(() => VerifyClearSnackbar("cleared from 1 topic"));
         var state = _fixture.Adapter.Store.GetSelectedTopicState();
         state.Mode.Should().Be(TopicSelectionMode.Branches);
         state.Branches.Should().ContainSingle().Which.Path.Should().Be(string.Empty,
@@ -207,8 +204,7 @@ public sealed class TopicSingleSelectionActionsTests : BunitTestContext
         current = switched;
         await cut.InvokeAsync(() => result.SetResult(DialogResult.Ok(selection.Branches)));
 
-        cut.WaitForAssertion(() => cut.Find(".topic-bulk-outcome").TextContent
-            .Should().Contain("cleared from 1 topic"));
+        cut.WaitForAssertion(() => VerifyClearSnackbar("cleared from 1 topic"));
         _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().BeNull(
             "the new connection keeps its own selection");
     }
@@ -342,6 +338,11 @@ public sealed class TopicSingleSelectionActionsTests : BunitTestContext
                 _fixture.Adapter.Store.ClearMessagesForBranches(
                     call.Arg<IReadOnlyList<TopicBranchTarget>>()))));
     }
+
+    private void VerifyClearSnackbar(string text) =>
+        _snackbar.Received(1).Add(
+            Arg.Is<string>(message => message.Contains(text)), Severity.Success,
+            Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
 
     private static MqttMessage Message(string payload, int second) =>
         new(payload, "unused", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce)

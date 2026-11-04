@@ -7,9 +7,7 @@
 }
 
 .payload-detail-toolbar {
-    position: sticky;
-    top: 0;
-    z-index: 3;
+    flex: 0 0 auto;
     background: var(--mud-palette-surface);
 }
 
@@ -19,15 +17,34 @@
     outline-offset: -2px;
 }
 
-/* Shrinks before the payload body does, and scrolls once it can no longer
-   fit, so long v5 property values cannot push the payload out of view. Its
-   own floor keeps the topic row reachable in very short panels. */
+.payload-detail-split-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.payload-detail-split-wrap ::deep .payload-detail-split-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.payload-detail-split-wrap ::deep .child-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* A stable gutter keeps the wrapping table from shifting sideways when the
+   pane's own scrollbar appears. */
 .payload-detail-meta {
-    flex: 0 1 auto;
-    min-height: 25%;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
+    padding: 6px 0 8px;
     background: var(--mud-palette-surface);
-    border-bottom: 1px solid var(--mud-palette-divider);
+    scrollbar-gutter: stable;
 }
 
 /* The detail toolbar must never wrap: back, title, prev/next, copy stay on one
@@ -207,14 +224,10 @@
     vertical-align: middle;
 }
 
-/* Flex column that clips: the payload content (JSON tree / pre) flex-fills
-   it and becomes the bounded scroller, so its horizontal scrollbar sits at
-   the visible bottom of the panel. flex-basis 0 plus a min-height keeps the
-   body usable when the metadata block above is tall. The host div carries
-   the scope attribute; MudPaper renders without it, hence ::deep. */
+/* The host carries the scope attribute; MudPaper renders without it, hence ::deep. */
 .payload-detail-body-host {
-    flex: 1 1 0;
-    min-height: max(160px, 40%);
+    flex: 1 1 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -456,7 +469,7 @@
     padding: 1px 10px 1px 0;
     font-size: 0.8rem;
     vertical-align: top;
-    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 .pb-user-prop-name {
@@ -466,6 +479,34 @@
 
 .pb-preserve-ws {
     white-space: pre-wrap;
+}
+
+/* Phones: the fixed label column and the two-column user property table leave
+   long names and values too little room. */
+@media (max-width: 599.98px) {
+    .pb-meta-label {
+        width: 88px;
+    }
+
+    .pb-user-props,
+    .pb-user-props tbody,
+    .pb-user-props tr,
+    .pb-user-props td {
+        display: block;
+        width: auto;
+    }
+
+    .pb-user-props tr + tr {
+        margin-top: 4px;
+    }
+
+    .pb-user-props td {
+        padding: 0;
+    }
+
+    .pb-user-prop-name {
+        font-size: 0.72rem;
+    }
 }
 
 /* ── MudTable flex height fix ──────────────────────────────────────────────

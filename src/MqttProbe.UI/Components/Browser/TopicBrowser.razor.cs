@@ -134,6 +134,10 @@ public partial class TopicBrowser
             _globalState = GlobalSelectionState();
             _bulkSelection.CoversWholeTree = _globalState == TopicTreeSelectionState.Checked;
         }
+        else
+        {
+            _bulkSelection.AdoptSingle(frame.Selection);
+        }
         EnsureActiveRow(previousRows, previousActive);
 
         if (previousRows.Count > 0 && _visibleRows.Count == 0 && _focusedKey is not null)

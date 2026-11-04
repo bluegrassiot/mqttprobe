@@ -3,7 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Configuration;
+using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Tests.TestHelpers;
+using MudBlazor;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
@@ -22,6 +24,10 @@ public sealed class TopicTreeMultiSelectTests : BunitTestContext
         Services.AddSingleton<ITopicSelectionStore>(_fixture.Adapter);
         _uiSettings = SettingsSubstituteRegistration.CreateUiSettings(_preferences);
         Services.AddUiSettings(_uiSettings);
+        Services.AddSingleton(Substitute.For<IDialogService>());
+        Services.AddSingleton(Substitute.For<ISnackbar>());
+        Services.AddSingleton(Substitute.For<ITopicExcludeService>());
+        Services.AddSingleton(Substitute.For<IMessageStoreManager>());
     }
 
     [Test]
@@ -131,6 +137,24 @@ public sealed class TopicTreeMultiSelectTests : BunitTestContext
         Row(cut, "sensors/temp").Click();
         cut.WaitForAssertion(() =>
             _fixture.Adapter.Store.GetSelectedTopicState().Mode.Should().Be(TopicSelectionMode.Branches));
+    }
+
+    [Test]
+    public void Disabled_ClickingATopic_DrivesTheSharedActionBanner()
+    {
+        _preferences.TopicTreeMultiSelect = false;
+        var selection = new TopicBulkSelection(_fixture.Adapter);
+        var cut = Render<TopicBrowser>(parameters => parameters.AddCascadingValue(selection));
+        EnsureMudProviders();
+        cut.FindAll(".mud-toolbar button")[0].Click();
+        var toolbar = Render<TopicBulkToolbar>(parameters => parameters.AddCascadingValue(selection));
+
+        Row(cut, "sensors/temp").Click();
+
+        toolbar.WaitForAssertion(() => toolbar.Find(".topic-bulk-toolbar__count").TextContent
+            .Should().Be("Selected topic and its subtopics: \"sensors/temp\""));
+        toolbar.Find(".topic-bulk-toolbar__clear-messages").Should().NotBeNull();
+        toolbar.Find(".topic-bulk-toolbar__exclude").Should().NotBeNull();
     }
 
     private IRenderedComponent<TopicBrowser> RenderExpanded()

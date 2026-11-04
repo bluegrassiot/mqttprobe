@@ -21,10 +21,7 @@
 </TabPanelHeader>
 <CascadingValue Value="_bulkSelection" IsFixed="true">
 <div class="tab-panel-content">
-    @if (_multiSelect)
-    {
-        <TopicBulkToolbar OnOpenTopicPicker="OpenMobilePicker"/>
-    }
+    <TopicBulkToolbar OnOpenTopicPicker="OpenMobilePicker"/>
     @if (MessageStoreManager.RootTopicCount == 0 && !UiSettings.IsHintDismissed("browser"))
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-2"
@@ -94,6 +91,7 @@
     {
         _bulkSelection = new TopicBulkSelection(TopicSelectionStore);
         _multiSelect = UiSettings.Ui.TopicTreeMultiSelect;
+        _bulkSelection.SetMultiSelect(_multiSelect);
         _lastCount = MessageStoreManager.RootTopicCount;
         UiSettings.UiPreferencesChanged += OnUiPreferencesChanged;
         _updateTimer = CreateUpdateTimer();
@@ -113,12 +111,7 @@
                 if (multiSelect == _multiSelect) return;
 
                 _multiSelect = multiSelect;
-                if (!multiSelect)
-                {
-                    // A hidden bulk selection would keep filtering messages, so clear it first.
-                    _bulkSelection.Clear();
-                }
-
+                _bulkSelection.SetMultiSelect(multiSelect);
                 StateHasChanged();
             });
         }

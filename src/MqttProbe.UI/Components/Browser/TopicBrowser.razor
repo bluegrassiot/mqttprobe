@@ -227,6 +227,7 @@
         _selectionSession = new TopicSelectionSession(TopicSelectionStore);
         _bulkSelection = BulkSelectionHost ?? new TopicBulkSelection(TopicSelectionStore);
         _bulkSelection.Changed += OnBulkSelectionChanged;
+        _bulkSelection.SetMultiSelect(_multiSelect);
         BuildVisibleRows();
         UiSettings.UiPreferencesChanged += OnUiPreferencesChanged;
         _updateTimer = new Timer(_ =>
@@ -245,7 +246,8 @@
 
     private TopicSelectionFrame? RefreshFrame(bool force)
     {
-        ReconcileBulkSelection();
+        if (!_bulkSelection.IsPassive)
+            ReconcileBulkSelection();
         return _selectionSession!.Refresh(_searchFilter, _expandedPaths, _groupSparkplugTopics, force,
             selectionMode: _multiSelect);
     }

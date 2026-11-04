@@ -21,12 +21,7 @@ public partial class TopicBrowser
                 if (multiSelect != _multiSelect)
                 {
                     _multiSelect = multiSelect;
-                    if (!multiSelect)
-                    {
-                        // Bulk targets must not outlive the controls that could clear them.
-                        _bulkSelection.Clear();
-                    }
-
+                    _bulkSelection.SetMultiSelect(multiSelect);
                     changed = true;
                 }
 

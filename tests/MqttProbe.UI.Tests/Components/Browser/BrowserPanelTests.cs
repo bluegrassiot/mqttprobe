@@ -90,13 +90,14 @@ public class BrowserPanelTests : BunitTestContext
     }
 
     [Test]
-    public void BulkToolbar_IsGoneWhenMultiSelectIsOff()
+    public void BulkToolbar_StaysAvailableWhenMultiSelectIsOff()
     {
         _mockConfig.Ui.TopicTreeMultiSelect = false;
 
         var cut = Render<BrowserPanel>();
 
-        cut.FindComponents<TopicBulkToolbar>().Should().BeEmpty();
+        cut.FindComponents<TopicBulkToolbar>().Should().ContainSingle();
+        cut.FindAll(".topic-bulk-toolbar").Should().BeEmpty("nothing is selected yet");
     }
 
     [Test]

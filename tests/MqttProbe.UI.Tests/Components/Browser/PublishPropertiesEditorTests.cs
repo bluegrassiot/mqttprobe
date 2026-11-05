@@ -5,6 +5,7 @@ using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Tests.TestHelpers;
 using MqttProbe.UI.Utilities;
 using MudBlazor;
+using MudBlazor.Services;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
@@ -343,5 +344,90 @@ public class PublishPropertiesEditorTests : BunitTestContext
 
         draft.ExpiryText.Should().BeNull();
         draft.ValidationError.Should().BeNull();
+    }
+
+    [Test]
+    public void CollapsedPanel_StaysCollapsedAcrossRerendersOfTheSameDraft()
+    {
+        var draft = new PublishPropertiesDraft { ContentType = "text/plain" };
+        var cut = RenderEditor(draft);
+        cut.Instance.Expanded.Should().BeTrue("a draft with values opens the panel");
+
+        cut.FindComponent<MudExpansionPanel>().Find(".mud-expand-panel-header").Click();
+        cut.Instance.Expanded.Should().BeFalse();
+
+        cut.Render(p => p.Add(x => x.Draft, draft));
+
+        cut.Instance.Expanded.Should().BeFalse("a user collapse is kept while editing the same draft");
+    }
+
+    [Test]
+    public void ImportedDraftWithProperties_OpensThePanel()
+    {
+        var cut = RenderEditor(new PublishPropertiesDraft());
+        cut.Instance.Expanded.Should().BeFalse();
+
+        cut.Render(p => p.Add(x => x.Draft, new PublishPropertiesDraft { ContentType = "text/plain" }));
+
+        cut.Instance.Expanded.Should().BeTrue("a newly imported draft with values opens the panel");
+    }
+
+    [Test]
+    public void Root_HasLabelledRegion_WithoutDeadTabStop()
+    {
+        var cut = RenderEditor(new PublishPropertiesDraft());
+
+        var root = cut.Find(".publish-props");
+        root.GetAttribute("role").Should().Be("region");
+        root.GetAttribute("aria-label").Should().Be("MQTT 5 properties");
+        root.HasAttribute("tabindex").Should().BeFalse("the Mud panel header is the keyboard entry point");
+
+        cut.Find(".mud-expand-panel-header").GetAttribute("tabindex").Should().Be("0");
+    }
+
+    [TestCase("Enter")]
+    [TestCase(" ")]
+    public async Task CollapsedHeader_NativeActivation_TogglesWithoutAddingDraft(string key)
+    {
+        var draft = new PublishPropertiesDraft();
+        var cut = RenderEditor(draft);
+        cut.Instance.NameDraft = "pending";
+        cut.Instance.ValueDraft = "value";
+
+        cut.Instance.Expanded.Should().BeFalse();
+
+        await cut.InvokeAsync(() => cut.Find(".mud-expand-panel-header").KeyDown(key));
+
+        cut.WaitForAssertion(() =>
+            cut.FindComponent<MudExpansionPanel>().Instance.Expanded.Should().BeTrue());
+        cut.Instance.Expanded.Should().BeTrue();
+        draft.UserProperties.Should().BeEmpty();
+        cut.Instance.NameDraft.Should().Be("pending");
+
+        await cut.InvokeAsync(() => cut.Find(".mud-expand-panel-header").KeyDown(key));
+
+        cut.WaitForAssertion(() =>
+            cut.FindComponent<MudExpansionPanel>().Instance.Expanded.Should().BeFalse());
+        cut.Instance.Expanded.Should().BeFalse();
+        draft.UserProperties.Should().BeEmpty();
+        cut.Instance.NameDraft.Should().Be("pending");
+    }
+
+    [Test]
+    public void HeaderArrowKeys_AreWiredToTheMudHeaderTargetClass()
+    {
+        var cut = RenderEditor(new PublishPropertiesDraft());
+
+        var rootId = cut.Find(".publish-props").Id;
+        var invocation = JSInterop.Invocations
+            .Single(i => i.Identifier == "mudKeyInterceptor.connect"
+                && i.Arguments.Count > 1 && Equals(i.Arguments[1], rootId));
+
+        var options = invocation.Arguments[2].Should().BeOfType<KeyInterceptorOptions>().Subject;
+        options.TargetClass.Should().Be("mud-expand-panel-header");
+        options.Keys.Select(k => k.Key).Should().BeEquivalentTo(new[] { "ArrowRight", "ArrowLeft" });
+        options.Keys.Should().OnlyContain(k => k.SubscribeDown && k.IgnoreDownRepeats
+            && k.PreventDown == "none" && k.StopDown == "none");
+        options.Keys.Should().NotContain(k => k.Key == "Enter" || k.Key == " ");
     }
 }

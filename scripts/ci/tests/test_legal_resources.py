@@ -4,6 +4,7 @@
 Run: python -m unittest discover -s scripts/ci/tests
 """
 
+import fnmatch
 import hashlib
 import json
 import os
@@ -21,6 +22,8 @@ import catalogue as legal_catalogue  # noqa: E402
 UI_PROJECT = ROOT / "src" / "MqttProbe.UI" / "MqttProbe.UI.csproj"
 CATALOGUE = ROOT / "legal" / "generated" / "catalogue.json"
 TEXTS = ROOT / "legal" / "generated" / "texts"
+DOCKERFILE = ROOT / "Dockerfile"
+DOCKERIGNORE = ROOT / ".dockerignore"
 LOGICAL_NAMES = {
     "LICENSE": ("MqttProbe.UI.Legal.LICENSE", "LICENSE"),
     "catalogue.json": ("MqttProbe.UI.Legal.catalogue.json", "legal/generated/catalogue.json"),
@@ -49,6 +52,23 @@ def sha256_text(text):
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     normalized = "\n".join(line.rstrip() for line in normalized.split("\n")).strip("\n") + "\n"
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def dockerignore_patterns():
+    return [
+        line.strip()
+        for line in DOCKERIGNORE.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+
+def dockerignore_ignores(path, patterns):
+    ignored = False
+    for pattern in patterns:
+        negated = pattern.startswith("!")
+        if fnmatch.fnmatchcase(path, pattern[1:] if negated else pattern):
+            ignored = not negated
+    return ignored
 
 
 class LegalCatalogueTests(unittest.TestCase):
@@ -285,6 +305,49 @@ class LegalResourcePackagingTests(unittest.TestCase):
             if name in ("NOTICES", "catalogue.json")
         ]
         self.assertEqual(copies, [])
+
+
+class DockerLegalPackagingTests(unittest.TestCase):
+    def test_generated_licence_texts_are_not_dockerignored(self):
+        patterns = dockerignore_patterns()
+        generated = sorted(TEXTS.glob("*.txt"))
+        self.assertGreater(len(generated), 20)
+        for path in generated:
+            relative = path.relative_to(ROOT).as_posix()
+            self.assertFalse(dockerignore_ignores(relative, patterns), relative)
+        self.assertFalse(dockerignore_ignores("legal/generated/catalogue.json", patterns))
+        self.assertFalse(dockerignore_ignores("LICENSE", patterns))
+        self.assertTrue(dockerignore_ignores("legal/extracted/texts/example.txt", patterns))
+        self.assertTrue(dockerignore_ignores("legal/supplements/texts/example.txt", patterns))
+
+    def test_dockerfile_copies_legal_inputs_before_publish(self):
+        instructions = [
+            line.strip()
+            for line in DOCKERFILE.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        restore = next(i for i, line in enumerate(instructions) if line.startswith("RUN dotnet restore"))
+        publish_stage = next(
+            i
+            for i, line in enumerate(instructions)
+            if line.startswith("FROM ") and line.lower().endswith(" as publish")
+        )
+        publish = next(
+            i for i, line in enumerate(instructions) if line.startswith("RUN dotnet publish")
+        )
+        legal_copies = [
+            i
+            for i, line in enumerate(instructions)
+            if line.startswith("COPY ") and ("LICENSE" in line or "legal/generated" in line)
+        ]
+        self.assertEqual(len(legal_copies), 2)
+        for index in legal_copies:
+            self.assertGreater(index, restore)
+            self.assertGreater(index, publish_stage)
+            self.assertLess(index, publish)
+        self.assertTrue(
+            any(line.startswith("COPY --from=publish /app/publish") for line in instructions)
+        )
 
 
 class LegalIndexTests(unittest.TestCase):

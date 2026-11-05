@@ -73,6 +73,10 @@
 }
 
 @media (max-width: 600px) {
+    .chart-card-shell ::deep .mud-card-header {
+        padding: 12px 12px 10px;
+    }
+
     .chart-series-status {
         grid-template-columns: 1fr;
         margin: 4px 4px 6px;

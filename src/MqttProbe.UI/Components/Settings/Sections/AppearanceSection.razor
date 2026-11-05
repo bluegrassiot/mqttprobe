@@ -22,11 +22,13 @@
                ValueChanged="@OnFontProfileChanged"
                Variant="Variant.Outlined"
                Margin="Margin.Dense"
-               HelperText="Accessible uses OpenDyslexic for easier reading"
                Class="settings-field-medium">
         <MudSelectItem Value="@(FontProfiles.Standard)">Standard</MudSelectItem>
         <MudSelectItem Value="@(FontProfiles.Accessible)">Accessible</MudSelectItem>
     </MudSelect>
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Accessible uses OpenDyslexic for easier reading
+    </MudText>
 </div>
 
 <div class="settings-field">

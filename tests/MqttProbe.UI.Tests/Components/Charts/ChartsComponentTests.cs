@@ -59,9 +59,10 @@ public class ChartsComponentTests : BunitTestContext
         var cut = Render<ChartsComponent>();
 
         cut.Markup.Should().Contain("No charts yet");
-        cut.Markup.Should().Contain("select a node or device, then choose the chart icon");
-        cut.Markup.Should().Contain("values are not exposed under a stable metric name");
-        cut.Markup.Should().NotContain("open a metric");
+        cut.Markup.Should().Contain("Choose the chart icon beside a value in");
+        cut.Markup.Should().NotContain("stable metric name");
+        cut.Markup.Should().NotContain("indexed path");
+        cut.Markup.Should().NotContain("Add to Existing");
         return Task.CompletedTask;
     }
 
@@ -79,6 +80,7 @@ public class ChartsComponentTests : BunitTestContext
 
         cut.Markup.Should().Contain("Temp Chart");
         cut.Markup.Should().Contain("Pressure Chart");
+        cut.Markup.Should().NotContain("Choose the chart icon");
         return Task.CompletedTask;
     }
 
@@ -182,8 +184,8 @@ public class ChartsComponentTests : BunitTestContext
         cut.Markup.Should().Contain("app-tabpanel-header__row");
         cut.Markup.Should().Contain("mud-typography-h6");
         cut.Markup.Should().Contain(">Charts<");
-        cut.Markup.Should().Contain("Create");
-        cut.Markup.Should().NotContain("Create chart", "label was shortened to verb-only");
+        cut.Markup.Should().Contain("Configure New");
+        cut.Markup.Should().NotContain("Create chart");
     }
 }
 

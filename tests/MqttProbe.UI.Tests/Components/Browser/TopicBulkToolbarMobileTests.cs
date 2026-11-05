@@ -54,7 +54,7 @@ public sealed class TopicBulkToolbarMobileTests : BunitTestContext
         var actions = mobile.QuerySelector(".topic-bulk-toolbar__actions-menu")!;
         actions.TextContent.Trim().Should().Be("Actions");
         actions.ClassList.Should().Contain("app-mobile-bar-btn",
-            "both row buttons share the 44px touch height");
+            "both row buttons share the toolbar's compact height override");
         actions.GetAttribute("aria-expanded").Should().Be("false");
         actions.GetAttribute("aria-haspopup").Should().Be("menu");
         var topics = mobile.QuerySelector(".topic-bulk-toolbar__topics")!;

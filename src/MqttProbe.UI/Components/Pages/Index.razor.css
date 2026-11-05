@@ -41,6 +41,7 @@
 
 @media (max-width: 599px) {
     .tab-panel-content {
+        padding-top: 6px;
         padding-bottom: 64px; /* space for fixed mobile nav bar */
     }
 }
@@ -95,8 +96,9 @@
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    padding: 6px 12px;
+    padding: 6px 6px;
     min-height: 44px;
+    min-width: 0;
     border: none;
     background: transparent;
     color: var(--mud-palette-text-secondary);
@@ -104,6 +106,37 @@
     cursor: pointer;
     transition: color 150ms ease-out;
     -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-nav-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+}
+
+.mobile-nav-count {
+    position: absolute;
+    top: -5px;
+    right: -10px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    border-radius: 999px;
+    background: var(--mud-palette-primary);
+    color: #0F172A;
+    font-size: 0.56rem;
+    font-weight: 700;
+    line-height: 14px;
+    text-align: center;
+}
+
+.mobile-nav-label {
+    max-width: 100%;
+    font-size: clamp(0.58rem, 2.7vw, 0.7rem);
+    line-height: 1.15;
+    white-space: nowrap;
 }
 
 .mobile-nav-btn.active {

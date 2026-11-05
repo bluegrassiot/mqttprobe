@@ -325,17 +325,6 @@
         flex: 0 1 auto;
     }
 
-    .pb-list-header-time ::deep .pb-time-trigger {
-        justify-content: center;
-        min-width: 44px;
-        min-height: 44px;
-        padding: 0 10px;
-    }
-
-    .pb-list-header-time ::deep .pb-time-trigger__label {
-        display: none;
-    }
-
     ::deep .mud-table-container thead {
         display: none;
     }
@@ -392,14 +381,19 @@
     ::deep .payload-row .pb-cell-payload {
         order: 4;
         flex: 1 1 100%;
+        display: block;
+        min-width: 0;
+        margin-top: 2px;
+        color: var(--mud-palette-text-primary);
+    }
+
+    ::deep .payload-row .pb-payload-preview {
         display: -webkit-box;
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
         line-clamp: 2;
         overflow: hidden;
         word-break: break-all;
-        margin-top: 2px;
-        color: var(--mud-palette-text-primary);
     }
 }
 

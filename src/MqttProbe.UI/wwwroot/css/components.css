@@ -18,6 +18,12 @@
     min-height: 44px;
 }
 
+/* MudBlazor paints Color.Secondary with the palette accent and marks it
+   !important. Rebind the token on prose so helpers use readable text-secondary. */
+.mud-typography.mud-secondary-text {
+    --mud-palette-secondary: var(--mud-palette-text-secondary);
+}
+
 /* ── Brand button colors (BRAND_GUIDE §6) ──────────────────────────────────── */
 
 /* These rules MUST live in the global stylesheet (not in MainLayout.razor.css
@@ -144,6 +150,18 @@ button:focus-visible {
    the app shell, so a global :has() rule is the simplest override. */
 body:has(.mud-dialog-container) .mobile-primary-nav {
     display: none;
+}
+
+/* The native iOS host adds this class only for a software keyboard. The WebView
+   already shrinks for the keyboard, so hide the fixed nav and release both
+   reserved bottom bands rather than adding a second geometry detector. */
+html.app-keyboard-open .mobile-primary-nav {
+    display: none;
+}
+
+html.app-keyboard-open .app-shell-body .tab-panel-content,
+html.app-keyboard-open .app-shell-body .browser-mobile-payload {
+    padding-bottom: 0;
 }
 
 .mud-appbar .status-pulse {

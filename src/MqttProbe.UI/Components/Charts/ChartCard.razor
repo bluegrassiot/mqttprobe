@@ -4,6 +4,7 @@
 @inject IChartDataService ChartDataService
 @implements IAsyncDisposable
 
+<div class="chart-card-shell">
 <MudCard Elevation="0" Class="app-chrome-panel">
     <MudCardHeader>
         <CardHeaderContent>
@@ -96,6 +97,7 @@
         }
     </MudCardContent>
 </MudCard>
+</div>
 
 @code {
     [Parameter, EditorRequired] public ChartConfiguration Configuration { get; set; } = null!;

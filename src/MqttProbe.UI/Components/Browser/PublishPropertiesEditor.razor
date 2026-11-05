@@ -1,9 +1,13 @@
+@using Microsoft.JSInterop
+@using MudBlazor.Services
 @using MQTTnet.Protocol
+@implements IAsyncDisposable
 @inject ISnackbar Snackbar
+@inject IKeyInterceptorService KeyInterceptorService
 
-<div class="publish-props" role="region" aria-label="MQTT 5 properties" tabindex="0">
+<div id="@_rootId" class="publish-props" role="region" aria-label="MQTT 5 properties">
     <MudExpansionPanels Dense="true" Elevation="0">
-        <MudExpansionPanel @bind-Expanded="_expanded" Dense="true">
+        <MudExpansionPanel @ref="_panel" @bind-Expanded="_expanded" Dense="true">
             <TitleContent>
                 <div class="d-flex align-center gap-2">
                     <MudText Typo="Typo.subtitle2">MQTT 5 properties</MudText>
@@ -148,6 +152,9 @@
     private string _value = string.Empty;
     private HashSet<UserPropertyRow> _selected = [];
     private bool _expanded;
+    private readonly string _rootId = $"publish-props-{Guid.NewGuid():N}";
+    private MudExpansionPanel? _panel;
+    private PublishPropertiesDraft? _observedDraft;
 
     private bool CanAdd => !string.IsNullOrWhiteSpace(_name) && Draft.CanAddUserProperty;
 
@@ -158,7 +165,53 @@
     internal void SelectForTests(int index) => _selected.Add(Rows()[index]);
     internal void RemoveSelectedForTests() => RemoveSelected();
 
-    protected override void OnParametersSet() => _expanded |= Draft.Any;
+    protected override void OnParametersSet()
+    {
+        // Open for the initial draft and for a newly imported one, but keep a collapse
+        // the user chose while editing the same draft.
+        if (ReferenceEquals(_observedDraft, Draft))
+            return;
+
+        _observedDraft = Draft;
+        _expanded |= Draft.Any;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await KeyInterceptorService.SubscribeAsync(
+            _rootId,
+            new KeyInterceptorOptions(
+                "mud-expand-panel-header",
+                new KeyOptions("ArrowRight", subscribeDown: true, ignoreDownRepeats: true),
+                new KeyOptions("ArrowLeft", subscribeDown: true, ignoreDownRepeats: true)),
+            HandleDisclosureKeyDown);
+    }
+
+    private async Task HandleDisclosureKeyDown(KeyboardEventArgs e)
+    {
+        if (_panel is null || e.Repeat || e.IsComposing ||
+            e.CtrlKey || e.AltKey || e.MetaKey || e.ShiftKey)
+            return;
+
+        if (e.Key == "ArrowRight")
+            await _panel.ExpandAsync();
+        else if (e.Key == "ArrowLeft")
+            await _panel.CollapseAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await KeyInterceptorService.UnsubscribeAsync(_rootId);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is gone; the browser drops the listener with the page.
+        }
+    }
 
     private List<UserPropertyRow> Rows() =>
         Draft.UserProperties.Select((property, index) => new UserPropertyRow(index, property)).ToList();

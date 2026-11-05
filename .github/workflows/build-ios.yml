@@ -165,6 +165,11 @@ jobs:
           -p:ApplicationDisplayVersion=${{ steps.version.outputs.marketing }}
           -p:ApplicationVersion=${{ steps.version.outputs.build }}
 
+      - name: Verify legal notices
+        run: |
+          python3 scripts/legal/notices.py profiles-check --scenario maui-ios-arm64
+          python3 scripts/legal/notices.py verify --scenario maui-ios-arm64
+
       - name: Collect the IPA
         id: collect
         # The RID folder varies by SDK version, so search rather than hardcode it.

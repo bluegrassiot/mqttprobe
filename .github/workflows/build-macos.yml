@@ -151,6 +151,11 @@ jobs:
           -p:ApplicationDisplayVersion=${{ steps.version.outputs.value }}
           -p:ApplicationVersion=${{ steps.version.outputs.code }}
 
+      - name: Verify legal notices
+        run: |
+          python3 scripts/legal/notices.py profiles-check --scenario maui-maccatalyst
+          python3 scripts/legal/notices.py verify --scenario maui-maccatalyst
+
       - name: Verify universal binary and signature
         run: |
           # --output is ignored for Apple bundles; the universal .app lands at the TFM root

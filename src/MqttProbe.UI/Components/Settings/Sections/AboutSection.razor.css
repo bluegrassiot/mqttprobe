@@ -65,3 +65,42 @@
     display: block;
     margin-top: 0.25rem;
 }
+
+.about-legal {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
+.about-legal__button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--mud-palette-primary);
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.5;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.about-legal__button:hover .about-legal__label,
+.about-legal__button:focus-visible .about-legal__label {
+    text-decoration: underline;
+}
+
+.about-legal__button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 3px;
+    border-radius: 4px;
+}
+
+.about-legal ::deep .about-legal__hint {
+    display: block;
+    margin-top: 0.25rem;
+}

@@ -1,196 +1,1299 @@
 MQTT Probe
 Copyright 2026 Bluegrass IoT
-Licensed under the Apache License, Version 2.0 — see LICENSE.
-
----
-
-This product includes the following third-party components:
-
-## Sparkplug B Protocol Buffer Generated Code
-
-File: src/MqttProbe.Shared/Models/SparkplugBProtobuf.cs
-
-  Copyright (c) 2015, 2018 Cirrus Link Solutions and others
-
-  Source: https://github.com/eclipse/tahu/blob/master/c_sharp/core/src/SparkplugBCSharp.cs
-
-  Licensed under the Eclipse Public License 2.0 (EPL-2.0):
-  https://www.eclipse.org/legal/epl-2.0/
-
-  SPDX-License-Identifier: EPL-2.0
-
-  This file is the unmodified official generated C# file distributed
-  by the Eclipse Tahu project and must not be edited or reformatted.
-
-## Inter Variable — SIL Open Font License 1.1
-
-Files: src/MqttProbe.Shared/wwwroot/fonts/InterVariable.woff2
-       src/MqttProbe.Maui/Resources/Fonts/Inter-Variable.ttf
-
-  Copyright 2016 The Inter Project Authors
-
-  Source: https://github.com/rsms/inter
-
-  Licensed under the SIL Open Font License, Version 1.1 (OFL-1.1):
-  https://scripts.sil.org/OFL
-
-## JetBrains Mono — SIL Open Font License 1.1
-
-Files: src/MqttProbe.Shared/wwwroot/fonts/JetBrainsMono-Regular.woff2
-       src/MqttProbe.Shared/wwwroot/fonts/JetBrainsMono-Medium.woff2
-
-  Copyright 2020 JetBrains s.r.o.
-
-  Source: https://github.com/JetBrains/JetBrainsMono
-
-  Licensed under the SIL Open Font License, Version 1.1 (OFL-1.1):
-  https://scripts.sil.org/OFL
-
-## Chakra Petch — SIL Open Font License 1.1
-
-Files: src/MqttProbe.Shared/wwwroot/fonts/ChakraPetch-500.woff2
-       src/MqttProbe.Shared/wwwroot/fonts/ChakraPetch-600.woff2
-       src/MqttProbe.Shared/wwwroot/fonts/ChakraPetch-700.woff2
-
-  Copyright 2020 Cadson Demak
-
-  Source: https://github.com/cadsondemak/chakra-petch
-
-  Licensed under the SIL Open Font License, Version 1.1 (OFL-1.1):
-  https://scripts.sil.org/OFL
-
-## OpenDyslexic (Nerd Font) — Bitstream License
-
-Files: src/MqttProbe.Shared/wwwroot/fonts/OpenDyslexicNerdFont-Regular.woff2
-       src/MqttProbe.Shared/wwwroot/fonts/OpenDyslexicNerdFont-Bold.woff2
-       src/MqttProbe.Shared/wwwroot/fonts/OpenDyslexicNerdFont-Italic.woff2
-       src/MqttProbe.Shared/wwwroot/fonts/OpenDyslexicMNerdFontMono-Regular.woff2
-
-  Copyright (c) 2003 by Bitstream, Inc. All Rights Reserved.
-  Bitstream Vera is a trademark of Bitstream, Inc.
-
-  OpenDyslexic is based on Bitstream Vera, modified by Abelardo
-  González and others.
-
-  Permission is hereby granted, free of charge, to any person
-  obtaining a copy of the fonts accompanying this license ("Fonts")
-  and associated documentation files (the "Font Software"), to
-  reproduce and distribute the Font Software, including without
-  limitation the rights to use, copy, merge, publish, distribute,
-  and/or sell copies of the Font Software, and to permit persons to
-  whom the Font Software is furnished to do so, subject to the
-  following conditions:
-
-  The above copyright and trademark notices and this permission
-  notice shall be included in all copies of one or more of the Font
-  Software typefaces.
-
-  THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
-  KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY
-  WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE
-  AND NONINFRINGEMENT OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER
-  RIGHT. IN NO EVENT SHALL BITSTREAM OR THE GNOME FOUNDATION BE
-  LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, INCLUDING ANY
-  GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES,
-  WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-  OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM OTHER
-  DEALINGS IN THE FONT SOFTWARE.
-
-## NuGet Dependencies
-
-AwesomeAssertions — Apache-2.0
-  Copyright Dennis Doomen 2010-2025, AwesomeAssertions 2025-
-
-BenchmarkDotNet — MIT
-  .NET Foundation and contributors
-
-Blazor-ApexCharts — MIT
-  Copyright 2022 (c) Joakim Dangården
-
-Blazor.Lucide — MIT
-
-bunit — MIT
-  Egil Hansen
-
-coverlet.collector — MIT
-  (c) 2018 Toni Solarin-Sodara
-
-CurrieTechnologies.Razor.Clipboard — MIT
-  Michael J. Currie
-
-FluentValidation — Apache-2.0
-  Copyright (c) Jeremy Skinner, .NET Foundation, and contributors 2008-2025
-
-Google.Protobuf — BSD-3-Clause
-  Copyright 2015, Google Inc.
-
-JunitXml.TestLogger — MIT
-  Copyright 2016 Spekt Inc.
-
-MessagePack — MIT
-  (c) Yoshifumi Kawai and contributors
-
-Microsoft.AspNetCore.Components.Authorization — MIT
-  (c) Microsoft Corporation
-
-Microsoft.AspNetCore.Components.Web — MIT
-  (c) Microsoft Corporation
-
-Microsoft.AspNetCore.Components.WebView.Maui — MIT
-  (c) Microsoft Corporation
-
-Microsoft.AspNetCore.Mvc.Testing — MIT
-  (c) Microsoft Corporation
-
-Microsoft.Extensions.Logging.Abstractions — MIT
-  (c) Microsoft Corporation
-
-Microsoft.Extensions.Logging.Debug — MIT
-  (c) Microsoft Corporation
-
-Microsoft.Extensions.TimeProvider.Testing — MIT
-  (c) Microsoft Corporation
-
-Microsoft.Maui.Controls — MIT
-  (c) Microsoft Corporation
-
-Microsoft.Maui.Controls.Compatibility — MIT
-  (c) Microsoft Corporation
-
-Microsoft.Maui.Essentials — MIT
-  (c) Microsoft Corporation
-
-Microsoft.NET.Test.Sdk — MIT
-  (c) Microsoft Corporation
-
-Microsoft.Playwright.NUnit — MIT
-  (c) Microsoft Corporation
-
-MQTTnet — MIT
-  .NET Foundation and Contributors
-
-MQTTnet.Extensions.ManagedClient — MIT
-  .NET Foundation and Contributors
-
-MudBlazor — MIT
-  Copyright 2026 MudBlazor
-
-NSubstitute — BSD-3-Clause
-
-NUnit — MIT
-  Copyright (c) Charlie Poole, Rob Prouse and Contributors
-
-NUnit.Analyzers — MIT
-  Copyright (c) 2018-2026 NUnit project
-
-NUnit3TestAdapter — MIT
-  Copyright (c) 2011-2021 Charlie Poole, 2014-2026 Terje Sandstrom
-
-SparkplugNet — MIT
-  Copyright (c) Hämmer Electronics
-
-System.Threading.RateLimiting — MIT
-  (c) Microsoft Corporation
-
-Testcontainers — MIT
-  Copyright (c) 2019-2026 Andre Hofmeister and other authors
+Licensed under the Apache License, Version 2.0; see LICENSE.
+
+THIRD-PARTY NOTICES
+
+This file is generated by scripts/legal/notices.py. Do not edit it by hand.
+It is the component index for the offline legal catalogue embedded in the
+application. Full licence and notice texts live in legal/generated/texts
+and are shown in the app without network access.
+
+Regenerate: python scripts/legal/notices.py generate
+Verify:     python scripts/legal/notices.py check
+
+==============================================================================
+
+1. Shipped components
+
+  ApexCharts JavaScript library 6.5.0
+    Licence: ApexCharts Community/Commercial dual license (unresolved)
+    Source: https://github.com/apexcharts/apexcharts.js
+    Texts: ApexCharts 6.5.0 License (upstream text)
+    Note: Bundled by Blazor-ApexCharts as js/apexcharts.esm.js and served to the browser. Upstream terms are not MIT and are not resolved by this notice.
+
+  .NET for Android runtime 36.1.118
+    Licence: MIT and third-party terms
+    Copyright: Copyright (c) .NET Foundation and Contributors
+    Source: https://github.com/dotnet/android
+    Texts: xamarin-android third-party notices (.NET for Android runtime 36.1.118); LLVM Release License
+    Note: Bundled from Microsoft.Android.Runtime.36.android/36.1.118.
+
+  .NET MAUI platform notices 10.0.110
+    Licence: MIT and third-party terms
+    Copyright: Copyright (c) Microsoft Corporation. All rights reserved.
+    Source: https://github.com/dotnet/maui
+    Texts: .NET MAUI third-party notices (10.0.110); License notice for IQKeyboardManager
+    Note: The individual Microsoft.Maui.* packages also carry their own current third-party notice file, reproduced through those components.
+
+  .NET runtime 10.0.14
+    Licence: MIT and third-party terms
+    Copyright: Copyright (c) .NET Foundation and Contributors
+    Source: https://github.com/dotnet/runtime
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); Microsoft .NET runtime third-party notices (10.0.14)
+    Note: Bundled by iOS, Android, MacCatalyst and self-contained desktop builds. The notice files are from Microsoft.NETCore.App.Runtime.Mono.ios-arm64 10.0.14, byte-identical to the android-arm64 and maccatalyst-arm64 packs of the same version.
+
+  Chakra Petch unversioned
+    Licence: SIL Open Font License 1.1
+    Copyright: Copyright 2018 The Chakra Petch Project Authors
+    Source: https://github.com/m4rc1e/Chakra-Petch
+    Texts: SIL Open Font License 1.1
+
+  Inter variable
+    Licence: SIL Open Font License 1.1
+    Copyright: Copyright (c) 2016 The Inter Project Authors
+    Source: https://github.com/rsms/inter
+    Texts: SIL Open Font License 1.1
+
+  JetBrains Mono unversioned
+    Licence: SIL Open Font License 1.1
+    Copyright: Copyright 2020 The JetBrains Mono Project Authors
+    Source: https://github.com/JetBrains/JetBrainsMono
+    Texts: SIL Open Font License 1.1
+
+  OpenDyslexic, Nerd Font patched builds unrecorded patcher build
+    Licence: Bitstream Vera License
+    Copyright: Copyright (c) 2003 by Bitstream, Inc. All Rights Reserved
+    Source: https://github.com/antijingoist/opendyslexic
+    Texts: Nerd Fonts patcher license; Bitstream Vera License - OpenDyslexic
+    Note: The patcher version used for these files and the individual notices for patched-in icon sets are not recorded in this repository.
+
+  Lucide and Feather icon path data unversioned
+    Licence: ISC and MIT
+    Copyright: Copyright (c) 2026 Lucide Icons and Contributors; Copyright (c) 2013-present Cole Bemis
+    Source: https://github.com/lucide-icons/lucide
+    Texts: ISC License and Feather notice - Lucide
+
+  Microsoft.iOS SDK 27.1.10018
+    Licence: MIT and third-party terms
+    Copyright: Copyright (c) .NET Foundation and Contributors
+    Source: https://github.com/dotnet/macios
+    Texts: Microsoft.iOS SDK License (27.1.10018)
+    Note: Installed workload pack Microsoft.iOS.Runtime.ios-arm64.net10.0_27.1/27.1.10018 with .NET SDK 10.0.403.
+
+  Microsoft.MacCatalyst SDK 27.0.10742
+    Licence: MIT and third-party terms
+    Copyright: Copyright (c) .NET Foundation and Contributors
+    Source: https://github.com/dotnet/macios
+    Texts: Microsoft.iOS SDK License (27.1.10018)
+    Note: Installed workload pack Microsoft.MacCatalyst.Runtime.maccatalyst-arm64.net10.0_27.0/27.0.10742. Its SDK licence is byte-identical to the Microsoft.iOS copy reproduced here.
+
+  Blazor-ApexCharts 7.1.0
+    Licence: MIT
+    Copyright: Copyright 2022 (c) Joakim Dangården. All rights reserved.
+    Source: https://apexcharts.github.io/Blazor-ApexCharts/
+    Texts: ApexCharts 6.5.0 License (upstream text); MIT License; MIT License (generic text)
+    Note: The package is MIT. The bundled ApexCharts JavaScript library is separately licensed and unresolved.
+
+  Blazor.Lucide 1.0.6
+    Licence: MIT
+    Source: https://www.nuget.org/packages/Blazor.Lucide/1.0.6
+    Texts: MIT License (generic text)
+
+  FluentValidation 12.2.0
+    Licence: Apache-2.0
+    Copyright: Copyright (c) Jeremy Skinner, .NET Foundation, and contributors 2008-2025
+    Source: https://fluentvalidation.net/
+    Texts: Apache License 2.0
+
+  Google.Protobuf 3.36.2
+    Licence: BSD-3-Clause
+    Copyright: Copyright 2015, Google Inc.
+    Source: https://github.com/protocolbuffers/protobuf
+    Texts: BSD 3-Clause License
+
+  GoogleGson 2.13.1.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Apache License 2.0; Android binding notices - Google Gson; MIT License (generic text)
+
+  MessagePack.Annotations 3.1.12
+    Licence: MIT
+    Copyright: © Yoshifumi Kawai and contributors. All rights reserved.
+    Source: https://github.com/MessagePack-CSharp/MessagePack-CSharp
+    Texts: MIT License (generic text)
+
+  MessagePack 3.1.12
+    Licence: MIT
+    Copyright: © Yoshifumi Kawai and contributors. All rights reserved.
+    Source: https://github.com/MessagePack-CSharp/MessagePack-CSharp
+    Texts: MIT License (generic text)
+
+  Microsoft.AspNetCore.App.Internal.Assets 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
+
+  Microsoft.AspNetCore.Authentication.OpenIdConnect 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
+
+  Microsoft.AspNetCore.Authorization 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
+
+  Microsoft.AspNetCore.Components.Authorization 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: Microsoft.AspNetCore.Components packages third-party notices; MIT License (generic text)
+
+  Microsoft.AspNetCore.Components.Forms 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: Microsoft.AspNetCore.Components packages third-party notices; MIT License (generic text)
+
+  Microsoft.AspNetCore.Components.Web 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: Microsoft.AspNetCore.Components packages third-party notices; MIT License (generic text)
+
+  Microsoft.AspNetCore.Components.WebView.Maui 10.0.110
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/dotnet/maui
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
+
+  Microsoft.AspNetCore.Components.WebView 10.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: Microsoft.AspNetCore.Components packages third-party notices; MIT License (generic text)
+
+  Microsoft.AspNetCore.Components.WebView 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: Microsoft.AspNetCore.Components packages third-party notices; MIT License (generic text)
+
+  Microsoft.AspNetCore.Components 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: Microsoft.AspNetCore.Components packages third-party notices; MIT License (generic text)
+
+  Microsoft.AspNetCore.Metadata 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
+
+  Microsoft.Bcl.Cryptography 10.0.2
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Configuration.Abstractions 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Configuration.Binder 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Configuration.FileExtensions 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Configuration.Json 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Configuration 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.DependencyInjection.Abstractions 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.DependencyInjection 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Diagnostics.Abstractions 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Diagnostics 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.FileProviders.Abstractions 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.FileProviders.Composite 10.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.FileProviders.Composite 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.FileProviders.Embedded 10.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: MIT License (generic text)
+
+  Microsoft.Extensions.FileProviders.Embedded 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: MIT License (generic text)
+
+  Microsoft.Extensions.FileProviders.Physical 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.FileSystemGlobbing 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Hosting.Abstractions 10.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Http 10.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Localization.Abstractions 10.0.1
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
+
+  Microsoft.Extensions.Localization 10.0.1
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
+
+  Microsoft.Extensions.Logging.Abstractions 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Logging.Configuration 9.0.1
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); Microsoft.Extensions.Logging and System.Numerics.Tensors third-party notices; MIT License (generic text)
+
+  Microsoft.Extensions.Logging.Console 9.0.1
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); Microsoft.Extensions.Logging and System.Numerics.Tensors third-party notices; MIT License (generic text)
+
+  Microsoft.Extensions.Logging.Debug 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Logging 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Options.ConfigurationExtensions 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Options 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Primitives 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Microsoft.Extensions.Validation 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
+
+  Microsoft.Graphics.Win2D 1.4.0
+    Licence: Unresolved: package metadata declares a legacy Win2D EULA and the repository license is MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://go.microsoft.com/fwlink/?LinkID=519078
+    Texts: Microsoft.Graphics.Win2D repository license (MIT)
+    Note: The package ships no license file. Its EULA URL is legacy and the repository LICENSE.txt is MIT; which terms apply is not established here.
+
+  Microsoft.IdentityModel.Abstractions 8.23.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet
+    Texts: MIT License (generic text)
+
+  Microsoft.IdentityModel.JsonWebTokens 8.23.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet
+    Texts: MIT License (generic text)
+
+  Microsoft.IdentityModel.Logging 8.23.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet
+    Texts: MIT License (generic text)
+
+  Microsoft.IdentityModel.Protocols.OpenIdConnect 8.19.2
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet
+    Texts: MIT License (generic text)
+
+  Microsoft.IdentityModel.Protocols 8.19.2
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet
+    Texts: MIT License (generic text)
+
+  Microsoft.IdentityModel.Tokens 8.23.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet
+    Texts: MIT License (generic text)
+
+  Microsoft.IO.RecyclableMemoryStream 3.0.1
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/Microsoft/Microsoft.IO.RecyclableMemoryStream
+    Texts: MIT License (generic text)
+
+  Microsoft.JSInterop 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://asp.net/
+    Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
+
+  Microsoft.Maui.Controls.Compatibility 10.0.110
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/dotnet/maui
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
+
+  Microsoft.Maui.Controls.Core 10.0.110
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/dotnet/maui
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
+
+  Microsoft.Maui.Controls.Xaml 10.0.110
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/dotnet/maui
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
+
+  Microsoft.Maui.Controls 10.0.110
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/dotnet/maui
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
+
+  Microsoft.Maui.Core 10.0.110
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/dotnet/maui
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
+
+  Microsoft.Maui.Essentials 10.0.110
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/dotnet/maui
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
+
+  Microsoft.Maui.Graphics.Win2D.WinUI.Desktop 10.0.110
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/dotnet/maui
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
+
+  Microsoft.Maui.Graphics 10.0.110
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/dotnet/maui
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
+
+  Microsoft.Web.WebView2 1.0.3179.45
+    Licence: BSD-3-Clause
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/webview
+    Texts: Microsoft Edge WebView2 license; Microsoft Edge WebView2 NOTICE
+    Note: Windows MAUI builds. The package licence text is BSD-3-Clause and its NOTICE is reproduced here.
+
+  Microsoft.WindowsAppSDK.AI 1.8.76
+    Licence: Microsoft proprietary terms
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/microsoft/windowsappsdk
+    Texts: Microsoft Windows App SDK license terms; Microsoft Windows App SDK NOTICE
+    Note: Windows MAUI builds. The component packages ship under their own copies of the same Microsoft terms; the DWrite and ML variants are reproduced with their packages.
+
+  Microsoft.WindowsAppSDK.Base 1.8.251216001
+    Licence: Microsoft proprietary terms
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/microsoft/windowsappsdk
+    Texts: Microsoft Windows App SDK license terms; Microsoft Windows App SDK NOTICE
+    Note: Windows MAUI builds. The component packages ship under their own copies of the same Microsoft terms; the DWrite and ML variants are reproduced with their packages.
+
+  Microsoft.WindowsAppSDK.DWrite 1.8.25122902
+    Licence: Microsoft proprietary terms
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/WindowsAppSDK
+    Texts: Microsoft Windows App SDK DWrite license terms; Microsoft Windows App SDK NOTICE
+    Note: Windows MAUI builds. The component packages ship under their own copies of the same Microsoft terms; the DWrite and ML variants are reproduced with their packages.
+
+  Microsoft.WindowsAppSDK.Foundation 1.8.260527000
+    Licence: Microsoft proprietary terms
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/windowsappsdk
+    Texts: Microsoft Windows App SDK license terms; Microsoft Windows App SDK NOTICE
+    Note: Windows MAUI builds. The component packages ship under their own copies of the same Microsoft terms; the DWrite and ML variants are reproduced with their packages.
+
+  Microsoft.WindowsAppSDK.InteractiveExperiences 1.8.260525001
+    Licence: Microsoft proprietary terms
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/windowsappsdk
+    Texts: Microsoft Windows App SDK license terms; Microsoft Windows App SDK NOTICE
+    Note: Windows MAUI builds. The component packages ship under their own copies of the same Microsoft terms; the DWrite and ML variants are reproduced with their packages.
+
+  Microsoft.WindowsAppSDK.ML 1.8.2197
+    Licence: Microsoft proprietary terms
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/microsoft/windowsappsdk
+    Texts: Microsoft Windows App SDK ML license terms; Microsoft Windows App SDK NOTICE; THIRD PARTY SOFTWARE NOTICES AND INFORMATION
+    Note: Windows MAUI builds. The component packages ship under their own copies of the same Microsoft terms; the DWrite and ML variants are reproduced with their packages.
+
+  Microsoft.WindowsAppSDK.Runtime 1.8.260529003
+    Licence: Microsoft proprietary terms
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/microsoft/windowsappsdk
+    Texts: Microsoft Windows App SDK license terms; Microsoft Windows App SDK NOTICE
+    Note: Windows MAUI builds. The component packages ship under their own copies of the same Microsoft terms; the DWrite and ML variants are reproduced with their packages.
+
+  Microsoft.WindowsAppSDK.Widgets 1.8.251231004
+    Licence: Microsoft proprietary terms
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/microsoft/windowsappsdk
+    Texts: Microsoft Windows App SDK license terms; Microsoft Windows App SDK DWrite license terms; Microsoft Windows App SDK NOTICE
+    Note: Windows MAUI builds. The component packages ship under their own copies of the same Microsoft terms; the DWrite and ML variants are reproduced with their packages.
+
+  Microsoft.WindowsAppSDK.WinUI 1.8.260528001
+    Licence: Microsoft proprietary terms
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/microsoft/windowsappsdk
+    Texts: Microsoft Windows App SDK license terms; NOTICES AND INFORMATION; Microsoft Windows App SDK NOTICE
+    Note: Windows MAUI builds. The component packages ship under their own copies of the same Microsoft terms; the DWrite and ML variants are reproduced with their packages.
+
+  Microsoft.WindowsAppSDK 1.8.260529003
+    Licence: Microsoft proprietary terms
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/microsoft/windowsappsdk
+    Texts: Microsoft Windows App SDK license terms; Microsoft Windows App SDK NOTICE
+    Note: Windows MAUI builds. The component packages ship under their own copies of the same Microsoft terms; the DWrite and ML variants are reproduced with their packages.
+
+  MQTTnet 5.2.0.1603
+    Licence: MIT
+    Copyright: Copyright (c) .NET Foundation and Contributors
+    Source: https://github.com/dotnet/MQTTnet
+    Texts: The MIT License (MIT)
+
+  MudBlazor 9.12.0
+    Licence: MIT
+    Copyright: Copyright 2026 MudBlazor
+    Source: https://mudblazor.com/
+    Texts: MIT License (generic text); MIT License
+
+  Photino.Blazor 4.0.13
+    Licence: Apache-2.0
+    Source: https://github.com/tryphotino/photino.Blazor
+    Texts: Apache License 2.0
+
+  Photino.Native 4.0.22
+    Licence: Apache-2.0
+    Source: https://github.com/tryphotino/photino.Native
+    Texts: Apache License 2.0
+
+  Photino.NET 4.0.16
+    Licence: Apache-2.0
+    Copyright: Copyright (C) 2025
+    Source: https://github.com/tryphotino/photino.NET
+    Texts: Apache License 2.0
+
+  protobuf-net.Core 3.4.40
+    Licence: Apache-2.0
+    Source: https://protobuf-net.dev/
+    Texts: Apache License 2.0
+
+  protobuf-net.Reflection 3.4.40
+    Licence: Apache-2.0
+    Source: https://protobuf-net.dev/
+    Texts: Apache License 2.0
+
+  protobuf-net 3.2.56
+    Licence: Apache-2.0
+    Source: https://github.com/protobuf-net/protobuf-net
+    Texts: Apache License 2.0
+
+  System.Formats.Cbor 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  System.IdentityModel.Tokens.Jwt 8.19.2
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet
+    Texts: MIT License (generic text)
+
+  System.Numerics.Tensors 9.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); Microsoft.Extensions.Logging and System.Numerics.Tensors third-party notices; MIT License (generic text)
+
+  System.Reflection.MetadataLoadContext 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  System.Security.Cryptography.ProtectedData 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  System.Threading.RateLimiting 10.0.14
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+
+  Velopack 1.2.161
+    Licence: MIT
+    Copyright: Copyright © Velopack Ltd. All rights reserved.
+    Source: https://github.com/velopack/velopack
+    Texts: MIT License (generic text)
+    Note: Installer and auto-update channel. Upstream also credits Copyright (c) 2021 Caelan Sayler.
+
+  Xamarin.Android.Glide.Annotations 4.16.0.14
+    Licence: MIT AND BSD-2-Clause AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - Xamarin.Android.Glide; BSD 2-Clause License; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.Android.Glide.DiskLruCache 4.16.0.14
+    Licence: MIT AND BSD-2-Clause AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - Xamarin.Android.Glide; BSD 2-Clause License; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.Android.Glide.GifDecoder 4.16.0.14
+    Licence: MIT AND BSD-2-Clause AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - Xamarin.Android.Glide; BSD 2-Clause License; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.Android.Glide 4.16.0.14
+    Licence: MIT AND BSD-2-Clause AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - Xamarin.Android.Glide; BSD 2-Clause License; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Activity.Ktx 1.10.1.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Activity 1.10.1.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Annotation.Experimental 1.5.1.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Annotation.Jvm 1.9.1.5
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Annotation 1.9.1.5
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.AppCompat.AppCompatResources 1.7.1.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.AppCompat 1.7.1.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Arch.Core.Common 2.2.0.18
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Arch.Core.Runtime 2.2.0.18
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Browser 1.8.0.11
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.CardView 1.0.0.36
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Collection.Jvm 1.5.0.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Collection.Ktx 1.5.0.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Collection 1.5.0.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Concurrent.Futures 1.3.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.ConstraintLayout.Core 1.1.1.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.ConstraintLayout 2.2.1.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.CoordinatorLayout 1.3.0.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Core.Core.Ktx 1.16.0.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Core.ViewTree 1.0.0.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Core 1.16.0.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.CursorAdapter 1.0.0.34
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.CustomView.PoolingContainer 1.1.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.CustomView 1.2.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.DrawerLayout 1.2.0.18
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.DynamicAnimation 1.1.0.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Emoji2.ViewsHelper 1.5.0.6
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Emoji2 1.5.0.6
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.ExifInterface 1.4.1.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Fragment.Ktx 1.8.8.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Fragment 1.8.8.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Interpolator 1.0.0.34
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.Common.Jvm 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.Common 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.LiveData.Core.Ktx 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.LiveData.Core 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.LiveData 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.Process 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.Runtime.Android 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.Runtime.Ktx.Android 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.Runtime.Ktx 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.Runtime 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.ViewModel.Android 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.ViewModel.Ktx 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.ViewModel 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.ViewModelSavedState.Android 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Lifecycle.ViewModelSavedState 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Loader 1.1.0.34
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Navigation.Common.Android 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Navigation.Common 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Navigation.Fragment 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Navigation.Runtime.Android 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Navigation.Runtime 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Navigation.UI 2.9.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.ProfileInstaller.ProfileInstaller 1.4.1.5
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.RecyclerView 1.4.0.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.ResourceInspection.Annotation 1.0.1.22
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.SavedState.SavedState.Android 1.3.1.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.SavedState.SavedState.Ktx 1.3.1.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.SavedState 1.3.1.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Security.SecurityCrypto 1.1.0.4-alpha07
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.SlidingPaneLayout 1.2.0.22
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Startup.StartupRuntime 1.2.0.5
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.SwipeRefreshLayout 1.1.0.29
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Tracing.Tracing.Android 1.3.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Tracing.Tracing 1.3.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Transition 1.6.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.VectorDrawable.Animated 1.2.0.8
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.VectorDrawable 1.2.0.8
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.VersionedParcelable 1.2.1.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.ViewPager2 1.1.0.8
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.ViewPager 1.1.0.4
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Window.WindowCore.Jvm 1.4.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Window.WindowCore 1.4.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.AndroidX.Window 1.4.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.Google.Android.Material 1.12.0.5
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.Google.Code.FindBugs.JSR305 3.0.2.21
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.Google.Crypto.Tink.Android 1.18.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Apache License 2.0; MIT License (generic text); Android binding notices - Google Tink
+
+  Xamarin.Google.ErrorProne.Annotations 2.41.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - Error Prone annotations; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.Google.Guava.ListenableFuture 1.0.0.29
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.Jetbrains.Annotations 26.0.2.3
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Apache License 2.0; Android binding notices - JetBrains annotations; MIT License (generic text)
+
+  Xamarin.JSpecify 1.0.0.4
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - Kotlin standard library; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.Kotlin.StdLib 2.2.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - Kotlin standard library; Apache License 2.0; MIT License (generic text)
+
+  Xamarin.KotlinX.Coroutines.Android 1.10.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Apache License 2.0; Android binding notices - Google Gson; MIT License (generic text)
+
+  Xamarin.KotlinX.Coroutines.Core.Jvm 1.10.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Apache License 2.0; Android binding notices - Google Gson; MIT License (generic text)
+
+  Xamarin.KotlinX.Coroutines.Core 1.10.2.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Apache License 2.0; Android binding notices - Google Gson; MIT License (generic text)
+
+  Xamarin.KotlinX.Serialization.Core.Jvm 1.9.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Apache License 2.0; Android binding notices - Google Gson; MIT License (generic text)
+
+  Xamarin.KotlinX.Serialization.Core 1.9.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Apache License 2.0; Android binding notices - Google Gson; MIT License (generic text)
+
+  Sparkplug B generated code (SparkplugBProtobuf.cs) e33d56d2f427
+    Licence: EPL-2.0
+    Copyright: Copyright (c) 2015, 2018 Cirrus Link Solutions and others
+    Source: https://github.com/eclipse/tahu
+    Texts: Eclipse Public License 2.0
+    Note: Generated from the Eclipse Tahu protocol buffer definition. MQTTProbe extends the upstream #pragma warning disable list; there are no functional changes. Source is available from the MQTTProbe public repository under EPL-2.0.
+
+  SparkplugNet 1.4.1
+    Licence: MIT
+    Copyright: Copyright (c) Hämmer Electronics
+    Source: https://github.com/HaeMmer/SparkplugNet
+    Texts: MIT License (generic text)
+    Note: Consumed from the external/SparkplugNet git submodule as a project reference.
+
+==============================================================================
+
+2. Build-only components
+
+Not included in a shipped build. Listed so the set is auditable.
+
+  MessagePackAnalyzer 3.1.12
+    Licence: MIT
+    Source: https://github.com/MessagePack-CSharp/MessagePack-CSharp
+  Meziantou.Analyzer 3.0.320
+    Licence: MIT
+    Source: https://github.com/meziantou/Meziantou.Analyzer
+  Microsoft.AspNetCore.Components.Analyzers 10.0.14
+    Licence: MIT
+    Source: https://asp.net/
+  Microsoft.Maui.Controls.Build.Tasks 10.0.110
+    Licence: MIT
+    Source: https://github.com/dotnet/maui
+  Microsoft.Maui.Resizetizer 10.0.110
+    Licence: MIT
+    Source: https://github.com/dotnet/maui
+  Microsoft.NET.ILLink.Tasks 10.0.14
+    Licence: MIT
+    Source: https://dot.net/
+  Microsoft.NET.StringTools 17.11.4
+    Licence: MIT
+    Source: https://go.microsoft.com/fwlink/?LinkId=624683
+  Microsoft.Windows.SDK.BuildTools.MSIX 1.7.20250829.1
+    Licence: Microsoft Windows SDK license terms
+    Source: https://aka.ms/WinSDKProjectURL
+  Microsoft.Windows.SDK.BuildTools 10.0.26100.8249
+    Licence: Microsoft Windows SDK license terms
+    Source: https://aka.ms/WinSDKProjectURL
+  SonarAnalyzer.CSharp 10.35.0.4138
+    Licence: Sonar Source-Available License v1.0
+    Source: https://redirect.sonarsource.com/doc/sonar-visualstudio.html
+
+Other build and test tooling, not included in a shipped publish graph:
+
+  Analyzers: Meziantou.Analyzer 3.0.320, SonarAnalyzer.CSharp 10.35.0.4138,
+  NUnit.Analyzers 4.15.0, MessagePackAnalyzer 3.1.12,
+  Microsoft.AspNetCore.Components.Analyzers 10.0.14.
+
+  Test and benchmark: AngleSharp 1.9.0, AwesomeAssertions 9.6.0, bunit 2.13.3,
+  coverlet.collector 10.1.0, JunitXml.TestLogger 8.1.0,
+  Microsoft.Extensions.TimeProvider.Testing 10.11.0,
+  Microsoft.NET.Test.Sdk 18.11.0, NSubstitute 6.2.0, NUnit 5.0.0,
+  NUnit3TestAdapter 6.3.1, Microsoft.AspNetCore.Mvc.Testing 10.0.14,
+  Microsoft.Playwright 1.64.1 and Microsoft.Playwright.NUnit 1.63.0,
+  Testcontainers 4.16.0, BenchmarkDotNet.
+
+  Build tooling: Microsoft.Windows.SDK.BuildTools 10.0.26100.8249,
+  Microsoft.Windows.SDK.BuildTools.MSIX 1.7.20250829.1,
+  Microsoft.NET.ILLink.Tasks 10.0.14, Microsoft.NET.StringTools 17.11.4,
+  Microsoft.AspNetCore.App.Internal.Assets 10.0.14,
+  Microsoft.Maui.Resizetizer 10.0.110.
+
+==============================================================================
+
+PROVENANCE NOTES
+----------------
+
+Statements about sources that could not be verified from this repository.
+They are separate from the license texts above.
+
+1. ApexCharts. The bundled ApexCharts JavaScript library 6.5.0 is licensed
+   under upstream's dual Community/Commercial terms, not MIT. The library is
+   served as js/apexcharts.esm.js from the Blazor-ApexCharts package.
+
+2. Nerd Fonts. The OpenDyslexic files are patched builds made with the Nerd
+   Fonts patcher, whose license is reproduced above. The patcher version used
+   and the individual licenses of patched-in icon sets are not recorded in
+   this repository, so this notice does not enumerate them.
+
+3. Microsoft.Graphics.Win2D 1.4.0. The package carries no license file. Its
+   package metadata declares a legacy Win2D EULA URL and requires license
+   acceptance; the Win2D repository's LICENSE.txt is MIT and is reproduced
+   above. Which terms apply to the package is not established here.
+
+4. Android binding packages. The third-party notices reproduced above are the
+   notices shipped in the Microsoft binding packages. They identify the
+   licenses under which Microsoft received the upstream Android libraries.
+   The upstream projects' own NOTICE files are not reproduced, and their
+   correspondence with these texts has not been checked.
+
+5. Microsoft package notices. The four documents listed in section 8.3, the
+   MAUI notice in section 9.4 and the runtime notices in section 9 are
+   reproduced verbatim. Package-level notices for Microsoft packages not
+   listed in section 8.1 are not included.

@@ -1,6 +1,7 @@
 @namespace MqttProbe.UI.Components.Settings
 @inject IAppInfoService AppInfoService
 @inject IUpdateService UpdateService
+@inject IDialogService DialogService
 
 <MudText Typo="Typo.body2" Color="Color.Secondary">
     MQTTProbe — the MQTT diagnostic tool built for IIoT.
@@ -86,6 +87,19 @@
     </div>
 }
 
+<div class="about-legal">
+    <button type="button"
+            class="about-legal__button"
+            data-testid="open-source-licences-button"
+            @onclick="OpenLicencesAsync">
+        <MudIcon Icon="@LucideIcons.FileText" Size="Size.Small" aria-hidden="true" />
+        <span class="about-legal__label">Open-source licences</span>
+    </button>
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="about-legal__hint">
+        Licences for MQTTProbe and the components it includes.
+    </MudText>
+</div>
+
 @code {
     private string _version = string.Empty;
     private bool _checkingForUpdate;
@@ -97,6 +111,12 @@
     protected override void OnInitialized()
     {
         _version = AppInfoService.GetVersion();
+    }
+
+    private async Task OpenLicencesAsync()
+    {
+        await DialogService.ShowAsync<LicencesDialog>(null, new DialogParameters<LicencesDialog>(),
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
     }
 
     private async Task CheckForUpdatesAsync()

@@ -56,6 +56,13 @@ _se_mod = _ilu.module_from_spec(_se_spec)
 _se_spec.loader.exec_module(_se_mod)
 SOURCE_LINE_EXCEPTIONS = _se_mod.SOURCE_LINE_EXCEPTIONS
 
+_legal_path = Path(__file__).resolve().parent / "inspect_legal_exceptions.py"
+_legal_spec = _ilu.spec_from_file_location("_inspect_legal_exceptions", _legal_path)
+if _legal_spec is None or _legal_spec.loader is None:
+    raise SystemExit("Cannot load inspect_legal_exceptions.py")
+_legal_mod = _ilu.module_from_spec(_legal_spec)
+_legal_spec.loader.exec_module(_legal_mod)
+
 ARTIFACTS = ROOT / "artifacts"
 SOLUTION = "MqttProbe.slnx"
 
@@ -206,6 +213,11 @@ def is_source_line_exception(finding):
     return _se_mod.is_source_line_exception(finding, ROOT)
 
 
+def is_legal_hash_exception(finding, cache=None):
+    """True only for a schema-checked public digest line in the legal data."""
+    return _legal_mod.is_legal_hash_exception(finding, ROOT, cache)
+
+
 def git_ignored_paths(paths, repo_root):
     """Delegate to the exceptions module; see there for full docstring."""
     return _se_mod.git_ignored_paths(paths, repo_root)
@@ -267,6 +279,9 @@ def parse_sarif(path):
                 # eat the leading dot of a path like ./.config/x.
                 "file": uri.replace("\\", "/").removeprefix("./"),
                 "line": region.get("startLine", 0),
+                "startColumn": region.get("startColumn", 0),
+                "endColumn": region.get("endColumn", 0),
+                "endLine": region.get("endLine", 0),
                 "snippet": (region.get("snippet", {}).get("text") or "").strip(),
             })
 
@@ -409,6 +424,7 @@ def main():
     totals = []
     gated = []
     accepted = []
+    legal_cache = {}
     for label, sarif in runs:
         findings, rules = parse_sarif(sarif)
         # Filter out findings on gitignored files (e.g. deploy/mtls/certs/*.key).
@@ -431,7 +447,8 @@ def main():
                 # Reported either way; only the exit code is affected.
                 if (is_gated_exception(finding)
                         or is_spec_identifier_exception(finding)
-                        or is_source_line_exception(finding)):
+                        or is_source_line_exception(finding)
+                        or is_legal_hash_exception(finding, legal_cache)):
                     accepted.append(finding)
                 else:
                     gated.append(finding)

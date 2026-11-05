@@ -59,6 +59,18 @@ jobs:
           -p:Version=${{ steps.version.outputs.value }}
           --output publish/web
 
+      - name: Verify legal notices (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python3 scripts/legal/notices.py profiles-check --scenario web-${{ matrix.rid }}
+          python3 scripts/legal/notices.py verify --scenario web-${{ matrix.rid }}
+
+      - name: Verify legal notices (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          python scripts/legal/notices.py profiles-check --scenario web-${{ matrix.rid }}
+          python scripts/legal/notices.py verify --scenario web-${{ matrix.rid }}
+
       - name: Archive (Linux)
         if: runner.os == 'Linux'
         run: |

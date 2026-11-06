@@ -52,6 +52,39 @@
     padding: 0 8px 8px;
 }
 
+/* The completion action sits in the thumb zone, outside the tree's scroll owner, so it stays
+   put while the list scrolls. The panel's safe-area padding keeps it above the home indicator. */
+.topic-picker-overlay__footer {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    gap: 6px;
+    padding: 8px 16px 10px;
+    border-top: 1px solid var(--mud-palette-divider);
+    background: var(--mud-palette-surface);
+}
+
+.topic-picker-overlay__selection {
+    min-height: 1.1rem;
+    overflow: hidden;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.75rem;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.topic-picker-overlay__footer ::deep .topic-picker-overlay__done {
+    min-height: 48px;
+    font-weight: 600;
+    box-sizing: border-box;
+}
+
+.topic-picker-overlay__footer ::deep .topic-picker-overlay__done:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
 /* The picker header already names the topic list. Keep only the existing icon-key
    toggle in the nested header, right-aligned above the filter. */
 .topic-picker-overlay__body ::deep .topic-header-row {

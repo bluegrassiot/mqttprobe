@@ -93,6 +93,11 @@ public class BrowserResponsiveLayoutTests
 
         ReadRuleContaining(PickerCss, ".topic-picker-overlay__body {")
             .Should().Contain("overflow: hidden");
+        ReadRuleContaining(PickerCss, ".topic-picker-overlay__footer {")
+            .Should().Contain("flex: 0 0 auto")
+            .And.Contain("border-top: 1px solid var(--mud-palette-divider)");
+        ReadRuleContaining(PickerCss, ".topic-picker-overlay__done {")
+            .Should().Contain("min-height: 48px");
         ReadRuleContaining(PickerCss, ".topic-browser-panel {")
             .Should().Contain("flex: 1 1 auto").And.Contain("min-height: 0");
         ReadRuleContaining(PickerCss, ".topic-header-row {")

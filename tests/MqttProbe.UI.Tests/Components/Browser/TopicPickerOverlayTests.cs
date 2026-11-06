@@ -133,6 +133,21 @@ public class TopicPickerOverlayTests : BunitTestContext
     }
 
     [Test]
+    public void Opening_SavesFocusBeforeTheTrapMovesIt()
+    {
+        Render<TopicPickerOverlay>(p => p.Add(x => x.IsOpen, true));
+
+        var identifiers = JSInterop.Invocations.Select(invocation => invocation.Identifier).ToList();
+        var saveIndex = identifiers.IndexOf("mudElementRef.saveFocus");
+        saveIndex.Should().BeGreaterThanOrEqualTo(0, "the trap must save the opener");
+        identifiers.Take(saveIndex).Should().NotContain(
+            identifier => identifier.Contains("focus", StringComparison.OrdinalIgnoreCase),
+            "no component may move focus before the trap records the opener");
+        identifiers.IndexOf("mudElementRef.focusFirst").Should().BeGreaterThan(saveIndex,
+            "the trap must place its initial focus after saving the opener");
+    }
+
+    [Test]
     public void Closing_RestoresFocusToWhateverOpenedIt()
     {
         var cut = Render<TopicPickerOverlay>(p => p.Add(x => x.IsOpen, true));

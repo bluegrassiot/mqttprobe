@@ -40,50 +40,53 @@
         @if (Selection.HasSelection)
         {
             <div class="topic-bulk-toolbar__mobile">
-                <span class="topic-bulk-toolbar__mobile-count" aria-live="polite">@Selection.CompactSummary</span>
-                <MudMenu Open="_actionsOpen"
-                         OpenChanged="OnActionsOpenChanged"
-                         AnchorOrigin="Origin.BottomRight"
-                         TransformOrigin="Origin.TopRight"
-                         PopoverClass="topic-bulk-actions-menu">
-                    <ActivatorContent>
-                        <AppSecondaryButton @ref="_actionsButton"
-                                            Size="Size.Small"
-                                            Class="topic-bulk-toolbar__actions-menu app-mobile-bar-btn"
-                                            EndIcon="@LucideIcons.ChevronDown"
-                                            aria-haspopup="menu"
-                                            aria-expanded="@(_actionsOpen ? "true" : "false")"
-                                            title="Clear messages or exclude the selected topics."
-                                            @onkeydown="DismissMenuOnEscape"
-                                            OnClick="context.ToggleAsync">
-                            Actions
-                        </AppSecondaryButton>
-                    </ActivatorContent>
-                    <ChildContent>
-                        <MudMenuItem @onkeydown="DismissMenuOnEscapeOrTab" OnClick="ConfirmClearMessagesAsync">
-                            <span class="topic-bulk-actions-menu__clear">Clear messages</span>
-                        </MudMenuItem>
-                        <AuthorizeView Roles="Admin,Operator">
-                            <Authorized>
-                                <MudMenuItem @onkeydown="DismissMenuOnEscapeOrTab"
-                                             Label="@ExcludeLabel"
-                                             OnClick="ConfirmExcludeAsync"
-                                             title="@ExcludeTitle"/>
-                            </Authorized>
-                            <NotAuthorized>
-                                <MudMenuItem @onkeydown="DismissMenuOnEscapeOrTab"
-                                             Label="@ExcludeLabel" Disabled="true"
-                                             title="Connect as Operator or Admin to manage exclusions"/>
-                            </NotAuthorized>
-                        </AuthorizeView>
-                    </ChildContent>
-                </MudMenu>
-                <AppPrimaryButton Size="Size.Small"
-                                  Class="topic-bulk-toolbar__topics app-mobile-bar-btn"
-                                  StartIcon="@LucideIcons.ChevronDown"
-                                  OnClick="OnOpenTopicPicker">
-                    Topics
-                </AppPrimaryButton>
+                <span class="topic-bulk-toolbar__mobile-count" aria-live="polite"
+                      title="@Selection.CompactSummary">@Selection.CompactSummary</span>
+                <div class="topic-bulk-toolbar__mobile-actions">
+                    <MudMenu Open="_actionsOpen"
+                             OpenChanged="OnActionsOpenChanged"
+                             AnchorOrigin="Origin.BottomRight"
+                             TransformOrigin="Origin.TopRight"
+                             PopoverClass="topic-bulk-actions-menu">
+                        <ActivatorContent>
+                            <AppSecondaryButton @ref="_actionsButton"
+                                                Size="Size.Small"
+                                                Class="topic-bulk-toolbar__actions-menu app-mobile-bar-btn"
+                                                EndIcon="@LucideIcons.ChevronDown"
+                                                aria-haspopup="menu"
+                                                aria-expanded="@(_actionsOpen ? "true" : "false")"
+                                                title="Clear messages or exclude the selected topics."
+                                                @onkeydown="DismissMenuOnEscape"
+                                                OnClick="context.ToggleAsync">
+                                Actions
+                            </AppSecondaryButton>
+                        </ActivatorContent>
+                        <ChildContent>
+                            <MudMenuItem @onkeydown="DismissMenuOnEscapeOrTab" OnClick="ConfirmClearMessagesAsync">
+                                <span class="topic-bulk-actions-menu__clear">Clear messages</span>
+                            </MudMenuItem>
+                            <AuthorizeView Roles="Admin,Operator">
+                                <Authorized>
+                                    <MudMenuItem @onkeydown="DismissMenuOnEscapeOrTab"
+                                                 Label="@ExcludeLabel"
+                                                 OnClick="ConfirmExcludeAsync"
+                                                 title="@ExcludeTitle"/>
+                                </Authorized>
+                                <NotAuthorized>
+                                    <MudMenuItem @onkeydown="DismissMenuOnEscapeOrTab"
+                                                 Label="@ExcludeLabel" Disabled="true"
+                                                 title="Connect as Operator or Admin to manage exclusions"/>
+                                </NotAuthorized>
+                            </AuthorizeView>
+                        </ChildContent>
+                    </MudMenu>
+                    <AppPrimaryButton Size="Size.Small"
+                                      Class="topic-bulk-toolbar__topics app-mobile-bar-btn"
+                                      StartIcon="@LucideIcons.ChevronDown"
+                                      OnClick="OnOpenTopicPicker">
+                        Topics
+                    </AppPrimaryButton>
+                </div>
             </div>
         }
         @if (_outcome is { } outcome)

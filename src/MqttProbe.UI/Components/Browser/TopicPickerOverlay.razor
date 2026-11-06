@@ -1,7 +1,9 @@
+@implements IDisposable
+
 @if (IsOpen)
 {
     <MudFocusTrap>
-        <div class="topic-picker-overlay" @onclick="CloseWithoutSelection" @onkeydown="HandleKeyDown">
+        <div class="topic-picker-overlay" @onclick="ClosePicker" @onkeydown="HandleKeyDown">
             <MudPaper Class="topic-picker-overlay__panel" @onclick:stopPropagation="true"
                       role="dialog" aria-modal="true" aria-labelledby="@TitleId"
                       Elevation="8" Square="false">
@@ -9,10 +11,22 @@
                     <MudText Typo="Typo.subtitle1" id="@TitleId" Class="topic-picker-overlay__title">Topics</MudText>
                     <MudIconButton Icon="@LucideIcons.X" Size="Size.Small"
                                    Color="Color.Default" title="Close"
-                                   OnClick="CloseWithoutSelection"/>
+                                   OnClick="ClosePicker"/>
                 </div>
                 <div class="topic-picker-overlay__body">
                     <TopicBrowser/>
+                </div>
+                <div class="topic-picker-overlay__footer">
+                    <span class="topic-picker-overlay__selection" role="status" aria-live="polite"
+                          title="@SelectionSummary">
+                        @SelectionSummary
+                    </span>
+                    <AppPrimaryButton Class="topic-picker-overlay__done"
+                                      FullWidth="true"
+                                      Disabled="@(!ShowMessagesEnabled)"
+                                      OnClick="ClosePicker">
+                        Show messages
+                    </AppPrimaryButton>
                 </div>
             </MudPaper>
         </div>
@@ -25,7 +39,21 @@
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
-    private async Task CloseWithoutSelection()
+    [CascadingParameter] private TopicBulkSelection? BulkSelection { get; set; }
+
+    private string SelectionSummary => BulkSelection?.Summary ?? "No topics selected";
+
+    private bool ShowMessagesEnabled => BulkSelection?.HasSelection == true;
+
+    protected override void OnInitialized()
+    {
+        if (BulkSelection is not null)
+            BulkSelection.Changed += OnSelectionChanged;
+    }
+
+    private void OnSelectionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task ClosePicker()
     {
         await OnClose.InvokeAsync();
     }
@@ -33,6 +61,12 @@
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Escape")
-            await CloseWithoutSelection();
+            await ClosePicker();
+    }
+
+    public void Dispose()
+    {
+        if (BulkSelection is not null)
+            BulkSelection.Changed -= OnSelectionChanged;
     }
 }

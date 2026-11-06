@@ -63,6 +63,22 @@ public sealed class TopicBulkToolbarMobileTests : BunitTestContext
     }
 
     [Test]
+    public void MobileRow_GroupsTheActionButtonsAwayFromTheSelectionLabel()
+    {
+        _fixture.AddTopics((Alpha, 1), (Beta, 1));
+        var cut = RenderToolbar(Select(Alpha, Beta));
+
+        var mobile = cut.Find(".topic-bulk-toolbar__mobile");
+        var actions = mobile.QuerySelector(".topic-bulk-toolbar__mobile-actions");
+        actions.Should().NotBeNull("the buttons share a fixed-width cluster");
+        actions!.QuerySelector(".topic-bulk-toolbar__actions-menu").Should().NotBeNull();
+        actions.QuerySelector(".topic-bulk-toolbar__topics").Should().NotBeNull();
+        mobile.QuerySelector(".topic-bulk-toolbar__mobile-count")!
+            .GetAttribute("title").Should().Be("2 selected",
+                "the truncated label keeps its full value available");
+    }
+
+    [Test]
     public async Task MobileTopicsButton_OpensTheTopicPicker()
     {
         var opened = false;

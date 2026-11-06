@@ -5,7 +5,9 @@ namespace MqttProbe.UI.Components.Sparkplug;
 
 internal sealed class SparkplugSplitBoundsInterop(IJSRuntime js) : IAsyncDisposable
 {
-    private const string ModulePath = "./_content/MqttProbe.UI/js/sparkplug-nodes-split-bounds.js";
+    // Bump when the exported module contract changes so browsers cannot reuse an older module URL.
+    private const string ModulePath =
+        "./_content/MqttProbe.UI/js/sparkplug-nodes-split-bounds.js?v=2";
 
     // Disposal waits on this gate so an in-flight attach can still detach from a live module.
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -29,17 +31,17 @@ internal sealed class SparkplugSplitBoundsInterop(IJSRuntime js) : IAsyncDisposa
         }
     }
 
-    internal async Task AttachAsync(ElementReference wrapper)
+    internal async Task<bool> AttachAsync(ElementReference wrapper)
     {
         await _gate.WaitAsync();
         try
         {
             if (_disposed)
-                return;
+                return false;
 
             var module = await EnsureModuleAsync();
             if (module is null)
-                return;
+                return false;
 
             await ReleaseAttachmentAsync();
 
@@ -48,10 +50,31 @@ internal sealed class SparkplugSplitBoundsInterop(IJSRuntime js) : IAsyncDisposa
             {
                 if (attachment is { } token)
                     await TryDetachAsync(module, token);
-                return;
+                return false;
             }
 
             _attachment = attachment;
+            return attachment is not null;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    internal async Task<bool> EnsureSizedAsync(ElementReference wrapper)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            if (_disposed)
+                return false;
+
+            var module = await EnsureModuleAsync();
+            if (module is null)
+                return false;
+
+            return await module.InvokeAsync<bool>("ensureSized", wrapper);
         }
         finally
         {

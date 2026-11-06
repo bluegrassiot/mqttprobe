@@ -92,9 +92,80 @@ public class SparkplugSplitBoundsInteropTests
         await interop.DisposeAsync();
 
         (await interop.InstallAsync()).Should().BeFalse();
-        await interop.AttachAsync(new ElementReference("wrapper"));
+        (await interop.AttachAsync(new ElementReference("wrapper"))).Should().BeFalse();
 
         js.Imports.Should().Be(0);
+    }
+
+    [Test]
+    public async Task InstallAsync_ImportsTheVersionedModuleContract()
+    {
+        var js = new FakeJsRuntime(new FakeModule());
+        var interop = new SparkplugSplitBoundsInterop(js);
+
+        (await interop.InstallAsync()).Should().BeTrue();
+
+        js.ImportArguments.Should().ContainSingle();
+        js.ImportArguments[0]![0].Should()
+            .Be("./_content/MqttProbe.UI/js/sparkplug-nodes-split-bounds.js?v=2");
+    }
+
+    [Test]
+    public async Task AttachAsync_ReturnsFalseWhenTheRuntimeIsNotReady()
+    {
+        var module = new FakeModule();
+        module.CompleteAttach(null);
+        var interop = new SparkplugSplitBoundsInterop(new FakeJsRuntime(module));
+
+        (await interop.AttachAsync(new ElementReference("wrapper"))).Should().BeFalse();
+
+        module.Invocations.Should().Equal("install", "attach");
+    }
+
+    [Test]
+    public async Task EnsureSizedAsync_ReturnsFalseUntilTheRuntimeIsReady()
+    {
+        var module = new FakeModule();
+        module.QueueEnsureResults(false, true);
+        var interop = new SparkplugSplitBoundsInterop(new FakeJsRuntime(module));
+
+        (await interop.EnsureSizedAsync(new ElementReference("wrapper"))).Should().BeFalse();
+        (await interop.EnsureSizedAsync(new ElementReference("wrapper"))).Should().BeTrue();
+
+        module.Invocations.Should().Equal("install", "ensureSized", "ensureSized");
+    }
+
+    [Test]
+    public async Task EnsureSizedAfterDispose_DoesNotTouchJs()
+    {
+        var js = new FakeJsRuntime(new FakeModule());
+        var interop = new SparkplugSplitBoundsInterop(js);
+        await interop.DisposeAsync();
+
+        (await interop.EnsureSizedAsync(new ElementReference("wrapper"))).Should().BeFalse();
+
+        js.Imports.Should().Be(0);
+    }
+
+    [Test]
+    public async Task DisposeWhileEnsureSizedIsPending_WaitsForTheInvocation()
+    {
+        var module = new FakeModule();
+        module.HoldEnsure();
+        var interop = new SparkplugSplitBoundsInterop(new FakeJsRuntime(module));
+
+        (await interop.InstallAsync()).Should().BeTrue();
+        var ensure = interop.EnsureSizedAsync(new ElementReference("wrapper"));
+        await module.EnsureStarted.WaitAsync(_timeout);
+
+        var dispose = interop.DisposeAsync().AsTask();
+        dispose.IsCompleted.Should().BeFalse();
+
+        module.CompleteEnsure(true);
+        (await ensure.WaitAsync(_timeout)).Should().BeTrue();
+        await dispose.WaitAsync(_timeout);
+
+        module.Invocations.Should().Equal("install", "ensureSized", "dispose");
     }
 
     private sealed class FakeJsRuntime(FakeModule module) : IJSRuntime
@@ -104,6 +175,7 @@ public class SparkplugSplitBoundsInteropTests
 
         internal Task ImportStarted => _importStarted.Task;
         internal int Imports { get; private set; }
+        internal List<object?[]?> ImportArguments { get; } = [];
 
         private readonly TaskCompletionSource _importStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -123,6 +195,7 @@ public class SparkplugSplitBoundsInteropTests
                 throw new InvalidOperationException($"Unexpected JS invocation: {identifier}");
 
             Imports++;
+            ImportArguments.Add(args);
             _importStarted.TrySetResult();
             if (_holdImport)
                 await _importGate.Task;
@@ -136,16 +209,31 @@ public class SparkplugSplitBoundsInteropTests
         private readonly List<string> _invocations = [];
         private readonly TaskCompletionSource<int?> _attach = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _attachStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _ensure = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _ensureStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly Queue<bool> _ensureResults = new();
         private readonly TaskCompletionSource _installGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _installStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _holdEnsure;
         private bool _holdInstall;
         private bool _disposed;
 
         internal IReadOnlyList<string> Invocations => _invocations;
         internal Task AttachStarted => _attachStarted.Task;
+        internal Task EnsureStarted => _ensureStarted.Task;
         internal Task InstallStarted => _installStarted.Task;
 
         internal void CompleteAttach(int? token) => _attach.TrySetResult(token);
+
+        internal void CompleteEnsure(bool result) => _ensure.TrySetResult(result);
+
+        internal void HoldEnsure() => _holdEnsure = true;
+
+        internal void QueueEnsureResults(params bool[] results)
+        {
+            foreach (var result in results)
+                _ensureResults.Enqueue(result);
+        }
 
         internal void HoldInstall() => _holdInstall = true;
 
@@ -175,6 +263,9 @@ public class SparkplugSplitBoundsInteropTests
                 case "detach":
                     _invocations.Add($"detach:{args![0]}");
                     return ValueTask.FromResult(default(TValue)!);
+                case "ensureSized":
+                    _invocations.Add("ensureSized");
+                    return AwaitEnsureAsync<TValue>();
                 default:
                     throw new InvalidOperationException($"Unexpected JS invocation: {identifier}");
             }
@@ -203,6 +294,17 @@ public class SparkplugSplitBoundsInteropTests
                 await _installGate.Task;
 
             return default!;
+        }
+
+        private async ValueTask<TValue> AwaitEnsureAsync<TValue>()
+        {
+            if (_holdEnsure)
+            {
+                _ensureStarted.TrySetResult();
+                return (TValue)(object)await _ensure.Task;
+            }
+
+            return (TValue)(object)(_ensureResults.Count > 0 && _ensureResults.Dequeue());
         }
     }
 }

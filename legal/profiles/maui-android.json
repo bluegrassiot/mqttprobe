@@ -1,0 +1,813 @@
+{
+  "schemaVersion": 1,
+  "name": "maui-android",
+  "host": "any",
+  "project": "src/MqttProbe.Maui/MqttProbe.Maui.csproj",
+  "framework": "net10.0-android",
+  "runtimeIdentifier": null,
+  "runtimeIdentifiers": null,
+  "selfContained": false,
+  "targets": [
+    "net10.0-android"
+  ],
+  "inputs": {
+    "files": {
+      "global.json": "a4c16f708b406a9d1c56bdd74a46c730277d3e3ddc825efd6baed2e692bc60bf",
+      "Directory.Packages.props": "17a71e6038836c65d3612e2601d3cc1fb2c61f5dfacd88ec5d437122586e8f80",
+      "Directory.Build.props": "5b030b22a23b70b4378434208e44693013479cd56b981d331429dbf85c596621",
+      ".github/actions/setup-dotnet-workload/action.yml": "e3f7736c4e8887df3019c24fea10702dcd5a6be3381679792148b66e238d0464",
+      "src/MqttProbe.Core/MqttProbe.Core.csproj": "f17a0c8eaa5569f8bf877669173f5260700013ece29639e6dee0a30d49ede2ec",
+      "src/MqttProbe.Desktop/MqttProbe.Desktop.csproj": "83d7bdfd02fa814797b5b66b3f09bbe4bacb7585d8d849ad883b399a20cf2da7",
+      "src/MqttProbe.Maui/MqttProbe.Maui.csproj": "426f0d82919558cc47423e351c8daf45d1bd9b062ee8ae6356a43b950bd8d8c3",
+      "src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj": "ad64a32de96245d593d3c03f9ca581d8affce7f0d147e3947a08a6a6d2797612",
+      "src/MqttProbe.UI/MqttProbe.UI.csproj": "984773e2f9588a641a4b2fd1aabf34826435f798f88ce958af98ff045ae4ed09",
+      "src/MqttProbe.Web/MqttProbe.Web.csproj": "235a7f45c35d0d50d8201f9be0eab8475f90163eb43296aed78d687dd419eea6"
+    },
+    "submodules": {
+      "external/SparkplugNet": "95366c3915db71bdf661c5ea29f2fc87c2da5866"
+    },
+    "sdk": "10.0.403"
+  },
+  "packages": [
+    {
+      "id": "Blazor-ApexCharts",
+      "version": "7.1.0",
+      "sha512": "QR5xWNETy0DkgFQ0TFQIdmHi7J402hBRpegzOlbFAAaYgcgM+YZs5LL1qaZRf8nMWP+jRE/R4JbnxFUqOPbZNw=="
+    },
+    {
+      "id": "Blazor.Lucide",
+      "version": "1.0.6",
+      "sha512": "UgssRLV/BlqFrXj3YgJL7DNkjTYzInFdKHHETQ+HUm5SYRgROqvDXjXX7VrGzyGHcqBRZ2/CBeFSjZFhnf9sUA=="
+    },
+    {
+      "id": "FluentValidation",
+      "version": "12.2.0",
+      "sha512": "DR3lFbdnKucaaj1/8zMNOACMz/64igzox1yVZSFVsLxYB5mxAB+wFP1WZ8fjwrZnbU1KA1DoMzHKYKxUfuZ4wQ=="
+    },
+    {
+      "id": "Google.Protobuf",
+      "version": "3.36.2",
+      "sha512": "Ci1q1iJg74qAE5riTA2FbMS0wPbpruPQI/JQ9DrAsRo2VsSxgt1e/pmxGxgrci+pXJEgrSYg2vPl8rrStZkclQ=="
+    },
+    {
+      "id": "GoogleGson",
+      "version": "2.13.1.1",
+      "sha512": "1yD5W1UPmgEEHrqdtVJI7330h1foGWiehVC07er3NiZxJPMmphTmPz2kuSXawIo8xmeIvd92WpiTOEmYpk6mzQ=="
+    },
+    {
+      "id": "MQTTnet",
+      "version": "5.2.0.1603",
+      "sha512": "iNuWVo/568aRo2ExEN2qkC4J5b07ckKqt+9Uok2kIbbK7PMBsXvYiKVENPHmOBWFB5ExhlNQb/qQ8M9/IYRTdQ=="
+    },
+    {
+      "id": "MessagePack",
+      "version": "3.1.12",
+      "sha512": "m1QEsd59gUj82ji5tEQbZiyjV6y0F7cYfGVhil6pAlNZpyzR7ze9TucMu4lPpi8cZAV8aNl3D9/T9J1HbFz15Q=="
+    },
+    {
+      "id": "MessagePack.Annotations",
+      "version": "3.1.12",
+      "sha512": "LdI67sY7F3KK+JsrG02+DP1XFkowaZSoyfL2M88hjm1MOOsjf8amBLAJolV+zxoPUZf3uGbKzq1cMQD8PlpSpA=="
+    },
+    {
+      "id": "MessagePackAnalyzer",
+      "version": "3.1.12",
+      "sha512": "iNSNatPh6bafRUbkQKlClExjpPpd8hiZgfZsodGf7bheIlkizGbMzsJ2mPui8jOHRe4Ky9eg5ou/fFzI7CT3fg=="
+    },
+    {
+      "id": "Meziantou.Analyzer",
+      "version": "3.0.320",
+      "sha512": "yKkD+uA684so6/ct3dcGm8H2esrLn/gAS9qYbAcis216gBx+o5LWm5ou/BZDIDg6TTzr5ayojv9cgpoHSasxOw=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Authorization",
+      "version": "10.0.14",
+      "sha512": "0iRuv9FevMH1TFuYBMY7M+Z/Xm1V8iEDM5p3i+oBWLEdlLyPgMA+RkQDN/1a0MMAEisPxHseTOJ5vnb3n9HARg=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components",
+      "version": "10.0.14",
+      "sha512": "MAuPVtxnAmZcu0lFYVUW+xxuwufIwalz8Gp2b5D3ogLN4OKCBJ8LSO9j1f45LJs3c2LZ+/6Jj7nFtU0itUcJpg=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components.Analyzers",
+      "version": "10.0.14",
+      "sha512": "qWj8T3qD0MzxuradKXMYSX/68czXLIANyts7nlQitMSrdup3aeH6BXSULVXcXiHg4OGD5M82eKtQrY3O4YZd8A=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components.Authorization",
+      "version": "10.0.14",
+      "sha512": "u7lHiI9Z7y9nch44Kfc60VMhzAXO2pxmRzDWTHM9ts4J2Oe9u+zgLucyxY/cZlIW6OjP8/GMvwR8YdnfQbfHRQ=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components.Forms",
+      "version": "10.0.14",
+      "sha512": "fD6xw8fKERmW0OhngY42d3Pzjk6/oaFZzx1RzCJjB2Ory8pzzBTARiZZBVwW7oh/O25H5dtjTVTz2d+yxpYr+A=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components.Web",
+      "version": "10.0.14",
+      "sha512": "SVNV6nfDggaBCETwy6v/995JOBH6MKtuEmPQVh3mF6BxipOihl2Sd2d46nenXnadCp+d0QniKmUrahYC5VETPA=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components.WebView",
+      "version": "10.0.0",
+      "sha512": "fdBlMj2W0Kv5qIsUKotipoaCUQT1LgWc9QVbS0dJpiFL5UWytp6JvKrB71dj6tuqCZwb2VpcKyIj6uQWfG5VLw=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components.WebView.Maui",
+      "version": "10.0.110",
+      "sha512": "kvMn5HbRuBS0092BKlraxSJeH/BsMeYQ/WwxLOQ7BrAONNVnW916UbBdHi+KrLsg0iTix8XtFbNtnGGVJk6VqA=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Metadata",
+      "version": "10.0.14",
+      "sha512": "RXaeKIj2fJEEXghowZLAqTBOm2D+aGcLmQgCD/BMHkWjkhnBQ9QND0fOctxrisdojsg1lmF+aRWA7L5qa1pE8g=="
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration",
+      "version": "10.0.14",
+      "sha512": "UcnvaEaMvRckDDhyqY1OZkFwBqpZArkHFKB6dWaQWT9XTuNttNNX8Cqsb/Sic2LfJxsMLJUXnYrxY3iX5LN9pQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.Abstractions",
+      "version": "10.0.14",
+      "sha512": "4YdfvaoWn3tB1xQQHGrhRTFWJ8fGOqxThxduynSZy9ZFTiSaUi3vX4EK/kj8h2HQMwTlks9MWV1fv2WRBv5/1w=="
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.Binder",
+      "version": "10.0.14",
+      "sha512": "brDb5kgle2iY2lWHgeV/KOqnBEpVnlMFigGJ/WW7KP9Nj6C/t53f/h5boYyVXB0bEhgpL+ctbewDJMI+zAMj1w=="
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.FileExtensions",
+      "version": "10.0.14",
+      "sha512": "NBIfm8vWNi3UJ9OI9thvREJeV6KzEdPjQ4ONdH+yPWutGBpVnwLbXiEqdEFaGAFYpAluGCfyCwKFgH9pd2scfw=="
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.Json",
+      "version": "10.0.14",
+      "sha512": "4Tn8eNg85x+ICDN4OLC7Dl/xvZNREZIf7VSOAdT4Q4KYf5Ip1zAk+0BAx8BsRTomgEpCYV4kKsNNnP/ZXUbQkw=="
+    },
+    {
+      "id": "Microsoft.Extensions.DependencyInjection",
+      "version": "10.0.14",
+      "sha512": "2LzcuVjemeXR+WdY9wGIr8iGb7fYsDAit+IScxXX2XJnX0b++mWcE/WO6fEGIqhdMfSQM2ZS5JGMHYZix7YXZg=="
+    },
+    {
+      "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+      "version": "10.0.14",
+      "sha512": "QtpQzuSZVyTPCuHW058yCs9Nj0394uUkNyFHS813nOmK9UgUdBdaprJ5PPsBgsQIpxADTsTkbaMMonykem6qdw=="
+    },
+    {
+      "id": "Microsoft.Extensions.Diagnostics",
+      "version": "10.0.14",
+      "sha512": "80VqW8eKxQaxBOLDNpLUdxOlxzWn/jqBSxNBCfD8GCjcshNDpFvUgKh8uvvZwvkfBbwmNPWPWHyy9F+RLd1dlQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Diagnostics.Abstractions",
+      "version": "10.0.14",
+      "sha512": "vm+PPso6vOwGeX52MdOPh6z/R6KHgxQUwqq7k7Jc9jhy2JOxO2KB4xfoJQBBp2Ni8M4zKgJ4r2a1dgrYG7+MKw=="
+    },
+    {
+      "id": "Microsoft.Extensions.FileProviders.Abstractions",
+      "version": "10.0.14",
+      "sha512": "rAqf2Em2ZjLqNbcLJlboQnXNyJP604F960TsCKNiP00Ur6ExIc1mcwmNb8L2eTRT8RC8UKx/GjecoWcW2Sj7bw=="
+    },
+    {
+      "id": "Microsoft.Extensions.FileProviders.Composite",
+      "version": "10.0.0",
+      "sha512": "oi6UKOtboSHd/sQRgiPN5BXMGHUWyBmgu/nC/khs+eJYdeitciqW7MWIvs9sZIG1rOTH2cuLjMu9VeK4bL0Jvg=="
+    },
+    {
+      "id": "Microsoft.Extensions.FileProviders.Embedded",
+      "version": "10.0.0",
+      "sha512": "ECaTMB4NdV9W1es9J6tN0yoXRPUHKMi5+2L7hcVZ5k9zVdxccIx6+vMllwEYcdTaO0mCETEmdH4F0KxCqgnPaw=="
+    },
+    {
+      "id": "Microsoft.Extensions.FileProviders.Physical",
+      "version": "10.0.14",
+      "sha512": "dcp6eCIk6ZpE3CTNmIna0ifgxsPel/MtOc23/Y/AJlD9SZZr7bhlKK2DAXYlrz81yMkMi6el/LHHUFKCZ3ufuQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.FileSystemGlobbing",
+      "version": "10.0.14",
+      "sha512": "xt6c/PWLL6+CiBiZA3PWRSfkwcPh+HCwiOLrgSUkhzBT7lrT/+QpIKPeuCQyDPspwOuG1q0cbJhuiGpRjr4UNQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Hosting.Abstractions",
+      "version": "10.0.0",
+      "sha512": "KrN6TGFwCwqOkLLk/idW/XtDQh+8In+CL9T4M1Dx+5ScsjTq4TlVbal8q532m82UYrMr6RiQJF2HvYCN0QwVsA=="
+    },
+    {
+      "id": "Microsoft.Extensions.Http",
+      "version": "10.0.0",
+      "sha512": "r+mSvm/Ryc/iYcc9zcUG5VP9EBB8PL1rgVU6macEaYk45vmGRk9PntM3aynFKN6s3Q4WW36kedTycIctctpTUQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Localization",
+      "version": "10.0.1",
+      "sha512": "yJBI3IRm9uTRu7cPc7i90/8+CuiiJJ5M4khj6iWQcYnq6VrG+H2U5GzpRLtkVCsgxc1LjtkNMEbSDatfBA+z5g=="
+    },
+    {
+      "id": "Microsoft.Extensions.Localization.Abstractions",
+      "version": "10.0.1",
+      "sha512": "TQSQWF+iZdtGNgPiu7gKUqrTEeRD/mhk7KeYiuEwmTUPbawsYfPSNzSvOOeueJ0nU1697X8HZ2vCp2ByHNHkZg=="
+    },
+    {
+      "id": "Microsoft.Extensions.Logging",
+      "version": "10.0.14",
+      "sha512": "O2fXL6JmtkFwkigxS8fPTQpLXxGDjgZco5D+h88s++Cl0bDCs023PVkpNoifciJ+f30I82jnp8tpwF0wCLdFtA=="
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Abstractions",
+      "version": "10.0.14",
+      "sha512": "SwcbEBtkECq3D2oywvHkm46fyrX9Dd2JPWphDnHUc2+cUWR1Mdo41atAjh/9iZjgQxuvbKfZKXqostT/LZfefA=="
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Debug",
+      "version": "10.0.14",
+      "sha512": "8e79uonXzgIsZbdgc5pa2Ybk5W+vUbd+gfGS50E+BW9ApRv9s0qL1DTyqLv7VQEPxTHS/l8Y0AtS7K8do+TczQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Options",
+      "version": "10.0.14",
+      "sha512": "EeN/33S418m9oWEaZY4N5T+BNxtOqNTIFoFbIgBKwylh4OJPKIWFAzbIhpTdNbwUs26MhkmbLCAbdY+YCJ1dIQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Options.ConfigurationExtensions",
+      "version": "10.0.14",
+      "sha512": "4wcIU0rE04ejEfCwHTftu9O8fgH6CRYCe+tseRapikUBn1Kic3QdO7ku22SwFyLrzdWGYPUZMEgv57ZYuuc5gA=="
+    },
+    {
+      "id": "Microsoft.Extensions.Primitives",
+      "version": "10.0.14",
+      "sha512": "1bbZqqCJTPba3inTADExbp/9PsGVyvGOX3zr6tFr7ySCgVkX9Lpw7BV0TizktNItd3SsbUu1sQfSAYm1GZMoNw=="
+    },
+    {
+      "id": "Microsoft.Extensions.Validation",
+      "version": "10.0.14",
+      "sha512": "60BCCGjCU/CxDSqmMtRStBYTMy36G+0NJ5iiZWJTPtztcHvUkbpRSum4GIeyky/9yRyt/vQ4Gfe3zjyctyQoDA=="
+    },
+    {
+      "id": "Microsoft.JSInterop",
+      "version": "10.0.14",
+      "sha512": "YZZ99v5PYCdyn2r8nqEIg141m1BhlVqwewwL4Z87s1h7FFS6oJG6CPOyGBO8/W6jYV57Ur/EmQEhSVgka2w1NA=="
+    },
+    {
+      "id": "Microsoft.Maui.Controls",
+      "version": "10.0.110",
+      "sha512": "QeXQZlZzqY+ynRb/trEgAA0NNFsmiXDKwsklDjY9hPfFJEjWXzNiaxq3XgmEFbse9yNTILG9LeIpmNthUh+ASQ=="
+    },
+    {
+      "id": "Microsoft.Maui.Controls.Build.Tasks",
+      "version": "10.0.110",
+      "sha512": "+7Jg5SjRq0FvZLI2fT7HqLA01D+iywvYqFcCdJiYUO3GHh6EdQczyBvdDBjxd40OBK+taJp81ttNy/6mTYxMpQ=="
+    },
+    {
+      "id": "Microsoft.Maui.Controls.Compatibility",
+      "version": "10.0.110",
+      "sha512": "Oq7iCfgaK9Qte/a+ZutoCvrKCwHdzoIkawD/4g24yZbcE7MVtybI3O2jHQ80kxIkwSg8g+qQeq28T7swz6Mpdg=="
+    },
+    {
+      "id": "Microsoft.Maui.Controls.Core",
+      "version": "10.0.110",
+      "sha512": "86tIdXecm7E7HbFmB2B8JRGrzYqafM3W64cX3B4FQNX8IC6z//uW24yejXbvU9AhJiEEQZH3vzCb2MnxwVq1bA=="
+    },
+    {
+      "id": "Microsoft.Maui.Controls.Xaml",
+      "version": "10.0.110",
+      "sha512": "FGvMa7vNfj5A+Lg/x9fRwC9p4+1ZWI9EkPYLaaWbgN4z11j4EePTc5bw5oZX61N9pPETm6aw0XflJeBEIF2GtA=="
+    },
+    {
+      "id": "Microsoft.Maui.Core",
+      "version": "10.0.110",
+      "sha512": "FsQqFkS5Qq+vHu9yHNy5KJPmbn1slX9QBzDriNcTvncvfoUHxPpEhtbegjY8kXOoZXc0nmovX1U7eD+NozR93Q=="
+    },
+    {
+      "id": "Microsoft.Maui.Essentials",
+      "version": "10.0.110",
+      "sha512": "9QAmmko3oez5jO+bpT64Wsef0W2xrQtug5/UClYEPqkJo95UWHdTVOWfdypCl/26yoggflZU/Swd1w56+H+DWQ=="
+    },
+    {
+      "id": "Microsoft.Maui.Graphics",
+      "version": "10.0.110",
+      "sha512": "+7WK3GKUg+osnQEsgsun5s6VpwKegjpAnBnlMmgK9iX5KO0ImBQwiOqmHOslfDr8E9r44bNmUnj33wSbEE5RKg=="
+    },
+    {
+      "id": "Microsoft.Maui.Resizetizer",
+      "version": "10.0.110",
+      "sha512": "8b911sZEcqcQcJbtUaeaPJSkg+9tIbJ1Wz2s9UY13eqZFAeCgqOQbb/03kdlaV7cRTU/shS1ot52+536mlsp/g=="
+    },
+    {
+      "id": "Microsoft.NET.ILLink.Tasks",
+      "version": "10.0.14",
+      "sha512": "YlTamXppEQls6DYWt7RdUuwWDb0lyw/vXCaGeQpLCpsLmfwGuCkOz/vIGgMTV7ECsJcavkCOkxZXv9s8rdAHkQ=="
+    },
+    {
+      "id": "Microsoft.NET.StringTools",
+      "version": "17.11.4",
+      "sha512": "mudqUHhNpeqIdJoUx2YDWZO/I9uEDYVowan89R6wsomfnUJQk6HteoQTlNjZDixhT2B4IXMkMtgZtoceIjLRmA=="
+    },
+    {
+      "id": "MudBlazor",
+      "version": "9.12.0",
+      "sha512": "T6PQUCJe60UTSy3u1F8R2nuC06Cox6WEhon5GA2/AZNVI1WstlPSJZdGPyp6pHFpWdjPpla65piLpyJsbW+1rA=="
+    },
+    {
+      "id": "SonarAnalyzer.CSharp",
+      "version": "10.35.0.4138",
+      "sha512": "T5o/tuyPw9pHRkyWxW07TkSri4I4pLpqwH922JuhphDjHAM7BUHaGE67h/w+65evHsIar8mYB2Ey6OmOLj9QDw=="
+    },
+    {
+      "id": "System.Formats.Cbor",
+      "version": "10.0.14",
+      "sha512": "eHnlBHHk6ft/5TsuZPtz9xgxKFIILf3nA+yKVZaKmJ7GCHpz8nd4cjnMys5NQF3PvBpWcb0u01LNR2jX9jrRFw=="
+    },
+    {
+      "id": "System.Reflection.MetadataLoadContext",
+      "version": "10.0.14",
+      "sha512": "TBqKGTYnKq/glgpGAM8iOSpSNlO++ZLbdOHHvxO/+QpvBYNfcP8dCi7m/da1tbG5zwmthf9+UHpjVq664HNnAg=="
+    },
+    {
+      "id": "System.Threading.RateLimiting",
+      "version": "10.0.14",
+      "sha512": "SLoXh2YBBLFmUMQwmPNky45ETCK/0qpp+bCjTaYC4MctQG4FVCPDMfeMt/mN2nxJG7VIRMGOovCJEKsx5nj7VQ=="
+    },
+    {
+      "id": "Xamarin.Android.Glide",
+      "version": "4.16.0.14",
+      "sha512": "zoo2thzoKv5SuY9PeB3Iaf41L7P4Z0jyPRMLUrb5u35KPHgWyQvj9hBablvtaFXuZIMMYyctwkHJwc4a4NPEKA=="
+    },
+    {
+      "id": "Xamarin.Android.Glide.Annotations",
+      "version": "4.16.0.14",
+      "sha512": "t9TZb8QU2s4pmxmDP7Xg2j0ovkpeuZJJ+SOnnHw0Y0APmnhBf3u3TmaggLMZlZuxutCbcym/ctBOmng2R3XBKQ=="
+    },
+    {
+      "id": "Xamarin.Android.Glide.DiskLruCache",
+      "version": "4.16.0.14",
+      "sha512": "QlIrJyf8D3ZlONOt7KC8u0lYZT7vtFm3JJD2rFbszl1CnKsQS3jJ9B5X2XAiDFvA63ePRzctD7hRhOo9uCO8Gw=="
+    },
+    {
+      "id": "Xamarin.Android.Glide.GifDecoder",
+      "version": "4.16.0.14",
+      "sha512": "QOKrX0gcCNss4MUimJQBahnajtH2Jg5BuKgFAkjEHkXse85ymDZyZCd59oY3ctra+imfy0bvUhSqV4tsHTdOYg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Activity",
+      "version": "1.10.1.3",
+      "sha512": "qxmO45ZQ8XyvKVK+pI4PdI8DngsyTt+HOkZ7GtvULbI77CSvD/c88rjyCMmG/wtpl1dErtt64IgIOx8qgKf2vQ=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Activity.Ktx",
+      "version": "1.10.1.3",
+      "sha512": "ud+WuRyHS6YUZdN7yS6l2FXWqZQFJiDQeRIco0A4eIeNCf47/pK68zo/kIYKeIEVt5VFqh/KJj9SZ92sMCRoHQ=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Annotation",
+      "version": "1.9.1.5",
+      "sha512": "4o4oY21xGR03dmQalOQwcwHVxUoLzPTw/Dun6aco2svGK+JcQdfEQdU9z+yoaeO2K4IarQbU5OQzC6qEcj5yNw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Annotation.Experimental",
+      "version": "1.5.1.1",
+      "sha512": "WE6omaI8M+TFYQOXMEQV2OyvgLRn491VTIlB+4hJrFV4x+quQqE4Z9BHEhcFVW+KlaQK4d44vspj1zAvxVlgiA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Annotation.Jvm",
+      "version": "1.9.1.5",
+      "sha512": "mMZwGncl5RHx9MxLJsu8Zp4ZW2mAMUQO60G36PP2Qqd0TuO144nCVANry6va7BqgwyysQaOmtHpKqE/Pdl8WBQ=="
+    },
+    {
+      "id": "Xamarin.AndroidX.AppCompat",
+      "version": "1.7.1.1",
+      "sha512": "Y7A52/ECKbqNRnVCJhgBajrcKxuxJPpcTKiVjcHUUfisplPndUbaYw0Bkj8FIsrQAdTzinJmGHHul8RVWLmhew=="
+    },
+    {
+      "id": "Xamarin.AndroidX.AppCompat.AppCompatResources",
+      "version": "1.7.1.1",
+      "sha512": "m56iEdeLK5yf5utSIY6UtmGRxC+VhjUuXRauyQynC9YCPzVjm/cYK4QLbSrjUVyxjjxpL/u6Np7cx9KxfAD/Ug=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Arch.Core.Common",
+      "version": "2.2.0.18",
+      "sha512": "bxuNXCXcHBDiLCk0Rv7UQ5U0y6cowY7tniX0UkPN2LbiEMwbuSSwcEG99smnZnI17zYsaw/Z0yu3ili/+DD6Tg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Arch.Core.Runtime",
+      "version": "2.2.0.18",
+      "sha512": "3hAR3rHrzRLRXn5+IgI/V7Pp98Xia37IESyNcPIKAQcaedOsHQNKcwyGAxjrbp3Z7L/v92uMuafBfje4Ucltvg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Browser",
+      "version": "1.8.0.11",
+      "sha512": "Ar3Wem/bBfvaehe28ck/5OxnMHN4OHn/uFagwBdHHXRlZtucO3IDaSXlquUqfIMsWwUfW+gVmEMsUpcVTmnJzw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.CardView",
+      "version": "1.0.0.36",
+      "sha512": "pQfqy6TgcvdA5oJBOvnurB+I+dPByncEFb+UwvUqNrvhK3gCKdIVUaIcjq8oyvUWdhGED3B9r94kW+fnZMgWew=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Collection",
+      "version": "1.5.0.3",
+      "sha512": "rL4Sa779VQ+0XyrV3YCoWrSddyOv+WDkIu3zGJyEsHk+SSl2C/nBwTqdBVJbYwhIu4iStLADpCiM1OBTFbPAVw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Collection.Jvm",
+      "version": "1.5.0.3",
+      "sha512": "S0RXRf3zICS5spPuwHkgOsfLpLks2Jk6uMl3ONOxKoGS27pYLaUSAZpnUR4rNiM38EA4BpKJQKGiYU9otcHrtg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Collection.Ktx",
+      "version": "1.5.0.3",
+      "sha512": "bvwOVJd8XogrMJdXbnbWUWjWrRt7UMv+heOPAP2AqFaxUmt63mxYa4Lbx0Dd+qNcg42KtBtxC+1h02xBMl6Yyw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Concurrent.Futures",
+      "version": "1.3.0.1",
+      "sha512": "xmav5pmoJoI66Djb1E1T3ME2lLylEf1PX4Xjqz4OaLVWK3wjPmtuKIaeDwmQ/yK0IgP7auj9RC7dap4YMoLu8g=="
+    },
+    {
+      "id": "Xamarin.AndroidX.ConstraintLayout",
+      "version": "2.2.1.3",
+      "sha512": "hPp/QY2SxAfVKZuhvtfRYgyp0xctKW5VE0Jdhb5YevFKSIW1dj/tlQPSD4PGjQaS+bGDARtWTivVKKknKnudig=="
+    },
+    {
+      "id": "Xamarin.AndroidX.ConstraintLayout.Core",
+      "version": "1.1.1.3",
+      "sha512": "H1YjiAR7d1qAZFbu87NIizuJkr+OJp8OW+TCzXaDxQEdgPDj9d73FJi70QRaZswXz1sU9b4cI2ApRiqzFkRmaA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.CoordinatorLayout",
+      "version": "1.3.0.3",
+      "sha512": "4N4xEalP50L+eMXlMBjfpd0EReGTyV5aIMY/XawpjVsH9lAJe44i2XwhRhdwulmu6ymcYbE+8U/29RfqSyfM3Q=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Core",
+      "version": "1.16.0.3",
+      "sha512": "ufdTfnLRHYcyrZWQzayzdQr3N7DQg+aZVqSs8QFYPIw8fvd41aWp8wLMRvockbzBOQezUJ5Xm0uuOhTur51u+Q=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Core.Core.Ktx",
+      "version": "1.16.0.3",
+      "sha512": "w8x1SNjzbuRi+85Bv0Iw4KAWpoXxlQpVQZAeJ/hE6diinnata7y/lmldx4GsdranZon5GSadaa49UnXSllJ0ZQ=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Core.ViewTree",
+      "version": "1.0.0.3",
+      "sha512": "HHodPFu0R1xq6Emxdw5muLSBaFycL9Gxu+/M2mAaitKjFZgEguaMb4bgCNiRXk1AnoT26LEka833fjAT5PU/9w=="
+    },
+    {
+      "id": "Xamarin.AndroidX.CursorAdapter",
+      "version": "1.0.0.34",
+      "sha512": "V5wppzsP48BFihhrxTF37u2v4bE9Szv9Az1J0naYhSYuTPH46GbQTb/5X5I6/6PkkhPymvTD4ZYohTl4gCgFnQ=="
+    },
+    {
+      "id": "Xamarin.AndroidX.CustomView",
+      "version": "1.2.0.1",
+      "sha512": "mAqZiSC7wRYUbePbKDqSRoM+pWW25QSlXyz2ybMLT5Js0njBLq0erDMp0xC0wFczYUuEVgsCdAP4H1j1kwD77Q=="
+    },
+    {
+      "id": "Xamarin.AndroidX.CustomView.PoolingContainer",
+      "version": "1.1.0.1",
+      "sha512": "Apo6x8DDyhYBw7OxSWA2f9RKiMz1uijeTFTzkTt7fASw993SWSyhLfK+WVzzrHtpi90en9GRxxTNYNnFjlczHA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.DrawerLayout",
+      "version": "1.2.0.18",
+      "sha512": "W00iYqmTg+wUrFQjepBppIlUDLMIeBkPvghHxJ0u4N/dLCeIjG0ZZQOQOk5ZTMX4pmQu3vhMUWLBpD6ZEMWL2A=="
+    },
+    {
+      "id": "Xamarin.AndroidX.DynamicAnimation",
+      "version": "1.1.0.3",
+      "sha512": "8Gphvv9b5hF0dd/VWYsYZrF2If/f4T6VfUEqVM6UD+LZpbNJ4SQ2WsClGfdfzNF6NPp3HOCcekKRSSHicFoUSw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Emoji2",
+      "version": "1.5.0.6",
+      "sha512": "ZCk12ZnFLzzaGL4iNZpR+APGEVzEzN++VynBKcpEfU9mFARSb6wZPjY6/Zyk4uNRBSsfNdNlwg3M94DRJihXvQ=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Emoji2.ViewsHelper",
+      "version": "1.5.0.6",
+      "sha512": "k8EvnbkTShNQfdEwmqkqAw8jSw5zc0Gid6ZVhDbhDjkAg+4VIQ+APX8jw41cAQAvxNold+LUyowGxUth2Z7GmA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.ExifInterface",
+      "version": "1.4.1.1",
+      "sha512": "V6c8eS61dM+/7kHuG3wT956EjxwKOSfCiAY8faNmUY76BNt5VFNaimQZJT9ROSctf3Svv/GAGTl91Rcxzuf/9g=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Fragment",
+      "version": "1.8.8.1",
+      "sha512": "XVQkfdzhTM4zxc7VbT8ROnkh2zQgx2rgWgsGuFwzfJPLLAqPkL/trKBYp7VL7Hulb6HPau5o4Ds0hiVgM8ODyw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Fragment.Ktx",
+      "version": "1.8.8.1",
+      "sha512": "P7aRXF5epXm4FYnBA4keKXHFzWOBxdfhHxcL1FGSLNT2szNhoChYhYza3VIShPuo+pfFm6m/Tk2tcwf26mjgkw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Interpolator",
+      "version": "1.0.0.34",
+      "sha512": "PRLkeu5BFY57wbC128lPMHpQZO4fxEV6PL0gxe7gosfluAqggSn1x2v47paq4hOpSa0VvaXdz5JwFjL9j+1ZMA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.Common",
+      "version": "2.9.2.1",
+      "sha512": "5PCjbhIVEp3MIbhs72dM0wx4EuSpU5q418uqKRLKaLe5WfNbKmSI5h28ugqyXZlnVNmR3WNIm30Sjaa+rRCKIw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.Common.Jvm",
+      "version": "2.9.2.1",
+      "sha512": "z0/dW41mpX50ob+SzcWlI+kabR11dqrha6rlQXQvu3j+27hfNW00ZbukmE1Kw/zPBBdSAfwHILBRrdyPKDGzwA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.LiveData",
+      "version": "2.9.2.1",
+      "sha512": "4++tRPKTWo4/6wY6cUsbxAbM23RD9+0Ictu9F7GJs0i4whGVgqIl+PTxrBq09cN43BFnrqhx6fySi9Ltdam+qg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.LiveData.Core",
+      "version": "2.9.2.1",
+      "sha512": "dnQv9+I/lPhf5LWBKa6jhS18zp5RGbjOinie2tlU+x/BWKiekmgy9gXcGizFUtPdUdLjsUtUZMHr2HwBhPtbvw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.LiveData.Core.Ktx",
+      "version": "2.9.2.1",
+      "sha512": "8BkUa80J7C48DVWKpcKjL+nWWyUKSYwh5R3J0iZZ6OX/PHGUf/qUQOnuIiTnMA+iTwNp03hUrOYPhyz8FM2R4A=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.Process",
+      "version": "2.9.2.1",
+      "sha512": "VCsPE95U0N9CsiC4fSiKZVaRFXaM8dYuoqCQg63vnw/xOfX48dAVX18FMVTDBUbNsgxMhp2JrAKazu/Sw47G0w=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.Runtime",
+      "version": "2.9.2.1",
+      "sha512": "0Cefhnmf0tUHH0LVcE47DZ4LIh/ueEVhJ+yUIsZ7DdzvQTCaHzgs+48Iv4ptndbeP/13hL5G7aoBDb0/Sfkpxg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.Runtime.Android",
+      "version": "2.9.2.1",
+      "sha512": "vzv8KbjAg3Qm57RrdwRoXMyeqqGU67pjT8wrD62ceOiobYI5daOTyVVVcn1f08SIH2W8Q9iAbBPA9l9zcWUxqg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.Runtime.Ktx",
+      "version": "2.9.2.1",
+      "sha512": "CH2eVOugIKpyAOOrnCdF04baCjrPUfs3vkZNVB1Z0VeLfGT8NbVjP6IknjteZNVCqWy/22JNyKcp4wuMRaYVig=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.Runtime.Ktx.Android",
+      "version": "2.9.2.1",
+      "sha512": "Lz877w1/XEAZPfO6Yn0U1ujU+NCGDjOGm5at6Y9s5eIzcgyJo/iTEFjqLCt+X1FXJ8kDcdFP3RvN0f4wQ+v12w=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.ViewModel",
+      "version": "2.9.2.1",
+      "sha512": "NsrUSK8s5q/31HgiCA6d+Bg93LgvYzSmMAVPQbHmRKM694D6RXlZkd0P1nUk+M40uC4WigSKmJeq6bjLroJFTg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.ViewModel.Android",
+      "version": "2.9.2.1",
+      "sha512": "eyKWxB0alV+DNWZS3m7rRQxaCR7twRBkbr8N6OIL4p/xq3SIgLCXD+uWoF4cSlRtooaSjasJMlDnZNcbVJplAQ=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.ViewModel.Ktx",
+      "version": "2.9.2.1",
+      "sha512": "YisJfMfjXE7nv9NQnzYatRkzROh4PCy3oLPCt6jBD73YWalk4BPOVm7bhkuqaJfnhVtKDuogHuB8BsOX2GlFow=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.ViewModelSavedState",
+      "version": "2.9.2.1",
+      "sha512": "fUwB+NA4O/HgvlJNaoSa6XuhpLd9k9vwSnQSZKx9z1PPEzX3ChYLmIOdZQc9DzcRZoem+AdL86ChXyCQkYS4YA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Lifecycle.ViewModelSavedState.Android",
+      "version": "2.9.2.1",
+      "sha512": "+WoE0dnvnn0eCcSCK8IKm5L24BhCsYD6BrgMX9LqWLKVbjynzZBHz1ZkqAH5HSb1luVspwFfARYNQPSlcGyYqA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Loader",
+      "version": "1.1.0.34",
+      "sha512": "1LEi7FcyStmPGT9DB1PZrOE28Y6vF+4Vb+rGWuUrVZFV9DDwMdKNqCQZi4VGO6q7q44/bHMTnuDBvylI4x72ww=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Navigation.Common",
+      "version": "2.9.2.1",
+      "sha512": "LrxZcMFuSXKYKB1bYcKLdKSHu7cEPOoy8g7Rlqf1GjV7bzf+8YjtGIRNWBYgp7zELuSsoin+Esc2T1W5U7tmSg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Navigation.Common.Android",
+      "version": "2.9.2.1",
+      "sha512": "iGS4iK8gDgKUYOdEF8ganw57IK0f04Gs/rtHAdanxTpPCMpfdCsBjMtqnXn/Illl7Pqwxe1Gyzlbiej8n6oI5w=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Navigation.Fragment",
+      "version": "2.9.2.1",
+      "sha512": "+pV6drgHr2JJgs4iSf71bAz6hI7A0XXANGdT1qDDhT8Pf7YS48j2Cn10UeDcIADk/LQxDf6fShptxbWg18EhTA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Navigation.Runtime",
+      "version": "2.9.2.1",
+      "sha512": "fvFy8nwF4OZ6IPR+beMmsRPLP8aYT42a7ULQ8m3kJPt1Qi9zTCsq180aDJX2u+67G5VRle5NNOhWmVq105ZrCQ=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Navigation.Runtime.Android",
+      "version": "2.9.2.1",
+      "sha512": "3DcGdtTt/dPn3uTgrSVHL2cTSiThdz7WUgGRIPvg8KrtSCMGCFjcheFxOy0vVfjkHcz9BYyE/vqNtxgzsw+x/w=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Navigation.UI",
+      "version": "2.9.2.1",
+      "sha512": "ZL1TtUpA/p5+VDPwBI7IVu7K0l4czutHX2S0+XvDtmakmycLIvL1d2JA6cfJLjzGwHciS5nm9s9OnCRH1xxFhg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.ProfileInstaller.ProfileInstaller",
+      "version": "1.4.1.5",
+      "sha512": "wRnVAoFzhllgoonYpoA7JVpBHtsQP81ChagkQ+LtG8JPcu/MLPETg/Yq8cO+bvNwNCvn/5+v4uyv3Pd8j9hT+A=="
+    },
+    {
+      "id": "Xamarin.AndroidX.RecyclerView",
+      "version": "1.4.0.3",
+      "sha512": "Xpwo0U+YbkDIkiPiArwDBioDjdeJiZK4mMl777odOaprezVLW5SJvHV/DpkverhlIDp5fTC97cVNXy19e0Tz8g=="
+    },
+    {
+      "id": "Xamarin.AndroidX.ResourceInspection.Annotation",
+      "version": "1.0.1.22",
+      "sha512": "hAD8tWKqwvKQ2bWdRthlBWntBG0zpz5MzLuX2iG2CcFFFS+kx4w7qmXjfPgTEVxHE214ctvaBtYs8r9x3b82og=="
+    },
+    {
+      "id": "Xamarin.AndroidX.SavedState",
+      "version": "1.3.1.1",
+      "sha512": "dpP5rrtROOybk/wbtS1nPh+nU2JeqUtgOccY4oxD7IYitEzqRn2cOHmbRnJ/S+C+wwUo0/At/qdLPQ4TqE8n7A=="
+    },
+    {
+      "id": "Xamarin.AndroidX.SavedState.SavedState.Android",
+      "version": "1.3.1.1",
+      "sha512": "Iej96BtfWgZvs+mAlp2p5VUXV7R2AVktYgt7XAqlnTTTaE2Ue88pyjQH7hmxKpMEtBUd+Q4TIZcEsLxn8d2GeA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.SavedState.SavedState.Ktx",
+      "version": "1.3.1.1",
+      "sha512": "/0Xaj7Cjzv4Ok6j6A3TfWWcwsOHyK9jLBQRQfaS4vNHx3kNtMVLnSyzwIto47Q1oMEC8VlFogLuSBoUpviNWbw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Security.SecurityCrypto",
+      "version": "1.1.0.4-alpha07",
+      "sha512": "Wm2BH+hNOHoMA5Z8iWIlckfgpUntHikfkBIjMpciY6AVnKrSfZcwQDVRGSySDgje52b5Kwkejp4EKrlUBN7uYA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.SlidingPaneLayout",
+      "version": "1.2.0.22",
+      "sha512": "uSr7bE1tJ2i3RhfS4yJupUB/X0QfhRyh+YUJsMYVefTtAuixondhHleQREA5N/rmV8qo6xY79hD6mO7Pvtpolg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Startup.StartupRuntime",
+      "version": "1.2.0.5",
+      "sha512": "A44F9zM0yqi2jg2AAsfwJqdc8W2MYKHnxKTewn5T9NxAvZg3h3aN7NCVjUWyqdmhzBamPWEyRrIN/1NY1U03/A=="
+    },
+    {
+      "id": "Xamarin.AndroidX.SwipeRefreshLayout",
+      "version": "1.1.0.29",
+      "sha512": "FSABkMhwOmfqUjRWf3rM4GzLzFiec8OLLNe4uAbi6Leea6U5xNKq2sumiQ2ySnffZ7Hm6l5cuysc+zCfzgWv5Q=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Tracing.Tracing",
+      "version": "1.3.0.1",
+      "sha512": "tgMXLYR6AFc/Hu32MNCPWrjsYnn1XMbse5+g8PNBzdmzmv+HoaJotSTYMI1qjAgZmYVxdPsmt5oU4Mu8q54iVw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Tracing.Tracing.Android",
+      "version": "1.3.0.1",
+      "sha512": "LkCq6ICPD9S8JBAqinPqx+gOeq/6kPcy7m/MUQlGZv0TjU8IL5qAX6mLKjq//fcAuuCX7FAHk3N8tCVsPmQ3Pw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Transition",
+      "version": "1.6.0.1",
+      "sha512": "urEA6HnrFNz9YUAt6vIvTz92+5iAuBVC2HZ9kNwuw0ESB6pMvX6Z9+fD5G4AAdRf2n/7hecE99TyJvKvRdzvuQ=="
+    },
+    {
+      "id": "Xamarin.AndroidX.VectorDrawable",
+      "version": "1.2.0.8",
+      "sha512": "bIAuUzHIp49qy7++UOBcBWfJr4akRVfapPFjg6+C+AIH08+5BExlPYx6edYII5eW22ZCZT6elCTqqI8qdl1vyA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.VectorDrawable.Animated",
+      "version": "1.2.0.8",
+      "sha512": "F1GNMpae4zF0/NOUgUIOEh+blVQ/nLO5eY2AKlFigD7wvt7wlY0wk5h6B2jwPzvFYpsPdWvZsQoI1tgmsrXT0Q=="
+    },
+    {
+      "id": "Xamarin.AndroidX.VersionedParcelable",
+      "version": "1.2.1.3",
+      "sha512": "UmcG3rQreb/ObIjObemxQ6Dw1xX3eDtpB9ICa+Dj05qYDKP3WK7dlfmYZGqvwu3TeoZQ1NSR6UjzePaXfvQwQA=="
+    },
+    {
+      "id": "Xamarin.AndroidX.ViewPager",
+      "version": "1.1.0.4",
+      "sha512": "EY90yxGRM1jfPRheLwGhP1mZfySmGRcH0pIFjdDVHBACm81z+ebffFKykZYrCb/JkTNJRiLS5ZEEwqzR5HNX8Q=="
+    },
+    {
+      "id": "Xamarin.AndroidX.ViewPager2",
+      "version": "1.1.0.8",
+      "sha512": "wYJ8lQ3AOr0H2y9Vl/sPnRwXmZuqyEDV8xV9U2K51DSZ/0fjLK2qousI+kLOkGfdqbvv9j82q51TUiOx4JMbzg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Window",
+      "version": "1.4.0.1",
+      "sha512": "uV20G1H8Woeja+h9rt6SzzbVIuequ7yMpcY8q7QstEH2eEQvFmAteE0v9Sc19RV52Du0tkbp0ccNWYzRQ5GTQg=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Window.WindowCore",
+      "version": "1.4.0.1",
+      "sha512": "VHzqNYlfD4QY+81PaMH5WKNoczwQqNocyAG5AaazMSUne9y5SywjkmIBzFDmu0bxgWqkD2e6dAmXaxY8vntGBw=="
+    },
+    {
+      "id": "Xamarin.AndroidX.Window.WindowCore.Jvm",
+      "version": "1.4.0.1",
+      "sha512": "et2icsl112iTtREGS2BQnPFTKfvmQT64KfIm5r8GYiEoR6z3kCYwal7Irdf6NYm5n8G4JeltnozdW4o9TQTTqg=="
+    },
+    {
+      "id": "Xamarin.Google.Android.Material",
+      "version": "1.12.0.5",
+      "sha512": "F3qEyoazFbkeN0xXckfcPtIibVYkF0RU0Dbxgp4NZemK4q88twGmyiqLUx/5DAdwEcVitTVyT5V040EN8c6SBg=="
+    },
+    {
+      "id": "Xamarin.Google.Code.FindBugs.JSR305",
+      "version": "3.0.2.21",
+      "sha512": "7vV5upoSB+npYC6UZGkLQANdn0nKlNG7lEGwrJgF9HLCCSQvhbwTuU25mQHDBVfhGTHKtiGKdlS44hOkips/6Q=="
+    },
+    {
+      "id": "Xamarin.Google.Crypto.Tink.Android",
+      "version": "1.18.0.1",
+      "sha512": "sNFZmNxrVFXNgo8OhIIC567dPKli2u0ZKP/RbXS0hbr6nCzMqoZSk18nMWDfu83/FcTgMcaUi+EXna5oTs9Oig=="
+    },
+    {
+      "id": "Xamarin.Google.ErrorProne.Annotations",
+      "version": "2.41.0.1",
+      "sha512": "+emGBrib8sHMJd1miJgozqQsS29e0U6Ns0iCj6SeGSosEki2Whg+5NKqgpfFKJPrKNPrmcglj3TPsNubDuViwQ=="
+    },
+    {
+      "id": "Xamarin.Google.Guava.ListenableFuture",
+      "version": "1.0.0.29",
+      "sha512": "5w1ErO9PmpGR3ii2qJkzV1ntOJGSrd7NyOdop3Sw+q/DQ6oCdyoOq3jbJ3Stg0ACOUItN7XO6EqAvNQ8jQaV0g=="
+    },
+    {
+      "id": "Xamarin.JSpecify",
+      "version": "1.0.0.4",
+      "sha512": "/rjNkRuJWpyPcXs2ymK/jFvI5PVrTc/0ODpMKNPaQSOpBtiPgicHqjxrDlM0VAUdRr5+WB8PCpdSFqrWKtdcAg=="
+    },
+    {
+      "id": "Xamarin.Jetbrains.Annotations",
+      "version": "26.0.2.3",
+      "sha512": "dSXWSYq/F7UAb2B3skXLkW7ZRK8lYkAyUWKXeL6Cn8EyubnDGrpLd0FN7akLFjsG7Li7WdSj4NdDTWbfOLnCOA=="
+    },
+    {
+      "id": "Xamarin.Kotlin.StdLib",
+      "version": "2.2.0.1",
+      "sha512": "jPxSvOvFabE8sTl+3v66s2q0RobE+KwJ9OkOqaxOFDesJJhNxo0qPa5DAoAiPRU00vbIQTu3op/cOpcK5ptRSQ=="
+    },
+    {
+      "id": "Xamarin.KotlinX.Coroutines.Android",
+      "version": "1.10.2.1",
+      "sha512": "FsJqCEgV27IiiSg19xgcwmK0N89e3EL2uITws7b3D/HzoP/yyo9ddwWitxpI8PO0VTpRtrMxs4wUI7gy671wtQ=="
+    },
+    {
+      "id": "Xamarin.KotlinX.Coroutines.Core",
+      "version": "1.10.2.1",
+      "sha512": "4l0lpiEtS4lksxeLchfbSYwWVz7EgjIVfZUNmjgw4LfoHoI+6xptF05qryvAVnOZsORXXZMD9uKrsL6J3J2fxA=="
+    },
+    {
+      "id": "Xamarin.KotlinX.Coroutines.Core.Jvm",
+      "version": "1.10.2.1",
+      "sha512": "fKzLo4b9d8g6LCDf5YaJjxouNZxG2a6B6l68z3ifrvTjduRhcK9esjtQBhvJ+pl6EYBwHNOQPOxeeqOFdlTQ2g=="
+    },
+    {
+      "id": "Xamarin.KotlinX.Serialization.Core",
+      "version": "1.9.0.1",
+      "sha512": "CUUY2+3xeWkbeMK8vBV62eqbJxKBxzqezxoBpN+D54kz7QrONS+a+shldNpKq8pwvfplqRb5wNDICHuIGPTlkA=="
+    },
+    {
+      "id": "Xamarin.KotlinX.Serialization.Core.Jvm",
+      "version": "1.9.0.1",
+      "sha512": "wxycnKINoRwSmVNV80NcZf7OUwPDVzgPwL3uz6W/hDQ1eJ/IxhzaSoElSKwICEsRwSFSpTQMjE6b6nRyAiUByA=="
+    },
+    {
+      "id": "protobuf-net",
+      "version": "3.2.56",
+      "sha512": "4IPJeTYAMNewlN8MDaFkcmR/9hLhJeo9eARnTh104zh7mf+vXT2gu5MUfUnkSQU+CH578Q6vcdU7LQDQPG6eaw=="
+    },
+    {
+      "id": "protobuf-net.Core",
+      "version": "3.4.40",
+      "sha512": "UDQ8fbEKqpQktJfFyqkZ22S7P01sJWNmqkYjzbwZdZUHFwHIDigmWIzxmExF7NjbNoTqmv2Dfsu3rOpRHXK5EA=="
+    },
+    {
+      "id": "protobuf-net.Reflection",
+      "version": "3.4.40",
+      "sha512": "1wlf2O6sqEypWMu5IMGOTcovVicQ+QP9PRNelsRcx823UWO9ytVuDFLRaJ5sVg8zoSxzgOT9sBdYbmv3i/wgaw=="
+    }
+  ]
+}

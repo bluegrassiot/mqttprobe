@@ -178,6 +178,8 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
                 continue;
 
             var (value, dataType) = ExtractMetricValue(metric);
+            if (dataType.Length == 0)
+                dataType = "unknown";
             result.Add(new MetricSnapshot
             {
                 Name = metric.Name,
@@ -312,6 +314,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
     {
         var dataType = metric.Datatype switch
         {
+            0 => string.Empty,
             1 => "int8",
             2 => "int16",
             3 => "int32",

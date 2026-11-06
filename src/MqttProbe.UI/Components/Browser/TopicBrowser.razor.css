@@ -28,6 +28,23 @@
     font-size: 0.85rem;
 }
 
+/* The toolbar and the select-all strip stay outside the tree's scroll owner, so the global
+   control and the legend stay next to the first row instead of scrolling away with the rows. */
+.topic-tree-controls {
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+/* Wrapping rather than overflowing keeps the label and the legend apart on a narrow pane. */
+.topic-select-strip {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    min-width: 0;
+    margin-bottom: 2px;
+}
+
 .topic-tree-wrap {
     /* One vertical scroll owner for the tree: the panel flexes, the wrap scrolls. */
     flex: 1 1 auto;
@@ -72,8 +89,8 @@
     padding: 0 6px;
 }
 
-/* The grouping flag must not shrink: when it and the T/M legend cannot both fit beside the
-   toolbar buttons, the legend wraps to the next line instead of the flag clipping. */
+/* The grouping flag must not shrink: it truncates inside the toolbar rather than pushing the
+   buttons or the select-all strip sideways. */
 ::deep .topic-grouping-flag {
     display: inline-flex;
     align-items: center;
@@ -91,17 +108,18 @@
 
 /* Narrow pane: the row wraps rather than truncating either label. The 4px gap below
    deliberately overrides the row-gap 2px it precedes. */
-.topic-tree-wrap ::deep .topic-toolbar {
+.topic-tree-controls ::deep .topic-toolbar {
     flex-wrap: wrap;
     row-gap: 2px;
     gap: 4px;
 }
 
-::deep .topic-stat-legend {
+.topic-stat-legend {
+    flex: 0 0 auto;
+    margin-left: auto;
     font-size: 0.65rem;
     opacity: 0.45;
     white-space: nowrap;
-    margin-left: auto;
 }
 
 /* The icon key shows the same coloured roles as the rows, so colour is never the only cue: every
@@ -120,6 +138,33 @@
 
 .topic-header-row ::deep .topic-icon-key-toggle {
     margin-left: auto;
+}
+
+/* The global checkbox keeps the same 44px target as a row checkbox. */
+.topic-select-all-wrap {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    min-height: 44px;
+}
+
+.topic-select-all-wrap ::deep .topic-select-all {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 44px;
+    margin: 0;
+    padding: 0;
+}
+
+.topic-select-all-wrap ::deep .topic-select-all .mud-button-root {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+}
+
+.topic-select-all__label {
+    font-size: 0.8rem;
+    white-space: nowrap;
 }
 
 .topic-icon-key-header {

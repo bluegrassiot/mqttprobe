@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Mqtt;
@@ -8,19 +7,19 @@ using MqttProbe.UI.Tests.TestHelpers;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
 
+// A refresh reconciles the checked set against the store: a branch whose rows are gone is dropped
+// and everything else stays exactly as the user left it.
 [TestFixture]
 public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
 {
     private const string Aggregate = "spBv1.0/plant1/NDATA";
     private const string Tip = "spBv1.0/plant1/NDATA/node1";
     private const string Residue = "spBv1.0/plant1/NDATA/ghosttip/leaf";
-    private const string GroupedMarker = "Grouped by node and device";
 
     private IMessageStoreManager _mockMsgStore = null!;
     private TopicBrowserTestFixture _fixture = null!;
     private IUiSettings _mockUi = null!;
     private readonly UiPreferences _preferences = new();
-    private readonly Guid _storeId = Guid.NewGuid();
 
     [SetUp]
     public void SetupMocks()
@@ -33,28 +32,20 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
         Services.AddUiSettings(_mockUi);
     }
 
-    private IRenderedComponent<TopicBrowser> RenderSelected(
-        string selectedPath,
-        bool grouped = true)
+    private IRenderedComponent<TopicBrowser> RenderSelected(string selectedPath, bool grouped = false)
     {
         _preferences.GroupSparkplugTopicsByNodeAndDevice = grouped;
-        Add("spBv1.0/plant1/NDATA/node1", 3);
+        Add(Tip, 3);
         Add(Residue, 1);
-        _fixture.SetSelection(TopicSelection.ForTopic(selectedPath));
+        SeedBranch(selectedPath);
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
         return cut;
     }
 
-    // Waits for the component's own refresh to read the store, then for the render it causes.
-    private async Task<IRenderedComponent<TopicBrowser>> RefreshAsync(
-        IRenderedComponent<TopicBrowser> cut,
-        CancellationToken token)
-    {
-        token.ThrowIfCancellationRequested();
-        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
-        return cut;
-    }
+    private void SeedBranch(string path) =>
+        _fixture.Adapter.Store.SelectTopics(
+            TopicSelection.ForBranches([new TopicBranchTarget(TopicBranchKind.Raw, Path: path)]));
 
     private void Add(string topic, int count)
     {
@@ -67,164 +58,86 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
     private static void ExpandAll(IRenderedComponent<TopicBrowser> cut) =>
         cut.FindAll(".mud-toolbar button")[0].Click();
 
+    private static IReadOnlyList<string> CheckedPaths(IRenderedComponent<TopicBrowser> cut) =>
+        [.. cut.FindAll(".topic-tree-row--selected").Select(row => row.GetAttribute("data-topic-path")!)];
+
     [Test]
-    public async Task VersionChange_ThatRemovesTheOnlyResidue_ClearsTheRemovedAggregate()
+    public async Task Purge_KeepsACheckedBranchThatStillHasRows()
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var cut = RenderSelected(Aggregate);
         ExpandAll(cut);
-        cut.FindAll(".topic-tree-row--selected").Should().ContainSingle(
-            "the residual prefix has a row to start with");
+        CheckedPaths(cut).Should().Contain(Aggregate);
 
         _fixture.Adapter.Store.RemoveMatchingTopic("spBv1.0/plant1/NDATA/ghosttip/#");
-        await RefreshAsync(cut, timeout.Token);
+        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
 
-        cut.WaitForAssertion(() => _mockMsgStore.Received(1)
-            .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
-        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().BeEmpty());
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        _fixture.SelectedKey.Should().BeNull("the clear reached the manager");
-        cut.Markup.Should().Contain("spBv1.0/plant1/NDATA/node1",
-            "the valid tip under the same verb stays grouped");
-    }
-
-    [Test]
-    public async Task VersionChange_KeepsTheSelectedLeafThatIsStillPresent()
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var cut = RenderSelected(Tip);
-
-        _fixture.Adapter.Store.RemoveMatchingTopic("spBv1.0/plant1/NDATA/ghosttip/#");
-        await RefreshAsync(cut, timeout.Token);
-
-        cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedKey.Should().Be(Tip);
-        ExpandAll(cut);
         cut.WaitForAssertion(() =>
         {
-            var selected = cut.FindAll(".topic-tree-row--selected");
-            selected.Should().ContainSingle();
-            selected[0].TextContent.Should().Contain(Tip);
+            CheckedPaths(cut).Should().Contain(Aggregate,
+                "the branch still has the valid tip under it");
+            _fixture.Adapter.Store.GetSelectedTopicState().Branches.Select(branch => branch.Path)
+                .Should().Equal(Aggregate);
         });
+        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
     }
 
     [Test]
-    public async Task VersionChange_KeepsTheRetainedFallbackPrefixWhileItsResidueRemains()
+    public async Task Purge_DropsACheckedBranchWhenItsRowsAreGone()
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var cut = RenderSelected(Aggregate);
+        ExpandAll(cut);
 
-        Add(Tip, 1);
-        await RefreshAsync(cut, timeout.Token);
-
-        cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedKey.Should().Be(Aggregate);
-    }
-
-    [Test]
-    public void FilterAndCollapseRebuilds_DoNotClearAHiddenLeaf()
-    {
-        var cut = RenderSelected(Tip);
-
-        // The filter clears the selection by design, so it is set again behind the filter.
-        cut.Find(".topic-filter-field input").Input("industrial");
-        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("NDATA"));
-        _fixture.SetSelection(TopicSelection.ForTopic(Tip));
-        _mockMsgStore.ClearReceivedCalls();
-
-        cut.FindAll(".mud-toolbar button")[1].Click(); // collapse all
-
-        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("NDATA"));
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedKey.Should().Be(Tip);
-    }
-
-    [Test]
-    public async Task StaleVerdict_WhenTheStoreMovesUnderTheClear_KeepsTheSelectionForTheNextRefresh()
-    {
-        // The verdict sees an emptied store, but the topic returns at the instant of the clear.
-        // The conditional clear must reject, and the next ordinary refresh, with no ExpandAll,
-        // must render the row it never cleared.
-        _preferences.GroupSparkplugTopicsByNodeAndDevice = false;
-        Add("sensors/temp", 2);
-        _fixture.SetSelection(TopicSelection.ForTopic("sensors"));
-        _fixture.Adapter.ReturnSnapshotOnce(
-            new TopicTreeSnapshot(_fixture.Adapter.Store.Version, ImmutableArray<TopicNodeSnapshot>.Empty));
-        _fixture.BeforeConditionalClear = () => Add("sensors/temp", 1);
-
-        SelectedTopicState? callbackState = null;
-        var cut = Render<TopicBrowser>(parameters => parameters.Add(
-            component => component.OnSelectedChanged, state =>
-            {
-                callbackState = state;
-                return Task.CompletedTask;
-            }));
-        EnsureMudProviders();
-
-        cut.WaitForAssertion(() => _mockMsgStore.Received(1)
-            .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        callbackState.Should().BeNull("a rejected clear must not raise the selection callback");
-        _fixture.SelectedKey.Should().Be("sensors");
-
+        _fixture.Adapter.Store.RemoveMatchingTopic("spBv1.0/plant1/NDATA/#");
         await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
-        var selected = cut.FindAll(".topic-tree-row--selected");
-        selected.Should().ContainSingle();
-        selected[0].TextContent.Should().Contain("sensors");
+
+        cut.WaitForAssertion(() =>
+        {
+            CheckedPaths(cut).Should().BeEmpty("the branch no longer names anything");
+            _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().BeNull();
+        });
+        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
     }
 
     [Test]
-    public async Task PurgeAfterSelectionConfirmation_DoesNotPublishTheStaleSelection()
+    public async Task Purge_OfOneBranch_KeepsAnother()
     {
-        Add("sensors/temp", 1);
-        SelectedTopicState? callbackState = null;
-        var cut = Render<TopicBrowser>(parameters => parameters.Add(
-            component => component.OnSelectedChanged, state =>
-            {
-                callbackState = state;
-                return Task.CompletedTask;
-            }));
-        EnsureMudProviders();
-        _fixture.Adapter.BeforeSnapshotRead = () => _fixture.Adapter.Store.RemoveMatchingTopic("sensors/#");
-
-        await cut.InvokeAsync(() => cut.Find(".topic-tree-row").Click());
-
-        callbackState.Should().BeNull();
-        _fixture.SelectedKey.Should().BeNull();
-        cut.FindAll(".topic-tree-row--selected").Should().BeEmpty();
-    }
-
-    [Test]
-    public void StaleVerdict_WhenTheSelectionMovesUnderTheClear_KeepsTheNewSelection()
-    {
-        // The tree stays purged, but a new selection arrives before the clear is evaluated, so
-        // the captured token no longer matches and the clear must leave the live selection alone.
-        _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
+        _preferences.GroupSparkplugTopicsByNodeAndDevice = false;
         Add(Tip, 3);
-        _fixture.SetSelection(TopicSelection.ForTopic(Aggregate));
-        _fixture.Adapter.ReturnSnapshotOnce(
-            new TopicTreeSnapshot(_fixture.Adapter.Store.Version, ImmutableArray<TopicNodeSnapshot>.Empty));
-        _fixture.BeforeConditionalClear = () => _fixture.SetSelection(TopicSelection.ForTopic(Tip));
-
+        Add("sensors/temp", 1);
+        SeedBranch(Aggregate);
+        SeedBranch("sensors");
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
         ExpandAll(cut);
 
-        cut.WaitForAssertion(() => _mockMsgStore.Received(1)
-            .TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>()));
-        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        _fixture.SelectedKey.Should().Be(Tip);
+        _fixture.Adapter.Store.RemoveMatchingTopic("spBv1.0/plant1/NDATA/#");
+        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
+
         cut.WaitForAssertion(() =>
         {
-            var selected = cut.FindAll(".topic-tree-row--selected");
-            selected.Should().ContainSingle();
-            selected[0].TextContent.Should().Contain(Tip);
+            _fixture.Adapter.Store.GetSelectedTopicState().Branches.Select(branch => branch.Path)
+                .Should().Equal("sensors");
+            CheckedPaths(cut).Should().Contain("sensors");
+            CheckedPaths(cut).Should().NotContain(path => path.StartsWith("spBv1.0/", StringComparison.Ordinal));
         });
+    }
+
+    [Test]
+    public void FilterAndCollapseRebuilds_DoNotDropACheckedBranch()
+    {
+        var cut = RenderSelected(Tip);
+        cut.Find(".topic-filter-field input").Input("industrial");
+        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("NDATA"));
+        _mockMsgStore.ClearReceivedCalls();
+
+        cut.FindAll(".mud-toolbar button")[1].Click();
+
+        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("NDATA"));
+        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
+        _fixture.Adapter.Store.GetSelectedTopicState().Branches.Select(branch => branch.Path)
+            .Should().Equal(Tip);
     }
 
     [Test]
@@ -234,20 +147,18 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
 
         ExpandAll(cut);
 
-        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().ContainSingle());
+        cut.WaitForAssertion(() => CheckedPaths(cut).Should().ContainSingle().Which.Should().Be(Tip));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
         _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
-        _fixture.SelectedKey.Should().Be(Tip);
     }
 
     [Test]
     public async Task UnchangedVersion_DoesNotTouchTheStore()
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var cut = RenderSelected(Tip);
         var version = _fixture.Adapter.Store.Version;
 
-        await RefreshAsync(cut, timeout.Token);
+        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
 
         _fixture.Adapter.Store.Version.Should().Be(version);
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
@@ -259,13 +170,12 @@ public sealed class TopicBrowserRefreshReconciliationTests : BunitTestContext
     {
         var cut = RenderSelected(Residue, grouped: false);
         ExpandAll(cut);
-        cut.FindAll(".topic-tree-row--selected").Should().ContainSingle();
+        CheckedPaths(cut).Should().ContainSingle().Which.Should().Be(Residue);
 
-        cut.FindAll(".mud-toolbar button")[1].Click(); // collapse all
+        cut.FindAll(".mud-toolbar button")[1].Click();
         ExpandAll(cut);
 
-        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().ContainSingle());
+        cut.WaitForAssertion(() => CheckedPaths(cut).Should().ContainSingle().Which.Should().Be(Residue));
         _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
-        _mockMsgStore.DidNotReceive().TryClearSelection(Arg.Any<long>(), Arg.Any<SelectedTopicState>());
     }
 }

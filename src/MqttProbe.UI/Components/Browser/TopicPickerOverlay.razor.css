@@ -1,11 +1,11 @@
 .topic-picker-overlay {
     position: fixed;
     inset: 0;
-    z-index: 1200;
-    background: rgba(0, 0, 0, 0.5);
+    z-index: 1500;
+    background: var(--mud-palette-surface);
     display: flex;
-    align-items: flex-end;
-    justify-content: center;
+    align-items: stretch;
+    justify-content: stretch;
 }
 
 /* The panel class sits on a MudPaper (child component), which never gets this
@@ -13,9 +13,18 @@
    silently fails, letting the panel grow past the viewport with no scroll. */
 .topic-picker-overlay ::deep .topic-picker-overlay__panel {
     width: 100%;
-    max-width: 480px;
-    max-height: 80vh;
-    border-radius: 16px 16px 0 0;
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    margin: 0;
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    border-radius: 0;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     animation: slide-up 200ms ease-out;
@@ -39,12 +48,58 @@
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;
-    overflow: auto;
-    padding: 8px;
+    overflow: hidden;
+    padding: 0 8px 8px;
 }
 
-.topic-picker-overlay__body ::deep .mud-paper {
-    flex: none;
+/* The completion action sits in the thumb zone, outside the tree's scroll owner, so it stays
+   put while the list scrolls. The panel's safe-area padding keeps it above the home indicator. */
+.topic-picker-overlay__footer {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    gap: 6px;
+    padding: 8px 16px 10px;
+    border-top: 1px solid var(--mud-palette-divider);
+    background: var(--mud-palette-surface);
+}
+
+.topic-picker-overlay__selection {
+    min-height: 1.1rem;
+    overflow: hidden;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.75rem;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.topic-picker-overlay__footer ::deep .topic-picker-overlay__done {
+    min-height: 48px;
+    font-weight: 600;
+    box-sizing: border-box;
+}
+
+.topic-picker-overlay__footer ::deep .topic-picker-overlay__done:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
+/* The picker header already names the topic list. Keep only the existing icon-key
+   toggle in the nested header, right-aligned above the filter. */
+.topic-picker-overlay__body ::deep .topic-header-row {
+    justify-content: flex-end;
+    margin-bottom: 0;
+    padding: 0;
+}
+
+.topic-picker-overlay__body ::deep .topic-header-row > :not(.topic-icon-key-toggle) {
+    display: none;
+}
+
+.topic-picker-overlay__body ::deep .topic-browser-panel {
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 @keyframes slide-up {

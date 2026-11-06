@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "licenses": {
+    "MIT": ["mit-license-generic-text"],
+    "Apache-2.0": ["apache-license-2-0"],
+    "BSD-3-Clause": ["bsd-3-clause-license"],
+    "BSD-2-Clause": ["bsd-2-clause-license"],
+    "ISC": ["isc-license-and-feather-notice-lucide"],
+    "EPL-2.0": ["eclipse-public-license-2-0"]
+  }
+}

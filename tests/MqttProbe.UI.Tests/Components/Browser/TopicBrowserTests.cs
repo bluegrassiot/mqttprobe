@@ -225,17 +225,20 @@ public class TopicBrowserInteractionTests : BunitTestContext
     }
 
     [Test]
-    public void ClickingRow_RequestsManagerOwnedSelection()
+    public void ClickingRow_RequestsManagerOwnedBranchSelection()
     {
         var cut = RenderWithTree();
 
         cut.Find(".topic-tree-row").Click();
 
-        _mockMsgStore.Received().SelectTopics(Arg.Is<TopicSelection>(selection => selection.Key == "sensors"));
+        _mockMsgStore.Received().SelectTopics(Arg.Is<TopicSelection>(selection =>
+            selection.Mode == TopicSelectionMode.Branches
+            && selection.Branches.Length == 1
+            && selection.Branches[0].Path == "sensors"));
     }
 
     [Test]
-    public void ClickingRow_PublishesManagerSelectionAfterSelectingPath()
+    public void ClickingRow_PublishesTheCheckedBranch()
     {
         SelectedTopicState? callbackState = null;
         var cut = RenderWithTree(state =>
@@ -247,13 +250,14 @@ public class TopicBrowserInteractionTests : BunitTestContext
         cut.Find(".topic-tree-row").Click();
 
         callbackState.Should().NotBeNull();
-        callbackState!.Key.Should().Be("sensors");
+        callbackState!.Branches.Should().ContainSingle().Which.Path.Should().Be("sensors");
         callbackState.Token.Generation.Should().BeGreaterThan(0);
-        _mockMsgStore.Received().SelectTopics(Arg.Is<TopicSelection>(selection => selection.Key == "sensors"));
+        _mockMsgStore.Received().SelectTopics(Arg.Is<TopicSelection>(selection =>
+            selection.Mode == TopicSelectionMode.Branches));
     }
 
     [Test]
-    public async Task ClickingPurgedRow_DoesNotPublishPreviousSelection()
+    public async Task ClickingAPurgedRow_LeavesNothingChecked()
     {
         SelectedTopicState? callbackState = null;
         var cut = RenderWithTree(state =>
@@ -261,14 +265,16 @@ public class TopicBrowserInteractionTests : BunitTestContext
             callbackState = state;
             return Task.CompletedTask;
         });
-        // The store loses the topic while the rendered row is still on screen; holding the
-        // version keeps that the frame under test.
+        // The store loses the topic while the rendered row is still on screen; the click can only
+        // check a branch nothing represents, so the next reconcile drops it again.
         _fixture.Adapter.Store.RemoveMatchingTopic("sensors/#");
 
         await ClickAsync(cut, ".topic-tree-row");
 
-        callbackState.Should().BeNull();
-        _mockMsgStore.Received().SelectTopics(Arg.Is<TopicSelection>(selection => selection.Key == "sensors"));
+        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().BeEmpty());
+        _fixture.SelectedKey.Should().BeNull();
+        _mockMsgStore.DidNotReceive().SelectTopic(Arg.Any<string?>());
+        callbackState.Should().NotBeNull("the click still publishes the checked set it produced");
     }
 
     [Test]
@@ -439,27 +445,28 @@ public class TopicBrowserInteractionTests : BunitTestContext
     }
 
     [Test]
-    public void Filter_ClearsSelection_WhenChanged()
+    public void Filter_KeepsTheCheckedSet_WhenChanged()
     {
         var cut = RenderWithTree();
 
-        // First select a row
         cut.Find(".topic-tree-row").Click();
         cut.Find(".topic-tree-row").ClassName.Should().Contain("topic-tree-row--selected");
 
-        // Type in the filter
         var filterInput = cut.Find(".topic-filter-field input");
         filterInput.Input("temp");
 
+        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row").Should().HaveCount(2,
+            "the match and its ancestor"));
+        _fixture.Adapter.Store.GetSelectedTopicState().Branches.Should().ContainSingle()
+            .Which.Path.Should().Be("sensors", "filtering is a view, not a selection change");
+        cut.Find(".topic-tree-row--selected").GetAttribute("data-topic-path").Should().Be("sensors");
+
+        filterInput.Input(string.Empty);
         cut.WaitForAssertion(() =>
         {
-            // Visual selection should be cleared
-            var selectedRows = cut.FindAll(".topic-tree-row--selected");
-            selectedRows.Should().BeEmpty();
+            cut.FindAll(".topic-tree-row--selected").Should().ContainSingle()
+                .Which.GetAttribute("data-topic-path").Should().Be("sensors");
         });
-
-        // Manager selection should also be cleared
-        _mockMsgStore.Received().SelectTopics(null);
     }
 
     [Test]
@@ -467,11 +474,10 @@ public class TopicBrowserInteractionTests : BunitTestContext
     {
         var cut = RenderWithTree();
 
-        // Select a row
         await ClickAsync(cut, ".topic-tree-row");
         cut.Find(".topic-tree-row").ClassName.Should().Contain("topic-tree-row--selected");
 
-        // Simulate external clear (e.g., ClearAllMessages)
+        // Simulate an external clear of the store selection.
         _fixture.SetSelection(null);
 
         await ClickAsync(cut, ".topic-tree-row button");

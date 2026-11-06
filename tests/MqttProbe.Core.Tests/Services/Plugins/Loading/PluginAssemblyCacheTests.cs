@@ -106,7 +106,7 @@ public class PluginAssemblyCacheTests
 
         registry.FindDecoder("json").Should().NotBeNull();
         registry.FindDecoder("sparkplug-b").Should().NotBeNull();
-        registry.Decoders.Should().HaveCount(9);
+        registry.Decoders.Should().HaveCount(10);
         registry.LoadedPackagePaths.Should().BeEmpty();
     }
 

@@ -21,6 +21,12 @@
     overflow: hidden;
 }
 
+@media (max-width: 599.98px) {
+    .app-shell-body {
+        padding-top: 6px;
+    }
+}
+
 ::deep .app-chrome-panel {
     background: var(--mud-palette-surface);
     border: 1px solid var(--mud-palette-lines-default);

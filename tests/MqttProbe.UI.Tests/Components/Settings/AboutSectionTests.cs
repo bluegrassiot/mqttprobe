@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Services.Platform;
 using MqttProbe.UI.Components.Settings;
 using MqttProbe.UI.Tests.TestHelpers;
+using MudBlazor;
 
 namespace MqttProbe.UI.Tests.Components.Settings;
 
@@ -10,6 +11,7 @@ public class AboutSectionTests : BunitTestContext
 {
     private IAppInfoService _mockAppInfo = null!;
     private IUpdateService _updateService = null!;
+    private IRenderedComponent<MudDialogProvider> _dialogProvider = null!;
 
     // Exercises the iOS branch from a non-iOS host.
     private sealed class IosAboutSection : AboutSection
@@ -30,6 +32,37 @@ public class AboutSectionTests : BunitTestContext
         Services.AddSingleton(_mockAppInfo);
         Services.AddSingleton(_updateService);
         EnsureMudProviders();
+        _dialogProvider = Render<MudDialogProvider>();
+    }
+
+    [Test]
+    public void OpenSourceLicences_Is_Available_OffIos()
+    {
+        var cut = Render<NonIosAboutSection>();
+
+        var button = cut.Find("[data-testid=open-source-licences-button]");
+        button.TextContent.Should().Contain("Open-source licences");
+        button.GetAttribute("href").Should().BeNull();
+        cut.Markup.Should().Contain("Licences for MQTTProbe and the components it includes");
+    }
+
+    [Test]
+    public async Task OpenSourceLicences_Opens_The_Licences_Dialog()
+    {
+        var cut = Render<NonIosAboutSection>();
+
+        cut.Find("[data-testid=open-source-licences-button]").Click();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        _dialogProvider.WaitForAssertion(() =>
+        {
+            _dialogProvider.Find(".licences-dialog__title").TextContent.Trim()
+                .Should().Be("Open-source licences");
+            _dialogProvider.Find("[data-testid=app-licence-button]").TextContent
+                .Should().Contain("MQTTProbe licence");
+            _dialogProvider.Find("[data-testid=licence-detail-title]").TextContent.Trim()
+                .Should().Be("MQTTProbe licence");
+        });
     }
 
     [Test]
@@ -43,6 +76,33 @@ public class AboutSectionTests : BunitTestContext
         link.GetAttribute("rel").Should().Be("noopener noreferrer");
         link.GetAttribute("aria-label").Should().Be("Privacy policy (opens in a new tab)");
         link.TextContent.Should().Contain("Privacy policy");
+        cut.Find(".about-links").TextContent.Should().Contain("What MQTTProbe stores and sends on your device.");
+        cut.FindAll("[data-testid=contact-email-link]").Count.Should().Be(1);
+        cut.FindAll("[data-testid=support-website-link]").Count.Should().Be(1);
+    }
+
+    [Test]
+    public void Support_Shows_Email_Contact_As_Mailto()
+    {
+        var cut = Render<NonIosAboutSection>();
+
+        var link = cut.Find("[data-testid=contact-email-link]");
+        link.GetAttribute("href").Should().Be("mailto:info@bluegrassiot.com");
+        link.TextContent.Trim().Should().Be("info@bluegrassiot.com");
+        link.HasAttribute("target").Should().BeFalse();
+    }
+
+    [Test]
+    public void Support_Opens_The_Support_Website_As_A_Safe_External_Anchor()
+    {
+        var cut = Render<NonIosAboutSection>();
+
+        var link = cut.Find("[data-testid=support-website-link]");
+        link.GetAttribute("href").Should().Be("https://mqttprobe.com/support");
+        link.GetAttribute("target").Should().Be("_blank");
+        link.GetAttribute("rel").Should().Be("noopener noreferrer");
+        link.GetAttribute("aria-label").Should().Be("Support website (opens in a new tab)");
+        link.TextContent.Should().Contain("Support website");
     }
 
     [Test]
@@ -51,7 +111,9 @@ public class AboutSectionTests : BunitTestContext
         var cut = Render<NonIosAboutSection>();
 
         cut.FindAll("[data-testid=privacy-policy-link]").Should().BeEmpty();
-        cut.FindAll(".about-links").Should().BeEmpty();
+        cut.Find(".about-links").TextContent.Should().NotContain("Privacy policy");
+        cut.Find("[data-testid=contact-email-link]").Should().NotBeNull();
+        cut.Find("[data-testid=support-website-link]").Should().NotBeNull();
     }
 
     [Test]

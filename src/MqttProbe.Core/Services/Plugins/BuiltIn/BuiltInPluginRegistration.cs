@@ -9,6 +9,7 @@ public static class BuiltInPluginRegistration
         context.RegisterDetector(new EmptyPayloadDetector());
         context.RegisterDetector(new SparkplugPayloadDetector());
         context.RegisterDetector(new MessagePackPayloadDetector());
+        context.RegisterDetector(new CborPayloadDetector());
         context.RegisterDetector(new BinaryPayloadDetector());
         context.RegisterDetector(new JsonPayloadDetector());
         context.RegisterDetector(new XmlPayloadDetector());
@@ -19,6 +20,7 @@ public static class BuiltInPluginRegistration
         context.RegisterDecoder(new EmptyPayloadDecoder());
         context.RegisterDecoder(new SparkplugPayloadDecoder());
         context.RegisterDecoder(new MessagePackPayloadDecoder());
+        context.RegisterDecoder(new CborPayloadDecoder());
         context.RegisterDecoder(new BinaryPayloadDecoder());
         context.RegisterDecoder(new JsonPayloadDecoder());
         context.RegisterDecoder(new XmlPayloadDecoder());

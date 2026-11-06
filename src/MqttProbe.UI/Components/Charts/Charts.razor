@@ -9,8 +9,8 @@
 
 <TabPanelHeader Title="Charts" Icon="@LucideIcons.Activity">
     <HeaderActions>
-        <AppPrimaryButton
-                   StartIcon="@LucideIcons.Plus" OnClick="CreateChart">
+        <AppPrimaryButton Size="Size.Small"
+                          StartIcon="@LucideIcons.Plus" OnClick="CreateChart">
             Configure New
         </AppPrimaryButton>
     </HeaderActions>
@@ -24,19 +24,10 @@
     @if (!charts.Any())
     {
         <div class="d-flex flex-column align-center justify-center charts-empty-state">
-            <MudIcon Icon="@LucideIcons.Activity" Style="font-size:64px; color:var(--mud-palette-text-disabled)"/>
+            <MudIcon Icon="@LucideIcons.Activity" Class="charts-empty-icon"/>
             <MudText Typo="Typo.h6" Color="Color.Secondary">No charts yet</MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Style="max-width:380px">
-                Open a JSON message in the <strong>Browse</strong> tab, then click a numeric field
-                to create a chart or add it to an existing one.
-            </MudText>
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Style="max-width:420px">
-                <MudText Typo="Typo.caption">
-                    Look for the <MudIcon Icon="@LucideIcons.ChartLine" Style="font-size:14px; vertical-align:middle"/> icon next to numeric fields in the payload viewer.
-                </MudText>
-            </MudAlert>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                Choose <strong>Create New Chart</strong> to start fresh or <strong>Add to Existing</strong> to append a series.
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="charts-empty-copy">
+                Choose the chart icon beside a value in <strong>Browser</strong> or <strong>Nodes</strong> to start a chart.
             </MudText>
         </div>
     }

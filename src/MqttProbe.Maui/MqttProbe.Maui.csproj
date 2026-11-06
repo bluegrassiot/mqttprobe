@@ -113,7 +113,6 @@ System.IO.File.WriteAllText(FilePath, content);
 	<!--IOS SECTION-->
 	<PropertyGroup Condition="'$(TargetFramework)'=='net10.0-ios'">
 		<BuildIpa>True</BuildIpa>
-		<MtouchNoSymbolStrip>True</MtouchNoSymbolStrip>
 		<!-- CodesignKey/CodesignProvision are machine-specific (per Apple Developer account).
 		     Set them in MqttProbe.Maui.local.props (gitignored) to build/deploy iOS from Windows
 		     via a paired Mac. See that file's import at the top of this project. -->

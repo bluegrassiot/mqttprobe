@@ -20,6 +20,7 @@ Connect to any broker, browse/filter live topics, inspect payloads, chart payloa
   - XML
   - Plain text (UTF-8)
   - MessagePack
+  - CBOR
   - Sparkplug B
   - Protobuf, when schemas and topic mappings are installed via plugins
   - Hex-encoded text

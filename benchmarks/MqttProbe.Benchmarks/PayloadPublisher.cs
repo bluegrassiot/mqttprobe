@@ -177,6 +177,7 @@ public static class PayloadPublisher
         // Must match a topicPattern in the ChirpStack schema manifest, or the protobuf detector
         // never fires and the payload falls through to binary.
         PayloadFormat.ChirpStack => "application/1/device/0102030405060708/event/up",
+        PayloadFormat.Cbor => "benchmarks/payloads/cbor",
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, null)
     };
 }

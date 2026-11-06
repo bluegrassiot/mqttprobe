@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "id": "font-inter",
+      "name": "Inter",
+      "version": "variable",
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright (c) 2016 The Inter Project Authors",
+      "sourceUrl": "https://github.com/rsms/inter",
+      "documents": ["sil-open-font-license-1-1"]
+    },
+    {
+      "id": "font-jetbrains-mono",
+      "name": "JetBrains Mono",
+      "version": "unversioned",
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright 2020 The JetBrains Mono Project Authors",
+      "sourceUrl": "https://github.com/JetBrains/JetBrainsMono",
+      "documents": ["sil-open-font-license-1-1"]
+    },
+    {
+      "id": "font-chakra-petch",
+      "name": "Chakra Petch",
+      "version": "unversioned",
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright 2018 The Chakra Petch Project Authors",
+      "sourceUrl": "https://github.com/m4rc1e/Chakra-Petch",
+      "documents": ["sil-open-font-license-1-1"]
+    },
+    {
+      "id": "font-opendyslexic-nerd",
+      "name": "OpenDyslexic, Nerd Font patched builds",
+      "version": "unrecorded patcher build",
+      "license": "Bitstream Vera License",
+      "copyright": "Copyright (c) 2003 by Bitstream, Inc. All Rights Reserved",
+      "sourceUrl": "https://github.com/antijingoist/opendyslexic",
+      "documents": [
+        "bitstream-vera-license-opendyslexic",
+        "nerd-fonts-patcher-license"
+      ],
+      "notes": "The patcher version used for these files and the individual notices for patched-in icon sets are not recorded in this repository."
+    },
+    {
+      "id": "lucide-icons",
+      "name": "Lucide and Feather icon path data",
+      "version": "unversioned",
+      "license": "ISC and MIT",
+      "copyright": "Copyright (c) 2026 Lucide Icons and Contributors; Copyright (c) 2013-present Cole Bemis",
+      "sourceUrl": "https://github.com/lucide-icons/lucide",
+      "documents": ["isc-license-and-feather-notice-lucide"]
+    },
+    {
+      "id": "sparkplugnet",
+      "name": "SparkplugNet",
+      "version": "1.4.1",
+      "license": "MIT",
+      "copyright": "Copyright (c) Hämmer Electronics",
+      "sourceUrl": "https://github.com/HaeMmer/SparkplugNet",
+      "documents": ["mit-license-generic-text"],
+      "notes": "Consumed from the external/SparkplugNet git submodule as a project reference."
+    },
+    {
+      "id": "sparkplug-b-generated-code",
+      "name": "Sparkplug B generated code (SparkplugBProtobuf.cs)",
+      "version": "e33d56d2f427",
+      "license": "EPL-2.0",
+      "copyright": "Copyright (c) 2015, 2018 Cirrus Link Solutions and others",
+      "sourceUrl": "https://github.com/eclipse/tahu",
+      "documents": ["eclipse-public-license-2-0"],
+      "notes": "Generated from the Eclipse Tahu protocol buffer definition. MQTTProbe extends the upstream #pragma warning disable list; there are no functional changes. Source is available from the MQTTProbe public repository under EPL-2.0."
+    },
+    {
+      "id": "apexcharts-javascript",
+      "name": "ApexCharts JavaScript library",
+      "version": "6.5.0",
+      "license": "ApexCharts Community/Commercial dual license (unresolved)",
+      "copyright": "",
+      "sourceUrl": "https://github.com/apexcharts/apexcharts.js",
+      "documents": ["apexcharts-6-5-0-license-upstream-text"],
+      "notes": "Bundled by Blazor-ApexCharts as js/apexcharts.esm.js and served to the browser. Upstream terms are not MIT and are not resolved by this notice."
+    },
+    {
+      "id": "dotnet-runtime",
+      "name": ".NET runtime",
+      "version": "10.0.14",
+      "license": "MIT and third-party terms",
+      "copyright": "Copyright (c) .NET Foundation and Contributors",
+      "sourceUrl": "https://github.com/dotnet/runtime",
+      "documents": [
+        "mit-license-net-runtime-license-txt-10-0-14",
+        "microsoft-net-runtime-third-party-notices-10-0-14"
+      ],
+      "notes": "Bundled by iOS, Android, MacCatalyst and self-contained desktop builds. The notice files are from Microsoft.NETCore.App.Runtime.Mono.ios-arm64 10.0.14, byte-identical to the android-arm64 and maccatalyst-arm64 packs of the same version."
+    },
+    {
+      "id": "microsoft-ios-sdk",
+      "name": "Microsoft.iOS SDK",
+      "version": "27.1.10018",
+      "license": "MIT and third-party terms",
+      "copyright": "Copyright (c) .NET Foundation and Contributors",
+      "sourceUrl": "https://github.com/dotnet/macios",
+      "documents": ["microsoft-ios-sdk-license-27-1-10018"],
+      "notes": "Installed workload pack Microsoft.iOS.Runtime.ios-arm64.net10.0_27.1/27.1.10018 with .NET SDK 10.0.403."
+    },
+    {
+      "id": "microsoft-maccatalyst-sdk",
+      "name": "Microsoft.MacCatalyst SDK",
+      "version": "27.0.10742",
+      "license": "MIT and third-party terms",
+      "copyright": "Copyright (c) .NET Foundation and Contributors",
+      "sourceUrl": "https://github.com/dotnet/macios",
+      "documents": ["microsoft-ios-sdk-license-27-1-10018"],
+      "notes": "Installed workload pack Microsoft.MacCatalyst.Runtime.maccatalyst-arm64.net10.0_27.0/27.0.10742. Its SDK licence is byte-identical to the Microsoft.iOS copy reproduced here."
+    },
+    {
+      "id": "dotnet-android-runtime",
+      "name": ".NET for Android runtime",
+      "version": "36.1.118",
+      "license": "MIT and third-party terms",
+      "copyright": "Copyright (c) .NET Foundation and Contributors",
+      "sourceUrl": "https://github.com/dotnet/android",
+      "documents": [
+        "xamarin-android-third-party-notices-net-for-android-runtime-36-1",
+        "llvm-release-license"
+      ],
+      "notes": "Bundled from Microsoft.Android.Runtime.36.android/36.1.118."
+    },
+    {
+      "id": "dotnet-maui-platform-notices",
+      "name": ".NET MAUI platform notices",
+      "version": "10.0.110",
+      "license": "MIT and third-party terms",
+      "copyright": "Copyright (c) Microsoft Corporation. All rights reserved.",
+      "sourceUrl": "https://github.com/dotnet/maui",
+      "documents": [
+        "net-maui-third-party-notices-10-0-110",
+        "license-notice-for-iqkeyboardmanager"
+      ],
+      "notes": "The individual Microsoft.Maui.* packages also carry their own current third-party notice file, reproduced through those components."
+    }
+  ]
+}

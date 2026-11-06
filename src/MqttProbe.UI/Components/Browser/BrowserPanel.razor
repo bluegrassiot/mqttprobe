@@ -1,8 +1,7 @@
 @using MqttProbe.Core.Services.Configuration
 @inject IMessageStoreManager MessageStoreManager
+@inject ITopicSelectionStore TopicSelectionStore
 @inject IUiSettings UiSettings
-@inject IDialogService DialogService
-@inject ISnackbar Snackbar
 @inject ILogger<BrowserPanel> Logger
 @using Microsoft.Extensions.Logging
 @implements IAsyncDisposable
@@ -11,23 +10,18 @@
     <HeaderChips>
         @if (MessageStoreManager.RootTopicCount > 0)
         {
-            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
-                     Style="height:20px; font-size:0.7rem; padding:0 6px;">
-                @MessageStoreManager.RootTopicCount
-            </MudChip>
+            <span class="browser-root-count-chip-host">
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled"
+                         Class="browser-root-count-chip">
+                    @MessageStoreManager.RootTopicCount
+                </MudChip>
+            </span>
         }
     </HeaderChips>
-    <HeaderActions>
-        <AppDestructiveButton Size="Size.Medium"
-                   StartIcon="@LucideIcons.Trash2"
-                   MinWidth="true"
-                   Disabled="@(MessageStoreManager.RootTopicCount == 0)"
-                   OnClick="ClearAllMessages">
-            Clear
-        </AppDestructiveButton>
-    </HeaderActions>
 </TabPanelHeader>
+<CascadingValue Value="_bulkSelection" IsFixed="true">
 <div class="tab-panel-content">
+    <TopicBulkToolbar OnOpenTopicPicker="OpenMobilePicker"/>
     @if (MessageStoreManager.RootTopicCount == 0 && !UiSettings.IsHintDismissed("browser"))
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-2"
@@ -38,7 +32,7 @@
     <ErrorBoundary ErrorContent="_sectionError">
         <MudHidden Breakpoint="Breakpoint.SmAndDown">
             <div class="browser-split-wrap">
-                <MudSplitPanel Class="browser-split-panel"
+                <MudSplitPanel Class="browser-split-panel app-split-panel"
                                FirstPanelInitialSize="320" MinPanelSize="220"
                                PanelGap="6" ResetOnDoubleClick="true" Transparent="true">
                     <FirstPanel>
@@ -52,7 +46,7 @@
         </MudHidden>
         <MudHidden Breakpoint="Breakpoint.MdAndUp">
             <div class="browser-split-wrap browser-split-wrap--mobile">
-                @* Phone layout: topic bar + payload (CSS media query hides the split) *@
+                @* The desktop split would stack below the md boundary, so that range uses this layout instead. *@
                 <div class="browser-mobile-layout">
                     <MobileTopicBar HasTopics="@(MessageStoreManager.RootTopicCount > 0)"
                                     OnOpenPicker="OpenMobilePicker"/>
@@ -60,30 +54,20 @@
                         <PayloadBrowser/>
                     </div>
                 </div>
-                @* Tablet layout: stacked split (CSS media query hides the mobile bar) *@
-                <div class="browser-tablet-layout">
-                    <MudSplitPanel Class="browser-split-panel" Horizontal="true"
-                                   FirstPanelInitialSize="260" MinPanelSize="120"
-                                   PanelGap="6" ResetOnDoubleClick="true" Transparent="true">
-                        <FirstPanel>
-                            <TopicBrowser/>
-                        </FirstPanel>
-                        <SecondPanel>
-                            <PayloadBrowser/>
-                        </SecondPanel>
-                    </MudSplitPanel>
-                </div>
             </div>
         </MudHidden>
         <TopicPickerOverlay IsOpen="@_mobilePickerOpen" OnClose="CloseMobilePicker"/>
     </ErrorBoundary>
 </div>
+</CascadingValue>
 
 @code {
     private readonly RenderFragment<Exception> _sectionError = _ => @<SectionError />;
 
+    private TopicBulkSelection _bulkSelection = null!;
     private Timer? _updateTimer;
     private bool _disposed;
+    private bool _multiSelect;
     private int _lastCount;
     private bool _mobilePickerOpen;
 
@@ -92,8 +76,40 @@
 
     protected override void OnInitialized()
     {
+        _bulkSelection = new TopicBulkSelection(TopicSelectionStore);
+        _multiSelect = UiSettings.Ui.TopicTreeMultiSelect;
+        _bulkSelection.SetMultiSelect(_multiSelect);
         _lastCount = MessageStoreManager.RootTopicCount;
+        UiSettings.UiPreferencesChanged += OnUiPreferencesChanged;
         _updateTimer = CreateUpdateTimer();
+    }
+
+    private void OnUiPreferencesChanged() => _ = ApplyMultiSelectPreferenceAsync();
+
+    private async Task ApplyMultiSelectPreferenceAsync()
+    {
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                if (_disposed) return;
+
+                var multiSelect = UiSettings.Ui.TopicTreeMultiSelect;
+                if (multiSelect == _multiSelect) return;
+
+                _multiSelect = multiSelect;
+                _bulkSelection.SetMultiSelect(multiSelect);
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException) when (_disposed)
+        {
+            // The circuit was torn down before the preference was applied.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "BrowserPanel preference refresh failed");
+        }
     }
 
     protected virtual Timer? CreateUpdateTimer() => new Timer(_ =>
@@ -129,21 +145,6 @@
         }
     }
 
-    private async Task ClearAllMessages()
-    {
-        var confirmed = await DialogService.ShowMessageBoxAsync(
-            "Clear All Messages",
-            "This will remove all stored topics and messages. Continue?",
-            yesText: "Clear all", cancelText: "Cancel",
-            options: new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
-        if (confirmed != true)
-            return;
-
-        await MessageStoreManager.ClearAllMessages();
-        _lastCount = MessageStoreManager.RootTopicCount;
-        Snackbar.Add("All stored messages cleared.", Severity.Success);
-    }
-
     private async Task DismissHint()
     {
         await UiSettings.DismissHintAsync("browser");
@@ -153,6 +154,7 @@
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        UiSettings.UiPreferencesChanged -= OnUiPreferencesChanged;
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();
     }

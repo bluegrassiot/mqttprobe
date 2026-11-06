@@ -13,4 +13,5 @@ public enum PayloadFormat
     PlainText,
     Csv,
     ChirpStack,
+    Cbor,
 }

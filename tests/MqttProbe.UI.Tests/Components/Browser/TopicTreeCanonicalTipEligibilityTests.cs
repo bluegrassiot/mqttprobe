@@ -92,7 +92,7 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
     }
 
     [Test]
-    public void AliasSpellingOfANodeTipStaysLiteral()
+    public void EmptyLevelSpellingOfANodeTipStaysLiteral()
     {
         var tree = TopicSnapshotBuilder.Build(("spBv1.0/g/NDATA//n1", 2, true, false));
 
@@ -103,7 +103,8 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
             ("spBv1.0", 0, "spBv1.0"),
             ("g", 1, "spBv1.0/g"),
             ("NDATA", 2, "spBv1.0/g/NDATA"),
-            ("n1", 3, "spBv1.0/g/NDATA/n1"));
+            ("", 3, "spBv1.0/g/NDATA/"),
+            ("n1", 4, "spBv1.0/g/NDATA//n1"));
 
         var tip = rows[^1];
         tip.IsValueBearer.Should().BeTrue("the store does hold messages on the node");
@@ -111,7 +112,7 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
     }
 
     [Test]
-    public void AliasSpellingOfADeviceTipStaysLiteral()
+    public void EmptyLevelSpellingOfADeviceTipStaysLiteral()
     {
         var tree = TopicSnapshotBuilder.Build(("spBv1.0/g/DDATA/n//dev1", 2, true, false));
 
@@ -119,24 +120,35 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
 
         rows.Should().OnlyContain(row => !row.IsVirtualTopic);
         rows.Select(row => row.FullPath).Should().Equal(
-            "spBv1.0", "spBv1.0/g", "spBv1.0/g/DDATA", "spBv1.0/g/DDATA/n", "spBv1.0/g/DDATA/n/dev1");
+            "spBv1.0", "spBv1.0/g", "spBv1.0/g/DDATA", "spBv1.0/g/DDATA/n",
+            "spBv1.0/g/DDATA/n/", "spBv1.0/g/DDATA/n//dev1");
     }
 
-    [TestCase("spBv1.0/g/NDATA//n1")]
-    [TestCase("spBv1.0/g/NDATA/n1//")]
-    [TestCase("/spBv1.0/g/NDATA/n1")]
-    [TestCase("spBv1.0/g/NDATA///n1")]
-    public void LeadingTrailingAndRepeatedSeparatorsAllStayLiteral(string alias)
+    [TestCase("spBv1.0/g/NDATA//n1",
+        new[] { "spBv1.0", "spBv1.0/g", "spBv1.0/g/NDATA", "spBv1.0/g/NDATA/", "spBv1.0/g/NDATA//n1" })]
+    [TestCase("spBv1.0/g/NDATA/n1//",
+        new[]
+        {
+            "spBv1.0", "spBv1.0/g", "spBv1.0/g/NDATA", "spBv1.0/g/NDATA/n1",
+            "spBv1.0/g/NDATA/n1/", "spBv1.0/g/NDATA/n1//"
+        })]
+    [TestCase("/spBv1.0/g/NDATA/n1",
+        new[] { "", "/spBv1.0", "/spBv1.0/g", "/spBv1.0/g/NDATA", "/spBv1.0/g/NDATA/n1" })]
+    [TestCase("spBv1.0/g/NDATA///n1",
+        new[]
+        {
+            "spBv1.0", "spBv1.0/g", "spBv1.0/g/NDATA", "spBv1.0/g/NDATA/",
+            "spBv1.0/g/NDATA//", "spBv1.0/g/NDATA///n1"
+        })]
+    public void LeadingTrailingAndRepeatedSeparatorsAllStayLiteral(string alias, string[] expected)
     {
         var tree = TopicSnapshotBuilder.Build((alias, 1, true, false));
 
         var rows = Rows(tree);
 
         rows.Should().OnlyContain(row => !row.IsVirtualTopic);
-        rows[^1].FullPath.Should().Be("spBv1.0/g/NDATA/n1",
-            "the alias still lands on the normalized node, shown on its own path");
-        rows.Count(row => row.FullPath == "spBv1.0/g/NDATA/n1").Should().Be(1,
-            "the alias is not presented as a row of its own");
+        rows.Select(row => row.FullPath).Should().Equal(expected,
+            "every empty level keeps its own path and none of them takes the canonical node's row");
     }
 
     [TestCase("NBIRTH")]
@@ -197,7 +209,7 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
     }
 
     [Test]
-    public void ANodeObservedBothCanonicallyAndByAliasGroupsOnceAndKeepsTheStoreCounts()
+    public void ANodeObservedBothCanonicallyAndByEmptyLevelSpellingGroupsOnlyTheCanonicalPath()
     {
         var tree = TopicSnapshotBuilder.Build(
             ("spBv1.0/g/NDATA/n1", 2, true, true),
@@ -205,25 +217,27 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
 
         var rows = Rows(tree);
 
-        rows.Count(row => row.Kind == TopicTreeRowKind.SparkplugNode).Should().Be(1);
-        rows.Count(row => row.FullPath == "spBv1.0/g/NDATA/n1").Should().Be(1,
-            "the tip is presented once, never twice for the two spellings");
-        rows.Should().NotContain(row => row.FullPath == "spBv1.0/g/NDATA",
-            "the grouped tip leaves no residual prefix behind");
+        rows.Count(row => row.Kind == TopicTreeRowKind.SparkplugNode).Should().Be(1,
+            "only the canonical node path is an endpoint");
+        rows.Count(row => row.FullPath == "spBv1.0/g/NDATA/n1").Should().Be(1);
 
         var nodeRow = rows.Single(row => row.Kind == TopicTreeRowKind.SparkplugNode);
         nodeRow.DisplayName.Should().Be("n1");
         nodeRow.TopicCount.Should().Be(1);
-        nodeRow.MessageCount.Should().Be(5, "both spellings are the store's messages on this node");
+        nodeRow.MessageCount.Should().Be(2, "the empty-level spelling is a different path");
 
         var tip = rows.Single(row => row.FullPath == "spBv1.0/g/NDATA/n1");
         tip.DisplayName.Should().Be("spBv1.0/g/NDATA/n1", "a grouped leaf shows its real topic");
-        tip.MessageCount.Should().Be(5);
+        tip.MessageCount.Should().Be(2);
         tip.IsValueBearer.Should().BeTrue();
+
+        var literalTip = rows.Single(row => row.FullPath == "spBv1.0/g/NDATA//n1");
+        literalTip.IsVirtualTopic.Should().BeFalse("a spelling with an empty level stays literal");
+        literalTip.MessageCount.Should().Be(3);
     }
 
     [Test]
-    public void RetiringTheCanonicalHistoryReclassifiesTheAliasNodeAsLiteral()
+    public void RetiringTheCanonicalHistoryReclassifiesBothPathsAsLiteral()
     {
         const string Tip = "spBv1.0/g/NDATA/n1";
         var tree = TopicSnapshotBuilder.Build(
@@ -242,7 +256,8 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
 
         rows.Should().OnlyContain(row => !row.IsVirtualTopic);
         rows.Select(row => row.FullPath).Should().Equal(
-            "spBv1.0", "spBv1.0/g", "spBv1.0/g/NDATA", Tip);
+            "spBv1.0", "spBv1.0/g", "spBv1.0/g/NDATA",
+            "spBv1.0/g/NDATA/", "spBv1.0/g/NDATA//n1", Tip);
     }
 
     [Test]
@@ -259,8 +274,9 @@ public sealed class TopicTreeCanonicalTipEligibilityTests
         var tip = Node(tree, Tip);
         var rows = Rows(Replace(tree, Tip, tip with { HasObservedCanonicalTopic = false }));
 
-        rows.Select(row => row.FullPath).Should().Equal("spBv1.0", "spBv1.0/g", "spBv1.0/g/NDATA", Tip);
-        rows[^1].IsValueBearer.Should().BeFalse("retention emptied the tip itself");
+        rows.Select(row => row.FullPath).Should().Equal(
+            "spBv1.0", "spBv1.0/g", "spBv1.0/g/NDATA", "spBv1.0/g/NDATA/", "spBv1.0/g/NDATA//n1", Tip);
+        rows.Single(row => row.FullPath == Tip).IsValueBearer.Should().BeFalse("retention emptied the tip itself");
         rows.Should().OnlyContain(row => !row.IsVirtualTopic);
     }
 }

@@ -28,8 +28,26 @@
 .app-tabpanel-header__actions {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 8px;
+    min-width: 0;
+    max-width: 100%;
     margin-left: auto;
+}
+
+.app-tabpanel-header__actions ::deep .mud-button-root {
+    height: 30px;
+    min-height: 30px;
+    padding: 0 12px;
+    font-size: 0.8125rem;
+    line-height: 1;
+}
+
+@media (max-width: 480px) {
+    .app-tabpanel-header__actions ::deep .mud-button-root {
+        min-width: 0;
+    }
 }
 
 .app-tabpanel-header__filters {
@@ -42,8 +60,8 @@
 /* Phones: tighten further so header chrome doesn't dominate the viewport. */
 @media (max-width: 599px) {
     .app-tabpanel-header {
-        padding: 6px 0;
-        margin-bottom: 8px;
+        padding: 4px 0;
+        margin-bottom: 6px;
     }
 
     .app-tabpanel-header__title {

@@ -19,8 +19,8 @@
     min-height: 0;
 }
 
-/* Resizable split: side-by-side (topics left, payload right) on desktop and
-   stacked (topics top, payload bottom) on mobile */
+/* Resizable split: side-by-side (topics left, payload right) on desktop; the
+   mobile layout replaces it below 960px, where the split would stack. */
 .browser-split-wrap {
     flex: 1 1 auto;
     min-height: 0;
@@ -44,8 +44,7 @@
 
 /* MudSplitPanel's .child-panel gets `flex:1 1 auto; overflow:hidden` from
    MudBlazor, but it is NOT a flex container. Make each child panel a flex column with min-height:0 so the
-   browser panes fill it and their own scroll areas activate. Applies to both
-   the side-by-side (desktop) and stacked (mobile) split layouts. */
+   browser panes fill it and their own scroll areas activate. */
 .browser-split-wrap ::deep .child-panel {
     display: flex;
     flex-direction: column;
@@ -55,17 +54,12 @@
 /* The divider look and grip live in components.css under .app-split-panel, shared
    with the Nodes split. */
 
-/* Mobile layout: visible only below 600px */
+/* Mobile layout: visible below 960px, where the desktop split would stack. */
 .browser-mobile-layout {
     display: none;
 }
 
-/* Tablet layout: visible between 600px and 959px */
-.browser-tablet-layout {
-    display: contents;
-}
-
-@media (max-width: 599.98px) {
+@media (max-width: 959.98px) {
     .browser-mobile-layout {
         display: flex;
         flex-direction: column;
@@ -79,14 +73,12 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
-        /* BrowserPanel isn't wrapped in .tab-panel-content (it manages its own
-           flex chain), so reserve space for the fixed mobile nav bar here —
-           otherwise the payload panel's bottom edge (and its horizontal
-           scrollbar) sits underneath the bar. Matches .tab-panel-content. */
-        padding-bottom: 64px;
     }
+}
 
-    .browser-tablet-layout {
-        display: none;
+/* Reserve space for the fixed mobile nav bar only where it exists. */
+@media (max-width: 599.98px) {
+    .browser-mobile-payload {
+        padding-bottom: 64px;
     }
 }

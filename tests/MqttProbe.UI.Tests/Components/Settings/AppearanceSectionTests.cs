@@ -84,6 +84,16 @@ public class AppearanceSectionTests : BunitTestContext
     }
 
     [Test]
+    public void Helpers_UseTheSharedCaptionStyling()
+    {
+        var cut = Render<AppearanceSection>();
+
+        cut.FindAll(".settings-caption").Should().HaveCount(2);
+        cut.FindAll(".mud-input-helper-text").Should().BeEmpty(
+            "the font-profile hint now uses the same caption treatment as multi-select");
+    }
+
+    [Test]
     public void Section_RendersNoPanelChrome()
     {
         var cut = Render<AppearanceSection>();

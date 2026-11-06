@@ -9,8 +9,8 @@
 
 <TabPanelHeader Title="Charts" Icon="@LucideIcons.Activity">
     <HeaderActions>
-        <AppPrimaryButton
-                   StartIcon="@LucideIcons.Plus" OnClick="CreateChart">
+        <AppPrimaryButton Size="Size.Small"
+                          StartIcon="@LucideIcons.Plus" OnClick="CreateChart">
             Configure New
         </AppPrimaryButton>
     </HeaderActions>
@@ -27,18 +27,7 @@
             <MudIcon Icon="@LucideIcons.Activity" Class="charts-empty-icon"/>
             <MudText Typo="Typo.h6" Color="Color.Secondary">No charts yet</MudText>
             <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="charts-empty-copy">
-                In the <strong>Nodes</strong> tab, select a node or device, then choose the chart icon on a numeric, boolean, or datetime metric row.
-                In the <strong>Browser</strong> tab, open a JSON message and choose a numeric field.
-            </MudText>
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="charts-empty-alert">
-                <MudText Typo="Typo.caption">
-                    Look for the <MudIcon Icon="@LucideIcons.ChartLine" Class="charts-help-icon"/> icon next to chartable values.
-                    In Nodes, String-valued metrics are skipped because their values are not exposed under a stable metric name.
-                    In Browser message details, numeric strings can still be charted by their indexed path.
-                </MudText>
-            </MudAlert>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                Choose <strong>Create New Chart</strong> to start fresh or <strong>Add to Existing</strong> to append a series.
+                Choose the chart icon beside a value in <strong>Browser</strong> or <strong>Nodes</strong> to start a chart.
             </MudText>
         </div>
     }

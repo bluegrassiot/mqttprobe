@@ -29,5 +29,6 @@ public abstract class BunitTestContext : BunitContext
         AuthorizationContext = this.AddAuthorization();
     }
 
-    protected void EnsureMudProviders() => Render<MudPopoverProvider>();
+    protected IRenderedComponent<MudPopoverProvider> EnsureMudProviders() =>
+        Render<MudPopoverProvider>();
 }

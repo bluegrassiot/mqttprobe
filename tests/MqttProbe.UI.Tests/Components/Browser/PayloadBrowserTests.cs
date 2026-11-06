@@ -93,6 +93,20 @@ public class PayloadBrowserTests : BunitTestContext
 
 
     [Test]
+    public void MessageList_LongPayload_PreviewIsWrappedAndTruncated()
+    {
+        var payload = new string('x', 300);
+        ReturnMessages([new MqttMessage { Topic = "sensor/temp", Payload = payload }]);
+        EnsureMudProviders();
+
+        var cut = Render<PayloadBrowser>();
+
+        cut.WaitForAssertion(() => cut.FindAll(".pb-cell-payload .pb-payload-preview")
+            .Should().ContainSingle("the clamped preview needs its own block inside the table cell"));
+        cut.Find(".pb-payload-preview").TextContent.Should().Be(payload[..250] + "…");
+    }
+
+    [Test]
     public void MessageList_AtOrAboveCap_ShowsTruncationWarning()
     {
         var messages = Enumerable.Range(0, 600)

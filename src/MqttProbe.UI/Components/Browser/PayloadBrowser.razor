@@ -356,7 +356,9 @@ else
                     </MudTd>
                     <MudTd DataLabel="Topic" Class="metrics-mono metrics-compact pb-cell-topic">@context.Topic</MudTd>
                     <MudTd DataLabel="Payload" Class="metrics-mono metrics-compact pb-cell-payload">
-                        @(context.Payload is { Length: > 250 } ? $"{context.Payload[..250]}…" : context.Payload)
+                        <div class="pb-payload-preview">
+                            @(context.Payload is { Length: > 250 } ? $"{context.Payload[..250]}…" : context.Payload)
+                        </div>
                     </MudTd>
                     <MudTd DataLabel="" Class="pb-cell-flag">
                         @if (context.RetainedMessage)

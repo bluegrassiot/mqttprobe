@@ -42,6 +42,7 @@ public class IndexTests : BunitTestContext
     private IChartSettings _mockCharts = null!;
     private IConnectionSessionLifecycle _mockLifecycle = null!;
     private Connection _selectedConnection = null!;
+    private IRenderedComponent<MudPopoverProvider> _popovers = null!;
 
     [SetUp]
     public void SetupMocks()
@@ -102,7 +103,7 @@ public class IndexTests : BunitTestContext
         Services.AddSingleton<IFormatDisplayNames>(new FormatDisplayNames(pipeline));
 
         AuthorizationContext.SetAuthorized("testuser").SetRoles(AppRoles.Operator);
-        EnsureMudProviders();
+        _popovers = EnsureMudProviders();
     }
 
     [Test]
@@ -206,32 +207,99 @@ public class IndexTests : BunitTestContext
 
         var navButtons = cut.FindAll(".mobile-nav-btn");
         navButtons.Should().Contain(b => b.TextContent.Contains("Browser"));
+        navButtons.Should().Contain(b => b.TextContent.Contains("Subscriptions"));
         navButtons.Should().Contain(b => b.TextContent.Contains("Charts"));
         navButtons.Should().Contain(b => b.TextContent.Contains("Publish"));
     }
 
     [Test]
-    public void MobileNav_ShowsNodes_WhenTopologyHasGroups()
+    public void MobileNav_PutsSubscriptionsInTheNodesPosition()
+    {
+        var cut = Render<IndexPage>();
+
+        var labels = cut.FindAll(".mobile-nav-btn")
+            .Take(3)
+            .Select(button => button.TextContent.Trim())
+            .ToList();
+
+        labels[0].Should().Contain("Browser");
+        labels[1].Should().Contain("Subscriptions");
+        labels[2].Should().Contain("Charts");
+    }
+
+    [Test]
+    public void MoreMenu_ContainsNodes_WhenTopologyHasGroups()
     {
         var group = new SpbGroup();
         group.Nodes["n1"] = new SpbNode { NodeId = "n1", GroupId = "g1", Status = SpbNodeStatus.Online };
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["g1"] = group });
 
         var cut = Render<IndexPage>();
+        var providers = _popovers;
 
-        cut.FindAll(".mobile-nav-btn")
-            .Should().Contain(b => b.TextContent.Contains("Nodes"));
+        cut.FindAll(".mobile-nav-btn").Should().NotContain(b => b.TextContent.Contains("Nodes"),
+            "Nodes moved into the overflow menu");
+        cut.Find(".mobile-nav-more button").Click();
+
+        providers.WaitForAssertion(() => providers.FindAll(".mud-menu-item")
+            .Should().Contain(item => item.TextContent.Contains("Nodes")));
     }
 
     [Test]
-    public void MobileNav_HidesNodes_WhenTopologyEmpty()
+    public void MoreMenu_OmitsNodes_WhenTopologyEmpty()
     {
         _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup>());
 
         var cut = Render<IndexPage>();
+        var providers = _popovers;
 
         cut.FindAll(".mobile-nav-btn")
             .Should().NotContain(b => b.TextContent.Contains("Nodes"));
+        cut.Find(".mobile-nav-more button").Click();
+
+        providers.WaitForAssertion(() => providers.FindAll(".mud-menu-item")
+            .Should().NotContain(item => item.TextContent.Contains("Nodes")));
+    }
+
+    [Test]
+    public void MoreMenu_MarksActiveOverflowDestination()
+    {
+        var group = new SpbGroup();
+        group.Nodes["n1"] = new SpbNode { NodeId = "n1", GroupId = "g1", Status = SpbNodeStatus.Online };
+        _mockTopology.Groups.Returns(new Dictionary<string, SpbGroup> { ["g1"] = group });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/?tab=nodes");
+
+        var cut = Render<IndexPage>();
+        var providers = _popovers;
+
+        cut.Find(".mobile-nav-more").ClassList.Should().Contain("active");
+        cut.Find(".mobile-nav-more button").Click();
+
+        providers.WaitForAssertion(() =>
+        {
+            var nodes = providers.FindAll(".mud-menu-item")
+                .Where(item => item.TextContent.Contains("Nodes"))
+                .Should().ContainSingle().Subject;
+            nodes.GetAttribute("aria-current").Should().Be("page");
+        });
+    }
+
+    [Test]
+    public void MobileNav_ShowsCountBadgeAndKeepsFullAccessibleLabel()
+    {
+        _mockSubManager.Subscriptions.Returns([
+            new SubscribedTopic { Topic = "sensors/a" },
+            new SubscribedTopic { Topic = "sensors/b" }
+        ]);
+
+        var cut = Render<IndexPage>();
+
+        var subscriptions = cut.FindAll(".mobile-nav-btn")
+            .First(button => button.TextContent.Contains("Subscriptions"));
+        subscriptions.QuerySelector(".mobile-nav-count")!.TextContent.Trim().Should().Be("2");
+        subscriptions.TextContent.Should().NotContain("(2)",
+            "the count is a compact badge, not part of the wrapping label");
+        subscriptions.GetAttribute("aria-label").Should().Be("Subscriptions (2)");
     }
 
     [Test]

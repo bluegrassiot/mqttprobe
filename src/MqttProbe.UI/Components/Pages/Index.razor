@@ -17,17 +17,27 @@
 <PageTitle>MQTTProbe</PageTitle>
 
 <nav class="mobile-primary-nav" aria-label="Primary navigation">
-    @foreach (var dest in _destinations.Where(d => d.IsMobilePrimary && d.IsVisible()))
+    @foreach (var dest in _destinations
+        .Where(d => d.IsMobilePrimary && d.IsVisible())
+        .OrderBy(d => d.MobileOrder))
     {
+        var (mobileLabel, mobileCount) = SplitMobileLabel(dest.Label());
         @if (dest.RequiresOperatorRole)
         {
             <AuthorizeView Roles="Admin,Operator">
                 <Authorized>
                     <button class="mobile-nav-btn @(IsSlugActive(dest.Slug) ? "active" : "")"
                             @onclick="() => OnDestinationSelected(dest)"
+                            aria-label="@dest.Label()"
                             aria-current="@(IsSlugActive(dest.Slug) ? "page" : null)">
-                        <MudIcon Icon="@dest.Icon" Size="Size.Medium" />
-                        <span>@dest.Label()</span>
+                        <span class="mobile-nav-icon">
+                            <MudIcon Icon="@dest.Icon" Size="Size.Medium" />
+                            @if (mobileCount is not null)
+                            {
+                                <span class="mobile-nav-count" aria-hidden="true">@mobileCount</span>
+                            }
+                        </span>
+                        <span class="mobile-nav-label">@mobileLabel</span>
                     </button>
                 </Authorized>
             </AuthorizeView>
@@ -36,9 +46,16 @@
         {
             <button class="mobile-nav-btn @(IsSlugActive(dest.Slug) ? "active" : "")"
                     @onclick="() => OnDestinationSelected(dest)"
+                    aria-label="@dest.Label()"
                     aria-current="@(IsSlugActive(dest.Slug) ? "page" : null)">
-                <MudIcon Icon="@dest.Icon" Size="Size.Medium" />
-                <span>@dest.Label()</span>
+                <span class="mobile-nav-icon">
+                    <MudIcon Icon="@dest.Icon" Size="Size.Medium" />
+                    @if (mobileCount is not null)
+                    {
+                        <span class="mobile-nav-count" aria-hidden="true">@mobileCount</span>
+                    }
+                </span>
+                <span class="mobile-nav-label">@mobileLabel</span>
             </button>
         }
     }
@@ -53,7 +70,7 @@
            makes mobile browsers zoom out and the fixed nav bar vanish. *@
         <MudMenu Icon="@LucideIcons.MoreVertical" Size="Size.Medium"
                  AnchorOrigin="Origin.TopRight" TransformOrigin="Origin.BottomRight"
-                 Class="mobile-nav-btn mobile-nav-more"
+                 Class="@MoreMenuClass"
                  AriaLabel="More navigation options">
             @foreach (var dest in moreItems)
             {
@@ -62,6 +79,7 @@
                     <AuthorizeView Roles="Admin,Operator">
                         <Authorized>
                             <MudMenuItem Icon="@dest.Icon"
+                                         aria-current="@(IsSlugActive(dest.Slug) ? "page" : null)"
                                          OnClick="() => OnDestinationSelected(dest)">
                                 @dest.Label()
                             </MudMenuItem>
@@ -71,6 +89,7 @@
                 else
                 {
                     <MudMenuItem Icon="@dest.Icon"
+                                 aria-current="@(IsSlugActive(dest.Slug) ? "page" : null)"
                                  OnClick="() => OnDestinationSelected(dest)">
                         @dest.Label()
                     </MudMenuItem>
@@ -121,15 +140,6 @@
         <div class="tab-panel-content">
             @if (CanShowWorkspaceContent("charts"))
             {
-                @if (!ChartSettings.GetCharts(SessionState.SelectedConnection.Id).Any() && !UiSettings.IsHintDismissed("charts"))
-                {
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3"
-                              ShowCloseIcon="true" CloseIconClicked="@(() => DismissHint("charts"))">
-                        <strong>Start here:</strong> in Browser, open a JSON message and choose a numeric field. In Nodes, select a node or device, then choose the chart icon on a numeric, boolean, or datetime metric row.
-                        Nodes skips String-valued metrics because their values are not exposed under a stable metric name.
-                        Browser message details can still chart numeric strings by their indexed path.
-                    </MudAlert>
-                }
                 <ErrorBoundary ErrorContent="_sectionError">
                     <Charts/>
                 </ErrorBoundary>
@@ -287,6 +297,20 @@
     private bool IsSlugActive(string slug) =>
         string.Equals(_activeSlug, slug, StringComparison.OrdinalIgnoreCase);
 
+    private static (string Label, string? Count) SplitMobileLabel(string label)
+    {
+        var marker = label.LastIndexOf(" (", StringComparison.Ordinal);
+        if (marker > 0 && label.EndsWith(')'))
+            return (label[..marker], label[(marker + 2)..^1]);
+        return (label, null);
+    }
+
+    private bool MoreMenuActive =>
+        _destinations.Any(d => !d.IsMobilePrimary && d.IsVisible() && IsSlugActive(d.Slug));
+
+    private string MoreMenuClass =>
+        MoreMenuActive ? "mobile-nav-btn mobile-nav-more active" : "mobile-nav-btn mobile-nav-more";
+
     private bool CanShowWorkspaceContent(string slug) =>
         MqttClient.IsConnected || !DestinationRequiresConnection(slug);
 
@@ -305,26 +329,27 @@
         bool IsMobilePrimary,
         Func<bool> IsVisible,
         bool RequiresOperatorRole = false,
-        bool RequiresConnection = true);
+        bool RequiresConnection = true,
+        int MobileOrder = 0);
 
     private IReadOnlyList<NavigationDestination> _destinations = null!;
 
     private IReadOnlyList<NavigationDestination> BuildDestinations() =>
     [
         new(0, "browser", () => BrowserTabLabel, LucideIcons.Eye,
-            IsMobilePrimary: true, IsVisible: () => true),
+            IsMobilePrimary: true, IsVisible: () => true, MobileOrder: 0),
         new(1, "nodes", () => NodesTabLabel, LucideIcons.Network,
-            IsMobilePrimary: true, IsVisible: () => TopologyService.Groups.Any()),
+            IsMobilePrimary: false, IsVisible: () => TopologyService.Groups.Any(), MobileOrder: 4),
         new(2, "charts", () => ChartsTabLabel, LucideIcons.Activity,
-            IsMobilePrimary: true, IsVisible: () => true),
+            IsMobilePrimary: true, IsVisible: () => true, MobileOrder: 2),
         new(3, "subscriptions", () => SubscriptionsTabLabel, LucideIcons.Layers,
-            IsMobilePrimary: false, IsVisible: () => true),
+            IsMobilePrimary: true, IsVisible: () => true, MobileOrder: 1),
         new(4, "publish", () => "Publish", LucideIcons.Send,
-            IsMobilePrimary: true, IsVisible: () => true, RequiresOperatorRole: true),
+            IsMobilePrimary: true, IsVisible: () => true, RequiresOperatorRole: true, MobileOrder: 3),
         new(5, "emulation", () => EmulationTabLabel, LucideIcons.Zap,
-            IsMobilePrimary: false, IsVisible: () => true, RequiresOperatorRole: true),
+            IsMobilePrimary: false, IsVisible: () => true, RequiresOperatorRole: true, MobileOrder: 5),
         new(6, "settings", () => "Settings", LucideIcons.Settings,
-            IsMobilePrimary: false, IsVisible: () => true, RequiresConnection: false),
+            IsMobilePrimary: false, IsVisible: () => true, RequiresConnection: false, MobileOrder: 6),
     ];
 
     protected override void OnInitialized()

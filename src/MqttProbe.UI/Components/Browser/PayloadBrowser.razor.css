@@ -278,19 +278,22 @@
     word-break: break-all;
 }
 
-@media (max-width: 959.98px) {
-    ::deep .payload-row td {
-        padding-top: 8px;
-        padding-bottom: 8px;
+/* A long unbroken payload makes the auto-layout table shrink the topic column
+   to one character. Keep the topic readable; the payload keeps its own
+   horizontal scroll. */
+@media (min-width: 960px) {
+    ::deep .payload-row .pb-cell-topic {
+        min-width: 160px;
     }
 }
 
 /* ── Mobile stacked rows ───────────────────────────────────────────────────
-   At phone widths the 13/28/54/5 column split leaves ~105px for the topic and
-   wraps everything into screen-tall rows. Collapse each row into a stacked
-   entry instead: time + retained flag on top, topic on one ellipsized line,
-   payload preview clamped to two lines. Desktop table is untouched. */
-@media (max-width: 599.98px) {
+   In the mobile layout the 13/28/54/5 column split leaves ~105px for the
+   topic and wraps everything into screen-tall rows. Collapse each row into a
+   stacked entry instead: time + retained flag on top, topic on one ellipsized
+   line, payload preview clamped to two lines. The desktop table keeps its own
+   layout. */
+@media (max-width: 959.98px) {
     /* Two clear lines: the topic gets the full width, then one row carries the
        current time mode, its short zone, and the settings trigger. */
     .payload-list-header {
@@ -475,9 +478,9 @@
     white-space: pre-wrap;
 }
 
-/* Phones: the fixed label column and the two-column user property table leave
-   long names and values too little room. */
-@media (max-width: 599.98px) {
+/* Mobile layout: the fixed label column and the two-column user property table
+   leave long names and values too little room. */
+@media (max-width: 959.98px) {
     .pb-meta-label {
         width: 88px;
     }

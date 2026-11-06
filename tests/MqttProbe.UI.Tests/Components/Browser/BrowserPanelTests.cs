@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Mqtt;
@@ -109,6 +110,28 @@ public class BrowserPanelTests : BunitTestContext
         cut.Markup.Should().Contain("browser-mobile-layout");
     }
 
+    [TestCase(Breakpoint.Md, true)]
+    [TestCase(Breakpoint.Lg, true)]
+    [TestCase(Breakpoint.Sm, false)]
+    [TestCase(Breakpoint.Xs, false)]
+    public void Layout_SelectsDesktopSplitOrMobileLayout_WithoutAnIntermediateStackedSplit(
+        Breakpoint breakpoint, bool desktop)
+    {
+        var cut = RenderPanel(breakpoint);
+
+        if (desktop)
+        {
+            cut.FindComponents<MudSplitPanel>().Should().ContainSingle(
+                "only the desktop layout keeps the resizable split");
+            cut.FindAll(".browser-mobile-layout").Should().BeEmpty();
+        }
+        else
+        {
+            cut.FindComponents<MudSplitPanel>().Should().BeEmpty();
+            cut.FindAll(".browser-mobile-layout").Should().ContainSingle();
+        }
+    }
+
     [Test]
     public void MobileLayout_RendersTopicPickerOverlay()
     {
@@ -140,5 +163,19 @@ public class BrowserPanelTests : BunitTestContext
         cut.Render();
 
         cut.Markup.Should().NotContain("topic-picker-overlay__panel");
+    }
+
+    private IRenderedComponent<BrowserPanel> RenderPanel(Breakpoint breakpoint)
+    {
+        var wrapper = Render<CascadingValue<Breakpoint>>(parameters => parameters
+            .Add(value => value.Value, breakpoint)
+            .Add(value => value.IsFixed, true)
+            .Add(value => value.ChildContent, (RenderFragment)(builder =>
+            {
+                builder.OpenComponent<BrowserPanel>(0);
+                builder.CloseComponent();
+            })));
+
+        return wrapper.FindComponent<BrowserPanel>();
     }
 }

@@ -46,26 +46,13 @@
         </MudHidden>
         <MudHidden Breakpoint="Breakpoint.MdAndUp">
             <div class="browser-split-wrap browser-split-wrap--mobile">
-                @* Phone layout: topic bar + payload (CSS media query hides the split) *@
+                @* The desktop split would stack below the md boundary, so that range uses this layout instead. *@
                 <div class="browser-mobile-layout">
                     <MobileTopicBar HasTopics="@(MessageStoreManager.RootTopicCount > 0)"
                                     OnOpenPicker="OpenMobilePicker"/>
                     <div class="browser-mobile-payload">
                         <PayloadBrowser/>
                     </div>
-                </div>
-                @* Tablet layout: stacked split (CSS media query hides the mobile bar) *@
-                <div class="browser-tablet-layout">
-                    <MudSplitPanel Class="browser-split-panel app-split-panel" Horizontal="true"
-                                   FirstPanelInitialSize="260" MinPanelSize="120"
-                                   PanelGap="6" ResetOnDoubleClick="true" Transparent="true">
-                        <FirstPanel>
-                            <TopicBrowser/>
-                        </FirstPanel>
-                        <SecondPanel>
-                            <PayloadBrowser/>
-                        </SecondPanel>
-                    </MudSplitPanel>
                 </div>
             </div>
         </MudHidden>

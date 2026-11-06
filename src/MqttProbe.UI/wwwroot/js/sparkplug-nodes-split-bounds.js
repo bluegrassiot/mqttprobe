@@ -191,6 +191,35 @@ export function detach(attachment) {
     activeAttachments.get(attachment)?.();
 }
 
+export function ensureSized(wrapper) {
+    if (!wrapper) {
+        return false;
+    }
+
+    const panel = wrapper.querySelector('.mud-split-panel.app-split-panel');
+    if (!panel?.id || !panel.isConnected) {
+        return false;
+    }
+
+    const runtime = window.splitPanels?.[panel.id];
+    if (!runtime?.container || runtime.container !== panel || !runtime.container.isConnected
+        || !runtime.firstPanel || !runtime.secondPanel || !runtime.divider
+        || typeof runtime.getDividerPosition !== 'function'
+        || typeof runtime.resetSizes !== 'function'
+        || typeof runtime._getContainerSize !== 'function'
+        || typeof runtime._setPanelSizes !== 'function') {
+        return false;
+    }
+
+    const position = runtime.getDividerPosition();
+    if (!Number.isFinite(position) || position <= 0) {
+        return false;
+    }
+
+    runtime.resetSizes();
+    return true;
+}
+
 function readNumber(style, property, fallback) {
     const value = Number.parseFloat(style.getPropertyValue(property));
     return Number.isFinite(value) ? value : fallback;

@@ -102,6 +102,7 @@
     private ElementReference _splitWrapper;
     private SparkplugSplitBoundsInterop? _splitBounds;
     private MudSplitPanel? _boundsPanel;
+    private string? _boundsWrapperId;
     private bool _boundsInstalled;
     private bool _splitSized;
 
@@ -171,28 +172,45 @@
         if (_splitPanel is null)
         {
             _boundsPanel = null;
+            _boundsWrapperId = null;
             return;
         }
 
-        if (!ReferenceEquals(_splitPanel, _boundsPanel))
+        var panel = _splitPanel;
+        var wrapper = _splitWrapper;
+
+        if (!ReferenceEquals(panel, _boundsPanel)
+            || !string.Equals(_boundsWrapperId, wrapper.Id, StringComparison.Ordinal))
         {
-            _boundsPanel = _splitPanel;
-            if (_splitBounds is not null)
-                await _splitBounds.AttachAsync(_splitWrapper);
+            if (_splitBounds is null || !await _splitBounds.AttachAsync(wrapper))
+                return;
+
+            if (_disposed || !IsCurrentSplit(panel, wrapper))
+                return;
+
+            _boundsPanel = panel;
+            _boundsWrapperId = wrapper.Id;
+            _splitSized = false;
         }
 
-        if (_disposed) return;
-
-        if (_splitSized) return;
-
-        if (await _splitPanel.GetDividerPositionAsync() <= 0)
+        if (_disposed || _splitSized || _splitBounds is null)
             return;
 
-        if (_disposed) return;
+        if (!IsCurrentSplit(panel, wrapper))
+            return;
+
+        if (!await _splitBounds.EnsureSizedAsync(wrapper))
+            return;
+
+        if (_disposed || !IsCurrentSplit(panel, wrapper))
+            return;
 
         _splitSized = true;
-        await _splitPanel.ResetDividerPositionAsync();
     }
+
+    private bool IsCurrentSplit(MudSplitPanel panel, ElementReference wrapper) =>
+        ReferenceEquals(_splitPanel, panel)
+        && string.Equals(_splitWrapper.Id, wrapper.Id, StringComparison.Ordinal);
 
     private async Task RequestRenderSafelyAsync()
     {

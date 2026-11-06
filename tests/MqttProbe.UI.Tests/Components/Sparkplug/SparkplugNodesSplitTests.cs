@@ -164,6 +164,68 @@ public class SparkplugNodesSplitTests : BunitTestContext
     }
 
     [Test]
+    [CancelAfter(10_000)]
+    public async Task DesktopSplit_OverlappingRenderDuringPendingAttachment_AttachesAndSizesOnce()
+    {
+        var module = _gatedModule;
+        _gatedRuntime.Enabled = true;
+        var (cut, view) = RenderTrackedNodes();
+
+        cut.WaitForAssertion(() => module.AttachCount.Should().Be(1));
+        view.StartedCount.Should().Be(1);
+
+        cut.Render();
+        cut.WaitForAssertion(() => view.StartedCount.Should().Be(2));
+
+        module.ReleaseAttach(1);
+
+        await Task.WhenAll(view.Renders);
+
+        module.AttachCount.Should().Be(1);
+        module.EnsureCount.Should().Be(1);
+
+        cut.Render();
+        await Task.WhenAll(view.Renders);
+
+        module.AttachCount.Should().Be(1);
+        module.EnsureCount.Should().Be(1);
+    }
+
+    [Test]
+    [CancelAfter(10_000)]
+    public async Task DesktopSplit_OverlappingRenderDuringPendingSizing_DoesNotQueueAnotherSizing()
+    {
+        var module = _gatedModule;
+        _gatedRuntime.Enabled = true;
+        module.SetEnsureResult(false);
+        var (cut, view) = RenderTrackedNodes();
+
+        module.ReleaseAttach(1);
+        cut.WaitForAssertion(() => module.EnsureCount.Should().Be(1));
+        module.AttachCount.Should().Be(1);
+
+        module.HoldNextEnsure();
+        cut.Render();
+        cut.WaitForAssertion(() => module.EnsureCount.Should().Be(2));
+        cut.WaitForAssertion(() => view.StartedCount.Should().Be(2));
+
+        cut.Render();
+        cut.WaitForAssertion(() => view.StartedCount.Should().Be(3));
+        module.EnsureCount.Should().Be(2);
+
+        module.ReleaseEnsure(true);
+
+        await Task.WhenAll(view.Renders);
+
+        module.AttachCount.Should().Be(1);
+        module.EnsureCount.Should().Be(2);
+
+        cut.Render();
+        await Task.WhenAll(view.Renders);
+        module.EnsureCount.Should().Be(2);
+    }
+
+    [Test]
     public void DesktopSplit_WhenTheLegacyMudGetterThrows_DoesNotInvokeItOrRenderFallback()
     {
         var module = SetupSplitModule();
@@ -236,6 +298,21 @@ public class SparkplugNodesSplitTests : BunitTestContext
         return wrapper.FindComponent<SparkplugNodesView>();
     }
 
+    private (IRenderedComponent<TrackedNodesView> Cut, TrackedNodesView View) RenderTrackedNodes()
+    {
+        var wrapper = Render<CascadingValue<Breakpoint>>(parameters => parameters
+            .Add(value => value.Value, Breakpoint.Lg)
+            .Add(value => value.IsFixed, true)
+            .Add(value => value.ChildContent, (RenderFragment)(builder =>
+            {
+                builder.OpenComponent<TrackedNodesView>(0);
+                builder.CloseComponent();
+            })));
+
+        var cut = wrapper.FindComponent<TrackedNodesView>();
+        return (cut, cut.Instance);
+    }
+
     private sealed class GatedSplitJsRuntime(IJSRuntime inner, GatedSplitModule module) : IJSRuntime
     {
         public bool Enabled { get; set; }
@@ -254,14 +331,48 @@ public class SparkplugNodesSplitTests : BunitTestContext
 
     private sealed class GatedSplitModule : IJSObjectReference
     {
+        private readonly Lock _sync = new();
         private readonly List<string> _invocations = [];
         private readonly TaskCompletionSource<int?> _attach = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TaskCompletionSource<bool>? _ensureGate;
         private int _attachCount;
+        private bool _ensureResult = true;
 
-        public int AttachCount => _attachCount;
-        public int EnsureCount => _invocations.Count(invocation => invocation == "ensureSized");
+        public int AttachCount
+        {
+            get { lock (_sync) return _attachCount; }
+        }
+
+        public int EnsureCount
+        {
+            get { lock (_sync) return _invocations.Count(invocation => invocation == "ensureSized"); }
+        }
+
+        public void SetEnsureResult(bool result)
+        {
+            lock (_sync) _ensureResult = result;
+        }
 
         public void ReleaseAttach(int? token) => _attach.TrySetResult(token);
+
+        public void HoldNextEnsure()
+        {
+            lock (_sync)
+                _ensureGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        public void ReleaseEnsure(bool result)
+        {
+            TaskCompletionSource<bool>? gate;
+            lock (_sync)
+            {
+                _ensureResult = result;
+                gate = _ensureGate;
+                _ensureGate = null;
+            }
+
+            gate?.TrySetResult(result);
+        }
 
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)
             => InvokeAsync<TValue>(identifier, CancellationToken.None, args);
@@ -272,18 +383,15 @@ public class SparkplugNodesSplitTests : BunitTestContext
             switch (identifier)
             {
                 case "install":
-                    _invocations.Add("install");
+                    Record("install");
                     return ValueTask.FromResult(default(TValue)!);
                 case "attach":
-                    _invocations.Add("attach");
-                    return Interlocked.Increment(ref _attachCount) == 1
-                        ? AwaitAttachAsync<TValue>()
-                        : ValueTask.FromResult((TValue)(object)(int?)1);
+                    Record("attach");
+                    return AttachAsync<TValue>();
                 case "ensureSized":
-                    _invocations.Add("ensureSized");
-                    return ValueTask.FromResult((TValue)(object)true);
+                    return EnsureSizedAsync<TValue>();
                 case "detach":
-                    _invocations.Add($"detach:{args![0]}");
+                    Record($"detach:{args![0]}");
                     return ValueTask.FromResult(default(TValue)!);
                 default:
                     throw new InvalidOperationException($"Unexpected JS invocation: {identifier}");
@@ -292,10 +400,70 @@ public class SparkplugNodesSplitTests : BunitTestContext
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
+        private ValueTask<TValue> AttachAsync<TValue>()
+        {
+            int count;
+            lock (_sync) count = ++_attachCount;
+
+            return count == 1
+                ? AwaitAttachAsync<TValue>()
+                : ValueTask.FromResult((TValue)(object)(int?)1);
+        }
+
+        private ValueTask<TValue> EnsureSizedAsync<TValue>()
+        {
+            TaskCompletionSource<bool>? gate;
+            bool result;
+            lock (_sync)
+            {
+                _invocations.Add("ensureSized");
+                gate = _ensureGate;
+                result = _ensureResult;
+            }
+
+            return gate is null
+                ? ValueTask.FromResult((TValue)(object)result)
+                : AwaitEnsureAsync<TValue>(gate);
+        }
+
+        private void Record(string invocation)
+        {
+            lock (_sync) _invocations.Add(invocation);
+        }
+
         private async ValueTask<TValue> AwaitAttachAsync<TValue>()
         {
             var token = await _attach.Task;
             return token is null ? default! : (TValue)(object)token;
+        }
+
+        private static async ValueTask<TValue> AwaitEnsureAsync<TValue>(TaskCompletionSource<bool> gate)
+        {
+            var result = await gate.Task;
+            return (TValue)(object)result;
+        }
+    }
+
+    public sealed class TrackedNodesView : SparkplugNodesView
+    {
+        private readonly Lock _sync = new();
+        private readonly List<Task> _renders = [];
+
+        public int StartedCount
+        {
+            get { lock (_sync) return _renders.Count; }
+        }
+
+        public Task[] Renders
+        {
+            get { lock (_sync) return [.. _renders]; }
+        }
+
+        protected override Task OnAfterRenderAsync(bool firstRender)
+        {
+            var task = base.OnAfterRenderAsync(firstRender);
+            lock (_sync) _renders.Add(task);
+            return task;
         }
     }
 

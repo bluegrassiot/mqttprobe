@@ -104,6 +104,7 @@
     private MudSplitPanel? _boundsPanel;
     private string? _boundsWrapperId;
     private bool _boundsInstalled;
+    private readonly SemaphoreSlim _renderGate = new(1, 1);
     private bool _splitSized;
 
     private RenderFragment _nodeList => @<SparkplugNodeList Groups="@GroupedNodes.ToList()"
@@ -162,50 +163,58 @@
     // measurement is zero wide; reset it once it has a real width.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_disposed) return;
-
-        if (!_boundsInstalled && _splitBounds is not null)
-            _boundsInstalled = await _splitBounds.InstallAsync();
-
-        if (_disposed) return;
-
-        if (_splitPanel is null)
+        await _renderGate.WaitAsync();
+        try
         {
-            _boundsPanel = null;
-            _boundsWrapperId = null;
-            return;
-        }
+            if (_disposed) return;
 
-        var panel = _splitPanel;
-        var wrapper = _splitWrapper;
+            if (!_boundsInstalled && _splitBounds is not null)
+                _boundsInstalled = await _splitBounds.InstallAsync();
 
-        if (!ReferenceEquals(panel, _boundsPanel)
-            || !string.Equals(_boundsWrapperId, wrapper.Id, StringComparison.Ordinal))
-        {
-            if (_splitBounds is null || !await _splitBounds.AttachAsync(wrapper))
+            if (_disposed) return;
+
+            if (_splitPanel is null)
+            {
+                _boundsPanel = null;
+                _boundsWrapperId = null;
+                return;
+            }
+
+            var panel = _splitPanel;
+            var wrapper = _splitWrapper;
+
+            if (!ReferenceEquals(panel, _boundsPanel)
+                || !string.Equals(_boundsWrapperId, wrapper.Id, StringComparison.Ordinal))
+            {
+                if (_splitBounds is null || !await _splitBounds.AttachAsync(wrapper))
+                    return;
+
+                if (_disposed || !IsCurrentSplit(panel, wrapper))
+                    return;
+
+                _boundsPanel = panel;
+                _boundsWrapperId = wrapper.Id;
+                _splitSized = false;
+            }
+
+            if (_disposed || _splitSized || _splitBounds is null)
+                return;
+
+            if (!IsCurrentSplit(panel, wrapper))
+                return;
+
+            if (!await _splitBounds.EnsureSizedAsync(wrapper))
                 return;
 
             if (_disposed || !IsCurrentSplit(panel, wrapper))
                 return;
 
-            _boundsPanel = panel;
-            _boundsWrapperId = wrapper.Id;
-            _splitSized = false;
+            _splitSized = true;
         }
-
-        if (_disposed || _splitSized || _splitBounds is null)
-            return;
-
-        if (!IsCurrentSplit(panel, wrapper))
-            return;
-
-        if (!await _splitBounds.EnsureSizedAsync(wrapper))
-            return;
-
-        if (_disposed || !IsCurrentSplit(panel, wrapper))
-            return;
-
-        _splitSized = true;
+        finally
+        {
+            _renderGate.Release();
+        }
     }
 
     private bool IsCurrentSplit(MudSplitPanel panel, ElementReference wrapper) =>

@@ -9,6 +9,9 @@
     border-radius: 8px;
     background: color-mix(in srgb, var(--mud-palette-primary) 7%, transparent);
     flex-shrink: 0;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .topic-bulk-toolbar__summary {
@@ -37,21 +40,56 @@
 
 .topic-bulk-toolbar__mobile {
     display: none;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 8px;
     width: 100%;
+    max-width: 100%;
     min-width: 0;
     min-height: 44px;
+    box-sizing: border-box;
 }
 
 .topic-bulk-toolbar__mobile-count {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 600;
     font-size: 0.85rem;
+}
+
+.topic-bulk-toolbar__mobile-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+::deep .topic-bulk-toolbar__mobile-actions .mud-menu {
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+::deep .topic-bulk-toolbar__mobile-actions .app-mobile-bar-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* At the narrowest phones, tighten the gaps and button padding so the short
+   selection count still fits beside both actions. */
+@media (max-width: 359.98px) {
+    .topic-bulk-toolbar__mobile,
+    .topic-bulk-toolbar__mobile-actions {
+        gap: 4px;
+    }
+
+    ::deep .topic-bulk-toolbar__mobile-actions .app-mobile-bar-btn {
+        padding-left: 6px;
+        padding-right: 6px;
+    }
 }
 
 ::deep .topic-bulk-toolbar__actions-menu:focus-visible {

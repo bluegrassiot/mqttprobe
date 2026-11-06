@@ -7,6 +7,7 @@ public class BrowserResponsiveLayoutTests
     private const string BrowserCss = "src/MqttProbe.UI/Components/Browser/BrowserPanel.razor.css";
     private const string PayloadCss = "src/MqttProbe.UI/Components/Browser/PayloadBrowser.razor.css";
     private const string ToolbarCss = "src/MqttProbe.UI/Components/Browser/TopicBulkToolbar.razor.css";
+    private const string PickerCss = "src/MqttProbe.UI/Components/Browser/TopicPickerOverlay.razor.css";
 
     private const string DesktopSplitBoundary = "@media (max-width: 959.98px)";
     private const string PhoneBoundary = "@media (max-width: 599.98px)";
@@ -62,6 +63,44 @@ public class BrowserResponsiveLayoutTests
             .Should().Contain("display: flex");
     }
 
+    [Test]
+    public void ToolbarCss_GivesTheSelectionLabelTheOnlyFlexibleTrack()
+    {
+        var css = ReadRepositoryFile(ToolbarCss);
+
+        ReadRuleContaining(ToolbarCss, ".topic-bulk-toolbar__mobile-count {")
+            .Should().Contain("flex: 1 1 0");
+        ReadRuleContaining(ToolbarCss, ".topic-bulk-toolbar__mobile-actions {")
+            .Should().Contain("flex: 0 0 auto");
+        ReadRuleContaining(ToolbarCss, ".topic-bulk-toolbar__mobile-actions .app-mobile-bar-btn {")
+            .Should().Contain("white-space: nowrap");
+        ReadMediaBlockContaining(ToolbarCss, "@media (max-width: 359.98px)", ".topic-bulk-toolbar__mobile-actions {")
+            .Should().Contain("gap: 4px");
+        css.Should().Contain("min-width: 0");
+    }
+
+    [Test]
+    public void PickerCss_FillsTheViewportWithOneTreeScrollOwner()
+    {
+        var panel = ReadRuleContaining(PickerCss, ".topic-picker-overlay__panel {");
+        panel.Should().Contain("width: 100%");
+        panel.Should().Contain("height: 100dvh");
+        panel.Should().Contain("max-width: none");
+        panel.Should().Contain("max-height: 100dvh");
+        panel.Should().Contain("border-radius: 0");
+        panel.Should().Contain("env(safe-area-inset-top)");
+        panel.Should().Contain("env(safe-area-inset-bottom)");
+
+        ReadRuleContaining(PickerCss, ".topic-picker-overlay__body {")
+            .Should().Contain("overflow: hidden");
+        ReadRuleContaining(PickerCss, ".topic-browser-panel {")
+            .Should().Contain("flex: 1 1 auto").And.Contain("min-height: 0");
+        ReadRuleContaining(PickerCss, ".topic-header-row {")
+            .Should().Contain("justify-content: flex-end");
+        ReadRuleContaining(PickerCss, ".topic-header-row > :not(.topic-icon-key-toggle) {")
+            .Should().Contain("display: none");
+    }
+
     private static string ReadRepositoryFile(string relativePath)
     {
         var path = Path.GetFullPath(Path.Combine(
@@ -69,6 +108,15 @@ public class BrowserResponsiveLayoutTests
 
         File.Exists(path).Should().BeTrue($"expected the repository file at '{path}' to exist");
         return File.ReadAllText(path);
+    }
+
+    private static string ReadRuleContaining(string cssFilePath, string selector)
+    {
+        var css = ReadRepositoryFile(cssFilePath);
+        var index = css.IndexOf(selector, StringComparison.Ordinal);
+        index.Should().BeGreaterThanOrEqualTo(0,
+            $"expected '{selector}' in {cssFilePath}");
+        return ExtractBracedBlockFromFirstBrace(css[index..]);
     }
 
     private static string ReadMediaBlockContaining(string cssFilePath, string mediaQuery, string anchor)

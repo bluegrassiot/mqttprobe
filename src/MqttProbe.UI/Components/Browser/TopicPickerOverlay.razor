@@ -7,7 +7,7 @@
                       Elevation="8" Square="false">
                 <div class="topic-picker-overlay__header">
                     <MudText Typo="Typo.subtitle1" id="@TitleId" Class="topic-picker-overlay__title">Topics</MudText>
-                    <MudIconButton Icon="@LucideIcons.X" Size="Size.Small"
+                    <MudIconButton @ref="_closeButton" Icon="@LucideIcons.X" Size="Size.Small"
                                    Color="Color.Default" title="Close"
                                    OnClick="CloseWithoutSelection"/>
                 </div>
@@ -22,8 +22,25 @@
 @code {
     private const string TitleId = "topic-picker-overlay-title";
 
+    private MudIconButton? _closeButton;
+    private bool _wasOpen;
+
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsOpen && !_wasOpen)
+        {
+            _wasOpen = true;
+            if (_closeButton is not null)
+                await _closeButton.FocusAsync();
+        }
+        else if (!IsOpen)
+        {
+            _wasOpen = false;
+        }
+    }
 
     private async Task CloseWithoutSelection()
     {

@@ -98,6 +98,19 @@ public class SparkplugSplitBoundsInteropTests
     }
 
     [Test]
+    public async Task InstallAsync_ImportsTheVersionedModuleContract()
+    {
+        var js = new FakeJsRuntime(new FakeModule());
+        var interop = new SparkplugSplitBoundsInterop(js);
+
+        (await interop.InstallAsync()).Should().BeTrue();
+
+        js.ImportArguments.Should().ContainSingle();
+        js.ImportArguments[0]![0].Should()
+            .Be("./_content/MqttProbe.UI/js/sparkplug-nodes-split-bounds.js?v=2");
+    }
+
+    [Test]
     public async Task AttachAsync_ReturnsFalseWhenTheRuntimeIsNotReady()
     {
         var module = new FakeModule();
@@ -162,6 +175,7 @@ public class SparkplugSplitBoundsInteropTests
 
         internal Task ImportStarted => _importStarted.Task;
         internal int Imports { get; private set; }
+        internal List<object?[]?> ImportArguments { get; } = [];
 
         private readonly TaskCompletionSource _importStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -181,6 +195,7 @@ public class SparkplugSplitBoundsInteropTests
                 throw new InvalidOperationException($"Unexpected JS invocation: {identifier}");
 
             Imports++;
+            ImportArguments.Add(args);
             _importStarted.TrySetResult();
             if (_holdImport)
                 await _importGate.Task;

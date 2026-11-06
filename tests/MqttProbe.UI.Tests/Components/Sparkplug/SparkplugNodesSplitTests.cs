@@ -60,7 +60,7 @@ public class SparkplugNodesSplitTests : BunitTestContext
     [Test]
     public void DesktopSplit_AppliesBoundedDragInteropToTheNodesWrapper()
     {
-        var module = JSInterop.SetupModule("./_content/MqttProbe.UI/js/sparkplug-nodes-split-bounds.js");
+        var module = JSInterop.SetupModule("./_content/MqttProbe.UI/js/sparkplug-nodes-split-bounds.js?v=2");
         module.SetupVoid("install", _ => true).SetVoidResult();
         module.Setup<int?>("attach", _ => true).SetResult(1);
 
@@ -183,7 +183,7 @@ public class SparkplugNodesSplitTests : BunitTestContext
 
     private Bunit.BunitJSModuleInterop SetupSplitModule()
     {
-        var module = JSInterop.SetupModule("./_content/MqttProbe.UI/js/sparkplug-nodes-split-bounds.js");
+        var module = JSInterop.SetupModule("./_content/MqttProbe.UI/js/sparkplug-nodes-split-bounds.js?v=2");
         module.SetupVoid("install", _ => true).SetVoidResult();
         module.Setup<int?>("attach", _ => true).SetResult(1);
         return module;

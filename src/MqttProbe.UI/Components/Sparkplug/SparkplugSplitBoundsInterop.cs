@@ -5,7 +5,9 @@ namespace MqttProbe.UI.Components.Sparkplug;
 
 internal sealed class SparkplugSplitBoundsInterop(IJSRuntime js) : IAsyncDisposable
 {
-    private const string ModulePath = "./_content/MqttProbe.UI/js/sparkplug-nodes-split-bounds.js";
+    // Bump when the exported module contract changes so browsers cannot reuse an older module URL.
+    private const string ModulePath =
+        "./_content/MqttProbe.UI/js/sparkplug-nodes-split-bounds.js?v=2";
 
     // Disposal waits on this gate so an in-flight attach can still detach from a live module.
     private readonly SemaphoreSlim _gate = new(1, 1);

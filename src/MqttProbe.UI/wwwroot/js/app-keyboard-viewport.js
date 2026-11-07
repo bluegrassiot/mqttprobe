@@ -77,7 +77,15 @@
 
     const revealFocusedEditor = (band) => {
         const active = document.activeElement;
-        if (!band || !(active instanceof HTMLElement) || !isEditing() || active.closest('.mud-dialog-container')) {
+        const root = document.documentElement;
+        // A deferred callback must not act on a band the shell has replaced or dismissed.
+        if (!band
+            || !root.classList.contains(KEYBOARD_CLASS)
+            || root.style.getPropertyValue(HEIGHT_VARIABLE) !== `${band.height}px`
+            || root.style.getPropertyValue(TOP_INSET_VARIABLE) !== `${band.top}px`
+            || !(active instanceof HTMLElement)
+            || !isEditing()
+            || active.closest('.mud-dialog-container')) {
             return;
         }
 

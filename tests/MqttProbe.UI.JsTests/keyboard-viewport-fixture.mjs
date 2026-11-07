@@ -256,6 +256,58 @@ export async function createShell(options = {}) {
         blurTopic() {
             topic.blur();
         },
+        setFocusedEditor(options = {}) {
+            const {
+                fieldContentTop = 0,
+                fieldHeight = 20,
+                initialScrollTop = 0,
+                scrollerTop = 0,
+                scrollerHeight = 300,
+                scrollerScrollHeight = 2000,
+            } = options;
+            const other = createElement([], state);
+            other.scrollTop = 33;
+
+            const scroller = createElement([], state);
+            scroller.parentElement = document.body;
+            scroller.scrollLeft = 0;
+            scroller.clientHeight = scrollerHeight;
+            scroller.scrollHeight = scrollerScrollHeight;
+            scroller.computedOverflowY = 'auto';
+            let scrollTop = initialScrollTop;
+            Object.defineProperty(scroller, 'scrollTop', {
+                configurable: true,
+                get: () => scrollTop,
+                set: (value) => {
+                    const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+                    scrollTop = Math.max(0, Math.min(value, max));
+                },
+            });
+            scroller.getBoundingClientRect = () => ({
+                top: scrollerTop,
+                bottom: scrollerTop + scrollerHeight,
+                left: 0,
+                right: 600,
+                width: 600,
+                height: scrollerHeight,
+            });
+
+            const editor = createElement([], state);
+            editor.parentElement = scroller;
+            editor.matches = (selector) => String(selector).includes('textarea');
+            editor.closest = () => null;
+            editor.scrollIntoViewCalls = 0;
+            editor.scrollIntoView = () => {
+                editor.scrollIntoViewCalls += 1;
+            };
+            // Geometry follows the scroll position, as a real scroller's does.
+            editor.getBoundingClientRect = () => {
+                const top = fieldContentTop - scrollTop;
+                return { top, bottom: top + fieldHeight, left: 0, right: 600, width: 600, height: fieldHeight };
+            };
+            state.activeElement = editor;
+            return { editor, scroller, other };
+        },
         flush(limit = 200) {
             let remaining = limit;
             while (frames.length > 0 && remaining > 0) {
@@ -366,7 +418,11 @@ export async function createShell(options = {}) {
         dispatchEvent: windowTarget.dispatchEvent,
     };
 
-    const getComputedStyle = () => ({ overflowY: 'visible', paddingTop: '0px', paddingBottom: '0px' });
+    const getComputedStyle = (element) => ({
+        overflowY: element?.computedOverflowY ?? 'visible',
+        paddingTop: '0px',
+        paddingBottom: '0px',
+    });
     runtime.getComputedStyle = getComputedStyle;
 
     if (options.nativeState) {

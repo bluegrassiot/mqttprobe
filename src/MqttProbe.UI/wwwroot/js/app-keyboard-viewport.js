@@ -101,7 +101,11 @@
         const scrollerBand = scroller.getBoundingClientRect();
         const visibleTop = Math.max(scrollerBand.top, viewportTop) + REVEAL_MARGIN;
         const visibleBottom = Math.min(scrollerBand.bottom, viewportBottom) - REVEAL_MARGIN;
-        if (field.bottom > visibleBottom) {
+        const visibleHeight = visibleBottom - visibleTop;
+        // A field taller than the band cannot satisfy both edges; pin one so repeat reveals agree.
+        if (visibleHeight > 0 && field.height > visibleHeight) {
+            scroller.scrollTop += field.top - visibleTop;
+        } else if (field.bottom > visibleBottom) {
             scroller.scrollTop += field.bottom - visibleBottom;
         } else if (field.top < visibleTop) {
             scroller.scrollTop -= visibleTop - field.top;

@@ -125,7 +125,7 @@ Two traps: a folder named `Integration` under `MqttProbe.Core.Tests` holds in-pr
 
 ## Native iOS simulator acceptance (Mac)
 
-Detailed tooling and historical findings live in [the simulator notes](D:/Projects/Open/mqttprobe-docs/Projects/mqttprobe/simulator-orientation-cli.md). Re-check versions and current device state; earlier failed trials are not the final test method.
+This workflow was exercised with Xcode 27.1, an iOS 27.1 Duo simulator and an iOS 27.0 iPad simulator. Re-check tool versions and current device state before reusing it.
 
 - Target an explicit simulator UDID, never an ambiguous `booted` target. Record its runtime, posture, foreground app and keyboard state. Before replacing an app, preserve its artifact and data; verify built and installed assembly/JS hashes. Do not uninstall or reset user data.
 - For Duo fold/rotation, the verified tool was `skarol/duoctl` 0.2.1, commit `c6ff3e961a9858fb061907448e702d7d1617dc4a`. Use `duoctl -d <UDID> state`, `open`, `close`, `rotate portrait|landscape`, and `screenshot <path>`. Its private simulator APIs require explicit approval and version checks; never ship them in the app.

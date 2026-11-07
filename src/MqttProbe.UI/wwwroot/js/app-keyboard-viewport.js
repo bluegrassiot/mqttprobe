@@ -31,6 +31,8 @@
     let restRoot = null;
     let keyboardEpisode = false;
     let episodeRestHeight = 0;
+    let episodeWidth = 0;
+    let restorationWitness = null;
     let lastBand = null;
     let recoveryBand = null;
     let recoveryRestHeight = 0;
@@ -336,6 +338,7 @@
         if (Math.abs(window.innerWidth - lastWidth) > 1) {
             lastWidth = window.innerWidth;
             restRoot = null;
+            restorationWitness = null;
             if (!keyboardEpisode && !recoveryBand && validLayout) {
                 idleHeight = layoutHeight;
             }
@@ -405,9 +408,38 @@
         // The iOS container closes the keyboard itself, so a closed hint with a valid full
         // CURRENT viewport is a real dismissal even when the old idle height was larger.
         // Browsers without the native hint keep the legacy coverage heuristic below.
-        const settledFull = validLayout && !!measured
+        let settledFull = validLayout && !!measured
             && (native === 'closed' && layoutFull
                 || hiddenBottom <= MIN_KEYBOARD_OCCLUSION);
+
+        // A native hint is authoritative; the plain-browser witness belongs to absent only.
+        if (native !== 'absent') {
+            restorationWitness = null;
+        }
+
+        const fullCurrent = validLayout && !!measured && layoutFull && rawScaleIsOne();
+        const noRecovery = !panningNow && window.performance.now() >= recoveryHoldUntil;
+        const settledPosture = !posturePending
+            && Math.abs(window.innerWidth - postureSettledWidth) <= 1;
+        const postRotation = native === 'absent'
+            && keyboardEpisode
+            && noRecovery
+            && settledPosture
+            && Math.abs(window.innerWidth - episodeWidth) > 1;
+
+        if (restorationWitness
+            && Math.abs(window.innerWidth - restorationWitness.width) > 1) {
+            restorationWitness = null;
+        }
+
+        // A shorter layout alone is ambiguous; only growth after a settled rotation restores.
+        if (postRotation && fullCurrent && restorationWitness
+            && measured.height >= restorationWitness.height + MIN_KEYBOARD_OCCLUSION) {
+            keyboard = false;
+            settledFull = true;
+        } else if (postRotation && fullCurrent && !restorationWitness) {
+            restorationWitness = { width: window.innerWidth, height: measured.height };
+        }
 
         // WillHide can land before the geometry settles. That close is a checkpoint:
         // the visible keyboard is gone, but the band the reopen needs is not.
@@ -429,6 +461,7 @@
             if (keyboardEpisode) {
                 keyboardEpisode = false;
                 episodeRestHeight = 0;
+                restorationWitness = null;
                 scrollCorrectionUsed = false;
                 lastBand = null;
             }
@@ -452,6 +485,8 @@
                     && (window.innerWidth !== recoveryWidth || viewport.height !== recoveryViewportHeight)) {
                 // Only a new posture or new coverage resumes the interrupted episode.
                 keyboardEpisode = true;
+                episodeWidth = window.innerWidth;
+                restorationWitness = null;
                 episodeRestHeight = recoveryRestHeight;
                 lastBand = recoveryBand;
                 recoveryBand = null;
@@ -464,6 +499,8 @@
         if (keyboard) {
             if (!keyboardEpisode) {
                 keyboardEpisode = true;
+                episodeWidth = window.innerWidth;
+                restorationWitness = null;
                 // No restRoot on a real overflow; use the preserved idle height.
                 episodeRestHeight = restRoot ? restRoot.clientHeight : idleHeight;
             }
@@ -483,6 +520,7 @@
             if (keyboardEpisode && native !== 'open' && settledFull) {
                 keyboardEpisode = false;
                 episodeRestHeight = 0;
+                restorationWitness = null;
                 scrollCorrectionUsed = false;
                 lastBand = null;
                 // Never promote a keyboard-shrunken height to the resting baseline.

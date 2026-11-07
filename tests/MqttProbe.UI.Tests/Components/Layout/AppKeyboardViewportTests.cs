@@ -210,7 +210,7 @@ public class AppKeyboardViewportTests
         settlement.Should().Contain("const layoutFull = !!measured");
         settlement.Should().Contain("measured.height >= Math.round(layoutHeight / scale) - BAND_TOLERANCE",
             "settlement needs a valid full viewport for the current layout");
-        settlement.Should().Contain("const settledFull = validLayout && !!measured",
+        settlement.Should().Contain("let settledFull = validLayout && !!measured",
             "a broken measurement must not be accepted as dismissal");
         script.Should().Contain("hiddenBottom <= MIN_KEYBOARD_OCCLUSION",
             "the episode ends only when no geometric keyboard coverage remains");

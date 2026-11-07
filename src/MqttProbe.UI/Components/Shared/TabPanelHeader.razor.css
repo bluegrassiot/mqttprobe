@@ -57,8 +57,8 @@
     padding-top: 6px;
 }
 
-/* Phones: tighten further so header chrome doesn't dominate the viewport. */
-@media (max-width: 599px) {
+/* Compact: tighten further so header chrome doesn't dominate the viewport. */
+@media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px) {
     .app-tabpanel-header {
         padding: 4px 0;
         margin-bottom: 6px;

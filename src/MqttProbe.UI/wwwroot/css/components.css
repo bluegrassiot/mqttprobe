@@ -18,6 +18,11 @@
     min-height: 44px;
 }
 
+/* Fixed bottom navigation height plus its safe-area padding, reserved by compact pages. */
+:root {
+    --app-mobile-nav-reserve: calc(68px + env(safe-area-inset-bottom, 0px));
+}
+
 /* MudBlazor paints Color.Secondary with the palette accent and marks it
    !important. Rebind the token on prose so helpers use readable text-secondary. */
 .mud-typography.mud-secondary-text {
@@ -138,8 +143,8 @@ button:focus-visible {
     white-space: nowrap;
 }
 
-/* Long connection names must not crowd out the appbar actions on phones. */
-@media (max-width: 599px) {
+/* Long connection names must not crowd out the appbar actions in compact mode. */
+@media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px) {
     .mud-appbar .broker-chip .mud-chip-content {
         max-width: 100%;
     }
@@ -148,19 +153,59 @@ button:focus-visible {
 /* Hide the mobile bottom nav when a MudBlazor dialog is open so only the
    dialog's own navigation is visible. MudDialog renders in a portal outside
    the app shell, so a global :has() rule is the simplest override. */
-body:has(.mud-dialog-container) .mobile-primary-nav {
+body:has(.mud-dialog-container) .mobile-primary-nav,
+body:has(.topic-picker-overlay) .mobile-primary-nav {
     display: none;
 }
 
-/* The native iOS host adds this class only for a software keyboard. The WebView
-   already shrinks for the keyboard, so hide the fixed nav and release both
-   reserved bottom bands rather than adding a second geometry detector. */
+/* The iOS keyboard leaves the fixed nav above itself; hide it and release the
+   reserved nav padding while an editor is focused. */
+html.app-keyboard-open .mud-layout {
+    height: var(--app-keyboard-height, 100dvh);
+}
+
 html.app-keyboard-open .mobile-primary-nav {
     display: none;
 }
 
-html.app-keyboard-open .app-shell-body .tab-panel-content,
-html.app-keyboard-open .app-shell-body .browser-mobile-payload {
+html.app-keyboard-open .app-shell-appbar {
+    display: none;
+}
+
+html.app-keyboard-open .tab-panel-content > .mud-alert {
+    display: none;
+}
+
+html.app-keyboard-open:not(.app-keyboard-editor-in-header) .app-tabpanel-header,
+html.app-keyboard-open:not(.app-keyboard-editor-in-header) .topic-bulk-toolbar {
+    display: none;
+}
+
+/* Searching messages in a keyboard band leaves room for the field or for rows,
+   never both, so the list title row and the payload preview step aside and each
+   match keeps one line with its time and topic. */
+html.app-keyboard-open .payload-browser-panel:has(input:focus) .payload-list-header {
+    display: none !important;
+}
+
+html.app-keyboard-open .payload-browser-panel:has(input:focus) .pb-cell-payload {
+    display: none;
+}
+
+html.app-keyboard-open .payload-browser-panel:has(input:focus) .payload-row {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 4px 12px;
+}
+
+html.app-keyboard-open .payload-browser-panel:has(input:focus) .payload-row .pb-cell-topic {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
+}
+
+html.app-keyboard-open .tab-panel-content,
+html.app-keyboard-open .browser-mobile-payload {
     padding-bottom: 0;
 }
 
@@ -323,14 +368,14 @@ html.app-keyboard-open .app-shell-body .browser-mobile-payload {
     flex-direction: column;
 }
 
-/* Hide the desktop MudTabs tabbar on mobile. Like the .mud-tabs-panels rule
-   above, this must live in the global sheet: although .desktop-tabs is a
+/* Hide the desktop MudTabs tabbar in compact mode. Like the .mud-tabs-panels
+   rule above, this must live in the global sheet: although .desktop-tabs is a
    Blazor component element (and does receive CSS-isolation scoping), the
    inner .mud-tabs-tabbar is MudBlazor markup rendered without the host
    component's isolation attribute — so a scoped ::deep selector cannot
    reach it reliably. Scoped under .app-shell-body to avoid hitting other
    MudTabs instances (e.g. the connection dialog's tabs). */
-@media (max-width: 599px) {
+@media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px) {
     .app-shell-body .desktop-tabs .mud-tabs-tabbar {
         display: none;
     }

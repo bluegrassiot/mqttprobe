@@ -10,12 +10,17 @@ namespace MqttProbe;
 public partial class MainPage
 {
 #if IOS
-    private const string KeyboardOpenClassName = "app-keyboard-open";
+    private const string KeyboardStateAttributeName = "data-app-native-keyboard-state";
+    private const string KeyboardStateChangeEventName = "app-native-keyboard-change";
     private const string KeyboardReadyMessageName = "appKeyboardReady";
 
     // An accessory/QuickType bar without a software keyboard is at most ~55 pt tall; every real
     // software keyboard is taller, so the keyboard's own height tells the two apart.
     private const double SoftwareKeyboardMinimumHeight = 100;
+
+    // A frame this tall relative to its window cannot be a keyboard occlusion; on a fold it is a
+    // foreign coordinate-space artifact.
+    private const double KeyboardFullHeightRatio = 0.9;
 
     private static readonly string _keyboardReadyScript =
         "var handlers = window.webkit && window.webkit.messageHandlers; " +
@@ -26,15 +31,23 @@ public partial class MainPage
     private NSObject? _keyboardFrameObserver;
     private NSObject? _keyboardHideObserver;
     private NSObject? _foregroundObserver;
-    private bool _keyboardOpen;
-    private bool? _appliedKeyboardOpen;
+    private IosKeyboardState _keyboardState = IosKeyboardState.Closed;
+    private IosKeyboardState? _appliedKeyboardState;
     private bool _applyingKeyboardState;
     private bool _keyboardStateQueued;
+    private double _lastLayoutWidth = double.NaN;
+    private double _lastLayoutHeight = double.NaN;
 #endif
 
     public MainPage()
     {
         InitializeComponent();
+#if IOS
+        // The web app owns the keyboard band. MAUI's SoftInput safe area shrinks this view to
+        // zero height after a fold; Container keeps the hardware insets only.
+        SafeAreaEdges = new Microsoft.Maui.SafeAreaEdges(Microsoft.Maui.SafeAreaRegions.Container);
+        Loaded += OnPageLoaded;
+#endif
     }
 
 #if IOS
@@ -44,12 +57,37 @@ public partial class MainPage
         AttachKeyboardObservers();
         AttachKeyboardBridge();
         ReplayKeyboardState();
+        RefreshOrientationPolicy();
     }
 
     protected override void OnDisappearing()
     {
         DetachKeyboardObservers();
         base.OnDisappearing();
+    }
+
+    protected override void OnSizeAllocated(double width, double height)
+    {
+        base.OnSizeAllocated(width, height);
+        if (Math.Abs(width - _lastLayoutWidth) < 0.5 && Math.Abs(height - _lastLayoutHeight) < 0.5)
+        {
+            return;
+        }
+
+        _lastLayoutWidth = width;
+        _lastLayoutHeight = height;
+        Dispatcher.Dispatch(RefreshOrientationPolicy);
+    }
+
+    private void OnPageLoaded(object? sender, EventArgs e)
+    {
+        Dispatcher.Dispatch(RefreshOrientationPolicy);
+    }
+
+    private void RefreshOrientationPolicy()
+    {
+        var window = _webView?.Window ?? Window?.Handler?.PlatformView as UIWindow;
+        IosOrientationPolicy.Refresh(window);
     }
 #endif
 
@@ -63,6 +101,7 @@ public partial class MainPage
         _webView = e.WebView;
         AttachKeyboardBridge();
         ReplayKeyboardState();
+        RefreshOrientationPolicy();
     }
 #else
     // The keyboard bridge keeps WebView state only on iOS; S2325 is a ship gate on the other
@@ -84,8 +123,12 @@ public partial class MainPage
         }
 
         _keyboardFrameObserver = UIKeyboard.Notifications.ObserveWillChangeFrame((_, e) => OnKeyboardFrameChanged(e.FrameEnd));
-        _keyboardHideObserver = UIKeyboard.Notifications.ObserveWillHide((_, _) => SetKeyboardOpen(false));
-        _foregroundObserver = UIApplication.Notifications.ObserveWillEnterForeground((_, _) => ReplayKeyboardState());
+        _keyboardHideObserver = UIKeyboard.Notifications.ObserveWillHide((_, _) => SetKeyboardState(IosKeyboardState.Closed));
+        _foregroundObserver = UIApplication.Notifications.ObserveWillEnterForeground((_, _) =>
+        {
+            ReplayKeyboardState();
+            RefreshOrientationPolicy();
+        });
     }
 
     private void DetachKeyboardObservers()
@@ -116,33 +159,74 @@ public partial class MainPage
 
     private void OnKeyboardFrameChanged(CGRect keyboardFrame)
     {
+        SetKeyboardState(ClassifyKeyboardFrame(keyboardFrame));
+    }
+
+    private IosKeyboardState ClassifyKeyboardFrame(CGRect keyboardFrame)
+    {
         var window = _webView?.Window;
         var screen = window?.Screen;
         if (window is null || screen is null)
         {
-            SetKeyboardOpen(false);
-            return;
+            return IosKeyboardState.Unknown;
+        }
+
+        var bounds = window.Bounds;
+        if (!IsUsableRectangle(bounds) || !IsUsableRectangle(keyboardFrame))
+        {
+            return IosKeyboardState.Unknown;
         }
 
         var frameInWindow = window.ConvertRectFromCoordinateSpace(keyboardFrame, screen.CoordinateSpace);
-        var overlappingWindow = CGRect.Intersect(frameInWindow, window.Bounds).Height > 0;
-        SetKeyboardOpen(overlappingWindow && keyboardFrame.Height >= SoftwareKeyboardMinimumHeight);
+        if (!IsUsableRectangle(frameInWindow))
+        {
+            return IosKeyboardState.Unknown;
+        }
+
+        var visible = CGRect.Intersect(frameInWindow, bounds);
+        if (visible.Width <= 0 || visible.Height <= 0)
+        {
+            return IosKeyboardState.Unknown;
+        }
+
+        if (visible.Height >= bounds.Height * (nfloat)KeyboardFullHeightRatio)
+        {
+            return IosKeyboardState.Unknown;
+        }
+
+        return visible.Height < (nfloat)SoftwareKeyboardMinimumHeight
+            ? IosKeyboardState.Unknown
+            : IosKeyboardState.Open;
     }
 
-    private void SetKeyboardOpen(bool open)
+    private static bool IsUsableRectangle(CGRect rect)
+        => IsFinite(rect.X)
+            && IsFinite(rect.Y)
+            && IsFinite(rect.Width)
+            && IsFinite(rect.Height)
+            && rect.Width > 0
+            && rect.Height > 0;
+
+    private static bool IsFinite(nfloat value)
     {
-        if (_keyboardOpen == open && _appliedKeyboardOpen == open)
+        var number = (double)value;
+        return !double.IsNaN(number) && !double.IsInfinity(number);
+    }
+
+    private void SetKeyboardState(IosKeyboardState state)
+    {
+        if (_keyboardState == state && _appliedKeyboardState == state)
         {
             return;
         }
 
-        _keyboardOpen = open;
+        _keyboardState = state;
         PushKeyboardState();
     }
 
     private void ReplayKeyboardState()
     {
-        _appliedKeyboardOpen = null;
+        _appliedKeyboardState = null;
         PushKeyboardState();
     }
 
@@ -167,10 +251,10 @@ public partial class MainPage
             do
             {
                 _keyboardStateQueued = false;
-                var open = _keyboardOpen;
-                if (await EvaluateKeyboardStateAsync(open))
+                var state = _keyboardState;
+                if (await EvaluateKeyboardStateAsync(state))
                 {
-                    _appliedKeyboardOpen = open;
+                    _appliedKeyboardState = state;
                 }
             }
             while (_keyboardStateQueued);
@@ -181,7 +265,7 @@ public partial class MainPage
         }
     }
 
-    private async Task<bool> EvaluateKeyboardStateAsync(bool open)
+    private async Task<bool> EvaluateKeyboardStateAsync(IosKeyboardState state)
     {
         var webView = _webView;
         if (webView is null)
@@ -189,10 +273,7 @@ public partial class MainPage
             return false;
         }
 
-        var script = open
-            ? $"document.documentElement.classList.add('{KeyboardOpenClassName}')"
-            : $"document.documentElement.classList.remove('{KeyboardOpenClassName}')";
-
+        var script = BuildKeyboardStateScript(state);
         try
         {
             await MainThread.InvokeOnMainThreadAsync(() => webView.EvaluateJavaScriptAsync(script));
@@ -204,6 +285,26 @@ public partial class MainPage
             // pending, so the next notification or document-ready message retries it.
             return false;
         }
+    }
+
+    private static string BuildKeyboardStateScript(IosKeyboardState state)
+    {
+        var token = state switch
+        {
+            IosKeyboardState.Open => "open",
+            IosKeyboardState.Closed => "closed",
+            _ => "unknown",
+        };
+
+        return $"document.documentElement.setAttribute('{KeyboardStateAttributeName}', '{token}');"
+            + $"window.dispatchEvent(new Event('{KeyboardStateChangeEventName}'));";
+    }
+
+    private enum IosKeyboardState
+    {
+        Unknown,
+        Open,
+        Closed,
     }
 
     private sealed class KeyboardReadyHandler(MainPage page) : WKScriptMessageHandler

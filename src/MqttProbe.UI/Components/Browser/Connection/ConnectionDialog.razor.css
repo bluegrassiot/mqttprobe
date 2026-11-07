@@ -34,6 +34,42 @@
     flex-shrink: 0;
 }
 
+.connection-dialog-titlebar ::deep .connection-dialog-keyboard-connect {
+    display: none;
+    flex-shrink: 0;
+}
+
+/* Keyboard mode keeps only the close/connect row and the tab strip above the
+   focused editor, so the visible band is not consumed by fixed chrome. */
+.connection-dialog-content--keyboard .connection-dialog-titlebar {
+    min-height: 44px;
+    padding: 2px 8px 0;
+    justify-content: flex-end;
+}
+
+.connection-dialog-content--keyboard .connection-dialog-title {
+    display: none;
+}
+
+.connection-dialog-content--keyboard .connection-dialog-titlebar ::deep .connection-dialog-keyboard-connect {
+    display: inline-flex;
+}
+
+.connection-dialog-content--keyboard ::deep .connection-dialog-header {
+    display: none;
+}
+
+.connection-dialog-content--keyboard .step-selector {
+    display: flex;
+    flex: 0 0 auto;
+    background: var(--mud-palette-surface);
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+.connection-dialog-content--keyboard ::deep .connection-tabs .mud-tabs-tabbar {
+    display: none;
+}
+
 .connection-dialog-content ::deep .mud-form {
     display: flex;
     flex-direction: column;

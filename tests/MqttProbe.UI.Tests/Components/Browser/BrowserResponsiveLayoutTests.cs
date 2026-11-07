@@ -10,7 +10,8 @@ public class BrowserResponsiveLayoutTests
     private const string PickerCss = "src/MqttProbe.UI/Components/Browser/TopicPickerOverlay.razor.css";
 
     private const string DesktopSplitBoundary = "@media (max-width: 959.98px)";
-    private const string PhoneBoundary = "@media (max-width: 599.98px)";
+    private const string CompactNavBoundary =
+        "@media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px)";
 
     [Test]
     public void Markup_HasOnlyTheDesktopSplitAndTheMobileLayout()
@@ -30,16 +31,22 @@ public class BrowserResponsiveLayoutTests
 
         var layout = ReadMediaBlockContaining(BrowserCss, DesktopSplitBoundary, ".browser-mobile-layout {");
         layout.Should().Contain("display: flex");
+        layout.Should().NotContain("--app-mobile-nav-reserve",
+            "the bottom nav only exists on phones and short foldables");
         layout.Should().NotContain("padding-bottom: 64px",
-            "the bottom nav only exists below the phone boundary");
+            "the reserve is the shell's dynamic token, not a fixed height");
         css.Should().NotContain("browser-tablet-layout");
     }
 
     [Test]
     public void BrowserCss_ReservesTheBottomNavOnlyWhereTheNavExists()
     {
-        ReadMediaBlockContaining(BrowserCss, PhoneBoundary, ".browser-mobile-payload {")
-            .Should().Contain("padding-bottom: 64px");
+        var reserve = ReadMediaBlockContaining(
+            BrowserCss, CompactNavBoundary, ".browser-mobile-payload {");
+
+        reserve.Should().Contain("padding-bottom: var(--app-mobile-nav-reserve)");
+        reserve.Should().NotContain("padding-bottom: 64px",
+            "the reserve follows the shell's safe-area-aware token");
     }
 
     [Test]

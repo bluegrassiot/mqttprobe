@@ -66,9 +66,8 @@
     color: var(--mud-palette-primary);
 }
 
-/* Same breakpoint as the connection dialog: below it, text buttons become
-   icon buttons and secondary actions collapse into the overflow menu. */
-@media (max-width: 599px) {
+/* Compact: icon actions and an overflow menu replace the text buttons. */
+@media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px) {
     .app-actions-wide {
         display: none;
     }

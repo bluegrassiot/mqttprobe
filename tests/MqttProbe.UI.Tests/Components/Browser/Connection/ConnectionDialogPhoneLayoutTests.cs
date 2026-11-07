@@ -154,15 +154,44 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     }
 
     [Test]
+    public void KeyboardMode_KeepsCloseConnectAndTabsAboveTheFocusedEditor()
+    {
+        var css = ReadRepositoryFile(DialogCss);
+
+        css.Should().Contain(".connection-dialog-titlebar ::deep .connection-dialog-keyboard-connect");
+        css.Should().Contain(".connection-dialog-content--keyboard .connection-dialog-titlebar ::deep .connection-dialog-keyboard-connect");
+        css.Should().NotContain(".connection-dialog-content--keyboard .connection-dialog-keyboard-connect",
+            "the MudIconButton renders outside the component scope, so its display rules need ::deep");
+        css.Should().Contain(".connection-dialog-content--keyboard ::deep .connection-dialog-header");
+        css.Should().Contain(".connection-dialog-content--keyboard .step-selector");
+        ReadRepositoryFile(DialogMarkup).Should().Contain("connection-connect-keyboard");
+        ReadRepositoryFile(ViewportScript).Should().Contain(
+            "const KEYBOARD_CLASS = 'connection-dialog-content--keyboard'");
+    }
+
+    [Test]
+    public void ViewportScript_HoldsTheKeyboardBandUntilTheTapFinishes()
+    {
+        var script = ReadRepositoryFile(ViewportScript);
+
+        script.Should().Contain("window.setTimeout(releaseBand, KEYBOARD_RELEASE_DELAY)");
+        script.Should().Contain("if (!releaseTimer)", "a release already pending must not be rescheduled");
+    }
+
+    [Test]
     public void ViewportScript_RevealsTheFocusedControl_InsideTheScrollOwner()
     {
         var script = ReadRepositoryFile(ViewportScript);
         var reveal = ExtractBracedBlockFromFirstBrace(
-            script[script.IndexOf("const revealFocusedField = () => {", StringComparison.Ordinal)..]);
+            script[script.IndexOf("const revealFocusedField = (strips) => {", StringComparison.Ordinal)..]);
 
         script.Should().Contain("const REVEAL_MARGIN = 8");
         script.Should().Contain("const scrollOwner = () =>");
-        reveal.Should().Contain("const bandBottom = scrollerBox.bottom");
+        reveal.Should().Contain("const viewportTop = strips.top;");
+        reveal.Should().Contain("const viewportBottom = layoutFrame() - strips.bottom;",
+            "the reveal is bounded by the band the shell selected, not a phantom raw viewport");
+        reveal.Should().Contain("const bandTop = Math.max(scrollerBox.top, viewportTop)");
+        reveal.Should().Contain("const bandBottom = Math.min(scrollerBox.bottom, viewportBottom)");
         reveal.Should().NotContain("connection-actions-footer");
         reveal.Should().Contain("const tallerThanBand = fieldBox.height > visibleBottom - visibleTop");
         reveal.Should().Contain("scroller.scrollTop = Math.max(0, scroller.scrollTop + (delta / scale))");
@@ -202,12 +231,15 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
     }
 
     [Test]
-    public void ViewportScript_TreatsPinchZoomAsZoom_NotAsAKeyboard()
+    public void ViewportScript_CountsKeyboardCoverage_WithoutTheViewportPosition()
     {
         var script = ReadRepositoryFile(ViewportScript);
 
-        script.Should().Contain("const ZOOM_SCALE_THRESHOLD = 1.01");
-        script.Should().Contain("viewport.scale > ZOOM_SCALE_THRESHOLD");
+        script.Should().Contain("const MIN_KEYBOARD_OCCLUSION = 120;");
+        script.Should().Contain("const covered = window.innerHeight / scale - viewport.height;");
+        script.Should().Contain("if (covered <= MIN_KEYBOARD_OCCLUSION) {");
+        script.Should().NotContain("covered - viewport.offsetTop",
+            "a panned viewport must not cancel the height the keyboard took");
     }
 
     [Test]
@@ -313,7 +345,7 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
         var script = ReadRepositoryFile(ViewportScript);
         script.Should().Contain("container.style.setProperty(TOP_INSET_VARIABLE");
         script.Should().Contain("container.style.setProperty(BOTTOM_INSET_VARIABLE");
-        script.Should().Contain("container.classList.toggle(CONTAINER_KEYBOARD_CLASS, hidden)");
+        script.Should().Contain("container.classList.toggle(CONTAINER_KEYBOARD_CLASS, keyboard)");
     }
 
     [Test]
@@ -431,7 +463,7 @@ public class ConnectionDialogPhoneLayoutTests : BunitTestContext
 
         var script = ReadRepositoryFile(ViewportScript);
         script.Should().Contain("MIN_USABLE_PANEL_HEIGHT");
-        script.Should().Contain("container.classList.toggle(CONTAINER_KEYBOARD_CLASS, hidden)");
+        script.Should().Contain("container.classList.toggle(CONTAINER_KEYBOARD_CLASS, keyboard)");
         script.Should().NotContain("FOOTER_HEIGHT_VARIABLE");
     }
 

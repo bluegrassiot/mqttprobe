@@ -28,6 +28,12 @@
             <div class="connection-dialog-body" @attributes="BodyAttributes">
                 <div class="connection-dialog-titlebar">
                     <h2 id="@_titleId" class="connection-dialog-title" data-testid="connection-title">Setup Connection</h2>
+                    <MudIconButton Icon="@LucideIcons.Power" Color="Color.Primary"
+                                   Class="connection-dialog-keyboard-connect"
+                                   aria-label="Connect"
+                                   data-testid="connection-connect-keyboard"
+                                   Disabled="@(!_canConnect || _operation is not null)"
+                                   OnClick="Connect" />
                     <MudIconButton Icon="@LucideIcons.X" Color="Color.Inherit"
                                    Class="connection-dialog-close" aria-label="Close"
                                    data-testid="connection-close"
@@ -48,17 +54,17 @@
                                         ConnectDisabled="@(!_canConnect || _operation is not null)"
                                         OnConnect="Connect"
                                         OnStop="CancelConnect" />
+                <div class="step-selector">
+                    <button class="step-btn @(_activeTabIndex == 0 ? "active" : "")"
+                            @onclick="() => _activeTabIndex = 0" type="button">Connection</button>
+                    <button class="step-btn @(_activeTabIndex == 1 ? "active" : "")"
+                            @onclick="() => _activeTabIndex = 1" type="button">Security</button>
+                    <button class="step-btn @(_activeTabIndex == 2 ? "active" : "")"
+                            @onclick="() => _activeTabIndex = 2" type="button">On Connect</button>
+                </div>
                 <MudForm Model="@_selectedConnection" @ref="@_form"
                          Validation="@_connectionValidator.ValidateValue" ValidationDelay="0"
                          IsValidChanged="@FormValidationChanged" FieldChanged="@FormChanged">
-                    <div class="step-selector">
-                        <button class="step-btn @(_activeTabIndex == 0 ? "active" : "")"
-                                @onclick="() => _activeTabIndex = 0" type="button">Connection</button>
-                        <button class="step-btn @(_activeTabIndex == 1 ? "active" : "")"
-                                @onclick="() => _activeTabIndex = 1" type="button">Security</button>
-                        <button class="step-btn @(_activeTabIndex == 2 ? "active" : "")"
-                                @onclick="() => _activeTabIndex = 2" type="button">On Connect</button>
-                    </div>
                     <MudTabs @bind-ActivePanelIndex="_activeTabIndex"
                              KeepPanelsAlive="true" Elevation="0" Class="connection-tabs">
                         <MudTabPanel Text="Connection">

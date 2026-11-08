@@ -143,24 +143,37 @@ public class SparkplugNodesSplitTests : BunitTestContext
     {
         var module = _gatedModule;
         _gatedRuntime.Enabled = true;
-        var host = Render<BreakpointHost>();
+        try
+        {
+            var host = Render<BreakpointHost>();
+            var cut = host.FindComponent<SparkplugNodesView>();
 
-        host.WaitForAssertion(() => module.AttachCount.Should().Be(1));
+            host.WaitForAssertion(() => module.AttachCount.Should().Be(1));
 
-        await host.InvokeAsync(() => host.Instance.Set(Breakpoint.Sm));
-        host.WaitForAssertion(() => host.FindAll(".mud-split-panel").Should().BeEmpty());
+            await host.InvokeAsync(() => host.Instance.Set(Breakpoint.Sm));
+            host.WaitForAssertion(() => host.FindAll(".mud-split-panel").Should().BeEmpty());
+            cut.Render();
 
-        await host.InvokeAsync(() => host.Instance.Set(Breakpoint.Lg));
-        host.WaitForAssertion(() => host.FindAll(".mud-split-panel").Should().ContainSingle());
-        module.EnsureCount.Should().Be(0);
+            await host.InvokeAsync(() => host.Instance.Set(Breakpoint.Lg));
+            host.WaitForAssertion(() => host.FindAll(".mud-split-panel").Should().ContainSingle());
+            cut.Render();
+            module.EnsureCount.Should().Be(0);
 
-        module.ReleaseAttach(1);
+            module.ReleaseAttach(1);
 
-        host.WaitForAssertion(() => module.AttachCount.Should().BeGreaterThanOrEqualTo(2));
-        host.WaitForAssertion(() => module.EnsureCount.Should().Be(1));
+            await module.SecondAttachStarted.WaitAsync(TimeSpan.FromSeconds(5));
+            await module.EnsureSizedInvoked.WaitAsync(TimeSpan.FromSeconds(5));
 
-        await host.InvokeAsync(() => host.Instance.Set(Breakpoint.Lg));
-        module.EnsureCount.Should().Be(1);
+            module.AttachCount.Should().BeGreaterThanOrEqualTo(2);
+            module.EnsureCount.Should().Be(1);
+
+            await host.InvokeAsync(() => host.Instance.Set(Breakpoint.Lg));
+            module.EnsureCount.Should().Be(1);
+        }
+        finally
+        {
+            module.ReleasePendingOperations();
+        }
     }
 
     [Test]
@@ -169,26 +182,33 @@ public class SparkplugNodesSplitTests : BunitTestContext
     {
         var module = _gatedModule;
         _gatedRuntime.Enabled = true;
-        var (cut, view) = RenderTrackedNodes();
+        try
+        {
+            var (cut, view) = RenderTrackedNodes();
 
-        cut.WaitForAssertion(() => module.AttachCount.Should().Be(1));
-        view.StartedCount.Should().Be(1);
+            cut.WaitForAssertion(() => module.AttachCount.Should().Be(1));
+            view.StartedCount.Should().Be(1);
 
-        cut.Render();
-        cut.WaitForAssertion(() => view.StartedCount.Should().Be(2));
+            cut.Render();
+            cut.WaitForAssertion(() => view.StartedCount.Should().Be(2));
 
-        module.ReleaseAttach(1);
+            module.ReleaseAttach(1);
 
-        await Task.WhenAll(view.Renders);
+            await Task.WhenAll(view.Renders);
 
-        module.AttachCount.Should().Be(1);
-        module.EnsureCount.Should().Be(1);
+            module.AttachCount.Should().Be(1);
+            module.EnsureCount.Should().Be(1);
 
-        cut.Render();
-        await Task.WhenAll(view.Renders);
+            cut.Render();
+            await Task.WhenAll(view.Renders);
 
-        module.AttachCount.Should().Be(1);
-        module.EnsureCount.Should().Be(1);
+            module.AttachCount.Should().Be(1);
+            module.EnsureCount.Should().Be(1);
+        }
+        finally
+        {
+            module.ReleasePendingOperations();
+        }
     }
 
     [Test]
@@ -197,32 +217,94 @@ public class SparkplugNodesSplitTests : BunitTestContext
     {
         var module = _gatedModule;
         _gatedRuntime.Enabled = true;
-        module.SetEnsureResult(false);
-        var (cut, view) = RenderTrackedNodes();
+        try
+        {
+            module.SetEnsureResult(false);
+            var (cut, view) = RenderTrackedNodes();
 
-        module.ReleaseAttach(1);
-        cut.WaitForAssertion(() => module.EnsureCount.Should().Be(1));
-        module.AttachCount.Should().Be(1);
+            module.ReleaseAttach(1);
+            await module.EnsureSizedInvoked.WaitAsync(TimeSpan.FromSeconds(5));
+            module.EnsureCount.Should().Be(1);
+            module.AttachCount.Should().Be(1);
 
+            module.HoldNextEnsure();
+            cut.Render();
+            cut.WaitForAssertion(() => module.EnsureCount.Should().Be(2));
+            cut.WaitForAssertion(() => view.StartedCount.Should().Be(2));
+
+            cut.Render();
+            cut.WaitForAssertion(() => view.StartedCount.Should().Be(3));
+            module.EnsureCount.Should().Be(2);
+
+            module.ReleaseEnsure(true);
+
+            await Task.WhenAll(view.Renders);
+
+            module.AttachCount.Should().Be(1);
+            module.EnsureCount.Should().Be(2);
+
+            cut.Render();
+            await Task.WhenAll(view.Renders);
+            module.EnsureCount.Should().Be(2);
+        }
+        finally
+        {
+            module.ReleasePendingOperations();
+        }
+    }
+
+    [Test]
+    [CancelAfter(10_000)]
+    public async Task DesktopSplit_AbandonedPendingAttach_CleanupAllowsDisposal()
+    {
+        var module = _gatedModule;
+        _gatedRuntime.Enabled = true;
+
+        try
+        {
+            var cut = RenderNodes(Breakpoint.Lg);
+
+            cut.WaitForAssertion(() => module.AttachCount.Should().Be(1));
+
+            module.ReleasePendingOperations();
+            module.AttachReleased.Should().BeTrue();
+            module.AttachResult.Should().BeNull();
+
+            await DisposeComponentsAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            module.ReleasePendingOperations();
+        }
+    }
+
+    [Test]
+    [CancelAfter(10_000)]
+    public async Task DesktopSplit_AbandonedPendingSizing_CleanupAllowsDisposal()
+    {
+        var module = _gatedModule;
+        _gatedRuntime.Enabled = true;
         module.HoldNextEnsure();
-        cut.Render();
-        cut.WaitForAssertion(() => module.EnsureCount.Should().Be(2));
-        cut.WaitForAssertion(() => view.StartedCount.Should().Be(2));
 
-        cut.Render();
-        cut.WaitForAssertion(() => view.StartedCount.Should().Be(3));
-        module.EnsureCount.Should().Be(2);
+        try
+        {
+            var cut = RenderNodes(Breakpoint.Lg);
 
-        module.ReleaseEnsure(true);
+            cut.WaitForAssertion(() => module.AttachCount.Should().Be(1));
 
-        await Task.WhenAll(view.Renders);
+            module.ReleaseAttach(1);
+            await module.EnsureSizedInvoked.WaitAsync(TimeSpan.FromSeconds(5));
+            module.EnsureCount.Should().Be(1);
 
-        module.AttachCount.Should().Be(1);
-        module.EnsureCount.Should().Be(2);
+            module.ReleasePendingOperations();
+            module.PendingEnsureResult.Should().Be(false);
 
-        cut.Render();
-        await Task.WhenAll(view.Renders);
-        module.EnsureCount.Should().Be(2);
+            await DisposeComponentsAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            module.ReleasePendingOperations();
+        }
     }
 
     [Test]
@@ -334,13 +416,30 @@ public class SparkplugNodesSplitTests : BunitTestContext
         private readonly Lock _sync = new();
         private readonly List<string> _invocations = [];
         private readonly TaskCompletionSource<int?> _attach = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _secondAttachStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _ensureSizedInvoked = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private TaskCompletionSource<bool>? _ensureGate;
         private int _attachCount;
         private bool _ensureResult = true;
+        private bool? _pendingEnsureResult;
+        private int? _releasedAttachToken;
+        private bool _attachReleased;
 
         public int AttachCount
         {
             get { lock (_sync) return _attachCount; }
+        }
+
+        public Task SecondAttachStarted => _secondAttachStarted.Task;
+
+        public int? AttachResult
+        {
+            get { lock (_sync) return _releasedAttachToken; }
+        }
+
+        public bool AttachReleased
+        {
+            get { lock (_sync) return _attachReleased; }
         }
 
         public int EnsureCount
@@ -348,12 +447,51 @@ public class SparkplugNodesSplitTests : BunitTestContext
             get { lock (_sync) return _invocations.Count(invocation => invocation == "ensureSized"); }
         }
 
+        public Task EnsureSizedInvoked => _ensureSizedInvoked.Task;
+
+        public bool? PendingEnsureResult
+        {
+            get { lock (_sync) return _pendingEnsureResult; }
+        }
+
         public void SetEnsureResult(bool result)
         {
             lock (_sync) _ensureResult = result;
         }
 
-        public void ReleaseAttach(int? token) => _attach.TrySetResult(token);
+        public void ReleaseAttach(int? token)
+        {
+            if (!_attach.TrySetResult(token))
+                return;
+
+            lock (_sync)
+            {
+                _releasedAttachToken = token;
+                _attachReleased = true;
+            }
+        }
+
+        public void ReleasePendingOperations()
+        {
+            if (_attach.TrySetResult(null))
+            {
+                lock (_sync)
+                {
+                    _releasedAttachToken = null;
+                    _attachReleased = true;
+                }
+            }
+
+            TaskCompletionSource<bool>? gate;
+            lock (_sync)
+            {
+                _pendingEnsureResult = false;
+                gate = _ensureGate;
+                _ensureGate = null;
+            }
+
+            gate?.TrySetResult(false);
+        }
 
         public void HoldNextEnsure()
         {
@@ -367,6 +505,7 @@ public class SparkplugNodesSplitTests : BunitTestContext
             lock (_sync)
             {
                 _ensureResult = result;
+                _pendingEnsureResult = result;
                 gate = _ensureGate;
                 _ensureGate = null;
             }
@@ -403,7 +542,15 @@ public class SparkplugNodesSplitTests : BunitTestContext
         private ValueTask<TValue> AttachAsync<TValue>()
         {
             int count;
-            lock (_sync) count = ++_attachCount;
+            bool secondAttach;
+            lock (_sync)
+            {
+                count = ++_attachCount;
+                secondAttach = count == 2;
+            }
+
+            if (secondAttach)
+                _secondAttachStarted.TrySetResult();
 
             return count == 1
                 ? AwaitAttachAsync<TValue>()
@@ -420,6 +567,8 @@ public class SparkplugNodesSplitTests : BunitTestContext
                 gate = _ensureGate;
                 result = _ensureResult;
             }
+
+            _ensureSizedInvoked.TrySetResult();
 
             return gate is null
                 ? ValueTask.FromResult((TValue)(object)result)
@@ -484,7 +633,6 @@ public class SparkplugNodesSplitTests : BunitTestContext
         {
             builder.OpenComponent<CascadingValue<Breakpoint>>(0);
             builder.AddAttribute(1, "Value", Value);
-            builder.AddAttribute(2, "IsFixed", true);
             builder.AddAttribute(3, "ChildContent", (RenderFragment)(child =>
             {
                 if (WrapInErrorBoundary)

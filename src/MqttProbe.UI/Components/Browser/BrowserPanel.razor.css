@@ -76,9 +76,10 @@
     }
 }
 
-/* Reserve space for the fixed mobile nav bar only where it exists. */
-@media (max-width: 599.98px) {
+/* Reserve the compact bottom nav where it is actually shown: phones and short
+   foldable widths. components.css releases it again while the keyboard is open. */
+@media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px) {
     .browser-mobile-payload {
-        padding-bottom: 64px;
+        padding-bottom: var(--app-mobile-nav-reserve);
     }
 }

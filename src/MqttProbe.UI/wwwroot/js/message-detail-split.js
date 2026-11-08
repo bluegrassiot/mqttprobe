@@ -5,6 +5,20 @@
 
 const MAX_META_SHARE = 0.4;
 const MIN_PAYLOAD_HEIGHT = 200;
+const resetListeners = new WeakSet();
+
+function attachResetListener(panel, metaPane) {
+    const divider = panel.querySelector('.divider');
+    if (!divider || resetListeners.has(divider)) {
+        return;
+    }
+
+    resetListeners.add(divider);
+    divider.addEventListener('dblclick', () => {
+        resetListeners.delete(divider);
+        requestAnimationFrame(() => fitToContent(metaPane));
+    }, { once: true });
+}
 
 export function fitToContent(metaPane) {
     const panel = metaPane?.closest('.mud-split-panel');
@@ -34,5 +48,6 @@ export function fitToContent(metaPane) {
     window.mudSplitPanel_setDividerPosition(
         panel.id,
         Math.round(Math.min(Math.max(content, min), max)));
+    attachResetListener(panel, metaPane);
     return true;
 }

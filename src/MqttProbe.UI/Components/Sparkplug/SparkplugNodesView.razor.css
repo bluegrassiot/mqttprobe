@@ -251,12 +251,8 @@
     }
 }
 
-/* ── Phone layout: in-place swap ───────────────────────────────────────────
-   The stacked split is too cramped below 600px, so mirror the Browser tab's
-   Message Details pattern instead: the list fills the pane until a node is
-   selected, then the detail takes over the full pane and the existing Back
-   button (already rendered below 960px) returns to the list. */
-@media (max-width: 599.98px) {
+/* Compact: give the detail the full pane instead of a short stacked split. */
+@media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px) {
     .spb-split__nodes {
         max-height: none;
         flex: 1 1 auto;
@@ -275,7 +271,9 @@
         flex: 1 1 auto;
         overflow-y: auto;
     }
+}
 
+@media (max-width: 599.98px) {
     /* Metric tables never fit ~360px. Rather than let each one scroll
        horizontally under a capped height — which stacks two or three nested
        scrollbars on top of the detail panel's own — collapse every row into a

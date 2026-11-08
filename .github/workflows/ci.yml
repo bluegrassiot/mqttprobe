@@ -52,6 +52,10 @@ jobs:
       - name: Script tests
         run: python3 -m unittest discover -s scripts/ci/tests
 
+      - name: JavaScript tests
+        working-directory: tests/MqttProbe.UI.JsTests
+        run: node --test
+
       - name: Legal notices
         run: python3 scripts/legal/notices.py check
 

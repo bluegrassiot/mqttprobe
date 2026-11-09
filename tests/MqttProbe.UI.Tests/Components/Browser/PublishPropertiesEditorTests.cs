@@ -5,6 +5,7 @@ using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Tests.TestHelpers;
 using MqttProbe.UI.Utilities;
 using MudBlazor;
+using MudBlazor.Extensions;
 using MudBlazor.Services;
 
 namespace MqttProbe.UI.Tests.Components.Browser;
@@ -22,10 +23,8 @@ public class PublishPropertiesEditorTests : BunitTestContext
         EnsureMudProviders();
     }
 
-    private IRenderedComponent<PublishPropertiesEditor> RenderEditor(PublishPropertiesDraft draft, bool disabled = false) =>
-        Render<PublishPropertiesEditor>(p => p
-            .Add(x => x.Draft, draft)
-            .Add(x => x.Disabled, disabled));
+    private IRenderedComponent<PublishPropertiesEditor> RenderEditor(PublishPropertiesDraft draft) =>
+        Render<PublishPropertiesEditor>(p => p.Add(x => x.Draft, draft));
 
     [Test]
     public void Renders_Region_And_Count_Chip()
@@ -194,35 +193,75 @@ public class PublishPropertiesEditorTests : BunitTestContext
     [Test]
     public void InvalidHexCorrelation_ShowsFieldError()
     {
-        var cut = RenderEditor(new PublishPropertiesDraft { CorrelationText = "xyz", CorrelationEncoding = CorrelationDataEncoding.Hex });
+        var cut = RenderEditor(new PublishPropertiesDraft
+        {
+            CorrelationPresent = true,
+            CorrelationText = "xyz",
+            CorrelationEncoding = CorrelationDataEncoding.Hex
+        });
 
         cut.FindAll(".mud-input-error").Should().NotBeEmpty();
         cut.Markup.Should().Contain("even number of hex digits");
     }
 
     [Test]
-    public void Disabled_ShowsHintAndDisablesInputs()
+    public void CorrelationPresence_IsOffByDefault_AndDisablesTheField()
     {
-        var draft = new PublishPropertiesDraft();
-        draft.UserProperties.Add(new MqttMessageUserProperty("k", "v"));
-        var cut = RenderEditor(draft, disabled: true);
+        var cut = RenderEditor(new PublishPropertiesDraft());
 
-        cut.Markup.Should().Contain("Available on MQTT 5 connections");
-        cut.FindComponents<MudTextField<string>>().Should().AllSatisfy(f => f.Instance.Disabled.Should().BeTrue());
-        cut.Find("button[title='Add user property']").HasAttribute("disabled").Should().BeTrue();
+        cut.FindComponent<MudSwitch<bool>>().Instance.GetState(x => x.Value).Should().BeFalse();
+        CorrelationTextField(cut).Instance.Disabled.Should().BeTrue();
+        cut.Markup.Should().Contain("No correlation data is sent");
     }
 
+    [Test]
+    public async Task CorrelationPresence_On_EnablesTheFieldAndCountsTheProperty()
+    {
+        var draft = new PublishPropertiesDraft();
+        var cut = RenderEditor(draft);
+
+        await cut.InvokeAsync(() => cut.FindComponent<MudSwitch<bool>>().Instance.ValueChanged.InvokeAsync(true));
+        cut.Render();
+
+        draft.CorrelationPresent.Should().BeTrue();
+        CorrelationTextField(cut).Instance.Disabled.Should().BeFalse();
+        cut.Find(".count-chip").TextContent.Trim().Should().Be("1");
+    }
 
     [Test]
-    public void Clear_WorksWhileDisabled()
+    public async Task CorrelationPresence_Off_KeepsTextButStopsCountingIt()
+    {
+        var draft = new PublishPropertiesDraft { CorrelationPresent = true, CorrelationText = "keep" };
+        var cut = RenderEditor(draft);
+
+        await cut.InvokeAsync(() => cut.FindComponent<MudSwitch<bool>>().Instance.ValueChanged.InvokeAsync(false));
+        cut.Render();
+
+        draft.CorrelationText.Should().Be("keep");
+        draft.SetCount.Should().Be(0);
+        CorrelationTextField(cut).Instance.Disabled.Should().BeTrue();
+    }
+
+    [Test]
+    public void CorrelationPresence_PresentWithEmptyValue_ShowsZeroLengthHint()
+    {
+        var cut = RenderEditor(new PublishPropertiesDraft { CorrelationPresent = true });
+
+        cut.Markup.Should().Contain("zero-length");
+        cut.FindAll(".mud-input-error").Should().BeEmpty();
+    }
+
+    private static IRenderedComponent<MudTextField<string>> CorrelationTextField(IRenderedComponent<PublishPropertiesEditor> cut) =>
+        cut.FindComponents<MudTextField<string>>().First(f => f.Instance.Label == "Correlation data");
+
+    [Test]
+    public void Clear_WorksWithImportedProperties()
     {
         var draft = new PublishPropertiesDraft { ContentType = "x" };
         draft.UserProperties.Add(new MqttMessageUserProperty("k", "v"));
-        var cut = RenderEditor(draft, disabled: true);
+        var cut = RenderEditor(draft);
 
-        var clear = cut.Find("button[title='Clear properties']");
-        clear.HasAttribute("disabled").Should().BeFalse("an operator on MQTT 3.1.1 must be able to drop imported properties");
-        clear.Click();
+        cut.Find("button[title='Clear properties']").Click();
 
         draft.Any.Should().BeFalse();
     }
@@ -233,20 +272,6 @@ public class PublishPropertiesEditorTests : BunitTestContext
         var cut = RenderEditor(new PublishPropertiesDraft());
 
         cut.Find("button[title='Clear properties']").HasAttribute("disabled").Should().BeTrue();
-    }
-
-    [Test]
-    public async Task RemoveSelected_WorksWhileDisabled()
-    {
-        var draft = new PublishPropertiesDraft();
-        draft.UserProperties.Add(new MqttMessageUserProperty("a", "1"));
-        draft.UserProperties.Add(new MqttMessageUserProperty("b", "2"));
-        var cut = RenderEditor(draft, disabled: true);
-        cut.Instance.SelectForTests(0);
-
-        await cut.InvokeAsync(() => cut.Instance.RemoveSelectedForTests());
-
-        draft.UserProperties.Should().Equal(new MqttMessageUserProperty("b", "2"));
     }
 
     [Test]

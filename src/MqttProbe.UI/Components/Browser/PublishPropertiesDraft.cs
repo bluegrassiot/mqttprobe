@@ -23,6 +23,7 @@ public sealed class PublishPropertiesDraft
         set => ExpiryText = value?.ToString(CultureInfo.InvariantCulture);
     }
     public string? ResponseTopic { get; set; }
+    public bool CorrelationPresent { get; set; }
     public string? CorrelationText { get; set; }
     public CorrelationDataEncoding CorrelationEncoding { get; set; } = CorrelationDataEncoding.Text;
     public IList<MqttMessageUserProperty> UserProperties { get; } = new List<MqttMessageUserProperty>();
@@ -32,7 +33,7 @@ public sealed class PublishPropertiesDraft
         (PayloadFormat == MqttPayloadFormatIndicator.Unspecified ? 0 : 1) +
         (ExpirySeconds is > 0 ? 1 : 0) +
         (string.IsNullOrEmpty(ResponseTopic) ? 0 : 1) +
-        (string.IsNullOrEmpty(CorrelationText) ? 0 : 1) +
+        (CorrelationPresent ? 1 : 0) +
         UserProperties.Count;
 
     public bool Any => SetCount > 0;
@@ -45,7 +46,9 @@ public sealed class PublishPropertiesDraft
             : "Response topic must be a topic name without + or # wildcards.";
 
     public string? CorrelationError =>
-        CorrelationDataCodec.TryParse(CorrelationText, CorrelationEncoding, out _, out var error) ? null : error;
+        !CorrelationPresent || CorrelationDataCodec.TryParse(CorrelationText, CorrelationEncoding, out _, out var error)
+            ? null
+            : error;
 
     public string? ContentTypeError =>
         string.IsNullOrEmpty(ContentType) || MqttStringRules.IsValidUtf8String(ContentType)
@@ -89,6 +92,7 @@ public sealed class PublishPropertiesDraft
             PayloadFormat = message.PayloadFormatIndicator ?? MqttPayloadFormatIndicator.Unspecified,
             ExpirySeconds = message.MessageExpiryInterval is > 0 and var expiry ? expiry : null,
             ResponseTopic = message.ResponseTopic,
+            CorrelationPresent = message.CorrelationData is not null,
             CorrelationText = text,
             CorrelationEncoding = encoding
         };
@@ -105,7 +109,7 @@ public sealed class PublishPropertiesDraft
         {
             ContentType = string.IsNullOrEmpty(ContentType) ? null : ContentType,
             ResponseTopic = string.IsNullOrEmpty(ResponseTopic) ? null : ResponseTopic,
-            CorrelationData = correlation.Length > 0 ? correlation : null,
+            CorrelationData = CorrelationPresent ? correlation : null,
             MessageExpiryInterval = ExpirySeconds is > 0 ? ExpirySeconds : null,
             PayloadFormatIndicator = PayloadFormat == MqttPayloadFormatIndicator.Unspecified ? null : PayloadFormat,
             UserProperties = UserProperties.Count > 0 ? UserProperties.ToArray() : null
@@ -118,6 +122,7 @@ public sealed class PublishPropertiesDraft
         PayloadFormat = MqttPayloadFormatIndicator.Unspecified;
         ExpiryText = null;
         ResponseTopic = null;
+        CorrelationPresent = false;
         CorrelationText = null;
         CorrelationEncoding = CorrelationDataEncoding.Text;
         UserProperties.Clear();

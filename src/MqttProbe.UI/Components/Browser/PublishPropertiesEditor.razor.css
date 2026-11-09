@@ -55,6 +55,35 @@
     flex: 0 0 auto;
 }
 
+.publish-props-correlation {
+    display: flex;
+    flex-direction: column;
+    grid-column: 1 / -1;
+    gap: 2px;
+}
+
+.publish-props-correlation-head ::deep .mud-switch {
+    margin-inline-start: -11px;
+}
+
+.publish-props-correlation-head ::deep .mud-typography-caption {
+    margin-top: -6px;
+    margin-bottom: 6px;
+}
+
+.publish-props-correlation-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(10rem, 1fr);
+    gap: 4px 12px;
+    align-items: start;
+}
+
+@media (max-width: 599px) {
+    .publish-props-correlation-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 .publish-props-empty {
     padding: 8px 0;
 }

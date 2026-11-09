@@ -7,7 +7,9 @@ namespace MqttProbe.Core.Services.Mqtt;
 
 public static class OutboundMessageMapper
 {
-    public static MqttApplicationMessage Build(MqttMessage message)
+    public static MqttApplicationMessage Build(MqttMessage message) => Build(message, MqttVersion.V5);
+
+    public static MqttApplicationMessage Build(MqttMessage message, MqttVersion version)
     {
         var builder = new MqttApplicationMessageBuilder()
             .WithTopic(message.Topic)
@@ -15,13 +17,16 @@ public static class OutboundMessageMapper
             .WithQualityOfServiceLevel(message.QualityOfServiceLevel)
             .WithRetainFlag(message.RetainedMessage);
 
+        if (version != MqttVersion.V5)
+            return builder.Build();
+
         if (!string.IsNullOrEmpty(message.ContentType))
             builder.WithContentType(message.ContentType);
 
         if (!string.IsNullOrEmpty(message.ResponseTopic))
             builder.WithResponseTopic(message.ResponseTopic);
 
-        if (message.CorrelationData is { Length: > 0 } correlation)
+        if (message.CorrelationData is { } correlation)
             builder.WithCorrelationData(correlation);
 
         if (message.MessageExpiryInterval is > 0 and var expiry)
@@ -42,7 +47,7 @@ public static class OutboundMessageMapper
     public static bool HasV5Properties(MqttMessage message) =>
         !string.IsNullOrEmpty(message.ContentType) ||
         !string.IsNullOrEmpty(message.ResponseTopic) ||
-        message.CorrelationData is { Length: > 0 } ||
+        message.CorrelationData is not null ||
         message.MessageExpiryInterval is > 0 ||
         message.PayloadFormatIndicator is { } indicator && indicator != MqttPayloadFormatIndicator.Unspecified ||
         message.UserProperties is { Count: > 0 };

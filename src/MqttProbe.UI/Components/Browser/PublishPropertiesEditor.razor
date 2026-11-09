@@ -19,20 +19,13 @@
                 </div>
             </TitleContent>
             <ChildContent>
-                @if (Disabled)
-                {
-                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="publish-props-alert">
-                        Available on MQTT 5 connections. Reconnect with MQTT version 5.0 to send these properties, or clear them to publish without.
-                    </MudAlert>
-                }
-
                 <div class="publish-props-grid">
                     <MudTextField T="string" Label="Content type" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                  @bind-Value="Draft.ContentType" Immediate="true" Clearable="true" Disabled="@Disabled"
+                                  @bind-Value="Draft.ContentType" Immediate="true" Clearable="true"
                                   Error="@(Draft.ContentTypeError is not null)" ErrorText="@Draft.ContentTypeError"
                                   HelperText="Not sent when empty"/>
                     <MudSelect T="MqttPayloadFormatIndicator" Label="Payload format" Variant="Variant.Outlined"
-                               Margin="Margin.Dense" @bind-Value="Draft.PayloadFormat" Disabled="@Disabled">
+                               Margin="Margin.Dense" @bind-Value="Draft.PayloadFormat">
                         <MudSelectItem T="MqttPayloadFormatIndicator" Value="MqttPayloadFormatIndicator.Unspecified">
                             @MqttMessagePropertyDisplay.FormatPayloadFormat(MqttPayloadFormatIndicator.Unspecified)
                         </MudSelectItem>
@@ -41,22 +34,35 @@
                         </MudSelectItem>
                     </MudSelect>
                     <MudTextField T="string" Label="Message expiry (seconds)" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                  @bind-Value="Draft.ExpiryText" Immediate="true" Clearable="true" Disabled="@Disabled"
+                                  @bind-Value="Draft.ExpiryText" Immediate="true" Clearable="true"
                                   InputMode="InputMode.numeric"
                                   Error="@(Draft.ExpiryError is not null)" ErrorText="@Draft.ExpiryError"
                                   HelperText="Whole seconds. Empty or 0 sends no expiry"/>
                     <MudTextField T="string" Label="Response topic" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                  @bind-Value="Draft.ResponseTopic" Immediate="true" Clearable="true" Disabled="@Disabled"
+                                  @bind-Value="Draft.ResponseTopic" Immediate="true" Clearable="true"
                                   Error="@(Draft.ResponseTopicError is not null)" ErrorText="@Draft.ResponseTopicError"/>
-                    <MudTextField T="string" Label="Correlation data" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                  @bind-Value="Draft.CorrelationText" Immediate="true" Clearable="true" Disabled="@Disabled"
-                                  Error="@(Draft.CorrelationError is not null)" ErrorText="@Draft.CorrelationError"
-                                  HelperText="@(Draft.CorrelationEncoding == CorrelationDataEncoding.Hex ? "Hex digits, optional 0x prefix" : "Sent as UTF-8, whitespace kept")"/>
-                    <MudSelect T="CorrelationDataEncoding" Label="Correlation encoding" Variant="Variant.Outlined"
-                               Margin="Margin.Dense" @bind-Value="Draft.CorrelationEncoding" Disabled="@Disabled">
-                        <MudSelectItem T="CorrelationDataEncoding" Value="CorrelationDataEncoding.Text">Text</MudSelectItem>
-                        <MudSelectItem T="CorrelationDataEncoding" Value="CorrelationDataEncoding.Hex">Hex</MudSelectItem>
-                    </MudSelect>
+                    <div class="publish-props-correlation">
+                        <div class="publish-props-correlation-head">
+                            <MudSwitch T="bool" @bind-Value="Draft.CorrelationPresent" Label="Send correlation data"
+                                       Color="Color.Primary" Class="publish-props-presence"/>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                No correlation data is sent while this is off. On with an empty value sends a zero-length value.
+                            </MudText>
+                        </div>
+                        <div class="publish-props-correlation-fields">
+                            <MudTextField T="string" Label="Correlation data" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                          @bind-Value="Draft.CorrelationText" Immediate="true" Clearable="true"
+                                          Disabled="@(!Draft.CorrelationPresent)"
+                                          Error="@(Draft.CorrelationError is not null)" ErrorText="@Draft.CorrelationError"
+                                          HelperText="@(Draft.CorrelationEncoding == CorrelationDataEncoding.Hex ? "Hex digits, optional 0x prefix" : "Sent as UTF-8, whitespace kept")"/>
+                            <MudSelect T="CorrelationDataEncoding" Label="Encoding" Variant="Variant.Outlined"
+                                       Margin="Margin.Dense" @bind-Value="Draft.CorrelationEncoding"
+                                       Disabled="@(!Draft.CorrelationPresent)">
+                                <MudSelectItem T="CorrelationDataEncoding" Value="CorrelationDataEncoding.Text">Text</MudSelectItem>
+                                <MudSelectItem T="CorrelationDataEncoding" Value="CorrelationDataEncoding.Hex">Hex</MudSelectItem>
+                            </MudSelect>
+                        </div>
+                    </div>
                 </div>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                     The payload is always sent as UTF-8 text; the payload format only tells subscribers so.
@@ -81,14 +87,14 @@
                     <div class="publish-props-add-row">
                         <MudTextField @ref="_nameField" T="string" Class="publish-props-name" Label="Name"
                                       Variant="Variant.Outlined" Margin="Margin.Dense"
-                                      @bind-Value="_name" Immediate="true" Clearable="true" Disabled="@Disabled"
+                                      @bind-Value="_name" Immediate="true" Clearable="true"
                                       OnKeyDown="HandleKeyDown"/>
                         <MudTextField T="string" Class="publish-props-value" Label="Value"
                                       Variant="Variant.Outlined" Margin="Margin.Dense"
-                                      @bind-Value="_value" Immediate="true" Clearable="true" Disabled="@Disabled"
+                                      @bind-Value="_value" Immediate="true" Clearable="true"
                                       OnKeyDown="HandleKeyDown"/>
                         <AppPrimaryButton Class="publish-props-add" StartIcon="@LucideIcons.Plus" title="Add user property"
-                                          Disabled="@(Disabled || !CanAdd)" OnClick="@AddAsync">
+                                          Disabled="@(!CanAdd)" OnClick="@AddAsync">
                             Add
                         </AppPrimaryButton>
                     </div>
@@ -143,7 +149,6 @@
 
 @code {
     [Parameter, EditorRequired] public PublishPropertiesDraft Draft { get; set; } = new();
-    [Parameter] public bool Disabled { get; set; }
 
     internal sealed record UserPropertyRow(int Index, MqttMessageUserProperty Property);
 
@@ -224,8 +229,6 @@
 
     private async Task AddAsync()
     {
-        if (Disabled)
-            return;
         if (string.IsNullOrWhiteSpace(_name))
         {
             Snackbar.Add("User property name cannot be blank.", Severity.Warning);

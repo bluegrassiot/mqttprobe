@@ -48,6 +48,7 @@
         RenderFragment Content);
 
     private readonly RenderFragment _appearance = @<AppearanceSection />;
+    private readonly RenderFragment _time = @<TimeSection />;
     private readonly RenderFragment _subscriptions = @<SubscriptionsSection />;
     private readonly RenderFragment _sparkplug = @<SparkplugSection />;
     private readonly RenderFragment _performance = @<PerformanceSection />;
@@ -69,6 +70,7 @@
     private IReadOnlyList<SettingsSection> BuildSections() =>
     [
         new("appearance", "Appearance", LucideIcons.Sun, () => true, _appearance),
+        new("time", "Time", LucideIcons.Clock, () => true, _time),
         new("subscriptions", "Subscriptions", LucideIcons.Layers, () => true, _subscriptions),
         new("sparkplug", "Sparkplug", LucideIcons.Radio, () => true, _sparkplug),
         new("performance", "Performance", LucideIcons.Cpu, () => true, _performance),

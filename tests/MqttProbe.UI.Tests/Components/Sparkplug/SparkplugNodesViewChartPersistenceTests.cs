@@ -46,6 +46,7 @@ public class SparkplugNodesViewChartPersistenceTests : BunitTestContext
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
         _snackbar = Substitute.For<ISnackbar>();
         Services.AddSingleton(_snackbar);
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
 
         EnsureMudProviders();
     }

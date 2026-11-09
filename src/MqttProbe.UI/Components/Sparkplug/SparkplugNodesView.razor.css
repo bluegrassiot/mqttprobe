@@ -95,6 +95,13 @@
 
 /* Node/detail rows (rendered by child components → ::deep) */
 
+::deep .spb-list-header {
+    display: flex;
+    justify-content: flex-end;
+    padding: 3px 12px 5px;
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
 ::deep .spb-group-header {
     padding: 6px 12px 4px;
     font-size: 11px;
@@ -526,6 +533,30 @@
     font-size: 12px;
     color: var(--mud-palette-text-secondary);
 }
+
+::deep .spb-timestamp {
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    min-width: 0;
+}
+
+::deep .spb-timestamp__value {
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 2px 5px;
+    min-width: 0;
+}
+
+::deep .spb-timestamp__time {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--mud-palette-text-primary);
+}
+
+::deep .spb-timestamp--pending { letter-spacing: 0.12em; }
 
 ::deep .spb-sequence-panel {
     margin: 0 0 16px;

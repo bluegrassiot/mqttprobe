@@ -1,5 +1,5 @@
-using System.Collections.Concurrent;
 using System.Globalization;
+using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.PluginContracts;
 using Org.Eclipse.Tahu.Protobuf;
 
@@ -7,12 +7,13 @@ namespace MqttProbe.Core.Services.Plugins.BuiltIn;
 
 public sealed class SparkplugTopologyExtractor : ITopologyExtractor
 {
-    // Key: "group/node" for node-scoped, "group/node/device" for device-scoped.
-    private readonly ConcurrentDictionary<string, Dictionary<ulong, string>> _aliasMaps = new(StringComparer.Ordinal);
-
     public string FormatId => "sparkplug-b";
 
-    public IReadOnlyList<TopologyEvent> Extract(DecodedPayloadEnvelope envelope)
+    public IReadOnlyList<TopologyEvent> Extract(DecodedPayloadEnvelope envelope) =>
+        Extract(envelope, null);
+
+    public IReadOnlyList<TopologyEvent> Extract(
+        DecodedPayloadEnvelope envelope, SparkplugMetricMetadataStore? metadataStore)
     {
         if (envelope.FormatId != FormatId || envelope.IsFailure)
             return [];
@@ -35,7 +36,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
                 NodeId = node,
                 BirthDeathSequenceNumber = GetBirthDeathSequence(payload)
             }],
-            "NDATA" => HandleNData(envelope, payload, group, node),
+            "NDATA" => HandleNData(envelope, payload, metadataStore, group, node),
             "DBIRTH" when device != null => HandleDBirth(envelope, payload, group, node, device),
             "DDEATH" when device != null => [new DeviceDeathEvent
             {
@@ -46,7 +47,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
                 NodeId = node,
                 DeviceId = device
             }],
-            "DDATA" when device != null => HandleDData(envelope, payload, group, node, device),
+            "DDATA" when device != null => HandleDData(envelope, payload, metadataStore, group, node, device),
             _ => []
         };
     }
@@ -54,17 +55,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
     private IReadOnlyList<TopologyEvent> HandleNBirth(
         DecodedPayloadEnvelope envelope, Payload payload, string group, string node)
     {
-        var key = $"{group}/{node}";
-        var aliasMap = new Dictionary<ulong, string>();
-
         var metrics = ExtractMetrics(payload);
-        foreach (var metric in payload.Metrics)
-        {
-            if (!string.IsNullOrEmpty(metric.Name) && metric.Alias != 0)
-                aliasMap[metric.Alias] = metric.Name;
-        }
-
-        _aliasMaps[key] = aliasMap;
 
         return [new NodeBirthEvent
         {
@@ -80,12 +71,10 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
     }
 
     private IReadOnlyList<TopologyEvent> HandleNData(
-        DecodedPayloadEnvelope envelope, Payload payload, string group, string node)
+        DecodedPayloadEnvelope envelope, Payload payload, SparkplugMetricMetadataStore? metadataStore,
+        string group, string node)
     {
-        var key = $"{group}/{node}";
-        _aliasMaps.TryGetValue(key, out var aliasMap);
-
-        var metrics = ExtractMetricsWithAliasResolution(payload, aliasMap);
+        var metrics = ExtractMetricsWithAliasResolution(payload, metadataStore, group, node, null);
 
         return [new NodeDataEvent
         {
@@ -101,17 +90,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
     private IReadOnlyList<TopologyEvent> HandleDBirth(
         DecodedPayloadEnvelope envelope, Payload payload, string group, string node, string device)
     {
-        var key = $"{group}/{node}/{device}";
-        var aliasMap = new Dictionary<ulong, string>();
-
         var metrics = ExtractMetrics(payload);
-        foreach (var metric in payload.Metrics)
-        {
-            if (!string.IsNullOrEmpty(metric.Name) && metric.Alias != 0)
-                aliasMap[metric.Alias] = metric.Name;
-        }
-
-        _aliasMaps[key] = aliasMap;
 
         return [new DeviceBirthEvent
         {
@@ -126,12 +105,10 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
     }
 
     private IReadOnlyList<TopologyEvent> HandleDData(
-        DecodedPayloadEnvelope envelope, Payload payload, string group, string node, string device)
+        DecodedPayloadEnvelope envelope, Payload payload, SparkplugMetricMetadataStore? metadataStore,
+        string group, string node, string device)
     {
-        var key = $"{group}/{node}/{device}";
-        _aliasMaps.TryGetValue(key, out var aliasMap);
-
-        var metrics = ExtractMetricsWithAliasResolution(payload, aliasMap);
+        var metrics = ExtractMetricsWithAliasResolution(payload, metadataStore, group, node, device);
 
         return [new DeviceDataEvent
         {
@@ -177,7 +154,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
             if (string.IsNullOrEmpty(metric.Name))
                 continue;
 
-            var (value, dataType) = ExtractMetricValue(metric);
+            var (value, dataType) = ExtractMetricValue(metric, metric.Datatype);
             if (dataType.Length == 0)
                 dataType = "unknown";
             result.Add(new MetricSnapshot
@@ -280,7 +257,8 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
     }
 
     private static List<MetricSnapshot> ExtractMetricsWithAliasResolution(
-        Payload payload, Dictionary<ulong, string>? aliasMap)
+        Payload payload, SparkplugMetricMetadataStore? metadataStore,
+        string group, string node, string? device)
     {
         var result = new List<MetricSnapshot>();
 
@@ -289,15 +267,16 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
             string? name;
             if (!string.IsNullOrEmpty(metric.Name))
                 name = metric.Name;
-            else if (aliasMap != null)
-                name = aliasMap.GetValueOrDefault(metric.Alias);
+            else if (metadataStore != null && metric.Alias != 0)
+                name = metadataStore.ResolveName(group, node, device, metric.Alias);
             else
                 name = null;
 
             if (name == null)
                 continue;
 
-            var (value, dataType) = ExtractMetricValue(metric);
+            var datatype = ResolveDatatype(metric, name, metadataStore, group, node, device);
+            var (value, dataType) = ExtractMetricValue(metric, datatype);
             result.Add(new MetricSnapshot
             {
                 Name = name,
@@ -310,34 +289,28 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
         return result;
     }
 
-    private static (string Value, string DataType) ExtractMetricValue(Payload.Types.Metric metric)
+    private static uint ResolveDatatype(
+        Payload.Types.Metric metric, string name, SparkplugMetricMetadataStore? metadataStore,
+        string group, string node, string? device)
     {
-        var dataType = metric.Datatype switch
-        {
-            0 => string.Empty,
-            1 => "int8",
-            2 => "int16",
-            3 => "int32",
-            4 => "int64",
-            5 => "uint8",
-            6 => "uint16",
-            7 => "uint32",
-            8 => "uint64",
-            9 => "float",
-            10 => "double",
-            11 => "bool",
-            12 => "string",
-            14 => "datetime",
-            15 => "text",
-            16 => "uuid",
-            17 => "dataset",
-            18 => "bytes",
-            19 => "file",
-            20 => "template",
-            _ => "unknown"
-        };
+        if (metric.Datatype != 0 || metadataStore is null)
+            return metric.Datatype;
 
-        var value = metric.ValueCase switch
+        return metadataStore.ResolveDatatype(group, node, device, metric.Alias, name) ?? 0;
+    }
+
+    private static (string Value, string DataType) ExtractMetricValue(
+        Payload.Types.Metric metric, uint datatype)
+    {
+        var dataType = datatype == 0
+            ? string.Empty
+            : SparkplugMetricValueConverter.LabelForDatatype(datatype);
+
+        var value = SparkplugMetricValueConverter.IsIntegerDatatype(datatype)
+            ? FormatIntegerValue(metric, datatype)
+            : null;
+
+        value ??= metric.ValueCase switch
         {
             // Invariant so the displayed value matches what is on the wire rather than
             // the viewer's locale — this is a protocol diagnostic, not localised UI.
@@ -351,5 +324,24 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
         };
 
         return (value, dataType);
+    }
+
+    private static string? FormatIntegerValue(Payload.Types.Metric metric, uint datatype)
+    {
+        ulong rawValue;
+        switch (metric.ValueCase)
+        {
+            case Payload.Types.Metric.ValueOneofCase.IntValue:
+                rawValue = metric.IntValue;
+                break;
+            case Payload.Types.Metric.ValueOneofCase.LongValue:
+                rawValue = metric.LongValue;
+                break;
+            default:
+                return null;
+        }
+
+        return SparkplugMetricValueConverter.DecodeInteger(datatype, rawValue)
+            .ToString(CultureInfo.InvariantCulture);
     }
 }

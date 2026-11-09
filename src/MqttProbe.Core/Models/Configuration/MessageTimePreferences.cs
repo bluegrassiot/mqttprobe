@@ -13,14 +13,14 @@ public sealed record MessageTimePreferences
     public const string DeltaScopeTopic = "topic";
 
     public string Mode { get; set; } = ModeClock;
-    public string Zone { get; set; } = ZoneUtc;
+    public string Zone { get; set; } = ZoneLocal;
     public string ClockFormat { get; set; } = ClockFormat24Hour;
     public string DeltaScope { get; set; } = DeltaScopeAll;
 
     public static MessageTimePreferences Normalize(MessageTimePreferences? preferences) => new()
     {
         Mode = Match(preferences?.Mode, ModeClock, ModeClock, ModeElapsed, ModeDelta),
-        Zone = Match(preferences?.Zone, ZoneUtc, ZoneUtc, ZoneLocal),
+        Zone = Match(preferences?.Zone, ZoneLocal, ZoneUtc, ZoneLocal),
         ClockFormat = Match(preferences?.ClockFormat, ClockFormat24Hour, ClockFormat24Hour, ClockFormat12Hour),
         DeltaScope = Match(preferences?.DeltaScope, DeltaScopeAll, DeltaScopeAll, DeltaScopeTopic)
     };

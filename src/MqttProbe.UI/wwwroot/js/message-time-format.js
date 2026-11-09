@@ -1,5 +1,8 @@
 const formatters = new Map();
 
+const bridgeName = "mqttProbeTime";
+const bridgeVersion = 1;
+
 function pick(parts, type) {
     return parts.find(part => part.type === type)?.value ?? "";
 }
@@ -8,10 +11,21 @@ function deviceTimeZone() {
     return new Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
-function requestZone(zone, explicitTimeZone) {
-    if (zone !== "local")
-        return "UTC";
-    return explicitTimeZone || deviceTimeZone();
+function resolveOptions(options) {
+    const opts = options || {};
+    return {
+        zone: opts.zone === "utc" ? "utc" : "local",
+        clockFormat: opts.clockFormat === "12h" ? "12h" : "24h",
+        timeZone: opts.timeZone
+    };
+}
+
+function resolveZone(options) {
+    const resolved = resolveOptions(options);
+    return {
+        ...resolved,
+        timeZone: resolved.zone === "local" ? resolved.timeZone || deviceTimeZone() : "UTC"
+    };
 }
 
 function clockFormatter(timeZone, clockFormat) {
@@ -74,9 +88,9 @@ function offsetLabel(timeZone, epochMs) {
     return `UTC${match[1]}${match[2].padStart(2, "0")}:${match[3] ?? "00"}`;
 }
 
-function formatInstant(value, zone, clockFormat) {
-    const date = new Date(value);
-    const parts = clockFormatter(zone, clockFormat).formatToParts(date);
+function formatInstant(epochMs, zone) {
+    const date = new Date(epochMs);
+    const parts = clockFormatter(zone.timeZone, zone.clockFormat).formatToParts(date);
     const fraction = pick(parts, "fractionalSecond") || String(date.getMilliseconds()).padStart(3, "0");
     const hour = pick(parts, "hour").padStart(2, "0");
     const minute = pick(parts, "minute");
@@ -84,42 +98,77 @@ function formatInstant(value, zone, clockFormat) {
     const dayPeriod = pick(parts, "dayPeriod");
     const dateText = `${pick(parts, "year")}-${pick(parts, "month")}-${pick(parts, "day")}`;
     const timeText = `${hour}:${minute}:${second}.${fraction}${dayPeriod ? ` ${dayPeriod}` : ""}`;
+    const zoneAbbreviation = pick(parts, "timeZoneName");
 
     return {
         dateText,
         timeText,
-        zoneAbbreviation: pick(parts, "timeZoneName")
+        zoneAbbreviation,
+        fullText: `${dateText} ${timeText} ${zoneAbbreviation}`.trim()
     };
 }
 
-export function formatMessages(items, options) {
-    const opts = options || {};
-    const zone = opts.zone === "local" ? "local" : "utc";
-    const clockFormat = opts.clockFormat === "12h" ? "12h" : "24h";
-    const timeZone = requestZone(zone, opts.timeZone);
-    const probe = items && items.length > 0 ? items[0].epochMs : Date.now();
+function formatZoneLabel(zone) {
+    return zone.zone === "local" ? zone.timeZone : "UTC";
+}
+
+export function formatInstants(items, options) {
+    const zone = resolveZone(options);
+    const list = items || [];
+    const probe = list.length > 0 ? list[0].epochMs : Date.now();
 
     return {
-        zoneLabel: zone === "local" ? timeZone : "UTC",
-        zoneName: zoneName(timeZone, probe),
-        items: (items || []).map(item => {
-            const instant = formatInstant(item.epochMs, timeZone, clockFormat);
+        zoneLabel: formatZoneLabel(zone),
+        zoneName: zoneName(zone.timeZone, probe),
+        items: list.map(item => {
+            const instant = formatInstant(item.epochMs, zone);
             const result = {
                 key: item.key,
                 dateText: instant.dateText,
                 timeText: instant.timeText,
-                fullText: `${instant.dateText} ${instant.timeText} ${instant.zoneAbbreviation}`.trim(),
+                fullText: instant.fullText,
                 zoneAbbreviation: instant.zoneAbbreviation,
                 zoneName: "",
                 offsetLabel: ""
             };
 
             if (item.detail) {
-                result.zoneName = zoneName(timeZone, item.epochMs);
-                result.offsetLabel = offsetLabel(timeZone, item.epochMs);
+                result.zoneName = zoneName(zone.timeZone, item.epochMs);
+                result.offsetLabel = offsetLabel(zone.timeZone, item.epochMs);
             }
 
             return result;
         })
     };
+}
+
+function bridgeApi() {
+    return Object.freeze({
+        version: bridgeVersion,
+        formatAxis(epochMs, options) {
+            return formatInstant(epochMs, resolveZone(options)).timeText;
+        },
+        formatTooltip(epochMs, options) {
+            return formatInstant(epochMs, resolveZone(options)).fullText;
+        },
+        zoneLabel(options) {
+            return formatZoneLabel(resolveZone(options));
+        },
+        zoneName(epochMs, options) {
+            return zoneName(resolveZone(options).timeZone, epochMs);
+        },
+        offsetLabel(epochMs, options) {
+            return offsetLabel(resolveZone(options).timeZone, epochMs);
+        }
+    });
+}
+
+export function installTimeBridge(target = globalThis) {
+    const existing = target[bridgeName];
+    if (existing && existing.version === bridgeVersion)
+        return existing;
+
+    const bridge = bridgeApi();
+    target[bridgeName] = bridge;
+    return bridge;
 }

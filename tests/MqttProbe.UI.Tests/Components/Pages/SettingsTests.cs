@@ -78,8 +78,8 @@ public class SettingsTests : BunitTestContext
         var cut = Render<MqttProbe.UI.Components.Pages.Settings>();
 
         var items = cut.FindAll("nav[aria-label='Settings sections'] button");
-        items.Should().HaveCount(7);
-        items.Select(i => i.TextContent.Trim()).Should().Contain("Plugins");
+        items.Should().HaveCount(8);
+        items.Select(i => i.TextContent.Trim()).Should().Contain(["Plugins", "Time"]);
     }
 
     [Test]
@@ -90,7 +90,7 @@ public class SettingsTests : BunitTestContext
         var cut = Render<MqttProbe.UI.Components.Pages.Settings>();
 
         var items = cut.FindAll("nav[aria-label='Settings sections'] button");
-        items.Should().HaveCount(6);
+        items.Should().HaveCount(7);
         items.Should().NotContain(i => i.TextContent.Contains("Account"));
     }
 
@@ -101,6 +101,20 @@ public class SettingsTests : BunitTestContext
 
         cut.FindComponents<MudSelect<string>>().Should().Contain(s => s.Instance.Label == "Theme");
         cut.FindComponents<MudNumericField<int>>().Should().NotContain(f => f.Instance.Label == "Max stored messages");
+    }
+
+    [Test]
+    public void TimeSection_IsReachableFromTheRail()
+    {
+        var cut = Render<MqttProbe.UI.Components.Pages.Settings>();
+
+        cut.FindAll("nav[aria-label='Settings sections'] button")
+            .First(button => button.TextContent.Contains("Time"))
+            .Click();
+
+        cut.FindComponents<MudSelect<string>>().Should().Contain(select => select.Instance.Label == "Time zone");
+        cut.FindComponents<MudSelect<string>>().Should().Contain(select => select.Instance.Label == "Clock format");
+        cut.FindComponents<MudSelect<string>>().Should().NotContain(select => select.Instance.Label == "Theme");
     }
 
     [Test]
@@ -241,7 +255,7 @@ public class SettingsTests : BunitTestContext
             .Select(i => i.Instance.Value);
 
         values.Should().BeEquivalentTo(
-            "appearance", "subscriptions", "sparkplug", "performance", "plugins", "account", "about");
+            "appearance", "time", "subscriptions", "sparkplug", "performance", "plugins", "account", "about");
     }
 
     [Test]

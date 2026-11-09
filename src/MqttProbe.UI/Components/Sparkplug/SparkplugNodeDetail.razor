@@ -74,20 +74,16 @@ else
         <div class="spb-timestamps d-flex flex-wrap gap-3 mb-3">
             @if (Node.LastBirthAt != null)
             {
-                <span>
+                <span class="spb-timestamp">
                     Birth:
-                    <span class="metrics-mono">
-                        @Node.LastBirthAt.Value.ToLocalTime().ToString("HH:mm:ss")
-                    </span>
+                    @TimestampValue(SparkplugTimeKeys.NodeBirth)
                 </span>
             }
             @if (Node.LastDataAt != null)
             {
-                <span>
+                <span class="spb-timestamp">
                     Last data:
-                    <span class="metrics-mono">
-                        @Node.LastDataAt.Value.ToLocalTime().ToString("HH:mm:ss")
-                    </span>
+                    @TimestampValue(SparkplugTimeKeys.NodeLastData)
                     @if (Node.Status == SpbNodeStatus.Online)
                     {
                         <span class="spb-relative-time">(@DisplayHelpers.GetRelativeTime(Node.LastDataAt))</span>
@@ -96,20 +92,16 @@ else
             }
             @if (Node.LastDeathAt != null && Node.Status == SpbNodeStatus.Offline)
             {
-                <span>
+                <span class="spb-timestamp">
                     Death:
-                    <span class="metrics-mono">
-                        @Node.LastDeathAt.Value.ToLocalTime().ToString("HH:mm:ss")
-                    </span>
+                    @TimestampValue(SparkplugTimeKeys.NodeDeath)
                 </span>
             }
             @if (Node.LastRebirthRequestAt != null)
             {
-                <span>
+                <span class="spb-timestamp">
                     Rebirth requested:
-                    <span class="metrics-mono">
-                        @Node.LastRebirthRequestAt.Value.ToLocalTime().ToString("HH:mm:ss")
-                    </span>
+                    @TimestampValue(SparkplugTimeKeys.NodeRebirthRequest)
                 </span>
             }
             <span>
@@ -132,6 +124,7 @@ else
         {
             <SparkplugMetricsTable Class="mb-3"
                                    Topic="@SparkplugChartTargets.NodeTopic(Node.GroupId, Node.NodeId)"
+                                   Time="Time"
                                    Items="@Node.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
                                    Mode="@MetricViewMode"
                                    OnAddToChart="OnAddMetricToChart" />
@@ -186,6 +179,7 @@ else
                         {
                             <SparkplugMetricsTable
                                 Topic="@SparkplugChartTargets.DeviceTopic(Node.GroupId, Node.NodeId, device.DeviceId)"
+                                Time="Time"
                                 Items="@device.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
                                 Mode="@MetricViewMode"
                                 OnAddToChart="OnAddMetricToChart" />
@@ -198,6 +192,23 @@ else
 }
 
 @code {
+    private RenderFragment TimestampValue(string key) => @<span class="spb-timestamp__value">
+        @{
+            var time = Time.Find(key);
+        }
+        <span class="metrics-mono spb-timestamp__time @(time is null ? "spb-timestamp--pending" : "")"
+              data-time-value="@key"
+              data-time-pending="@(time is null ? "true" : null)"
+              title="@(time?.FullText ?? SparkplugTimeDisplay.PendingTitle)">@(time?.TimeText ?? SparkplugTimeDisplay.PendingMarker)</span>
+        @if (Time.ZoneFor(key) is { } zone)
+        {
+            <SparkplugZoneToken Abbreviation="@zone.Abbreviation"
+                                Detail="@zone.Tooltip"
+                                AccessibleLabel="@zone.AccessibleLabel"
+                                data-time-zone="@key" />
+        }
+    </span>;
+
     private async Task OnDeviceKeyDown(SpbDevice device, KeyboardEventArgs args)
     {
         if (args.IsComposing || args.CtrlKey || args.AltKey || args.MetaKey || args.ShiftKey)
@@ -271,6 +282,9 @@ else
 
     [Parameter]
     public SpbDevice? ExpandedDevice { get; set; }
+
+    [Parameter]
+    public SparkplugTimeDisplay Time { get; set; } = SparkplugTimeDisplay.Empty;
 
     [Parameter]
     public bool AllowNodeReboot { get; set; }

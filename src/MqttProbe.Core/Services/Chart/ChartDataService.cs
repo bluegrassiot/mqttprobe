@@ -169,15 +169,17 @@ public class ChartDataService(
             var payload = result.Envelope.DisplayText;
 
             IReadOnlyDictionary<ulong, string>? aliasNames = null;
+            ISparkplugMetricTypeResolver? sparkplugTypes = null;
             if (result.Envelope.FormatId == "sparkplug-b"
                 && !result.Envelope.IsFailure
-                && sparkplugSettings.Sparkplug.EnrichAliasNames
-                && topologyService is not null)
+                && SparkplugTopologyService.TryParseTopic(topic, out _, out _, out _, out _))
             {
-                aliasNames = SparkplugAliasResolver.Resolve(topic, result.Envelope, topologyService.Groups);
+                sparkplugTypes = new SparkplugChartMetricTypeResolver(topic, topologyService);
+                if (sparkplugSettings.Sparkplug.EnrichAliasNames && topologyService is not null)
+                    aliasNames = SparkplugAliasResolver.Resolve(topic, result.Envelope, topologyService.Groups);
             }
 
-            if (!TryExtractFields(payload, aliasNames, out var fields))
+            if (!TryExtractFields(payload, aliasNames, sparkplugTypes, out var fields))
                 return Task.CompletedTask;
 
             registry.Update(topic, fields);
@@ -249,6 +251,7 @@ public class ChartDataService(
     private bool TryExtractFields(
         string? payload,
         IReadOnlyDictionary<ulong, string>? aliasNames,
+        ISparkplugMetricTypeResolver? sparkplugTypes,
         out IReadOnlyDictionary<string, ExtractedField> fields)
     {
         fields = new Dictionary<string, ExtractedField>(StringComparer.Ordinal);
@@ -257,7 +260,7 @@ public class ChartDataService(
 
         try
         {
-            fields = extractor.Extract(payload, aliasNames);
+            fields = extractor.Extract(payload, aliasNames, sparkplugTypes);
         }
         catch
         {

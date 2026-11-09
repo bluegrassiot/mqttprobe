@@ -26,6 +26,7 @@ public partial class MessageStoreManager : IMessageStoreManager
     private readonly InboundRateLimiter _rateLimiter;
     private readonly SparkplugAliasEnricher _aliasEnricher;
     private readonly ITopicExcludeService? _topicExcludeService;
+    private readonly SparkplugMetricMetadataStore? _metricMetadataStore;
     private readonly Lock _lifecycleSync = new();
     private CancellationTokenSource? _sequenceMonitorCts;
     private Task _sequenceMonitorTask = Task.CompletedTask;
@@ -38,7 +39,8 @@ public partial class MessageStoreManager : IMessageStoreManager
         ISparkplugTopologyService? topologyService = null,
         ISparkplugCommandService? commandService = null,
         ITopicExcludeService? topicExcludeService = null,
-        ISubscriptionManager? subscriptionManager = null)
+        ISubscriptionManager? subscriptionManager = null,
+        SparkplugMetricMetadataStore? metricMetadataStore = null)
     {
         _client = client;
         _logger = logger;
@@ -48,6 +50,7 @@ public partial class MessageStoreManager : IMessageStoreManager
         _topologyService = topologyService;
         _commandService = commandService;
         _topicExcludeService = topicExcludeService;
+        _metricMetadataStore = metricMetadataStore;
         _store = new TopicTreeStore(performanceSettings, logger);
         _rateLimiter = new InboundRateLimiter(performanceSettings, metrics, logger);
         _aliasEnricher = new SparkplugAliasEnricher(sparkplugSettings, topologyService);
@@ -303,7 +306,7 @@ public partial class MessageStoreManager : IMessageStoreManager
 
             try
             {
-                var result = _pipeline.ProcessInbound(arg);
+                var result = _pipeline.ProcessInbound(arg, _metricMetadataStore);
                 var payloadText = result.Envelope.DisplayText;
                 formatId = result.Envelope.FormatId;
 

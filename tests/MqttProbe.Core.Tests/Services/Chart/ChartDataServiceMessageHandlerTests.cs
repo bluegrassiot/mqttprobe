@@ -763,6 +763,12 @@ public class ChartDataServiceMessageHandlerTests
             IReadOnlyDictionary<ulong, string>? aliasNames) =>
             ExtractCore(jsonPayload);
 
+        public IReadOnlyDictionary<string, ExtractedField> Extract(
+            string jsonPayload,
+            IReadOnlyDictionary<ulong, string>? aliasNames,
+            ISparkplugMetricTypeResolver? sparkplugTypes) =>
+            ExtractCore(jsonPayload);
+
         private IReadOnlyDictionary<string, ExtractedField> ExtractCore(string jsonPayload)
         {
             Interlocked.Exchange(ref _reached, 1);

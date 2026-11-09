@@ -71,6 +71,32 @@ public sealed class SparkplugMetricsTableHierarchyTests : BunitTestContext
     }
 
     [Test]
+    public async Task SortInFlat_DoesNotReorderHierarchyPreorderWhenSwitchingBack()
+    {
+        SparkplugChartSelection? captured = null;
+        var cut = Render<SparkplugMetricsTable>(parameters => parameters
+            .Add(component => component.Items, [Metric("A"), Metric("A/B"), Metric("B")])
+            .Add(component => component.Topic, Topic)
+            .Add(component => component.Mode, SparkplugMetricViewMode.Flat)
+            .Add(component => component.OnAddToChart,
+                EventCallback.Factory.Create<SparkplugChartSelection>(this, selection => captured = selection)));
+
+        cut.Find(".mud-table-sort-label").Click();
+        cut.Find(".mud-table-sort-label").Click();
+        Titles(cut).Should().Equal("B", "A/B", "A");
+
+        cut.Render(parameters => parameters.Add(component => component.Mode, SparkplugMetricViewMode.Hierarchy));
+        Titles(cut).Should().Equal(["A", "A/B", "B"],
+            "the hierarchy keeps preorder rather than inheriting the flat sort");
+
+        await cut.InvokeAsync(() => Row(cut, "A/B")
+            .QuerySelector("button[title='Add to chart']")!.Click());
+        captured.Should().NotBeNull();
+        captured!.JsonPath.Should().Be("metrics.A/B");
+        captured.SeriesName.Should().Be("A/B");
+    }
+
+    [Test]
     public void HierarchyMode_CollapsesBranchFoldersUntilExpanded()
     {
         var cut = RenderTable(SparkplugMetricViewMode.Hierarchy, Metric("A/T1"), Metric("A/T2"));
@@ -257,6 +283,9 @@ public sealed class SparkplugMetricsTableHierarchyTests : BunitTestContext
 
     private static string VisibleLabel(IRenderedComponent<SparkplugMetricsTable> cut, string fullPath) =>
         Row(cut, fullPath).QuerySelector(".spb-metric-label")!.TextContent.Trim();
+
+    private static IEnumerable<string?> Titles(IRenderedComponent<SparkplugMetricsTable> cut) =>
+        cut.FindAll("tr.spb-metric-row").Select(row => row.QuerySelector(".spb-td-name")!.GetAttribute("title"));
 
     private static SpbMetricSnapshot Metric(string name, string value = "1", string dataType = "double") =>
         new(name, dataType, value, DateTime.UtcNow);

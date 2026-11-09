@@ -26,6 +26,7 @@ public sealed class SparkplugNodesViewMetricModeTests : BunitTestContext
         var sparkplugSettings = Substitute.For<ISparkplugSettings>();
         sparkplugSettings.Sparkplug.Returns(new SparkplugSettings());
         Services.AddSparkplugSettings(sparkplugSettings);
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
 
         Services.AddSingleton(Substitute.For<IDialogService>());
         Services.AddSingleton(Substitute.For<ISnackbar>());

@@ -12,12 +12,14 @@ public class SparkplugTopologyServiceTests
 {
     private SparkplugTopologyService _service = null!;
     private SparkplugTopologyExtractor _extractor = null!;
+    private SparkplugMetricMetadataStore _store = null!;
 
     [SetUp]
     public void Setup()
     {
+        _store = new SparkplugMetricMetadataStore();
         _extractor = new SparkplugTopologyExtractor();
-        _service = new SparkplugTopologyService();
+        _service = new SparkplugTopologyService(metricMetadataStore: _store);
     }
 
     // Mirrors the live path: decoded envelope -> topology extractor -> service.
@@ -38,7 +40,7 @@ public class SparkplugTopologyServiceTests
             : DecodedPayloadEnvelope.CreateSuccess(
                 "sparkplug-b", topic, payload, parsed.ToString(), typedPayload: parsed);
 
-        return _service.ApplyTopologyEventsAsync(_extractor.Extract(envelope));
+        return _service.ApplyTopologyEventsAsync(_extractor.Extract(envelope, _store));
     }
 
     private static byte[] SpbPayload(params (string Name, ulong Alias, uint Datatype, double DoubleValue)[] metrics)

@@ -1,0 +1,25 @@
+.chart-zone-token {
+    display: inline;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--mud-palette-text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+    cursor: help;
+}
+
+.chart-zone-token:hover {
+    color: var(--mud-palette-text-primary);
+}
+
+.chart-zone-token:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 1px;
+}

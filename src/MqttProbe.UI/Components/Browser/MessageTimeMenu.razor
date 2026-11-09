@@ -40,35 +40,6 @@
                 </div>
             </div>
 
-            @if (IsClock)
-            {
-                <div class="pb-time-row">
-                    <span class="pb-time-row__label">Zone</span>
-                    <div class="pb-time-seg" role="group" aria-label="Time zone">
-                        <button type="button" class="pb-time-option" data-time-zone="utc"
-                                aria-pressed="@(IsUtc ? "true" : "false")"
-                                title="Coordinated Universal Time"
-                                @onclick="() => SetZoneAsync(MessageTimePreferences.ZoneUtc)">UTC</button>
-                        <button type="button" class="pb-time-option" data-time-zone="local"
-                                aria-pressed="@(IsLocal ? "true" : "false")"
-                                title="This device's time zone"
-                                @onclick="() => SetZoneAsync(MessageTimePreferences.ZoneLocal)">Local</button>
-                    </div>
-                </div>
-
-                <div class="pb-time-row">
-                    <span class="pb-time-row__label">Hours</span>
-                    <div class="pb-time-seg" role="group" aria-label="Clock format">
-                        <button type="button" class="pb-time-option" data-time-format="24h"
-                                aria-pressed="@(Is24Hour ? "true" : "false")"
-                                @onclick="() => SetClockFormatAsync(MessageTimePreferences.ClockFormat24Hour)">24-hour</button>
-                        <button type="button" class="pb-time-option" data-time-format="12h"
-                                aria-pressed="@(Is12Hour ? "true" : "false")"
-                                @onclick="() => SetClockFormatAsync(MessageTimePreferences.ClockFormat12Hour)">12-hour</button>
-                    </div>
-                </div>
-            }
-
             @if (IsDelta)
             {
                 <div class="pb-time-row">
@@ -99,10 +70,6 @@
     private bool IsClock => Presentation.IsClock;
     private bool IsElapsed => Presentation.IsElapsed;
     private bool IsDelta => Presentation.IsDelta;
-    private bool IsUtc => !Presentation.IsLocal;
-    private bool IsLocal => Presentation.IsLocal;
-    private bool Is24Hour => !Presentation.Is12Hour;
-    private bool Is12Hour => Presentation.Is12Hour;
     private bool IsAllTopics => !Presentation.SameTopic;
     private bool IsSameTopic => Presentation.SameTopic;
 
@@ -114,11 +81,6 @@
         args.Key == "Escape" ? CloseMenuAsync() : Task.CompletedTask;
 
     private Task SetModeAsync(string mode) => UpdateAsync(preferences => preferences.Mode = mode);
-
-    private Task SetZoneAsync(string zone) => UpdateAsync(preferences => preferences.Zone = zone);
-
-    private Task SetClockFormatAsync(string clockFormat) =>
-        UpdateAsync(preferences => preferences.ClockFormat = clockFormat);
 
     private Task SetDeltaScopeAsync(string deltaScope) =>
         UpdateAsync(preferences => preferences.DeltaScope = deltaScope);

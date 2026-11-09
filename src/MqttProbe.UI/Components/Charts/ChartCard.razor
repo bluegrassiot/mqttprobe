@@ -1,7 +1,12 @@
 @using ApexCharts
 @using Microsoft.JSInterop
+@using MqttProbe.Core.Models.Configuration
+@using MqttProbe.Core.Services.Configuration
+@using MqttProbe.UI.Services.Formatting
 @using AppChartType = MqttProbe.Core.Models.Chart.ChartType
 @inject IChartDataService ChartDataService
+@inject IUiSettings UiSettings
+@inject IDeviceTimeFormatter TimeFormatter
 @implements IAsyncDisposable
 
 <div class="chart-card-shell">
@@ -53,23 +58,40 @@
         else
         {
             <div class="chart-card-plot" @onmouseover="OnMouseOver" @onmouseleave="OnMouseLeave">
-                <ApexChart TItem="ChartDataPoint"
-                           Options="_options"
-                           @ref="_chart"
-                           Height="300">
-                    @foreach (var series in Configuration.Series)
-                    {
-                        var s = series;
-                        <ApexPointSeries TItem="ChartDataPoint"
-                                         Items="@GetPoints(s.Id)"
-                                         Name="@s.DisplayName"
-                                         SeriesType="@GetSeriesType()"
-                                         XValue="@(p => (decimal)new DateTimeOffset(p.Timestamp).ToUnixTimeMilliseconds())"
-                                         YValue="@(p => (decimal)p.Value)"
-                                         Color="@s.Color" />
-                    }
-                </ApexChart>
+                @if (_bridgeReady)
+                {
+                    <ApexChart TItem="ChartDataPoint"
+                               Options="_options"
+                               @ref="_chart"
+                               Height="300"
+                               OnZoomed="OnChartZoomed"
+                               OnScrolled="OnChartScrolled">
+                        @foreach (var series in Configuration.Series)
+                        {
+                            var s = series;
+                            <ApexPointSeries TItem="ChartDataPoint"
+                                             Items="@GetPoints(s.Id)"
+                                             Name="@s.DisplayName"
+                                             SeriesType="@GetSeriesType()"
+                                             XValue="@(p => (decimal)new DateTimeOffset(p.Timestamp).ToUnixTimeMilliseconds())"
+                                             YValue="@(p => (decimal)p.Value)"
+                                             Color="@s.Color" />
+                        }
+                    </ApexChart>
+                }
+                else
+                {
+                    <div class="chart-card-plot__pending" aria-hidden="true"></div>
+                }
             </div>
+            @if (_zoneCaption.Length > 0)
+            {
+                <div class="chart-card-zone-row">
+                    <ChartZoneToken Abbreviation="@_zoneCaption"
+                                    Detail="@_zoneDetails"
+                                    AccessibleLabel="@ZoneAccessibleLabel" />
+                </div>
+            }
             <div class="chart-series-status" role="list" aria-label="Series status">
                 @foreach (var series in Configuration.Series)
                 {
@@ -164,6 +186,7 @@
 
     protected override void OnInitialized()
     {
+        InitializeTimeDisplay();
         _options = new ApexChartOptions<ChartDataPoint>
         {
             Chart = new Chart
@@ -180,20 +203,30 @@
             Grid = new Grid
             {
                 StrokeDashArray = 4,
+                Padding = new ApexCharts.Padding { Left = 24, Right = 56 },
                 Xaxis = new GridXAxis { Lines = new Lines { Show = true } },
                 Yaxis = new GridYAxis { Lines = new Lines { Show = true } }
             },
             Xaxis = new XAxis
             {
                 Type = XAxisType.Datetime,
-                Labels = new XAxisLabels { DatetimeUTC = false, Style = new AxisLabelStyle { FontSize = "11px" } },
+                Labels = new XAxisLabels
+                {
+                    DatetimeUTC = _preferences.Zone == MessageTimePreferences.ZoneUtc,
+                    Formatter = ChartTimeFormat.AxisFormatter(_preferences),
+                    HideOverlappingLabels = true,
+                    Rotate = -45,
+                    RotateAlways = false,
+                    MinHeight = 30,
+                    Style = new AxisLabelStyle { FontSize = "11px" }
+                },
                 AxisBorder = new AxisBorder { Show = true },
                 AxisTicks = new AxisTicks { Show = true }
             },
             Stroke = new Stroke { Curve = Curve.Smooth, Width = [2] },
             Tooltip = new Tooltip
             {
-                X = new TooltipX { Format = "HH:mm:ss" },
+                X = new TooltipX { Formatter = ChartTimeFormat.TooltipFormatter(_preferences) },
                 Theme = IsDarkMode ? Mode.Dark : Mode.Light
             },
             Yaxis = [new YAxis
@@ -268,6 +301,9 @@
 
         _pendingOptionsUpdate = true;
         if (configChanged) _pendingUpdate = true;
+
+        if (configChanged)
+            _ = InvokeAsync(() => RefreshZoneCaptionAsync(force: true));
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -280,6 +316,7 @@
                 null,
                 TimeSpan.FromSeconds(1),
                 TimeSpan.FromSeconds(1));
+            await EnsureTimeBridgeAsync();
         }
 
         if (_pendingOptionsUpdate && _chartReady && !_disposed && _chart is not null)
@@ -345,11 +382,20 @@
         RefreshReceipts();
         RefreshFreshness(render: true);
         RefreshChart();
+
+        if (_live && !_hovering && _visibleFromMs is null)
+            _ = InvokeAsync(() => RefreshZoneCaptionAsync());
     });
 
     // Runs even without messages so last-received ages stay current.
     internal void Tick()
     {
+        if (!_bridgeReady)
+            _ = InvokeAsync(EnsureTimeBridgeAsync);
+
+        if (_captionPending && _bridgeReady)
+            _ = InvokeAsync(() => RefreshZoneCaptionAsync(force: true, retry: true));
+
         RefreshFreshness(render: true);
         RefreshChart();
     }
@@ -399,6 +445,7 @@
             _hasNewData = true;
             RefreshFreshness(render: true);
             RefreshChart();
+            _ = InvokeAsync(() => RefreshZoneCaptionAsync());
         }
         StateHasChanged();
     }
@@ -420,6 +467,7 @@
     {
         _disposed = true;
         ChartDataService.OnDataUpdated -= OnDataUpdated;
+        DisposeTimeDisplay();
         if (_updateTimer is not null) await _updateTimer.DisposeAsync();
     }
 }

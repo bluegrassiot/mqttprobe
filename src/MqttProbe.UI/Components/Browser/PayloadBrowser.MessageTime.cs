@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Mqtt;
+using MqttProbe.UI.Services.Formatting;
 
 namespace MqttProbe.UI.Components.Browser;
 
@@ -10,7 +11,7 @@ public partial class PayloadBrowser
 {
     private MessageTimePreferences _preferences = new();
     private MessageTimePresentation _presentation = MessageTimeDisplay.Describe(new MessageTimePreferences());
-    private readonly Dictionary<Guid, MessageTimeFormatItem> _clockItems = [];
+    private readonly Dictionary<Guid, DeviceTimeFormatItem> _clockItems = [];
     private string _zoneLabel = "UTC";
     private string _zoneName = "Coordinated Universal Time";
     private bool _zoneFromBrowser;
@@ -18,7 +19,7 @@ public partial class PayloadBrowser
     private bool _formatInFlight;
     private int _formatVersion;
 
-    [Inject] private IMessageTimeFormatter MessageTimeFormatter { get; set; } = null!;
+    [Inject] private IDeviceTimeFormatter MessageTimeFormatter { get; set; } = null!;
 
     private string HeaderLabel => _presentation.HeaderLabel;
 
@@ -61,7 +62,7 @@ public partial class PayloadBrowser
         UiSettings.UiPreferencesChanged += OnUiPreferencesChanged;
     }
 
-    private MessageTimeFormatItem? ClockItem(MqttMessage message)
+    private DeviceTimeFormatItem? ClockItem(MqttMessage message)
     {
         if (_clockItems.TryGetValue(message.Id, out var item))
             return item;
@@ -69,7 +70,7 @@ public partial class PayloadBrowser
         return _presentation.IsLocal ? null : MessageTimeDisplay.FallbackClock(message, _preferences);
     }
 
-    private MessageTimeFormatItem? DetailItem(MqttMessage message)
+    private DeviceTimeFormatItem? DetailItem(MqttMessage message)
     {
         var item = ClockItem(message);
         if (item is null)
@@ -153,8 +154,8 @@ public partial class PayloadBrowser
             StateHasChanged();
     }
 
-    private async Task<MessageTimeFormatResult?> FormatBatchAsync(
-        List<MessageTimeFormatRequest> request,
+    private async Task<DeviceTimeFormatResult?> FormatBatchAsync(
+        List<DeviceTimeFormatRequest> request,
         MessageTimePreferences preferences)
     {
         try
@@ -176,7 +177,7 @@ public partial class PayloadBrowser
         }
     }
 
-    private void ApplyFormatResult(List<MessageTimeFormatItem> items, List<MessageTimeFormatRequest> request)
+    private void ApplyFormatResult(List<DeviceTimeFormatItem> items, List<DeviceTimeFormatRequest> request)
     {
         var requestedEpochs = new Dictionary<Guid, long>(request.Count);
         foreach (var item in request)
@@ -204,9 +205,9 @@ public partial class PayloadBrowser
         StateHasChanged();
     }
 
-    private List<MessageTimeFormatRequest> BuildFormatRequest()
+    private List<DeviceTimeFormatRequest> BuildFormatRequest()
     {
-        var request = new List<MessageTimeFormatRequest>(_presentation.IsClock ? _messageList.Count + 1 : 1);
+        var request = new List<DeviceTimeFormatRequest>(_presentation.IsClock ? _messageList.Count + 1 : 1);
         var selected = _selectedMessage;
 
         if (_presentation.IsClock)
@@ -227,7 +228,7 @@ public partial class PayloadBrowser
         return request;
     }
 
-    private static MessageTimeFormatRequest RequestFor(MqttMessage message, bool detail) =>
+    private static DeviceTimeFormatRequest RequestFor(MqttMessage message, bool detail) =>
         new(message.Id, MessageTimeDisplay.EpochMillis(message.DateTimeReceived), detail);
 
     private void OnUiPreferencesChanged() => _ = ApplyPreferencesAsync();

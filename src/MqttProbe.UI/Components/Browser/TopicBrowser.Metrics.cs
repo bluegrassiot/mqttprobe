@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Components;
-using Microsoft.Extensions.Logging;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Models.Sparkplug;
 using MqttProbe.Core.Services.Sparkplug;
@@ -11,6 +10,7 @@ public partial class TopicBrowser
 {
     private Func<SparkplugSelectionScope, IReadOnlyList<SpbMetricSnapshot>>? _metricSource;
     private bool _topologySubscribed;
+    private int _topologyDirty;
 
     [Parameter] public ISparkplugTopologyService? TopologyService { get; set; }
 
@@ -57,25 +57,18 @@ public partial class TopicBrowser
             : [];
     }
 
-    // Topology can change without the topic tree version moving, so this path bypasses the
-    // refresh cursor instead of waiting for a tree change that may never come.
-    private void OnTopologyChanged() => _ = RefreshFromTopologyAsync();
+    // Broker threads only mark the tree dirty; the existing refresh timer owns the rebuild, so a
+    // telemetry burst costs one projection instead of one per event.
+    private void OnTopologyChanged() => Interlocked.Exchange(ref _topologyDirty, 1);
 
-    private async Task RefreshFromTopologyAsync()
-    {
-        try
-        {
-            await InvokeAsync(() =>
-            {
-                if (_disposed) return;
+    // Takes the pending change atomically, so an event that lands during a refresh stays queued
+    // for the next tick instead of being lost.
+    private bool TakeTopologyDirty() => Interlocked.Exchange(ref _topologyDirty, 0) == 1;
 
-                ApplyFrame(RefreshFrame(force: true));
-                StateHasChanged();
-            });
-        }
-        catch (ObjectDisposedException) when (_disposed) { /* component torn down mid-refresh; nothing left to render */ }
-        catch (Exception ex) { Logger.LogWarning(ex, "TopicBrowser topology refresh render failed"); }
-    }
+    private EventCallback<TopicTreeRowModel> MetricChartCallback =>
+        OnAddMetricToChart.HasDelegate
+            ? EventCallback.Factory.Create<TopicTreeRowModel>(this, OnMetricChart)
+            : default;
 
     private Task OnMetricChart(TopicTreeRowModel row)
     {

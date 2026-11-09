@@ -153,7 +153,7 @@
                                   IsTabStop="@IsActiveRow(row)"
                                   OnExpandToggled="ToggleExpand"
                                   OnSelectionToggled="OnRowActivated"
-                                  OnAddMetricToChart="OnMetricChart"
+                                  OnAddMetricToChart="MetricChartCallback"
                                   OnKeyPressed="args => OnRowKeyPressed(row, args)"
                                   OnFocused="OnRowFocused"/>
                 </Virtualize>
@@ -298,7 +298,7 @@
             {
                 if (_disposed) return;
 
-                var frame = RefreshFrame(force: false);
+                var frame = RefreshFrame(force: TakeTopologyDirty());
                 if (frame is null)
                     return;
                 ApplyFrame(frame);

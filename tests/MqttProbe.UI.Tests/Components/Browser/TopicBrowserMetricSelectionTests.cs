@@ -1,4 +1,5 @@
 using AngleSharp.Dom;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using MQTTnet.Protocol;
@@ -194,8 +195,14 @@ public sealed class TopicBrowserMetricSelectionTests : BunitTestContext
         _fixture.Adapter.ConditionalClearCalls.Should().Be(0);
     }
 
+    private static void ExpandAll(IRenderedComponent<TopicBrowser> cut) =>
+        cut.Find("[aria-label='Expand all']").Click();
+
+    private static Task RefreshOnNextTickAsync(IRenderedComponent<TopicBrowser> cut) =>
+        cut.InvokeAsync(() => cut.Instance.RefreshAsync());
+
     [Test]
-    public void OfflineOwnerAndZeroHistory_KeepTheSelectedMetricValue()
+    public async Task OfflineOwnerAndZeroHistory_KeepTheSelectedMetricValue()
     {
         var cut = RenderExpanded();
         MetricRow(cut, "Temp").Click();
@@ -206,13 +213,11 @@ public sealed class TopicBrowserMetricSelectionTests : BunitTestContext
         AddNodeMessage("no metric name");
 
         _topology.TopologyChanged += Raise.Event<Action>();
+        await RefreshOnNextTickAsync(cut);
 
-        cut.WaitForAssertion(() =>
-        {
-            var state = _fixture.Adapter.Store.GetSelectedTopicState();
-            state.Metric!.MetricName.Should().Be("Temp");
-            state.MessageCount.Should().Be(0, "the owner row remains while no message names the metric");
-        });
+        var state = _fixture.Adapter.Store.GetSelectedTopicState();
+        state.Metric!.MetricName.Should().Be("Temp");
+        state.MessageCount.Should().Be(0, "the owner row remains while no message names the metric");
         MetricRow(cut, "Temp").QuerySelector(".topic-metric-value")!.TextContent.Should().Be("3",
             "the last value is kept while the node is offline");
     }
@@ -247,19 +252,20 @@ public sealed class TopicBrowserMetricSelectionTests : BunitTestContext
     }
 
     [Test]
-    public void BirthReplacementWithoutTheMetric_ClearsIt()
+    public async Task BirthReplacementWithoutTheMetric_ClearsIt()
     {
         var cut = RenderExpanded();
         MetricRow(cut, MotorTemp).Click();
 
         _node.Metrics = [Metric("Temp", "3")];
         _topology.TopologyChanged += Raise.Event<Action>();
+        await RefreshOnNextTickAsync(cut);
 
-        cut.WaitForAssertion(() => _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().BeNull());
+        _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().BeNull();
     }
 
     [Test]
-    public void PurgedOwner_ClearsTheMetric()
+    public async Task PurgedOwner_ClearsTheMetric()
     {
         var cut = RenderExpanded();
         MetricRow(cut, MotorTemp).Click();
@@ -268,12 +274,13 @@ public sealed class TopicBrowserMetricSelectionTests : BunitTestContext
         _fixture.Adapter.Store.RemoveMatchingTopic(DeviceTopic);
         _topology.Groups.Returns(new Dictionary<string, SpbGroup>(StringComparer.Ordinal));
         _topology.TopologyChanged += Raise.Event<Action>();
+        await RefreshOnNextTickAsync(cut);
 
-        cut.WaitForAssertion(() => _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().BeNull());
+        _fixture.Adapter.Store.GetSelectedTopicState().Key.Should().BeNull();
     }
 
     [Test]
-    public void TopologyOnlyChange_RefreshesMetricRowsWithoutATreeVersionChange()
+    public async Task TopologyOnlyChange_RefreshesMetricRowsWithoutATreeVersionChange()
     {
         _node.Metrics = [];
         _node.Devices["dev1"].Metrics = [];
@@ -283,10 +290,50 @@ public sealed class TopicBrowserMetricSelectionTests : BunitTestContext
 
         _node.Metrics = [Metric("New/Metric", "1")];
         _topology.TopologyChanged += Raise.Event<Action>();
+        await RefreshOnNextTickAsync(cut);
 
-        cut.WaitForAssertion(() => cut.FindAll("[data-metric-folder='true']").Should().NotBeEmpty());
+        _fixture.Adapter.Store.Version.Should().Be(version);
+        cut.FindAll("[data-metric-folder='true']").Should().NotBeEmpty();
         FolderRow(cut, "New").Click();
         cut.WaitForAssertion(() => cut.FindAll("[data-metric-name='New/Metric']").Should().NotBeEmpty());
+    }
+
+    [Test]
+    public async Task TopologyChangedBurst_RendersOnceWhenTheCadenceTickRuns()
+    {
+        _node.Metrics = [];
+        var cut = RenderExpanded();
+        var version = _fixture.Adapter.Store.Version;
+        var rendersBefore = cut.RenderCount;
+
+        _node.Metrics = [Metric("Latest/Value", "9")];
+        for (var index = 0; index < 5; index++)
+            _topology.TopologyChanged += Raise.Event<Action>();
+
+        cut.RenderCount.Should().BeLessThanOrEqualTo(rendersBefore + 1,
+            "a burst queues at most one refresh, not one render per event");
+
+        await RefreshOnNextTickAsync(cut);
+
+        _fixture.Adapter.Store.Version.Should().Be(version);
+        FolderRow(cut, "Latest").Should().NotBeNull("the next cadence tick serves the whole burst");
+    }
+
+    [Test]
+    public void TopologyOnlyChange_RefreshesOnTheExistingCadenceTimer()
+    {
+        _node.Metrics = [];
+        _node.Devices["dev1"].Metrics = [];
+        var cut = RenderExpanded();
+        cut.FindAll("[data-metric-name]").Should().BeEmpty();
+        var version = _fixture.Adapter.Store.Version;
+
+        _node.Metrics = [Metric("Timer/Fresh", "5")];
+        _topology.TopologyChanged += Raise.Event<Action>();
+
+        cut.WaitForAssertion(
+            () => cut.FindAll("[data-metric-folder='true']").Should().NotBeEmpty(),
+            TimeSpan.FromSeconds(5));
         _fixture.Adapter.Store.Version.Should().Be(version);
     }
 
@@ -298,6 +345,49 @@ public sealed class TopicBrowserMetricSelectionTests : BunitTestContext
         await cut.Instance.DisposeAsync();
 
         _topology.Received(1).TopologyChanged -= Arg.Any<Action>();
+    }
+
+    [Test]
+    public async Task DisposedBrowser_IgnoresTopologyEventsAndRefreshes()
+    {
+        var cut = RenderExpanded();
+        await cut.Instance.DisposeAsync();
+        var renders = cut.RenderCount;
+
+        _topology.TopologyChanged += Raise.Event<Action>();
+        await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
+
+        cut.RenderCount.Should().Be(renders);
+    }
+
+    [Test]
+    public void DesktopMetricRow_WithAChartHandler_AddsTheExactMetric()
+    {
+        SparkplugChartSelection? captured = null;
+        var cut = Render<TopicBrowser>(parameters => parameters
+            .Add(component => component.TopologyService, _topology)
+            .Add(component => component.OnAddMetricToChart,
+                EventCallback.Factory.Create<SparkplugChartSelection>(this, selection => captured = selection)));
+        EnsureMudProviders();
+        ExpandAll(cut);
+
+        MetricRow(cut, MotorTemp).QuerySelector("button[aria-label='Chart metric Motor/Temp']")!.Click();
+
+        captured.Should().NotBeNull();
+        captured!.Topic.Should().Be(SparkplugChartTargets.NodeTopic("plant1", "node1"));
+        captured.JsonPath.Should().Be(SparkplugChartTargets.JsonPath(MotorTemp));
+        captured.SeriesName.Should().Be(MotorTemp);
+    }
+
+    [Test]
+    public void PickerMetricRow_WithoutAChartHandler_RendersNoChartAction()
+    {
+        var cut = RenderExpanded();
+
+        var row = MetricRow(cut, MotorTemp);
+
+        row.QuerySelector(".topic-metric-chart__button").Should().BeNull(
+            "the topic picker hosts this browser with no chart handler, so no dead action may render");
     }
 
     [Test]

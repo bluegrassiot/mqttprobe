@@ -433,23 +433,28 @@
 
 /* ── Header chips and filters ────────────────────────────────────────────── */
 
+/* TabPanelHeader is a child component, so it carries no scope attribute of this
+   component and a leading ::deep would compile to [b-scope] .class with nothing to
+   match. This display:contents wrapper is that anchor and adds no layout box. */
+.spb-nodes-header { display: contents; }
+
 /* ::deep because MudChip renders the element; scoped selector won't reach it */
 ::deep .spb-section-title { font-weight: 600; }
 
-::deep .spb-count-chip {
+.spb-nodes-header ::deep .spb-count-chip {
     height: 20px;
     font-size: 0.7rem;
     padding: 0 6px;
 }
 
-::deep .spb-count-chip--online  { color: var(--mud-palette-success); }
-::deep .spb-count-chip--offline { color: var(--mud-palette-error); }
-::deep .spb-filter-select { min-width: 120px; font-size: 0.85rem; }
-::deep .spb-filter-text   { min-width: 160px; font-size: 0.85rem; }
-::deep .spb-metric-view-toggle { min-width: 168px; font-size: 0.78rem; }
+.spb-nodes-header ::deep .spb-count-chip--online  { color: var(--mud-palette-success); }
+.spb-nodes-header ::deep .spb-count-chip--offline { color: var(--mud-palette-error); }
+.spb-nodes-header ::deep .spb-filter-select { min-width: 120px; font-size: 0.85rem; }
+.spb-nodes-header ::deep .spb-filter-text   { min-width: 160px; font-size: 0.85rem; }
+.spb-nodes-header ::deep .spb-metric-view-toggle { min-width: 168px; font-size: 0.78rem; }
 
-/* Nodes opts into wrapping filters so the metric view control stays reachable on a phone. */
-::deep .app-tabpanel-header__filters {
+/* Nodes opts into wrapping filters so the metric view control keeps its labels on a phone. */
+.spb-nodes-header ::deep .app-tabpanel-header__filters {
     flex-wrap: wrap;
     row-gap: 6px;
 }

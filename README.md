@@ -6,8 +6,8 @@ Connect to any broker, browse/filter live topics, inspect payloads, chart payloa
 
 [![CI](https://github.com/bluegrassiot/mqttprobe/actions/workflows/ci.yml/badge.svg)](https://github.com/bluegrassiot/mqttprobe/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/bluegrassiot/mqttprobe)](https://github.com/bluegrassiot/mqttprobe/releases/latest)
-[![Docker Pulls](https://img.shields.io/docker/pulls/bluegrassiot/mqttprobe)](https://hub.docker.com/r/bluegrassiot/mqttprobe)
+[![Release](https://img.shields.io/github/v/release/bluegrassiot/mqttprobe?cacheSeconds=86400)](https://github.com/bluegrassiot/mqttprobe/releases/latest)
+[![Docker Pulls](https://img.shields.io/docker/pulls/bluegrassiot/mqttprobe?cacheSeconds=86400)](https://hub.docker.com/r/bluegrassiot/mqttprobe)
 
 ![MQTTProbe demo: connecting to a broker, browsing topics, and decoding Sparkplug B messages](docs/images/demo.gif)
 

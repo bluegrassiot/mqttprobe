@@ -200,6 +200,75 @@ public class SparkplugNodesTimeTests : BunitTestContext
     }
 
     [Test]
+    public void DuplicateNodeMetricNames_KeepTheRegionRenderable()
+    {
+        _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneUtc };
+        var latest = _dataUtc.AddMinutes(5);
+        _node.Metrics =
+        [
+            new SpbMetricSnapshot("Flow Rate", "double", "12.5000", _dataUtc),
+            new SpbMetricSnapshot("Flow Rate", "double", "13.2500", latest)
+        ];
+        _formatter.Format = static (request, _) => new DeviceTimeFormatItem(
+            request.Key, $"t{request.EpochMs}", "", "", "UTC", "", "");
+
+        var cut = RenderSelectedNode();
+
+        cut.WaitForAssertion(() =>
+        {
+            var cells = cut.FindAll(".spb-time-value");
+            cells.Should().HaveCount(2, "the duplicated metric name still renders both rows");
+            cells.Select(cell => cell.TextContent.Trim())
+                .Should().AllBe($"t{EpochMillis(latest)}", "both rows read the snapshot that wins for the name");
+            cut.FindAll("tr.spb-metric-row .spb-td-value").Select(cell => cell.TextContent.Trim())
+                .Should().AllBe("13.2500");
+            cut.Find("[data-time-zone-label]").Should().NotBeNull("the region caption still resolves");
+        }, TimeSpan.FromSeconds(5));
+
+        _formatter.Batches.Should().ContainSingle("the region still formats in one batch");
+        _formatter.Batches[0].Requests.Select(request => request.Key)
+            .Should().OnlyHaveUniqueItems("a duplicated metric name must not reuse a request key in one batch");
+    }
+
+    [Test]
+    public void DuplicateDeviceMetricNames_KeepTheDeviceTableRenderable()
+    {
+        _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneUtc };
+        var latest = _dataUtc.AddMinutes(5);
+        _node.Devices["sensor-A"] = new SpbDevice
+        {
+            DeviceId = "sensor-A",
+            NodeId = _node.NodeId,
+            GroupId = _node.GroupId,
+            Status = SpbNodeStatus.Online,
+            LastBirthAt = _birthUtc,
+            LastDataAt = latest,
+            Metrics =
+            [
+                new SpbMetricSnapshot("Flow Rate", "double", "12.5000", _dataUtc),
+                new SpbMetricSnapshot("Flow Rate", "double", "13.2500", latest)
+            ]
+        };
+        _formatter.Format = static (request, _) => new DeviceTimeFormatItem(
+            request.Key, $"t{request.EpochMs}", "", "", "UTC", "", "");
+
+        var cut = RenderSelectedNode();
+        cut.Find(".spb-device-select").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var cells = cut.FindAll(".spb-device-metrics .spb-time-value");
+            cells.Should().HaveCount(2, "the duplicated device metric name still renders both rows");
+            cells.Select(cell => cell.TextContent.Trim())
+                .Should().AllBe($"t{EpochMillis(latest)}", "both device rows read the snapshot that wins for the name");
+        }, TimeSpan.FromSeconds(5));
+
+        _formatter.Batches.Should().HaveCount(2, "one batch for the node and one for the expanded device");
+        _formatter.Batches.Should().OnlyContain(batch =>
+            batch.Requests.Select(request => request.Key).Distinct().Count() == batch.Requests.Count);
+    }
+
+    [Test]
     public void NodesRegion_FormatsNodeTimesAndMetricRowsInOneBatch()
     {
         _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneUtc };

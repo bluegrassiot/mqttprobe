@@ -20,6 +20,9 @@ public partial class ChartCard
     private long? _visibleFromMs;
     private long? _visibleToMs;
     private string _zoneCaptionSignature = "";
+    private string _desiredCaptionSignature = "";
+    private string? _captionInFlightSignature;
+    private int _captionInFlightVersion;
     private int _captionVersion;
     private bool _captionPending;
     private DateTime _lastCaptionRequest = DateTime.MinValue;
@@ -73,15 +76,6 @@ public partial class ChartCard
         if (_disposed || !_bridgeReady)
             return;
 
-        if (retry && _captionAttempts >= MaxCaptionAttempts)
-        {
-            _captionPending = false;
-            return;
-        }
-
-        if (!retry)
-            _captionAttempts = 0;
-
         var range = CurrentRange();
         if (range is null)
         {
@@ -91,11 +85,55 @@ public partial class ChartCard
 
         var (from, to) = range.Value;
         var signature = CaptionSignature(from, to);
-        if (ShouldSkipCaption(signature, force))
-            return;
+        var targetChanged = signature != _desiredCaptionSignature;
+        _desiredCaptionSignature = signature;
 
+        if (targetChanged)
+        {
+            _captionAttempts = 0;
+            InvalidateCaptionRequest();
+            _captionPending = false;
+        }
+        else if (_captionInFlightSignature == signature)
+        {
+            return;
+        }
+
+        if (signature == _zoneCaptionSignature)
+        {
+            _captionPending = false;
+            return;
+        }
+
+        if (retry && _captionAttempts >= MaxCaptionAttempts)
+        {
+            _captionPending = false;
+            return;
+        }
+
+        var now = Clock.GetUtcNow().UtcDateTime;
+        if (!force && !retry && now - _lastCaptionRequest < _captionRequestInterval)
+        {
+            _captionPending = true;
+            return;
+        }
+
+        if (!retry)
+            _captionAttempts = 0;
+
+        _lastCaptionRequest = now;
+        _captionPending = false;
+        await RequestCaptionAsync(from, to, signature);
+    }
+
+    private async Task RequestCaptionAsync(long from, long to, string signature)
+    {
         var version = ++_captionVersion;
+        _captionInFlightSignature = signature;
+        _captionInFlightVersion = version;
+
         var preferences = _preferences;
+        var zone = preferences.Zone;
         var requests = BuildCaptionRequests(from, to);
 
         DeviceTimeFormatResult? result;
@@ -105,12 +143,14 @@ public partial class ChartCard
         }
         catch (Exception ex) when (ex is JSDisconnectedException or JSException or ObjectDisposedException)
         {
-            if (IsCurrent(version, preferences))
+            ClearCaptionInFlight(version);
+            if (IsCurrent(version, zone))
                 CaptionFailed();
             return;
         }
 
-        if (!IsCurrent(version, preferences))
+        ClearCaptionInFlight(version);
+        if (!IsCurrent(version, zone))
             return;
 
         if (result is null)
@@ -122,28 +162,24 @@ public partial class ChartCard
         ApplyCaptionResult(result, signature);
     }
 
-    private bool ShouldSkipCaption(string signature, bool force)
+    private void InvalidateCaptionRequest()
     {
-        if (!force && signature == _zoneCaptionSignature)
-        {
-            _captionPending = false;
-            return true;
-        }
-
-        var now = DateTime.UtcNow;
-        if (!force && now - _lastCaptionRequest < _captionRequestInterval)
-        {
-            _captionPending = true;
-            return true;
-        }
-
-        _lastCaptionRequest = now;
-        _captionPending = false;
-        return false;
+        _captionVersion++;
+        _captionInFlightSignature = null;
+        _captionInFlightVersion = 0;
     }
 
-    private bool IsCurrent(int version, MessageTimePreferences preferences) =>
-        !_disposed && version == _captionVersion && preferences == _preferences;
+    private void ClearCaptionInFlight(int version)
+    {
+        if (_captionInFlightVersion != version)
+            return;
+
+        _captionInFlightSignature = null;
+        _captionInFlightVersion = 0;
+    }
+
+    private bool IsCurrent(int version, string zone) =>
+        !_disposed && version == _captionVersion && zone == _preferences.Zone;
 
     private void ApplyCaptionResult(DeviceTimeFormatResult result, string signature)
     {
@@ -165,8 +201,10 @@ public partial class ChartCard
     private void ClearZoneCaption()
     {
         _zoneCaptionSignature = "";
+        _desiredCaptionSignature = "";
         _captionAttempts = 0;
         _captionPending = false;
+        InvalidateCaptionRequest();
         if (_zoneCaption.Length == 0 && _zoneDetails.Length == 0)
             return;
 

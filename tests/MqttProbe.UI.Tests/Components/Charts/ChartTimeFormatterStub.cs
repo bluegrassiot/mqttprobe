@@ -19,17 +19,25 @@ internal sealed class ChartTimeFormatterStub : IDeviceTimeFormatter
 
     internal int FailuresRemaining { get; set; }
 
+    internal TaskCompletionSource? Gate { get; set; }
+
     internal List<MessageTimePreferences> Requests { get; } = [];
 
-    public Task<DeviceTimeFormatResult?> FormatAsync(
+    public async Task<DeviceTimeFormatResult?> FormatAsync(
         IReadOnlyList<DeviceTimeFormatRequest> items,
         MessageTimePreferences preferences)
     {
         Requests.Add(preferences);
+        if (Gate is { } gate)
+        {
+            Gate = null;
+            await gate.Task;
+        }
+
         if (FailuresRemaining > 0)
         {
             FailuresRemaining--;
-            return Task.FromResult<DeviceTimeFormatResult?>(null);
+            return null;
         }
 
         var formatted = new List<DeviceTimeFormatItem>(items.Count);
@@ -41,8 +49,7 @@ internal sealed class ChartTimeFormatterStub : IDeviceTimeFormatter
                 request.Key, "", "", "", abbreviation, zoneName, offset));
         }
 
-        return Task.FromResult<DeviceTimeFormatResult?>(
-            new DeviceTimeFormatResult(ZoneLabel, ZoneName, formatted));
+        return new DeviceTimeFormatResult(ZoneLabel, ZoneName, formatted);
     }
 
     public Task<bool> EnsureBridgeAsync() => Task.FromResult(BridgeReady);

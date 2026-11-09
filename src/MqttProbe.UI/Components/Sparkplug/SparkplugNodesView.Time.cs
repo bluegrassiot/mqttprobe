@@ -141,7 +141,7 @@ public partial class SparkplugNodesView
     {
         var requests = new List<TimeRequest>();
         var needed = new HashSet<string>(StringComparer.Ordinal);
-        var instants = new List<TimeInstant>();
+        var instants = new Dictionary<string, TimeInstant>(StringComparer.Ordinal);
 
         if (_selectedNode is { } node)
         {
@@ -162,12 +162,12 @@ public partial class SparkplugNodesView
             }
         }
 
-        foreach (var instant in instants)
+        foreach (var instant in instants.Values)
             AddTimeRequest(requests, needed, instant.Label, instant.EpochMs, instant.Detail);
 
         if (instants.Count > 0)
         {
-            var newestEpoch = instants.Max(instant => instant.EpochMs);
+            var newestEpoch = instants.Values.Max(instant => instant.EpochMs);
             AddTimeRequest(requests, needed, SparkplugTimeKeys.RegionCaption, newestEpoch, detail: true);
         }
 
@@ -175,10 +175,14 @@ public partial class SparkplugNodesView
         return requests;
     }
 
-    private static void AddInstant(List<TimeInstant> instants, string label, DateTime? instant, bool detail)
+    private static void AddInstant(
+        Dictionary<string, TimeInstant> instants,
+        string label,
+        DateTime? instant,
+        bool detail)
     {
         if (instant is { } value)
-            instants.Add(new TimeInstant(label, ToEpochMillis(value), detail));
+            instants[label] = new TimeInstant(label, ToEpochMillis(value), detail);
     }
 
     private void AddTimeRequest(
@@ -223,7 +227,10 @@ public partial class SparkplugNodesView
     {
         if (result.Items is { } items)
         {
-            var byKey = items.ToDictionary(item => item.Key);
+            var byKey = new Dictionary<Guid, DeviceTimeFormatItem>(items.Count);
+            foreach (var item in items)
+                byKey[item.Key] = item;
+
             foreach (var request in requests)
             {
                 if (!byKey.TryGetValue(request.Request.Key, out var item))

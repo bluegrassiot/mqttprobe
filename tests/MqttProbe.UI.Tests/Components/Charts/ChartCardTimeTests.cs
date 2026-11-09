@@ -489,6 +489,180 @@ public class ChartCardTimeTests : BunitTestContext
     }
 
     [Test]
+    public async Task ZoneCaption_ThrottledRangeChangeReplacesTheInFlightOldRange()
+    {
+        var transition = new DateTimeOffset(2026, 11, 1, 6, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneLocal };
+        _formatter.ZoneLabel = "America/New_York";
+        _formatter.ItemFor = epoch => epoch < transition
+            ? ("EDT", "Eastern Daylight Time", "UTC-04:00")
+            : ("EST", "Eastern Standard Time", "UTC-05:00");
+        var series = new ChartSeries { DisplayName = "Temp" };
+        _chartData.GetPoints(series.Id).Returns(
+        [
+            new ChartDataPoint(new DateTime(2026, 11, 1, 5, 58, 0, DateTimeKind.Utc), 1),
+            new ChartDataPoint(new DateTime(2026, 11, 1, 6, 2, 0, DateTimeKind.Utc), 2)
+        ]);
+
+        var cut = RenderCard(series);
+        cut.WaitForAssertion(
+            () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EDT / EST"),
+            TimeSpan.FromSeconds(5));
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _formatter.Gate = gate;
+        var initialRequests = _formatter.Requests.Count;
+        var chart = cut.FindComponent<ApexChart<ChartDataPoint>>().Instance;
+
+        var oldZoom = cut.InvokeAsync(() => chart.OnZoomed.InvokeAsync(new ZoomedData<ChartDataPoint>
+        {
+            XAxis = new SelectionXAxis
+            {
+                Min = transition - (10 * 60_000),
+                Max = transition - (5 * 60_000)
+            }
+        }));
+        cut.WaitForAssertion(
+            () => _formatter.Requests.Should().HaveCount(initialRequests + 1),
+            TimeSpan.FromSeconds(5));
+
+        await cut.InvokeAsync(() => chart.OnScrolled.InvokeAsync(new SelectionData<ChartDataPoint>
+        {
+            XAxis = new SelectionXAxis
+            {
+                Min = transition + (5 * 60_000),
+                Max = transition + (10 * 60_000)
+            }
+        }));
+
+        gate.SetResult();
+        await oldZoom;
+
+        cut.Find("button.chart-zone-token").TextContent.Trim().Should()
+            .Be("EDT / EST", "the old in-flight range must not replace the latest pan range");
+
+        await cut.InvokeAsync(() => cut.Instance.Tick());
+
+        cut.WaitForAssertion(
+            () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EST"),
+            TimeSpan.FromSeconds(5));
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task ZoneCaption_NonZonePreferenceChangeDuringInFlightRequestKeepsTheZoneCaption(bool changeClockFormat)
+    {
+        var transition = new DateTimeOffset(2026, 11, 1, 6, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneLocal };
+        _formatter.ZoneLabel = "America/New_York";
+        _formatter.ItemFor = epoch => epoch < transition
+            ? ("EDT", "Eastern Daylight Time", "UTC-04:00")
+            : ("EST", "Eastern Standard Time", "UTC-05:00");
+        var series = new ChartSeries { DisplayName = "Temp" };
+        _chartData.GetPoints(series.Id).Returns(
+        [
+            new ChartDataPoint(new DateTime(2026, 11, 1, 5, 58, 0, DateTimeKind.Utc), 1),
+            new ChartDataPoint(new DateTime(2026, 11, 1, 6, 2, 0, DateTimeKind.Utc), 2)
+        ]);
+
+        var cut = RenderCard(series);
+        cut.WaitForAssertion(
+            () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EDT / EST"),
+            TimeSpan.FromSeconds(5));
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _formatter.Gate = gate;
+        var initialRequests = _formatter.Requests.Count;
+        var chart = cut.FindComponent<ApexChart<ChartDataPoint>>().Instance;
+
+        var zoom = cut.InvokeAsync(() => chart.OnZoomed.InvokeAsync(new ZoomedData<ChartDataPoint>
+        {
+            XAxis = new SelectionXAxis
+            {
+                Min = transition + (5 * 60_000),
+                Max = transition + (10 * 60_000)
+            }
+        }));
+        cut.WaitForAssertion(
+            () => _formatter.Requests.Should().HaveCount(initialRequests + 1),
+            TimeSpan.FromSeconds(5));
+
+        _ui.Ui.MessageTime = changeClockFormat
+            ? new MessageTimePreferences
+            {
+                Zone = MessageTimePreferences.ZoneLocal,
+                ClockFormat = MessageTimePreferences.ClockFormat12Hour
+            }
+            : new MessageTimePreferences
+            {
+                Zone = MessageTimePreferences.ZoneLocal,
+                Mode = MessageTimePreferences.ModeElapsed
+            };
+        _ui.UiPreferencesChanged += Raise.Event<Action>();
+
+        if (changeClockFormat)
+        {
+            cut.WaitForAssertion(
+                () => cut.FindComponent<ApexChart<ChartDataPoint>>().Instance.Options.Tooltip.X.Formatter
+                    .Should().Contain("\"clockFormat\":\"12h\""),
+                TimeSpan.FromSeconds(5));
+        }
+        else
+        {
+            await cut.InvokeAsync(() => Task.CompletedTask);
+        }
+
+        gate.SetResult();
+        await zoom;
+
+        cut.WaitForAssertion(
+            () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EST"),
+            TimeSpan.FromSeconds(5));
+    }
+
+    [Test]
+    public async Task ZoneCaption_SameTargetNotificationsCoalesceWithTheInFlightRequest()
+    {
+        _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneLocal };
+        _formatter.ZoneLabel = "America/New_York";
+        _formatter.ZoneName = "Eastern Standard Time";
+        _formatter.Abbreviation = "EST";
+        _formatter.OffsetLabel = "UTC-05:00";
+        _formatter.BridgeReady = false;
+        var series = new ChartSeries { DisplayName = "Temp" };
+        _chartData.GetPoints(series.Id).Returns(
+        [
+            new ChartDataPoint(new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc), 1)
+        ]);
+
+        var cut = RenderCard(series);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _formatter.Gate = gate;
+        _formatter.BridgeReady = true;
+
+        var bridge = cut.InvokeAsync(() => cut.Instance.EnsureTimeBridgeAsync());
+        cut.WaitForAssertion(
+            () => _formatter.Requests.Should().ContainSingle("the initial caption request is genuinely in flight"),
+            TimeSpan.FromSeconds(5));
+
+        for (var index = 0; index < 5; index++)
+            _chartData.OnDataUpdated += Raise.Event<Action>();
+
+        _formatter.Requests.Should().ContainSingle(
+            "same-target notifications must coalesce with the in-flight request, not invalidate it");
+
+        gate.SetResult();
+        await bridge;
+
+        cut.WaitForAssertion(
+            () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EST"),
+            TimeSpan.FromSeconds(5));
+        _formatter.Requests.Should().ContainSingle("the first valid caption request was not replaced");
+    }
+
+    [Test]
     public void ChartOptions_KeepRotationAutomaticAndReserveEdgePadding()
     {
         var cut = RenderCard(new ChartSeries { DisplayName = "Temp" });

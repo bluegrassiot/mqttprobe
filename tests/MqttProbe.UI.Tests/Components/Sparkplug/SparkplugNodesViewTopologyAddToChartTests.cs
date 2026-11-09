@@ -41,6 +41,7 @@ public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
 
         Services.AddSingleton(Substitute.For<IDialogService>());
         Services.AddSingleton(Substitute.For<ISnackbar>());
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
         EnsureMudProviders();
     }
 

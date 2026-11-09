@@ -34,7 +34,7 @@ public class MessageTimeDisplayTests
     [Test]
     public void Describe_ClockLeavesTheDynamicHeaderDetailToTheParent()
     {
-        var utc = MessageTimeDisplay.Describe(new MessageTimePreferences());
+        var utc = MessageTimeDisplay.Describe(new MessageTimePreferences { Zone = MessageTimePreferences.ZoneUtc });
 
         utc.IsClock.Should().BeTrue();
         utc.IsElapsed.Should().BeFalse();
@@ -42,7 +42,7 @@ public class MessageTimeDisplayTests
         utc.HeaderLabel.Should().Be("Time");
         utc.HeaderMeta.Should().BeNull();
         utc.HeaderMetaTitle.Should().BeNull();
-        utc.MenuHint.Should().Be("Clock shows when each message arrived.");
+        utc.MenuHint.Should().Be("Clock shows when each message arrived. Time zone and hour format are in Settings.");
         utc.IsLocal.Should().BeFalse();
         utc.Is12Hour.Should().BeFalse();
 
@@ -54,7 +54,7 @@ public class MessageTimeDisplayTests
 
         localTwelveHour.IsLocal.Should().BeTrue();
         localTwelveHour.Is12Hour.Should().BeTrue();
-        localTwelveHour.MenuHint.Should().Be("Local uses this device's time zone.");
+        localTwelveHour.MenuHint.Should().Be(utc.MenuHint);
     }
 
     [Test]

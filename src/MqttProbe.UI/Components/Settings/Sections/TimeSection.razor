@@ -1,0 +1,49 @@
+@namespace MqttProbe.UI.Components.Settings
+@using MqttProbe.Core.Models.Configuration
+@using MqttProbe.Core.Services.Configuration
+@inject IUiSettings UiSettings
+
+<div class="settings-field">
+    <MudSelect T="string" Label="Time zone"
+               Value="@UiSettings.Ui.MessageTime.Zone"
+               ValueChanged="@OnZoneChanged"
+               Variant="Variant.Outlined"
+               Margin="Margin.Dense"
+               Class="settings-field-medium">
+        <MudSelectItem Value="@MessageTimePreferences.ZoneLocal">Local (this device)</MudSelectItem>
+        <MudSelectItem Value="@MessageTimePreferences.ZoneUtc">UTC</MudSelectItem>
+    </MudSelect>
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Local follows this device's time zone. The server's time zone is never used.
+    </MudText>
+</div>
+
+<div class="settings-field">
+    <MudSelect T="string" Label="Clock format"
+               Value="@UiSettings.Ui.MessageTime.ClockFormat"
+               ValueChanged="@OnClockFormatChanged"
+               Variant="Variant.Outlined"
+               Margin="Margin.Dense"
+               Class="settings-field-medium">
+        <MudSelectItem Value="@MessageTimePreferences.ClockFormat24Hour">24-hour</MudSelectItem>
+        <MudSelectItem Value="@MessageTimePreferences.ClockFormat12Hour">12-hour</MudSelectItem>
+    </MudSelect>
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        12-hour times include AM or PM. Milliseconds are shown everywhere.
+    </MudText>
+</div>
+
+@code {
+    private Task OnZoneChanged(string? zone) =>
+        UpdateAsync(preferences => preferences.Zone = zone ?? preferences.Zone);
+
+    private Task OnClockFormatChanged(string? clockFormat) =>
+        UpdateAsync(preferences => preferences.ClockFormat = clockFormat ?? preferences.ClockFormat);
+
+    private Task UpdateAsync(Action<MessageTimePreferences> mutate)
+    {
+        var next = MessageTimePreferences.Normalize(UiSettings.Ui.MessageTime);
+        mutate(next);
+        return UiSettings.SetMessageTimeAsync(next);
+    }
+}

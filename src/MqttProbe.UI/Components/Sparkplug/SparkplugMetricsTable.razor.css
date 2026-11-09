@@ -1,7 +1,15 @@
 /* Fixed columns stay narrow enough for the detail pane at its smallest size;
-   the metric name takes whatever is left and wraps. */
+   the metric name takes whatever is left and wraps. Updated also has to fit
+   "02:32:05.123 PM", so it is wide enough for a 12-hour time with milliseconds. */
 .spb-col-type { width: 64px; }
 .spb-col-alias { width: 44px; }
 .spb-col-value { width: 18%; }
-.spb-col-updated { width: 68px; }
+.spb-col-updated { width: 124px; }
 .spb-col-chart { width: 84px; }
+
+.spb-time-value {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.spb-time-value--pending { letter-spacing: 0.12em; }

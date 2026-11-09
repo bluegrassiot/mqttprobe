@@ -9,6 +9,7 @@ using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Plugins.BuiltIn;
 using MqttProbe.Core.Services.Plugins.Pipeline;
 using MqttProbe.Core.Services.Plugins.Registry;
+using MqttProbe.UI.Services.Formatting;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
 
@@ -40,6 +41,7 @@ public class MessageTimeBrowserTests : BunitTestContext
         Services.AddSingleton(_store);
 
         _settings = new RecordingUiSettings();
+        _settings.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneUtc };
         Services.AddUiSettings(_settings);
 
         var performance = Substitute.For<IPerformanceSettings>();
@@ -118,7 +120,7 @@ public class MessageTimeBrowserTests : BunitTestContext
     }
 
     [Test]
-    public void DefaultDisplay_IsUtc24WithOneHeaderZoneAndNoRowZone()
+    public void UtcDisplay_HasOneHeaderZoneAndNoRowZone()
     {
         _messages = [Message("first"), Message("second", 1_000), Message("third", 65_500)];
 
@@ -169,7 +171,11 @@ public class MessageTimeBrowserTests : BunitTestContext
     [Test]
     public void TwelveHourPreference_KeepsMillisecondsAndMatchesTheDetails()
     {
-        _settings.Ui.MessageTime = new MessageTimePreferences { ClockFormat = MessageTimePreferences.ClockFormat12Hour };
+        _settings.Ui.MessageTime = new MessageTimePreferences
+        {
+            Zone = MessageTimePreferences.ZoneUtc,
+            ClockFormat = MessageTimePreferences.ClockFormat12Hour
+        };
         _messages = [Message("first")];
 
         var (_, browser) = RenderBrowser();
@@ -189,31 +195,44 @@ public class MessageTimeBrowserTests : BunitTestContext
         var (provider, browser) = RenderBrowser();
 
         OpenTimeMenu(browser, provider);
-        Option(provider, "data-time-format", "12h").Click();
-
-        browser.WaitForAssertion(() => RowTimes(browser)[1].Should().Contain("PM"));
-        _settings.SavedMessageTimes.Should().ContainSingle()
-            .Which.ClockFormat.Should().Be(MessageTimePreferences.ClockFormat12Hour);
-
-        Option(provider, "data-time-zone", "local").Click();
-        provider.WaitForAssertion(() => _settings.SavedMessageTimes.Should().HaveCount(2));
-        _settings.SavedMessageTimes[^1].Zone.Should().Be(MessageTimePreferences.ZoneLocal);
 
         Option(provider, "data-time-mode", "delta").Click();
         provider.WaitForAssertion(() => provider.FindAll("[data-delta-scope]").Should().HaveCount(2));
-        provider.FindAll("[data-time-zone]").Should().BeEmpty("zone is a clock-only setting");
-        provider.FindAll("[data-time-format]").Should().BeEmpty("clock format is a clock-only setting");
 
         Option(provider, "data-delta-scope", "topic").Click();
         browser.WaitForAssertion(() => Text(browser.Find("[data-time-header-meta]")).Should().Be("same topic"));
-        _settings.SavedMessageTimes[^1].DeltaScope.Should().Be(MessageTimePreferences.DeltaScopeTopic);
-        _settings.SavedMessageTimes[^1].Mode.Should().Be(MessageTimePreferences.ModeDelta);
+
+        var saved = _settings.SavedMessageTimes.Should().HaveCount(2).And.Subject.Last();
+        saved.DeltaScope.Should().Be(MessageTimePreferences.DeltaScopeTopic);
+        saved.Mode.Should().Be(MessageTimePreferences.ModeDelta);
+        saved.Zone.Should().Be(MessageTimePreferences.ZoneUtc, "the toolbar never owns the global zone");
+        saved.ClockFormat.Should().Be(MessageTimePreferences.ClockFormat24Hour);
+    }
+
+    [Test]
+    public void TimeMenu_OmitsZoneAndClockFormatButKeepsEveryMode()
+    {
+        _messages = [Message("first")];
+        var (provider, browser) = RenderBrowser();
+
+        OpenTimeMenu(browser, provider);
+
+        provider.FindAll("[data-time-zone]").Should().BeEmpty("the zone lives in global Settings");
+        provider.FindAll("[data-time-format]").Should().BeEmpty("the clock format lives in global Settings");
+        provider.FindAll("[data-time-mode]").Should().HaveCount(3);
+
+        Option(provider, "data-time-mode", "delta").Click();
+        provider.WaitForAssertion(() => provider.FindAll("[data-delta-scope]").Should().HaveCount(2));
     }
 
     [Test]
     public void ElapsedMode_ShowsZeroFirstAndUnambiguousDurations_WithAbsoluteTimeInDetails()
     {
-        _settings.Ui.MessageTime = new MessageTimePreferences { Mode = MessageTimePreferences.ModeElapsed };
+        _settings.Ui.MessageTime = new MessageTimePreferences
+        {
+            Mode = MessageTimePreferences.ModeElapsed,
+            Zone = MessageTimePreferences.ZoneUtc
+        };
         _messages =
         [
             Message("first", elapsed: TimeSpan.Zero),
@@ -290,11 +309,11 @@ public class MessageTimeBrowserTests : BunitTestContext
         var message = _messages[0];
 
         var module = JSInterop.SetupModule(ModulePath);
-        module.Setup<MessageTimeFormatResult?>("formatMessages", _ => true).SetResult(new MessageTimeFormatResult(
+        module.Setup<DeviceTimeFormatResult?>("formatInstants", _ => true).SetResult(new DeviceTimeFormatResult(
             "America/New_York",
             "Eastern Daylight Time",
             [
-                new MessageTimeFormatItem(
+                new DeviceTimeFormatItem(
                     message.Id,
                     "06:41:07.123 PM",
                     "2026-10-29",
@@ -310,7 +329,7 @@ public class MessageTimeBrowserTests : BunitTestContext
         Text(browser.Find("[data-time-header-meta]")).Should().Be("America/New_York");
         Text(browser.Find("[data-time-mobile-readout] .pb-mobile-time-readout__meta")).Should().Be("New York");
         Text(browser.Find("[data-time-mobile-readout] .pb-mobile-time-readout__full")).Should().Be("America/New_York");
-        module.Invocations.Count(invocation => invocation.Identifier == "formatMessages")
+        module.Invocations.Count(invocation => invocation.Identifier == "formatInstants")
             .Should().Be(1, "one batch formats the visible rows and must not loop on its own render");
 
         browser.FindAll(".payload-row")[0].Click();
@@ -350,7 +369,7 @@ public class MessageTimeBrowserTests : BunitTestContext
     {
         _settings.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneLocal };
         var formatter = new DelayedMessageTimeFormatter();
-        Services.AddScoped<IMessageTimeFormatter>(_ => formatter);
+        Services.AddScoped<IDeviceTimeFormatter>(_ => formatter);
 
         var first = Message("first");
         var second = Message("second", 1_000);
@@ -400,7 +419,7 @@ public class MessageTimeBrowserTests : BunitTestContext
     {
         _settings.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneLocal };
         var formatter = new DelayedMessageTimeFormatter();
-        Services.AddScoped<IMessageTimeFormatter>(_ => formatter);
+        Services.AddScoped<IDeviceTimeFormatter>(_ => formatter);
         var message = Message("first");
         _messages = [message];
 
@@ -416,10 +435,10 @@ public class MessageTimeBrowserTests : BunitTestContext
         browser.WaitForAssertion(() => formatter.Calls.Should().HaveCount(2));
         browser.Find("[data-time-pending]").TextContent.Trim().Should().Be(MessageTimeDisplay.PendingMarker);
 
-        formatter.Calls[1].Completion.SetResult(new MessageTimeFormatResult(
+        formatter.Calls[1].Completion.SetResult(new DeviceTimeFormatResult(
             "Asia/Tokyo",
             "Japan Standard Time",
-            [new MessageTimeFormatItem(
+            [new DeviceTimeFormatItem(
                 message.Id,
                 "09:41:07.123 AM",
                 "2026-10-30",
@@ -446,7 +465,11 @@ public class MessageTimeBrowserTests : BunitTestContext
             Mode = TopicSelectionMode.MultipleTopics,
             Paths = ImmutableArray.Create("a", "b")
         };
-        _settings.Ui.MessageTime = new MessageTimePreferences { ClockFormat = MessageTimePreferences.ClockFormat12Hour };
+        _settings.Ui.MessageTime = new MessageTimePreferences
+        {
+            Zone = MessageTimePreferences.ZoneUtc,
+            ClockFormat = MessageTimePreferences.ClockFormat12Hour
+        };
         _messages = [Message("first"), Message("second", 1_000)];
 
         var (_, browser) = RenderBrowser();
@@ -528,7 +551,7 @@ public class MessageTimeBrowserTests : BunitTestContext
     {
         _settings.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneLocal };
         var formatter = new DelayedMessageTimeFormatter();
-        Services.AddScoped<IMessageTimeFormatter>(_ => formatter);
+        Services.AddScoped<IDeviceTimeFormatter>(_ => formatter);
         var message = Message("first");
         _messages = [message];
 
@@ -549,25 +572,22 @@ public class MessageTimeBrowserTests : BunitTestContext
         formatter.Calls[1].Preferences.ClockFormat.Should().Be(MessageTimePreferences.ClockFormat12Hour);
         RowTimes(browser).Should().Equal("10:41:07.123 PM");
 
-        formatter.Calls[1].Completion.SetResult(new MessageTimeFormatResult(
+        formatter.Calls[1].Completion.SetResult(new DeviceTimeFormatResult(
             "UTC",
             "Coordinated Universal Time",
-            [new MessageTimeFormatItem(message.Id, "10:41:07.123 PM", "2026-10-29", "2026-10-29 10:41:07.123 PM UTC", "UTC", "Coordinated Universal Time", "UTC+00:00")]));
+            [new DeviceTimeFormatItem(message.Id, "10:41:07.123 PM", "2026-10-29", "2026-10-29 10:41:07.123 PM UTC", "UTC", "Coordinated Universal Time", "UTC+00:00")]));
         browser.WaitForAssertion(() => RowTimes(browser).Should().Equal("10:41:07.123 PM"));
     }
 
     [Test]
-    public void TimeMenu_HintsFollowModeZoneAndScope()
+    public void TimeMenu_HintsFollowModeAndPointClockSettingsToTheGlobalSection()
     {
         _messages = [Message("first")];
         var (provider, browser) = RenderBrowser();
         OpenTimeMenu(browser, provider);
 
-        Text(provider.Find(".pb-time-hint")).Should().Be("Clock shows when each message arrived.");
-
-        Option(provider, "data-time-zone", "local").Click();
-        provider.WaitForAssertion(() =>
-            Text(provider.Find(".pb-time-hint")).Should().Be("Local uses this device's time zone."));
+        Text(provider.Find(".pb-time-hint")).Should().Be(
+            "Clock shows when each message arrived. Time zone and hour format are in Settings.");
 
         Option(provider, "data-time-mode", "elapsed").Click();
         provider.WaitForAssertion(() =>
@@ -586,17 +606,19 @@ public class MessageTimeBrowserTests : BunitTestContext
         var (provider, browser) = RenderBrowser();
         _settings.Ui.MessageTime = new MessageTimePreferences
         {
+            Zone = MessageTimePreferences.ZoneUtc,
             ClockFormat = MessageTimePreferences.ClockFormat12Hour
         };
 
         OpenTimeMenu(browser, provider);
-        Option(provider, "data-time-zone", "local").Click();
+        Option(provider, "data-time-mode", "elapsed").Click();
 
         provider.WaitForAssertion(() => _settings.SavedMessageTimes.Should().ContainSingle());
         var saved = _settings.SavedMessageTimes[0];
-        saved.Zone.Should().Be(MessageTimePreferences.ZoneLocal);
+        saved.Mode.Should().Be(MessageTimePreferences.ModeElapsed);
         saved.ClockFormat.Should().Be(MessageTimePreferences.ClockFormat12Hour,
             "the menu must start from the latest stored settings, not its rendered snapshot");
+        saved.Zone.Should().Be(MessageTimePreferences.ZoneUtc);
     }
 
     [TestCase("America/Kentucky/Louisville", "Louisville")]
@@ -607,14 +629,51 @@ public class MessageTimeBrowserTests : BunitTestContext
     public void CompactZoneLabel_KeepsTheRecognizableTail(string label, string expected) =>
         PayloadBrowser.CompactZoneLabel(label).Should().Be(expected);
 
+    [Test]
+    public async Task GlobalPreferenceChange_ReformatsRowsAndDetailsWithoutChangingTheStoredInstant()
+    {
+        Services.AddScoped<IDeviceTimeFormatter>(_ => new PreferenceEchoFormatter());
+        _settings.Ui.MessageTime = new MessageTimePreferences
+        {
+            Zone = MessageTimePreferences.ZoneUtc,
+            ClockFormat = MessageTimePreferences.ClockFormat24Hour
+        };
+        var message = Message("first");
+        _messages = [message];
+
+        var (_, browser) = RenderBrowser();
+
+        browser.WaitForAssertion(() => RowTimes(browser).Should().Equal("22:41:07.123"));
+        browser.FindAll(".payload-row")[0].Click();
+        browser.WaitForAssertion(() =>
+            Text(browser.Find(".pb-received-instant")).Should().Be("2026-10-29 22:41:07.123"));
+        Text(browser.Find("[data-received-zone]")).Should().Be("UTC");
+
+        await _settings.SetMessageTimeAsync(new MessageTimePreferences
+        {
+            Zone = MessageTimePreferences.ZoneLocal,
+            ClockFormat = MessageTimePreferences.ClockFormat12Hour
+        });
+
+        browser.WaitForAssertion(() =>
+        {
+            Text(browser.Find(".pb-received-instant")).Should().Be("2026-10-29 06:41:07.123 PM");
+            Text(browser.Find("[data-received-zone]")).Should().Be("EDT");
+        });
+        message.DateTimeReceived.Should().Be(_baseUtc, "display choices never rewrite the stored instant");
+
+        browser.Find("button[title='Back to message list']").Click();
+        browser.WaitForAssertion(() => RowTimes(browser).Should().Equal("06:41:07.123 PM"));
+    }
+
     private void AdvanceSelection() =>
         _selection = _selection with { Token = new SelectedTopicToken(_storeId, 1, _selection.Token.ContentVersion + 1) };
 
-    private static MessageTimeFormatResult LocalResult(params (MqttMessage Message, string Time)[] items) =>
+    private static DeviceTimeFormatResult LocalResult(params (MqttMessage Message, string Time)[] items) =>
         new(
             "Asia/Tokyo",
             "Japan Standard Time",
-            items.Select(item => new MessageTimeFormatItem(
+            items.Select(item => new DeviceTimeFormatItem(
                 item.Message.Id,
                 item.Time,
                 "2026-10-30",
@@ -623,24 +682,64 @@ public class MessageTimeBrowserTests : BunitTestContext
                 "",
                 "")).ToList());
 
-    private sealed class DelayedMessageTimeFormatter : IMessageTimeFormatter
+    private sealed class PreferenceEchoFormatter : IDeviceTimeFormatter
+    {
+        public Task<DeviceTimeFormatResult?> FormatAsync(
+            IReadOnlyList<DeviceTimeFormatRequest> items,
+            MessageTimePreferences preferences)
+        {
+            var isUtc = preferences.Zone == MessageTimePreferences.ZoneUtc;
+            var is12Hour = preferences.ClockFormat == MessageTimePreferences.ClockFormat12Hour;
+            var timeText = (isUtc, is12Hour) switch
+            {
+                (true, true) => "10:41:07.123 PM",
+                (true, false) => "22:41:07.123",
+                (false, true) => "06:41:07.123 PM",
+                _ => "18:41:07.123"
+            };
+            var zoneLabel = isUtc ? "UTC" : "America/New_York";
+            var abbreviation = isUtc ? "UTC" : "EDT";
+            var zoneName = isUtc ? "Coordinated Universal Time" : "Eastern Daylight Time";
+            var offset = isUtc ? "UTC+00:00" : "UTC-04:00";
+
+            return Task.FromResult<DeviceTimeFormatResult?>(new DeviceTimeFormatResult(
+                zoneLabel,
+                zoneName,
+                items.Select(item => new DeviceTimeFormatItem(
+                    item.Key,
+                    timeText,
+                    "2026-10-29",
+                    $"2026-10-29 {timeText} {abbreviation}",
+                    abbreviation,
+                    item.Detail ? zoneName : "",
+                    item.Detail ? offset : "")).ToList()));
+        }
+
+        public Task<bool> EnsureBridgeAsync() => Task.FromResult(true);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class DelayedMessageTimeFormatter : IDeviceTimeFormatter
     {
         internal sealed record Call(
-            List<MessageTimeFormatRequest> Items,
+            List<DeviceTimeFormatRequest> Items,
             MessageTimePreferences Preferences,
-            TaskCompletionSource<MessageTimeFormatResult?> Completion);
+            TaskCompletionSource<DeviceTimeFormatResult?> Completion);
 
         public List<Call> Calls { get; } = [];
 
-        public Task<MessageTimeFormatResult?> FormatAsync(
-            IReadOnlyList<MessageTimeFormatRequest> items,
+        public Task<DeviceTimeFormatResult?> FormatAsync(
+            IReadOnlyList<DeviceTimeFormatRequest> items,
             MessageTimePreferences preferences)
         {
-            var completion = new TaskCompletionSource<MessageTimeFormatResult?>(
+            var completion = new TaskCompletionSource<DeviceTimeFormatResult?>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             Calls.Add(new Call(items.ToList(), preferences, completion));
             return completion.Task;
         }
+
+        public Task<bool> EnsureBridgeAsync() => Task.FromResult(true);
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

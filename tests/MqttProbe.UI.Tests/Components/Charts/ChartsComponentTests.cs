@@ -13,6 +13,7 @@ using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Plugins.BuiltIn;
 using MqttProbe.Core.Services.Plugins.Pipeline;
 using MqttProbe.Core.Services.Plugins.Registry;
+using MqttProbe.UI.Services.Formatting;
 using MqttProbe.UI.Tests.TestHelpers;
 using Org.Eclipse.Tahu.Protobuf;
 using ChartsComponent = MqttProbe.UI.Components.Charts.Charts;
@@ -47,6 +48,7 @@ public class ChartsComponentTests : BunitTestContext
         Services.AddSingleton(_mockChartDataService);
         Services.AddSingleton(_mockSessionState);
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
 
         EnsureMudProviders();
     }
@@ -236,6 +238,8 @@ public class ChartsRealCollectorComponentTests : BunitTestContext
         Services.AddSingleton<IChartDataService>(_chartDataService);
         Services.AddSingleton(_sessionState);
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
+        Services.AddSingleton<IDeviceTimeFormatter>(new ChartTimeFormatterStub());
         EnsureMudProviders();
     }
 

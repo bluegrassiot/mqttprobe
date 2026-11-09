@@ -25,6 +25,10 @@
         <MudTh>Chart</MudTh>
     </HeaderContent>
     <RowTemplate>
+        @{
+            var timeKey = SparkplugTimeKeys.Metric(Topic, context.Name);
+            var time = Time.Find(timeKey);
+        }
         <MudTd Class="spb-td-name">@context.Name</MudTd>
         <MudTd Class="spb-td-type">@context.Snapshot.DataType</MudTd>
         <MudTd Class="spb-td-alias spb-th-right">
@@ -34,7 +38,10 @@
             @context.Snapshot.Value
         </MudTd>
         <MudTd Class="spb-td-updated">
-            @context.Snapshot.LastUpdated.ToLocalTime().ToString("HH:mm:ss")
+            <span class="spb-time-value @(time is null ? "spb-time-value--pending" : "")"
+                  data-time-value="@timeKey"
+                  data-time-pending="@(time is null ? "true" : null)"
+                  title="@(time?.FullText ?? SparkplugTimeDisplay.PendingTitle)">@(time?.TimeText ?? SparkplugTimeDisplay.PendingMarker)</span>
         </MudTd>
         <MudTd Class="spb-td-chart">
             @if (OnAddToChart.HasDelegate && SparkplugChartTargets.IsChartable(context.Snapshot))
@@ -56,6 +63,9 @@
 
     [Parameter]
     public string? Class { get; set; }
+
+    [Parameter]
+    public SparkplugTimeDisplay Time { get; set; } = SparkplugTimeDisplay.Empty;
 
     [Parameter, EditorRequired]
     public string Topic { get; set; } = "";

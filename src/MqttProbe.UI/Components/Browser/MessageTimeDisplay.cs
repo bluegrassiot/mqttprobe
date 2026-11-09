@@ -1,22 +1,9 @@
 using System.Globalization;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Mqtt;
+using MqttProbe.UI.Services.Formatting;
 
 namespace MqttProbe.UI.Components.Browser;
-
-internal sealed record MessageTimeFormatItem(
-    Guid Key,
-    string TimeText,
-    string DateText,
-    string FullText,
-    string ZoneAbbreviation,
-    string ZoneName,
-    string OffsetLabel);
-
-internal sealed record MessageTimeFormatResult(
-    string ZoneLabel,
-    string ZoneName,
-    List<MessageTimeFormatItem>? Items);
 
 public sealed record MessageTimePresentation(
     string HeaderLabel,
@@ -84,7 +71,7 @@ internal static class MessageTimeDisplay
             },
             _ => new MessageTimePresentation(
                 "Time",
-                isLocal ? "Local uses this device's time zone." : "Clock shows when each message arrived.",
+                "Clock shows when each message arrived. Time zone and hour format are in Settings.",
                 isLocal, is12Hour, sameTopic)
         };
     }
@@ -112,7 +99,7 @@ internal static class MessageTimeDisplay
         return $"{sign}{magnitude.Days}d {magnitude.Hours:00}h {magnitude.Minutes:00}m {magnitude.Seconds:00}.{magnitude.Milliseconds:000}s";
     }
 
-    internal static MessageTimeFormatItem FallbackClock(MqttMessage message, MessageTimePreferences preferences)
+    internal static DeviceTimeFormatItem FallbackClock(MqttMessage message, MessageTimePreferences preferences)
     {
         var received = DateTime.SpecifyKind(message.DateTimeReceived, DateTimeKind.Utc);
         var timeText = received.ToString(
@@ -122,7 +109,7 @@ internal static class MessageTimeDisplay
             CultureInfo.InvariantCulture);
         var dateText = received.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-        return new MessageTimeFormatItem(
+        return new DeviceTimeFormatItem(
             message.Id,
             timeText,
             dateText,

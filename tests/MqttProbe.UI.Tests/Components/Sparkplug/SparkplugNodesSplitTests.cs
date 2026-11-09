@@ -34,6 +34,7 @@ public class SparkplugNodesSplitTests : BunitTestContext
         Services.AddSingleton(Substitute.For<ISnackbar>());
         _gatedRuntime = new GatedSplitJsRuntime(JSInterop.JSRuntime, _gatedModule);
         Services.AddSingleton<IJSRuntime>(_gatedRuntime);
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
         EnsureMudProviders();
     }
 

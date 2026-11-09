@@ -24,6 +24,15 @@
 }
 else
 {
+    @if (Time.ZoneCaption is { } caption)
+    {
+        <div class="spb-list-header">
+            <SparkplugZoneToken Abbreviation="@caption.Abbreviation"
+                                Detail="@caption.Tooltip"
+                                AccessibleLabel="@caption.AccessibleLabel"
+                                data-time-zone-label="true" />
+        </div>
+    }
     @foreach (var grp in Groups)
     {
         <div class="spb-group-header">@grp.Key.ToUpperInvariant()</div>
@@ -100,6 +109,9 @@ else
 
     [Parameter]
     public string? SelectedGroupId { get; set; }
+
+    [Parameter]
+    public SparkplugTimeDisplay Time { get; set; } = SparkplugTimeDisplay.Empty;
 
     [Parameter]
     public EventCallback<SpbNode> OnSelect { get; set; }

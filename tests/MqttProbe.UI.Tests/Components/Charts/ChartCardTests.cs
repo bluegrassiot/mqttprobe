@@ -25,6 +25,7 @@ public class ChartCardTests : BunitTestContext
         _clock = new FakeTimeProvider(_start);
 
         Services.AddSingleton(_chartData);
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
         EnsureMudProviders();
     }
 

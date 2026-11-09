@@ -317,12 +317,12 @@ public class PreferenceSettingsTests
     }
 
     [Test]
-    public void MessageTime_DefaultsToUtcClockWith24HourFormatAndAllTopics()
+    public void MessageTime_DefaultsToLocalClockWith24HourFormatAndAllTopics()
     {
         var messageTime = _preferences.Ui.MessageTime;
 
         messageTime.Mode.Should().Be("clock");
-        messageTime.Zone.Should().Be("utc");
+        messageTime.Zone.Should().Be("local");
         messageTime.ClockFormat.Should().Be("24h");
         messageTime.DeltaScope.Should().Be("all");
     }
@@ -409,7 +409,7 @@ public class PreferenceSettingsTests
         requested.Mode = "delta";
         var stored = _preferences.Ui.MessageTime;
         stored.Mode.Should().Be("elapsed");
-        stored.Zone.Should().Be("utc");
+        stored.Zone.Should().Be("local");
         stored.ClockFormat.Should().Be("24h");
         stored.DeltaScope.Should().Be("all");
     }
@@ -422,6 +422,6 @@ public class PreferenceSettingsTests
         await _preferences.SetMessageTimeAsync(null!);
 
         _preferences.Ui.MessageTime.Mode.Should().Be("clock");
-        _preferences.Ui.MessageTime.Zone.Should().Be("utc");
+        _preferences.Ui.MessageTime.Zone.Should().Be("local");
     }
 }

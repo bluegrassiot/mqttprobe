@@ -28,6 +28,7 @@ public class PublishPropertiesDraftTests
             PayloadFormat = MqttPayloadFormatIndicator.CharacterData,
             ExpirySeconds = 10,
             ResponseTopic = "r",
+            CorrelationPresent = true,
             CorrelationText = "c"
         };
         draft.UserProperties.Add(new MqttMessageUserProperty("a", "1"));
@@ -62,9 +63,9 @@ public class PublishPropertiesDraftTests
     [Test]
     public void CorrelationError_FlagsBadHexOnly()
     {
-        new PublishPropertiesDraft { CorrelationText = "xyz", CorrelationEncoding = CorrelationDataEncoding.Hex }
+        new PublishPropertiesDraft { CorrelationPresent = true, CorrelationText = "xyz", CorrelationEncoding = CorrelationDataEncoding.Hex }
             .CorrelationError.Should().NotBeNull();
-        new PublishPropertiesDraft { CorrelationText = "xyz", CorrelationEncoding = CorrelationDataEncoding.Text }
+        new PublishPropertiesDraft { CorrelationPresent = true, CorrelationText = "xyz", CorrelationEncoding = CorrelationDataEncoding.Text }
             .CorrelationError.Should().BeNull();
     }
 
@@ -78,6 +79,7 @@ public class PublishPropertiesDraftTests
             PayloadFormat = MqttPayloadFormatIndicator.CharacterData,
             ExpirySeconds = 60,
             ResponseTopic = "t/1/reply",
+            CorrelationPresent = true,
             CorrelationText = "abcd",
             CorrelationEncoding = CorrelationDataEncoding.Hex
         };
@@ -143,6 +145,68 @@ public class PublishPropertiesDraftTests
 
         draft.Any.Should().BeFalse();
         draft.CorrelationEncoding.Should().Be(CorrelationDataEncoding.Text);
+    }
+
+    [Test]
+    public void From_ZeroLengthCorrelation_IsPresentAndRoundTripsAsEmpty()
+    {
+        var original = new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce)
+        {
+            CorrelationData = []
+        };
+
+        var draft = PublishPropertiesDraft.From(original);
+
+        draft.CorrelationPresent.Should().BeTrue();
+        draft.CorrelationText.Should().BeEmpty();
+        draft.SetCount.Should().Be(1);
+
+        var roundTripped = draft.ToMessage(original);
+
+        roundTripped.CorrelationData.Should().NotBeNull();
+        roundTripped.CorrelationData.Should().BeEmpty();
+    }
+
+    [Test]
+    public void From_AbsentCorrelation_IsNotPresent()
+    {
+        var draft = PublishPropertiesDraft.From(new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce));
+
+        draft.CorrelationPresent.Should().BeFalse();
+        draft.SetCount.Should().Be(0);
+    }
+
+    [Test]
+    public void ToMessage_AbsentCorrelation_IgnoresLeftoverText()
+    {
+        var draft = new PublishPropertiesDraft { CorrelationText = "unused", CorrelationPresent = false };
+
+        var message = draft.ToMessage(new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce));
+
+        message.CorrelationData.Should().BeNull();
+        draft.SetCount.Should().Be(0);
+    }
+
+    [Test]
+    public void ToMessage_PresentCorrelation_KeepsTextBytesAndWhitespace()
+    {
+        var draft = new PublishPropertiesDraft { CorrelationText = " order  42 ", CorrelationPresent = true };
+
+        var message = draft.ToMessage(new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce));
+
+        message.CorrelationData.Should().Equal(" order  42 "u8.ToArray());
+    }
+
+    [Test]
+    public void Clear_ResetsCorrelationPresence()
+    {
+        var draft = new PublishPropertiesDraft { CorrelationPresent = true, CorrelationText = "c" };
+
+        draft.Clear();
+
+        draft.CorrelationPresent.Should().BeFalse();
+        draft.ToMessage(new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce))
+            .CorrelationData.Should().BeNull();
     }
 
     [Test]

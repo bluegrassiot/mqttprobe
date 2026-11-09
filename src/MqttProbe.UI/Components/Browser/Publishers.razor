@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.Extensions.Logging
 @using MqttProbe.Core.Services.Security
+@implements IDisposable
 @inject IMqttManagedClient ManagedMqttClient
 @inject ILogger<Publishers> Logger
 @inject ISnackbar Snackbar
@@ -86,9 +87,12 @@
             </MudItem>
         }
 
-        <MudItem xs="12">
-            <PublishPropertiesEditor Draft="_properties" Disabled="@(!IsV5Connection)"/>
-        </MudItem>
+        @if (IsV5Connection)
+        {
+            <MudItem xs="12">
+                <PublishPropertiesEditor Draft="_properties"/>
+            </MudItem>
+        }
     </MudGrid>
 </div>
 
@@ -102,7 +106,24 @@
 
     internal PublishPropertiesDraft PropertiesForTests => _properties;
 
-    private bool IsV5Connection => SessionState.SelectedConnection?.MqttVersion == MqttVersion.V5;
+    private bool IsV5Connection => SessionState.SelectedConnection.MqttVersion == MqttVersion.V5;
+
+    protected override void OnInitialized()
+    {
+        SessionState.SelectedConnectionChanged += OnSelectedConnectionChanged;
+    }
+
+    private void OnSelectedConnectionChanged(MqttProbe.Core.Models.Mqtt.Connection _) => InvokeAsync(() =>
+    {
+        if (!IsV5Connection)
+            _properties.Clear();
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        SessionState.SelectedConnectionChanged -= OnSelectedConnectionChanged;
+    }
 
     private async Task PublishMessage()
     {
@@ -119,13 +140,8 @@
             Snackbar.Add(validationError, Severity.Warning);
             return;
         }
-        if (_properties.Any && !IsV5Connection)
-        {
-            Snackbar.Add("MQTT 5 properties need an MQTT 5 connection. Clear them or reconnect with MQTT version 5.0.", Severity.Warning);
-            return;
-        }
 
-        var appMsg = OutboundMessageMapper.Build(_properties.ToMessage(_message));
+        var appMsg = OutboundMessageMapper.Build(_properties.ToMessage(_message), SessionState.SelectedConnection.MqttVersion);
 
         try
         {
@@ -175,7 +191,16 @@
             try
             {
                 _message = JsonSerializer.Deserialize<MqttMessage>(jsonString) ?? new MqttMessage();
-                _properties = PublishPropertiesDraft.From(_message);
+                if (IsV5Connection)
+                {
+                    _properties = PublishPropertiesDraft.From(_message);
+                }
+                else
+                {
+                    _message = new MqttMessage(_message.Payload ?? string.Empty, _message.Topic ?? string.Empty,
+                        _message.RetainedMessage, _message.QualityOfServiceLevel);
+                    _properties = new PublishPropertiesDraft();
+                }
             }
             catch (Exception e)
             {

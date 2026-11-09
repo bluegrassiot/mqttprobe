@@ -100,6 +100,84 @@ public class MqttV5PropertiesBrokerTests
     }
 
     [Test]
+    public async Task OutboundMapper_PresentEmptyCorrelation_SurvivesBrokerRoundTrip_AgainstBroker()
+    {
+        var topic = $"v5/present-empty-correlation/{Guid.NewGuid():N}";
+
+        await PublishMappedAsync(OutboundMessageMapper.Build(
+            new MqttMessage("payload", topic, true, MqttQualityOfServiceLevel.AtLeastOnce)
+            {
+                CorrelationData = []
+            }));
+
+        var message = await ReadSingleMessageAsync(topic);
+
+        message.CorrelationData.Should().NotBeNull().And.BeEmpty();
+        message.ContentType.Should().BeNull();
+        message.ResponseTopic.Should().BeNull();
+        message.MessageExpiryInterval.Should().BeNull();
+        message.UserProperties.Should().BeNull();
+    }
+
+    [TestCase("whitespace")]
+    [TestCase("binary")]
+    public async Task OutboundMapper_CorrelationBytes_SurviveBrokerRoundTrip_AgainstBroker(string kind)
+    {
+        var topic = $"v5/correlation/{kind}/{Guid.NewGuid():N}";
+        var correlation = kind == "whitespace"
+            ? "  alpha  beta\t\tgamma\r\ndelta  "u8.ToArray()
+            : new byte[] { 0x00, 0xFF, 0x10, 0x80, 0xC3, 0x28, 0x01, 0xFE };
+
+        await PublishMappedAsync(OutboundMessageMapper.Build(
+            new MqttMessage("payload", topic, true, MqttQualityOfServiceLevel.AtLeastOnce)
+            {
+                CorrelationData = correlation
+            }));
+
+        var message = await ReadSingleMessageAsync(topic);
+
+        message.CorrelationData.Should().Equal(correlation);
+    }
+
+    [Test]
+    public async Task VersionAwareMapper_OnV311Session_PublishesOrdinaryMessageWithoutV5Properties_AgainstBroker()
+    {
+        var topic = $"v311/mapped/{Guid.NewGuid():N}";
+        using var publisher = new MqttManagedClient();
+        await publisher.StartAsync(BuildConnectOptions("v311-mapped-publisher", MqttProtocolVersion.V311));
+        await WaitUntilAsync(() => publisher.IsConnected);
+
+        var message = OutboundMessageMapper.Build(
+            new MqttMessage("v311 payload", topic, true, MqttQualityOfServiceLevel.AtLeastOnce)
+            {
+                ContentType = "application/json",
+                ResponseTopic = $"{topic}/reply",
+                CorrelationData = [],
+                MessageExpiryInterval = 3600,
+                PayloadFormatIndicator = MqttPayloadFormatIndicator.CharacterData,
+                UserProperties = [new MqttMessageUserProperty("k", "v")]
+            },
+            MqttVersion.V311);
+
+        var act = () => publisher.EnqueueAsync(message);
+
+        await act.Should().NotThrowAsync();
+        await publisher.StopAsync();
+
+        var received = await ReadSingleMessageAsync(topic);
+
+        received.Payload.Should().Be("v311 payload");
+        received.RetainedMessage.Should().BeTrue();
+        received.QualityOfServiceLevel.Should().Be(MqttQualityOfServiceLevel.AtLeastOnce);
+        received.ContentType.Should().BeNull();
+        received.ResponseTopic.Should().BeNull();
+        received.CorrelationData.Should().BeNull();
+        received.MessageExpiryInterval.Should().BeNull();
+        received.PayloadFormatIndicator.Should().BeNull();
+        received.UserProperties.Should().BeNull();
+    }
+
+    [Test]
     public async Task EnqueueAsync_OnV311Session_RejectsV5Properties_AgainstBroker()
     {
         using var publisher = new MqttManagedClient();
@@ -176,6 +254,15 @@ public class MqttV5PropertiesBrokerTests
         await storeManager.Stop();
         await client.StopAsync();
         return message;
+    }
+
+    private static async Task PublishMappedAsync(MqttApplicationMessage applicationMessage)
+    {
+        using var publisher = new MqttManagedClient();
+        await publisher.StartAsync(BuildConnectOptions("v5-mapped-publisher", MqttProtocolVersion.V500));
+        await WaitUntilAsync(() => publisher.IsConnected);
+        await publisher.EnqueueAsync(applicationMessage);
+        await publisher.StopAsync();
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)

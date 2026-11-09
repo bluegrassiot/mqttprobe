@@ -61,7 +61,6 @@ public class OutboundMessageMapperTests
         {
             ContentType = string.Empty,
             ResponseTopic = string.Empty,
-            CorrelationData = [],
             MessageExpiryInterval = 0,
             PayloadFormatIndicator = MqttPayloadFormatIndicator.Unspecified,
             UserProperties = []
@@ -73,6 +72,17 @@ public class OutboundMessageMapperTests
         built.MessageExpiryInterval.Should().Be(0u);
         built.PayloadFormatIndicator.Should().Be(MqttPayloadFormatIndicator.Unspecified);
         built.UserProperties.Should().BeNullOrEmpty();
+    }
+
+    [Test]
+    public void Build_ZeroLengthCorrelationData_IsPreserved()
+    {
+        var built = OutboundMessageMapper.Build(new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce)
+        {
+            CorrelationData = []
+        });
+
+        built.CorrelationData.Should().NotBeNull().And.BeEmpty();
     }
 
     [Test]
@@ -121,6 +131,46 @@ public class OutboundMessageMapperTests
     }
 
     [Test]
+    public void Build_WithV311_OmitsEveryV5PropertyButKeepsBaseFields()
+    {
+        var built = OutboundMessageMapper.Build(Populated(), MqttVersion.V311);
+
+        built.Topic.Should().Be("out/topic");
+        System.Text.Encoding.UTF8.GetString(built.Payload.ToArray()).Should().Be("{\"a\":1}");
+        built.QualityOfServiceLevel.Should().Be(MqttQualityOfServiceLevel.ExactlyOnce);
+        built.Retain.Should().BeTrue();
+        built.ContentType.Should().BeNull();
+        built.ResponseTopic.Should().BeNull();
+        built.CorrelationData.Should().BeNull();
+        built.MessageExpiryInterval.Should().Be(0u);
+        built.PayloadFormatIndicator.Should().Be(MqttPayloadFormatIndicator.Unspecified);
+        built.UserProperties.Should().BeNullOrEmpty();
+    }
+
+    [Test]
+    public void Build_WithV5_SetsEveryV5Property()
+    {
+        var built = OutboundMessageMapper.Build(Populated(), MqttVersion.V5);
+
+        built.ContentType.Should().Be("application/json");
+        built.ResponseTopic.Should().Be("out/topic/reply");
+        built.CorrelationData.Should().Equal(0xAB, 0xCD);
+        built.MessageExpiryInterval.Should().Be(300u);
+        built.PayloadFormatIndicator.Should().Be(MqttPayloadFormatIndicator.CharacterData);
+        built.UserProperties.Select(p => (p.Name, p.ReadValueAsString()))
+            .Should().Equal(("source", "probe"), ("site", "lab"));
+    }
+
+    [Test]
+    public void HasV5Properties_TrueForPresentZeroLengthCorrelationData()
+    {
+        OutboundMessageMapper.HasV5Properties(new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce)
+        {
+            CorrelationData = []
+        }).Should().BeTrue();
+    }
+
+    [Test]
     public void HasV5Properties_FalseForPlainAndEmptyValues()
     {
         OutboundMessageMapper.HasV5Properties(new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce))
@@ -129,7 +179,6 @@ public class OutboundMessageMapperTests
         {
             ContentType = "",
             ResponseTopic = "",
-            CorrelationData = [],
             MessageExpiryInterval = 0,
             PayloadFormatIndicator = MqttPayloadFormatIndicator.Unspecified,
             UserProperties = []

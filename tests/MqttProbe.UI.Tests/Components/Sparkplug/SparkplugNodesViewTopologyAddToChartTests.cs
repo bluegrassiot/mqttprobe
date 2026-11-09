@@ -26,11 +26,13 @@ public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
 
     private SparkplugTopologyService _topology = null!;
     private SparkplugTopologyExtractor _extractor = null!;
+    private SparkplugMetricMetadataStore _store = null!;
 
     [SetUp]
     public void SetupTopology()
     {
-        _topology = new SparkplugTopologyService();
+        _store = new SparkplugMetricMetadataStore();
+        _topology = new SparkplugTopologyService(metricMetadataStore: _store);
         _extractor = new SparkplugTopologyExtractor();
         Services.AddSingleton<ISparkplugTopologyService>(_topology);
         Services.AddSingleton(Substitute.For<ISparkplugCommandService>());
@@ -179,7 +181,7 @@ public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
         var bytes = payload.ToByteArray();
         var envelope = DecodedPayloadEnvelope.CreateSuccess(
             "sparkplug-b", topic, bytes, string.Empty, typedPayload: payload);
-        await _topology.ApplyTopologyEventsAsync(_extractor.Extract(envelope));
+        await _topology.ApplyTopologyEventsAsync(_extractor.Extract(envelope, _store));
     }
 
     private IRenderedComponent<SparkplugNodesView> RenderNode()
@@ -219,7 +221,7 @@ public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
         payload.Metrics.Add(BooleanMetric("Node Switch", 12, 11, true));
         payload.Metrics.Add(StringMetric("Node String Number", 13, 12, "42"));
         payload.Metrics.Add(StringMetric("Node String Bool", 14, 12, "true"));
-        payload.Metrics.Add(LongMetric("Node Timestamp", 15, 14, 1712345678000UL));
+        payload.Metrics.Add(LongMetric("Node Timestamp", 15, 13, 1712345678000UL));
         return payload;
     }
 
@@ -241,7 +243,7 @@ public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
         payload.Metrics.Add(BooleanMetric("Device Switch", 22, 11, true));
         payload.Metrics.Add(StringMetric("Device String Number", 23, 12, "42"));
         payload.Metrics.Add(StringMetric("Device String Bool", 24, 12, "true"));
-        payload.Metrics.Add(LongMetric("Device Timestamp", 25, 14, 1712345678000UL));
+        payload.Metrics.Add(LongMetric("Device Timestamp", 25, 13, 1712345678000UL));
         return payload;
     }
 

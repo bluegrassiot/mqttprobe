@@ -16,14 +16,15 @@ public sealed partial class SparkplugSequenceRecoveryTests
         var groupId = $"datatype-{Guid.NewGuid():N}";
         const string nodeId = "node";
         const string deviceId = "dev";
-        var topology = new SparkplugTopologyService();
+        var store = new SparkplugMetricMetadataStore();
+        var topology = new SparkplugTopologyService(metricMetadataStore: store);
         var pipeline = BuildRebuildPipeline();
         var client = new MqttManagedClient();
         using var publisher = new MqttClientFactory().CreateMqttClient();
 
         Task HandleAsync(MqttApplicationMessageReceivedEventArgs args)
         {
-            var result = pipeline.ProcessInbound(args);
+            var result = pipeline.ProcessInbound(args, store);
             return topology.ApplyTopologyEventsAsync(result.TopologyEvents);
         }
 
@@ -123,7 +124,7 @@ public sealed partial class SparkplugSequenceRecoveryTests
         new() { Name = name, Alias = alias, Datatype = 12, StringValue = value };
 
     private static Payload.Types.Metric NamedLong(string name, ulong alias, ulong value) =>
-        new() { Name = name, Alias = alias, Datatype = 14, LongValue = value };
+        new() { Name = name, Alias = alias, Datatype = 13, LongValue = value };
 
     private static Payload.Types.Metric AliasDouble(ulong alias, double value) =>
         new() { Alias = alias, DoubleValue = value };

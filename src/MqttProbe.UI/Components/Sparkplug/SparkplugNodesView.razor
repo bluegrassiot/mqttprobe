@@ -2,9 +2,12 @@
 @using Microsoft.JSInterop
 @using MqttProbe.Core.Models.Sparkplug
 @using MqttProbe.Core.Services.Configuration
+@using MqttProbe.UI.Services.Formatting
 @inject ISparkplugTopologyService TopologyService
 @inject ISparkplugCommandService CommandService
 @inject ISparkplugSettings SparkplugSettings
+@inject IUiSettings UiSettings
+@inject IDeviceTimeFormatter TimeFormatter
 @inject ILogger<SparkplugNodesView> Logger
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -111,11 +114,13 @@
                                                               SelectedNode="@_selectedNode"
                                                               FilterText="@_filterText"
                                                               SelectedGroupId="@_selectedGroupId"
+                                                              Time="@TimeDisplay"
                                                               OnSelect="@SelectNode"
                                                               OnRemove="@RemoveNodeAsync" />;
 
     private RenderFragment _nodeDetail => @<SparkplugNodeDetail Node="@_selectedNode"
                                                                 ExpandedDevice="@_selectedDevice"
+                                                                Time="@TimeDisplay"
                                                                 AllowNodeReboot="@SparkplugSettings.Sparkplug.AllowNodeReboot"
                                                                 OnBack="@ClearSelection"
                                                                 OnToggleDevice="@ToggleDevice"
@@ -151,6 +156,7 @@
     {
         _splitBounds = new SparkplugSplitBoundsInterop(JS);
         _refreshCoalescer = new RefreshCoalescer(InvokeAsync, RefreshTopologyAsync, DefaultRenderCoalesceMs);
+        InitializeTimeDisplay();
         TopologyService.TopologyChanged += OnTopologyChanged;
         _updateTimer = new Timer(_ =>
         {
@@ -163,6 +169,8 @@
     // measurement is zero wide; reset it once it has a real width.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        await FormatTimesIfNeededAsync();
+
         await _renderGate.WaitAsync();
         try
         {
@@ -246,6 +254,7 @@
     private async Task RefreshTopologyAsync()
     {
         ReconcileTopologyState();
+        MarkTimePending();
         await RequestRenderSafelyAsync();
     }
 
@@ -267,6 +276,7 @@
     {
         _selectedNode = node;
         _selectedDevice = null;
+        MarkTimePending();
     }
 
     private async Task RemoveNodeAsync(SpbNode node)
@@ -304,11 +314,13 @@
     {
         _selectedNode = null;
         _selectedDevice = null;
+        MarkTimePending();
     }
 
     private void ToggleDevice(SpbDevice device)
     {
         _selectedDevice = _selectedDevice == device ? null : device;
+        MarkTimePending();
     }
 
     private Task AddMetricToChartAsync(SparkplugChartSelection selection) =>
@@ -392,6 +404,7 @@
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        DisposeTimeDisplay();
         TopologyService.TopologyChanged -= OnTopologyChanged;
         if (_updateTimer != null)
             await _updateTimer.DisposeAsync();

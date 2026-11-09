@@ -76,6 +76,7 @@ public class SparkplugNodesChartCollectionTests : BunitTestContext
 
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
         Services.AddSingleton(Substitute.For<ISnackbar>());
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
 
         _client = Substitute.For<IMqttManagedClient>();
         _client

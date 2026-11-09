@@ -16,6 +16,15 @@
     overflow-wrap: anywhere;
 }
 
+.chart-card-plot__pending {
+    height: 300px;
+}
+
+.chart-card-zone-row {
+    margin: 0 8px 2px;
+    text-align: right;
+}
+
 .chart-series-status {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));

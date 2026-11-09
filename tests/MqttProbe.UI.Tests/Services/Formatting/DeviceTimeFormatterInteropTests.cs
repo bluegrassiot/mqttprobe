@@ -1,3 +1,4 @@
+using System.Collections;
 using Microsoft.JSInterop;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.UI.Services.Formatting;
@@ -132,6 +133,26 @@ public class DeviceTimeFormatterInteropTests
     }
 
     [Test]
+    public async Task DisposeAsync_WhileTheImportIsPendingDoesNotThrowWhenItIsCanceled()
+    {
+        var gate = new TaskCompletionSource();
+        var runtime = new FakeRuntime { ImportGate = gate };
+        runtime.ImportFailures.Enqueue(new TaskCanceledException("import canceled"));
+        var interop = new DeviceTimeFormatterInterop(runtime);
+
+        var format = interop.FormatAsync(
+            [new DeviceTimeFormatRequest(Guid.NewGuid(), 1, Detail: false)],
+            new MessageTimePreferences());
+        var dispose = interop.DisposeAsync().AsTask();
+
+        gate.SetResult();
+
+        await FluentActions.Awaiting(() => format).Should().ThrowAsync<TaskCanceledException>();
+        await FluentActions.Awaiting(() => dispose).Should().NotThrowAsync();
+        runtime.Module.DisposeCount.Should().Be(0);
+    }
+
+    [Test]
     public async Task DisposedFormatter_DoesNotTouchJsAgain()
     {
         var runtime = new FakeRuntime();
@@ -148,6 +169,48 @@ public class DeviceTimeFormatterInteropTests
 
         runtime.Module.DisposeCount.Should().Be(1);
         runtime.Module.Identifiers.Should().ContainSingle();
+    }
+
+    [Test]
+    public async Task FormatAsync_DisposedAfterTheInitialCheckDoesNotImport()
+    {
+        var runtime = new FakeRuntime();
+        var interop = new DeviceTimeFormatterInterop(runtime);
+        var items = new DisposeOnCountList(
+            interop,
+            [new DeviceTimeFormatRequest(Guid.NewGuid(), 1, Detail: false)]);
+
+        var result = await interop.FormatAsync(items, new MessageTimePreferences());
+
+        result.Should().BeNull();
+        runtime.ImportedPaths.Should().BeEmpty();
+    }
+
+    private sealed class DisposeOnCountList(
+        DeviceTimeFormatterInterop interop,
+        IReadOnlyList<DeviceTimeFormatRequest> items) : IReadOnlyList<DeviceTimeFormatRequest>
+    {
+        private bool _disposed;
+
+        public int Count
+        {
+            get
+            {
+                if (!_disposed)
+                {
+                    _disposed = true;
+                    interop.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                }
+
+                return items.Count;
+            }
+        }
+
+        public DeviceTimeFormatRequest this[int index] => items[index];
+
+        public IEnumerator<DeviceTimeFormatRequest> GetEnumerator() => items.GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     private sealed class FakeRuntime : IJSRuntime

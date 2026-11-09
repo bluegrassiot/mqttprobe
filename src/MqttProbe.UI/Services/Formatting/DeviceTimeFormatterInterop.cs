@@ -91,7 +91,7 @@ internal sealed class DeviceTimeFormatterInterop(IJSRuntime js) : IDeviceTimeFor
         {
             module = await load;
         }
-        catch (Exception ex) when (ex is JSDisconnectedException or JSException)
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or OperationCanceledException)
         {
             return;
         }
@@ -113,6 +113,9 @@ internal sealed class DeviceTimeFormatterInterop(IJSRuntime js) : IDeviceTimeFor
     {
         lock (_gate)
         {
+            if (_disposed)
+                return Task.FromResult<IJSObjectReference?>(null);
+
             var load = _moduleLoad;
             if (load is not null && !load.IsFaulted && !load.IsCanceled)
                 return load;

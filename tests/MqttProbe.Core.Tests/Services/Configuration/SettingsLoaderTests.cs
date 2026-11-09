@@ -141,9 +141,36 @@ public class SettingsLoaderTests
         _document.Config.Ui.Theme.Should().Be("light");
         var messageTime = _document.Config.Ui.MessageTime;
         messageTime.Mode.Should().Be("clock");
-        messageTime.Zone.Should().Be("utc");
+        messageTime.Zone.Should().Be("local");
         messageTime.ClockFormat.Should().Be("12h");
         messageTime.DeltaScope.Should().Be("topic");
+    }
+
+    [Test]
+    public async Task LoadAsync_MissingZoneFallsBackToLocalAndKeepsFormat()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """{"ui":{"messageTime":{"clockFormat":"12h"}}}""");
+
+        await _loader.LoadAsync();
+
+        var messageTime = _document.Config.Ui.MessageTime;
+        messageTime.Zone.Should().Be("local");
+        messageTime.ClockFormat.Should().Be("12h");
+    }
+
+    [Test]
+    public async Task LoadAsync_ExplicitUtcZoneAndFormatSurviveReloadWithoutMigration()
+    {
+        await File.WriteAllTextAsync(_configPath,
+            """{"ui":{"messageTime":{"zone":"utc","clockFormat":"12h"}}}""");
+
+        await _loader.LoadAsync();
+
+        var messageTime = _document.Config.Ui.MessageTime;
+        messageTime.Zone.Should().Be("utc");
+        messageTime.ClockFormat.Should().Be("12h");
+        (await File.ReadAllTextAsync(_configPath)).Should().Contain("\"utc\"");
     }
 
     [Test]
@@ -155,7 +182,7 @@ public class SettingsLoaderTests
 
         var messageTime = _document.Config.Ui.MessageTime;
         messageTime.Mode.Should().Be("clock");
-        messageTime.Zone.Should().Be("utc");
+        messageTime.Zone.Should().Be("local");
         messageTime.ClockFormat.Should().Be("24h");
         messageTime.DeltaScope.Should().Be("all");
     }

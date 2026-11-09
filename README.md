@@ -6,6 +6,8 @@ Connect to any broker, browse/filter live topics, inspect payloads, chart payloa
 
 [![CI](https://github.com/bluegrassiot/mqttprobe/actions/workflows/ci.yml/badge.svg)](https://github.com/bluegrassiot/mqttprobe/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/bluegrassiot/mqttprobe)](https://github.com/bluegrassiot/mqttprobe/releases/latest)
+[![Docker Pulls](https://img.shields.io/docker/pulls/bluegrassiot/mqttprobe)](https://hub.docker.com/r/bluegrassiot/mqttprobe)
 
 ![MQTTProbe demo: connecting to a broker, browsing topics, and decoding Sparkplug B messages](docs/images/demo.gif)
 
@@ -33,10 +35,12 @@ Connect to any broker, browse/filter live topics, inspect payloads, chart payloa
 - Topic exclusions to ignore noisy topics
 - Multiple saved connections, TLS/MQTTS, WebSocket
 - OIDC sign-in on the web host (Keycloak, Authentik, or any OIDC provider)
-- Runs local: Desktop (Windows/Linux), Android (sideload), Docker, Web, iOS (coming soon)
+- Runs local: Desktop (Windows, macOS, Linux), Android (sideload), Docker, Web, iOS (App Store)
 - Updates directly available in the Desktop apps
 
 ## Get MQTTProbe
+
+[![Download on the App Store](https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg)](https://apps.apple.com/gb/app/mqttprobe-mqtt-client/id6822484688)
 
 | Platform | Artifact | Notes |
 |----------|----------|-------|
@@ -45,7 +49,7 @@ Connect to any broker, browse/filter live topics, inspect payloads, chart payloa
 | Linux | [MQTTProbe.AppImage](https://github.com/bluegrassiot/mqttprobe/releases/latest/download/MQTTProbe.AppImage) | `chmod +x` and run. WebKit and GTK are bundled; needs `libfuse2` on Ubuntu 22.04+ |
 | Android | [APK on latest release](https://github.com/bluegrassiot/mqttprobe/releases/latest) | `mqttprobe-android-*.apk`; sideload, allow unknown apps if prompted |
 | Docker | [bluegrassiot/mqttprobe](https://hub.docker.com/r/bluegrassiot/mqttprobe) | See Docker section |
-| iOS | -- | coming soon |
+| iOS | [App Store](https://apps.apple.com/gb/app/mqttprobe-mqtt-client/id6822484688) | iPhone, iOS 15 or later |
 
 See all builds on the [latest release page](https://github.com/bluegrassiot/mqttprobe/releases/latest).
 

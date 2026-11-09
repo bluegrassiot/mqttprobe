@@ -301,6 +301,36 @@ public class JsonFieldExtractorTests
         result["metrics[1].doubleValue"].Value.Should().BeApproximately(22.5, 0.001);
     }
 
+    [Test]
+    public void Extract_WithSparkplugTypes_DecodesSignedIntValue()
+    {
+        var json = """{"metrics":[{"name":"Value","datatype":3,"intValue":4294967295}]}""";
+
+        var result = _extractor.Extract(json, null, new StaticSparkplugTypeResolver(null));
+
+        result["metrics.Value"].Value.Should().Be(-1.0);
+    }
+
+    [Test]
+    public void Extract_WithSparkplugTypes_UsesResolverForOmittedDatatype()
+    {
+        var json = $$"""{"metrics":[{"name":"Value","longValue":"{{ulong.MaxValue}}"}]}""";
+
+        var result = _extractor.Extract(json, null, new StaticSparkplugTypeResolver(4));
+
+        result["metrics.Value"].Value.Should().Be(-1.0);
+    }
+
+    [Test]
+    public void Extract_WithoutSparkplugTypes_LeavesSignedIntegerRaw()
+    {
+        var json = """{"metrics":[{"name":"Value","datatype":3,"intValue":4294967295}]}""";
+
+        var result = _extractor.Extract(json);
+
+        result["metrics.Value"].Value.Should().Be(4294967295.0);
+    }
+
     [TestCase("0.00", 0.0)]
     [TestCase("42", 42.0)]
     [TestCase("-5.5", -5.5)]
@@ -334,4 +364,9 @@ public class JsonFieldExtractorTests
     [TestCase("[1]")]
     public void Extract_ObjectOrArrayPayload_DoesNotAddRootField(string payload) =>
         _extractor.Extract(payload).Should().NotContainKey(ChartFieldPaths.Root);
+
+    private sealed class StaticSparkplugTypeResolver(uint? datatype) : ISparkplugMetricTypeResolver
+    {
+        public uint? Resolve(ulong metricAlias, string? name) => datatype;
+    }
 }

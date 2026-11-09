@@ -218,7 +218,7 @@ public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
         payload.Metrics.Add(BooleanMetric("Node Switch", 12, 11, true));
         payload.Metrics.Add(StringMetric("Node String Number", 13, 12, "42"));
         payload.Metrics.Add(StringMetric("Node String Bool", 14, 12, "true"));
-        payload.Metrics.Add(LongMetric("Node Timestamp", 15, 14, 1712345678000UL));
+        payload.Metrics.Add(LongMetric("Node Timestamp", 15, 13, 1712345678000UL));
         return payload;
     }
 
@@ -240,7 +240,7 @@ public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
         payload.Metrics.Add(BooleanMetric("Device Switch", 22, 11, true));
         payload.Metrics.Add(StringMetric("Device String Number", 23, 12, "42"));
         payload.Metrics.Add(StringMetric("Device String Bool", 24, 12, "true"));
-        payload.Metrics.Add(LongMetric("Device Timestamp", 25, 14, 1712345678000UL));
+        payload.Metrics.Add(LongMetric("Device Timestamp", 25, 13, 1712345678000UL));
         return payload;
     }
 

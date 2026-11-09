@@ -1,10 +1,12 @@
+using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.PluginContracts;
 
 namespace MqttProbe.Core.Services.Plugins.BuiltIn;
 
 public static class BuiltInPluginRegistration
 {
-    public static void RegisterBuiltIns(IPluginRegistrationContext context)
+    public static void RegisterBuiltIns(
+        IPluginRegistrationContext context, SparkplugMetricMetadataStore? metricMetadataStore = null)
     {
         context.RegisterDetector(new EmptyPayloadDetector());
         context.RegisterDetector(new SparkplugPayloadDetector());
@@ -28,7 +30,7 @@ public static class BuiltInPluginRegistration
         context.RegisterDecoder(new Base64PayloadDecoder());
         context.RegisterDecoder(new PlainTextPayloadDecoder());
 
-        context.RegisterTopologyExtractor(new SparkplugTopologyExtractor());
+        context.RegisterTopologyExtractor(new SparkplugTopologyExtractor(metricMetadataStore));
 
         context.RegisterEncoder(new JsonPayloadEncoder());
         context.RegisterEncoder(new PlainTextPayloadEncoder());

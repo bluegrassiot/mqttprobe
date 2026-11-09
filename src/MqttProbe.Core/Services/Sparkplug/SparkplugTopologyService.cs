@@ -35,13 +35,15 @@ public interface ISparkplugTopologyService
 public sealed partial class SparkplugTopologyService(
     TimeProvider? timeProvider = null,
     int reorderTimeoutMilliseconds = 5000,
-    MqttProbe.Core.Services.Configuration.ISparkplugSettings? sparkplugSettings = null) : ISparkplugTopologyService
+    MqttProbe.Core.Services.Configuration.ISparkplugSettings? sparkplugSettings = null,
+    SparkplugMetricMetadataStore? metricMetadataStore = null) : ISparkplugTopologyService
 {
     private static readonly string[] _nodeVerbs = ["NBIRTH", "NDATA", "NDEATH"];
     private static readonly string[] _deviceVerbs = ["DBIRTH", "DDATA", "DDEATH"];
     private readonly ConcurrentDictionary<string, SpbGroup> _groups = new(StringComparer.Ordinal);
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly int _reorderTimeoutMilliseconds = Math.Clamp(reorderTimeoutMilliseconds, 0, 60000);
+    private readonly SparkplugMetricMetadataStore _metricMetadata = metricMetadataStore ?? new();
 
     public IReadOnlyDictionary<string, SpbGroup> Groups => _groups;
     public event Action? TopologyChanged;
@@ -53,6 +55,8 @@ public sealed partial class SparkplugTopologyService(
 
         if (!group.Nodes.TryRemove(nodeId, out _))
             return false;
+
+        _metricMetadata.RemoveNode(groupId, nodeId);
 
         if (group.Nodes.IsEmpty)
             _groups.TryRemove(groupId, out _);
@@ -70,7 +74,10 @@ public sealed partial class SparkplugTopologyService(
             foreach (var (nodeId, node) in group.Nodes)
             {
                 if (node.Status == SpbNodeStatus.Offline && group.Nodes.TryRemove(nodeId, out _))
+                {
+                    _metricMetadata.RemoveNode(groupId, nodeId);
                     removed++;
+                }
             }
 
             if (group.Nodes.IsEmpty)
@@ -116,6 +123,7 @@ public sealed partial class SparkplugTopologyService(
                     if (TopicMatchesDevice(predicate, groupId, nodeId, deviceId)
                         && node.Devices.TryRemove(deviceId, out _))
                     {
+                        _metricMetadata.RemoveDevice(groupId, nodeId, deviceId);
                         removed++;
                     }
                 }
@@ -123,6 +131,7 @@ public sealed partial class SparkplugTopologyService(
                 if (TopicMatchesNode(predicate, groupId, nodeId)
                     && group.Nodes.TryRemove(nodeId, out _))
                 {
+                    _metricMetadata.RemoveNode(groupId, nodeId);
                     removed++;
                 }
             }
@@ -138,6 +147,7 @@ public sealed partial class SparkplugTopologyService(
     {
         var wasEmpty = _groups.IsEmpty;
         _groups.Clear();
+        _metricMetadata.ClearAll();
         if (!wasEmpty)
             TopologyChanged?.Invoke();
     }

@@ -40,7 +40,7 @@ public class SparkplugTopologyDatatypeRetentionTests
             NamedMetric("Temperature", 10, 21.5, 42),
             NamedMetric("Ready", 11, true, 43),
             NamedMetric("Label", 12, "42", 44),
-            NamedMetric("Timestamp", 14, 1714050000000L, 45)));
+            NamedMetric("Timestamp", 13, 1714050000000L, 45)));
         await Fire("spBv1.0/g/NDATA/n", SpbPayload(2,
             AliasMetric(42, 22.75),
             AliasMetric(43, false),
@@ -62,7 +62,7 @@ public class SparkplugTopologyDatatypeRetentionTests
             NamedMetric("Temperature", 10, 21.5, 142),
             NamedMetric("Ready", 11, true, 143),
             NamedMetric("Label", 12, "42", 144),
-            NamedMetric("Timestamp", 14, 1714050000000L, 145)));
+            NamedMetric("Timestamp", 13, 1714050000000L, 145)));
         await Fire("spBv1.0/g/DDATA/n/d", SpbPayload(2,
             AliasMetric(142, 22.75),
             AliasMetric(143, false),

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using MqttProbe.Core.Models.Plugins;
 using MqttProbe.Core.Services.Plugins.Loading;
 using MqttProbe.Core.Services.Plugins.Pipeline;
+using MqttProbe.Core.Services.Sparkplug;
 
 namespace MqttProbe.Core.Services.Plugins.Packaging;
 
@@ -15,13 +16,15 @@ public sealed class PluginReloadService
     private readonly PluginAssemblyCache _assemblyCache;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<PluginReloadService> _logger;
+    private readonly SparkplugMetricMetadataStore? _metricMetadataStore;
 
     public PluginReloadService(
         PluginConfig config,
         PayloadPipeline pipeline,
         PluginInstallSession session,
         PluginAssemblyCache assemblyCache,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        SparkplugMetricMetadataStore? metricMetadataStore = null)
     {
         _config = config;
         _pipeline = pipeline;
@@ -29,6 +32,7 @@ public sealed class PluginReloadService
         _assemblyCache = assemblyCache;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<PluginReloadService>();
+        _metricMetadataStore = metricMetadataStore;
     }
 
     public PluginReloadOutcome Reload()
@@ -36,7 +40,7 @@ public sealed class PluginReloadService
         try
         {
             var registry = MqttProbePluginStartup.BuildPluginRegistry(
-                _config, _loggerFactory, _assemblyCache);
+                _config, _loggerFactory, _assemblyCache, _metricMetadataStore);
 
             _pipeline.SwapRegistry(registry);
             _session.ClearNonRestartEntries();

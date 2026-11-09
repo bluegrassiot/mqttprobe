@@ -4,6 +4,7 @@ using MqttProbe.Core.Services.Plugins.BuiltIn;
 using MqttProbe.Core.Services.Plugins.Loading;
 using MqttProbe.Core.Services.Plugins.Protobuf;
 using MqttProbe.Core.Services.Plugins.Registry;
+using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.PluginContracts;
 
 namespace MqttProbe.Core.Services.Plugins;
@@ -13,8 +14,10 @@ public static class MqttProbePluginStartup
     public static PluginRegistry BuildPluginRegistry(
         PluginConfig config,
         ILoggerFactory loggerFactory,
-        PluginAssemblyCache? assemblyCache = null) =>
-        BuildPluginRegistry(config, loggerFactory, assemblyCache, combineProtobufSources: null);
+        PluginAssemblyCache? assemblyCache = null,
+        SparkplugMetricMetadataStore? metricMetadataStore = null) =>
+        BuildPluginRegistry(
+            config, loggerFactory, assemblyCache, combineProtobufSources: null, metricMetadataStore);
 
     // Test seam: no real schema content fails only once combined (duplicates just warn),
     // so tests inject a failing combiner to reach the combine-failure branch.
@@ -22,7 +25,8 @@ public static class MqttProbePluginStartup
         PluginConfig config,
         ILoggerFactory loggerFactory,
         PluginAssemblyCache? assemblyCache,
-        Func<IReadOnlyList<ProtobufSchemaSource>, ILogger, ProtobufSchemaRegistry>? combineProtobufSources)
+        Func<IReadOnlyList<ProtobufSchemaSource>, ILogger, ProtobufSchemaRegistry>? combineProtobufSources,
+        SparkplugMetricMetadataStore? metricMetadataStore = null)
     {
         combineProtobufSources ??= static (sources, logger) => new ProtobufSchemaRegistry(sources, logger);
 
@@ -30,7 +34,7 @@ public static class MqttProbePluginStartup
             .LogInformation("Plugin contract version {Version}", PluginContract.Version);
 
         var registryBuilder = new PluginRegistryBuilder();
-        BuiltInPluginRegistration.RegisterBuiltIns(registryBuilder);
+        BuiltInPluginRegistration.RegisterBuiltIns(registryBuilder, metricMetadataStore);
 
         var protobufLogger = loggerFactory.CreateLogger<ProtobufSchemaRegistry>();
         var usableSources = DiscoverUsableProtobufSources(config, protobufLogger, registryBuilder);

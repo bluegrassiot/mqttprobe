@@ -123,7 +123,7 @@ public sealed partial class SparkplugSequenceRecoveryTests
         new() { Name = name, Alias = alias, Datatype = 12, StringValue = value };
 
     private static Payload.Types.Metric NamedLong(string name, ulong alias, ulong value) =>
-        new() { Name = name, Alias = alias, Datatype = 14, LongValue = value };
+        new() { Name = name, Alias = alias, Datatype = 13, LongValue = value };
 
     private static Payload.Types.Metric AliasDouble(ulong alias, double value) =>
         new() { Alias = alias, DoubleValue = value };

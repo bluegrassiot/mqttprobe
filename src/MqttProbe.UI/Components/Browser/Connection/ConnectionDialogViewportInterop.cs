@@ -46,6 +46,36 @@ internal sealed class ConnectionDialogViewportInterop(IJSRuntime js) : IAsyncDis
         _attachment = attachment;
     }
 
+    internal async Task RememberFocusAsync(ElementReference content)
+    {
+        if (_module is null)
+            return;
+
+        try
+        {
+            await _module.InvokeVoidAsync("rememberFocus", content);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is gone; there is no focus left to restore.
+        }
+    }
+
+    internal async Task<bool> RestoreFocusAsync(ElementReference content)
+    {
+        if (_module is null)
+            return false;
+
+        try
+        {
+            return await _module.InvokeAsync<bool>("restoreFocus", content);
+        }
+        catch (JSDisconnectedException)
+        {
+            return false;
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         _disposed = true;

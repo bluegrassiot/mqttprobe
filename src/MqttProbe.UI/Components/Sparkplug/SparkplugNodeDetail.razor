@@ -74,20 +74,16 @@ else
         <div class="spb-timestamps d-flex flex-wrap gap-3 mb-3">
             @if (Node.LastBirthAt != null)
             {
-                <span>
+                <span class="spb-timestamp">
                     Birth:
-                    <span class="metrics-mono">
-                        @Node.LastBirthAt.Value.ToLocalTime().ToString("HH:mm:ss")
-                    </span>
+                    @TimestampValue(SparkplugTimeKeys.NodeBirth)
                 </span>
             }
             @if (Node.LastDataAt != null)
             {
-                <span>
+                <span class="spb-timestamp">
                     Last data:
-                    <span class="metrics-mono">
-                        @Node.LastDataAt.Value.ToLocalTime().ToString("HH:mm:ss")
-                    </span>
+                    @TimestampValue(SparkplugTimeKeys.NodeLastData)
                     @if (Node.Status == SpbNodeStatus.Online)
                     {
                         <span class="spb-relative-time">(@DisplayHelpers.GetRelativeTime(Node.LastDataAt))</span>
@@ -96,20 +92,16 @@ else
             }
             @if (Node.LastDeathAt != null && Node.Status == SpbNodeStatus.Offline)
             {
-                <span>
+                <span class="spb-timestamp">
                     Death:
-                    <span class="metrics-mono">
-                        @Node.LastDeathAt.Value.ToLocalTime().ToString("HH:mm:ss")
-                    </span>
+                    @TimestampValue(SparkplugTimeKeys.NodeDeath)
                 </span>
             }
             @if (Node.LastRebirthRequestAt != null)
             {
-                <span>
+                <span class="spb-timestamp">
                     Rebirth requested:
-                    <span class="metrics-mono">
-                        @Node.LastRebirthRequestAt.Value.ToLocalTime().ToString("HH:mm:ss")
-                    </span>
+                    @TimestampValue(SparkplugTimeKeys.NodeRebirthRequest)
                 </span>
             }
             <span>
@@ -131,7 +123,10 @@ else
         else
         {
             <SparkplugMetricsTable Class="mb-3"
-                                   Items="@Node.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)" />
+                                   Topic="@SparkplugChartTargets.NodeTopic(Node.GroupId, Node.NodeId)"
+                                   Time="Time"
+                                   Items="@Node.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
+                                   OnAddToChart="OnAddMetricToChart" />
         }
 
         <div class="spb-subsection-header">
@@ -148,15 +143,19 @@ else
             {
                 <div @key="device.DeviceId" class="spb-device-row @(ExpandedDevice == device ? "spb-device-row--expanded" : "")"
                      @onclick="() => OnToggleDevice.InvokeAsync(device)">
-                    <span class="spb-status-dot @StatusClass(device.Status)"></span>
-                    <span class="spb-device-id">@device.DeviceId</span>
-                    <span class="spb-status-label spb-status-label--device @StatusClass(device.Status)">
-                        @SparkplugNodeDisplay.StatusLabel(device.Status)
-                    </span>
-                    <span class="spb-device-secondary">
-                        @SparkplugNodeDisplay.DeviceSecondaryText(device)
-                    </span>
-                    <span @onclick:stopPropagation="true" class="ms-auto">
+                    <button type="button" class="spb-device-select"
+                            aria-expanded="@(ExpandedDevice == device ? "true" : "false")"
+                            @onkeydown="args => OnDeviceKeyDown(device, args)">
+                        <span class="spb-status-dot @StatusClass(device.Status)"></span>
+                        <span class="spb-device-id">@device.DeviceId</span>
+                        <span class="spb-status-label spb-status-label--device @StatusClass(device.Status)">
+                            @SparkplugNodeDisplay.StatusLabel(device.Status)
+                        </span>
+                        <span class="spb-device-secondary">
+                            @SparkplugNodeDisplay.DeviceSecondaryText(device)
+                        </span>
+                    </button>
+                    <span class="spb-device-rebirth" @onclick:stopPropagation="true">
                         <MudButton Variant="Variant.Outlined"
                                    Size="Size.Small" Class="app-btn-min"
                                    StartIcon="@LucideIcons.RefreshCw"
@@ -177,7 +176,11 @@ else
                         }
                         else
                         {
-                            <SparkplugMetricsTable Items="@device.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)" />
+                            <SparkplugMetricsTable
+                                Topic="@SparkplugChartTargets.DeviceTopic(Node.GroupId, Node.NodeId, device.DeviceId)"
+                                Time="Time"
+                                Items="@device.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
+                                OnAddToChart="OnAddMetricToChart" />
                         }
                     </div>
                 }
@@ -187,6 +190,33 @@ else
 }
 
 @code {
+    private RenderFragment TimestampValue(string key) => @<span class="spb-timestamp__value">
+        @{
+            var time = Time.Find(key);
+        }
+        <span class="metrics-mono spb-timestamp__time @(time is null ? "spb-timestamp--pending" : "")"
+              data-time-value="@key"
+              data-time-pending="@(time is null ? "true" : null)"
+              title="@(time?.FullText ?? SparkplugTimeDisplay.PendingTitle)">@(time?.TimeText ?? SparkplugTimeDisplay.PendingMarker)</span>
+        @if (Time.ZoneFor(key) is { } zone)
+        {
+            <SparkplugZoneToken Abbreviation="@zone.Abbreviation"
+                                Detail="@zone.Tooltip"
+                                AccessibleLabel="@zone.AccessibleLabel"
+                                data-time-zone="@key" />
+        }
+    </span>;
+
+    private async Task OnDeviceKeyDown(SpbDevice device, KeyboardEventArgs args)
+    {
+        if (args.IsComposing || args.CtrlKey || args.AltKey || args.MetaKey || args.ShiftKey)
+            return;
+
+        var expanded = ExpandedDevice == device;
+        if ((args.Key == "ArrowRight" && !expanded) || (args.Key == "ArrowLeft" && expanded))
+            await OnToggleDevice.InvokeAsync(device);
+    }
+
     private static string NodeStatusClass(SpbNode node) => SparkplugNodeDisplay.IsStale(node)
         ? "spb-status--stale"
         : StatusClass(node.Status);
@@ -252,6 +282,9 @@ else
     public SpbDevice? ExpandedDevice { get; set; }
 
     [Parameter]
+    public SparkplugTimeDisplay Time { get; set; } = SparkplugTimeDisplay.Empty;
+
+    [Parameter]
     public bool AllowNodeReboot { get; set; }
 
     [Parameter]
@@ -268,4 +301,7 @@ else
 
     [Parameter]
     public EventCallback<SpbDevice> OnRequestDeviceRebirth { get; set; }
+
+    [Parameter]
+    public EventCallback<SparkplugChartSelection> OnAddMetricToChart { get; set; }
 }

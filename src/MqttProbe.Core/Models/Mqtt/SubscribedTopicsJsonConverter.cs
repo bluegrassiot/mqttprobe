@@ -28,7 +28,7 @@ public sealed class SubscribedTopicsJsonConverter : JsonConverter<List<Subscribe
                 list.Add(new SubscribedTopic
                 {
                     Topic = reader.GetString() ?? string.Empty,
-                    QualityOfServiceLevel = MqttQualityOfServiceLevel.AtLeastOnce
+                    QualityOfServiceLevel = MqttQualityOfServiceLevel.AtMostOnce
                 });
                 continue;
             }

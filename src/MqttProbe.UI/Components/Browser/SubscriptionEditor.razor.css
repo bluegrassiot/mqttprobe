@@ -8,13 +8,13 @@
     overflow: hidden;
 }
 
-.subscription-editor:focus-visible {
-    outline: 2px solid var(--mud-palette-primary);
-    outline-offset: 2px;
-}
-
 .subscription-editor ::deep .mud-expand-panel-header {
     background: var(--mud-palette-action-default-hover);
+}
+
+.subscription-editor ::deep .mud-expand-panel-header:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
 }
 
 .subscription-editor-add-row,

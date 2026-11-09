@@ -1,0 +1,12 @@
+@using System.Collections.Immutable
+
+<ul class="topic-target-list">
+    @foreach (var topic in Topics)
+    {
+        <li class="topic-target-list__item">@topic</li>
+    }
+</ul>
+
+@code {
+    [Parameter, EditorRequired] public ImmutableArray<string> Topics { get; set; }
+}

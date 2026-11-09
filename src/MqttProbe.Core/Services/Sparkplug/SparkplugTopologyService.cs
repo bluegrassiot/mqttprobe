@@ -11,11 +11,13 @@ public interface ISparkplugTopologyService
     public event Action? TopologyChanged;
     public bool RemoveNode(string groupId, string nodeId);
     public int RemoveMatchingTopic(string filter);
+    public int RemoveMatchingTopics(Func<string, bool> predicate);
 
     // Exclusion purgers run while the exclude service holds its locks; a subscriber that
     // re-enters the service from TopologyChanged would deadlock, so the purge removes
     // silently and the caller raises the event later through RaiseTopologyChanged.
     public int RemoveMatchingTopicSilent(string filter);
+    public int RemoveMatchingTopicsSilent(Func<string, bool> predicate);
     public void RaiseTopologyChanged();
 
     public int RemoveOfflineNodes();
@@ -33,27 +35,35 @@ public interface ISparkplugTopologyService
 public sealed partial class SparkplugTopologyService(
     TimeProvider? timeProvider = null,
     int reorderTimeoutMilliseconds = 5000,
-    MqttProbe.Core.Services.Configuration.ISparkplugSettings? sparkplugSettings = null) : ISparkplugTopologyService
+    MqttProbe.Core.Services.Configuration.ISparkplugSettings? sparkplugSettings = null,
+    SparkplugMetricMetadataStore? metricMetadataStore = null) : ISparkplugTopologyService
 {
     private static readonly string[] _nodeVerbs = ["NBIRTH", "NDATA", "NDEATH"];
     private static readonly string[] _deviceVerbs = ["DBIRTH", "DDATA", "DDEATH"];
     private readonly ConcurrentDictionary<string, SpbGroup> _groups = new(StringComparer.Ordinal);
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly int _reorderTimeoutMilliseconds = Math.Clamp(reorderTimeoutMilliseconds, 0, 60000);
+    private readonly SparkplugMetricMetadataStore _metricMetadata = metricMetadataStore ?? new();
+    private readonly Lock _lifecycleGate = new();
 
     public IReadOnlyDictionary<string, SpbGroup> Groups => _groups;
     public event Action? TopologyChanged;
 
     public bool RemoveNode(string groupId, string nodeId)
     {
-        if (!_groups.TryGetValue(groupId, out var group))
-            return false;
+        lock (_lifecycleGate)
+        {
+            if (!_groups.TryGetValue(groupId, out var group))
+                return false;
 
-        if (!group.Nodes.TryRemove(nodeId, out _))
-            return false;
+            if (!group.Nodes.TryRemove(nodeId, out _))
+                return false;
 
-        if (group.Nodes.IsEmpty)
-            _groups.TryRemove(groupId, out _);
+            _metricMetadata.RemoveNode(groupId, nodeId);
+
+            if (group.Nodes.IsEmpty)
+                _groups.TryRemove(groupId, out _);
+        }
 
         TopologyChanged?.Invoke();
         return true;
@@ -63,83 +73,139 @@ public sealed partial class SparkplugTopologyService(
     {
         var removed = 0;
 
-        foreach (var (groupId, group) in _groups)
+        lock (_lifecycleGate)
         {
-            foreach (var (nodeId, node) in group.Nodes)
+            foreach (var (groupId, group) in _groups)
             {
-                if (node.Status == SpbNodeStatus.Offline && group.Nodes.TryRemove(nodeId, out _))
-                    removed++;
-            }
-
-            if (group.Nodes.IsEmpty)
-                _groups.TryRemove(groupId, out _);
-        }
-
-        if (removed > 0)
-            TopologyChanged?.Invoke();
-
-        return removed;
-    }
-
-    public int RemoveMatchingTopic(string filter)
-    {
-        var removed = RemoveMatchingTopicCore(filter);
-        if (removed > 0)
-            TopologyChanged?.Invoke();
-
-        return removed;
-    }
-
-    public int RemoveMatchingTopicSilent(string filter) => RemoveMatchingTopicCore(filter);
-
-    public void RaiseTopologyChanged() => TopologyChanged?.Invoke();
-
-    private int RemoveMatchingTopicCore(string filter)
-    {
-        var removed = 0;
-
-        foreach (var (groupId, group) in _groups)
-        {
-            foreach (var (nodeId, node) in group.Nodes)
-            {
-                foreach (var (deviceId, _) in node.Devices)
+                foreach (var (nodeId, node) in group.Nodes)
                 {
-                    if (TopicMatchesDevice(filter, groupId, nodeId, deviceId)
-                        && node.Devices.TryRemove(deviceId, out _))
+                    if (node.Status == SpbNodeStatus.Offline && group.Nodes.TryRemove(nodeId, out _))
                     {
+                        _metricMetadata.RemoveNode(groupId, nodeId);
                         removed++;
                     }
                 }
 
-                if (TopicMatchesNode(filter, groupId, nodeId)
-                    && group.Nodes.TryRemove(nodeId, out _))
+                if (group.Nodes.IsEmpty)
+                    _groups.TryRemove(groupId, out _);
+            }
+        }
+
+        if (removed > 0)
+            TopologyChanged?.Invoke();
+
+        return removed;
+    }
+
+    public int RemoveMatchingTopic(string filter) =>
+        RemoveMatchingTopics(topic => TopicExcludeService.Matches(topic, filter));
+
+    public int RemoveMatchingTopics(Func<string, bool> predicate)
+    {
+        var removed = RemoveMatchingTopicsCore(predicate);
+        if (removed > 0)
+            TopologyChanged?.Invoke();
+
+        return removed;
+    }
+
+    public int RemoveMatchingTopicSilent(string filter) =>
+        RemoveMatchingTopicsSilent(topic => TopicExcludeService.Matches(topic, filter));
+
+    public int RemoveMatchingTopicsSilent(Func<string, bool> predicate) =>
+        RemoveMatchingTopicsCore(predicate);
+
+    public void RaiseTopologyChanged() => TopologyChanged?.Invoke();
+
+    private int RemoveMatchingTopicsCore(Func<string, bool> predicate)
+    {
+        var nodeCandidates = new List<(string GroupId, SpbGroup Group, string NodeId, SpbNode Node)>();
+        var deviceCandidates = new List<(
+            string GroupId, SpbGroup Group, string NodeId, SpbNode Node, string DeviceId, SpbDevice Device)>();
+
+        foreach (var (groupId, group) in _groups)
+        {
+            foreach (var (nodeId, node) in group.Nodes)
+            {
+                foreach (var (deviceId, device) in node.Devices)
                 {
+                    if (TopicMatchesDevice(predicate, groupId, nodeId, deviceId))
+                        deviceCandidates.Add((groupId, group, nodeId, node, deviceId, device));
+                }
+
+                if (TopicMatchesNode(predicate, groupId, nodeId))
+                    nodeCandidates.Add((groupId, group, nodeId, node));
+            }
+        }
+
+        var removed = 0;
+
+        lock (_lifecycleGate)
+        {
+            foreach (var candidate in deviceCandidates)
+            {
+                if (!IsCurrent(candidate.GroupId, candidate.Group, candidate.NodeId, candidate.Node))
+                    continue;
+
+                if (!candidate.Node.Devices.TryGetValue(candidate.DeviceId, out var device)
+                    || !ReferenceEquals(device, candidate.Device))
+                    continue;
+
+                if (candidate.Node.Devices.TryRemove(candidate.DeviceId, out _))
+                {
+                    _metricMetadata.RemoveDevice(candidate.GroupId, candidate.NodeId, candidate.DeviceId);
                     removed++;
                 }
             }
 
-            if (group.Nodes.IsEmpty && _groups.TryRemove(groupId, out _))
-                removed++;
+            foreach (var candidate in nodeCandidates)
+            {
+                if (!IsCurrent(candidate.GroupId, candidate.Group, candidate.NodeId, candidate.Node))
+                    continue;
+
+                if (candidate.Group.Nodes.TryRemove(candidate.NodeId, out _))
+                {
+                    _metricMetadata.RemoveNode(candidate.GroupId, candidate.NodeId);
+                    removed++;
+                }
+            }
+
+            foreach (var (groupId, group) in _groups)
+            {
+                if (group.Nodes.IsEmpty && _groups.TryRemove(groupId, out _))
+                    removed++;
+            }
         }
 
         return removed;
     }
 
+    private bool IsCurrent(string groupId, SpbGroup group, string nodeId, SpbNode node) =>
+        _groups.TryGetValue(groupId, out var currentGroup)
+        && ReferenceEquals(currentGroup, group)
+        && group.Nodes.TryGetValue(nodeId, out var currentNode)
+        && ReferenceEquals(currentNode, node);
+
     public void ClearAll()
     {
-        var wasEmpty = _groups.IsEmpty;
-        _groups.Clear();
+        bool wasEmpty;
+        lock (_lifecycleGate)
+        {
+            wasEmpty = _groups.IsEmpty;
+            _groups.Clear();
+            _metricMetadata.ClearAll();
+        }
+
         if (!wasEmpty)
             TopologyChanged?.Invoke();
     }
 
-    private static bool TopicMatchesNode(string filter, string groupId, string nodeId) =>
-        _nodeVerbs
-            .Any(verb => TopicExcludeService.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}", filter));
+    private static bool TopicMatchesNode(Func<string, bool> predicate, string groupId, string nodeId) =>
+        _nodeVerbs.Any(verb => predicate($"spBv1.0/{groupId}/{verb}/{nodeId}"));
 
-    private static bool TopicMatchesDevice(string filter, string groupId, string nodeId, string deviceId) =>
-        _deviceVerbs
-            .Any(verb => TopicExcludeService.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}/{deviceId}", filter));
+    private static bool TopicMatchesDevice(
+        Func<string, bool> predicate, string groupId, string nodeId, string deviceId) =>
+        _deviceVerbs.Any(verb => predicate($"spBv1.0/{groupId}/{verb}/{nodeId}/{deviceId}"));
 
     internal static bool TryParseTopic(string topic, out string group, out string verb, out string node, out string? device)
     {
@@ -253,7 +319,7 @@ public sealed partial class SparkplugTopologyService(
                 case DeviceBirthEvent e:
                     MarkObservationIncompleteIfNeeded(e.GroupId, e.NodeId, observationContext);
                     if (ObserveSequence(e.GroupId, e.NodeId, e.SequenceNumber))
-                        ApplyDeviceBirth(e.GroupId, e.NodeId, e.DeviceId, ConvertMetricSnapshots(e.Metrics));
+                        ApplyDeviceBirth(e, ConvertMetricSnapshots(e.Metrics));
                     break;
                 case DeviceDeathEvent e:
                     MarkObservationIncompleteIfNeeded(e.GroupId, e.NodeId, observationContext);
@@ -286,36 +352,41 @@ public sealed partial class SparkplugTopologyService(
     private void ApplyNodeBirth(
         NodeBirthEvent evt, SpbMetricSnapshot[] metrics, SpbSequenceObservationContext? observationContext)
     {
-        var node = GetOrCreateNode(evt.GroupId, evt.NodeId);
-        lock (node.SyncRoot)
+        lock (_lifecycleGate)
         {
-            var duplicate = evt.SequenceNumber is { } sequence
-                && node.LastBirthSequenceNumber == sequence
-                && node.LastBirthTimestampUtc == evt.TimestampUtc
-                && node.BirthDeathSequenceNumber == evt.BirthDeathSequenceNumber;
-            if (!duplicate)
+            var node = GetOrCreateNode(evt.GroupId, evt.NodeId);
+            lock (node.SyncRoot)
             {
-                EnsureSequenceTracker(node).Reset(evt.SequenceNumber);
-                node.Sequence = node.SequenceTracker!.Snapshot;
-                node.SequenceEpisodeId++;
-                node.SequenceRecoveryInFlightEpisodeId = null;
-                node.SequenceRecoverySentEpisodeId = null;
-                node.SequenceObservationComplete = evt.SequenceNumber is { } baseline && baseline <= byte.MaxValue
-                    && (observationContext?.HasCompleteSubscriptions ?? true);
-                if (observationContext is not null)
-                    node.SequenceConnectionEpoch = observationContext.ConnectionEpoch;
-                node.SequenceSubscriptionRevision = observationContext is { HasCompleteSubscriptions: true } completeContext
-                    ? completeContext.SubscriptionRevision
-                    : null;
-                node.BirthDeathSequenceNumber = evt.BirthDeathSequenceNumber;
-                node.LastBirthSequenceNumber = evt.SequenceNumber;
-                node.LastBirthTimestampUtc = evt.TimestampUtc;
+                var duplicate = evt.SequenceNumber is { } sequence
+                    && node.LastBirthSequenceNumber == sequence
+                    && node.LastBirthTimestampUtc == evt.TimestampUtc
+                    && node.BirthDeathSequenceNumber == evt.BirthDeathSequenceNumber;
+                if (!duplicate)
+                {
+                    EnsureSequenceTracker(node).Reset(evt.SequenceNumber);
+                    node.Sequence = node.SequenceTracker!.Snapshot;
+                    node.SequenceEpisodeId++;
+                    node.SequenceRecoveryInFlightEpisodeId = null;
+                    node.SequenceRecoverySentEpisodeId = null;
+                    node.SequenceObservationComplete = evt.SequenceNumber is { } baseline && baseline <= byte.MaxValue
+                        && (observationContext?.HasCompleteSubscriptions ?? true);
+                    if (observationContext is not null)
+                        node.SequenceConnectionEpoch = observationContext.ConnectionEpoch;
+                    node.SequenceSubscriptionRevision = observationContext is { HasCompleteSubscriptions: true } completeContext
+                        ? completeContext.SubscriptionRevision
+                        : null;
+                    node.BirthDeathSequenceNumber = evt.BirthDeathSequenceNumber;
+                    node.LastBirthSequenceNumber = evt.SequenceNumber;
+                    node.LastBirthTimestampUtc = evt.TimestampUtc;
+                }
+                node.Status = SpbNodeStatus.Online;
+                node.LastBirthAt = DateTime.UtcNow;
+                node.AliasMap.Clear();
+                PopulateAliasMap(node.AliasMap, metrics);
+                node.Metrics = metrics;
             }
-            node.Status = SpbNodeStatus.Online;
-            node.LastBirthAt = DateTime.UtcNow;
-            node.AliasMap.Clear();
-            PopulateAliasMap(node.AliasMap, metrics);
-            node.Metrics = metrics;
+
+            _metricMetadata.Record(evt.GroupId, evt.NodeId, null, evt.Metrics);
         }
 
         TopologyChanged?.Invoke();
@@ -355,35 +426,43 @@ public sealed partial class SparkplugTopologyService(
         {
             if (index.TryGetValue(snapshot.Name, out var idx))
             {
-                metrics[idx] = snapshot;
+                var dataType = snapshot.DataType;
+                if (dataType.Length == 0)
+                    dataType = metrics[idx].DataType.Length > 0 ? metrics[idx].DataType : "unknown";
+                metrics[idx] = snapshot with { DataType = dataType };
             }
             else
             {
                 index[snapshot.Name] = metrics.Count;
-                metrics.Add(snapshot);
+                metrics.Add(snapshot.DataType.Length > 0 ? snapshot : snapshot with { DataType = "unknown" });
             }
         }
 
         return metrics.ToArray();
     }
 
-    private void ApplyDeviceBirth(string groupId, string nodeId, string deviceId, SpbMetricSnapshot[] metrics)
+    private void ApplyDeviceBirth(DeviceBirthEvent evt, SpbMetricSnapshot[] metrics)
     {
-        var node = GetOrCreateNode(groupId, nodeId);
-        var device = node.Devices.GetOrAdd(deviceId, id => new SpbDevice
+        lock (_lifecycleGate)
         {
-            DeviceId = id,
-            NodeId = nodeId,
-            GroupId = groupId
-        });
+            var node = GetOrCreateNode(evt.GroupId, evt.NodeId);
+            var device = node.Devices.GetOrAdd(evt.DeviceId, id => new SpbDevice
+            {
+                DeviceId = id,
+                NodeId = evt.NodeId,
+                GroupId = evt.GroupId
+            });
 
-        lock (device.SyncRoot)
-        {
-            device.Status = SpbNodeStatus.Online;
-            device.LastBirthAt = DateTime.UtcNow;
-            device.AliasMap.Clear();
-            PopulateAliasMap(device.AliasMap, metrics);
-            device.Metrics = metrics;
+            lock (device.SyncRoot)
+            {
+                device.Status = SpbNodeStatus.Online;
+                device.LastBirthAt = DateTime.UtcNow;
+                device.AliasMap.Clear();
+                PopulateAliasMap(device.AliasMap, metrics);
+                device.Metrics = metrics;
+            }
+
+            _metricMetadata.Record(evt.GroupId, evt.NodeId, evt.DeviceId, evt.Metrics);
         }
 
         TopologyChanged?.Invoke();

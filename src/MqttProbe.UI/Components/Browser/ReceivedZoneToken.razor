@@ -1,0 +1,57 @@
+@* MudTooltip delegates hover, focus and tap to this component so a tap is not toggled twice. *@
+<MudTooltip Visible="_visible"
+            Text="@Detail"
+            Placement="Placement.Bottom"
+            ShowOnClick="false"
+            ShowOnFocus="false"
+            ShowOnHover="false">
+    <button type="button" class="pb-received-zone" data-received-zone
+            aria-label="@AccessibleLabel"
+            @onclick="Toggle"
+            @onpointerenter="HandlePointerEnter"
+            @onpointerleave="HandlePointerLeave"
+            @onfocus="Show"
+            @onblur="Dismiss">@Abbreviation</button>
+</MudTooltip>
+
+@code {
+    [Parameter, EditorRequired] public string Abbreviation { get; set; } = "";
+    [Parameter, EditorRequired] public string ZoneName { get; set; } = "";
+    [Parameter, EditorRequired] public string OffsetLabel { get; set; } = "";
+
+    private bool _visible;
+    private bool _pinned;
+
+    private string Detail => $"{ZoneName} · {OffsetLabel}";
+    private string AccessibleLabel => $"{Abbreviation}: {ZoneName}, {OffsetLabel}";
+
+    private void HandlePointerEnter(PointerEventArgs args)
+    {
+        if (args.PointerType != "touch")
+            Show();
+    }
+
+    private void HandlePointerLeave(PointerEventArgs args)
+    {
+        if (args.PointerType != "touch")
+            Dismiss();
+    }
+
+    private void Toggle()
+    {
+        _pinned = !_pinned;
+        _visible = _pinned;
+    }
+
+    private void Show()
+    {
+        if (!_visible)
+            _visible = true;
+    }
+
+    private void Dismiss()
+    {
+        _pinned = false;
+        _visible = false;
+    }
+}

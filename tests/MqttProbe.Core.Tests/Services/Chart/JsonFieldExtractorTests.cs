@@ -1,3 +1,4 @@
+using MqttProbe.Core.Models.Chart;
 using MqttProbe.Core.Services.Chart;
 
 namespace MqttProbe.Core.Tests.Services.Chart;
@@ -298,5 +299,74 @@ public class JsonFieldExtractorTests
         result["metrics[0].doubleValue"].Value.Should().BeApproximately(1013.25, 0.001);
         result.Should().ContainKey("metrics[1].doubleValue");
         result["metrics[1].doubleValue"].Value.Should().BeApproximately(22.5, 0.001);
+    }
+
+    [Test]
+    public void Extract_WithSparkplugTypes_DecodesSignedIntValue()
+    {
+        var json = """{"metrics":[{"name":"Value","datatype":3,"intValue":4294967295}]}""";
+
+        var result = _extractor.Extract(json, null, new StaticSparkplugTypeResolver(null));
+
+        result["metrics.Value"].Value.Should().Be(-1.0);
+    }
+
+    [Test]
+    public void Extract_WithSparkplugTypes_UsesResolverForOmittedDatatype()
+    {
+        var json = $$"""{"metrics":[{"name":"Value","longValue":"{{ulong.MaxValue}}"}]}""";
+
+        var result = _extractor.Extract(json, null, new StaticSparkplugTypeResolver(4));
+
+        result["metrics.Value"].Value.Should().Be(-1.0);
+    }
+
+    [Test]
+    public void Extract_WithoutSparkplugTypes_LeavesSignedIntegerRaw()
+    {
+        var json = """{"metrics":[{"name":"Value","datatype":3,"intValue":4294967295}]}""";
+
+        var result = _extractor.Extract(json);
+
+        result["metrics.Value"].Value.Should().Be(4294967295.0);
+    }
+
+    [TestCase("0.00", 0.0)]
+    [TestCase("42", 42.0)]
+    [TestCase("-5.5", -5.5)]
+    [TestCase("1.5e2", 150.0)]
+    [TestCase(" 21.5 ", 21.5)]
+    [TestCase("\"22.4\"", 22.4)]
+    [TestCase("\" 1.5 \"", 1.5)]
+    public void Extract_RootScalar_ReturnsRootField(string payload, double expected)
+    {
+        var result = _extractor.Extract(payload);
+
+        result.Should().ContainKey(ChartFieldPaths.Root);
+        result[ChartFieldPaths.Root].Value.Should().BeApproximately(expected, 0.001);
+    }
+
+    [TestCase("")]
+    [TestCase("   ")]
+    [TestCase("true")]
+    [TestCase("false")]
+    [TestCase("null")]
+    [TestCase("NaN")]
+    [TestCase("Infinity")]
+    [TestCase("1e400")]
+    [TestCase("1,000")]
+    [TestCase("\"not a number\"")]
+    [TestCase("\"NaN\"")]
+    public void Extract_NonNumericRootScalar_ReturnsEmpty(string payload) =>
+        _extractor.Extract(payload).Should().BeEmpty();
+
+    [TestCase("""{"v":1}""")]
+    [TestCase("[1]")]
+    public void Extract_ObjectOrArrayPayload_DoesNotAddRootField(string payload) =>
+        _extractor.Extract(payload).Should().NotContainKey(ChartFieldPaths.Root);
+
+    private sealed class StaticSparkplugTypeResolver(uint? datatype) : ISparkplugMetricTypeResolver
+    {
+        public uint? Resolve(ulong metricAlias, string? name) => datatype;
     }
 }

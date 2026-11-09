@@ -69,105 +69,65 @@ public sealed class TopicBrowserExcludePurgeReconciliationTests : BunitTestConte
     }
 
     [Test]
-    public async Task PurgingTheResidue_ClearsASelectionOnThePrefixTheTreeWasShowing()
+    public async Task PurgingTheResidue_KeepsTheCheckedVerbBranch()
     {
         await PublishAsync("spBv1.0/plant1/NDATA/node1", "tip-value");
         await PublishAsync(Residue, "residue-value");
         _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
 
-        _manager.SelectTopic(Aggregate);
-        _manager.GetSelectedTopicState().Key.Should().Be(Aggregate,
-            "the residual prefix has a row while the malformed tip exists");
+        _manager.SelectTopics(TopicSelection.ForBranches([
+            new TopicBranchTarget(TopicBranchKind.Raw, Path: Aggregate)
+        ]));
 
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
         await cut.InvokeAsync(() => cut.FindAll(".mud-toolbar button")[0].Click());
-        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row--selected").Should().ContainSingle());
+        cut.WaitForAssertion(() => SelectedPaths(cut)
+            .Should().Contain("spBv1.0/plant1/NDATA/node1", "the tip under the checked verb is grouped"));
 
         // The exclude purge Core performs for a matching topic filter.
         _excludes.PurgeExcludedTopic += Raise.Event<Action<string>>("spBv1.0/plant1/NDATA/ghosttip/#");
 
         await cut.InvokeAsync(() => cut.Instance.RefreshAsync());
-        _manager.GetSelectedTopicState().Key.Should().BeNull();
-        cut.FindAll(".topic-tree-row--selected").Should().BeEmpty();
+        _manager.GetSelectedTopicState().Branches.Select(branch => branch.Path)
+            .Should().Equal(new[] { Aggregate },
+                "the valid tip under the same verb still represents the branch");
+        SelectedPaths(cut).Should().Contain("spBv1.0/plant1/NDATA/node1");
         _manager.GetTopicTreeSnapshot().Roots.Should().NotBeEmpty();
         cut.Markup.Should().Contain("spBv1.0/plant1/NDATA/node1",
             "the valid tip under the same verb survives the purge and stays grouped");
     }
 
     [Test]
-    public async Task AResidueThatReturnsBeforeTheClear_LeavesTheSelectionAndItsTokenUntouched()
+    public async Task ARowThatReturnsBeforeTheReconcile_KeepsTheBranchChecked()
     {
         await PublishAsync("spBv1.0/plant1/NDATA/node1", "tip-value");
         await PublishAsync(Residue, "residue-value");
         _preferences.GroupSparkplugTopicsByNodeAndDevice = true;
-        _manager.SelectTopic(Aggregate);
+        _manager.SelectTopics(TopicSelection.ForBranches([
+            new TopicBranchTarget(TopicBranchKind.Raw, Path: Aggregate)
+        ]));
         var before = _manager.GetSelectedTopicState();
-        before.Key.Should().Be(Aggregate,
-            "the residual prefix has a row while the malformed tip exists");
 
-        // The exclude purge the component must react to, and then the malformed tip back in the
-        // store before the component's conditional clear arrives: a newer tree, the same token.
-        _excludes.PurgeExcludedTopic += Raise.Event<Action<string>>("spBv1.0/plant1/NDATA/ghosttip/#");
-        var purgedVerdict = _manager.GetTopicTreeSnapshot();
-        await PublishAsync(Residue, "residue-again");
-        _manager.GetVersion().Should().BeGreaterThan(purgedVerdict.Version,
-            "the store moved on since the verdict was taken");
+        // Everything under the branch is purged, then the tip comes back before the component
+        // reconciles: the rows exist again, so the branch must stay checked.
+        _excludes.PurgeExcludedTopic += Raise.Event<Action<string>>("spBv1.0/plant1/NDATA/#");
+        await PublishAsync("spBv1.0/plant1/NDATA/node1", "tip-again");
 
-        var forwarding = new StaleVerdictSelectionStore(_manager, purgedVerdict);
-        Services.AddSingleton<ITopicSelectionStore>(forwarding);
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
 
-        forwarding.ClearAttempts.Should().Be(1,
-            "the component asks once, then the restored residue is always represented");
-        forwarding.Cleared.Should().Be(0, "the tree version no longer matched the verdict");
-        var after = _manager.GetSelectedTopicState();
-        after.Key.Should().Be(Aggregate, "the rejected clear left the selection alone");
-        after.Token.StoreId.Should().Be(before.Token.StoreId);
-        after.Token.Generation.Should().Be(before.Token.Generation,
-            "a rejected clear must not move the selection on");
-
         await cut.InvokeAsync(() => cut.FindAll(".mud-toolbar button")[0].Click());
-        cut.FindAll(".topic-tree-row--selected").Should().ContainSingle();
+        cut.WaitForAssertion(() =>
+        {
+            _manager.GetSelectedTopicState().Branches.Select(branch => branch.Path).Should().Equal(Aggregate);
+            SelectedPaths(cut).Should().Contain("spBv1.0/plant1/NDATA/node1");
+        });
+        _manager.GetSelectedTopicState().Token.Generation.Should().Be(before.Token.Generation,
+            "reconciling against the returned rows must not move the selection on");
     }
 
-    // Serves the purged verdict the component's own read took, then forwards the conditional
-    // clear to the real manager, whose tree has since moved on with the returned residue.
-    private sealed class StaleVerdictSelectionStore(IMessageStoreManager manager, TopicTreeSnapshot verdict)
-        : ITopicSelectionStore
-    {
-        private bool _verdictPending = true;
-
-        public int ClearAttempts { get; private set; }
-
-        public int Cleared { get; private set; }
-
-        public TopicTreeSnapshot GetTopicTreeSnapshot()
-        {
-            if (!_verdictPending)
-                return manager.GetTopicTreeSnapshot();
-
-            _verdictPending = false;
-            return verdict;
-        }
-
-        public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection)
-        {
-            ClearAttempts++;
-            var cleared = manager.TryClearSelection(treeVersion, expectedSelection);
-            if (cleared)
-                Cleared++;
-
-            return cleared;
-        }
-
-        public SelectedTopicState GetSelectedTopicState() => manager.GetSelectedTopicState();
-
-        public void SelectTopics(TopicSelection? selection) => manager.SelectTopics(selection);
-
-        public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(
-            SelectedTopicToken expectedSelection, int limit) =>
-            manager.GetSelectedMessagesAsync(expectedSelection, limit);
-    }
+    private static IReadOnlyList<string> SelectedPaths(IRenderedComponent<TopicBrowser> cut) =>
+        [.. cut.FindAll(".topic-tree-row--selected")
+            .Select(row => row.GetAttribute("data-topic-path") ?? string.Empty)];
 }

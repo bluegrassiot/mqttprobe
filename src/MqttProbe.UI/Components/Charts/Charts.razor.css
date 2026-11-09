@@ -1,6 +1,7 @@
 .charts-empty-state {
     min-height: 300px;
-    gap: 16px;
+    padding: 24px 16px;
+    gap: 12px;
     background-image:
         linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
         linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
@@ -12,4 +13,13 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+}
+
+.charts-empty-state ::deep .charts-empty-icon {
+    font-size: 64px;
+    color: var(--mud-palette-text-disabled);
+}
+
+.charts-empty-state ::deep .charts-empty-copy {
+    max-width: 340px;
 }

@@ -1,27 +1,37 @@
 @using ApexCharts
 @using Microsoft.JSInterop
+@using MqttProbe.Core.Models.Configuration
+@using MqttProbe.Core.Services.Configuration
+@using MqttProbe.UI.Services.Formatting
 @using AppChartType = MqttProbe.Core.Models.Chart.ChartType
 @inject IChartDataService ChartDataService
+@inject IUiSettings UiSettings
+@inject IDeviceTimeFormatter TimeFormatter
 @implements IAsyncDisposable
 
+<div class="chart-card-shell">
 <MudCard Elevation="0" Class="app-chrome-panel">
     <MudCardHeader>
         <CardHeaderContent>
-            <MudText Typo="Typo.subtitle1" Style="font-weight:600">@Configuration.Name</MudText>
+            <MudText Typo="Typo.subtitle1" Class="chart-card__title">@Configuration.Name</MudText>
             <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">
                 @Configuration.Series.Count series · max @Configuration.MaxPoints pts
                 @if (Configuration.TimeWindowMinutes.HasValue)
                 {
                     <span> · last @Configuration.TimeWindowMinutes min</span>
                 }
+                <span> · @ChartFreshnessDisplay.TimeoutText(Configuration.StaleTimeoutSeconds)</span>
             </MudText>
-            <div class="d-flex align-center gap-1 mt-1">
+            <div class="chart-card-status">
                 <MudChip T="string" Size="MudBlazor.Size.Small" Variant="Variant.Outlined" Color="@StatusColor">
                     @StatusLabel
                 </MudChip>
-                <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">
-                    Last update: <span class="app-mono">@LastUpdateText</span>
-                </MudText>
+                @if (CountsText.Length > 0 && ChartFreshnessDisplay.ShowsCounts(_freshness))
+                {
+                    <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary" Class="chart-card-status__counts">
+                        @CountsText
+                    </MudText>
+                }
             </div>
         </CardHeaderContent>
         <CardHeaderActions>
@@ -47,32 +57,75 @@
         }
         else
         {
-            <div @onmouseover="OnMouseOver" @onmouseleave="OnMouseLeave">
-                <ApexChart TItem="ChartDataPoint"
-                           Options="_options"
-                           @ref="_chart"
-                           Height="300">
-                    @foreach (var series in Configuration.Series)
-                    {
-                        var s = series;
-                        <ApexPointSeries TItem="ChartDataPoint"
-                                         Items="@GetPoints(s.Id)"
-                                         Name="@s.DisplayName"
-                                         SeriesType="@GetSeriesType()"
-                                         XValue="@(p => (decimal)new DateTimeOffset(p.Timestamp).ToUnixTimeMilliseconds())"
-                                         YValue="@(p => (decimal)p.Value)"
-                                         Color="@s.Color" />
-                    }
-                </ApexChart>
+            <div class="chart-card-plot" @onmouseover="OnMouseOver" @onmouseleave="OnMouseLeave">
+                @if (_bridgeReady)
+                {
+                    <ApexChart TItem="ChartDataPoint"
+                               Options="_options"
+                               @ref="_chart"
+                               Height="300"
+                               OnZoomed="OnChartZoomed"
+                               OnScrolled="OnChartScrolled">
+                        @foreach (var series in Configuration.Series)
+                        {
+                            var s = series;
+                            <ApexPointSeries TItem="ChartDataPoint"
+                                             Items="@GetPoints(s.Id)"
+                                             Name="@s.DisplayName"
+                                             SeriesType="@GetSeriesType()"
+                                             XValue="@(p => (decimal)new DateTimeOffset(p.Timestamp).ToUnixTimeMilliseconds())"
+                                             YValue="@(p => (decimal)p.Value)"
+                                             Color="@s.Color" />
+                        }
+                    </ApexChart>
+                }
+                else
+                {
+                    <div class="chart-card-plot__pending" aria-hidden="true"></div>
+                }
+            </div>
+            @if (_zoneCaption.Length > 0)
+            {
+                <div class="chart-card-zone-row">
+                    <ChartZoneToken Abbreviation="@_zoneCaption"
+                                    Detail="@_zoneDetails"
+                                    AccessibleLabel="@ZoneAccessibleLabel" />
+                </div>
+            }
+            <div class="chart-series-status" role="list" aria-label="Series status">
+                @foreach (var series in Configuration.Series)
+                {
+                    var s = series;
+                    var freshness = FreshnessFor(s.Id);
+                    var age = ChartFreshnessDisplay.AgeText(freshness.Age);
+                    <div class="chart-series-status__row" role="listitem">
+                        <div class="chart-series-status__identity">
+                            <span class="chart-series-status__name">@s.DisplayName</span>
+                            <span class="chart-series-status__source app-mono">@s.Topic › @s.JsonPath</span>
+                        </div>
+                        <div class="chart-series-status__state">
+                            <MudChip T="string" Size="MudBlazor.Size.Small" Variant="Variant.Outlined"
+                                     Color="@SeriesStatusColor(freshness)" Class="chart-series-status__chip">
+                                @ChartFreshnessDisplay.SeriesLabel(freshness)
+                            </MudChip>
+                            @if (age is not null)
+                            {
+                                <span class="chart-series-status__age">@age</span>
+                            }
+                        </div>
+                    </div>
+                }
             </div>
         }
     </MudCardContent>
 </MudCard>
+</div>
 
 @code {
     [Parameter, EditorRequired] public ChartConfiguration Configuration { get; set; } = null!;
     [Parameter] public EventCallback<ChartConfiguration> OnEdit { get; set; }
     [Parameter] public EventCallback<ChartConfiguration> OnDelete { get; set; }
+    [Parameter] public TimeProvider Clock { get; set; } = TimeProvider.System;
     [CascadingParameter(Name = "IsDarkMode")] public bool IsDarkMode { get; set; }
 
     private ApexChart<ChartDataPoint>? _chart;
@@ -85,54 +138,55 @@
     private bool _hasNewData;
     private bool _live = true;
     private bool _hovering;
-    private bool _isStale;
     private DateTime _lastRender = DateTime.MinValue;
     private static readonly TimeSpan RenderThrottle = TimeSpan.FromMilliseconds(200);
-    private const int StaleAfterSeconds = 10;
     private int _lastSeriesCount = -1;
     private string _lastConfigFingerprint = "";
     private bool _lastIsDarkMode;
 
-    // Last arrival across all series, ignoring the display window — this is the true
-    // "has the feed gone quiet?" signal that drives the stale indicator and the readout.
-    private DateTime LastPointUtc => Configuration.Series
-        .SelectMany(s => ChartDataService.GetPoints(s.Id))
-        .Select(p => p.Timestamp)
-        .DefaultIfEmpty()
-        .Max();
+    private ChartFreshnessReport _freshness = ChartFreshnessEvaluator.Evaluate([], null, DateTime.MinValue);
+    private string _freshnessSignature = "";
+    private readonly Dictionary<Guid, DateTime?> _lastReceipts = [];
 
-    private string LastUpdateText
-    {
-        get
-        {
-            var last = LastPointUtc;
-            return last == default ? "No data yet" : last.ToLocalTime().ToString("HH:mm:ss");
-        }
-    }
+    private string StatusLabel => ChartFreshnessDisplay.SummaryLabel(_freshness.State, !_live || _hovering);
 
-    private string StatusLabel
-    {
-        get
-        {
-            if (!_live || _hovering) return "Paused";
-            return _isStale ? "Stale" : "Live";
-        }
-    }
+    private string CountsText => _freshness.Series.Count == 0
+        ? string.Empty
+        : ChartFreshnessDisplay.CountsText(_freshness);
 
     private MudBlazor.Color StatusColor
     {
         get
         {
             if (!_live || _hovering) return MudBlazor.Color.Default;
-            return _isStale ? MudBlazor.Color.Warning : MudBlazor.Color.Success;
+            return _freshness.State switch
+            {
+                ChartFreshnessState.Live => MudBlazor.Color.Success,
+                ChartFreshnessState.SomeStale or ChartFreshnessState.Stale or ChartFreshnessState.Mixed =>
+                    MudBlazor.Color.Warning,
+                ChartFreshnessState.Disabled => MudBlazor.Color.Default,
+                _ => MudBlazor.Color.Info
+            };
         }
     }
+
+    private ChartSeriesFreshness FreshnessFor(Guid seriesId) =>
+        _freshness.Series.FirstOrDefault(s => s.SeriesId == seriesId)
+        ?? new ChartSeriesFreshness(seriesId, ChartSeriesFreshnessState.Waiting, null, null);
+
+    private static MudBlazor.Color SeriesStatusColor(ChartSeriesFreshness series) => series.State switch
+    {
+        ChartSeriesFreshnessState.Fresh => MudBlazor.Color.Success,
+        ChartSeriesFreshnessState.Stale => MudBlazor.Color.Warning,
+        _ => MudBlazor.Color.Default
+    };
 
     private string GetConfigFingerprint() =>
         $"{Configuration.Type}|{string.Join(",", Configuration.Series.Select(s => $"{s.Id}:{s.DisplayName}:{s.Color}"))}";
 
     protected override void OnInitialized()
     {
+        InitializeTimeDisplay();
         _options = new ApexChartOptions<ChartDataPoint>
         {
             Chart = new Chart
@@ -149,20 +203,30 @@
             Grid = new Grid
             {
                 StrokeDashArray = 4,
+                Padding = new ApexCharts.Padding { Left = 24, Right = 56 },
                 Xaxis = new GridXAxis { Lines = new Lines { Show = true } },
                 Yaxis = new GridYAxis { Lines = new Lines { Show = true } }
             },
             Xaxis = new XAxis
             {
                 Type = XAxisType.Datetime,
-                Labels = new XAxisLabels { DatetimeUTC = false, Style = new AxisLabelStyle { FontSize = "11px" } },
+                Labels = new XAxisLabels
+                {
+                    DatetimeUTC = _preferences.Zone == MessageTimePreferences.ZoneUtc,
+                    Formatter = ChartTimeFormat.AxisFormatter(_preferences),
+                    HideOverlappingLabels = true,
+                    Rotate = -45,
+                    RotateAlways = false,
+                    MinHeight = 30,
+                    Style = new AxisLabelStyle { FontSize = "11px" }
+                },
                 AxisBorder = new AxisBorder { Show = true },
                 AxisTicks = new AxisTicks { Show = true }
             },
             Stroke = new Stroke { Curve = Curve.Smooth, Width = [2] },
             Tooltip = new Tooltip
             {
-                X = new TooltipX { Format = "HH:mm:ss" },
+                X = new TooltipX { Formatter = ChartTimeFormat.TooltipFormatter(_preferences) },
                 Theme = IsDarkMode ? Mode.Dark : Mode.Light
             },
             Yaxis = [new YAxis
@@ -179,6 +243,8 @@
         _lastConfigFingerprint = GetConfigFingerprint();
         _lastIsDarkMode = IsDarkMode;
 
+        RefreshReceipts();
+        RefreshFreshness(render: false);
         ChartDataService.OnDataUpdated += OnDataUpdated;
     }
 
@@ -203,6 +269,9 @@
         var darkModeChanged = IsDarkMode != _lastIsDarkMode;
         var fingerprint = GetConfigFingerprint();
         var configChanged = fingerprint != _lastConfigFingerprint;
+
+        if (configChanged) RefreshReceipts();
+        RefreshFreshness(render: false);
 
         if (!darkModeChanged && !configChanged) return;
 
@@ -232,6 +301,9 @@
 
         _pendingOptionsUpdate = true;
         if (configChanged) _pendingUpdate = true;
+
+        if (configChanged)
+            _ = InvokeAsync(() => RefreshZoneCaptionAsync(force: true));
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -244,6 +316,7 @@
                 null,
                 TimeSpan.FromSeconds(1),
                 TimeSpan.FromSeconds(1));
+            await EnsureTimeBridgeAsync();
         }
 
         if (_pendingOptionsUpdate && _chartReady && !_disposed && _chart is not null)
@@ -289,30 +362,66 @@
         _ => ApexCharts.ChartType.Line
     };
 
-    private void OnDataUpdated()
+    // The receipt time is the newest buffered point, which the display window never filters.
+    private DateTime? LastReceiptUtc(Guid seriesId)
     {
-        _hasNewData = true;
-        InvokeAsync(RefreshChart);
+        var points = ChartDataService.GetPoints(seriesId);
+        return points.Count == 0 ? null : points[^1].Timestamp;
     }
 
-    // Timer fires periodically to detect staleness and serve as a fallback render trigger.
-    private void Tick()
+    private void RefreshReceipts()
     {
-        var stale = ComputeStale();
-        if (stale != _isStale)
-        {
-            _isStale = stale;
-            StateHasChanged();
-        }
+        _lastReceipts.Clear();
+        foreach (var seriesId in Configuration.Series.Select(series => series.Id))
+            _lastReceipts[seriesId] = LastReceiptUtc(seriesId);
+    }
 
+    private void OnDataUpdated() => InvokeAsync(() =>
+    {
+        _hasNewData = true;
+        RefreshReceipts();
+        RefreshFreshness(render: true);
+        RefreshChart();
+
+        if (_live && !_hovering && _visibleFromMs is null)
+            _ = InvokeAsync(() => RefreshZoneCaptionAsync());
+    });
+
+    // Runs even without messages so last-received ages stay current.
+    internal void Tick()
+    {
+        if (!_bridgeReady)
+            _ = InvokeAsync(EnsureTimeBridgeAsync);
+
+        if (_captionPending && _bridgeReady)
+            _ = InvokeAsync(() => RefreshZoneCaptionAsync(force: true, retry: true));
+
+        RefreshFreshness(render: true);
         RefreshChart();
     }
 
-    private bool ComputeStale()
+    internal void RefreshFreshness(bool render)
     {
-        var last = LastPointUtc;
-        return _live && last != default && (DateTime.UtcNow - last).TotalSeconds > StaleAfterSeconds;
+        var receipts = Configuration.Series
+            .Select(s => new ChartSeriesReceipt(
+                s.Id,
+                _lastReceipts.TryGetValue(s.Id, out var lastReceived) ? lastReceived : null))
+            .ToList();
+        var report = ChartFreshnessEvaluator.Evaluate(
+            receipts,
+            Configuration.StaleTimeoutSeconds,
+            Clock.GetUtcNow().UtcDateTime);
+        var signature = Signature(report);
+        if (signature == _freshnessSignature) return;
+
+        _freshness = report;
+        _freshnessSignature = signature;
+        if (render && !_disposed) StateHasChanged();
     }
+
+    private static string Signature(ChartFreshnessReport report) =>
+        $"{report.State}|{string.Join(";", report.Series.Select(s =>
+            $"{s.SeriesId}:{s.State}:{(s.Age is { } age ? (long)age.TotalSeconds : -1)}"))}";
 
     private void RefreshChart()
     {
@@ -331,7 +440,13 @@
     {
         _live = !_live;
 
-        if (_live) { _hasNewData = true; RefreshChart(); }
+        if (_live)
+        {
+            _hasNewData = true;
+            RefreshFreshness(render: true);
+            RefreshChart();
+            _ = InvokeAsync(() => RefreshZoneCaptionAsync());
+        }
         StateHasChanged();
     }
 
@@ -344,6 +459,7 @@
     private void OnMouseLeave()
     {
         _hovering = false;
+        RefreshFreshness(render: true);
         StateHasChanged();
     }
 
@@ -351,6 +467,7 @@
     {
         _disposed = true;
         ChartDataService.OnDataUpdated -= OnDataUpdated;
+        DisposeTimeDisplay();
         if (_updateTimer is not null) await _updateTimer.DisposeAsync();
     }
 }

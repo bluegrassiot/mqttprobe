@@ -13,7 +13,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
     private const int MaxAliasCharacters = 4 * 1024 * 1024;
 
     private readonly Lock _storeSync = new();
-    private readonly Queue<MessageStore> _retentionOrder = new();
+    private readonly Queue<RetentionEntry> _retentionOrder = new();
     private readonly HashSet<string> _aliasSpellings = new(StringComparer.Ordinal);
 
     private int _totalNodeCount;
@@ -53,26 +53,25 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
     {
         lock (_storeSync)
         {
-            var normalized = Normalize(fullTopic);
-            if (normalized is null) return;
+            if (fullTopic.Length == 0) return;
 
             var rawTopic = message.Topic;
             var hasOwnTopic = rawTopic is not null;
-            rawTopic ??= normalized;
+            rawTopic ??= fullTopic;
 
-            // A message may carry its own topic only when that topic resolves to the same node;
-            // otherwise one raw spelling could sit in two nodes while the budget counted it once.
-            if (hasOwnTopic && !string.Equals(Normalize(rawTopic), normalized, StringComparison.Ordinal))
+            // The tree keeps the published spelling, so a message whose own topic differs would
+            // land in a node its raw name does not describe.
+            if (hasOwnTopic && !string.Equals(rawTopic, fullTopic, StringComparison.Ordinal))
                 return;
 
-            if (IsUnseenAlias(rawTopic, normalized) && AliasBudgetExhausted(rawTopic.Length))
+            if (IsUnseenAlias(rawTopic, fullTopic) && AliasBudgetExhausted(rawTopic.Length))
             {
                 LogAliasLimit();
                 return;
             }
 
-            var firstSlash = normalized.IndexOf('/', StringComparison.Ordinal);
-            var rootKey = firstSlash >= 0 ? normalized[..firstSlash] : normalized;
+            var firstSlash = fullTopic.IndexOf('/', StringComparison.Ordinal);
+            var rootKey = firstSlash >= 0 ? fullTopic[..firstSlash] : fullTopic;
 
             if (!_messageStores.TryGetValue(rootKey, out var messageStore))
             {
@@ -94,7 +93,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             }
 
             if (firstSlash >= 0)
-                AddData(normalized, firstSlash + 1, messageStore, message, rawTopic);
+                AddData(fullTopic, firstSlash + 1, messageStore, message, rawTopic);
             else
                 StoreMessage(messageStore, message, rawTopic);
         }
@@ -106,6 +105,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         {
             _messageStores.Clear();
             InvalidateSelection();
+            ResetTiming();
             _totalNodeCount = 0;
             _rootTopicCount = 0;
             _totalMessageCount = 0;
@@ -124,14 +124,17 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         lock (_storeSync) { TrimToLimit(); }
     }
 
-    public void RemoveMatchingTopic(string filter)
+    public void RemoveMatchingTopic(string filter) =>
+        RemoveMatchingTopics(topic => TopicExcludeService.Matches(topic, filter));
+
+    public void RemoveMatchingTopics(Func<string, bool> predicate)
     {
         lock (_storeSync)
         {
             var removed = false;
             foreach (var (key, store) in _messageStores.ToArray())
             {
-                if (!PurgeNode(store, filter, out var nodeRemoved))
+                if (!PurgeNode(store, predicate, out var nodeRemoved))
                     continue;
 
                 removed = true;
@@ -144,20 +147,11 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
             RecalculateCounters();
             RebuildRetentionOrder();
-            if (_selectedRoots.Count > 0)
+            if (HasSelection())
                 _selectionContentVersion++;
             Interlocked.Increment(ref _globalVersion);
             InvalidateTopicTree();
         }
-    }
-
-    internal static string? Normalize(string fullTopic)
-    {
-        var trimmed = fullTopic.Trim('/');
-        if (trimmed.Length == 0) return null;
-
-        var segments = trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        return string.Join('/', segments);
     }
 
     private MessageStore? FindNode(string fullTopic)
@@ -217,19 +211,20 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
     private void StoreMessage(MessageStore store, MqttMessage message, string rawTopic)
     {
+        RecordTiming(message, rawTopic);
         (store.ObservedRawTopics ??= new HashSet<string>(StringComparer.Ordinal)).Add(rawTopic);
         if (!string.Equals(rawTopic, store.FullTopic, StringComparison.Ordinal)
             && _aliasSpellings.Add(rawTopic))
             _aliasCharacterCount += rawTopic.Length;
         store.Messages ??= new ConcurrentQueue<MqttMessage>();
         store.Messages.Enqueue(message);
-        _retentionOrder.Enqueue(store);
+        _retentionOrder.Enqueue(new RetentionEntry(store, message));
         _totalMessageCount++;
         IncrementMessageCounts(store);
         AppendToScopedSelection(store);
         Interlocked.Increment(ref _globalVersion);
         InvalidateTopicTree();
-        if (SelectionIncludes(store))
+        if (SelectionCovers(store, rawTopic))
             _selectionContentVersion++;
         TrimToLimit();
     }
@@ -240,25 +235,25 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         while (_totalMessageCount > limit && _retentionOrder.Count > 0)
         {
             var oldest = _retentionOrder.Dequeue();
-            oldest.Messages?.TryDequeue(out _);
+            oldest.Store.Messages?.TryDequeue(out _);
             _totalMessageCount--;
-            DecrementMessageCounts(oldest);
+            DecrementMessageCounts(oldest.Store);
             Interlocked.Increment(ref _globalVersion);
             InvalidateTopicTree();
-            if (SelectionIncludes(oldest))
+            if (SelectionCovers(oldest.Store, oldest.Message.Topic ?? oldest.Store.FullTopic ?? string.Empty))
                 _selectionContentVersion++;
         }
     }
 
-    private bool PurgeNode(MessageStore node, string filter, out bool nodeRemoved)
+    private bool PurgeNode(MessageStore node, Func<string, bool> predicate, out bool nodeRemoved)
     {
-        var pathMatched = TopicExcludeService.Matches(node.FullTopic ?? string.Empty, filter);
+        var pathMatched = predicate(node.FullTopic ?? string.Empty);
         var changed = pathMatched;
         if (node.SubTopics is not null)
         {
             foreach (var (key, child) in node.SubTopics.ToArray())
             {
-                if (!PurgeNode(child, filter, out var childRemoved))
+                if (!PurgeNode(child, predicate, out var childRemoved))
                     continue;
 
                 changed = true;
@@ -275,7 +270,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             var remaining = new ConcurrentQueue<MqttMessage>();
             while (node.Messages.TryDequeue(out var message))
             {
-                if (TopicExcludeService.Matches(message.Topic ?? node.FullTopic ?? string.Empty, filter))
+                if (predicate(message.Topic ?? node.FullTopic ?? string.Empty))
                     changed = true;
                 else
                     remaining.Enqueue(message);
@@ -286,7 +281,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
 
         // History is retired by the raw names it was observed under, never by normalized
         // FullTopic matching, so a matching alias retires history even with no message left.
-        if (RetireExcludedObservedTopics(node, filter))
+        if (RetireExcludedObservedTopics(node, predicate))
             changed = true;
 
         nodeRemoved = changed && IsEmpty(node);
@@ -294,7 +289,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         return changed;
     }
 
-    private bool RetireExcludedObservedTopics(MessageStore node, string filter)
+    private bool RetireExcludedObservedTopics(MessageStore node, Func<string, bool> predicate)
     {
         var observed = node.ObservedRawTopics;
         if (observed is null)
@@ -303,7 +298,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         var retired = 0;
         foreach (var raw in observed.ToArray())
         {
-            if (!TopicExcludeService.Matches(raw, filter))
+            if (!predicate(raw))
                 continue;
 
             observed.Remove(raw);
@@ -348,8 +343,14 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
     // alias or descendant keeps the node alive.
     private bool SelectionStillCovered()
     {
+        if (_selectionMode == TopicSelectionMode.Branches)
+            return true;
+
         if (_selectedRoots.Count == 0)
             return true;
+
+        if (_selectionMode == TopicSelectionMode.MultipleTopics)
+            return ReconcileExactSelection();
 
         foreach (var selected in _selectedRoots)
         {
@@ -360,6 +361,26 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
                 return false;
         }
 
+        return true;
+    }
+
+    // Bulk selection prunes only raw spellings a purge actually retired; surviving spellings
+    // stay selected and the key follows the surviving set.
+    private bool ReconcileExactSelection()
+    {
+        if (_selectionPaths.IsDefaultOrEmpty)
+            return false;
+
+        var surviving = ResolveExactPaths(_selectionPaths);
+        if (surviving.Count == _selectionPaths.Length)
+            return true;
+
+        if (surviving.Count == 0)
+            return false;
+
+        var paths = SortedExactPaths(surviving.Select(item => item.Path));
+        ReplaceSelection(DistinctNodes(surviving.Select(item => item.Node)), TopicSelection.ComposeExactKey(paths),
+            ExactSelectionLabel(paths), scope: null, requiresCanonical: false, TopicSelectionMode.MultipleTopics, paths);
         return true;
     }
 
@@ -382,14 +403,6 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         }
     }
 
-    private void RebuildRetentionOrder()
-    {
-        _retentionOrder.Clear();
-        foreach (var store in EnumerateMessages(_messageStores.Values)
-                     .OrderBy(item => item.Message.DateTimeReceived)
-                     .Select(item => item.Store))
-            _retentionOrder.Enqueue(store);
-    }
 
     private static IEnumerable<(MessageStore Store, MqttMessage Message)> EnumerateMessages(
         IEnumerable<MessageStore> stores)

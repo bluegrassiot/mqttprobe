@@ -35,6 +35,7 @@ public class SparkplugNodesViewTests : BunitTestContext
         Services.AddSingleton(_mockDialogService);
         _mockSnackbar = Substitute.For<ISnackbar>();
         Services.AddSingleton(_mockSnackbar);
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
         EnsureMudProviders();
     }
 

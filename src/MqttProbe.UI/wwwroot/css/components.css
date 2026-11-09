@@ -13,6 +13,22 @@
     min-width: 96px;
 }
 
+/* The phone rows share one 44px line, so their buttons share this height. */
+.app-mobile-bar-btn {
+    min-height: 44px;
+}
+
+/* Fixed bottom navigation height plus its safe-area padding, reserved by compact pages. */
+:root {
+    --app-mobile-nav-reserve: calc(68px + env(safe-area-inset-bottom, 0px));
+}
+
+/* MudBlazor paints Color.Secondary with the palette accent and marks it
+   !important. Rebind the token on prose so helpers use readable text-secondary. */
+.mud-typography.mud-secondary-text {
+    --mud-palette-secondary: var(--mud-palette-text-secondary);
+}
+
 /* ── Brand button colors (BRAND_GUIDE §6) ──────────────────────────────────── */
 
 /* These rules MUST live in the global stylesheet (not in MainLayout.razor.css
@@ -69,6 +85,26 @@
     color: #F1F5F9 !important;
 }
 
+/* One visible ring for every keyboard focus target in the shared UI. Zero specificity so
+   component styles can still refine their own ring. Text inputs are left out on purpose:
+   MudBlazor already thickens their outline border on focus. */
+:where(a[href], button, summary, [role='button'], [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
+/* MudBlazor ships `a:focus-visible { outline: none }`, which outranks the rule above. */
+a:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
+/* MudBlazor also ships `button:focus { outline: none }`, same reasoning as the link rule. */
+button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
+}
+
 /* ── Data text ───────────────────────────────────────────────────────────── */
 
 /* Shared monospace data display (BRAND_GUIDE Code and Data Display). */
@@ -107,8 +143,8 @@
     white-space: nowrap;
 }
 
-/* Long connection names must not crowd out the appbar actions on phones. */
-@media (max-width: 599px) {
+/* Long connection names must not crowd out the appbar actions in compact mode. */
+@media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px) {
     .mud-appbar .broker-chip .mud-chip-content {
         max-width: 100%;
     }
@@ -117,8 +153,60 @@
 /* Hide the mobile bottom nav when a MudBlazor dialog is open so only the
    dialog's own navigation is visible. MudDialog renders in a portal outside
    the app shell, so a global :has() rule is the simplest override. */
-body:has(.mud-dialog-container) .mobile-primary-nav {
+body:has(.mud-dialog-container) .mobile-primary-nav,
+body:has(.topic-picker-overlay) .mobile-primary-nav {
     display: none;
+}
+
+/* The iOS keyboard leaves the fixed nav above itself; hide it and release the
+   reserved nav padding while an editor is focused. */
+html.app-keyboard-open .mud-layout {
+    height: var(--app-keyboard-height, 100dvh);
+}
+
+html.app-keyboard-open .mobile-primary-nav {
+    display: none;
+}
+
+html.app-keyboard-open .app-shell-appbar {
+    display: none;
+}
+
+html.app-keyboard-open .tab-panel-content > .mud-alert {
+    display: none;
+}
+
+html.app-keyboard-open:not(.app-keyboard-editor-in-header) .app-tabpanel-header,
+html.app-keyboard-open:not(.app-keyboard-editor-in-header) .topic-bulk-toolbar {
+    display: none;
+}
+
+/* Searching messages in a keyboard band leaves room for the field or for rows,
+   never both, so the list title row and the payload preview step aside and each
+   match keeps one line with its time and topic. */
+html.app-keyboard-open .payload-browser-panel:has(input:focus) .payload-list-header {
+    display: none !important;
+}
+
+html.app-keyboard-open .payload-browser-panel:has(input:focus) .pb-cell-payload {
+    display: none;
+}
+
+html.app-keyboard-open .payload-browser-panel:has(input:focus) .payload-row {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 4px 12px;
+}
+
+html.app-keyboard-open .payload-browser-panel:has(input:focus) .payload-row .pb-cell-topic {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
+}
+
+html.app-keyboard-open .tab-panel-content,
+html.app-keyboard-open .browser-mobile-payload {
+    padding-bottom: 0;
 }
 
 .mud-appbar .status-pulse {
@@ -280,14 +368,14 @@ body:has(.mud-dialog-container) .mobile-primary-nav {
     flex-direction: column;
 }
 
-/* Hide the desktop MudTabs tabbar on mobile. Like the .mud-tabs-panels rule
-   above, this must live in the global sheet: although .desktop-tabs is a
+/* Hide the desktop MudTabs tabbar in compact mode. Like the .mud-tabs-panels
+   rule above, this must live in the global sheet: although .desktop-tabs is a
    Blazor component element (and does receive CSS-isolation scoping), the
    inner .mud-tabs-tabbar is MudBlazor markup rendered without the host
    component's isolation attribute — so a scoped ::deep selector cannot
    reach it reliably. Scoped under .app-shell-body to avoid hitting other
    MudTabs instances (e.g. the connection dialog's tabs). */
-@media (max-width: 599px) {
+@media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px) {
     .app-shell-body .desktop-tabs .mud-tabs-tabbar {
         display: none;
     }
@@ -320,6 +408,85 @@ body:has(.mud-dialog-container) .mobile-primary-nav {
     flex-direction: column;
     overflow: hidden;
     box-sizing: border-box;
+}
+
+/* The message list and the detail view are both MudPaper roots, so these rules
+   cannot live in PayloadBrowser.razor.css. Bounding them keeps the payload body
+   the single scroll owner. */
+.payload-browser-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.payload-detail-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+/* Split-panel divider, shared by the Browser and Nodes splits. MudBlazor owns the
+   hit area (::before) and the resize cursor; these rules give the divider the app
+   look and the dot grip. Any MudSplitPanel with .app-split-panel picks them up. */
+.mud-split-panel.app-split-panel .divider {
+    background: var(--mud-palette-lines-default);
+    border-radius: 3px;
+    transition: background-color 150ms ease-out;
+}
+
+.mud-split-panel.app-split-panel .divider:hover,
+.mud-split-panel.app-split-panel .divider:focus {
+    background: var(--mud-palette-primary);
+}
+
+/* A vertical column of dots for the side-by-side divider; the horizontal divider
+   in a stacked split rotates it to a horizontal row. */
+.mud-split-panel.app-split-panel .divider::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 34px;
+    background-image: radial-gradient(circle, var(--mud-palette-text-secondary) 1.1px, transparent 1.4px);
+    background-size: 3px 6px;
+    background-position: center;
+    opacity: 0.85;
+    pointer-events: none;
+}
+
+.mud-split-panel.app-split-panel .divider.horizontal::after {
+    width: 34px;
+    height: 6px;
+    background-size: 6px 3px;
+}
+
+.mud-split-panel.app-split-panel .divider:hover::after,
+.mud-split-panel.app-split-panel .divider:focus::after {
+    background-image: radial-gradient(circle, var(--mud-palette-primary-text) 1.1px, transparent 1.4px);
+    opacity: 1;
+}
+
+/* Pin the dialog title and actions and let only the content scroll, so a short
+   viewport keeps Cancel and the submit button reachable. MudBlazor wraps the
+   content in display:contents focus-trap elements, so the content is matched as
+   a descendant. */
+.mud-dialog.quick-add-dialog-paper {
+    overflow: hidden;
+}
+
+.mud-dialog.quick-add-dialog-paper .mud-dialog-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 .mud-dialog.connection-dialog-paper {

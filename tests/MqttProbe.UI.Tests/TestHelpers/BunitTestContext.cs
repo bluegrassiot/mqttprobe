@@ -21,11 +21,14 @@ public abstract class BunitTestContext : BunitContext
             provider.GetService<MqttProbe.Core.Services.Mqtt.IMessageStoreManager>() is { } manager
                 ? new MqttProbe.UI.Components.Browser.MessageStoreSelectionAdapter(manager)
                 : MqttProbe.UI.Tests.Components.Browser.TopicTreeSelectionTestAdapter.Create());
+        Services.AddScoped<MqttProbe.UI.Services.Formatting.IDeviceTimeFormatter,
+            MqttProbe.UI.Services.Formatting.DeviceTimeFormatterInterop>();
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         // Auth support (user is unauthenticated by default)
         AuthorizationContext = this.AddAuthorization();
     }
 
-    protected void EnsureMudProviders() => Render<MudPopoverProvider>();
+    protected IRenderedComponent<MudPopoverProvider> EnsureMudProviders() =>
+        Render<MudPopoverProvider>();
 }

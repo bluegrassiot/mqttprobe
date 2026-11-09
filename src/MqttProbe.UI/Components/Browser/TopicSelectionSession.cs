@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Mqtt;
 
@@ -34,7 +35,8 @@ internal sealed class MessageStoreSelectionAdapter(IMessageStoreManager manager)
 internal sealed record TopicSelectionFrame(
     IReadOnlyList<TopicTreeRowModel> Rows,
     SelectedTopicState Selection,
-    int RootCount);
+    int RootCount,
+    ImmutableArray<TopicNodeSnapshot> Roots);
 
 internal sealed class TopicSelectionSession(ITopicSelectionStore store)
 {
@@ -47,7 +49,8 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
         string? filter,
         IReadOnlySet<string> expandedPaths,
         bool grouped,
-        bool force = false)
+        bool force = false,
+        bool selectionMode = false)
     {
         var snapshot = store.GetTopicTreeSnapshot();
         var selection = store.GetSelectedTopicState();
@@ -58,10 +61,26 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
             && selection.Token.IsSameSelection(acceptedSelection))
             return null;
 
-        var rows = TopicTreeProjection.CreateRows(
-            snapshot.Roots, filter, expandedPaths, grouped, selection.Key, out var selectionRepresented);
+        List<TopicTreeRowModel> rows;
+        bool selectionRepresented;
+        if (selectionMode)
+        {
+            rows = TopicTreeProjection.CreateRows(
+                snapshot.Roots, filter, expandedPaths, grouped,
+                selectionPath: null, out _, selectionMode: true);
+            selectionRepresented = true;
+        }
+        else
+        {
+            // Only a single-topic key names a real path. A branch or multi key is an identity,
+            // so treating it as a path would find no row and clear a live selection.
+            var selectionPath = selection.Mode == TopicSelectionMode.SingleTopic ? selection.Key : null;
+            rows = TopicTreeProjection.CreateRows(
+                snapshot.Roots, filter, expandedPaths, grouped, selectionPath, out selectionRepresented);
+        }
 
-        if (selection.Key is not null && !selectionRepresented)
+        if (selection.Mode == TopicSelectionMode.SingleTopic
+            && selection.Key is not null && !selectionRepresented)
         {
             if (!store.TryClearSelection(snapshot.Version, selection))
                 return null;
@@ -69,17 +88,10 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
             selection = store.GetSelectedTopicState();
         }
 
-        var frame = new TopicSelectionFrame(rows, selection, snapshot.Roots.Length);
+        var frame = new TopicSelectionFrame(rows, selection, snapshot.Roots.Length, snapshot.Roots);
         _acceptedTreeVersion = snapshot.Version;
         _acceptedSelection = selection.Token;
         Frame = frame;
         return frame;
-    }
-
-    public SelectedTopicState? Select(TopicSelection? request)
-    {
-        store.SelectTopics(request);
-        var selected = store.GetSelectedTopicState();
-        return string.Equals(selected.Key, request?.Key, StringComparison.Ordinal) ? selected : null;
     }
 }

@@ -33,15 +33,15 @@ public sealed class MessageStoreReadContractTests
     }
 
     [Test]
-    public void SelectTopic_NormalizesSlashesButPreservesCaseAndWhitespace()
+    public void SelectTopic_PreservesRawSlashesCaseAndWhitespace()
     {
         var store = CreateStore();
         store.Add("Root// Child /Leaf/", Message("x", 1));
 
-        store.SelectTopic("/Root// Child /Leaf/");
+        store.SelectTopic("Root// Child /Leaf/");
 
         var state = store.GetSelectedTopicState();
-        state.Key.Should().Be("Root/ Child /Leaf");
+        state.Key.Should().Be("Root// Child /Leaf/");
         state.MessageCount.Should().Be(1);
     }
 

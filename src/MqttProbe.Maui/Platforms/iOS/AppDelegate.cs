@@ -1,4 +1,5 @@
 using Foundation;
+using UIKit;
 
 namespace MqttProbe;
 
@@ -14,4 +15,12 @@ public class AppDelegate : MauiUIApplicationDelegate
     {
         return MauiProgram.CreateMauiApp();
     }
+
+#pragma warning disable CA1822 // UIKit sends this selector to the delegate instance
+    [Export("application:supportedInterfaceOrientationsForWindow:")]
+    public UIInterfaceOrientationMask GetSupportedInterfaceOrientations(UIApplication application, UIWindow? window)
+    {
+        return IosOrientationPolicy.ForWindow(window);
+    }
+#pragma warning restore CA1822
 }

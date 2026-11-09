@@ -184,6 +184,20 @@ internal sealed class TopicBulkSelection(ITopicSelectionStore store)
         Changed?.Invoke();
     }
 
+    // A metric replaces the branch filter, so checked rows are dropped here without touching Core;
+    // the caller writes the metric and reports the change afterwards.
+    public bool DiscardTargets()
+    {
+        if (_targets.Count == 0)
+            return false;
+
+        _targets.Clear();
+        _coversWholeTree = false;
+        return true;
+    }
+
+    public void NotifyChanged() => Changed?.Invoke();
+
     public bool AdoptSingle(SelectedTopicState selection)
     {
         if (!_passive)

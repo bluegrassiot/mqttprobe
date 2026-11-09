@@ -79,6 +79,25 @@ public sealed class TopicBulkSelectionMetricTests
         bulk.CaptureBrowsedTopicForClear().Should().BeNull();
     }
 
+    [Test]
+    public void DiscardTargets_DropsChecksWithoutWritingCore()
+    {
+        var adapter = CreateAdapter();
+        adapter.Add("spBv1.0/g/NDATA/n1", Message("data", 1, "Motor/Temp"));
+        var bulk = new TopicBulkSelection(adapter);
+        bulk.SetMultiSelect(true);
+        bulk.SelectAll([new TopicBranchTarget(TopicBranchKind.Raw, Path: "a")]);
+        adapter.Selections.Clear();
+
+        bulk.DiscardTargets().Should().BeTrue();
+
+        bulk.Count.Should().Be(0);
+        bulk.HasSelection.Should().BeFalse();
+        adapter.Selections.Should().BeEmpty(
+            "the caller writes the exact metric after the checks are dropped");
+        bulk.DiscardTargets().Should().BeFalse("there is nothing left to discard");
+    }
+
     private static MqttMessage Message(string payload, int second, params string[] metricNames) =>
         new(payload, "unused", false, MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce)
         {

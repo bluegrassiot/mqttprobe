@@ -42,7 +42,7 @@ internal static partial class TopicTreeProjection
         }
 
         // Devices are ordinary children of the node, so the node holds its message-type groups
-        // first and the device rows after them with no synthetic Devices wrapper between.
+        // first, then its metrics group and the device rows, with no synthetic wrapper between.
         foreach (var branch in nodes.Values)
         {
             AppendMetricRows(branch.Node, metrics, DataTopic(branch.Node, "NDATA"));

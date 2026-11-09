@@ -15,6 +15,9 @@ internal interface ITopicSelectionStore
 
     public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection);
 
+    public bool TryReplaceSelection(
+        long treeVersion, SelectedTopicState expectedSelection, TopicSelection? replacement);
+
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit);
 }
 
@@ -28,6 +31,10 @@ internal sealed class MessageStoreSelectionAdapter(IMessageStoreManager manager)
 
     public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection) =>
         manager.TryClearSelection(treeVersion, expectedSelection);
+
+    public bool TryReplaceSelection(
+        long treeVersion, SelectedTopicState expectedSelection, TopicSelection? replacement) =>
+        manager.TryReplaceSelection(treeVersion, expectedSelection, replacement);
 
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit) =>
         manager.GetSelectedMessagesAsync(expectedSelection, limit);
@@ -63,23 +70,15 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
             && selection.Token.IsSameSelection(acceptedSelection))
             return null;
 
-        SparkplugSelectionScope? selectedMetricOwner = null;
-        if (selection.Mode == TopicSelectionMode.SparkplugMetric)
-            selectedMetricOwner = selection.Metric?.Scope;
-
-        var metricProjection = metricSource is null
-            ? null
-            : new MetricProjection(metricSource, selectedMetricOwner);
+        var metricProjection = metricSource is null ? null : new MetricProjection(metricSource);
 
         List<TopicTreeRowModel> rows;
         bool selectionRepresented;
-        bool metricOwnerRepresented;
         if (selectionMode)
         {
             rows = TopicTreeProjection.CreateRows(
                 snapshot.Roots, filter, expandedPaths, grouped,
-                selectionPath: null, out _, out metricOwnerRepresented, selectionMode: true,
-                metrics: metricProjection);
+                selectionPath: null, out _, out _, metrics: metricProjection);
             selectionRepresented = true;
         }
         else
@@ -89,15 +88,15 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
             var selectionPath = selection.Mode == TopicSelectionMode.SingleTopic ? selection.Key : null;
             rows = TopicTreeProjection.CreateRows(
                 snapshot.Roots, filter, expandedPaths, grouped, selectionPath, out selectionRepresented,
-                out metricOwnerRepresented, metrics: metricProjection);
+                out _, metrics: metricProjection);
         }
+
+        if (!TryPruneSelection(ref selection, snapshot, grouped, metricSource))
+            return null;
 
         var pathSelectionGone = selection.Mode == TopicSelectionMode.SingleTopic
             && selection.Key is not null && !selectionRepresented;
-        var metricSelectionGone = selection.Mode == TopicSelectionMode.SparkplugMetric
-            && !MetricStillRepresented(selection, grouped, selectionMode, metricOwnerRepresented, metricSource);
-
-        if (pathSelectionGone || metricSelectionGone)
+        if (pathSelectionGone)
         {
             if (!store.TryClearSelection(snapshot.Version, selection))
                 return null;
@@ -112,21 +111,52 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
         return frame;
     }
 
-    // A metric stays selected through collapsing, filtering and zero matches. Only leaving the
-    // single browsing mode, losing the observed owner row, or the metric leaving the topology
-    // after a birth replacement or purge ends it.
-    private static bool MetricStillRepresented(
-        SelectedTopicState selection,
+    private bool TryPruneSelection(
+        ref SelectedTopicState selection,
+        TopicTreeSnapshot snapshot,
         bool grouped,
-        bool selectionMode,
-        bool ownerRepresented,
         Func<SparkplugSelectionScope, IReadOnlyList<SpbMetricSnapshot>>? metricSource)
     {
-        if (!grouped || selectionMode || !ownerRepresented || metricSource is null
-            || selection.Metric is not { } metric)
+        if (selection.Mode != TopicSelectionMode.SparkplugMetric)
+            return true;
+
+        var survivors = PruneMetrics(selection, snapshot.Roots, grouped, metricSource);
+        if (survivors.Length == selection.Metrics.Length)
+            return true;
+
+        var replacement = survivors.Length == 0
+            ? null
+            : TopicSelection.ForSparkplugMetrics(survivors);
+        if (!store.TryReplaceSelection(snapshot.Version, selection, replacement))
             return false;
 
-        return metricSource(metric.Scope)
-            .Any(item => string.Equals(item.Name, metric.MetricName, StringComparison.Ordinal));
+        selection = store.GetSelectedTopicState();
+        return true;
+    }
+
+    // Pruning ignores search, collapse, offline state and zero stored matches. A metric survives
+    // while its observed owner row remains and the current topology still lists its exact name.
+    private static ImmutableArray<MqttSparkplugMetricTarget> PruneMetrics(
+        SelectedTopicState selection,
+        ImmutableArray<TopicNodeSnapshot> roots,
+        bool grouped,
+        Func<SparkplugSelectionScope, IReadOnlyList<SpbMetricSnapshot>>? metricSource)
+    {
+        var metrics = selection.Metrics;
+        if (metrics.IsDefaultOrEmpty)
+            return metrics;
+
+        if (!grouped || metricSource is null)
+            return [];
+
+        var owners = TopicTreeProjection.RepresentedMetricOwners(
+            roots, grouped, metrics.Select(metric => metric.Scope));
+        var survivors = new List<MqttSparkplugMetricTarget>(metrics.Length);
+        survivors.AddRange(metrics.Where(metric =>
+            owners.Contains(metric.Scope)
+            && metricSource(metric.Scope).Any(item =>
+                string.Equals(item.Name, metric.MetricName, StringComparison.Ordinal))));
+
+        return [.. survivors];
     }
 }

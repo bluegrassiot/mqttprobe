@@ -139,6 +139,7 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
             Row(hasChildren: true, hasDirectMessages: false, kind: TopicTreeRowKind.SparkplugNode),
             Row(hasChildren: true, hasDirectMessages: false, kind: TopicTreeRowKind.Devices),
             Row(hasChildren: true, hasDirectMessages: false, kind: TopicTreeRowKind.SparkplugDevice),
+            Row(hasChildren: true, hasDirectMessages: false, kind: TopicTreeRowKind.SparkplugMetricsGroup),
             Row(hasChildren: false, hasDirectMessages: false, kind: TopicTreeRowKind.MessageType)
         ];
 
@@ -194,6 +195,27 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
 
         NodeGlyph(cut).ClassList.Should().Contain($"topic-role--{role}",
             "each exposed hierarchy category has its own hue; the Devices folder shares the device hue");
+    }
+
+    [TestCase(false, LucideIcons.Folder)]
+    [TestCase(true, LucideIcons.FolderOpen)]
+    public void TheMetricsGroupFollowsTheFolderRule(bool expanded, string folderGlyph)
+    {
+        var cut = RenderRow(Row(hasChildren: true, hasDirectMessages: false, expanded: expanded,
+            kind: TopicTreeRowKind.SparkplugMetricsGroup, owner: TopicTreeOwner.Node));
+
+        GlyphShape(cut).Should().Be(TopicIconShape.OfConstant(folderGlyph),
+            "a metrics group is a container, so it uses the folder shape");
+    }
+
+    [TestCase(TopicTreeOwner.Node, "node")]
+    [TestCase(TopicTreeOwner.Device, "device")]
+    public void MetricsGroupTakesItsOwnersColour(TopicTreeOwner owner, string role)
+    {
+        var cut = RenderRow(Row(hasChildren: true, hasDirectMessages: false,
+            kind: TopicTreeRowKind.SparkplugMetricsGroup, owner: owner));
+
+        NodeGlyph(cut).ClassList.Should().Contain($"topic-role--{role}");
     }
 
     [Test]

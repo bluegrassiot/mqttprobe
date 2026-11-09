@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using MqttProbe.Core.Models.Mqtt;
 
 namespace MqttProbe.UI.Components.Browser;
@@ -25,6 +26,14 @@ public partial class PayloadBrowser
     {
         var state = MessageStoreManager.GetSelectedTopicState();
         return state.Mode == TopicSelectionMode.SparkplugMetric ? state.Label : null;
+    }
+
+    private ImmutableArray<MqttSparkplugMetricTarget> MetricTargets()
+    {
+        var state = MessageStoreManager.GetSelectedTopicState();
+        return state.Mode == TopicSelectionMode.SparkplugMetric && !state.Metrics.IsDefaultOrEmpty
+            ? state.Metrics
+            : [];
     }
 
     private void ClearMetricFilter()

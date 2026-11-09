@@ -27,7 +27,6 @@ internal static partial class TopicTreeProjection
         string? selectionPath,
         out bool selectionRepresented,
         out bool metricOwnerRepresented,
-        bool selectionMode = false,
         MetricProjection? metrics = null)
     {
         var rows = new List<TopicTreeRowModel>();
@@ -48,14 +47,14 @@ internal static partial class TopicTreeProjection
             return rows;
         }
 
-        // Metric rows belong to the single browsing selection; a checked set names branches only.
-        var metricProjection = selectionMode ? null : metrics;
-        var built = BuildRoots(roots, groupSparkplugTopics: true, metricProjection);
+        // Metrics stay visible in every browsing mode; a checked topic set and an exact metric are
+        // two filters over the same tree, so the mode changes behaviour, not the rows.
+        var built = BuildRoots(roots, groupSparkplugTopics: true, metrics);
         selectionRepresented = selectionPath is null || built.Any(root => ContainsPath(root, selectionPath));
-        metricOwnerRepresented = metricProjection?.SelectedOwner is { } owner
+        metricOwnerRepresented = metrics?.SelectedOwner is { } owner
             && built.Any(root => ContainsOwner(root, owner));
 
-        var context = new WalkContext(filter, hasFilter, expandedPaths, selectionMode);
+        var context = new WalkContext(filter, hasFilter, expandedPaths);
         foreach (var root in InDisplayOrder(built))
             AppendRows(root, 0, context, rows);
 
@@ -265,7 +264,8 @@ internal static partial class TopicTreeProjection
             MetricChartTopic = node.MetricChartTopic,
             MetricChartable = node.MetricChartable,
             MetricNumeric = node.MetricNumeric,
-            MetricCount = node.MetricCount
+            MetricCount = node.MetricCount,
+            MetricTargets = node.MetricTargets
         });
 
         if (!hasChildren || (!isExpanded && !context.HasFilter))
@@ -328,7 +328,7 @@ internal static partial class TopicTreeProjection
     }
 
     private readonly record struct WalkContext(
-        string? Filter, bool HasFilter, IReadOnlySet<string> ExpandedPaths, bool SelectionMode);
+        string? Filter, bool HasFilter, IReadOnlySet<string> ExpandedPaths);
 
     private sealed class NodeBranch
     {
@@ -372,6 +372,9 @@ internal static partial class TopicTreeProjection
         public bool MetricNumeric { get; init; }
 
         public int MetricCount { get; init; }
+
+        public ImmutableArray<MqttSparkplugMetricTarget> MetricTargets { get; init; } =
+            ImmutableArray<MqttSparkplugMetricTarget>.Empty;
 
         public List<ProjectionNode> Children { get; } = [];
 

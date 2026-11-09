@@ -56,13 +56,34 @@ public sealed class TopicSelectionSessionMetricTests
 
         frame.Should().NotBeNull();
         frame.Selection.Key.Should().BeNull();
-        frame.Selection.Metric.Should().BeNull();
-        adapter.ConditionalClearCalls.Should().Be(1, "the clear is a compare-and-swap, not a blind clear");
+        frame.Selection.Metrics.Should().BeEmpty();
+        adapter.ConditionalReplaceCalls.Should().Be(1,
+            "the replacement is a compare-and-swap, not a blind write");
         adapter.Store.GetSelectedTopicState().Key.Should().BeNull();
     }
 
     [Test]
-    public void EnteringMultiSelect_ClearsTheMetricSelection()
+    public void EnteringMultiSelect_KeepsAValidMetricAndItsRows()
+    {
+        var adapter = CreateAdapter();
+        adapter.Add(NodeTopic, Message("data", 1, "Motor/Temp"));
+        SelectMetric(adapter, "Motor/Temp");
+        var session = new TopicSelectionSession(adapter);
+
+        var frame = session.Refresh(null, ExpandedWithMetrics(adapter, Metrics("Motor/Temp")),
+            grouped: true, selectionMode: true, metricSource: Metrics("Motor/Temp"));
+
+        frame.Should().NotBeNull();
+        frame.Selection.Mode.Should().Be(TopicSelectionMode.SparkplugMetric);
+        frame.Selection.Metric.Should().Be(new MqttSparkplugMetricTarget(_nodeScope, "Motor/Temp"));
+        frame.Rows.Should().Contain(row => row.IsMetricRow && row.MetricName == "Motor/Temp");
+        frame.Rows.Should().Contain(row => row.IsMetricGroup);
+        adapter.ConditionalReplaceCalls.Should().Be(0,
+            "turning the preference on is not a reason to end a valid metric filter");
+    }
+
+    [Test]
+    public void EnteringMultiSelect_StillClearsAMetricTheTopologyLost()
     {
         var adapter = CreateAdapter();
         adapter.Add(NodeTopic, Message("data", 1, "Motor/Temp"));
@@ -70,12 +91,11 @@ public sealed class TopicSelectionSessionMetricTests
         var session = new TopicSelectionSession(adapter);
 
         var frame = session.Refresh(null, EmptyExpanded(), grouped: true, selectionMode: true,
-            metricSource: Metrics("Motor/Temp"));
+            metricSource: Metrics());
 
         frame.Should().NotBeNull();
         frame.Selection.Key.Should().BeNull();
-        frame.Selection.Mode.Should().Be(TopicSelectionMode.SingleTopic);
-        frame.Rows.Should().NotContain(row => row.IsMetricRow);
+        adapter.ConditionalReplaceCalls.Should().Be(1);
     }
 
     [Test]
@@ -131,7 +151,7 @@ public sealed class TopicSelectionSessionMetricTests
     }
 
     [Test]
-    public void RejectedConditionalClear_LeavesTheFrameAndCursorUntouched()
+    public void RejectedConditionalReplace_LeavesTheFrameAndCursorUntouched()
     {
         var adapter = CreateAdapter();
         adapter.Add(NodeTopic, Message("data", 1, "Motor/Temp"));
@@ -142,14 +162,14 @@ public sealed class TopicSelectionSessionMetricTests
 
         adapter.ReturnSnapshotOnce(new TopicTreeSnapshot(adapter.Store.Version,
             ImmutableArray<TopicNodeSnapshot>.Empty));
-        adapter.BeforeClear = () => adapter.Store.SelectTopics(
+        adapter.BeforeReplace = () => adapter.Store.SelectTopics(
             TopicSelection.ForSparkplugMetric(_nodeScope, "Another"));
 
         session.Refresh(null, EmptyExpanded(), grouped: true, force: true, metricSource: Metrics())
             .Should().BeNull();
         session.Frame.Should().BeSameAs(original);
 
-        adapter.BeforeClear = null;
+        adapter.BeforeReplace = null;
         var recovered = session.Refresh(null, EmptyExpanded(), grouped: true, force: true,
             metricSource: Metrics("Motor/Temp", "Another"));
 
@@ -158,7 +178,41 @@ public sealed class TopicSelectionSessionMetricTests
             "the newer selection is the one the store kept");
     }
 
+    [Test]
+    public void PruningKeepsTheSurvivingMetricsAcrossOwners()
+    {
+        var adapter = CreateAdapter();
+        adapter.Add(NodeTopic, Message("data", 1, "Motor/Temp"));
+        adapter.Add("spBv1.0/g/NDATA/n2", Message("other", 2, "Speed"));
+        var n2Scope = new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/g", "n2");
+        var first = new MqttSparkplugMetricTarget(_nodeScope, "Motor/Temp");
+        var second = new MqttSparkplugMetricTarget(n2Scope, "Speed");
+        adapter.Store.SelectTopics(TopicSelection.ForSparkplugMetrics([first, second]));
+        var session = new TopicSelectionSession(adapter);
+
+        var frame = session.Refresh(null, EmptyExpanded(), grouped: true,
+            metricSource: scope => scope.Equals(_nodeScope)
+                ? [new SpbMetricSnapshot("Motor/Temp", "int32", "1", DateTime.UnixEpoch)]
+                : []);
+
+        frame.Should().NotBeNull();
+        frame.Selection.Metrics.Should().Equal(first);
+        adapter.ConditionalReplaceCalls.Should().Be(1);
+        adapter.Store.GetSelectedTopicState().Metrics.Should().Equal(first);
+    }
+
     private static IReadOnlySet<string> EmptyExpanded() => new HashSet<string>(StringComparer.Ordinal);
+
+    private static IReadOnlySet<string> ExpandedWithMetrics(
+        TopicTreeSelectionTestAdapter adapter,
+        Func<SparkplugSelectionScope, IReadOnlyList<SpbMetricSnapshot>> source)
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        TopicTreeProjection.AddExpandablePaths(
+            adapter.Store.GetTopicTreeSnapshot().Roots, groupSparkplugTopics: true, ids,
+            new MetricProjection(source));
+        return ids;
+    }
 
     private static Func<SparkplugSelectionScope, IReadOnlyList<SpbMetricSnapshot>> Metrics(
         params string[] names) =>

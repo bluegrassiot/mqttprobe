@@ -116,6 +116,74 @@ public sealed class PayloadBrowserMetricFilterTests : BunitTestContext
     }
 
     [Test]
+    public void SeveralMetrics_ShowTheCoreLabelAndAnAccessibleExactNameList()
+    {
+        var deviceScope = new SparkplugSelectionScope(SparkplugSelectionKind.Device, "spBv1.0/g", "n1", "d1");
+        _selection = new SelectedTopicState(_selection.Token, "metrics:key", 0, "3 metrics")
+        {
+            Mode = TopicSelectionMode.SparkplugMetric,
+            Metrics =
+            [
+                new MqttSparkplugMetricTarget(_nodeScope, "Motor/Temp"),
+                new MqttSparkplugMetricTarget(_nodeScope, "Temp"),
+                new MqttSparkplugMetricTarget(deviceScope, "Speed")
+            ]
+        };
+        ReturnMessages();
+        EnsureMudProviders();
+        var cut = Render<PayloadBrowser>();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find(".pb-metric-filter__label").TextContent.Trim().Should().Be("3 metrics");
+            cut.Find(".payload-topic-title").TextContent.Trim().Should().Be("3 metrics");
+            cut.Markup.Should().Contain("No stored messages for the selected topics");
+        });
+        var details = cut.Find(".pb-metric-filter__details");
+        details.GetAttribute("aria-expanded").Should().Be("false");
+        details.GetAttribute("aria-label").Should().Be("Show metric names");
+
+        details.Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var items = cut.FindAll(".pb-metric-filter__item");
+            items.Should().HaveCount(3);
+            items[0].QuerySelector(".pb-metric-filter__owner")!.TextContent.Trim()
+                .Should().Be("spBv1.0/g/n1");
+            items[0].QuerySelector(".pb-metric-filter__name")!.TextContent.Trim()
+                .Should().Be("Motor/Temp");
+            items.Any(item => item.TextContent.Contains("spBv1.0/g/n1/d1", StringComparison.Ordinal)
+                    && item.TextContent.Contains("Speed", StringComparison.Ordinal))
+                .Should().BeTrue("the device owner stays distinct from the node");
+            cut.Find(".pb-metric-filter__details").GetAttribute("aria-expanded").Should().Be("true");
+        });
+    }
+
+    [Test]
+    public void SeveralMetrics_ClearRemovesTheWholeSetOnce()
+    {
+        _selection = new SelectedTopicState(_selection.Token, "metrics:key", 0, "2 metrics")
+        {
+            Mode = TopicSelectionMode.SparkplugMetric,
+            Metrics =
+            [
+                new MqttSparkplugMetricTarget(_nodeScope, "Motor/Temp"),
+                new MqttSparkplugMetricTarget(_nodeScope, "Temp")
+            ]
+        };
+        ReturnMessages();
+        EnsureMudProviders();
+        var cut = Render<PayloadBrowser>();
+
+        cut.WaitForAssertion(() => cut.FindAll(".pb-metric-filter").Should().ContainSingle());
+        cut.Find(".pb-metric-filter__clear").Click();
+
+        _mockMsgStore.Received(1).SelectTopics(null);
+        cut.WaitForAssertion(() => cut.FindAll(".pb-metric-filter").Should().BeEmpty());
+    }
+
+    [Test]
     public void ClearMetricFilter_RemovesTheFilterAndAsksCoreToClear()
     {
         ReturnMessages();

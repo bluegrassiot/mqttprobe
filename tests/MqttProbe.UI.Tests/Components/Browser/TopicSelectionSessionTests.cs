@@ -176,7 +176,11 @@ internal sealed class TopicTreeSelectionTestAdapter(TopicTreeStore store, IMessa
 
     public Action? BeforeClear { get; set; }
 
+    public Action? BeforeReplace { get; set; }
+
     public int ConditionalClearCalls { get; private set; }
+
+    public int ConditionalReplaceCalls { get; private set; }
 
     public List<TopicSelection?> Selections { get; } = [];
 
@@ -218,6 +222,14 @@ internal sealed class TopicTreeSelectionTestAdapter(TopicTreeStore store, IMessa
         BeforeClear?.Invoke();
         observer?.TryClearSelection(treeVersion, expectedSelection);
         return Store.TryClearSelection(treeVersion, expectedSelection);
+    }
+
+    public bool TryReplaceSelection(
+        long treeVersion, SelectedTopicState expectedSelection, TopicSelection? replacement)
+    {
+        ConditionalReplaceCalls++;
+        BeforeReplace?.Invoke();
+        return Store.TryReplaceSelection(treeVersion, expectedSelection, replacement);
     }
 
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit) =>

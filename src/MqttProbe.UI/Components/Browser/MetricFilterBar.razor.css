@@ -1,14 +1,19 @@
-/* The metric filter names the owner and exact metric above the messages, so a zero-match
-   selection still explains why the list is empty. */
 .pb-metric-filter {
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
+    gap: 4px;
     min-width: 0;
     padding: 4px 12px;
     flex: 0 0 auto;
     border-bottom: 1px solid var(--mud-palette-lines-default);
     background: rgba(249, 115, 22, 0.08);
+}
+
+.pb-metric-filter__row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
 }
 
 .pb-metric-filter ::deep .pb-metric-filter__icon {
@@ -37,4 +42,29 @@
 .pb-metric-filter ::deep .pb-metric-filter__clear {
     flex: 0 0 auto;
     margin-left: auto;
+}
+
+.pb-metric-filter ::deep .pb-metric-filter__details {
+    flex: 0 0 auto;
+}
+
+.pb-metric-filter__list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    margin: 0 0 2px 26px;
+    padding: 0;
+    list-style: none;
+    font-size: 0.75rem;
+}
+
+.pb-metric-filter__item {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pb-metric-filter__owner {
+    margin-right: 6px;
+    color: var(--mud-palette-text-secondary);
 }

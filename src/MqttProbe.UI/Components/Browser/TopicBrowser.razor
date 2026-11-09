@@ -45,7 +45,7 @@
             }
         </MudToolBar>
         <div class="topic-select-strip">
-            @if (_multiSelect)
+            @if (EffectiveMultiSelect)
             {
                 <span class="topic-select-all-wrap" title="@GlobalSelectTitle">
                     <MudCheckBox T="bool?" Value="@GlobalCheckboxValue" ValueChanged="OnGlobalCheckboxChanged"
@@ -126,7 +126,7 @@
                                     <MudIcon Icon="@TopicTreeIconLanguage.BranchGlyph(isExpanded: false)" Size="Size.Small"
                                              Class="topic-node-icon topic-role--node"/>
                                 </span>
-                                <span class="topic-icon-key-text">Metric value, or a metric folder: select a value, expand a folder</span>
+                                <span class="topic-icon-key-text">Metrics group or metric folder: expand. Metric value: select that metric</span>
                             </li>
                             <li data-icon-key="grouping-row">
                                 <span class="topic-icon-key-glyphs">
@@ -143,16 +143,17 @@
         @if (_visibleRows.Count > 0)
         {
             <div class="topic-tree" role="tree" aria-label="Topics"
-                 aria-multiselectable="@(_multiSelect ? "true" : "false")"
+                 aria-multiselectable="@(EffectiveMultiSelect ? "true" : "false")"
                  id="@_treeId" @ref="_treeElement">
                 <Virtualize Items="@_visibleRows" Context="row" ItemSize="@RowHeight">
                     <TopicTreeRow @key="row.RowKey" Row="row"
-                                  ShowCheckbox="_multiSelect && row.Branch is not null"
+                                  ShowCheckbox="EffectiveMultiSelect && (row.Branch is not null || row.IsMetricRow || row.IsMetricGroup)"
                                   SelectionState="@RowSelectionState(row)"
                                   InheritedSelectionLabel="@InheritedSelectionLabel(row)"
                                   IsTabStop="@IsActiveRow(row)"
                                   OnExpandToggled="ToggleExpand"
                                   OnSelectionToggled="OnRowActivated"
+                                  OnCheckboxToggled="OnCheckboxActivated"
                                   OnAddMetricToChart="MetricChartCallback"
                                   OnKeyPressed="args => OnRowKeyPressed(row, args)"
                                   OnFocused="OnRowFocused"/>
@@ -218,6 +219,8 @@
 
     [Parameter] public EventCallback<SelectedTopicState> OnSelectedChanged { get; set; }
 
+    [Parameter] public bool ForceSingleSelect { get; set; }
+
     [CascadingParameter] private TopicBulkSelection? BulkSelectionHost { get; set; }
 
     private string? IconKeyControls => _iconKeyOpen ? _iconKeyId : null;
@@ -238,7 +241,10 @@
         _selectionSession = new TopicSelectionSession(TopicSelectionStore);
         _bulkSelection = BulkSelectionHost ?? new TopicBulkSelection(TopicSelectionStore);
         _bulkSelection.Changed += OnBulkSelectionChanged;
-        _bulkSelection.SetMultiSelect(_multiSelect);
+        if (!ForceSingleSelect)
+            _bulkSelection.SetMultiSelect(_multiSelect);
+        else if (BulkSelectionHost is null)
+            _bulkSelection.SetMultiSelect(false);
         BuildVisibleRows();
         UiSettings.UiPreferencesChanged += OnUiPreferencesChanged;
         _updateTimer = new Timer(_ =>
@@ -257,10 +263,10 @@
 
     private TopicSelectionFrame? RefreshFrame(bool force)
     {
-        if (!_bulkSelection.IsPassive)
+        if (!ForceSingleSelect && EffectiveMultiSelect)
             ReconcileBulkSelection();
         return _selectionSession!.Refresh(_searchFilter, _expandedPaths, _groupSparkplugTopics, force,
-            selectionMode: _multiSelect, metricSource: _metricSource);
+            selectionMode: EffectiveMultiSelect, metricSource: _metricSource);
     }
 
     private void ReconcileBulkSelection()

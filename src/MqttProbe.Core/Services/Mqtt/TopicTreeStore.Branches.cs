@@ -10,9 +10,18 @@ internal sealed partial class TopicTreeStore
     private long _branchCountContentVersion = -1;
 
     private bool HasSelection() =>
-        _selectionMode == TopicSelectionMode.Branches
-            ? !_selectionBranches.IsDefaultOrEmpty
-            : _selectedRoots.Count > 0;
+        _selectionMode switch
+        {
+            TopicSelectionMode.Branches => !_selectionBranches.IsDefaultOrEmpty,
+            TopicSelectionMode.SparkplugMetric => _selectionMetric is not null,
+            _ => _selectedRoots.Count > 0
+        };
+
+    private void InvalidateSelectionIfAny()
+    {
+        if (HasSelection())
+            InvalidateSelection();
+    }
 
     private bool MatchesAnyBranch(string topic) =>
         _selectionBranches.Any(branch => TopicBranchMatcher.Matches(branch, topic));
@@ -88,11 +97,14 @@ internal sealed partial class TopicTreeStore
         _selectionPaths = ImmutableArray<string>.Empty;
         _selectionMode = TopicSelectionMode.Branches;
         _selectionRequiresCanonical = false;
+        _selectionMetric = null;
         _selectionGeneration++;
         _selectionContentVersion++;
     }
 
-    private bool SelectionCovers(MessageStore store, string rawTopic) =>
+    private bool SelectionCovers(MessageStore store, MqttMessage message) =>
         SelectionIncludes(store)
-        || (_selectionMode == TopicSelectionMode.Branches && MatchesAnyBranch(rawTopic));
+        || (_selectionMode == TopicSelectionMode.Branches
+            && MatchesAnyBranch(message.Topic ?? store.FullTopic ?? string.Empty))
+        || (_selectionMode == TopicSelectionMode.SparkplugMetric && MatchesMetricSelection(store, message));
 }

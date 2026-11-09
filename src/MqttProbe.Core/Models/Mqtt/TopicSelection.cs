@@ -27,6 +27,8 @@ public sealed record TopicSelection(
 
     public ImmutableArray<TopicBranchTarget> Branches { get; init; } = ImmutableArray<TopicBranchTarget>.Empty;
 
+    public MqttSparkplugMetricTarget? Metric { get; init; }
+
     public static TopicSelection ForTopic(string fullTopic) =>
         new(fullTopic, fullTopic, [fullTopic]);
 
@@ -60,6 +62,32 @@ public sealed record TopicSelection(
         };
     }
 
+    public static TopicSelection ForSparkplugMetric(SparkplugSelectionScope scope, string metricName)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        ArgumentException.ThrowIfNullOrEmpty(metricName);
+        if (string.IsNullOrEmpty(scope.GroupPath) || string.IsNullOrEmpty(scope.NodeId))
+            throw new ArgumentException("A Sparkplug metric owner needs a group and node.", nameof(scope));
+
+        var device = scope.Kind switch
+        {
+            SparkplugSelectionKind.Node when scope.DeviceId is null => null,
+            SparkplugSelectionKind.Device when !string.IsNullOrEmpty(scope.DeviceId) => scope.DeviceId,
+            _ => throw new ArgumentException("A Sparkplug metric owner must be a node or a device.", nameof(scope))
+        };
+
+        var target = new MqttSparkplugMetricTarget(scope, metricName);
+        var owner = $"{scope.GroupPath}/{scope.NodeId}";
+        if (device is not null)
+            owner += "/" + device;
+
+        return new(ComposeMetricKey(target), $"{owner} {metricName}", ImmutableArray<string>.Empty)
+        {
+            Mode = TopicSelectionMode.SparkplugMetric,
+            Metric = target
+        };
+    }
+
     internal static string ComposeExactKey(IEnumerable<string> paths)
     {
         var builder = new StringBuilder("multi:");
@@ -76,6 +104,17 @@ public sealed record TopicSelection(
                      .OrderBy(identity => identity, StringComparer.Ordinal))
             builder.Append(identity.Length).Append(':').Append(identity);
 
+        return builder.ToString();
+    }
+
+    internal static string ComposeMetricKey(MqttSparkplugMetricTarget target)
+    {
+        var builder = new StringBuilder("metric:");
+        AppendIdentityField(builder, target.Scope.Kind.ToString());
+        AppendIdentityField(builder, target.Scope.GroupPath);
+        AppendIdentityField(builder, target.Scope.NodeId);
+        AppendIdentityField(builder, target.Scope.DeviceId);
+        AppendIdentityField(builder, target.MetricName);
         return builder.ToString();
     }
 

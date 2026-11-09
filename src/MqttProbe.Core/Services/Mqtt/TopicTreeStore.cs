@@ -224,7 +224,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
         AppendToScopedSelection(store);
         Interlocked.Increment(ref _globalVersion);
         InvalidateTopicTree();
-        if (SelectionCovers(store, rawTopic))
+        if (SelectionCovers(store, message))
             _selectionContentVersion++;
         TrimToLimit();
     }
@@ -240,7 +240,7 @@ internal sealed partial class TopicTreeStore(IPerformanceSettings performanceSet
             DecrementMessageCounts(oldest.Store);
             Interlocked.Increment(ref _globalVersion);
             InvalidateTopicTree();
-            if (SelectionCovers(oldest.Store, oldest.Message.Topic ?? oldest.Store.FullTopic ?? string.Empty))
+            if (SelectionCovers(oldest.Store, oldest.Message))
                 _selectionContentVersion++;
         }
     }

@@ -312,9 +312,12 @@ public partial class MessageStoreManager : IMessageStoreManager
                 if (result.TopologyEvents.Count > 0)
                     await ApplyTopologyEventsAsync(result.TopologyEvents, connectionEpoch, subscriptionSnapshot).ConfigureAwait(false);
 
+                var sparkplugMetricNames = SparkplugAliasResolver.ResolveMetricNames(
+                    topic, result.Envelope, _topologyService?.Groups);
                 var aliasNames = _aliasEnricher.Resolve(topic, result);
 
-                message = InboundMessageMapper.Map(arg.ApplicationMessage, payloadText, topic, aliasNames, formatId);
+                message = InboundMessageMapper.Map(arg.ApplicationMessage, payloadText, topic, aliasNames, formatId,
+                    sparkplugMetricNames);
 
                 AddMessage(topic, message);
             }

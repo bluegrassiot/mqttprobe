@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 using MQTTnet.Protocol;
 
@@ -48,6 +49,9 @@ public class MqttMessage
     public TimeSpan? SincePreviousSameTopic { get; internal set; }
 
     public IReadOnlyDictionary<ulong, string>? AliasNames { get; init; }
+
+    public ImmutableArray<string> SparkplugMetricNames { get; init; } = ImmutableArray<string>.Empty;
+
     public string? FormatId { get; init; }
 
     public string? ContentType { get; init; }

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using MQTTnet;
 using MQTTnet.Packets;
 using MQTTnet.Protocol;
@@ -8,10 +9,14 @@ namespace MqttProbe.Core.Services.Mqtt;
 internal static class InboundMessageMapper
 {
     public static MqttMessage Map(MqttApplicationMessage source, string payloadText, string topic,
-        IReadOnlyDictionary<ulong, string>? aliasNames, string? formatId) =>
+        IReadOnlyDictionary<ulong, string>? aliasNames, string? formatId,
+        ImmutableArray<string> sparkplugMetricNames = default) =>
         new(payloadText, topic, source.Retain, source.QualityOfServiceLevel)
         {
             AliasNames = aliasNames,
+            SparkplugMetricNames = sparkplugMetricNames.IsDefault
+                ? ImmutableArray<string>.Empty
+                : sparkplugMetricNames,
             FormatId = formatId,
             ContentType = ContentType(source),
             ResponseTopic = ResponseTopic(source),

@@ -57,11 +57,12 @@ internal sealed partial class TopicTreeStore
         {
             if (selection is null)
             {
-                if (HasSelection())
-                    InvalidateSelection();
-
+                InvalidateSelectionIfAny();
                 return;
             }
+
+            if (TryApplyMetricSelection(selection))
+                return;
 
             if (selection.Mode == TopicSelectionMode.Branches)
             {
@@ -151,7 +152,7 @@ internal sealed partial class TopicTreeStore
                 return null;
 
             var collected = new List<MqttMessage>();
-            int? branchCount = null;
+            int? modeMessageCount = null;
             if (HasSelection() && limit != 0)
             {
                 if (_selectionMode == TopicSelectionMode.MultipleTopics)
@@ -168,7 +169,12 @@ internal sealed partial class TopicTreeStore
                 else if (_selectionMode == TopicSelectionMode.Branches)
                 {
                     CollectBranchMessages(collected);
-                    branchCount = collected.Count;
+                    modeMessageCount = collected.Count;
+                }
+                else if (_selectionMode == TopicSelectionMode.SparkplugMetric)
+                {
+                    CollectMetricMessages(collected);
+                    modeMessageCount = collected.Count;
                 }
                 else
                 {
@@ -177,7 +183,7 @@ internal sealed partial class TopicTreeStore
                 }
             }
 
-            state = CaptureSelectedTopicState(branchCount);
+            state = CaptureSelectedTopicState(modeMessageCount);
             messages = collected.ToArray();
         }
 
@@ -186,28 +192,6 @@ internal sealed partial class TopicTreeStore
             Array.Resize(ref messages, limit);
 
         return new SelectedMessagesSnapshot(state, limit, ImmutableArray.CreateRange(messages));
-    }
-
-    private SelectedTopicState CaptureSelectedTopicState(int? branchMessageCount = null)
-    {
-        var paths = _selectionPaths;
-        var messageCount = _selectionMode switch
-        {
-            TopicSelectionMode.MultipleTopics => CountExactMessages(),
-            TopicSelectionMode.Branches => branchMessageCount ?? CountBranchMessages(),
-            _ => _selectedRoots.Sum(store => store.MessageCount)
-        };
-
-        return new SelectedTopicState(
-            new SelectedTopicToken(_storeId, _selectionGeneration, _selectionContentVersion),
-            _selectionKey,
-            messageCount,
-            _selectionLabel)
-        {
-            Paths = paths,
-            Mode = _selectionMode,
-            Branches = _selectionBranches
-        };
     }
 
     // A canonical request is validated per input topic before overlap normalization, so a missing,
@@ -369,6 +353,7 @@ internal sealed partial class TopicTreeStore
         _selectionScope = scope;
         _selectionPaths = exactPaths.IsDefault ? SnapshotPaths(resolved) : exactPaths;
         _selectionBranches = ImmutableArray<TopicBranchTarget>.Empty;
+        _selectionMetric = null;
         _selectionMode = mode;
         _selectionRequiresCanonical = requiresCanonical;
         _selectionGeneration++;
@@ -414,6 +399,7 @@ internal sealed partial class TopicTreeStore
         _selectionScope = null;
         _selectionPaths = ImmutableArray<string>.Empty;
         _selectionBranches = ImmutableArray<TopicBranchTarget>.Empty;
+        _selectionMetric = null;
         _selectionMode = TopicSelectionMode.SingleTopic;
         _selectionRequiresCanonical = false;
         _selectionGeneration++;

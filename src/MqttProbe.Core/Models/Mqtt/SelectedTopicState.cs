@@ -24,4 +24,6 @@ public sealed record SelectedTopicState(
     public ImmutableArray<TopicBranchTarget> Branches { get; init; } = ImmutableArray<TopicBranchTarget>.Empty;
 
     public TopicSelectionMode Mode { get; init; } = TopicSelectionMode.SingleTopic;
+
+    public MqttSparkplugMetricTarget? Metric { get; init; }
 }

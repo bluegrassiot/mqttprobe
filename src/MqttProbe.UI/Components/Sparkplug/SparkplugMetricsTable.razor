@@ -1,6 +1,7 @@
 @namespace MqttProbe.UI.Components.Sparkplug
 @using MqttProbe.Core.Models.Sparkplug
 
+<div class="spb-metric-table">
 <MudTable @key="Mode" Items="@_rows"
           Dense="true" Hover="true" Elevation="0" HorizontalScrollbar="false"
           Breakpoint="Breakpoint.None" Class="@Class" RowClassFunc="GetRowClass">
@@ -101,6 +102,7 @@
         </MudTd>
     </RowTemplate>
 </MudTable>
+</div>
 
 @code {
     private readonly Dictionary<string, SparkplugMetricRow> _rowsByKey = new(StringComparer.Ordinal);
@@ -171,7 +173,7 @@
             if (string.IsNullOrWhiteSpace(metric.Name))
                 continue;
 
-            var row = GetOrCreate(metric.Name, metric.Name, metric.Name, metric, 0, false, false, 0);
+            var row = GetOrCreate(metric.Name, metric.Name, metric.Name, metric, 0, false, false, 0, false);
             rows.Add(row);
         }
 
@@ -183,12 +185,15 @@
     {
         var visible = SparkplugMetricHierarchy.Flatten(_roots, _expandedPaths);
         var rows = new List<SparkplugMetricRow>(visible.Count);
-        foreach (var node in visible)
+        for (var index = 0; index < visible.Count; index++)
         {
+            var node = visible[index];
             var expanded = _expandedPaths.Contains(node.FullPath);
+            var endsGroup = node.Depth > 0
+                && (index == visible.Count - 1 || visible[index + 1].Depth < node.Depth);
             var row = GetOrCreate(
                 node.FullPath, node.Label, node.FullPath, node.Metric,
-                node.Depth, node.HasChildren, expanded, node.MetricCount);
+                node.Depth, node.HasChildren, expanded, node.MetricCount, endsGroup);
             rows.Add(row);
         }
 
@@ -204,11 +209,12 @@
         int depth,
         bool hasChildren,
         bool isExpanded,
-        int metricCount)
+        int metricCount,
+        bool endsGroup)
     {
         if (!_rowsByKey.TryGetValue(key, out var row))
         {
-            row = new SparkplugMetricRow(key, name, fullPath, snapshot, depth, hasChildren, isExpanded, metricCount);
+            row = new SparkplugMetricRow(key, name, fullPath, snapshot, depth, hasChildren, isExpanded, metricCount, endsGroup);
             _rowsByKey.Add(key, row);
         }
 
@@ -219,6 +225,7 @@
         row.HasChildren = hasChildren;
         row.IsExpanded = isExpanded;
         row.MetricCount = metricCount;
+        row.EndsGroup = endsGroup;
         return row;
     }
 
@@ -242,15 +249,18 @@
 
     private static string GetRowClass(SparkplugMetricRow row, int _)
     {
+        string baseClass;
         if (!row.HasChildren)
-            return "spb-metric-row";
+            baseClass = "spb-metric-row";
+        else if (row.IsMetric)
+            baseClass = "spb-metric-row spb-metric-row--branch";
+        else
+            baseClass = "spb-metric-row spb-metric-row--folder";
 
-        return row.IsMetric
-            ? "spb-metric-row spb-metric-row--branch"
-            : "spb-metric-row spb-metric-row--folder";
+        return row.EndsGroup ? $"{baseClass} spb-metric-row--group-end" : baseClass;
     }
 
-    private static int IndentWidth(SparkplugMetricRow row) => Math.Min(row.Depth, 10) * 10;
+    private static int IndentWidth(SparkplugMetricRow row) => Math.Min(row.Depth, 4) * 24;
 
     private static string AliasText(SpbMetricSnapshot? snapshot) =>
         snapshot is null ? string.Empty : snapshot.Alias?.ToString() ?? "\u2014";

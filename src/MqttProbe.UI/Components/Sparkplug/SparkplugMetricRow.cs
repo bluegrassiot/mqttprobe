@@ -10,7 +10,8 @@ internal sealed class SparkplugMetricRow(
     int depth,
     bool hasChildren,
     bool isExpanded,
-    int metricCount)
+    int metricCount,
+    bool endsGroup)
 {
     public string Key { get; } = key;
 
@@ -27,6 +28,8 @@ internal sealed class SparkplugMetricRow(
     public bool IsExpanded { get; set; } = isExpanded;
 
     public int MetricCount { get; set; } = metricCount;
+
+    public bool EndsGroup { get; set; } = endsGroup;
 
     public bool IsMetric => Snapshot is not null;
 }

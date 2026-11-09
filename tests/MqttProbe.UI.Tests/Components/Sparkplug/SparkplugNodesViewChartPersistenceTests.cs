@@ -9,6 +9,7 @@ using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
+using MudBlazor.Extensions;
 
 namespace MqttProbe.UI.Tests.Components.Sparkplug;
 
@@ -160,6 +161,59 @@ public class SparkplugNodesViewChartPersistenceTests : BunitTestContext
             Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task NodeMetric_KeepsExactFullNameChartInEitherMetricView(bool metricHierarchy)
+    {
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        node.Metrics = [new SpbMetricSnapshot("Motor/Temp", "double", "21.5000", DateTime.UtcNow)];
+        var cut = RenderNode(node, out var dialogProvider);
+        await SetMetricHierarchyAsync(cut, metricHierarchy);
+
+        var click = MetricRow(cut, "Motor/Temp").QuerySelector(ChartButtonSelector)!.ClickAsync(new());
+        dialogProvider.WaitForAssertion(() => dialogProvider.Markup.Should().Contain("Add field to chart"));
+        dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Create Chart")).Click();
+        dialogProvider.WaitForAssertion(() => _chartSettings.GetCharts(_connectionId).Should().ContainSingle());
+        await click;
+
+        var series = _chartSettings.GetCharts(_connectionId).Should().ContainSingle().Subject.Series
+            .Should().ContainSingle().Subject;
+        series.Topic.Should().Be("spBv1.0/factory/NDATA/edge-01");
+        series.JsonPath.Should().Be("metrics.Motor/Temp");
+        series.DisplayName.Should().Be("Motor/Temp");
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task DeviceMetric_KeepsExactFullNameChartInEitherMetricView(bool metricHierarchy)
+    {
+        var node = new SpbNode { NodeId = "edge-01", GroupId = "factory", Status = SpbNodeStatus.Online };
+        var device = new SpbDevice
+        {
+            DeviceId = "sensor-A",
+            NodeId = "edge-01",
+            GroupId = "factory",
+            Status = SpbNodeStatus.Online
+        };
+        device.Metrics = [new SpbMetricSnapshot("Speed/Value", "double", "7.0000", DateTime.UtcNow)];
+        node.Devices[device.DeviceId] = device;
+        var cut = RenderNode(node, out var dialogProvider);
+        await SetMetricHierarchyAsync(cut, metricHierarchy);
+        ExpandDevice(cut, "sensor-A");
+
+        var click = MetricRow(cut, "Speed/Value").QuerySelector(ChartButtonSelector)!.ClickAsync(new());
+        dialogProvider.WaitForAssertion(() => dialogProvider.Markup.Should().Contain("Add field to chart"));
+        dialogProvider.FindAll("button").First(b => b.TextContent.Contains("Create Chart")).Click();
+        dialogProvider.WaitForAssertion(() => _chartSettings.GetCharts(_connectionId).Should().ContainSingle());
+        await click;
+
+        var series = _chartSettings.GetCharts(_connectionId).Should().ContainSingle().Subject.Series
+            .Should().ContainSingle().Subject;
+        series.Topic.Should().Be("spBv1.0/factory/DDATA/edge-01/sensor-A");
+        series.JsonPath.Should().Be("metrics.Speed/Value");
+        series.DisplayName.Should().Be("Speed/Value");
+    }
+
     private ChartConfiguration SeedExistingChart()
     {
         var existing = new ChartConfiguration
@@ -194,6 +248,16 @@ public class SparkplugNodesViewChartPersistenceTests : BunitTestContext
 
     private static void ExpandDevice(IRenderedComponent<SparkplugNodesView> cut, string deviceId) =>
         cut.FindAll(".spb-device-row").First(row => row.TextContent.Contains(deviceId)).Click();
+
+    private static async Task SetMetricHierarchyAsync(IRenderedComponent<SparkplugNodesView> cut, bool enabled)
+    {
+        var metricSwitch = cut.FindComponent<MudSwitch<bool>>();
+        if (metricSwitch.Instance.GetState(state => state.Value) == enabled)
+            return;
+
+        await cut.InvokeAsync(() => metricSwitch.Instance.ValueChanged.InvokeAsync(enabled));
+        cut.Render();
+    }
 
     private static AngleSharp.Dom.IElement MetricRow(
         IRenderedComponent<SparkplugNodesView> cut, string metricName) =>

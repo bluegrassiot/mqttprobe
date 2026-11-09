@@ -451,9 +451,14 @@
 .spb-nodes-header ::deep .spb-count-chip--offline { color: var(--mud-palette-error); }
 .spb-nodes-header ::deep .spb-filter-select { min-width: 120px; font-size: 0.85rem; }
 .spb-nodes-header ::deep .spb-filter-text   { min-width: 160px; font-size: 0.85rem; }
-.spb-nodes-header ::deep .spb-metric-view-toggle { min-width: 168px; font-size: 0.78rem; }
+.spb-nodes-header ::deep .spb-metric-hierarchy-switch { min-width: 0; }
 
-/* Nodes opts into wrapping filters so the metric view control keeps its labels on a phone. */
+.spb-nodes-header ::deep .spb-metric-hierarchy-switch .mud-typography {
+    font-size: 0.85rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
 .spb-nodes-header ::deep .app-tabpanel-header__filters {
     flex-wrap: wrap;
     row-gap: 6px;

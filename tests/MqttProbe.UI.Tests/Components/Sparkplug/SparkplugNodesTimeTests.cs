@@ -70,8 +70,8 @@ public class SparkplugNodesTimeTests : BunitTestContext
 
     private static async Task ShowFlatAsync(IRenderedComponent<SparkplugNodesView> cut)
     {
-        var toggle = cut.FindComponent<MudToggleGroup<SparkplugMetricViewMode>>();
-        await cut.InvokeAsync(() => toggle.Instance.ValueChanged.InvokeAsync(SparkplugMetricViewMode.Flat));
+        var metricSwitch = cut.FindComponent<MudSwitch<bool>>();
+        await cut.InvokeAsync(() => metricSwitch.Instance.ValueChanged.InvokeAsync(false));
         cut.Render();
     }
 

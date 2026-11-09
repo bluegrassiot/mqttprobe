@@ -225,7 +225,7 @@ public sealed class SparkplugMetricsTableHierarchyTests : BunitTestContext
 
         var row = Row(cut, fullPath);
         row.QuerySelector(".spb-td-name")!.GetAttribute("title").Should().Be(fullPath);
-        row.QuerySelector(".spb-metric-indent")!.GetAttribute("width").Should().Be("100");
+        row.QuerySelector(".spb-metric-indent")!.GetAttribute("width").Should().Be("96");
         row.QuerySelector(".spb-td-name")!.GetAttribute("style").Should().BeNull();
     }
 

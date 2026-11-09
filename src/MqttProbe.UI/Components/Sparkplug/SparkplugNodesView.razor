@@ -49,13 +49,10 @@
             }
         </HeaderActions>
         <HeaderFilters>
-            <MudToggleGroup T="SparkplugMetricViewMode" @bind-Value="_metricViewMode"
-                            SelectionMode="SelectionMode.SingleSelection"
-                            Color="Color.Primary" Class="spb-metric-view-toggle"
-                            aria-label="Metric view">
-                <MudToggleItem Value="SparkplugMetricViewMode.Flat">Flat</MudToggleItem>
-                <MudToggleItem Value="SparkplugMetricViewMode.Hierarchy">Hierarchy</MudToggleItem>
-            </MudToggleGroup>
+            <MudSwitch T="bool" @bind-Value="MetricHierarchy"
+                       Size="Size.Small" Color="Color.Primary"
+                       Label="Metric hierarchy" AriaLabel="Metric hierarchy"
+                       Class="spb-metric-hierarchy-switch" />
 
             <MudSelect T="string?" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
                        Value="@_selectedGroupId"
@@ -120,6 +117,12 @@
     private bool _boundsInstalled;
     private readonly SemaphoreSlim _renderGate = new(1, 1);
     private bool _splitSized;
+
+    private bool MetricHierarchy
+    {
+        get => _metricViewMode == SparkplugMetricViewMode.Hierarchy;
+        set => _metricViewMode = value ? SparkplugMetricViewMode.Hierarchy : SparkplugMetricViewMode.Flat;
+    }
 
     private RenderFragment _nodeList => @<SparkplugNodeList Groups="@GroupedNodes.ToList()"
                                                               SelectedNode="@_selectedNode"

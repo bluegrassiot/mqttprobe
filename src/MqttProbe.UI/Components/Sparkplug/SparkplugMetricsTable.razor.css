@@ -14,6 +14,22 @@
 
 .spb-time-value--pending { letter-spacing: 0.12em; }
 
+.spb-metric-table {
+    min-width: 0;
+}
+
+.spb-metric-table ::deep .mud-table-root > .mud-table-body > .spb-metric-row--group-end > .mud-table-cell {
+    border-bottom-color: color-mix(in srgb, var(--mud-palette-text-secondary) 40%, transparent);
+    border-bottom-width: 2px;
+}
+
+@media (max-width: 599.98px) {
+    .spb-metric-table ::deep .mud-table-root > .mud-table-body > tr.spb-metric-row--group-end {
+        border-bottom-color: color-mix(in srgb, var(--mud-palette-text-secondary) 40%, transparent);
+        border-bottom-width: 2px;
+    }
+}
+
 .spb-metric-name {
     display: flex;
     align-items: center;

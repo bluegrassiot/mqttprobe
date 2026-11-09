@@ -31,7 +31,7 @@ public class SparkplugNodesHeaderLayoutTests
             "spb-count-chip",
             "spb-filter-select",
             "spb-filter-text",
-            "spb-metric-view-toggle",
+            "spb-metric-hierarchy-switch",
             "app-tabpanel-header__filters",
         ];
 
@@ -57,9 +57,31 @@ public class SparkplugNodesHeaderLayoutTests
         var filters = ReadRule(css, ".spb-nodes-header ::deep .app-tabpanel-header__filters {");
         filters.Should().Contain("flex-wrap: wrap");
         filters.Should().Contain("row-gap: 6px");
+    }
 
-        ReadRule(css, ".spb-nodes-header ::deep .spb-metric-view-toggle {")
-            .Should().Contain("min-width: 168px");
+    [Test]
+    public void Css_KeepsTheMetricHierarchySwitchCompact()
+    {
+        var css = ReadRepositoryFile(Css);
+
+        ReadRule(css, ".spb-nodes-header ::deep .spb-metric-hierarchy-switch {")
+            .Should().Contain("min-width: 0",
+                "the switch must be able to wrap beside the Group and Filter controls");
+
+        ReadRule(css, ".spb-nodes-header ::deep .spb-metric-hierarchy-switch .mud-typography {")
+            .Should().Contain("font-size: 0.85rem")
+            .And.Contain("white-space: nowrap");
+    }
+
+    [Test]
+    public void Css_HasNoSegmentedMetricViewControlLeft()
+    {
+        var css = ReadRepositoryFile(Css);
+
+        css.Should().NotContain("spb-metric-view-toggle",
+            "the segmented Flat/Hierarchy control is replaced by the compact switch");
+        css.Should().NotContain("min-width: 168px",
+            "the switch must not inherit the old segmented control width");
     }
 
     private static IEnumerable<string> LeadingDeepRulesFor(string css, string selector) =>

@@ -134,16 +134,25 @@ public sealed class PayloadBrowserMetricFilterTests : BunitTestContext
     }
 
     [Test]
-    public void StaleAsyncSnapshot_DoesNotReplaceTheMetricHeading()
+    public async Task StaleAsyncSnapshot_DoesNotReplaceTheMetricHeading()
     {
         ReturnStaleSnapshot();
         EnsureMudProviders();
-        var request = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>();
-        _nextQueryRequest = request;
+        var firstQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        _nextQueryRequest = firstQuery;
         var cut = Render<PayloadBrowser>();
 
-        cut.WaitForAssertion(() => cut.Find(".pb-metric-filter__label").Should().NotBeNull());
-        request.Task.IsCompleted.Should().BeTrue("the browser queried the store");
+        (await firstQuery.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().Be((_selection.Token, 500));
+
+        // The next poll starts only after the first refresh has applied or rejected its snapshot.
+        var nextQuery = new TaskCompletionSource<(SelectedTopicToken Token, int Limit)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        _nextQueryRequest = nextQuery;
+        await nextQuery.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await cut.InvokeAsync(() => { });
+
         cut.Find(".payload-topic-title").TextContent.Trim().Should().Be(Label);
         cut.FindAll(".payload-row").Should().BeEmpty(
             "a snapshot from a stale selection token is rejected");

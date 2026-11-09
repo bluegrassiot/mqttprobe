@@ -55,14 +55,24 @@ public class TopicBrowserGroupingTests : BunitTestContext
         return cut;
     }
 
-    private static void ExpandAll(IRenderedComponent<TopicBrowser> cut) =>
-        cut.FindAll(".mud-toolbar button")[0].Click();
+    private static void ExpandAll(IRenderedComponent<TopicBrowser> cut)
+    {
+        cut.Find("[aria-label='Expand all']").Click();
+        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row[data-depth='1']").Should().NotBeEmpty(
+            "Expand all should render the child rows"));
+    }
 
     private static void CollapseAll(IRenderedComponent<TopicBrowser> cut) =>
         cut.FindAll(".mud-toolbar button")[1].Click();
 
-    private static IElement RowWith(IRenderedComponent<TopicBrowser> cut, string text) =>
-        cut.FindAll(".topic-tree-row").First(row => row.TextContent.Contains(text, StringComparison.Ordinal));
+    private static IElement RowWith(IRenderedComponent<TopicBrowser> cut, string text)
+    {
+        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row")
+            .Any(row => row.TextContent.Contains(text, StringComparison.Ordinal))
+            .Should().BeTrue("the expanded tree should render a row containing '{0}'", text));
+
+        return cut.FindAll(".topic-tree-row").First(row => row.TextContent.Contains(text, StringComparison.Ordinal));
+    }
 
     private void ApplyPreference(bool grouped)
     {

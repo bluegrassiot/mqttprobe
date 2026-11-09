@@ -124,6 +124,9 @@
     "Meziantou.Analyzer@3.0.320": {
       "applicability": "build"
     },
+    "Meziantou.Analyzer@3.0.322": {
+      "applicability": "build"
+    },
     "MessagePackAnalyzer@3.1.12": {
       "applicability": "build"
     },

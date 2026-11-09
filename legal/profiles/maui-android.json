@@ -13,7 +13,7 @@
   "inputs": {
     "files": {
       "global.json": "a4c16f708b406a9d1c56bdd74a46c730277d3e3ddc825efd6baed2e692bc60bf",
-      "Directory.Packages.props": "17a71e6038836c65d3612e2601d3cc1fb2c61f5dfacd88ec5d437122586e8f80",
+      "Directory.Packages.props": "019914947059a88b5c5a0425850a8fb074936e90b564b80e2c83c7d1ed9bf336",
       "Directory.Build.props": "5b030b22a23b70b4378434208e44693013479cd56b981d331429dbf85c596621",
       ".github/actions/setup-dotnet-workload/action.yml": "e3f7736c4e8887df3019c24fea10702dcd5a6be3381679792148b66e238d0464",
       "src/MqttProbe.Core/MqttProbe.Core.csproj": "f17a0c8eaa5569f8bf877669173f5260700013ece29639e6dee0a30d49ede2ec",
@@ -76,8 +76,8 @@
     },
     {
       "id": "Meziantou.Analyzer",
-      "version": "3.0.320",
-      "sha512": "yKkD+uA684so6/ct3dcGm8H2esrLn/gAS9qYbAcis216gBx+o5LWm5ou/BZDIDg6TTzr5ayojv9cgpoHSasxOw=="
+      "version": "3.0.322",
+      "sha512": "aaynUqEHHeD0v1/RDW/Rq3d/gRkF8bRKJcvblhvuvyTAB+hGuzgFl4pBD9g6jGu+VqMWPinEGqu4hzG12TtnqQ=="
     },
     {
       "id": "Microsoft.AspNetCore.Authorization",

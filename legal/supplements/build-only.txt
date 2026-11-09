@@ -1,6 +1,6 @@
 Other build and test tooling, not included in a shipped publish graph:
 
-  Analyzers: Meziantou.Analyzer 3.0.320, SonarAnalyzer.CSharp 10.35.0.4138,
+  Analyzers: Meziantou.Analyzer 3.0.322, SonarAnalyzer.CSharp 10.35.0.4138,
   NUnit.Analyzers 4.15.0, MessagePackAnalyzer 3.1.12,
   Microsoft.AspNetCore.Components.Analyzers 10.0.14.
 

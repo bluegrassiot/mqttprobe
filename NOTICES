@@ -1217,7 +1217,7 @@ Not included in a shipped build. Listed so the set is auditable.
   MessagePackAnalyzer 3.1.12
     Licence: MIT
     Source: https://github.com/MessagePack-CSharp/MessagePack-CSharp
-  Meziantou.Analyzer 3.0.320
+  Meziantou.Analyzer 3.0.322
     Licence: MIT
     Source: https://github.com/meziantou/Meziantou.Analyzer
   Microsoft.AspNetCore.Components.Analyzers 10.0.14
@@ -1247,7 +1247,7 @@ Not included in a shipped build. Listed so the set is auditable.
 
 Other build and test tooling, not included in a shipped publish graph:
 
-  Analyzers: Meziantou.Analyzer 3.0.320, SonarAnalyzer.CSharp 10.35.0.4138,
+  Analyzers: Meziantou.Analyzer 3.0.322, SonarAnalyzer.CSharp 10.35.0.4138,
   NUnit.Analyzers 4.15.0, MessagePackAnalyzer 3.1.12,
   Microsoft.AspNetCore.Components.Analyzers 10.0.14.
 

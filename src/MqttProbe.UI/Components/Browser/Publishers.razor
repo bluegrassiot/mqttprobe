@@ -106,7 +106,7 @@
 
     internal PublishPropertiesDraft PropertiesForTests => _properties;
 
-    private bool IsV5Connection => SessionState.SelectedConnection?.MqttVersion == MqttVersion.V5;
+    private bool IsV5Connection => SessionState.SelectedConnection.MqttVersion == MqttVersion.V5;
 
     protected override void OnInitialized()
     {

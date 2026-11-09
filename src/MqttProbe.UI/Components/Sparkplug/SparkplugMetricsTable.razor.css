@@ -5,3 +5,70 @@
 .spb-col-value { width: 18%; }
 .spb-col-updated { width: 68px; }
 .spb-col-chart { width: 84px; }
+
+.spb-metric-name {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.spb-metric-indent {
+    flex: 0 0 auto;
+    pointer-events: none;
+}
+
+.spb-metric-toggle {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    min-height: 24px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--mud-palette-text-secondary);
+    cursor: pointer;
+}
+
+.spb-metric-toggle:hover {
+    color: var(--mud-palette-primary);
+}
+
+.spb-metric-toggle:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+.spb-metric-toggle-spacer {
+    flex: 0 0 24px;
+}
+
+.spb-metric-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.spb-metric-count {
+    flex: 0 0 auto;
+    margin-left: 6px;
+    font-size: 11px;
+    color: var(--mud-palette-text-secondary);
+}
+
+.spb-metric-meta {
+    display: none;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--mud-palette-text-secondary);
+}
+
+.spb-metric-meta-alias::before,
+.spb-metric-meta-updated::before {
+    content: "·";
+    margin-right: 6px;
+    color: var(--mud-palette-text-disabled);
+}

@@ -209,7 +209,7 @@ public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
     private static AngleSharp.Dom.IElement MetricRow(
         IRenderedComponent<SparkplugNodesView> cut, string metricName) =>
         cut.FindAll("tr.spb-metric-row").Single(row =>
-            row.QuerySelector(".spb-td-name")?.TextContent.Trim() == metricName);
+            row.QuerySelector(".spb-td-name")?.GetAttribute("title") == metricName);
 
     private static Payload NodeBirthPayload()
     {

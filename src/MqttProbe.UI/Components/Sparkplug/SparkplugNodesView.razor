@@ -45,6 +45,14 @@
         }
     </HeaderActions>
     <HeaderFilters>
+        <MudToggleGroup T="SparkplugMetricViewMode" @bind-Value="_metricViewMode"
+                        SelectionMode="SelectionMode.SingleSelection"
+                        Color="Color.Primary" Class="spb-metric-view-toggle"
+                        aria-label="Metric view">
+            <MudToggleItem Value="SparkplugMetricViewMode.Flat">Flat</MudToggleItem>
+            <MudToggleItem Value="SparkplugMetricViewMode.Hierarchy">Hierarchy</MudToggleItem>
+        </MudToggleGroup>
+
         <MudSelect T="string?" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
                    Value="@_selectedGroupId"
                    ValueChanged="@OnGroupFilterChanged"
@@ -95,6 +103,7 @@
     private SpbDevice? _selectedDevice;
     private string? _filterText;
     private string? _selectedGroupId;
+    private SparkplugMetricViewMode _metricViewMode = SparkplugMetricViewMode.Hierarchy;
     private Timer? _updateTimer;
     private RefreshCoalescer? _refreshCoalescer;
     private volatile bool _disposed;
@@ -117,6 +126,7 @@
     private RenderFragment _nodeDetail => @<SparkplugNodeDetail Node="@_selectedNode"
                                                                 ExpandedDevice="@_selectedDevice"
                                                                 AllowNodeReboot="@SparkplugSettings.Sparkplug.AllowNodeReboot"
+                                                                MetricViewMode="@_metricViewMode"
                                                                 OnBack="@ClearSelection"
                                                                 OnToggleDevice="@ToggleDevice"
                                                                 OnRequestRebirth="@RequestRebirthAsync"

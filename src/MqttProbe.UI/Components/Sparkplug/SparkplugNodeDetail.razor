@@ -133,6 +133,7 @@ else
             <SparkplugMetricsTable Class="mb-3"
                                    Topic="@SparkplugChartTargets.NodeTopic(Node.GroupId, Node.NodeId)"
                                    Items="@Node.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
+                                   Mode="@MetricViewMode"
                                    OnAddToChart="OnAddMetricToChart" />
         }
 
@@ -186,6 +187,7 @@ else
                             <SparkplugMetricsTable
                                 Topic="@SparkplugChartTargets.DeviceTopic(Node.GroupId, Node.NodeId, device.DeviceId)"
                                 Items="@device.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
+                                Mode="@MetricViewMode"
                                 OnAddToChart="OnAddMetricToChart" />
                         }
                     </div>
@@ -272,6 +274,9 @@ else
 
     [Parameter]
     public bool AllowNodeReboot { get; set; }
+
+    [Parameter]
+    public SparkplugMetricViewMode MetricViewMode { get; set; } = SparkplugMetricViewMode.Hierarchy;
 
     [Parameter]
     public EventCallback OnBack { get; set; }

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using MqttProbe.Core.Models.Mqtt;
+using MqttProbe.Core.Models.Sparkplug;
 using MqttProbe.Core.Services.Mqtt;
 
 namespace MqttProbe.UI.Components.Browser;
@@ -50,7 +51,8 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
         IReadOnlySet<string> expandedPaths,
         bool grouped,
         bool force = false,
-        bool selectionMode = false)
+        bool selectionMode = false,
+        Func<SparkplugSelectionScope, IReadOnlyList<SpbMetricSnapshot>>? metricSource = null)
     {
         var snapshot = store.GetTopicTreeSnapshot();
         var selection = store.GetSelectedTopicState();
@@ -61,13 +63,23 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
             && selection.Token.IsSameSelection(acceptedSelection))
             return null;
 
+        SparkplugSelectionScope? selectedMetricOwner = null;
+        if (selection.Mode == TopicSelectionMode.SparkplugMetric)
+            selectedMetricOwner = selection.Metric?.Scope;
+
+        var metricProjection = metricSource is null
+            ? null
+            : new MetricProjection(metricSource, selectedMetricOwner);
+
         List<TopicTreeRowModel> rows;
         bool selectionRepresented;
+        bool metricOwnerRepresented;
         if (selectionMode)
         {
             rows = TopicTreeProjection.CreateRows(
                 snapshot.Roots, filter, expandedPaths, grouped,
-                selectionPath: null, out _, selectionMode: true);
+                selectionPath: null, out _, out metricOwnerRepresented, selectionMode: true,
+                metrics: metricProjection);
             selectionRepresented = true;
         }
         else
@@ -76,11 +88,16 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
             // so treating it as a path would find no row and clear a live selection.
             var selectionPath = selection.Mode == TopicSelectionMode.SingleTopic ? selection.Key : null;
             rows = TopicTreeProjection.CreateRows(
-                snapshot.Roots, filter, expandedPaths, grouped, selectionPath, out selectionRepresented);
+                snapshot.Roots, filter, expandedPaths, grouped, selectionPath, out selectionRepresented,
+                out metricOwnerRepresented, metrics: metricProjection);
         }
 
-        if (selection.Mode == TopicSelectionMode.SingleTopic
-            && selection.Key is not null && !selectionRepresented)
+        var pathSelectionGone = selection.Mode == TopicSelectionMode.SingleTopic
+            && selection.Key is not null && !selectionRepresented;
+        var metricSelectionGone = selection.Mode == TopicSelectionMode.SparkplugMetric
+            && !MetricStillRepresented(selection, grouped, selectionMode, metricOwnerRepresented, metricSource);
+
+        if (pathSelectionGone || metricSelectionGone)
         {
             if (!store.TryClearSelection(snapshot.Version, selection))
                 return null;
@@ -93,5 +110,23 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
         _acceptedSelection = selection.Token;
         Frame = frame;
         return frame;
+    }
+
+    // A metric stays selected through collapsing, filtering and zero matches. Only leaving the
+    // single browsing mode, losing the observed owner row, or the metric leaving the topology
+    // after a birth replacement or purge ends it.
+    private static bool MetricStillRepresented(
+        SelectedTopicState selection,
+        bool grouped,
+        bool selectionMode,
+        bool ownerRepresented,
+        Func<SparkplugSelectionScope, IReadOnlyList<SpbMetricSnapshot>>? metricSource)
+    {
+        if (!grouped || selectionMode || !ownerRepresented || metricSource is null
+            || selection.Metric is not { } metric)
+            return false;
+
+        return metricSource(metric.Scope)
+            .Any(item => string.Equals(item.Name, metric.MetricName, StringComparison.Ordinal));
     }
 }

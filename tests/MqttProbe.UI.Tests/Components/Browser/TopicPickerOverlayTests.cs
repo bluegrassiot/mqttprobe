@@ -220,6 +220,31 @@ public class TopicPickerOverlayTests : BunitTestContext
     }
 
     [Test]
+    public async Task MetricSelection_EnablesShowMessagesAndClosesWithoutChangingThePredicate()
+    {
+        var scope = new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1");
+        var state = new SelectedTopicState(
+            new SelectedTopicToken(Guid.NewGuid(), 1, 2), "metric:key", 2, "spBv1.0/plant1/node1 Motor/Temp")
+        {
+            Mode = TopicSelectionMode.SparkplugMetric,
+            Metric = new MqttSparkplugMetricTarget(scope, "Motor/Temp")
+        };
+        _mockMsgStore.GetSelectedTopicState().Returns(state);
+        var closed = false;
+        var cut = RenderPicker(null, () => { closed = true; return Task.CompletedTask; });
+
+        cut.Find(".topic-picker-overlay__selection").TextContent.Trim()
+            .Should().Be("spBv1.0/plant1/node1 Motor/Temp");
+        var done = cut.Find(".topic-picker-overlay__done");
+        done.HasAttribute("disabled").Should().BeFalse("Core's metric predicate is a valid browsing target");
+
+        await cut.InvokeAsync(() => done.Click());
+
+        closed.Should().BeTrue();
+        _mockMsgStore.GetSelectedTopicState().Mode.Should().Be(TopicSelectionMode.SparkplugMetric);
+    }
+
+    [Test]
     public void Footer_IsSiblingOfTheScrollingBody()
     {
         var cut = RenderPicker();

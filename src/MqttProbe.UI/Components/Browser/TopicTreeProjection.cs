@@ -15,7 +15,7 @@ internal static partial class TopicTreeProjection
         string? filter,
         IReadOnlySet<string> expandedPaths,
         bool groupSparkplugTopics) =>
-        CreateRows(roots, filter, expandedPaths, groupSparkplugTopics, selectionPath: null, out _);
+        CreateRows(roots, filter, expandedPaths, groupSparkplugTopics, selectionPath: null, out _, out _, metrics: null);
 
     // One pass builds the rows and reports whether the selected real path still has one,
     // ignoring filter and expansion, so a refresh never walks the store twice.
@@ -26,10 +26,13 @@ internal static partial class TopicTreeProjection
         bool groupSparkplugTopics,
         string? selectionPath,
         out bool selectionRepresented,
-        bool selectionMode = false)
+        out bool metricOwnerRepresented,
+        bool selectionMode = false,
+        MetricProjection? metrics = null)
     {
         var rows = new List<TopicTreeRowModel>();
         selectionRepresented = false;
+        metricOwnerRepresented = false;
         if (roots.IsDefaultOrEmpty)
             return rows;
 
@@ -45,8 +48,12 @@ internal static partial class TopicTreeProjection
             return rows;
         }
 
-        var built = BuildRoots(roots, groupSparkplugTopics: true);
+        // Metric rows belong to the single browsing selection; a checked set names branches only.
+        var metricProjection = selectionMode ? null : metrics;
+        var built = BuildRoots(roots, groupSparkplugTopics: true, metricProjection);
         selectionRepresented = selectionPath is null || built.Any(root => ContainsPath(root, selectionPath));
+        metricOwnerRepresented = metricProjection?.SelectedOwner is { } owner
+            && built.Any(root => ContainsOwner(root, owner));
 
         var context = new WalkContext(filter, hasFilter, expandedPaths, selectionMode);
         foreach (var root in InDisplayOrder(built))
@@ -72,7 +79,8 @@ internal static partial class TopicTreeProjection
     public static void AddExpandablePaths(
         ImmutableArray<TopicNodeSnapshot> roots,
         bool groupSparkplugTopics,
-        ISet<string> target)
+        ISet<string> target,
+        MetricProjection? metrics = null)
     {
         if (roots.IsDefaultOrEmpty)
             return;
@@ -85,7 +93,7 @@ internal static partial class TopicTreeProjection
             return;
         }
 
-        foreach (var root in BuildRoots(roots, groupSparkplugTopics: true))
+        foreach (var root in BuildRoots(roots, groupSparkplugTopics: true, metrics))
             AddExpandablePaths(root, target);
     }
 
@@ -250,7 +258,14 @@ internal static partial class TopicTreeProjection
                 && (node.Source!.HasObservedDirectTopic || node.Source.HasDirectMessages))
         {
             Branch = node.Target,
-            BranchLabel = node.BranchLabel
+            BranchLabel = node.BranchLabel,
+            MetricName = node.MetricName,
+            MetricValue = node.MetricValue,
+            MetricDataType = node.MetricDataType,
+            MetricChartTopic = node.MetricChartTopic,
+            MetricChartable = node.MetricChartable,
+            MetricNumeric = node.MetricNumeric,
+            MetricCount = node.MetricCount
         });
 
         if (!hasChildren || (!isExpanded && !context.HasFilter))
@@ -272,9 +287,11 @@ internal static partial class TopicTreeProjection
 
     // Matching follows the literal view: a row matches on the text it shows and keeps the
     // ancestors of a match, so a grouped leaf is findable by the whole topic path it shows.
+    // A metric row also matches its exact full name, which its short label does not carry.
     private static bool Matches(ProjectionNode node, string filter)
     {
-        if (node.Label.Contains(filter, StringComparison.OrdinalIgnoreCase))
+        var text = node.MatchText.Length == 0 ? node.Label : node.MatchText;
+        if (text.Contains(filter, StringComparison.OrdinalIgnoreCase))
             return true;
 
         return node.Children.Any(child => Matches(child, filter));
@@ -285,14 +302,15 @@ internal static partial class TopicTreeProjection
 
     private static List<ProjectionNode> BuildRoots(
         ImmutableArray<TopicNodeSnapshot> roots,
-        bool groupSparkplugTopics)
+        bool groupSparkplugTopics,
+        MetricProjection? metrics = null)
     {
         var result = new List<ProjectionNode>(roots.Length);
         foreach (var root in roots)
         {
             if (groupSparkplugTopics
                 && string.Equals(root.Topic, SparkplugTopicClassifier.Namespace, StringComparison.Ordinal))
-                result.Add(BuildGroupedNamespace(root));
+                result.Add(BuildGroupedNamespace(root, metrics));
             else
                 result.Add(BuildLiteral(root, TopicTreeRowKind.Topic));
         }
@@ -327,6 +345,8 @@ internal static partial class TopicTreeProjection
 
         public int Order { get; init; }
 
+        public string MatchText { get; init; } = string.Empty;
+
         public TopicTreeRowKind Kind { get; init; }
 
         public SparkplugSelectionScope? Scope { get; init; }
@@ -338,6 +358,20 @@ internal static partial class TopicTreeProjection
         public TopicBranchTarget Target { get; init; } = null!;
 
         public string BranchLabel { get; init; } = string.Empty;
+
+        public string? MetricName { get; init; }
+
+        public string? MetricValue { get; init; }
+
+        public string? MetricDataType { get; init; }
+
+        public string? MetricChartTopic { get; init; }
+
+        public bool MetricChartable { get; init; }
+
+        public bool MetricNumeric { get; init; }
+
+        public int MetricCount { get; init; }
 
         public List<ProjectionNode> Children { get; } = [];
 

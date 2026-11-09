@@ -4,7 +4,7 @@ namespace MqttProbe.UI.Components.Browser;
 
 internal static partial class TopicTreeProjection
 {
-    private static ProjectionNode BuildGroupedNamespace(TopicNodeSnapshot namespaceNode)
+    private static ProjectionNode BuildGroupedNamespace(TopicNodeSnapshot namespaceNode, MetricProjection? metrics)
     {
         var built = RealRow(namespaceNode, TopicTreeRowKind.SparkplugNamespace);
         foreach (var group in namespaceNode.Children)
@@ -12,13 +12,14 @@ internal static partial class TopicTreeProjection
             // An empty group id is not an endpoint, so its subtree keeps its literal levels.
             built.Children.Add(group.Topic.Length == 0
                 ? BuildLiteral(group, TopicTreeRowKind.Topic)
-                : BuildGroup(group.FullTopic, group));
+                : BuildGroup(group.FullTopic, group, metrics));
         }
 
         return built;
     }
 
-    private static ProjectionNode BuildGroup(string groupPath, TopicNodeSnapshot groupNode)
+    private static ProjectionNode BuildGroup(
+        string groupPath, TopicNodeSnapshot groupNode, MetricProjection? metrics)
     {
         var built = RealRow(groupNode, TopicTreeRowKind.SparkplugGroup);
         var nodes = new Dictionary<string, NodeBranch>(StringComparer.Ordinal);
@@ -43,9 +44,27 @@ internal static partial class TopicTreeProjection
         // Devices are ordinary children of the node, so the node holds its message-type groups
         // first and the device rows after them with no synthetic Devices wrapper between.
         foreach (var branch in nodes.Values)
+        {
+            AppendMetricRows(branch.Node, metrics, DataTopic(branch.Node, "NDATA"));
+            foreach (var deviceRow in branch.DeviceRows.Values)
+                AppendMetricRows(deviceRow, metrics, DataTopic(deviceRow, "DDATA"));
             built.Children.Add(branch.Node);
+        }
 
         return built;
+    }
+
+    // The chart binds to a real observed data topic rather than a reconstructed one, so an owner
+    // with only a birth topic keeps its metric rows but offers no chart action.
+    private static string? DataTopic(ProjectionNode ownerRow, string verb)
+    {
+        var typeRow = ownerRow.Children.FirstOrDefault(child =>
+            child.Kind == TopicTreeRowKind.MessageType
+            && string.Equals(child.Label, verb, StringComparison.Ordinal));
+
+        return typeRow?.Children
+            .FirstOrDefault(tip => tip.Source is { HasObservedCanonicalTopic: true })
+            ?.Source?.FullTopic;
     }
 
     // Every row the partition did not take, minus the tips that moved into it: a structural

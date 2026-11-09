@@ -163,7 +163,7 @@ public sealed class TopicTreeProjectionTests
 
         var rows = TopicTreeProjection.CreateRows(
             roots, null, new HashSet<string> { "a" }, groupSparkplugTopics: false,
-            selectionPath: null, out _, selectionMode: true);
+            selectionPath: null, out _, out _, selectionMode: true);
 
         rows.Should().OnlyContain(row => row.Branch != null);
         rows.Should().ContainSingle(row => row.FullPath == "a/b")

@@ -69,6 +69,27 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
         cut.Find(".topic-tree-row").GetAttribute("data-depth").Should().Be(depth.ToString(CultureInfo.InvariantCulture));
     }
 
+    [TestCase(0, 0)]
+    [TestCase(3, 30)]
+    [TestCase(4, 40)]
+    [TestCase(1000, 40)]
+    public void MetricIndentIsCompactSoTheLeafLabelKeepsItsSpace(int depth, int expectedWidth)
+    {
+        var row = Row(depth, TopicTreeRowKind.SparkplugMetric) with
+        {
+            MetricName = "Motor/Temp",
+            MetricValue = "22.5000",
+            Scope = new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"),
+            Branch = null!
+        };
+        var cut = RenderRow(row);
+
+        cut.Find(".topic-tree-indent").GetAttribute("width")
+            .Should().Be(expectedWidth.ToString(CultureInfo.InvariantCulture));
+        cut.Find(".topic-tree-row--metric").Should().NotBeNull();
+        cut.Find(".topic-metric-value").GetAttribute("title").Should().Be("22.5000");
+    }
+
     [TestCase(0)]
     [TestCase(1000)]
     public void IndentUsesNoInlineStyleOrDepthKeyedClass(int depth)

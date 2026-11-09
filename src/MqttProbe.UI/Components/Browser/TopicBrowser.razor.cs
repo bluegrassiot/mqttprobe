@@ -403,6 +403,12 @@ public partial class TopicBrowser
 
     private async Task OnRowActivated(TopicTreeRowModel row)
     {
+        if (row.IsMetricFolder)
+        {
+            await ToggleExpand(row.FullPath);
+            return;
+        }
+
         if (_multiSelect)
         {
             await ToggleRowSelection(row);
@@ -425,12 +431,28 @@ public partial class TopicBrowser
             await OnSelectedChanged.InvokeAsync(selection);
     }
 
-    private TopicTreeSelectionState RowSelectionState(TopicTreeRowModel row) =>
-        _multiSelect ? SelectionStateOf(row.Branch) : SingleSelectionState(row);
+    private TopicTreeSelectionState RowSelectionState(TopicTreeRowModel row)
+    {
+        if (!_multiSelect)
+            return SingleSelectionState(row);
+
+        return row.Branch is null ? TopicTreeSelectionState.Unchecked : SelectionStateOf(row.Branch);
+    }
 
     private TopicTreeSelectionState SingleSelectionState(TopicTreeRowModel row)
     {
         if (_singleSelection is not { } selection)
+            return TopicTreeSelectionState.Unchecked;
+
+        if (selection.Mode == TopicSelectionMode.SparkplugMetric)
+            return selection.Metric is { } metric
+                   && row.MetricName is { } name
+                   && string.Equals(name, metric.MetricName, StringComparison.Ordinal)
+                   && Equals(row.Scope, metric.Scope)
+                ? TopicTreeSelectionState.Checked
+                : TopicTreeSelectionState.Unchecked;
+
+        if (row.Branch is null)
             return TopicTreeSelectionState.Unchecked;
 
         if (selection.Mode == TopicSelectionMode.Branches)

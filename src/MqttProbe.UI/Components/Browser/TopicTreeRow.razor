@@ -1,4 +1,4 @@
-<div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(IsChecked ? "topic-tree-row--selected" : "")"
+<div class="topic-tree-row d-flex align-center @(Row.Depth == 0 ? "font-weight-bold" : "") @(Row.IsVirtualTopic ? "topic-tree-row--group" : "") @(Row.IsMetricRow ? "topic-tree-row--metric" : "") @(Row.IsMetricFolder ? "topic-tree-row--metric-folder" : "") @(IsChecked ? "topic-tree-row--selected" : "")"
      role="treeitem"
      aria-level="@(Row.Depth + 1)"
      aria-expanded="@ExpandedAttribute"
@@ -6,6 +6,8 @@
      tabindex="@(IsTabStop ? 0 : -1)"
      data-topic-key="@Row.RowKey"
      data-topic-path="@Row.FullPath"
+     data-metric-name="@Row.MetricName"
+     data-metric-folder="@(Row.IsMetricFolder ? "true" : null)"
      data-message-topic="@(Row.IsMessageTopic ? "true" : null)"
      data-depth="@Row.Depth"
      title="@Title"
@@ -30,7 +32,7 @@
     {
         <div class="topic-tree-chevron-spacer" aria-hidden="true"></div>
     }
-    @if (ShowCheckbox)
+    @if (ShowCheckbox && Row.Branch is not null)
     {
         <span class="topic-select-checkbox-wrap @(IsInherited ? "topic-select-checkbox-wrap--inherited" : null)"
               title="@InheritedReason"
@@ -50,6 +52,10 @@
         {
             <span class="topic-name topic-name--empty">(empty level)</span>
         }
+        else if (Row.IsMetricFolder)
+        {
+            <span class="topic-name topic-metric-folder-label">@Row.DisplayName</span>
+        }
         else if (Row.IsVirtualTopic)
         {
             <span class="topic-name topic-group-label">@Row.DisplayName</span>
@@ -59,9 +65,35 @@
             <span class="topic-name">@Row.DisplayName</span>
         }
     </span>
-    <span class="topic-stat-text" title="@StatsLabel">
-        T @Row.TopicCount.ToString("N0") · M @Row.MessageCount.ToString("N0")
-    </span>
+    @if (Row.IsMetricRow)
+    {
+        @if (Row.MetricName is not null)
+        {
+            <span class="topic-metric-value @(Row.MetricNumeric ? "topic-metric-value--numeric" : "topic-metric-value--text")"
+                  title="@Row.MetricValue">
+                @Row.MetricValue
+            </span>
+            @if (ShowMetricChart)
+            {
+                <span class="topic-metric-chart" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                    <MudIconButton Icon="@LucideIcons.ChartLine" Size="Size.Small"
+                                   Class="topic-metric-chart__button"
+                                   title="@ChartLabel" aria-label="@ChartLabel"
+                                   OnClick="OnMetricChartClick"/>
+                </span>
+            }
+        }
+        else if (Row.HasChildren)
+        {
+            <span class="topic-metric-count" title="@MetricCountTitle">@Row.MetricCount</span>
+        }
+    }
+    else
+    {
+        <span class="topic-stat-text" title="@StatsLabel">
+            T @Row.TopicCount.ToString("N0") · M @Row.MessageCount.ToString("N0")
+        </span>
+    }
 </div>
 
 @code {
@@ -72,11 +104,14 @@
     [Parameter] public string? InheritedSelectionLabel { get; set; }
     [Parameter] public EventCallback<string> OnExpandToggled { get; set; }
     [Parameter] public EventCallback<TopicTreeRowModel> OnSelectionToggled { get; set; }
+    [Parameter] public EventCallback<TopicTreeRowModel> OnAddMetricToChart { get; set; }
     [Parameter] public EventCallback<KeyboardEventArgs> OnKeyPressed { get; set; }
     [Parameter] public EventCallback<string> OnFocused { get; set; }
 
     private const int IndentStepWidth = 16;
     private const int MaxIndentDepth = 6;
+    private const int MetricIndentStepWidth = 10;
+    private const int MaxMetricIndentDepth = 4;
 
     // The tree keeps one tab stop, on the focused row, so the checkbox never joins the tab order;
     // its row handles Space.
@@ -102,6 +137,16 @@
 
     private bool IsInherited => InheritedSelectionLabel is not null;
 
+    private bool ShowMetricChart => Row.MetricName is not null
+        && Row.MetricChartTopic is not null
+        && Row.MetricChartable
+        && OnAddMetricToChart.HasDelegate;
+
+    private string ChartLabel => $"Chart metric {Row.MetricName}";
+
+    private string MetricCountTitle =>
+        Row.MetricCount == 1 ? "1 metric below" : $"{Row.MetricCount:N0} metrics below";
+
     // A row checked only through a branch above it cannot be unchecked on its own: removing
     // that branch would drop its other members too.
     private string CheckboxLabel => InheritedSelectionLabel is { } inherited
@@ -115,7 +160,11 @@
     // One SVG sized by its width attribute carries the whole indent, so a row costs the same DOM
     // at depth 1000 as at depth 0. The indent stops at six levels so a narrow pane cannot be
     // pushed sideways; the path itself and the row order keep the hierarchy readable.
-    private int IndentWidth => Math.Min(Row.Depth, MaxIndentDepth) * IndentStepWidth;
+    // Metric rows keep their deep hierarchy but spend fewer pixels on indent, so the leaf label
+    // and its value stay readable in a narrow topic pane.
+    private int IndentWidth => Row.IsMetricRow
+        ? Math.Min(Row.Depth, MaxMetricIndentDepth) * MetricIndentStepWidth
+        : Math.Min(Row.Depth, MaxIndentDepth) * IndentStepWidth;
 
     private string RowLabel => Row.IsEmptyLevel ? "empty level" : Row.DisplayName;
 
@@ -127,6 +176,16 @@
         {
             if (Row.IsEmptyLevel)
                 return Row.EmptyLevelTitle;
+
+            if (Row.IsMetricRow)
+            {
+                if (Row.MetricName is { } metric)
+                    return $"Sparkplug metric · {metric} · {Row.MetricDataType}";
+
+                return Row.HasChildren
+                    ? $"Sparkplug metric folder · {Row.BranchLabel} · {Row.MetricCount} below"
+                    : $"Sparkplug metric folder · {Row.BranchLabel}";
+            }
 
             return Row.Kind switch
             {
@@ -170,4 +229,7 @@
 
     private async Task OnToggleExpand() =>
         await OnExpandToggled.InvokeAsync(Row.FullPath);
+
+    private async Task OnMetricChartClick() =>
+        await OnAddMetricToChart.InvokeAsync(Row);
 }

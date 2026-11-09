@@ -297,6 +297,7 @@ else
                 <MessageTimeMenu Presentation="_presentation"/>
             </div>
         </div>
+        <MetricFilterBar Label="@MetricFilterLabel()" OnClear="ClearMetricFilter"/>
         <div class="payload-message-list @TimeColumnClass" tabindex="0"
              role="group" aria-label="Message history"
              aria-activedescendant="@ActiveDescendantId"
@@ -400,19 +401,6 @@ else
     [CascadingParameter] private TopicBulkSelection? BulkSelection { get; set; }
 
     private bool HasSelection => !string.IsNullOrEmpty(MessageStoreManager.GetSelectedTopicState().Key);
-
-    // A scoped clear can leave the selection in place while removing the open message. The list
-    // heading then names the selection, not one of its topics.
-    private string? SelectionHeading
-    {
-        get
-        {
-            var state = MessageStoreManager.GetSelectedTopicState();
-            return state.Mode == TopicSelectionMode.MultipleTopics
-                ? state.Label
-                : _messageList.FirstOrDefault()?.Topic;
-        }
-    }
 
     public async ValueTask DisposeAsync()
     {

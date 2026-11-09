@@ -1,0 +1,40 @@
+/* The metric filter names the owner and exact metric above the messages, so a zero-match
+   selection still explains why the list is empty. */
+.pb-metric-filter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 4px 12px;
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    background: rgba(249, 115, 22, 0.08);
+}
+
+.pb-metric-filter ::deep .pb-metric-filter__icon {
+    flex: 0 0 auto;
+    color: var(--mud-palette-primary);
+}
+
+.pb-metric-filter__caption {
+    flex: 0 0 auto;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+}
+
+.pb-metric-filter__label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.8rem;
+}
+
+.pb-metric-filter ::deep .pb-metric-filter__clear {
+    flex: 0 0 auto;
+    margin-left: auto;
+}

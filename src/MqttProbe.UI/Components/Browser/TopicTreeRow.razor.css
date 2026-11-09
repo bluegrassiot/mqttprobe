@@ -145,3 +145,59 @@
     margin-left: 8px;
     cursor: default;
 }
+
+/* A metric value shares the row with the name and keeps both ends ellipsized, so a long path
+   or a long JSON value never pushes the row sideways. */
+.topic-metric-folder-label {
+    color: var(--mud-palette-text-secondary);
+    border-bottom: 1px dotted rgba(148, 163, 184, 0.55);
+}
+
+/* A metric row gives its short leaf label priority over the value: the value shrinks first,
+   and the metric indent is compact, so "Temp" stays readable in a narrow pane. The full value
+   remains available in the title. */
+.topic-tree-row--metric .flex-grow-1.topic-name-cell,
+.topic-tree-row--metric .topic-name {
+    min-width: min(5.5ch, 100%);
+}
+
+.topic-metric-value {
+    flex: 0 1 auto;
+    flex-shrink: 200;
+    max-width: 30%;
+    min-width: 0;
+    margin-left: 8px;
+    font-size: 0.72rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: default;
+}
+
+.topic-metric-value--numeric {
+    color: var(--mud-palette-warning);
+    font-variant-numeric: tabular-nums;
+}
+
+.topic-metric-value--text {
+    color: var(--mud-palette-text-secondary);
+}
+
+.topic-metric-count {
+    flex: 0 0 auto;
+    margin-left: 8px;
+    font-size: 0.65rem;
+    opacity: 0.5;
+    cursor: default;
+}
+
+.topic-metric-chart {
+    flex: 0 0 auto;
+    margin-left: 2px;
+}
+
+.topic-tree-row ::deep .topic-metric-chart__button {
+    min-width: 24px;
+    min-height: 24px;
+    padding: 0;
+}

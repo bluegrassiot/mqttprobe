@@ -1,4 +1,6 @@
 @implements IDisposable
+@using MqttProbe.Core.Models.Mqtt
+@using MqttProbe.Core.Services.Sparkplug
 
 @if (IsOpen)
 {
@@ -14,7 +16,8 @@
                                    OnClick="ClosePicker"/>
                 </div>
                 <div class="topic-picker-overlay__body">
-                    <TopicBrowser/>
+                    <TopicBrowser TopologyService="TopologyService"
+                                  OnSelectedChanged="@(_ => OnSelectionChanged())"/>
                 </div>
                 <div class="topic-picker-overlay__footer">
                     <span class="topic-picker-overlay__selection" role="status" aria-live="polite"
@@ -38,12 +41,28 @@
 
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public ISparkplugTopologyService? TopologyService { get; set; }
 
     [CascadingParameter] private TopicBulkSelection? BulkSelection { get; set; }
 
-    private string SelectionSummary => BulkSelection?.Summary ?? "No topics selected";
+    [Inject] private ITopicSelectionStore TopicSelectionStore { get; set; } = null!;
 
-    private bool ShowMessagesEnabled => BulkSelection?.HasSelection == true;
+    private SelectedTopicState? MetricSelection
+    {
+        get
+        {
+            var state = TopicSelectionStore?.GetSelectedTopicState();
+            return state is { Mode: TopicSelectionMode.SparkplugMetric, Key: not null, Metric: not null }
+                ? state
+                : null;
+        }
+    }
+
+    private string SelectionSummary =>
+        MetricSelection?.Label ?? BulkSelection?.Summary ?? "No topics selected";
+
+    private bool ShowMessagesEnabled =>
+        MetricSelection is not null || BulkSelection?.HasSelection == true;
 
     protected override void OnInitialized()
     {

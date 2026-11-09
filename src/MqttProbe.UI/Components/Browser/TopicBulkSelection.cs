@@ -189,6 +189,11 @@ internal sealed class TopicBulkSelection(ITopicSelectionStore store)
         if (!_passive)
             return false;
 
+        // A metric selection has an identity key but no branch, so the browsed filter cannot be
+        // mirrored as checked rows. Core owns the metric selection and must not be cleared here.
+        if (selection.Mode == TopicSelectionMode.SparkplugMetric)
+            return ReplaceTargets(ImmutableArray<TopicBranchTarget>.Empty);
+
         IEnumerable<TopicBranchTarget> branches = selection.Mode == TopicSelectionMode.Branches
             ? selection.Branches
             : SelectionPaths(selection).Select(path => new TopicBranchTarget(TopicBranchKind.Raw, Path: path));

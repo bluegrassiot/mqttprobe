@@ -1,0 +1,18 @@
+@if (Label is { Length: > 0 } label)
+{
+    <div class="pb-metric-filter" role="group" aria-label="Metric filter">
+        <MudIcon Icon="@LucideIcons.Activity" Size="Size.Small" Class="pb-metric-filter__icon"/>
+        <span class="pb-metric-filter__caption">Metric</span>
+        <span class="pb-metric-filter__label" title="@label">@label</span>
+        <MudIconButton Icon="@LucideIcons.X" Size="Size.Small" Color="Color.Default"
+                       Class="pb-metric-filter__clear"
+                       title="Clear metric filter" aria-label="Clear metric filter"
+                       OnClick="OnClear"/>
+    </div>
+}
+
+@code {
+    [Parameter] public string? Label { get; set; }
+
+    [Parameter] public EventCallback OnClear { get; set; }
+}

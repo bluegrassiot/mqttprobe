@@ -271,7 +271,7 @@ public sealed partial class SparkplugTopologyService(
                 case DeviceBirthEvent e:
                     MarkObservationIncompleteIfNeeded(e.GroupId, e.NodeId, observationContext);
                     if (ObserveSequence(e.GroupId, e.NodeId, e.SequenceNumber))
-                        ApplyDeviceBirth(e.GroupId, e.NodeId, e.DeviceId, ConvertMetricSnapshots(e.Metrics));
+                        ApplyDeviceBirth(e, ConvertMetricSnapshots(e.Metrics));
                     break;
                 case DeviceDeathEvent e:
                     MarkObservationIncompleteIfNeeded(e.GroupId, e.NodeId, observationContext);
@@ -336,6 +336,8 @@ public sealed partial class SparkplugTopologyService(
             node.Metrics = metrics;
         }
 
+        _metricMetadata.Record(evt.GroupId, evt.NodeId, null, evt.Metrics);
+
         TopologyChanged?.Invoke();
     }
 
@@ -388,14 +390,14 @@ public sealed partial class SparkplugTopologyService(
         return metrics.ToArray();
     }
 
-    private void ApplyDeviceBirth(string groupId, string nodeId, string deviceId, SpbMetricSnapshot[] metrics)
+    private void ApplyDeviceBirth(DeviceBirthEvent evt, SpbMetricSnapshot[] metrics)
     {
-        var node = GetOrCreateNode(groupId, nodeId);
-        var device = node.Devices.GetOrAdd(deviceId, id => new SpbDevice
+        var node = GetOrCreateNode(evt.GroupId, evt.NodeId);
+        var device = node.Devices.GetOrAdd(evt.DeviceId, id => new SpbDevice
         {
             DeviceId = id,
-            NodeId = nodeId,
-            GroupId = groupId
+            NodeId = evt.NodeId,
+            GroupId = evt.GroupId
         });
 
         lock (device.SyncRoot)
@@ -406,6 +408,8 @@ public sealed partial class SparkplugTopologyService(
             PopulateAliasMap(device.AliasMap, metrics);
             device.Metrics = metrics;
         }
+
+        _metricMetadata.Record(evt.GroupId, evt.NodeId, evt.DeviceId, evt.Metrics);
 
         TopologyChanged?.Invoke();
     }

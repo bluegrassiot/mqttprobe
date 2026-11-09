@@ -46,16 +46,9 @@ public sealed class SparkplugChartMetricTypeResolver(
             : null;
     }
 
-    private static uint? MapDataType(string dataType) => dataType switch
-    {
-        "int8" => 1,
-        "int16" => 2,
-        "int32" => 3,
-        "int64" => 4,
-        "uint8" => 5,
-        "uint16" => 6,
-        "uint32" => 7,
-        "uint64" => 8,
-        _ => null
-    };
+    private static uint? MapDataType(string dataType) =>
+        SparkplugMetricValueConverter.DatatypeForLabel(dataType) is { } datatype
+        && SparkplugMetricValueConverter.IsIntegerDatatype(datatype)
+            ? datatype
+            : null;
 }

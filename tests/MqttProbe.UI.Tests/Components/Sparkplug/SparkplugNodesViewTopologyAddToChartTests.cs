@@ -26,11 +26,13 @@ public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
 
     private SparkplugTopologyService _topology = null!;
     private SparkplugTopologyExtractor _extractor = null!;
+    private SparkplugMetricMetadataStore _store = null!;
 
     [SetUp]
     public void SetupTopology()
     {
-        _topology = new SparkplugTopologyService();
+        _store = new SparkplugMetricMetadataStore();
+        _topology = new SparkplugTopologyService(metricMetadataStore: _store);
         _extractor = new SparkplugTopologyExtractor();
         Services.AddSingleton<ISparkplugTopologyService>(_topology);
         Services.AddSingleton(Substitute.For<ISparkplugCommandService>());
@@ -178,7 +180,7 @@ public class SparkplugNodesViewTopologyAddToChartTests : BunitTestContext
         var bytes = payload.ToByteArray();
         var envelope = DecodedPayloadEnvelope.CreateSuccess(
             "sparkplug-b", topic, bytes, string.Empty, typedPayload: payload);
-        await _topology.ApplyTopologyEventsAsync(_extractor.Extract(envelope));
+        await _topology.ApplyTopologyEventsAsync(_extractor.Extract(envelope, _store));
     }
 
     private IRenderedComponent<SparkplugNodesView> RenderNode()

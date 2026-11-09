@@ -12,12 +12,14 @@ public class SparkplugTopologyDatatypeRetentionTests
 {
     private SparkplugTopologyService _service = null!;
     private SparkplugTopologyExtractor _extractor = null!;
+    private SparkplugMetricMetadataStore _store = null!;
 
     [SetUp]
     public void Setup()
     {
+        _store = new SparkplugMetricMetadataStore();
         _extractor = new SparkplugTopologyExtractor();
-        _service = new SparkplugTopologyService();
+        _service = new SparkplugTopologyService(metricMetadataStore: _store);
     }
 
     [Test]
@@ -163,7 +165,7 @@ public class SparkplugTopologyDatatypeRetentionTests
             : DecodedPayloadEnvelope.CreateSuccess(
                 "sparkplug-b", topic, payload, parsed.ToString(), typedPayload: parsed);
 
-        return _service.ApplyTopologyEventsAsync(_extractor.Extract(envelope));
+        return _service.ApplyTopologyEventsAsync(_extractor.Extract(envelope, _store));
     }
 
     private static byte[] SpbPayload(ulong sequence, params Payload.Types.Metric[] metrics)

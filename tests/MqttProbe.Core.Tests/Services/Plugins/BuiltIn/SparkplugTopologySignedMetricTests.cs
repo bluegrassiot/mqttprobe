@@ -1,5 +1,6 @@
 using Google.Protobuf;
 using MqttProbe.Core.Services.Plugins.BuiltIn;
+using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.PluginContracts;
 using Org.Eclipse.Tahu.Protobuf;
 
@@ -8,10 +9,17 @@ namespace MqttProbe.Core.Tests.Services.Plugins.BuiltIn;
 [TestFixture]
 public class SparkplugTopologySignedMetricTests
 {
+    private SparkplugMetricMetadataStore _store = null!;
     private SparkplugTopologyExtractor _extractor = null!;
+    private SparkplugTopologyService _service = null!;
 
     [SetUp]
-    public void Setup() => _extractor = new SparkplugTopologyExtractor();
+    public void Setup()
+    {
+        _store = new SparkplugMetricMetadataStore();
+        _extractor = new SparkplugTopologyExtractor();
+        _service = new SparkplugTopologyService(metricMetadataStore: _store);
+    }
 
     [Test]
     public void Extract_NBirth_SignedIntegerTypes_DecodeSignAndWidth()
@@ -71,12 +79,12 @@ public class SparkplugTopologySignedMetricTests
     }
 
     [Test]
-    public void Extract_NData_NameOnlyWithoutDatatype_InheritsBirthSignedType()
+    public async Task Extract_NData_NameOnlyWithoutDatatype_InheritsBirthSignedType()
     {
-        _extractor.Extract(Envelope("spBv1.0/g/NBIRTH/n",
-            new Payload.Types.Metric { Name = "Delta", Datatype = 1, IntValue = 5 }));
-        var data = _extractor.Extract(Envelope("spBv1.0/g/NDATA/n",
-            new Payload.Types.Metric { Name = "Delta", IntValue = 0xFFFFFFFF }));
+        await ApplyBirth("spBv1.0/g/NBIRTH/n",
+            new Payload.Types.Metric { Name = "Delta", Datatype = 1, IntValue = 5 });
+        var data = ExtractData("spBv1.0/g/NDATA/n",
+            new Payload.Types.Metric { Name = "Delta", IntValue = 0xFFFFFFFF });
 
         var metric = data.Should().ContainSingle().Subject.Should().BeOfType<NodeDataEvent>()
             .Subject.Metrics.Should().ContainSingle().Subject;
@@ -85,12 +93,12 @@ public class SparkplugTopologySignedMetricTests
     }
 
     [Test]
-    public void Extract_NData_AliasOnlyWithoutDatatype_InheritsBirthSignedType()
+    public async Task Extract_NData_AliasOnlyWithoutDatatype_InheritsBirthSignedType()
     {
-        _extractor.Extract(Envelope("spBv1.0/g/NBIRTH/n",
-            new Payload.Types.Metric { Name = "Delta", Alias = 42, Datatype = 2, IntValue = 5 }));
-        var data = _extractor.Extract(Envelope("spBv1.0/g/NDATA/n",
-            new Payload.Types.Metric { Alias = 42, IntValue = 0xFFFF }));
+        await ApplyBirth("spBv1.0/g/NBIRTH/n",
+            new Payload.Types.Metric { Name = "Delta", Alias = 42, Datatype = 2, IntValue = 5 });
+        var data = ExtractData("spBv1.0/g/NDATA/n",
+            new Payload.Types.Metric { Alias = 42, IntValue = 0xFFFF });
 
         var metric = data.Should().ContainSingle().Subject.Should().BeOfType<NodeDataEvent>()
             .Subject.Metrics.Should().ContainSingle().Subject;
@@ -100,12 +108,12 @@ public class SparkplugTopologySignedMetricTests
     }
 
     [Test]
-    public void Extract_DData_NameOnlyWithoutDatatype_InheritsBirthSignedType()
+    public async Task Extract_DData_NameOnlyWithoutDatatype_InheritsBirthSignedType()
     {
-        _extractor.Extract(Envelope("spBv1.0/g/DBIRTH/n/d",
-            new Payload.Types.Metric { Name = "Delta", Datatype = 1, IntValue = 5 }));
-        var data = _extractor.Extract(Envelope("spBv1.0/g/DDATA/n/d",
-            new Payload.Types.Metric { Name = "Delta", IntValue = 0xCE }));
+        await ApplyBirth("spBv1.0/g/DBIRTH/n/d",
+            new Payload.Types.Metric { Name = "Delta", Datatype = 1, IntValue = 5 });
+        var data = ExtractData("spBv1.0/g/DDATA/n/d",
+            new Payload.Types.Metric { Name = "Delta", IntValue = 0xCE });
 
         var metric = data.Should().ContainSingle().Subject.Should().BeOfType<DeviceDataEvent>()
             .Subject.Metrics.Should().ContainSingle().Subject;
@@ -114,12 +122,12 @@ public class SparkplugTopologySignedMetricTests
     }
 
     [Test]
-    public void Extract_DData_AliasOnlyWithoutDatatype_InheritsBirthSignedType()
+    public async Task Extract_DData_AliasOnlyWithoutDatatype_InheritsBirthSignedType()
     {
-        _extractor.Extract(Envelope("spBv1.0/g/DBIRTH/n/d",
-            new Payload.Types.Metric { Name = "Delta", Alias = 7, Datatype = 4, LongValue = 5 }));
-        var data = _extractor.Extract(Envelope("spBv1.0/g/DDATA/n/d",
-            new Payload.Types.Metric { Alias = 7, LongValue = 0xFFFFFFFFFFFFFFFF }));
+        await ApplyBirth("spBv1.0/g/DBIRTH/n/d",
+            new Payload.Types.Metric { Name = "Delta", Alias = 7, Datatype = 4, LongValue = 5 });
+        var data = ExtractData("spBv1.0/g/DDATA/n/d",
+            new Payload.Types.Metric { Alias = 7, LongValue = 0xFFFFFFFFFFFFFFFF });
 
         var metric = data.Should().ContainSingle().Subject.Should().BeOfType<DeviceDataEvent>()
             .Subject.Metrics.Should().ContainSingle().Subject;
@@ -129,12 +137,12 @@ public class SparkplugTopologySignedMetricTests
     }
 
     [Test]
-    public void Extract_DData_WithoutDeviceBirth_DoesNotInheritNodeBirthType()
+    public async Task Extract_DData_WithoutDeviceBirth_DoesNotInheritNodeBirthType()
     {
-        _extractor.Extract(Envelope("spBv1.0/g/NBIRTH/n",
-            new Payload.Types.Metric { Name = "Delta", Alias = 42, Datatype = 1, IntValue = 5 }));
-        var data = _extractor.Extract(Envelope("spBv1.0/g/DDATA/n/d",
-            new Payload.Types.Metric { Name = "Delta", IntValue = 0xFFFFFFFF }));
+        await ApplyBirth("spBv1.0/g/NBIRTH/n",
+            new Payload.Types.Metric { Name = "Delta", Alias = 42, Datatype = 1, IntValue = 5 });
+        var data = ExtractData("spBv1.0/g/DDATA/n/d",
+            new Payload.Types.Metric { Name = "Delta", IntValue = 0xFFFFFFFF });
 
         var metric = data.Should().ContainSingle().Subject.Should().BeOfType<DeviceDataEvent>()
             .Subject.Metrics.Should().ContainSingle().Subject;
@@ -143,27 +151,27 @@ public class SparkplugTopologySignedMetricTests
     }
 
     [Test]
-    public void Extract_NDATA_AliasOnly_DoesNotResolveDeviceAlias()
+    public async Task Extract_NDATA_AliasOnly_DoesNotResolveDeviceAlias()
     {
-        _extractor.Extract(Envelope("spBv1.0/g/DBIRTH/n/d",
-            new Payload.Types.Metric { Name = "Delta", Alias = 7, Datatype = 1, IntValue = 5 }));
-        var data = _extractor.Extract(Envelope("spBv1.0/g/NDATA/n",
-            new Payload.Types.Metric { Alias = 7, IntValue = 0xFFFFFFFF }));
+        await ApplyBirth("spBv1.0/g/DBIRTH/n/d",
+            new Payload.Types.Metric { Name = "Delta", Alias = 7, Datatype = 1, IntValue = 5 });
+        var data = ExtractData("spBv1.0/g/NDATA/n",
+            new Payload.Types.Metric { Alias = 7, IntValue = 0xFFFFFFFF });
 
         data.Should().ContainSingle().Subject.Should().BeOfType<NodeDataEvent>()
             .Subject.Metrics.Should().BeEmpty();
     }
 
     [Test]
-    public void Extract_NBirth_ReplacementChangesDataTypeUsedForLaterAliasData()
+    public async Task Extract_NBirth_ReplacementChangesDataTypeUsedForLaterAliasData()
     {
-        _extractor.Extract(Envelope("spBv1.0/g/NBIRTH/n",
-            new Payload.Types.Metric { Name = "Delta", Alias = 42, Datatype = 1, IntValue = 5 }));
-        _extractor.Extract(Envelope("spBv1.0/g/NBIRTH/n",
-            new Payload.Types.Metric { Name = "Delta", Alias = 42, Datatype = 5, IntValue = 5 }));
+        await ApplyBirth("spBv1.0/g/NBIRTH/n",
+            new Payload.Types.Metric { Name = "Delta", Alias = 42, Datatype = 1, IntValue = 5 });
+        await ApplyBirth("spBv1.0/g/NBIRTH/n",
+            new Payload.Types.Metric { Name = "Delta", Alias = 42, Datatype = 5, IntValue = 5 });
 
-        var data = _extractor.Extract(Envelope("spBv1.0/g/NDATA/n",
-            new Payload.Types.Metric { Alias = 42, IntValue = 0xFFFFFFFF }));
+        var data = ExtractData("spBv1.0/g/NDATA/n",
+            new Payload.Types.Metric { Alias = 42, IntValue = 0xFFFFFFFF });
 
         var metric = data.Should().ContainSingle().Subject.Should().BeOfType<NodeDataEvent>()
             .Subject.Metrics.Should().ContainSingle().Subject;
@@ -172,13 +180,13 @@ public class SparkplugTopologySignedMetricTests
     }
 
     [Test]
-    public void Extract_NDeath_KeepsBirthMetadataForLaterData()
+    public async Task Extract_NDeath_KeepsBirthMetadataForLaterData()
     {
-        _extractor.Extract(Envelope("spBv1.0/g/NBIRTH/n",
-            new Payload.Types.Metric { Name = "Delta", Alias = 42, Datatype = 1, IntValue = 5 }));
-        _extractor.Extract(Envelope("spBv1.0/g/NDEATH/n"));
-        var data = _extractor.Extract(Envelope("spBv1.0/g/NDATA/n",
-            new Payload.Types.Metric { Alias = 42, IntValue = 0xCE }));
+        await ApplyBirth("spBv1.0/g/NBIRTH/n",
+            new Payload.Types.Metric { Name = "Delta", Alias = 42, Datatype = 1, IntValue = 5 });
+        await ApplyBirth("spBv1.0/g/NDEATH/n");
+        var data = ExtractData("spBv1.0/g/NDATA/n",
+            new Payload.Types.Metric { Alias = 42, IntValue = 0xCE });
 
         var metric = data.Should().ContainSingle().Subject.Should().BeOfType<NodeDataEvent>()
             .Subject.Metrics.Should().ContainSingle().Subject;
@@ -224,6 +232,12 @@ public class SparkplugTopologySignedMetricTests
 
         AssertMetric(BirthMetrics(payload), "Timestamp", "datetime", "1714050000000");
     }
+
+    private async Task ApplyBirth(string topic, params Payload.Types.Metric[] metrics) =>
+        await _service.ApplyTopologyEventsAsync(_extractor.Extract(Envelope(topic, metrics)));
+
+    private IReadOnlyList<TopologyEvent> ExtractData(string topic, params Payload.Types.Metric[] metrics) =>
+        _extractor.Extract(Envelope(topic, metrics), _store);
 
     private IReadOnlyList<MetricSnapshot> BirthMetrics(Payload payload) =>
         _extractor.Extract(Envelope("spBv1.0/g/NBIRTH/n", payload))

@@ -5,13 +5,15 @@ using Org.Eclipse.Tahu.Protobuf;
 
 namespace MqttProbe.Core.Services.Plugins.BuiltIn;
 
-public sealed class SparkplugTopologyExtractor(SparkplugMetricMetadataStore? metadataStore = null) : ITopologyExtractor
+public sealed class SparkplugTopologyExtractor : ITopologyExtractor
 {
-    private readonly SparkplugMetricMetadataStore _metadataStore = metadataStore ?? new();
-
     public string FormatId => "sparkplug-b";
 
-    public IReadOnlyList<TopologyEvent> Extract(DecodedPayloadEnvelope envelope)
+    public IReadOnlyList<TopologyEvent> Extract(DecodedPayloadEnvelope envelope) =>
+        Extract(envelope, null);
+
+    public IReadOnlyList<TopologyEvent> Extract(
+        DecodedPayloadEnvelope envelope, SparkplugMetricMetadataStore? metadataStore)
     {
         if (envelope.FormatId != FormatId || envelope.IsFailure)
             return [];
@@ -34,7 +36,7 @@ public sealed class SparkplugTopologyExtractor(SparkplugMetricMetadataStore? met
                 NodeId = node,
                 BirthDeathSequenceNumber = GetBirthDeathSequence(payload)
             }],
-            "NDATA" => HandleNData(envelope, payload, group, node),
+            "NDATA" => HandleNData(envelope, payload, metadataStore, group, node),
             "DBIRTH" when device != null => HandleDBirth(envelope, payload, group, node, device),
             "DDEATH" when device != null => [new DeviceDeathEvent
             {
@@ -45,7 +47,7 @@ public sealed class SparkplugTopologyExtractor(SparkplugMetricMetadataStore? met
                 NodeId = node,
                 DeviceId = device
             }],
-            "DDATA" when device != null => HandleDData(envelope, payload, group, node, device),
+            "DDATA" when device != null => HandleDData(envelope, payload, metadataStore, group, node, device),
             _ => []
         };
     }
@@ -54,7 +56,6 @@ public sealed class SparkplugTopologyExtractor(SparkplugMetricMetadataStore? met
         DecodedPayloadEnvelope envelope, Payload payload, string group, string node)
     {
         var metrics = ExtractMetrics(payload);
-        _metadataStore.Record(group, node, null, payload);
 
         return [new NodeBirthEvent
         {
@@ -70,9 +71,10 @@ public sealed class SparkplugTopologyExtractor(SparkplugMetricMetadataStore? met
     }
 
     private IReadOnlyList<TopologyEvent> HandleNData(
-        DecodedPayloadEnvelope envelope, Payload payload, string group, string node)
+        DecodedPayloadEnvelope envelope, Payload payload, SparkplugMetricMetadataStore? metadataStore,
+        string group, string node)
     {
-        var metrics = ExtractMetricsWithAliasResolution(payload, group, node, null);
+        var metrics = ExtractMetricsWithAliasResolution(payload, metadataStore, group, node, null);
 
         return [new NodeDataEvent
         {
@@ -89,7 +91,6 @@ public sealed class SparkplugTopologyExtractor(SparkplugMetricMetadataStore? met
         DecodedPayloadEnvelope envelope, Payload payload, string group, string node, string device)
     {
         var metrics = ExtractMetrics(payload);
-        _metadataStore.Record(group, node, device, payload);
 
         return [new DeviceBirthEvent
         {
@@ -104,9 +105,10 @@ public sealed class SparkplugTopologyExtractor(SparkplugMetricMetadataStore? met
     }
 
     private IReadOnlyList<TopologyEvent> HandleDData(
-        DecodedPayloadEnvelope envelope, Payload payload, string group, string node, string device)
+        DecodedPayloadEnvelope envelope, Payload payload, SparkplugMetricMetadataStore? metadataStore,
+        string group, string node, string device)
     {
-        var metrics = ExtractMetricsWithAliasResolution(payload, group, node, device);
+        var metrics = ExtractMetricsWithAliasResolution(payload, metadataStore, group, node, device);
 
         return [new DeviceDataEvent
         {
@@ -254,8 +256,9 @@ public sealed class SparkplugTopologyExtractor(SparkplugMetricMetadataStore? met
         return false;
     }
 
-    private List<MetricSnapshot> ExtractMetricsWithAliasResolution(
-        Payload payload, string group, string node, string? device)
+    private static List<MetricSnapshot> ExtractMetricsWithAliasResolution(
+        Payload payload, SparkplugMetricMetadataStore? metadataStore,
+        string group, string node, string? device)
     {
         var result = new List<MetricSnapshot>();
 
@@ -264,15 +267,15 @@ public sealed class SparkplugTopologyExtractor(SparkplugMetricMetadataStore? met
             string? name;
             if (!string.IsNullOrEmpty(metric.Name))
                 name = metric.Name;
-            else if (metric.Alias != 0)
-                name = _metadataStore.ResolveName(group, node, device, metric.Alias);
+            else if (metadataStore != null && metric.Alias != 0)
+                name = metadataStore.ResolveName(group, node, device, metric.Alias);
             else
                 name = null;
 
             if (name == null)
                 continue;
 
-            var datatype = ResolveDatatype(metric, name, group, node, device);
+            var datatype = ResolveDatatype(metric, name, metadataStore, group, node, device);
             var (value, dataType) = ExtractMetricValue(metric, datatype);
             result.Add(new MetricSnapshot
             {
@@ -286,59 +289,24 @@ public sealed class SparkplugTopologyExtractor(SparkplugMetricMetadataStore? met
         return result;
     }
 
-    private uint ResolveDatatype(
-        Payload.Types.Metric metric, string name, string group, string node, string? device)
+    private static uint ResolveDatatype(
+        Payload.Types.Metric metric, string name, SparkplugMetricMetadataStore? metadataStore,
+        string group, string node, string? device)
     {
-        if (metric.Datatype != 0)
+        if (metric.Datatype != 0 || metadataStore is null)
             return metric.Datatype;
 
-        return _metadataStore.ResolveDatatype(group, node, device, metric.Alias, name) ?? 0;
+        return metadataStore.ResolveDatatype(group, node, device, metric.Alias, name) ?? 0;
     }
 
     private static (string Value, string DataType) ExtractMetricValue(
         Payload.Types.Metric metric, uint datatype)
     {
-        var dataType = datatype switch
-        {
-            0 => string.Empty,
-            1 => "int8",
-            2 => "int16",
-            3 => "int32",
-            4 => "int64",
-            5 => "uint8",
-            6 => "uint16",
-            7 => "uint32",
-            8 => "uint64",
-            9 => "float",
-            10 => "double",
-            11 => "bool",
-            12 => "string",
-            13 => "datetime",
-            14 => "text",
-            15 => "uuid",
-            16 => "dataset",
-            17 => "bytes",
-            18 => "file",
-            19 => "template",
-            20 => "propertyset",
-            21 => "propertysetlist",
-            22 => "int8[]",
-            23 => "int16[]",
-            24 => "int32[]",
-            25 => "int64[]",
-            26 => "uint8[]",
-            27 => "uint16[]",
-            28 => "uint32[]",
-            29 => "uint64[]",
-            30 => "float[]",
-            31 => "double[]",
-            32 => "bool[]",
-            33 => "string[]",
-            34 => "datetime[]",
-            _ => "unknown"
-        };
+        var dataType = datatype == 0
+            ? string.Empty
+            : SparkplugMetricValueConverter.LabelForDatatype(datatype);
 
-        var value = datatype is >= 1 and <= 8
+        var value = SparkplugMetricValueConverter.IsIntegerDatatype(datatype)
             ? FormatIntegerValue(metric, datatype)
             : null;
 

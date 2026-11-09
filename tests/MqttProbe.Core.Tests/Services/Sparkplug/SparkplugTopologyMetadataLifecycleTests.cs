@@ -1,8 +1,5 @@
 using Google.Protobuf;
-using Microsoft.Extensions.Logging.Abstractions;
-using MqttProbe.Core.Models.Plugins;
 using MqttProbe.Core.Models.Sparkplug;
-using MqttProbe.Core.Services.Plugins;
 using MqttProbe.Core.Services.Plugins.BuiltIn;
 using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.PluginContracts;
@@ -21,7 +18,7 @@ public class SparkplugTopologyMetadataLifecycleTests
     public void Setup()
     {
         _store = new SparkplugMetricMetadataStore();
-        _extractor = new SparkplugTopologyExtractor(_store);
+        _extractor = new SparkplugTopologyExtractor();
         _service = new SparkplugTopologyService(metricMetadataStore: _store);
     }
 
@@ -125,20 +122,14 @@ public class SparkplugTopologyMetadataLifecycleTests
     }
 
     [Test]
-    public void BuildPluginRegistry_SharesMetadataStoreWithBuiltInExtractor()
+    public async Task ExtractWithoutStore_DoesNotInheritMetadataRecordedByTopology()
     {
-        var registry = MqttProbePluginStartup.BuildPluginRegistry(
-            new PluginConfig(), NullLoggerFactory.Instance, metricMetadataStore: _store);
-        var extractor = registry.TopologyExtractors["sparkplug-b"];
+        await Fire("spBv1.0/g/NBIRTH/n", Payload(1, NamedMetric("Delta", 1, 5, alias: 42)));
 
-        extractor.Extract(Envelope("spBv1.0/g/NBIRTH/n", Payload(1, NamedMetric("Delta", 1, 5))));
-        _store.ClearAll();
-        var data = extractor.Extract(Envelope("spBv1.0/g/NDATA/n", Payload(2, DatatypeOmittedMetric("Delta", 0xCE))));
+        var data = _extractor.Extract(Envelope("spBv1.0/g/NDATA/n", Payload(2, AliasMetric(42, 0xCE))));
 
-        var metric = data.Should().ContainSingle().Subject.Should().BeOfType<NodeDataEvent>()
-            .Subject.Metrics.Should().ContainSingle().Subject;
-        metric.DataType.Should().BeEmpty();
-        metric.Value.Should().Be("206");
+        data.Should().ContainSingle().Subject.Should().BeOfType<NodeDataEvent>()
+            .Subject.Metrics.Should().BeEmpty();
     }
 
     private static DecodedPayloadEnvelope Envelope(string topic, Payload payload) =>
@@ -157,7 +148,7 @@ public class SparkplugTopologyMetadataLifecycleTests
     {
         var envelope = DecodedPayloadEnvelope.CreateSuccess(
             "sparkplug-b", topic, payload.ToByteArray(), payload.ToString(), typedPayload: payload);
-        var events = _extractor.Extract(envelope);
+        var events = _extractor.Extract(envelope, _store);
         await _service.ApplyTopologyEventsAsync(events);
         return events;
     }

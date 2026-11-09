@@ -48,4 +48,60 @@ public class SparkplugMetricValueConverterTests
     {
         SparkplugMetricValueConverter.DecodeInteger((uint)datatype, rawValue).Should().Be(rawValue);
     }
+
+    [TestCase(0, "unknown")]
+    [TestCase(1, "int8")]
+    [TestCase(8, "uint64")]
+    [TestCase(13, "datetime")]
+    [TestCase(14, "text")]
+    [TestCase(20, "propertyset")]
+    [TestCase(21, "propertysetlist")]
+    [TestCase(22, "int8[]")]
+    [TestCase(34, "datetime[]")]
+    [TestCase(99, "unknown")]
+    public void LabelForDatatype_ReturnsCanonicalLabel(int datatype, string expected)
+    {
+        SparkplugMetricValueConverter.LabelForDatatype((uint)datatype).Should().Be(expected);
+    }
+
+    [TestCase("unknown", 0)]
+    [TestCase("int8", 1)]
+    [TestCase("uint64", 8)]
+    [TestCase("double", 10)]
+    [TestCase("text", 14)]
+    [TestCase("propertysetlist", 21)]
+    [TestCase("int8[]", 22)]
+    [TestCase("datetime[]", 34)]
+    public void DatatypeForLabel_ReturnsCanonicalDatatype(string label, int expected)
+    {
+        SparkplugMetricValueConverter.DatatypeForLabel(label).Should().Be((uint)expected);
+    }
+
+    [Test]
+    public void DatatypeForLabel_UnknownLabel_ReturnsNull()
+    {
+        SparkplugMetricValueConverter.DatatypeForLabel("not-a-datatype").Should().BeNull();
+    }
+
+    [Test]
+    public void DatatypeForLabel_RoundTripsEveryCanonicalDatatype()
+    {
+        for (uint datatype = 1; datatype <= 34; datatype++)
+        {
+            SparkplugMetricValueConverter.DatatypeForLabel(
+                    SparkplugMetricValueConverter.LabelForDatatype(datatype))
+                .Should().Be(datatype);
+        }
+    }
+
+    [TestCase(1, true)]
+    [TestCase(8, true)]
+    [TestCase(0, false)]
+    [TestCase(9, false)]
+    [TestCase(13, false)]
+    [TestCase(22, false)]
+    public void IsIntegerDatatype_OnlyAcceptsIntegerDatatypes(int datatype, bool expected)
+    {
+        SparkplugMetricValueConverter.IsIntegerDatatype((uint)datatype).Should().Be(expected);
+    }
 }

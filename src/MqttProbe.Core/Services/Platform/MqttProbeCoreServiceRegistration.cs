@@ -126,7 +126,6 @@ public static class MqttProbeCoreServiceRegistration
     public static IServiceCollection AddMqttProbePlugins(this IServiceCollection services)
     {
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<PluginConfig>>().Value);
-        services.AddSingleton<SparkplugMetricMetadataStore>();
         services.AddSingleton<PluginArchiveLimits>();
         services.AddSingleton<PluginAssemblyCache>();
         services.AddSingleton<PluginInstallSession>();
@@ -144,8 +143,7 @@ public static class MqttProbeCoreServiceRegistration
                 config.PluginFolders, loggerFactory.CreateLogger(typeof(PluginPendingOperations).FullName!));
 
             return MqttProbePluginStartup.BuildPluginRegistry(
-                config, loggerFactory, sp.GetRequiredService<PluginAssemblyCache>(),
-                sp.GetRequiredService<SparkplugMetricMetadataStore>());
+                config, loggerFactory, sp.GetRequiredService<PluginAssemblyCache>());
         });
         services.AddSingleton<PayloadPipeline>();
         services.AddSingleton<IFormatDisplayNames, FormatDisplayNames>();
@@ -159,10 +157,12 @@ public static class MqttProbeCoreServiceRegistration
             ? ServiceLifetime.Scoped
             : ServiceLifetime.Singleton;
 
+        services.Add(new ServiceDescriptor(
+            typeof(SparkplugMetricMetadataStore), _ => new SparkplugMetricMetadataStore(), session));
         services.Add(new ServiceDescriptor(typeof(ISparkplugTopologyService),
             sp => new SparkplugTopologyService(
                 sparkplugSettings: sp.GetRequiredService<ISparkplugSettings>(),
-                metricMetadataStore: sp.GetService<SparkplugMetricMetadataStore>()), session));
+                metricMetadataStore: sp.GetRequiredService<SparkplugMetricMetadataStore>()), session));
         services.Add(new ServiceDescriptor(typeof(ISparkplugCommandService),
             sp => new SparkplugCommandService(
                 sp.GetRequiredService<IMqttManagedClient>(),

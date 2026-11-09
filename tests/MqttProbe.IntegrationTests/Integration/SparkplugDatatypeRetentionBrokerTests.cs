@@ -16,14 +16,15 @@ public sealed partial class SparkplugSequenceRecoveryTests
         var groupId = $"datatype-{Guid.NewGuid():N}";
         const string nodeId = "node";
         const string deviceId = "dev";
-        var topology = new SparkplugTopologyService();
+        var store = new SparkplugMetricMetadataStore();
+        var topology = new SparkplugTopologyService(metricMetadataStore: store);
         var pipeline = BuildRebuildPipeline();
         var client = new MqttManagedClient();
         using var publisher = new MqttClientFactory().CreateMqttClient();
 
         Task HandleAsync(MqttApplicationMessageReceivedEventArgs args)
         {
-            var result = pipeline.ProcessInbound(args);
+            var result = pipeline.ProcessInbound(args, store);
             return topology.ApplyTopologyEventsAsync(result.TopologyEvents);
         }
 

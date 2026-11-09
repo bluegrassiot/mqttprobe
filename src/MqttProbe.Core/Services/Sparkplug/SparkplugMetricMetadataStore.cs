@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using Org.Eclipse.Tahu.Protobuf;
+using MqttProbe.PluginContracts;
 
 namespace MqttProbe.Core.Services.Sparkplug;
 
@@ -14,21 +14,22 @@ public sealed class SparkplugMetricMetadataStore
 
     private readonly ConcurrentDictionary<string, Scope> _scopes = new(StringComparer.Ordinal);
 
-    public void Record(string groupId, string nodeId, string? deviceId, Payload payload)
+    public void Record(string groupId, string nodeId, string? deviceId, IReadOnlyList<MetricSnapshot> metrics)
     {
         var scope = new Scope();
-        foreach (var metric in payload.Metrics)
+        foreach (var metric in metrics)
         {
             if (string.IsNullOrEmpty(metric.Name))
                 continue;
 
-            if (metric.Alias != 0)
+            var datatype = SparkplugMetricValueConverter.DatatypeForLabel(metric.DataType) ?? 0;
+            if (metric.Alias is { } alias && alias != 0)
             {
-                scope.AliasNames[metric.Alias] = metric.Name;
-                scope.DatatypesByAlias[metric.Alias] = metric.Datatype;
+                scope.AliasNames[alias] = metric.Name;
+                scope.DatatypesByAlias[alias] = datatype;
             }
 
-            scope.DatatypesByName[metric.Name] = metric.Datatype;
+            scope.DatatypesByName[metric.Name] = datatype;
         }
 
         _scopes[ScopeKey(groupId, nodeId, deviceId)] = scope;

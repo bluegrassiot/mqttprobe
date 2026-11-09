@@ -13,7 +13,7 @@ internal sealed partial class TopicTreeStore
         _selectionMode switch
         {
             TopicSelectionMode.Branches => !_selectionBranches.IsDefaultOrEmpty,
-            TopicSelectionMode.SparkplugMetric => _selectionMetric is not null,
+            TopicSelectionMode.SparkplugMetric => !_selectionMetrics.IsDefaultOrEmpty,
             _ => _selectedRoots.Count > 0
         };
 
@@ -97,7 +97,7 @@ internal sealed partial class TopicTreeStore
         _selectionPaths = ImmutableArray<string>.Empty;
         _selectionMode = TopicSelectionMode.Branches;
         _selectionRequiresCanonical = false;
-        _selectionMetric = null;
+        _selectionMetrics = ImmutableArray<MqttSparkplugMetricTarget>.Empty;
         _selectionGeneration++;
         _selectionContentVersion++;
     }

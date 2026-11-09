@@ -5,7 +5,8 @@ namespace MqttProbe.Core.Services.Mqtt;
 
 internal sealed partial class TopicTreeStore
 {
-    private MqttSparkplugMetricTarget? _selectionMetric;
+    private ImmutableArray<MqttSparkplugMetricTarget> _selectionMetrics =
+        ImmutableArray<MqttSparkplugMetricTarget>.Empty;
 
     private int _metricMessageCount;
     private long _metricCountGeneration = -1;
@@ -16,7 +17,19 @@ internal sealed partial class TopicTreeStore
         if (selection.Mode != TopicSelectionMode.SparkplugMetric)
             return false;
 
-        ApplyMetricSelection(selection);
+        if (selection.Metrics.IsDefaultOrEmpty)
+        {
+            InvalidateSelectionIfAny();
+            return true;
+        }
+
+        var metrics = TopicSelection.CanonicalizeMetrics(selection.Metrics);
+        if (_selectionMode == TopicSelectionMode.SparkplugMetric
+            && string.Equals(_selectionKey, selection.Key, StringComparison.Ordinal)
+            && _selectionMetrics.SequenceEqual(metrics))
+            return true;
+
+        ReplaceMetricSelection(metrics, selection.Key, selection.Label);
         return true;
     }
 
@@ -39,33 +52,18 @@ internal sealed partial class TopicTreeStore
             Paths = _selectionPaths,
             Mode = _selectionMode,
             Branches = _selectionBranches,
-            Metric = _selectionMetric
+            Metrics = _selectionMetrics
         };
     }
 
-    private void ApplyMetricSelection(TopicSelection selection)
-    {
-        if (selection.Metric is not { } metric)
-        {
-            InvalidateSelectionIfAny();
-            return;
-        }
-
-        if (_selectionMode == TopicSelectionMode.SparkplugMetric
-            && Equals(_selectionMetric, metric)
-            && string.Equals(_selectionKey, selection.Key, StringComparison.Ordinal))
-            return;
-
-        ReplaceMetricSelection(metric, selection.Key, selection.Label);
-    }
-
-    private void ReplaceMetricSelection(MqttSparkplugMetricTarget metric, string key, string? label)
+    private void ReplaceMetricSelection(
+        ImmutableArray<MqttSparkplugMetricTarget> metrics, string key, string? label)
     {
         _selectedRoots.Clear();
         _selectedAncestors.Clear();
         _selectionPaths = ImmutableArray<string>.Empty;
         _selectionBranches = ImmutableArray<TopicBranchTarget>.Empty;
-        _selectionMetric = metric;
+        _selectionMetrics = metrics;
         _selectionKey = key;
         _selectionLabel = label;
         _selectionScope = null;
@@ -108,16 +106,24 @@ internal sealed partial class TopicTreeStore
         return count;
     }
 
-    private bool MatchesMetricSelection(MessageStore store, MqttMessage message) =>
-        _selectionMetric is { } metric
-        && MatchesSparkplugMetric(metric, message.Topic ?? store.FullTopic, message.SparkplugMetricNames);
-
-    private static bool MatchesSparkplugMetric(
-        MqttSparkplugMetricTarget target, string? topic, ImmutableArray<string> metricNames)
+    // A message is selected once even when several selected metrics resolve from its payload.
+    private bool MatchesMetricSelection(MessageStore store, MqttMessage message)
     {
-        if (metricNames.IsDefaultOrEmpty || !TopicBranchMatcher.TryParseSparkplug(topic, out var path))
+        if (_selectionMetrics.IsDefaultOrEmpty)
             return false;
 
+        var topic = message.Topic ?? store.FullTopic;
+        if (message.SparkplugMetricNames.IsDefaultOrEmpty
+            || !TopicBranchMatcher.TryParseSparkplug(topic, out var path))
+            return false;
+
+        return _selectionMetrics.Any(target =>
+            MatchesSparkplugMetric(target, path, message.SparkplugMetricNames));
+    }
+
+    private static bool MatchesSparkplugMetric(
+        MqttSparkplugMetricTarget target, SparkplugTopicPath path, ImmutableArray<string> metricNames)
+    {
         if (!string.Equals(path.GroupPath, target.Scope.GroupPath, StringComparison.Ordinal)
             || !string.Equals(path.NodeId, target.Scope.NodeId, StringComparison.Ordinal))
             return false;

@@ -25,5 +25,20 @@ public sealed record SelectedTopicState(
 
     public TopicSelectionMode Mode { get; init; } = TopicSelectionMode.SingleTopic;
 
-    public MqttSparkplugMetricTarget? Metric { get; init; }
+    public ImmutableArray<MqttSparkplugMetricTarget> Metrics { get; init; } =
+        ImmutableArray<MqttSparkplugMetricTarget>.Empty;
+
+    public MqttSparkplugMetricTarget? Metric
+    {
+        get
+        {
+            if (Metrics.IsDefaultOrEmpty || Metrics.Length != 1)
+                return null;
+
+            return Metrics[0];
+        }
+        init => Metrics = value is null
+            ? ImmutableArray<MqttSparkplugMetricTarget>.Empty
+            : [value];
+    }
 }

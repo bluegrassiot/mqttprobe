@@ -77,6 +77,10 @@ public partial class MessageStoreManager : IMessageStoreManager
     public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection) =>
         _store.TryClearSelection(treeVersion, expectedSelection);
 
+    public bool TryReplaceSelection(
+        long treeVersion, SelectedTopicState expectedSelection, TopicSelection? replacement) =>
+        _store.TryReplaceSelection(treeVersion, expectedSelection, replacement);
+
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit) =>
         Task.FromResult(_store.GetSelectedMessages(expectedSelection, limit));
 

@@ -22,8 +22,13 @@
     pointer-events: none;
 }
 
+/* Match branch and leaf slots to keep same-depth columns aligned. */
+.topic-tree-chevron-slot,
 .topic-tree-chevron-spacer {
+    display: flex;
     flex: 0 0 32px;
+    align-items: center;
+    justify-content: center;
 }
 
 /* The expand and collapse chevron is the tree's brand orange in both themes, so orange is not
@@ -52,7 +57,8 @@
 
 .topic-tree-row--selected {
     background: rgba(249, 115, 22, 0.12);
-    border-left: 2px solid var(--topic-role-brand, #f97316);
+    /* Unlike a border, this marker does not shift row contents. */
+    box-shadow: inset 2px 0 0 var(--topic-role-brand, #f97316);
 }
 
 .topic-tree-row ::deep .topic-select-checkbox {
@@ -154,8 +160,7 @@
 }
 
 /* A metric row gives its short leaf label priority over the value: the value shrinks first,
-   and the metric indent is compact, so "Temp" stays readable in a narrow pane. The full value
-   remains available in the title. */
+   so "Temp" stays readable in a narrow pane. The full value remains available in the title. */
 .topic-tree-row--metric .flex-grow-1.topic-name-cell,
 .topic-tree-row--metric .topic-name {
     min-width: min(5.5ch, 100%);

@@ -18,7 +18,7 @@
     <svg class="topic-tree-indent" width="@IndentWidth" height="1" aria-hidden="true" focusable="false"></svg>
     @if (Row.HasChildren)
     {
-        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+        <span class="topic-tree-chevron-slot" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
             <MudIconButton Icon="@(Row.IsExpanded ? LucideIcons.ChevronDown : LucideIcons.ChevronRight)"
                            Size="Size.Small"
                            Class="topic-chevron topic-role--brand"
@@ -116,8 +116,6 @@
 
     private const int IndentStepWidth = 16;
     private const int MaxIndentDepth = 6;
-    private const int MetricIndentStepWidth = 10;
-    private const int MaxMetricIndentDepth = 4;
 
     // The tree keeps one tab stop, on the focused row, so the checkbox never joins the tab order;
     // its row handles Space.
@@ -178,14 +176,8 @@
     private string? CheckboxTitle => InheritedReason
         ?? (Row.IsMetricRow || Row.IsMetricGroup ? Row.MetricCheckboxLabel : null);
 
-    // One SVG sized by its width attribute carries the whole indent, so a row costs the same DOM
-    // at depth 1000 as at depth 0. The indent stops at six levels so a narrow pane cannot be
-    // pushed sideways; the path itself and the row order keep the hierarchy readable.
-    // Metric rows keep their deep hierarchy but spend fewer pixels on indent, so the leaf label
-    // and its value stay readable in a narrow topic pane.
-    private int IndentWidth => Row.IsMetricRow || Row.IsMetricGroup
-        ? Math.Min(Row.Depth, MaxMetricIndentDepth) * MetricIndentStepWidth
-        : Math.Min(Row.Depth, MaxIndentDepth) * IndentStepWidth;
+    // A single SVG keeps DOM cost constant; the shared depth cap protects narrow panes.
+    private int IndentWidth => Math.Min(Row.Depth, MaxIndentDepth) * IndentStepWidth;
 
     private string RowLabel
     {

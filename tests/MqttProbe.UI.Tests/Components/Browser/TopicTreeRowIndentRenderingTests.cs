@@ -36,6 +36,9 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
     private static int ElementsIn(IRenderedComponent<TopicTreeRow> cut) =>
         Descendants(cut.Find(".topic-tree-row"));
 
+    private static int IndentWidth(IRenderedComponent<TopicTreeRow> cut) =>
+        int.Parse(cut.Find(".topic-tree-indent").GetAttribute("width")!, CultureInfo.InvariantCulture);
+
     private static int Descendants(IElement element) =>
         element.ChildElementCount + element.Children.Sum(Descendants);
 
@@ -70,10 +73,11 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
     }
 
     [TestCase(0, 0)]
-    [TestCase(3, 30)]
-    [TestCase(4, 40)]
-    [TestCase(1000, 40)]
-    public void MetricIndentIsCompactSoTheLeafLabelKeepsItsSpace(int depth, int expectedWidth)
+    [TestCase(3, 48)]
+    [TestCase(4, 64)]
+    [TestCase(6, 96)]
+    [TestCase(1000, 96)]
+    public void MetricRowsUseTheSharedIndentScale(int depth, int expectedWidth)
     {
         var row = Row(depth, TopicTreeRowKind.SparkplugMetric) with
         {
@@ -88,6 +92,27 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
             .Should().Be(expectedWidth.ToString(CultureInfo.InvariantCulture));
         cut.Find(".topic-tree-row--metric").Should().NotBeNull();
         cut.Find(".topic-metric-value").GetAttribute("title").Should().Be("22.5000");
+    }
+
+    [Test]
+    public void MetricGroupAndItsChildrenStayOneStepInsideTheirOwner()
+    {
+        var device = RenderRow(Row(3, TopicTreeRowKind.SparkplugDevice));
+        var group = RenderRow(Row(4, TopicTreeRowKind.SparkplugMetricsGroup) with
+        {
+            Owner = TopicTreeOwner.Device
+        });
+        var metric = RenderRow(Row(5, TopicTreeRowKind.SparkplugMetric) with
+        {
+            Owner = TopicTreeOwner.Device,
+            MetricName = "Temp",
+            Branch = null!
+        });
+
+        IndentWidth(device).Should().Be(48);
+        IndentWidth(group).Should().Be(64);
+        IndentWidth(metric).Should().Be(80,
+            "a metric group must not flatten into its owner or its metric children");
     }
 
     [TestCase(0)]

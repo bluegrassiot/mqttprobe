@@ -75,7 +75,7 @@
                                  Variant="Variant.Outlined" Margin="Margin.Dense"
                                  Min="0" Step="1" Disabled="@(!_stalenessEnabled)"
                                  Error="@(!StaleTimeoutValid)"
-                                 HelperText="A series turns stale after this long without a new point. Turn this off for change-only topics."
+                                 HelperText="The chart turns stale after this long without a new point. Turn this off for change-only topics."
                                  Class="quick-add-timeout" />
                 <MudSwitch T="bool" @bind-Value="_stalenessEnabled" Label="Check for stale data"
                            Color="Color.Primary" Class="quick-add-timeout-off" />
@@ -113,7 +113,7 @@
     private string _newChartName = "";
     private string _displayName = "";
     private double? _staleTimeoutSeconds = ChartConfiguration.DefaultStaleTimeoutSeconds;
-    private bool _stalenessEnabled = true;
+    private bool _stalenessEnabled;
 
     private bool StaleTimeoutValid => !_stalenessEnabled
         || (_staleTimeoutSeconds is { } seconds && ChartFreshnessEvaluator.IsValidTimeout(seconds));

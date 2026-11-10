@@ -44,7 +44,7 @@ public class ChartConfiguration
         set => field = value is > 0 ? value : null;
     }
 
-    public double? StaleTimeoutSeconds { get; set; } = DefaultStaleTimeoutSeconds;
+    public double? StaleTimeoutSeconds { get; set; }
 
     public List<ChartSeries> Series { get; set; } = [];
 }

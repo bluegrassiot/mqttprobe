@@ -26,11 +26,9 @@
                 <MudChip T="string" Size="MudBlazor.Size.Small" Variant="Variant.Outlined" Color="@StatusColor">
                     @StatusLabel
                 </MudChip>
-                @if (CountsText.Length > 0 && ChartFreshnessDisplay.ShowsCounts(_freshness))
+                @if (AgeLabel is not null)
                 {
-                    <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary" Class="chart-card-status__counts">
-                        @CountsText
-                    </MudText>
+                    <span class="chart-card-status__age">@AgeLabel</span>
                 }
             </div>
         </CardHeaderContent>
@@ -92,30 +90,6 @@
                                     AccessibleLabel="@ZoneAccessibleLabel" />
                 </div>
             }
-            <div class="chart-series-status" role="list" aria-label="Series status">
-                @foreach (var series in Configuration.Series)
-                {
-                    var s = series;
-                    var freshness = FreshnessFor(s.Id);
-                    var age = ChartFreshnessDisplay.AgeText(freshness.Age);
-                    <div class="chart-series-status__row" role="listitem">
-                        <div class="chart-series-status__identity">
-                            <span class="chart-series-status__name">@s.DisplayName</span>
-                            <span class="chart-series-status__source app-mono">@s.Topic › @s.JsonPath</span>
-                        </div>
-                        <div class="chart-series-status__state">
-                            <MudChip T="string" Size="MudBlazor.Size.Small" Variant="Variant.Outlined"
-                                     Color="@SeriesStatusColor(freshness)" Class="chart-series-status__chip">
-                                @ChartFreshnessDisplay.SeriesLabel(freshness)
-                            </MudChip>
-                            @if (age is not null)
-                            {
-                                <span class="chart-series-status__age">@age</span>
-                            }
-                        </div>
-                    </div>
-                }
-            </div>
         }
     </MudCardContent>
 </MudCard>
@@ -150,9 +124,7 @@
 
     private string StatusLabel => ChartFreshnessDisplay.SummaryLabel(_freshness.State, !_live || _hovering);
 
-    private string CountsText => _freshness.Series.Count == 0
-        ? string.Empty
-        : ChartFreshnessDisplay.CountsText(_freshness);
+    private string? AgeLabel => !_live || _hovering ? null : ChartFreshnessDisplay.AgeText(_freshness.Age);
 
     private MudBlazor.Color StatusColor
     {
@@ -162,24 +134,12 @@
             return _freshness.State switch
             {
                 ChartFreshnessState.Live => MudBlazor.Color.Success,
-                ChartFreshnessState.SomeStale or ChartFreshnessState.Stale or ChartFreshnessState.Mixed =>
-                    MudBlazor.Color.Warning,
+                ChartFreshnessState.Stale => MudBlazor.Color.Warning,
                 ChartFreshnessState.Disabled => MudBlazor.Color.Default,
                 _ => MudBlazor.Color.Info
             };
         }
     }
-
-    private ChartSeriesFreshness FreshnessFor(Guid seriesId) =>
-        _freshness.Series.FirstOrDefault(s => s.SeriesId == seriesId)
-        ?? new ChartSeriesFreshness(seriesId, ChartSeriesFreshnessState.Waiting, null, null);
-
-    private static MudBlazor.Color SeriesStatusColor(ChartSeriesFreshness series) => series.State switch
-    {
-        ChartSeriesFreshnessState.Fresh => MudBlazor.Color.Success,
-        ChartSeriesFreshnessState.Stale => MudBlazor.Color.Warning,
-        _ => MudBlazor.Color.Default
-    };
 
     private string GetConfigFingerprint() =>
         $"{Configuration.Type}|{string.Join(",", Configuration.Series.Select(s => $"{s.Id}:{s.DisplayName}:{s.Color}"))}";
@@ -420,8 +380,7 @@
     }
 
     private static string Signature(ChartFreshnessReport report) =>
-        $"{report.State}|{string.Join(";", report.Series.Select(s =>
-            $"{s.SeriesId}:{s.State}:{(s.Age is { } age ? (long)age.TotalSeconds : -1)}"))}";
+        $"{report.State}|{report.LastReceivedUtc?.Ticks ?? -1}|{(report.Age is { } age ? (long)age.TotalSeconds : -1)}";
 
     private void RefreshChart()
     {

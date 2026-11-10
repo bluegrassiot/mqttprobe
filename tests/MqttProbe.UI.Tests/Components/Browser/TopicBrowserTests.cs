@@ -178,6 +178,10 @@ public class TopicBrowserInteractionTests : BunitTestContext
         public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection) =>
             inner.TryClearSelection(treeVersion, expectedSelection);
 
+        public bool TryReplaceSelection(
+            long treeVersion, SelectedTopicState expectedSelection, TopicSelection? replacement) =>
+            inner.TryReplaceSelection(treeVersion, expectedSelection, replacement);
+
         public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit) =>
             inner.GetSelectedMessagesAsync(expectedSelection, limit);
     }

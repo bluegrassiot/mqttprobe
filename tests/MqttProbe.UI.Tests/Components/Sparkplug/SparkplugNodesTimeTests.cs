@@ -68,6 +68,13 @@ public class SparkplugNodesTimeTests : BunitTestContext
         return cut;
     }
 
+    private static async Task ShowFlatAsync(IRenderedComponent<SparkplugNodesView> cut)
+    {
+        var metricSwitch = cut.FindComponent<MudSwitch<bool>>();
+        await cut.InvokeAsync(() => metricSwitch.Instance.ValueChanged.InvokeAsync(false));
+        cut.Render();
+    }
+
     [Test]
     public void NodesRegion_ShowsOneShortZoneCaptionWithFullDetailOnDemand()
     {
@@ -200,7 +207,74 @@ public class SparkplugNodesTimeTests : BunitTestContext
     }
 
     [Test]
-    public void DuplicateNodeMetricNames_KeepTheRegionRenderable()
+    public async Task HierarchyMetric_UsesExactFullNameTimeAndChartIdentityAcrossModes()
+    {
+        const string topic = "spBv1.0/factory/NDATA/edge-01";
+        const string fullName = "Deep/One/Two";
+        const string timeText = "12:30:05.125";
+        var display = new SparkplugTimeDisplay("UTC",
+            new Dictionary<string, DeviceTimeFormatItem>(StringComparer.Ordinal)
+            {
+                [SparkplugTimeKeys.Metric(topic, fullName)] = new(
+                    Guid.NewGuid(), timeText, "2026-10-25",
+                    "2026-10-25 12:30:05.125 UTC", "UTC", "", "UTC+00:00")
+            });
+        SparkplugChartSelection? captured = null;
+
+        var cut = Render<SparkplugMetricsTable>(parameters => parameters
+            .Add(component => component.Items,
+                [new SpbMetricSnapshot(fullName, "double", "7.5000", _dataUtc)])
+            .Add(component => component.Topic, topic)
+            .Add(component => component.Time, display)
+            .Add(component => component.Mode, SparkplugMetricViewMode.Hierarchy)
+            .Add(component => component.OnAddToChart,
+                EventCallback.Factory.Create<SparkplugChartSelection>(this, selection => captured = selection)));
+
+        AssertMetricSurface(cut, fullName, "Two", timeText);
+        await ClickChartAsync(cut);
+        AssertChartSelection(captured, topic, fullName);
+
+        cut.Render(parameters => parameters.Add(component => component.Mode, SparkplugMetricViewMode.Flat));
+        AssertMetricSurface(cut, fullName, fullName, timeText);
+        await ClickChartAsync(cut);
+        AssertChartSelection(captured, topic, fullName);
+
+        cut.Render(parameters => parameters.Add(component => component.Mode, SparkplugMetricViewMode.Hierarchy));
+        AssertMetricSurface(cut, fullName, "Two", timeText);
+    }
+
+    private static void AssertMetricSurface(
+        IRenderedComponent<SparkplugMetricsTable> cut,
+        string fullName,
+        string label,
+        string timeText)
+    {
+        var row = cut.FindAll("tr.spb-metric-row")
+            .Single(item => item.QuerySelector(".spb-td-name")!.GetAttribute("title") == fullName);
+        row.QuerySelector(".spb-metric-label")!.TextContent.Trim().Should().Be(label);
+        row.QuerySelector(".spb-td-value")!.TextContent.Trim().Should().Be("7.5000");
+        row.QuerySelector(".spb-td-updated")!.TextContent.Trim().Should().Be(timeText);
+        row.QuerySelector(".spb-metric-meta-updated")!.TextContent.Trim().Should().Be(timeText);
+        cut.FindAll(".spb-time-value").Should().ContainSingle(
+            "the compact meta line must not duplicate the authoritative time node");
+    }
+
+    private static async Task ClickChartAsync(IRenderedComponent<SparkplugMetricsTable> cut) =>
+        await cut.InvokeAsync(() => cut.Find("button[title='Add to chart']").Click());
+
+    private static void AssertChartSelection(
+        SparkplugChartSelection? selection,
+        string topic,
+        string fullName)
+    {
+        selection.Should().NotBeNull();
+        selection!.Topic.Should().Be(topic);
+        selection.JsonPath.Should().Be($"metrics.{fullName}");
+        selection.SeriesName.Should().Be(fullName);
+    }
+
+    [Test]
+    public async Task DuplicateNodeMetricNames_KeepTheRegionRenderable()
     {
         _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneUtc };
         var latest = _dataUtc.AddMinutes(5);
@@ -213,6 +287,7 @@ public class SparkplugNodesTimeTests : BunitTestContext
             request.Key, $"t{request.EpochMs}", "", "", "UTC", "", "");
 
         var cut = RenderSelectedNode();
+        await ShowFlatAsync(cut);
 
         cut.WaitForAssertion(() =>
         {
@@ -231,7 +306,7 @@ public class SparkplugNodesTimeTests : BunitTestContext
     }
 
     [Test]
-    public void DuplicateDeviceMetricNames_KeepTheDeviceTableRenderable()
+    public async Task DuplicateDeviceMetricNames_KeepTheDeviceTableRenderable()
     {
         _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneUtc };
         var latest = _dataUtc.AddMinutes(5);
@@ -253,6 +328,7 @@ public class SparkplugNodesTimeTests : BunitTestContext
             request.Key, $"t{request.EpochMs}", "", "", "UTC", "", "");
 
         var cut = RenderSelectedNode();
+        await ShowFlatAsync(cut);
         cut.Find(".spb-device-select").Click();
 
         cut.WaitForAssertion(() =>
@@ -387,7 +463,7 @@ public class SparkplugNodesTimeTests : BunitTestContext
 
     private static string MetricUpdated(IRenderedComponent<SparkplugNodesView> cut, string name) =>
         cut.FindAll("tr.spb-metric-row")
-            .Single(row => row.QuerySelector(".spb-td-name")!.TextContent.Trim() == name)
+            .Single(row => row.QuerySelector(".spb-metric-label")!.TextContent.Trim() == name)
             .QuerySelector(".spb-td-updated")!.TextContent.Trim();
 
     private SparkplugTimeDisplay MetricTimeDisplay(string timeText, string fullText) =>

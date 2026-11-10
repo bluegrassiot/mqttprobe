@@ -4,5 +4,6 @@ public enum TopicSelectionMode
 {
     SingleTopic = 0,
     MultipleTopics = 1,
-    Branches = 2
+    Branches = 2,
+    SparkplugMetric = 3
 }

@@ -19,7 +19,9 @@ internal static class TopicTreeIconLanguage
         isExpanded ? LucideIcons.FolderOpen : LucideIcons.Folder;
 
     public static string NodeGlyph(TopicTreeRowModel row) =>
-        KindGlyph(row.Kind, row.HasChildren, row.IsExpanded);
+        row.Kind == TopicTreeRowKind.SparkplugMetric && row.MetricName is not null
+            ? LucideIcons.Activity
+            : KindGlyph(row.Kind, row.HasChildren, row.IsExpanded);
 
     // Role glyphs keep their shape whichever way the row is presented; only the plain
     // topic rows and the Devices container follow the folder/leaf split.
@@ -30,6 +32,8 @@ internal static class TopicTreeIconLanguage
         TopicTreeRowKind.SparkplugNode => LucideIcons.Router,
         TopicTreeRowKind.SparkplugDevice => LucideIcons.Network,
         TopicTreeRowKind.MessageType => LucideIcons.Hash,
+        TopicTreeRowKind.SparkplugMetric => hasChildren ? BranchGlyph(isExpanded) : LucideIcons.Activity,
+        TopicTreeRowKind.SparkplugMetricsGroup => BranchGlyph(isExpanded),
         TopicTreeRowKind.Spelling => LeafGlyph,
         TopicTreeRowKind.Devices => BranchGlyph(isExpanded),
         _ => hasChildren ? BranchGlyph(isExpanded) : LeafGlyph
@@ -55,6 +59,7 @@ internal static class TopicTreeIconLanguage
         TopicTreeRowKind.SparkplugNode => NodeRole,
         TopicTreeRowKind.SparkplugDevice or TopicTreeRowKind.Devices => DeviceRole,
         TopicTreeRowKind.MessageType => owner == TopicTreeOwner.Device ? DeviceRole : NodeRole,
+        TopicTreeRowKind.SparkplugMetric or TopicTreeRowKind.SparkplugMetricsGroup => owner == TopicTreeOwner.Device ? DeviceRole : NodeRole,
         TopicTreeRowKind.Spelling => LeafRole,
         _ => hasChildren ? BranchRole : LeafRole
     };

@@ -64,6 +64,30 @@ public class SparkplugNodesViewTests : BunitTestContext
     }
 
     [Test]
+    public void Header_RendersAnchoredFiltersInsideTheNodesWrapper()
+    {
+        var cut = Render<SparkplugNodesView>();
+
+        var anchor = cut.Find(".spb-nodes-header");
+        anchor.QuerySelector(".app-tabpanel-header").Should().NotBeNull(
+            "the shared header must render inside the Nodes-owned CSS-isolation anchor");
+        anchor.QuerySelector(".app-tabpanel-header__filters").Should().NotBeNull(
+            "the filter row must stay inside the anchor so the wrapping rule can match");
+        anchor.QuerySelector(".spb-metric-hierarchy-switch").Should().NotBeNull(
+            "the metric hierarchy switch must sit inside the same anchor as the filter row");
+
+        var metricSwitch = cut.Find(".spb-metric-hierarchy-switch");
+        metricSwitch.QuerySelector(".mud-typography")!.TextContent.Trim().Should().Be("Metric hierarchy");
+        metricSwitch.QuerySelector(".mud-sr-only")!.TextContent.Trim().Should().Be("Metric hierarchy",
+            "the switch exposes one explicit accessible name while its visible label stays on screen");
+
+        var input = cut.Find("input[role='switch']");
+        input.HasAttribute("disabled").Should().BeFalse("the switch is always enabled");
+        anchor.QuerySelector(".spb-filter-select").Should().NotBeNull();
+        anchor.QuerySelector(".spb-filter-text").Should().NotBeNull();
+    }
+
+    [Test]
     public void Renders_NodeList_WhenNodesExist()
     {
         var group = new SpbGroup();

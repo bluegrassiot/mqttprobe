@@ -217,7 +217,7 @@ public sealed class TopicBrowserSelectionReconciliationTests : BunitTestContext
     {
         var cut = RenderWithBranch(grouped: false, branchPath);
         ExpandAll(cut);
-        CheckedRow(cut, branchPath).Should().BeTrue();
+        cut.WaitForAssertion(() => CheckedRow(cut, branchPath).Should().BeTrue());
 
         ApplyPreference(true);
         cut.WaitForAssertion(() => cut.Markup.Should().Contain(GroupedMarker));

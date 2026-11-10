@@ -21,7 +21,8 @@ public partial class TopicBrowser
                 if (multiSelect != _multiSelect)
                 {
                     _multiSelect = multiSelect;
-                    _bulkSelection.SetMultiSelect(multiSelect);
+                    if (!ForceSingleSelect)
+                        _bulkSelection.SetMultiSelect(multiSelect);
                     changed = true;
                 }
 

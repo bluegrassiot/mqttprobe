@@ -77,6 +77,10 @@ public partial class MessageStoreManager : IMessageStoreManager
     public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection) =>
         _store.TryClearSelection(treeVersion, expectedSelection);
 
+    public bool TryReplaceSelection(
+        long treeVersion, SelectedTopicState expectedSelection, TopicSelection? replacement) =>
+        _store.TryReplaceSelection(treeVersion, expectedSelection, replacement);
+
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit) =>
         Task.FromResult(_store.GetSelectedMessages(expectedSelection, limit));
 
@@ -315,9 +319,12 @@ public partial class MessageStoreManager : IMessageStoreManager
                 if (result.TopologyEvents.Count > 0)
                     await ApplyTopologyEventsAsync(result.TopologyEvents, connectionEpoch, subscriptionSnapshot).ConfigureAwait(false);
 
+                var sparkplugMetricNames = SparkplugAliasResolver.ResolveMetricNames(
+                    topic, result.Envelope, _topologyService?.Groups);
                 var aliasNames = _aliasEnricher.Resolve(topic, result);
 
-                message = InboundMessageMapper.Map(arg.ApplicationMessage, payloadText, topic, aliasNames, formatId);
+                message = InboundMessageMapper.Map(arg.ApplicationMessage, payloadText, topic, aliasNames, formatId,
+                    sparkplugMetricNames);
 
                 AddMessage(topic, message);
             }

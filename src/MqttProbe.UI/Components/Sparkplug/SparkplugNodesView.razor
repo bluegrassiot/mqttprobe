@@ -14,58 +14,65 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-<TabPanelHeader Title="Nodes" Icon="@LucideIcons.Network" Class="app-tabpanel-header--stack-chips">
-    <HeaderChips>
-        @if (TotalNodeCount > 0)
-        {
-            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
-                     Class="spb-count-chip">
-                @TotalNodeCount nodes
-            </MudChip>
-            <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
-                     Class="spb-count-chip spb-count-chip--online">
-                @OnlineNodeCount online
-            </MudChip>
-            @if (OfflineNodeCount > 0)
+<div class="spb-nodes-header">
+    <TabPanelHeader Title="Nodes" Icon="@LucideIcons.Network" Class="app-tabpanel-header--stack-chips">
+        <HeaderChips>
+            @if (TotalNodeCount > 0)
             {
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
-                         Class="spb-count-chip spb-count-chip--offline">
-                    @OfflineNodeCount offline
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                         Class="spb-count-chip">
+                    @TotalNodeCount nodes
                 </MudChip>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                         Class="spb-count-chip spb-count-chip--online">
+                    @OnlineNodeCount online
+                </MudChip>
+                @if (OfflineNodeCount > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text"
+                             Class="spb-count-chip spb-count-chip--offline">
+                        @OfflineNodeCount offline
+                    </MudChip>
+                }
             }
-        }
-    </HeaderChips>
-    <HeaderActions>
-        @if (TotalNodeCount > 0)
-        {
-            <AppDestructiveButton Class="app-btn-min"
-                        StartIcon="@LucideIcons.Trash2" Size="Size.Medium"
-                        Disabled="@(OfflineNodeCount == 0)"
-                        OnClick="@ConfirmRemoveAllOfflineAsync"
-                        aria-label="Remove all offline nodes">
-                Prune offline
-            </AppDestructiveButton>
-        }
-    </HeaderActions>
-    <HeaderFilters>
-        <MudSelect T="string?" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
-                   Value="@_selectedGroupId"
-                   ValueChanged="@OnGroupFilterChanged"
-                   RelativeWidth="DropdownWidth.Adaptive"
-                   Class="spb-filter-select" Label="Group">
-            <MudSelectItem T="string?" Value="@((string?)null)">All</MudSelectItem>
-            @foreach (var g in TopologyService.Groups.Keys.OrderBy(k => k, NaturalStringComparer.Instance))
+        </HeaderChips>
+        <HeaderActions>
+            @if (TotalNodeCount > 0)
             {
-                <MudSelectItem T="string?" Value="@g">@g</MudSelectItem>
+                <AppDestructiveButton Class="app-btn-min"
+                            StartIcon="@LucideIcons.Trash2" Size="Size.Medium"
+                            Disabled="@(OfflineNodeCount == 0)"
+                            OnClick="@ConfirmRemoveAllOfflineAsync"
+                            aria-label="Remove all offline nodes">
+                    Prune offline
+                </AppDestructiveButton>
             }
-        </MudSelect>
+        </HeaderActions>
+        <HeaderFilters>
+            <MudSwitch T="bool" @bind-Value="MetricHierarchy"
+                       Size="Size.Small" Color="Color.Primary"
+                       Label="Metric hierarchy" AriaLabel="Metric hierarchy"
+                       Class="spb-metric-hierarchy-switch" />
 
-        <MudTextField @bind-Value="_filterText" Placeholder="Filter…"
-                      Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
-                      Immediate="true" Clearable="true" Variant="Variant.Outlined"
-                      Margin="Margin.Dense" Class="spb-filter-text"/>
-    </HeaderFilters>
-</TabPanelHeader>
+            <MudSelect T="string?" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                       Value="@_selectedGroupId"
+                       ValueChanged="@OnGroupFilterChanged"
+                       RelativeWidth="DropdownWidth.Adaptive"
+                       Class="spb-filter-select" Label="Group">
+                <MudSelectItem T="string?" Value="@((string?)null)">All</MudSelectItem>
+                @foreach (var g in TopologyService.Groups.Keys.OrderBy(k => k, NaturalStringComparer.Instance))
+                {
+                    <MudSelectItem T="string?" Value="@g">@g</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_filterText" Placeholder="Filter…"
+                          Adornment="Adornment.Start" AdornmentIcon="@LucideIcons.Search"
+                          Immediate="true" Clearable="true" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Class="spb-filter-text"/>
+        </HeaderFilters>
+    </TabPanelHeader>
+</div>
 
 <MudHidden Breakpoint="Breakpoint.SmAndDown">
     <div class="spb-split-wrap" @ref="_splitWrapper">
@@ -98,6 +105,7 @@
     private SpbDevice? _selectedDevice;
     private string? _filterText;
     private string? _selectedGroupId;
+    private SparkplugMetricViewMode _metricViewMode = SparkplugMetricViewMode.Hierarchy;
     private Timer? _updateTimer;
     private RefreshCoalescer? _refreshCoalescer;
     private volatile bool _disposed;
@@ -109,6 +117,12 @@
     private bool _boundsInstalled;
     private readonly SemaphoreSlim _renderGate = new(1, 1);
     private bool _splitSized;
+
+    private bool MetricHierarchy
+    {
+        get => _metricViewMode == SparkplugMetricViewMode.Hierarchy;
+        set => _metricViewMode = value ? SparkplugMetricViewMode.Hierarchy : SparkplugMetricViewMode.Flat;
+    }
 
     private RenderFragment _nodeList => @<SparkplugNodeList Groups="@GroupedNodes.ToList()"
                                                               SelectedNode="@_selectedNode"
@@ -122,6 +136,7 @@
                                                                 ExpandedDevice="@_selectedDevice"
                                                                 Time="@TimeDisplay"
                                                                 AllowNodeReboot="@SparkplugSettings.Sparkplug.AllowNodeReboot"
+                                                                MetricViewMode="@_metricViewMode"
                                                                 OnBack="@ClearSelection"
                                                                 OnToggleDevice="@ToggleDevice"
                                                                 OnRequestRebirth="@RequestRebirthAsync"

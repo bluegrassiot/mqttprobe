@@ -2,12 +2,34 @@ using MqttProbe.Core.Models.Sparkplug;
 
 namespace MqttProbe.UI.Components.Sparkplug;
 
-// MudTable keys rows by item, so passing fresh snapshot records would rebuild every
-// row, and the chart button inside it, on each value update. Identity is the metric
-// name; only Snapshot is replaced.
-internal sealed class SparkplugMetricRow(string name, SpbMetricSnapshot snapshot)
+internal sealed class SparkplugMetricRow(
+    string key,
+    string name,
+    string fullPath,
+    SpbMetricSnapshot? snapshot,
+    int depth,
+    bool hasChildren,
+    bool isExpanded,
+    int metricCount,
+    bool endsGroup)
 {
-    public string Name { get; } = name;
+    public string Key { get; } = key;
 
-    public SpbMetricSnapshot Snapshot { get; set; } = snapshot;
+    public string Name { get; set; } = name;
+
+    public string FullPath { get; set; } = fullPath;
+
+    public SpbMetricSnapshot? Snapshot { get; set; } = snapshot;
+
+    public int Depth { get; set; } = depth;
+
+    public bool HasChildren { get; set; } = hasChildren;
+
+    public bool IsExpanded { get; set; } = isExpanded;
+
+    public int MetricCount { get; set; } = metricCount;
+
+    public bool EndsGroup { get; set; } = endsGroup;
+
+    public bool IsMetric => Snapshot is not null;
 }

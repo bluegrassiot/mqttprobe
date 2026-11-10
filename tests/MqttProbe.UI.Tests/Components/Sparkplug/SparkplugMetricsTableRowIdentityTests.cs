@@ -36,7 +36,7 @@ public class SparkplugMetricsTableRowIdentityTests : BunitTestContext
 
         cut.Render(parameters => parameters.Add(component => component.Items, [flow]));
         cut.FindAll("tr.spb-metric-row").Should().ContainSingle()
-            .Which.QuerySelector(".spb-td-name")!.TextContent.Trim().Should().Be("Flow Rate");
+            .Which.QuerySelector(".spb-metric-label")!.TextContent.Trim().Should().Be("Flow Rate");
         cut.Instance.CachedRowCountForTest.Should().Be(1, "the dropped metric must not stay cached");
 
         cut.Render(parameters => parameters.Add(component => component.Items, [flow, pressure]));
@@ -56,7 +56,7 @@ public class SparkplugMetricsTableRowIdentityTests : BunitTestContext
         // Same count, different names: a node/device switch that shares no metric with the last one.
         cut.Render(parameters => parameters.Add(component => component.Items, [torque, speed]));
 
-        cut.FindAll("tr.spb-metric-row").Select(row => row.QuerySelector(".spb-td-name")!.TextContent.Trim())
+        cut.FindAll("tr.spb-metric-row").Select(row => row.QuerySelector(".spb-metric-label")!.TextContent.Trim())
             .Should().BeEquivalentTo(["Torque", "Speed"]);
         cut.Instance.CachedRowCountForTest.Should().Be(2,
             "replacing the whole metric set must not keep the previous rows cached");
@@ -83,7 +83,7 @@ public class SparkplugMetricsTableRowIdentityTests : BunitTestContext
     private static AngleSharp.Dom.IElement MetricCell(
         IRenderedComponent<SparkplugMetricsTable> cut, string name) =>
         cut.FindAll("tr.spb-metric-row")
-            .Single(row => row.QuerySelector(".spb-td-name")!.TextContent.Trim() == name)
+            .Single(row => row.QuerySelector(".spb-metric-label")!.TextContent.Trim() == name)
             .QuerySelector(".spb-td-value")!;
 
     private IRenderedComponent<SparkplugMetricsTable> RenderTable(params SpbMetricSnapshot[] metrics) =>

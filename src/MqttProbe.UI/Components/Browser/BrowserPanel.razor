@@ -1,8 +1,15 @@
 @using MqttProbe.Core.Services.Configuration
+@using MqttProbe.Core.Services.Sparkplug
+@using MqttProbe.UI.Components.Charts
+@using MqttProbe.UI.Components.Sparkplug
+@using Microsoft.Extensions.DependencyInjection
 @inject IMessageStoreManager MessageStoreManager
 @inject ITopicSelectionStore TopicSelectionStore
 @inject IUiSettings UiSettings
 @inject ILogger<BrowserPanel> Logger
+@inject IServiceProvider ServiceProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 @using Microsoft.Extensions.Logging
 @implements IAsyncDisposable
 
@@ -36,7 +43,8 @@
                                FirstPanelInitialSize="320" MinPanelSize="220"
                                PanelGap="6" ResetOnDoubleClick="true" Transparent="true">
                     <FirstPanel>
-                        <TopicBrowser/>
+                        <TopicBrowser TopologyService="_topology"
+                                      OnAddMetricToChart="AddMetricToChart"/>
                     </FirstPanel>
                     <SecondPanel>
                         <PayloadBrowser/>
@@ -56,7 +64,8 @@
                 </div>
             </div>
         </MudHidden>
-        <TopicPickerOverlay IsOpen="@_mobilePickerOpen" OnClose="CloseMobilePicker"/>
+        <TopicPickerOverlay IsOpen="@_mobilePickerOpen" OnClose="CloseMobilePicker"
+                            TopologyService="_topology"/>
     </ErrorBoundary>
 </div>
 </CascadingValue>
@@ -65,6 +74,7 @@
     private readonly RenderFragment<Exception> _sectionError = _ => @<SectionError />;
 
     private TopicBulkSelection _bulkSelection = null!;
+    private ISparkplugTopologyService? _topology;
     private Timer? _updateTimer;
     private bool _disposed;
     private bool _multiSelect;
@@ -76,6 +86,7 @@
 
     protected override void OnInitialized()
     {
+        _topology = ServiceProvider.GetService<ISparkplugTopologyService>();
         _bulkSelection = new TopicBulkSelection(TopicSelectionStore);
         _multiSelect = UiSettings.Ui.TopicTreeMultiSelect;
         _bulkSelection.SetMultiSelect(_multiSelect);
@@ -150,6 +161,10 @@
         await UiSettings.DismissHintAsync("browser");
         StateHasChanged();
     }
+
+    private Task AddMetricToChart(SparkplugChartSelection selection) =>
+        QuickAddToChartLauncher.ShowAsync(
+            DialogService, Snackbar, selection.Topic, selection.JsonPath, selection.SeriesName);
 
     public async ValueTask DisposeAsync()
     {

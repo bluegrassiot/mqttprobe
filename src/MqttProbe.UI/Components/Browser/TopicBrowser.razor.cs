@@ -121,23 +121,27 @@ public partial class TopicBrowser
         _rootTopicCount = frame.RootCount;
         _singleSelection = frame.Selection;
 
-        if (_multiSelect)
+        if (!ForceSingleSelect)
         {
-            var branches = frame.Selection.Branches.IsDefault
-                ? ImmutableArray<TopicBranchTarget>.Empty
-                : frame.Selection.Branches;
+            if (EffectiveMultiSelect)
+            {
+                var branches = frame.Selection.Branches.IsDefault
+                    ? ImmutableArray<TopicBranchTarget>.Empty
+                    : frame.Selection.Branches;
 
-            // The store's selection is the checked set, so an external clear empties the tree too.
-            _bulkSelection.Adopt(branches);
+                // The store's selection is the checked set, so an external clear empties the tree too.
+                _bulkSelection.Adopt(branches);
 
-            _rootBranches = TopicTreeProjection.RootTargets(frame.Roots, _groupSparkplugTopics);
-            _globalState = GlobalSelectionState();
-            _bulkSelection.CoversWholeTree = _globalState == TopicTreeSelectionState.Checked;
+                _rootBranches = TopicTreeProjection.RootTargets(frame.Roots, _groupSparkplugTopics);
+                _globalState = GlobalSelectionState();
+                _bulkSelection.CoversWholeTree = _globalState == TopicTreeSelectionState.Checked;
+            }
+            else
+            {
+                _bulkSelection.AdoptSingle(frame.Selection);
+            }
         }
-        else
-        {
-            _bulkSelection.AdoptSingle(frame.Selection);
-        }
+
         EnsureActiveRow(previousRows, previousActive);
 
         if (previousRows.Count > 0 && _visibleRows.Count == 0 && _focusedKey is not null)
@@ -403,13 +407,42 @@ public partial class TopicBrowser
 
     private async Task OnRowActivated(TopicTreeRowModel row)
     {
-        if (_multiSelect)
+        if (row.IsMetricGroup || row.IsMetricFolder)
+        {
+            await ToggleExpand(row.FullPath);
+            return;
+        }
+
+        if (row.IsMetricRow)
+        {
+            if (EffectiveMultiSelect)
+            {
+                await ToggleMetricTargets(MetricTargetsOf(row));
+                return;
+            }
+
+            await SelectMetricRow(row);
+            return;
+        }
+
+        if (EffectiveMultiSelect)
         {
             await ToggleRowSelection(row);
             return;
         }
 
         await SelectSingleTopic(row);
+    }
+
+    private Task OnCheckboxActivated(TopicTreeRowModel row)
+    {
+        if (!EffectiveMultiSelect)
+            return Task.CompletedTask;
+
+        if (row.IsMetricRow || row.IsMetricGroup)
+            return ToggleMetricTargets(MetricTargetsOf(row));
+
+        return ToggleRowSelection(row);
     }
 
     private async Task SelectSingleTopic(TopicTreeRowModel row)
@@ -425,12 +458,33 @@ public partial class TopicBrowser
             await OnSelectedChanged.InvokeAsync(selection);
     }
 
-    private TopicTreeSelectionState RowSelectionState(TopicTreeRowModel row) =>
-        _multiSelect ? SelectionStateOf(row.Branch) : SingleSelectionState(row);
+    private TopicTreeSelectionState RowSelectionState(TopicTreeRowModel row)
+    {
+        if (row.IsMetricRow || row.IsMetricGroup)
+        {
+            return EffectiveMultiSelect
+                ? MetricSelectionState(MetricTargetsOf(row))
+                : SingleSelectionState(row);
+        }
+
+        if (!EffectiveMultiSelect)
+            return SingleSelectionState(row);
+
+        return row.Branch is null ? TopicTreeSelectionState.Unchecked : SelectionStateOf(row.Branch);
+    }
 
     private TopicTreeSelectionState SingleSelectionState(TopicTreeRowModel row)
     {
         if (_singleSelection is not { } selection)
+            return TopicTreeSelectionState.Unchecked;
+
+        if (selection.Mode == TopicSelectionMode.SparkplugMetric)
+            return row.MetricName is { } name && row.Scope is { } scope
+                   && selection.Metrics.Contains(new MqttSparkplugMetricTarget(scope, name))
+                ? TopicTreeSelectionState.Checked
+                : TopicTreeSelectionState.Unchecked;
+
+        if (row.Branch is null)
             return TopicTreeSelectionState.Unchecked;
 
         if (selection.Mode == TopicSelectionMode.Branches)

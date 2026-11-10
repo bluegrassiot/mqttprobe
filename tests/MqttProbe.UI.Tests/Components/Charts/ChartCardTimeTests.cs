@@ -675,4 +675,3 @@ public class ChartCardTimeTests : BunitTestContext
         options.Grid.Padding.Right.Should().BeGreaterThan(0);
     }
 }
-

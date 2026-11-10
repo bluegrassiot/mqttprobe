@@ -33,7 +33,7 @@ internal static class TopicTreeIconLanguage
         TopicTreeRowKind.SparkplugDevice => LucideIcons.Network,
         TopicTreeRowKind.MessageType => LucideIcons.Hash,
         TopicTreeRowKind.SparkplugMetric => hasChildren ? BranchGlyph(isExpanded) : LucideIcons.Activity,
-        TopicTreeRowKind.SparkplugMetricsGroup => BranchGlyph(isExpanded),
+        TopicTreeRowKind.SparkplugMetricsGroup => LucideIcons.ChartLine,
         TopicTreeRowKind.Spelling => LeafGlyph,
         TopicTreeRowKind.Devices => BranchGlyph(isExpanded),
         _ => hasChildren ? BranchGlyph(isExpanded) : LeafGlyph

@@ -197,15 +197,31 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
             "each exposed hierarchy category has its own hue; the Devices folder shares the device hue");
     }
 
-    [TestCase(false, LucideIcons.Folder)]
-    [TestCase(true, LucideIcons.FolderOpen)]
-    public void TheMetricsGroupFollowsTheFolderRule(bool expanded, string folderGlyph)
+    [TestCase(false)]
+    [TestCase(true)]
+    public void TheMetricsGroupUsesTheChartGlyph(bool expanded)
     {
         var cut = RenderRow(Row(hasChildren: true, hasDirectMessages: false, expanded: expanded,
             kind: TopicTreeRowKind.SparkplugMetricsGroup, owner: TopicTreeOwner.Node));
 
-        GlyphShape(cut).Should().Be(TopicIconShape.OfConstant(folderGlyph),
-            "a metrics group is a container, so it uses the folder shape");
+        GlyphShape(cut).Should().Be(TopicIconShape.OfConstant(LucideIcons.ChartLine),
+            "a metrics group is a chartable collection, not an MQTT folder");
+        GlyphShape(cut).Should().NotBe(TopicIconShape.OfConstant(LucideIcons.Folder));
+        GlyphShape(cut).Should().NotBe(TopicIconShape.OfConstant(LucideIcons.FolderOpen));
+    }
+
+    [Test]
+    public void MetricLeafKeepsTheActivityGlyph()
+    {
+        var cut = RenderRow(Row(hasChildren: false, hasDirectMessages: false,
+            kind: TopicTreeRowKind.SparkplugMetric, owner: TopicTreeOwner.Node) with
+        {
+            MetricName = "Temp"
+        });
+
+        GlyphShape(cut).Should().Be(TopicIconShape.OfConstant(LucideIcons.Activity));
+        GlyphShape(cut).Should().NotBe(TopicIconShape.OfConstant(LucideIcons.ChartLine),
+            "only the metrics group takes the chart shape");
     }
 
     [TestCase(TopicTreeOwner.Node, "node")]

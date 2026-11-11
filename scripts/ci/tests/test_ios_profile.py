@@ -60,6 +60,25 @@ def make_profile(**overrides) -> dict:
     return profile
 
 
+def make_mac_profile(**overrides) -> dict:
+    profile = {
+        "Name": "MQTTProbe Mac App Store",
+        "UUID": "2b3c4d5e-0000-0000-0000-000000000000",
+        "TeamIdentifier": [TEAM],
+        "Platform": ["OSX"],
+        "ExpirationDate": NOW + timedelta(days=90),
+        "DeveloperCertificates": [CERT_DER],
+        "Entitlements": {
+            "com.apple.application-identifier": APP_ID,
+            "com.apple.developer.team-identifier": TEAM,
+            "com.apple.security.app-sandbox": True,
+            "get-task-allow": False,
+        },
+    }
+    profile.update(overrides)
+    return profile
+
+
 class ProfileFixture(unittest.TestCase):
     def write(self, profile) -> Path:
         directory = tempfile.mkdtemp()
@@ -155,6 +174,14 @@ class DistributionTypeTests(ProfileFixture):
 
     def test_rejects_development_profile(self):
         profile = make_profile(Entitlements={"get-task-allow": True})
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(profile)
+        self.assertIn("Development", str(raised.exception))
+
+    def test_rejects_macos_debug_entitlement_variant(self):
+        profile = make_profile(
+            Entitlements={"com.apple.security.get-task-allow": True}
+        )
         with self.assertRaises(ios_profile.ProfileError) as raised:
             self.check(profile)
         self.assertIn("Development", str(raised.exception))
@@ -257,6 +284,105 @@ class PlatformTests(ProfileFixture):
         with self.assertRaises(ios_profile.ProfileError) as raised:
             self.check(make_profile(Platform=["macOS"]))
         self.assertIn("macOS", str(raised.exception))
+
+
+class MacAppStoreProfileTests(ProfileFixture):
+    def test_accepts_osx_profile_with_mac_entitlement(self):
+        values = self.check(
+            make_mac_profile(),
+            platform="macos",
+            expected_name="MQTTProbe Mac App Store",
+            certificate_sha256=CERT_SHA256,
+        )
+        self.assertEqual(values["app_id"], APP_ID)
+        self.assertEqual(values["name"], "MQTTProbe Mac App Store")
+
+    def test_accepts_catalyst_platform_value(self):
+        self.assertIn(
+            "expires",
+            self.check(make_mac_profile(Platform=["Catalyst"]), platform="macos"),
+        )
+
+    def test_accepts_standard_application_identifier_fallback(self):
+        profile = make_mac_profile(
+            Entitlements={
+                "application-identifier": APP_ID,
+                "get-task-allow": False,
+            }
+        )
+        self.assertIn("expires", self.check(profile, platform="macos"))
+
+    def test_rejects_ios_profile_for_macos(self):
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(make_profile(), platform="macos")
+        self.assertIn("OSX", str(raised.exception))
+
+    def test_rejects_macos_profile_for_ios_by_default(self):
+        with self.assertRaises(ios_profile.ProfileError):
+            self.check(make_mac_profile())
+
+    def test_rejects_mac_profile_without_application_identifier(self):
+        profile = make_mac_profile(Entitlements={"get-task-allow": False})
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(profile, platform="macos")
+        self.assertIn("com.apple.application-identifier", str(raised.exception))
+
+    def test_rejects_development_mac_profile(self):
+        profile = make_mac_profile(
+            Entitlements={
+                "com.apple.application-identifier": APP_ID,
+                "get-task-allow": True,
+            }
+        )
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(profile, platform="macos")
+        self.assertIn("Development", str(raised.exception))
+
+    def test_rejects_mac_debug_entitlement_variant(self):
+        profile = make_mac_profile(
+            Entitlements={
+                "com.apple.application-identifier": APP_ID,
+                "com.apple.security.get-task-allow": True,
+            }
+        )
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(profile, platform="macos")
+        self.assertIn("com.apple.security.get-task-allow", str(raised.exception))
+
+    def test_rejects_non_boolean_debug_entitlements(self):
+        for key in ("get-task-allow", "com.apple.security.get-task-allow"):
+            for value in ("true", 1, 0, []):
+                with self.subTest(key=key, value=value):
+                    profile = make_mac_profile(
+                        Entitlements={
+                            "com.apple.application-identifier": APP_ID,
+                            key: value,
+                        }
+                    )
+                    with self.assertRaises(ios_profile.ProfileError):
+                        self.check(profile, platform="macos")
+
+    def test_rejects_conflicting_application_identifier_entitlements(self):
+        profile = make_mac_profile(
+            Entitlements={
+                "com.apple.application-identifier": APP_ID,
+                "application-identifier": f"{TEAM}.com.example.other",
+                "get-task-allow": False,
+            }
+        )
+        with self.assertRaises(ios_profile.ProfileError) as raised:
+            self.check(profile, platform="macos")
+        self.assertIn("conflicting", str(raised.exception))
+
+    def test_accepts_matching_application_identifier_entitlements(self):
+        profile = make_mac_profile(
+            Entitlements={
+                "com.apple.application-identifier": APP_ID,
+                "application-identifier": APP_ID,
+                "get-task-allow": False,
+            }
+        )
+        self.assertIn("expires", self.check(profile, platform="macos"))
 
 
 class ExpiryTests(ProfileFixture):

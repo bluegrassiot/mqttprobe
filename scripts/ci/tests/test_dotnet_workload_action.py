@@ -19,9 +19,14 @@ CALLERS = {
     "ci.yml": (("build-maui-windows", "maui-windows"), ("build-maui-android", "maui-android")),
     "release.yml": (("build-maui-windows", "maui-windows"), ("build-maui-android", "maui-android")),
     "build-macos.yml": (("build-maui-macos", "maui-maccatalyst"),),
+    "build-macos-app-store.yml": (("build-macos-app-store", "maui-maccatalyst"),),
     "build-ios.yml": (("build-ios-archive", "maui-ios"),),
 }
-APPLE_JOBS = (("build-macos.yml", "build-maui-macos"), ("build-ios.yml", "build-ios-archive"))
+APPLE_JOBS = (
+    ("build-macos.yml", "build-maui-macos"),
+    ("build-macos-app-store.yml", "build-macos-app-store"),
+    ("build-ios.yml", "build-ios-archive"),
+)
 
 POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
 
@@ -233,7 +238,7 @@ class WorkflowIntegrationTests(unittest.TestCase):
                     self.assertGreaterEqual(shared, 0, "job runs dotnet without the shared setup action")
                     self.assertLess(shared, commands[0].start())
                 checked += 1
-        self.assertEqual(checked, 13)
+        self.assertEqual(checked, 14)
 
     def test_sdk_only_jobs_use_shared_setup_without_a_workload(self):
         for filename, job in SDK_ONLY_JOBS:
@@ -255,7 +260,7 @@ class WorkflowIntegrationTests(unittest.TestCase):
                     self.assertNotIn("xcode-version:", section)
                     self.assertNotIn("dotnet workload list", section)
                 count += 1
-        self.assertEqual(count, 6)
+        self.assertEqual(count, 7)
 
     def test_apple_jobs_use_shared_xcode_action(self):
         pin = xcode_version_pin()

@@ -4,10 +4,12 @@
 Apple distinguishes the distribution channels by profile keys: App Store has no
 ProvisionedDevices, no ProvisionsAllDevices, and get-task-allow false; Ad Hoc has
 ProvisionedDevices; Development has get-task-allow true; Enterprise has
-ProvisionsAllDevices. The Platform list must also cover iOS, or a tvOS, watchOS
-or macOS profile for the same team and bundle id signs nothing useful. Only App
+ProvisionsAllDevices. The Platform list must also cover the requested platform,
+or a tvOS, watchOS or macOS profile for the same team and bundle id signs
+nothing useful. Only App
 Store is accepted here, and every check fails closed, since a wrong profile
-surfaces as an upload rejection rather than a build failure.
+surfaces as an upload rejection rather than a build failure. The default
+platform is iOS; Mac App Store profiles use macOS rules.
 
 Read with plistlib rather than a shell reader: the expiry is a plist <date> and
 the device list is a real array, so comparing them as text is how an expired
@@ -27,6 +29,16 @@ from pathlib import Path
 
 class ProfileError(ValueError):
     pass
+
+
+_PLATFORM_RULES = {
+    "ios": ("iOS", ("iOS",), ("application-identifier",)),
+    "macos": (
+        "OSX/Catalyst",
+        ("OSX", "Catalyst"),
+        ("com.apple.application-identifier", "application-identifier"),
+    ),
+}
 
 
 def _load(path: Path) -> dict:
@@ -53,6 +65,17 @@ def _is_disabled(value: object) -> bool:
     return value is None or value is False
 
 
+_DEBUG_ENTITLEMENT_KEYS = ("get-task-allow", "com.apple.security.get-task-allow")
+
+
+def _enabled_debug_entitlements(entitlements: dict) -> list[str]:
+    return [
+        key
+        for key in _DEBUG_ENTITLEMENT_KEYS
+        if key in entitlements and entitlements[key] is not False
+    ]
+
+
 def check(
     path: Path,
     team: str,
@@ -60,7 +83,12 @@ def check(
     expected_name: str | None = None,
     certificate_sha256: str | None = None,
     now: datetime | None = None,
+    platform: str = "ios",
 ) -> dict[str, str]:
+    try:
+        platform_label, profile_platforms, app_id_keys = _PLATFORM_RULES[platform]
+    except KeyError as error:
+        raise ProfileError(f"Unknown profile platform '{platform}'.") from error
     profile = _load(path)
     entitlements = _entitlements(profile)
 
@@ -70,7 +98,7 @@ def check(
     if expected_name is not None and name != expected_name:
         raise ProfileError(
             f"Profile name is '{name}', but the workflow expects '{expected_name}'. "
-            "Correct IOS_PROVISION_PROFILE_NAME in the workflow, or supply the "
+            "Correct the profile name expected by the workflow, or supply the "
             "profile you actually intend to sign with."
         )
 
@@ -81,33 +109,58 @@ def check(
         raise ProfileError(f"Profile team '{teams[0]}' does not match the expected team '{team}'.")
 
     expected_app_id = f"{team}.{bundle_id}"
-    app_id = entitlements.get("application-identifier")
+    app_id_values = [
+        entitlements[key]
+        for key in app_id_keys
+        if key in entitlements and entitlements[key] is not None
+    ]
+    if len(app_id_values) > 1 and any(
+        value != app_id_values[0] for value in app_id_values[1:]
+    ):
+        raise ProfileError(
+            "Profile has conflicting application-identifier entitlements; "
+            "refusing to guess which one the profile grants."
+        )
+    app_id = app_id_values[0] if app_id_values else None
+    if app_id is None:
+        raise ProfileError(
+            "Profile has no " + " or ".join(app_id_keys) + " entitlement for this app id."
+        )
+    if not isinstance(app_id, str) or not app_id:
+        raise ProfileError("Profile application-identifier is not a non-empty string.")
     if app_id != expected_app_id:
         raise ProfileError(
             f"Profile covers '{app_id}', not '{expected_app_id}'. An App Store profile must "
             "name this bundle id exactly; a wildcard profile is rejected."
         )
 
-    platform = profile.get("Platform")
-    if not isinstance(platform, list) or not platform:
+    profile_platform_values = profile.get("Platform")
+    if not isinstance(profile_platform_values, list) or not profile_platform_values:
         raise ProfileError(
-            "Profile has no Platform list naming the platforms it covers. An App Store iOS "
-            "profile declares Platform ['iOS']; App Store Connect rejects the upload otherwise."
+            "Profile has no Platform list naming the platforms it covers. An App Store "
+            f"{platform_label} profile declares Platform {list(profile_platforms)}; "
+            "App Store Connect rejects the upload otherwise."
         )
-    if not all(isinstance(entry, str) and entry for entry in platform):
+    if not all(isinstance(entry, str) and entry for entry in profile_platform_values):
         raise ProfileError(
             "Profile Platform must be a list of platform names; it contains a non-string or "
             "empty entry."
         )
-    if "iOS" not in platform:
+    if not any(
+        entry in profile_platform_values for entry in profile_platforms
+    ):
         raise ProfileError(
-            f"Profile covers platform(s) {', '.join(platform)}, not iOS. A tvOS, watchOS or "
-            "macOS App Store profile cannot sign an iOS app; App Store Connect rejects the upload."
+            f"Profile covers platform(s) {', '.join(profile_platform_values)}, not "
+            f"{platform_label}. A profile for another platform cannot sign this app; "
+            "App Store Connect rejects the upload."
         )
 
-    if not _is_disabled(entitlements.get("get-task-allow")):
+    enabled_debug = _enabled_debug_entitlements(entitlements)
+    if enabled_debug:
         raise ProfileError(
-            "Profile allows debugging (get-task-allow is true), so it is a Development profile."
+            "Profile allows debugging ("
+            + ", ".join(enabled_debug)
+            + " is not false), so it is a Development profile."
         )
     if not _is_disabled(profile.get("ProvisionsAllDevices")):
         raise ProfileError(
@@ -183,6 +236,12 @@ def main(argv: list[str] | None = None) -> int:
         help="SHA-256 hex digest of the DER bytes of the signing certificate the build "
         "was configured to use",
     )
+    parser.add_argument(
+        "--platform",
+        choices=tuple(sorted(_PLATFORM_RULES)),
+        default="ios",
+        help="Provisioning profile platform rules to apply (default: ios)",
+    )
     parser.add_argument("--github-output", help="Append the profile identity to this file")
     args = parser.parse_args(argv)
 
@@ -193,6 +252,7 @@ def main(argv: list[str] | None = None) -> int:
             bundle_id=args.bundle_id,
             expected_name=args.name,
             certificate_sha256=args.certificate_sha256,
+            platform=args.platform,
         )
     except ProfileError as error:
         print(f"::error::{error}", file=sys.stderr)

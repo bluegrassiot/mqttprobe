@@ -1,0 +1,44 @@
+name: TestFlight (manual)
+
+# Manual pre-release upload for both Apple targets from main. It needs no tag
+# and creates no GitHub release; production releases stay in release.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to upload, e.g. v1.2.3; no tag is required'
+        required: true
+        type: string
+      build_number:
+        description: 'Build number, a whole number 1-9999, higher than any build already uploaded for this version'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight-${{ inputs.version }}-${{ inputs.build_number }}
+  cancel-in-progress: false
+
+jobs:
+  ios:
+    name: Build and upload (iOS)
+    uses: ./.github/workflows/build-ios.yml
+    permissions:
+      contents: read
+    with:
+      version: ${{ inputs.version }}
+      build_number: ${{ inputs.build_number }}
+    secrets: inherit
+
+  macos:
+    name: Build and upload (Mac Catalyst)
+    uses: ./.github/workflows/build-macos-app-store.yml
+    permissions:
+      contents: read
+    with:
+      version: ${{ inputs.version }}
+      build_number: ${{ inputs.build_number }}
+    secrets: inherit

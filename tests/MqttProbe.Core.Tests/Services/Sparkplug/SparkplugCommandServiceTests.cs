@@ -129,7 +129,7 @@ public class SparkplugCommandServiceTests
         await _mockClient.Received(1).EnqueueAsync(
             Arg.Is<MqttApplicationMessage>(m =>
                 m!.Topic == "spBv1.0/g/NCMD/n"
-                && m.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce));
+                && m.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtMostOnce));
     }
 
     [Test]
@@ -212,7 +212,7 @@ public class SparkplugCommandServiceTests
         await _mockClient.Received(1).EnqueueAsync(
             Arg.Is<MqttApplicationMessage>(m =>
                 m!.Topic == "spBv1.0/g/DCMD/n/d1"
-                && m.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce));
+                && m.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtMostOnce));
     }
 
     [Test]
@@ -271,7 +271,7 @@ public class SparkplugCommandServiceTests
         await _mockClient.Received(1).EnqueueAsync(
             Arg.Is<MqttApplicationMessage>(m =>
                 m!.Topic == "spBv1.0/g/NCMD/n"
-                && m.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtLeastOnce));
+                && m.QualityOfServiceLevel == MqttQualityOfServiceLevel.AtMostOnce));
     }
 
     [Test]

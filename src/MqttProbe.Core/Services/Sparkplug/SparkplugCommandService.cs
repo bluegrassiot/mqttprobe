@@ -57,7 +57,8 @@ public sealed class SparkplugCommandService(
             node.LastRebirthRequestAt = _timeProvider.GetUtcNow().UtcDateTime;
         }
 
-        return await PublishNcmdAsync(groupId, nodeId, "Node Control/Rebirth", "rebirth");
+        return await PublishCommandAsync(
+            groupId, nodeId, null, TriggerMetric(SparkplugControlMetrics.NodeRebirth), "rebirth");
     }
 
     public async Task<SparkplugCommandResult> RequestDeviceRebirthAsync(string groupId, string nodeId, string deviceId)
@@ -69,7 +70,8 @@ public sealed class SparkplugCommandService(
         if (!node.Devices.ContainsKey(deviceId))
             return SparkplugCommandResult.TargetNotFound;
 
-        return await PublishDcmdAsync(groupId, nodeId, deviceId, "Device Control/Rebirth", "device rebirth");
+        return await PublishCommandAsync(
+            groupId, nodeId, deviceId, TriggerMetric(SparkplugControlMetrics.DeviceRebirth), "device rebirth");
     }
 
     public async Task<SparkplugCommandResult> RequestNodeRebootAsync(string groupId, string nodeId)
@@ -82,7 +84,8 @@ public sealed class SparkplugCommandService(
         if (!group.Nodes.TryGetValue(nodeId, out _))
             return SparkplugCommandResult.TargetNotFound;
 
-        return await PublishNcmdAsync(groupId, nodeId, "Node Control/Reboot", "node reboot");
+        return await PublishCommandAsync(
+            groupId, nodeId, null, TriggerMetric(SparkplugControlMetrics.NodeReboot), "node reboot");
     }
 
     public async Task RequestNodeRebirthIfNeededAsync(
@@ -113,10 +116,11 @@ public sealed class SparkplugCommandService(
                 out var isSequenceFault, out var episodeId))
             return;
 
-        var result = await PublishNcmdAsync(
+        var result = await PublishCommandAsync(
             groupId,
             nodeId,
-            "Node Control/Rebirth",
+            null,
+            TriggerMetric(SparkplugControlMetrics.NodeRebirth),
             "rebirth",
             isSequenceFault,
             isSequenceFault ? () => IsCurrentSequenceFault(
@@ -182,10 +186,14 @@ public sealed class SparkplugCommandService(
         }
     }
 
-    private async Task<SparkplugCommandResult> PublishNcmdAsync(
+    private static Payload.Types.Metric TriggerMetric(string metricName) =>
+        new() { Name = metricName, Datatype = 11, BooleanValue = true };
+
+    private async Task<SparkplugCommandResult> PublishCommandAsync(
         string groupId,
         string nodeId,
-        string metricName,
+        string? deviceId,
+        Payload.Types.Metric metric,
         string label,
         bool requireConnected = false,
         Func<bool>? canDispatch = null,
@@ -195,20 +203,21 @@ public sealed class SparkplugCommandService(
     {
         var payload = new Payload
         {
-            Timestamp = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            Timestamp = (ulong)_timeProvider.GetUtcNow().ToUnixTimeMilliseconds()
         };
-        payload.Metrics.Add(new Payload.Types.Metric
-        {
-            Name = metricName,
-            Datatype = 11,
-            BooleanValue = true
-        });
+        payload.Metrics.Add(metric);
 
-        var topic = $"spBv1.0/{groupId}/NCMD/{nodeId}";
+        var target = deviceId is null ? $"{groupId}/{nodeId}" : $"{groupId}/{nodeId}/{deviceId}";
+        var topic = deviceId is null
+            ? $"spBv1.0/{groupId}/NCMD/{nodeId}"
+            : $"spBv1.0/{groupId}/DCMD/{nodeId}/{deviceId}";
+
+        // Sparkplug commands are QoS 0, not retained, and carry no seq.
         var message = new MqttApplicationMessageBuilder()
             .WithTopic(topic)
             .WithPayload(payload.ToByteArray())
-            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtMostOnce)
+            .WithRetainFlag(false)
             .Build();
 
         try
@@ -222,12 +231,12 @@ public sealed class SparkplugCommandService(
             if (!published)
                 return SparkplugCommandResult.Failed;
             if (logger.IsEnabled(LogLevel.Information))
-                logger.LogInformation("Requested {Label} for node {GroupId}/{NodeId}", label, groupId, nodeId);
+                logger.LogInformation("Requested {Label} for {Target}", label, target);
             return SparkplugCommandResult.Published;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to request {Label} for node {GroupId}/{NodeId}", label, groupId, nodeId);
+            logger.LogWarning(ex, "Failed to request {Label} for {Target}", label, target);
             return SparkplugCommandResult.Failed;
         }
     }
@@ -258,40 +267,5 @@ public sealed class SparkplugCommandService(
     {
         await client.EnqueueAsync(message, cancellationToken).ConfigureAwait(false);
         return true;
-    }
-
-    private async Task<SparkplugCommandResult> PublishDcmdAsync(
-        string groupId, string nodeId, string deviceId, string metricName, string label)
-    {
-        var payload = new Payload
-        {
-            Timestamp = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        };
-        payload.Metrics.Add(new Payload.Types.Metric
-        {
-            Name = metricName,
-            Datatype = 11,
-            BooleanValue = true
-        });
-
-        var topic = $"spBv1.0/{groupId}/DCMD/{nodeId}/{deviceId}";
-        var message = new MqttApplicationMessageBuilder()
-            .WithTopic(topic)
-            .WithPayload(payload.ToByteArray())
-            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
-            .Build();
-
-        try
-        {
-            await client.EnqueueAsync(message);
-            if (logger.IsEnabled(LogLevel.Information))
-                logger.LogInformation("Requested {Label} for device {GroupId}/{NodeId}/{DeviceId}", label, groupId, nodeId, deviceId);
-            return SparkplugCommandResult.Published;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to request {Label} for device {GroupId}/{NodeId}/{DeviceId}", label, groupId, nodeId, deviceId);
-            return SparkplugCommandResult.Failed;
-        }
     }
 }

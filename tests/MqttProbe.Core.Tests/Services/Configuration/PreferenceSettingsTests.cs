@@ -116,6 +116,23 @@ public class PreferenceSettingsTests
     }
 
     [Test]
+    public async Task SetAllowMetricWritesAsync_PersistsAndRaisesSparkplugSettingsChanged()
+    {
+        var fired = false;
+        _preferences.SparkplugSettingsChanged += () => fired = true;
+        _document.Config.Sparkplug!.AllowMetricWrites.Should().BeFalse("metric writes ship off");
+
+        await _preferences.SetAllowMetricWritesAsync(true);
+
+        fired.Should().BeTrue();
+
+        using var reloaded = new SettingsDocument(_configPath);
+        await new SettingsLoader(reloaded, new ConnectionSecrets(null, null), false, null).LoadAsync();
+        reloaded.Config.Sparkplug!.AllowMetricWrites.Should().BeTrue();
+        reloaded.Config.Sparkplug.AllowNodeReboot.Should().BeFalse();
+    }
+
+    [Test]
     public async Task SetEnrichAliasNamesAsync_PersistsAndRaisesSparkplugSettingsChanged()
     {
         var fired = false;

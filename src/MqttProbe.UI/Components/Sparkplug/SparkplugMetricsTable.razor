@@ -30,7 +30,7 @@
         <MudTh Class="spb-th-alias spb-th-right">Alias</MudTh>
         <MudTh Class="spb-th-right">Value</MudTh>
         <MudTh Class="spb-th-updated">Updated</MudTh>
-        <MudTh>Chart</MudTh>
+        <MudTh>Actions</MudTh>
     </HeaderContent>
     <RowTemplate>
         @{
@@ -92,12 +92,33 @@
             }
         </MudTd>
         <MudTd Class="spb-td-chart">
-            @if (context.IsMetric && context.Snapshot is { } metric
-                 && OnAddToChart.HasDelegate && SparkplugChartTargets.IsChartable(metric))
+            @if (context.Snapshot is { } metric)
             {
-                <AddToChartButton JsonPath="@SparkplugChartTargets.JsonPath(context.FullPath)"
-                                  SeriesName="@context.FullPath"
-                                  OnAddToChart="@(selection => AddToChart(context, selection))" />
+                <div class="spb-metric-actions">
+                    @if (OnAddToChart.HasDelegate && SparkplugChartTargets.IsChartable(metric))
+                    {
+                        <AddToChartButton JsonPath="@SparkplugChartTargets.JsonPath(context.FullPath)"
+                                          SeriesName="@context.FullPath"
+                                          OnAddToChart="@(selection => AddToChart(context, selection))" />
+                    }
+                    @if (OnWriteMetric.HasDelegate && IsWritable(metric))
+                    {
+                        <span class="spb-write-wrap"
+                              title="@(AllowMetricWrites ? null : "Enable Allow metric writes in Settings, Sparkplug")">
+                            <button type="button" class="spb-write-btn"
+                                    title="@(AllowMetricWrites ? "Write metric" : null)"
+                                    aria-label="Write metric @metric.Name"
+                                    disabled="@(!AllowMetricWrites)"
+                                    @onclick="() => OnWriteMetric.InvokeAsync(metric)"
+                                    @onclick:stopPropagation="true">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                     aria-hidden="true" focusable="false">
+                                    @((MarkupString)LucideIcons.Pencil)
+                                </svg>
+                            </button>
+                        </span>
+                    }
+                </div>
             }
         </MudTd>
     </RowTemplate>
@@ -129,6 +150,12 @@
 
     [Parameter]
     public EventCallback<SparkplugChartSelection> OnAddToChart { get; set; }
+
+    [Parameter]
+    public bool AllowMetricWrites { get; set; }
+
+    [Parameter]
+    public EventCallback<SpbMetricSnapshot> OnWriteMetric { get; set; }
 
     protected override void OnParametersSet()
     {
@@ -264,6 +291,10 @@
 
     private static string AliasText(SpbMetricSnapshot? snapshot) =>
         snapshot is null ? string.Empty : snapshot.Alias?.ToString() ?? "\u2014";
+
+    private static bool IsWritable(SpbMetricSnapshot metric) =>
+        SparkplugMetricValueEncoder.IsWritable(metric.DataType)
+        && !SparkplugControlMetrics.IsControlMetric(metric.Name);
 
     private Task AddToChart(SparkplugMetricRow row, ChartFieldSelection selection) =>
         OnAddToChart.InvokeAsync(new SparkplugChartSelection(

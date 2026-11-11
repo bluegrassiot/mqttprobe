@@ -14,7 +14,8 @@ public enum SparkplugCommandResult
     Published,
     TargetNotFound,
     NotAllowed,
-    Failed
+    Failed,
+    InvalidValue
 }
 
 public interface ISparkplugCommandService
@@ -22,6 +23,15 @@ public interface ISparkplugCommandService
     public Task<SparkplugCommandResult> RequestNodeRebirthAsync(string groupId, string nodeId);
     public Task<SparkplugCommandResult> RequestDeviceRebirthAsync(string groupId, string nodeId, string deviceId);
     public Task<SparkplugCommandResult> RequestNodeRebootAsync(string groupId, string nodeId);
+    public Task<SparkplugCommandResult> WriteNodeMetricAsync(
+        string groupId, string nodeId, string metricName, string value, CancellationToken cancellationToken = default);
+    public Task<SparkplugCommandResult> WriteDeviceMetricAsync(
+        string groupId,
+        string nodeId,
+        string deviceId,
+        string metricName,
+        string value,
+        CancellationToken cancellationToken = default);
     public Task RequestNodeRebirthIfNeededAsync(
         string groupId,
         string nodeId,
@@ -86,6 +96,47 @@ public sealed class SparkplugCommandService(
 
         return await PublishCommandAsync(
             groupId, nodeId, null, TriggerMetric(SparkplugControlMetrics.NodeReboot), "node reboot");
+    }
+
+    public Task<SparkplugCommandResult> WriteNodeMetricAsync(
+        string groupId, string nodeId, string metricName, string value, CancellationToken cancellationToken = default) =>
+        WriteMetricAsync(groupId, nodeId, null, metricName, value, cancellationToken);
+
+    public Task<SparkplugCommandResult> WriteDeviceMetricAsync(
+        string groupId,
+        string nodeId,
+        string deviceId,
+        string metricName,
+        string value,
+        CancellationToken cancellationToken = default) =>
+        WriteMetricAsync(groupId, nodeId, deviceId, metricName, value, cancellationToken);
+
+    private async Task<SparkplugCommandResult> WriteMetricAsync(
+        string groupId,
+        string nodeId,
+        string? deviceId,
+        string metricName,
+        string value,
+        CancellationToken cancellationToken)
+    {
+        // Control metrics keep their own permissions and confirmations; the generic write must not bypass them.
+        if (!sparkplugSettings.Sparkplug.AllowMetricWrites || SparkplugControlMetrics.IsControlMetric(metricName))
+            return SparkplugCommandResult.NotAllowed;
+
+        if (!topologyService.Groups.TryGetValue(groupId, out var group)
+            || !group.Nodes.TryGetValue(nodeId, out var node)
+            || (deviceId is not null && !node.Devices.ContainsKey(deviceId))
+            || topologyService.ResolveAdvertisedDatatype(groupId, nodeId, deviceId, metricName) is not { } datatype)
+            return SparkplugCommandResult.TargetNotFound;
+
+        if (!SparkplugMetricValueEncoder.TryEncode(
+                SparkplugMetricValueConverter.LabelForDatatype(datatype), value, out var metric, out _))
+            return SparkplugCommandResult.InvalidValue;
+
+        metric.Name = metricName;
+        return await PublishCommandAsync(
+            groupId, nodeId, deviceId, metric, "metric write",
+            requireConnected: true, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     public async Task RequestNodeRebirthIfNeededAsync(

@@ -136,13 +136,15 @@
                                                                 ExpandedDevice="@_selectedDevice"
                                                                 Time="@TimeDisplay"
                                                                 AllowNodeReboot="@SparkplugSettings.Sparkplug.AllowNodeReboot"
+                                                                AllowMetricWrites="@SparkplugSettings.Sparkplug.AllowMetricWrites"
                                                                 MetricViewMode="@_metricViewMode"
                                                                 OnBack="@ClearSelection"
                                                                 OnToggleDevice="@ToggleDevice"
                                                                 OnRequestRebirth="@RequestRebirthAsync"
                                                                 OnRequestReboot="@RequestRebootAsync"
                                                                 OnRequestDeviceRebirth="@RequestDeviceRebirthAsync"
-                                                                OnAddMetricToChart="@AddMetricToChartAsync" />;
+                                                                OnAddMetricToChart="@AddMetricToChartAsync"
+                                                                OnWriteMetric="@WriteMetricAsync" />;
 
     private int TotalNodeCount =>
         TopologyService.Groups.Values.Sum(g => g.Nodes.Count);

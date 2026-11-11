@@ -29,7 +29,7 @@ Connect to any broker, browse/filter live topics, inspect payloads, chart payloa
   - Base64-encoded text
   - Binary, displayed as a hex dump
 - Extensible with plugins (payload formats, protobuf schemas)
-- Sparkplug B dashboard (with rebirth/reboot commands)
+- Sparkplug B dashboard (with rebirth/reboot commands and metric writes over NCMD/DCMD)
 - Sparkplug B EoN node and MQTT emulators
 - Live charts from payload fields/SpB metrics
 - Topic exclusions to ignore noisy topics

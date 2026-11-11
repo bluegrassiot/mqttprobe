@@ -16,7 +16,8 @@ public sealed record SpbSequenceDiagnostics
     public DateTime? ReorderDeadlineUtc { get; init; }
 }
 
-public sealed record SpbMetricSnapshot(string Name, string DataType, string Value, DateTime LastUpdated, ulong? Alias = null);
+public sealed record SpbMetricSnapshot(
+    string Name, string DataType, string Value, DateTime LastUpdated, ulong? Alias = null, string? EditValue = null);
 
 public sealed class SpbDevice
 {

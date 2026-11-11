@@ -233,6 +233,34 @@ public class SparkplugTopologySignedMetricTests
         AssertMetric(BirthMetrics(payload), "Timestamp", "datetime", "1714050000000");
     }
 
+    [Test]
+    public void Extract_NBirth_FloatingPoint_KeepsUnroundedEditValue()
+    {
+        var payload = PayloadWith(
+            new Payload.Types.Metric { Name = "Float", Datatype = 9, FloatValue = 0.123456789f },
+            new Payload.Types.Metric { Name = "Double", Datatype = 10, DoubleValue = 1.2345678901234567 },
+            new Payload.Types.Metric { Name = "Int", Datatype = 3, IntValue = 7 });
+
+        var metrics = BirthMetrics(payload);
+
+        AssertMetric(metrics, "Float", "float", "0.1235");
+        AssertMetric(metrics, "Double", "double", "1.2346");
+        metrics.Single(metric => metric.Name == "Float").EditValue.Should().Be("0.12345679");
+        metrics.Single(metric => metric.Name == "Double").EditValue.Should().Be("1.2345678901234567");
+        metrics.Single(metric => metric.Name == "Int").EditValue.Should().BeNull();
+    }
+
+    [Test]
+    public async Task ApplyBirth_CarriesEditValueIntoTopology()
+    {
+        await ApplyBirth(
+            "spBv1.0/g/NBIRTH/n",
+            new Payload.Types.Metric { Name = "Double", Datatype = 10, DoubleValue = 1.2345678901234567 });
+
+        _service.Groups["g"].Nodes["n"].Metrics.Should().ContainSingle()
+            .Which.EditValue.Should().Be("1.2345678901234567");
+    }
+
     private async Task ApplyBirth(string topic, params Payload.Types.Metric[] metrics) =>
         await _service.ApplyTopologyEventsAsync(_extractor.Extract(Envelope(topic, metrics)));
 

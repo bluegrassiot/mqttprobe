@@ -5,7 +5,7 @@
 .spb-col-alias { width: 44px; }
 .spb-col-value { width: 18%; }
 .spb-col-updated { width: 136px; }
-.spb-col-chart { width: 84px; }
+.spb-col-chart { width: 118px; }
 
 .spb-time-value {
     font-variant-numeric: tabular-nums;
@@ -16,6 +16,46 @@
 
 .spb-metric-table {
     min-width: 0;
+}
+
+.spb-metric-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.spb-write-wrap {
+    display: inline-flex;
+}
+
+.spb-write-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 5px;
+    border: 1px solid var(--mud-palette-primary);
+    border-radius: 3px;
+    background: none;
+    color: var(--mud-palette-primary);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.spb-write-btn:hover:not(:disabled) {
+    opacity: 1;
+    background: var(--mud-palette-primary-hover);
+}
+
+.spb-write-btn:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 1px;
+    opacity: 1;
+}
+
+.spb-write-btn:disabled {
+    border-color: var(--mud-palette-text-disabled);
+    color: var(--mud-palette-text-disabled);
+    cursor: not-allowed;
 }
 
 .spb-metric-table ::deep .mud-table-root > .mud-table-body > .spb-metric-row--group-end > .mud-table-cell {

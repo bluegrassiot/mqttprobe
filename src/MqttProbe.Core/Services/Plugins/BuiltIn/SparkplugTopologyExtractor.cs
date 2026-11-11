@@ -162,7 +162,8 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
                 Name = metric.Name,
                 DataType = dataType,
                 Value = value,
-                Alias = metric.Alias != 0 ? metric.Alias : null
+                Alias = metric.Alias != 0 ? metric.Alias : null,
+                EditValue = ExtractEditValue(metric)
             });
         }
 
@@ -325,6 +326,13 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
 
         return (value, dataType);
     }
+
+    private static string? ExtractEditValue(Payload.Types.Metric metric) => metric.ValueCase switch
+    {
+        Payload.Types.Metric.ValueOneofCase.FloatValue => metric.FloatValue.ToString("R", CultureInfo.InvariantCulture),
+        Payload.Types.Metric.ValueOneofCase.DoubleValue => metric.DoubleValue.ToString("R", CultureInfo.InvariantCulture),
+        _ => null
+    };
 
     private static string? FormatIntegerValue(Payload.Types.Metric metric, uint datatype)
     {

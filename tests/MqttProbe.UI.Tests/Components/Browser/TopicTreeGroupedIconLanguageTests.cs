@@ -59,6 +59,8 @@ public sealed class TopicTreeGroupedIconLanguageTests : BunitTestContext
         var cut = Render<TopicBrowser>();
         EnsureMudProviders();
         cut.FindAll(".mud-toolbar button")[0].Click();
+        cut.WaitForAssertion(() =>
+            cut.FindAll(".topic-tree-row[aria-expanded='true']").Should().NotBeEmpty());
 
         return cut;
     }
@@ -74,14 +76,19 @@ public sealed class TopicTreeGroupedIconLanguageTests : BunitTestContext
 
     private static IElement RowWithLabel(IRenderedComponent<TopicBrowser> cut, string label)
     {
-        var rows = cut.FindAll(".topic-tree-row")
-            .Where(row => row.QuerySelector(".topic-name")?.TextContent.Trim() == label)
-            .ToList();
-        var labels = cut.FindAll(".topic-tree-row .topic-name")
-            .Select(name => name.TextContent.Trim());
-        rows.Should().ContainSingle("the rendered tree should contain {0}; labels: {1}",
-            label, string.Join(" | ", labels));
-        return rows[0];
+        cut.WaitForAssertion(() =>
+        {
+            var rows = cut.FindAll(".topic-tree-row")
+                .Where(row => row.QuerySelector(".topic-name")?.TextContent.Trim() == label)
+                .ToList();
+            var labels = cut.FindAll(".topic-tree-row .topic-name")
+                .Select(name => name.TextContent.Trim());
+            rows.Should().ContainSingle("the rendered tree should contain {0}; labels: {1}",
+                label, string.Join(" | ", labels));
+        });
+
+        return cut.FindAll(".topic-tree-row")
+            .Single(row => row.QuerySelector(".topic-name")?.TextContent.Trim() == label);
     }
 
     private static IElement RowIcon(IRenderedComponent<TopicBrowser> cut, string label) =>

@@ -89,13 +89,16 @@ public sealed class TopicBrowserMetricSelectionTests : BunitTestContext
             .Add(component => component.TopologyService, _topology));
         EnsureMudProviders();
         cut.Find("[aria-label='Expand all']").Click();
+        cut.WaitForAssertion(() =>
+            cut.FindAll(".topic-tree-row[aria-expanded='true']").Should().NotBeEmpty());
         return cut;
     }
 
     private static IElement MetricRow(IRenderedComponent<TopicBrowser> cut, string name)
     {
-        var rows = cut.FindAll($"[data-metric-name='{name}']");
-        return rows.Single();
+        cut.WaitForAssertion(() =>
+            cut.FindAll($"[data-metric-name='{name}']").Should().ContainSingle());
+        return cut.FindAll($"[data-metric-name='{name}']").Single();
     }
 
     private static IElement FolderRow(IRenderedComponent<TopicBrowser> cut, string label) =>

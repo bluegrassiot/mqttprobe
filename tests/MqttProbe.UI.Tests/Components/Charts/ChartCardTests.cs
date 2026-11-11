@@ -51,19 +51,14 @@ public class ChartCardTests : BunitTestContext
         Series = [.. series]
     };
 
-    private static string SummaryText(IRenderedComponent<ChartCardComponent> cut) =>
+    private static string StatusChipText(IRenderedComponent<ChartCardComponent> cut) =>
         cut.Find(".chart-card-status .mud-chip").TextContent.Trim();
+
+    private static string? StatusAgeText(IRenderedComponent<ChartCardComponent> cut) =>
+        cut.FindAll(".chart-card-status__age").SingleOrDefault()?.TextContent.Trim();
 
     private static string HeaderText(IRenderedComponent<ChartCardComponent> cut) =>
         cut.Find(".mud-card-header-content > .mud-typography-caption").TextContent;
-
-    private static string RowText(IRenderedComponent<ChartCardComponent> cut, string seriesName) =>
-        cut.FindAll(".chart-series-status__row")
-            .Single(row => row.QuerySelector(".chart-series-status__name")!.TextContent.Trim() == seriesName)
-            .TextContent;
-
-    private static string CountsText(IRenderedComponent<ChartCardComponent> cut) =>
-        cut.Find(".chart-card-status__counts").TextContent.Trim();
 
     [Test]
     public void SeriesWithoutPoints_IsWaitingForData_NotLiveOrStale()
@@ -72,13 +67,14 @@ public class ChartCardTests : BunitTestContext
 
         var cut = RenderCard(chart);
 
-        SummaryText(cut).Should().Be("Waiting for data");
-        RowText(cut, "Temp").Should().Contain("Waiting for data");
-        cut.FindAll(".chart-card-status__counts").Should().BeEmpty("the summary chip already covers every series");
+        StatusChipText(cut).Should().Be("Waiting for data");
+        StatusAgeText(cut).Should().BeNull("waiting has no receipt to age");
+        cut.FindAll(".chart-series-status__row").Should().BeEmpty();
+        cut.FindAll(".chart-card-status__counts").Should().BeEmpty();
     }
 
     [Test]
-    public void AllSeriesFresh_ShowsLiveAndEachReceiptAge()
+    public void SharedIndicator_ShowsLiveAndTheNewestReceiptAge()
     {
         var a = new ChartSeries { DisplayName = "Temp" };
         var b = new ChartSeries { DisplayName = "Flow" };
@@ -87,30 +83,41 @@ public class ChartCardTests : BunitTestContext
 
         var cut = RenderCard(Chart(10, a, b));
 
-        SummaryText(cut).Should().Be("Live");
-        RowText(cut, "Temp").Should().Contain("Live").And.Contain("3s ago");
-        RowText(cut, "Flow").Should().Contain("Live").And.Contain("1s ago");
-        cut.FindAll(".chart-card-status__counts").Should().BeEmpty();
+        cut.FindAll(".chart-card-status .mud-chip").Should().ContainSingle();
+        StatusChipText(cut).Should().Be("Live");
+        StatusAgeText(cut).Should().Be("1s ago", "the newest point from any configured series drives the shared indicator");
     }
 
     [Test]
-    public void OneStaleSeries_IsNotHiddenByTheFreshSeries()
+    public void OlderSeries_CannotMakeAFreshChartStaleOrMixed()
     {
         var a = new ChartSeries { DisplayName = "Temp" };
         var b = new ChartSeries { DisplayName = "Flow" };
-        Record(a, 2);
-        Record(b, 45);
+        Record(a, 120);
+        Record(b, 2);
 
         var cut = RenderCard(Chart(10, a, b));
 
-        SummaryText(cut).Should().Be("Some series stale");
-        RowText(cut, "Temp").Should().Contain("Live");
-        RowText(cut, "Flow").Should().Contain("Stale").And.Contain("45s ago");
-        CountsText(cut).Should().Be("1 live · 1 stale");
+        StatusChipText(cut).Should().Be("Live");
+        StatusAgeText(cut).Should().Be("2s ago");
+        cut.Markup.Should().NotContain("Stale").And.NotContain("Mixed");
     }
 
     [Test]
-    public void AllSeriesStale_ShowsStaleSummary()
+    public void WaitingSeries_CannotMakeAFreshChartMixed()
+    {
+        var a = new ChartSeries { DisplayName = "Temp" };
+        var b = new ChartSeries { DisplayName = "Flow" };
+        Record(b, 2);
+
+        var cut = RenderCard(Chart(10, a, b));
+
+        StatusChipText(cut).Should().Be("Live");
+        cut.FindAll(".chart-card-status .mud-chip").Should().ContainSingle();
+    }
+
+    [Test]
+    public void AllSeriesStale_ShowsStaleWithTheNewestReceiptAge()
     {
         var a = new ChartSeries { DisplayName = "Temp" };
         var b = new ChartSeries { DisplayName = "Flow" };
@@ -119,23 +126,8 @@ public class ChartCardTests : BunitTestContext
 
         var cut = RenderCard(Chart(10, a, b));
 
-        SummaryText(cut).Should().Be("Stale");
-        cut.FindAll(".chart-card-status__counts").Should().BeEmpty();
-    }
-
-    [Test]
-    public void WaitingAndStaleSeries_StayDistinguishableInTheSummary()
-    {
-        var a = new ChartSeries { DisplayName = "Temp" };
-        var b = new ChartSeries { DisplayName = "Flow" };
-        Record(a, 40);
-
-        var cut = RenderCard(Chart(10, a, b));
-
-        SummaryText(cut).Should().Be("Mixed");
-        RowText(cut, "Temp").Should().Contain("Stale");
-        RowText(cut, "Flow").Should().Contain("Waiting for data");
-        CountsText(cut).Should().Be("1 stale · 1 waiting");
+        StatusChipText(cut).Should().Be("Stale");
+        StatusAgeText(cut).Should().Be("40s ago");
     }
 
     [Test]
@@ -146,33 +138,45 @@ public class ChartCardTests : BunitTestContext
 
         var cut = RenderCard(Chart(10, a));
 
-        SummaryText(cut).Should().Be("Live");
-        RowText(cut, "Temp").Should().Contain("10s ago");
+        StatusChipText(cut).Should().Be("Live");
+        StatusAgeText(cut).Should().Be("10s ago");
     }
 
     [Test]
-    public void DetectionOff_KeepsAgeAvailable_WithoutCallingDataStale()
+    public void FutureReceipt_StaysLiveWithoutShowingANegativeAge()
+    {
+        var a = new ChartSeries { DisplayName = "Temp" };
+        Record(a, -5);
+
+        var cut = RenderCard(Chart(10, a));
+
+        StatusChipText(cut).Should().Be("Live");
+        StatusAgeText(cut).Should().BeNull("an age in the future has no readable form");
+    }
+
+    [Test]
+    public void DetectionOff_ShowsFreshnessOffWithoutCallingDataStale()
     {
         var a = new ChartSeries { DisplayName = "Temp" };
         Record(a, 300);
 
         var cut = RenderCard(Chart(null, a));
 
-        SummaryText(cut).Should().Be("Freshness off");
+        StatusChipText(cut).Should().Be("Freshness off");
+        StatusAgeText(cut).Should().BeNull();
         HeaderText(cut).Should().Contain("Freshness off").And.NotContain("stale after");
-        RowText(cut, "Temp").Should().Contain("Not checked").And.Contain("5m 0s ago");
         cut.Markup.Should().NotContain("Stale");
     }
 
     [Test]
-    public void DetectionOff_WithoutData_ShowsFreshnessOffInTheHeader_AndKeepsWaitingChip()
+    public void DetectionOff_WithoutData_ShowsFreshnessOff()
     {
         var a = new ChartSeries { DisplayName = "Temp" };
 
         var cut = RenderCard(Chart(null, a));
 
         HeaderText(cut).Should().Contain("Freshness off").And.NotContain("stale after");
-        SummaryText(cut).Should().Be("Waiting for data");
+        StatusChipText(cut).Should().Be("Freshness off");
     }
 
     [Test]
@@ -182,30 +186,15 @@ public class ChartCardTests : BunitTestContext
         Record(a, 300);
         var cut = RenderCard(Chart(10, a));
         HeaderText(cut).Should().Contain("stale after 10s");
-        SummaryText(cut).Should().Be("Stale");
+        StatusChipText(cut).Should().Be("Stale");
 
         cut.Render(parameters => parameters
             .Add(c => c.Configuration, Chart(null, a))
             .Add(c => c.Clock, _clock));
 
         HeaderText(cut).Should().Contain("Freshness off").And.NotContain("stale after 10s");
-        SummaryText(cut).Should().Be("Freshness off");
-        RowText(cut, "Temp").Should().Contain("Not checked");
-    }
-
-    [Test]
-    public void TurningDetectionOff_WithNoData_FlipsTheHeaderButStaysWaiting()
-    {
-        var a = new ChartSeries { DisplayName = "Temp" };
-        var cut = RenderCard(Chart(10, a));
-        HeaderText(cut).Should().Contain("stale after 10s");
-
-        cut.Render(parameters => parameters
-            .Add(c => c.Configuration, Chart(null, a))
-            .Add(c => c.Clock, _clock));
-
-        HeaderText(cut).Should().Contain("Freshness off");
-        SummaryText(cut).Should().Be("Waiting for data", "no data is still waiting, not fresh");
+        StatusChipText(cut).Should().Be("Freshness off");
+        StatusAgeText(cut).Should().BeNull();
     }
 
     [Test]
@@ -214,19 +203,20 @@ public class ChartCardTests : BunitTestContext
         var a = new ChartSeries { DisplayName = "Temp" };
         Record(a, 2);
         var cut = RenderCard(Chart(10, a));
-        SummaryText(cut).Should().Be("Live");
+        StatusChipText(cut).Should().Be("Live");
 
         cut.Find("button[title='Pause live updates (enables zoom/pan/export)']").Click();
-        cut.WaitForAssertion(() => SummaryText(cut).Should().Be("Paused"), TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => StatusChipText(cut).Should().Be("Paused"), TimeSpan.FromSeconds(5));
+        StatusAgeText(cut).Should().BeNull();
 
         _clock.Advance(TimeSpan.FromSeconds(60));
-        SummaryText(cut).Should().Be("Paused");
+        StatusChipText(cut).Should().Be("Paused");
 
         cut.Find("button[title='Resume live updates']").Click();
         cut.WaitForAssertion(
-            () => SummaryText(cut).Should().Be("Stale", "resuming evaluates the real receipt time without waiting for a message"),
+            () => StatusChipText(cut).Should().Be("Stale", "resuming evaluates the real receipt time without waiting for a message"),
             TimeSpan.FromSeconds(5));
-        RowText(cut, "Temp").Should().Contain("1m 2s ago", "pausing must not reset receipt times");
+        StatusAgeText(cut).Should().Be("1m 2s ago", "pausing must not reset receipt times");
     }
 
     [Test]
@@ -235,30 +225,32 @@ public class ChartCardTests : BunitTestContext
         var a = new ChartSeries { DisplayName = "Temp" };
         Record(a, 60);
         var cut = RenderCard(Chart(10, a));
-        SummaryText(cut).Should().Be("Stale");
+        StatusChipText(cut).Should().Be("Stale");
 
         cut.Find(".chart-card-plot").MouseOver();
-        cut.WaitForAssertion(() => SummaryText(cut).Should().Be("Paused"), TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => StatusChipText(cut).Should().Be("Paused"), TimeSpan.FromSeconds(5));
 
         cut.Find(".chart-card-plot").TriggerEvent("onmouseleave", new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
-        cut.WaitForAssertion(() => SummaryText(cut).Should().Be("Stale"), TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(() => StatusChipText(cut).Should().Be("Stale"), TimeSpan.FromSeconds(5));
     }
 
     [Test]
-    public void NewPoint_ReturnsSeriesToLiveWithoutReload()
+    public void EitherSeries_ReturnsTheSharedIndicatorToLiveWithoutReload()
     {
         var a = new ChartSeries { DisplayName = "Temp" };
+        var b = new ChartSeries { DisplayName = "Flow" };
         Record(a, 60);
-        var cut = RenderCard(Chart(10, a));
-        SummaryText(cut).Should().Be("Stale");
+        Record(b, 90);
+        var cut = RenderCard(Chart(10, a, b));
+        StatusChipText(cut).Should().Be("Stale");
 
-        Record(a, 0, 21.5);
+        Record(b, 0, 21.5);
         _chartData.OnDataUpdated += Raise.Event<Action>();
 
         cut.WaitForAssertion(() =>
         {
-            SummaryText(cut).Should().Be("Live");
-            RowText(cut, "Temp").Should().Contain("just now");
+            StatusChipText(cut).Should().Be("Live");
+            StatusAgeText(cut).Should().Be("just now");
         }, TimeSpan.FromSeconds(5));
     }
 
@@ -268,27 +260,43 @@ public class ChartCardTests : BunitTestContext
         var a = new ChartSeries { DisplayName = "Temp" };
         Record(a, 2);
         var cut = RenderCard(Chart(10, a));
-        RowText(cut, "Temp").Should().Contain("2s ago");
+        StatusAgeText(cut).Should().Be("2s ago");
 
         _clock.Advance(TimeSpan.FromSeconds(5));
         await cut.InvokeAsync(() => cut.Instance.Tick());
 
-        RowText(cut, "Temp").Should().Contain("7s ago");
-        SummaryText(cut).Should().Be("Live");
+        StatusAgeText(cut).Should().Be("7s ago");
+        StatusChipText(cut).Should().Be("Live");
     }
 
     [Test]
-    public async Task Tick_MarksSeriesStaleWithoutNewMessages()
+    public async Task Tick_MarksTheChartStaleWithoutNewMessages()
     {
         var a = new ChartSeries { DisplayName = "Temp" };
         Record(a, 2);
         var cut = RenderCard(Chart(10, a));
-        SummaryText(cut).Should().Be("Live");
+        StatusChipText(cut).Should().Be("Live");
 
         _clock.Advance(TimeSpan.FromSeconds(9));
         await cut.InvokeAsync(() => cut.Instance.Tick());
 
-        SummaryText(cut).Should().Be("Stale");
+        StatusChipText(cut).Should().Be("Stale");
+    }
+
+    [Test]
+    public void UnrelatedSeriesUpdate_DoesNotResetTheSharedTimestamp()
+    {
+        var a = new ChartSeries { DisplayName = "Temp" };
+        Record(a, 500);
+        var cut = RenderCard(Chart(10, a));
+        StatusChipText(cut).Should().Be("Stale");
+        StatusAgeText(cut).Should().Be("8m 20s ago");
+
+        Record(new ChartSeries { DisplayName = "Other chart" }, 0, 7);
+        _chartData.OnDataUpdated += Raise.Event<Action>();
+
+        StatusChipText(cut).Should().Be("Stale", "only the configured series drive this chart's freshness");
+        StatusAgeText(cut).Should().Be("8m 20s ago");
     }
 
     [Test]
@@ -301,28 +309,10 @@ public class ChartCardTests : BunitTestContext
 
         var cut = RenderCard(chart);
 
-        SummaryText(cut).Should().Be("Stale");
-        RowText(cut, "Temp").Should().Contain("10m 0s ago", "the receipt age ignores the display window");
+        StatusChipText(cut).Should().Be("Stale");
+        StatusAgeText(cut).Should().Be("10m 0s ago", "the receipt age ignores the display window");
         cut.FindComponents<ApexCharts.ApexPointSeries<ChartDataPoint>>().Should().ContainSingle()
             .Which.Instance.Items.Should().BeEmpty("the point is outside the five-minute display window");
-    }
-
-    [Test]
-    public void LongTopicAndPath_RenderInFullForIdentification()
-    {
-        const string topic = "spBv1.0/plant-floor-west/DDATA/packaging-line-04/carton-sealer-17";
-        var a = new ChartSeries
-        {
-            DisplayName = "Seal temperature setpoint",
-            Topic = topic,
-            JsonPath = "metrics.Scalar/Seal Temperature Setpoint"
-        };
-
-        var cut = RenderCard(Chart(10, a));
-
-        var row = cut.Find(".chart-series-status__row");
-        row.QuerySelector(".chart-series-status__source")!.TextContent.Should().Contain(topic);
-        row.QuerySelector(".chart-series-status__name")!.TextContent.Should().Be("Seal temperature setpoint");
     }
 
     [Test]
@@ -332,5 +322,6 @@ public class ChartCardTests : BunitTestContext
 
         cut.Markup.Should().Contain("No series added.");
         cut.FindAll(".chart-series-status__row").Should().BeEmpty();
+        cut.FindAll(".chart-card-status__counts").Should().BeEmpty();
     }
 }

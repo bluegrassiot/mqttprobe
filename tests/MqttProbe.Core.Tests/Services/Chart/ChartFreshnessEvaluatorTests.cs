@@ -9,103 +9,95 @@ public class ChartFreshnessEvaluatorTests
     private static readonly DateTime _now = new(2026, 10, 27, 12, 0, 0, DateTimeKind.Utc);
 
     [Test]
-    public void SeriesThatNeverReceivedData_IsWaiting()
+    public void NoSeries_IsWaitingWithoutReceipt()
     {
-        var seriesId = Guid.NewGuid();
+        var report = ChartFreshnessEvaluator.Evaluate([], 10, _now);
 
-        var report = ChartFreshnessEvaluator.Evaluate(
-            [new ChartSeriesReceipt(seriesId, null)], 10, _now);
-
-        report.Series.Should().ContainSingle();
-        report.Series[0].State.Should().Be(ChartSeriesFreshnessState.Waiting);
-        report.Series[0].Age.Should().BeNull();
         report.State.Should().Be(ChartFreshnessState.Waiting);
+        report.LastReceivedUtc.Should().BeNull();
+        report.Age.Should().BeNull();
     }
 
     [Test]
-    public void AgeExactlyTheTimeout_IsFresh_AndOneTickBeyond_IsStale()
+    public void SeriesWithoutData_IsWaitingWithoutReceipt()
     {
-        var seriesId = Guid.NewGuid();
+        var report = ChartFreshnessEvaluator.Evaluate(
+            [new ChartSeriesReceipt(Guid.NewGuid(), null)], 10, _now);
 
-        var atBoundary = ChartFreshnessEvaluator.Evaluate(
-            [new ChartSeriesReceipt(seriesId, _now.AddSeconds(-10))], 10, _now);
-
-        atBoundary.Series[0].State.Should().Be(ChartSeriesFreshnessState.Fresh);
-        atBoundary.State.Should().Be(ChartFreshnessState.Live);
-
-        var pastBoundary = ChartFreshnessEvaluator.Evaluate(
-            [new ChartSeriesReceipt(seriesId, _now.AddSeconds(-10).AddTicks(-1))], 10, _now);
-
-        pastBoundary.Series[0].State.Should().Be(ChartSeriesFreshnessState.Stale);
-        pastBoundary.State.Should().Be(ChartFreshnessState.Stale);
+        report.State.Should().Be(ChartFreshnessState.Waiting);
+        report.LastReceivedUtc.Should().BeNull();
+        report.Age.Should().BeNull();
     }
 
     [Test]
-    public void NewerReceipt_MakesAStaleSeriesFreshAgain()
+    public void OldAndFreshSeries_NewestReceiptMakesTheChartLive()
     {
-        var seriesId = Guid.NewGuid();
-
-        var stale = ChartFreshnessEvaluator.Evaluate(
-            [new ChartSeriesReceipt(seriesId, _now.AddSeconds(-30))], 10, _now);
-        stale.Series[0].State.Should().Be(ChartSeriesFreshnessState.Stale);
-
-        var recovered = ChartFreshnessEvaluator.Evaluate(
-            [new ChartSeriesReceipt(seriesId, _now.AddSeconds(-1))], 10, _now);
-
-        recovered.Series[0].State.Should().Be(ChartSeriesFreshnessState.Fresh);
-        recovered.Series[0].Age.Should().Be(TimeSpan.FromSeconds(1));
-        recovered.State.Should().Be(ChartFreshnessState.Live);
-    }
-
-    [Test]
-    public void MixedRateSeries_EvaluateIndependently_AndSummaryReportsSomeStale()
-    {
+        var oldId = Guid.NewGuid();
         var freshId = Guid.NewGuid();
-        var staleId = Guid.NewGuid();
+        var freshReceipt = _now.AddSeconds(-2);
 
         var report = ChartFreshnessEvaluator.Evaluate(
             [
-                new ChartSeriesReceipt(freshId, _now.AddSeconds(-2)),
-                new ChartSeriesReceipt(staleId, _now.AddSeconds(-40))
+                new ChartSeriesReceipt(oldId, _now.AddSeconds(-40)),
+                new ChartSeriesReceipt(freshId, freshReceipt)
             ],
             10,
             _now);
 
-        report.Series.Single(s => s.SeriesId == freshId).State
-            .Should().Be(ChartSeriesFreshnessState.Fresh);
-        report.Series.Single(s => s.SeriesId == staleId).State
-            .Should().Be(ChartSeriesFreshnessState.Stale);
-        report.State.Should().Be(ChartFreshnessState.SomeStale);
-        report.FreshSeriesCount.Should().Be(1);
-        report.StaleSeriesCount.Should().Be(1);
+        report.State.Should().Be(ChartFreshnessState.Live);
+        report.LastReceivedUtc.Should().Be(freshReceipt);
+        report.Age.Should().Be(TimeSpan.FromSeconds(2));
     }
 
     [Test]
-    public void MixedWaitingFreshAndStaleSeries_StayDistinguishable()
+    public void NewerReceiptFromEitherSeries_KeepsTheChartLive()
     {
-        var waitingId = Guid.NewGuid();
-        var freshId = Guid.NewGuid();
-        var staleId = Guid.NewGuid();
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
 
-        var report = ChartFreshnessEvaluator.Evaluate(
+        var secondAdvances = ChartFreshnessEvaluator.Evaluate(
             [
-                new ChartSeriesReceipt(waitingId, null),
-                new ChartSeriesReceipt(freshId, _now.AddSeconds(-2)),
-                new ChartSeriesReceipt(staleId, _now.AddSeconds(-40))
+                new ChartSeriesReceipt(firstId, _now.AddSeconds(-8)),
+                new ChartSeriesReceipt(secondId, _now.AddSeconds(-1))
             ],
             10,
             _now);
 
-        report.State.Should().Be(ChartFreshnessState.Mixed);
-        report.WaitingSeriesCount.Should().Be(1);
-        report.FreshSeriesCount.Should().Be(1);
-        report.StaleSeriesCount.Should().Be(1);
-        report.Series.Single(s => s.SeriesId == waitingId).Age.Should().BeNull();
-        report.Series.Single(s => s.SeriesId == staleId).Age.Should().Be(TimeSpan.FromSeconds(40));
+        secondAdvances.State.Should().Be(ChartFreshnessState.Live);
+        secondAdvances.LastReceivedUtc.Should().Be(_now.AddSeconds(-1));
+
+        var firstAdvances = ChartFreshnessEvaluator.Evaluate(
+            [
+                new ChartSeriesReceipt(firstId, _now.AddSeconds(-1)),
+                new ChartSeriesReceipt(secondId, _now.AddSeconds(-8))
+            ],
+            10,
+            _now);
+
+        firstAdvances.State.Should().Be(ChartFreshnessState.Live);
+        firstAdvances.LastReceivedUtc.Should().Be(_now.AddSeconds(-1));
     }
 
     [Test]
-    public void WaitingSeriesAlongsideFreshSeries_IsMixedNotLive()
+    public void AllSeriesOld_IsStaleWithTheNewestReceipt()
+    {
+        var newest = _now.AddSeconds(-30);
+
+        var report = ChartFreshnessEvaluator.Evaluate(
+            [
+                new ChartSeriesReceipt(Guid.NewGuid(), _now.AddSeconds(-40)),
+                new ChartSeriesReceipt(Guid.NewGuid(), newest)
+            ],
+            10,
+            _now);
+
+        report.State.Should().Be(ChartFreshnessState.Stale);
+        report.LastReceivedUtc.Should().Be(newest);
+        report.Age.Should().Be(TimeSpan.FromSeconds(30));
+    }
+
+    [Test]
+    public void WaitingSeriesBesideFreshData_DoesNotChangeTheLiveState()
     {
         var report = ChartFreshnessEvaluator.Evaluate(
             [
@@ -115,42 +107,59 @@ public class ChartFreshnessEvaluatorTests
             10,
             _now);
 
-        report.State.Should().Be(ChartFreshnessState.Mixed);
+        report.State.Should().Be(ChartFreshnessState.Live);
     }
 
     [Test]
-    public void DetectionOff_NeverReportsOldDataAsFreshOrStale_AndKeepsAge()
+    public void AgeAtTheTimeout_IsLive_AndOneTickBeyond_IsStale()
     {
-        var oldId = Guid.NewGuid();
-        var waitingId = Guid.NewGuid();
+        var atBoundary = ChartFreshnessEvaluator.Evaluate(
+            [new ChartSeriesReceipt(Guid.NewGuid(), _now.AddSeconds(-10))], 10, _now);
 
-        var report = ChartFreshnessEvaluator.Evaluate(
-            [
-                new ChartSeriesReceipt(oldId, _now.AddHours(-1)),
-                new ChartSeriesReceipt(waitingId, null)
-            ],
-            null,
+        atBoundary.State.Should().Be(ChartFreshnessState.Live);
+        atBoundary.Age.Should().Be(TimeSpan.FromSeconds(10));
+
+        var pastBoundary = ChartFreshnessEvaluator.Evaluate(
+            [new ChartSeriesReceipt(Guid.NewGuid(), _now.AddSeconds(-10).AddTicks(-1))],
+            10,
             _now);
 
-        var old = report.Series.Single(s => s.SeriesId == oldId);
-        old.State.Should().Be(ChartSeriesFreshnessState.NotTracked);
-        old.Age.Should().Be(TimeSpan.FromHours(1));
-        report.Series.Single(s => s.SeriesId == waitingId).State
-            .Should().Be(ChartSeriesFreshnessState.Waiting);
-        report.State.Should().Be(ChartFreshnessState.Disabled);
-        report.FreshSeriesCount.Should().Be(0);
-        report.StaleSeriesCount.Should().Be(0);
-        report.NotTrackedSeriesCount.Should().Be(1);
-        report.WaitingSeriesCount.Should().Be(1);
+        pastBoundary.State.Should().Be(ChartFreshnessState.Stale);
     }
 
     [Test]
-    public void DetectionOff_WithNoReceivedData_StaysWaiting()
+    public void ReceiptAheadOfNow_IsLive()
+    {
+        var ahead = _now.AddSeconds(5);
+
+        var report = ChartFreshnessEvaluator.Evaluate(
+            [new ChartSeriesReceipt(Guid.NewGuid(), ahead)], 10, _now);
+
+        report.State.Should().Be(ChartFreshnessState.Live);
+        report.LastReceivedUtc.Should().Be(ahead);
+        report.Age.Should().Be(TimeSpan.FromSeconds(-5));
+    }
+
+    [Test]
+    public void TimeoutOff_WithReceivedData_IsDisabledWithoutReceipt()
+    {
+        var report = ChartFreshnessEvaluator.Evaluate(
+            [new ChartSeriesReceipt(Guid.NewGuid(), _now.AddSeconds(-1))], null, _now);
+
+        report.State.Should().Be(ChartFreshnessState.Disabled);
+        report.LastReceivedUtc.Should().BeNull();
+        report.Age.Should().BeNull();
+    }
+
+    [Test]
+    public void TimeoutOff_WithoutReceivedData_IsDisabled()
     {
         var report = ChartFreshnessEvaluator.Evaluate(
             [new ChartSeriesReceipt(Guid.NewGuid(), null)], null, _now);
 
-        report.State.Should().Be(ChartFreshnessState.Waiting);
+        report.State.Should().Be(ChartFreshnessState.Disabled);
+        report.LastReceivedUtc.Should().BeNull();
+        report.Age.Should().BeNull();
     }
 
     [Test]
@@ -172,16 +181,17 @@ public class ChartFreshnessEvaluatorTests
         var report = ChartFreshnessEvaluator.Evaluate(
             [new ChartSeriesReceipt(Guid.NewGuid(), _now.AddSeconds(-1))], invalid, _now);
 
-        report.Series[0].State.Should().Be(ChartSeriesFreshnessState.NotTracked);
         report.State.Should().Be(ChartFreshnessState.Disabled);
+        report.LastReceivedUtc.Should().BeNull();
+        report.Age.Should().BeNull();
     }
 
     [Test]
-    public void VeryLargeFiniteTimeout_KeepsDataFresh()
+    public void VeryLargeFiniteTimeout_KeepsDataLive()
     {
         var report = ChartFreshnessEvaluator.Evaluate(
             [new ChartSeriesReceipt(Guid.NewGuid(), _now.AddHours(-1))], double.MaxValue, _now);
 
-        report.Series[0].State.Should().Be(ChartSeriesFreshnessState.Fresh);
+        report.State.Should().Be(ChartFreshnessState.Live);
     }
 }

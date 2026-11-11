@@ -40,9 +40,15 @@ public class ChartSettingsTests
     }
 
     [Test]
-    public void NewChart_DefaultsStaleTimeoutToTenSeconds()
+    public void NewChart_LeavesFreshnessOffByDefault()
     {
-        new ChartConfiguration().StaleTimeoutSeconds.Should().Be(10);
+        new ChartConfiguration().StaleTimeoutSeconds.Should().BeNull();
+    }
+
+    [Test]
+    public void DefaultStaleTimeoutConstant_StaysAtTenSecondsForOptInPrefill()
+    {
+        ChartConfiguration.DefaultStaleTimeoutSeconds.Should().Be(10);
     }
 
     [Test]
@@ -80,7 +86,7 @@ public class ChartSettingsTests
     }
 
     [Test]
-    public async Task LegacyChartWithoutStaleTimeout_LoadsWithTenSecondDefault()
+    public async Task LegacyChartWithoutStaleTimeout_LoadsWithFreshnessOff()
     {
         var connectionId = Guid.NewGuid();
         await File.WriteAllTextAsync(_configPath,
@@ -90,6 +96,20 @@ public class ChartSettingsTests
 
         var loaded = await _document.ReadAsync();
 
-        loaded!.ChartsByConnection[connectionId].Single().StaleTimeoutSeconds.Should().Be(10);
+        loaded!.ChartsByConnection[connectionId].Single().StaleTimeoutSeconds.Should().BeNull();
+    }
+
+    [Test]
+    public async Task LegacyChartWithExplicitStaleTimeout_KeepsTheSavedValue()
+    {
+        var connectionId = Guid.NewGuid();
+        await File.WriteAllTextAsync(_configPath,
+            $$$"""
+            {"chartsByConnection":{"{{{connectionId}}}":[{"name":"legacy","type":"Line","staleTimeoutSeconds":4.5}]}}
+            """);
+
+        var loaded = await _document.ReadAsync();
+
+        loaded!.ChartsByConnection[connectionId].Single().StaleTimeoutSeconds.Should().Be(4.5);
     }
 }

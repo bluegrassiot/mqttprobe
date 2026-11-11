@@ -33,7 +33,7 @@
                                  Variant="Variant.Outlined" Margin="Margin.Dense"
                                  Min="0" Step="1" Disabled="@(!_stalenessEnabled)"
                                  Error="@(!StaleTimeoutValid)"
-                                 HelperText="A series turns stale when its last point is older than this."
+                                 HelperText="The chart turns stale when its newest point is older than this."
                                  Class="chart-dialog-timeout" />
                 <MudSwitch T="bool" @bind-Value="_stalenessEnabled" Label="Check for stale data"
                            Color="Color.Primary" />
@@ -103,7 +103,7 @@
     private int _maxPoints = 500;
     private int? _timeWindow;
     private double? _staleTimeoutSeconds = ChartConfiguration.DefaultStaleTimeoutSeconds;
-    private bool _stalenessEnabled = true;
+    private bool _stalenessEnabled;
     private List<ChartSeries> _series = [];
 
     private bool StaleTimeoutValid => !_stalenessEnabled

@@ -599,11 +599,11 @@ Verify:     python scripts/legal/notices.py check
     Source: https://github.com/protobuf-net/protobuf-net
     Texts: Apache License 2.0
 
-  System.Formats.Cbor 10.0.14
+  System.Formats.Cbor 11.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+    Texts: System.Formats.Cbor package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
 
   System.IdentityModel.Tokens.Jwt 8.19.2
     Licence: MIT

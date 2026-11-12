@@ -2197,7 +2197,7 @@
     },
     {
       "id": "System.Formats.Cbor",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "metadata": {
         "license": "MIT",
         "licenseUrl": "https://licenses.nuget.org/MIT",
@@ -2210,7 +2210,7 @@
       "documents": [
         {
           "title": "System.Formats.Cbor package licence (THIRD-PARTY-NOTICES.TXT)",
-          "sha256": "c6926930d0181fa515076603e1305461b1bce5275a8b35337d75d2eef3acad4a",
+          "sha256": "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
           "source": "embedded",
           "sourcePath": "THIRD-PARTY-NOTICES.TXT",
           "sourceUrl": "https://licenses.nuget.org/MIT"

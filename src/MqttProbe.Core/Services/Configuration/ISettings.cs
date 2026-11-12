@@ -62,6 +62,7 @@ public interface ISparkplugSettings
     public Task SetRebirthCooldownSecondsAsync(int seconds);
     public Task SetEnrichAliasNamesAsync(bool enrich);
     public Task SetAllowNodeRebootAsync(bool allow);
+    public Task SetAllowMetricWritesAsync(bool allow);
     public Task SetReorderTimeoutMillisecondsAsync(int milliseconds);
 }
 

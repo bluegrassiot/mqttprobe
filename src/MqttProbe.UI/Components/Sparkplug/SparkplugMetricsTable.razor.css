@@ -5,7 +5,7 @@
 .spb-col-alias { width: 44px; }
 .spb-col-value { width: 18%; }
 .spb-col-updated { width: 136px; }
-.spb-col-chart { width: 84px; }
+.spb-col-chart { width: 118px; }
 
 .spb-time-value {
     font-variant-numeric: tabular-nums;
@@ -16,6 +16,46 @@
 
 .spb-metric-table {
     min-width: 0;
+}
+
+.spb-metric-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.spb-write-wrap {
+    display: inline-flex;
+}
+
+.spb-write-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 5px;
+    border: 1px solid var(--mud-palette-primary);
+    border-radius: 3px;
+    background: none;
+    color: var(--mud-palette-primary);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.spb-write-btn:hover:not(:disabled) {
+    opacity: 1;
+    background: var(--mud-palette-primary-hover);
+}
+
+.spb-write-btn:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 1px;
+    opacity: 1;
+}
+
+.spb-write-btn:disabled {
+    border-color: var(--mud-palette-text-disabled);
+    color: var(--mud-palette-text-disabled);
+    cursor: not-allowed;
 }
 
 .spb-metric-table ::deep .mud-table-root > .mud-table-body > .spb-metric-row--group-end > .mud-table-cell {
@@ -30,15 +70,23 @@
     }
 }
 
+/* Lane width matches the chevron, so label, meta and chart share a left edge. */
+.spb-metric-table ::deep .spb-depth-0 { --spb-indent: 0px; }
+.spb-metric-table ::deep .spb-depth-1 { --spb-indent: 24px; }
+.spb-metric-table ::deep .spb-depth-2 { --spb-indent: 48px; }
+.spb-metric-table ::deep .spb-depth-3 { --spb-indent: 72px; }
+.spb-metric-table ::deep .spb-depth-4 { --spb-indent: 96px; }
+
+.spb-metric-table ::deep .spb-metric-row--folder,
+.spb-metric-table ::deep .spb-metric-row--branch {
+    --spb-lane: 24px;
+}
+
 .spb-metric-name {
     display: flex;
     align-items: center;
     min-width: 0;
-}
-
-.spb-metric-indent {
-    flex: 0 0 auto;
-    pointer-events: none;
+    margin-left: var(--spb-indent, 0px);
 }
 
 .spb-metric-toggle {
@@ -64,10 +112,6 @@
     outline-offset: -2px;
 }
 
-.spb-metric-toggle-spacer {
-    flex: 0 0 24px;
-}
-
 .spb-metric-label {
     min-width: 0;
     overflow-wrap: anywhere;
@@ -86,8 +130,11 @@
     flex-wrap: wrap;
     gap: 2px 6px;
     margin-top: 2px;
+    margin-left: calc(var(--spb-indent, 0px) + var(--spb-lane, 0px));
     font-size: 11px;
     color: var(--mud-palette-text-secondary);
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .spb-metric-meta-alias::before,

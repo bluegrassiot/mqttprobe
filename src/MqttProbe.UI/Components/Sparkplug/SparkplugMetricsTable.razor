@@ -30,7 +30,7 @@
         <MudTh Class="spb-th-alias spb-th-right">Alias</MudTh>
         <MudTh Class="spb-th-right">Value</MudTh>
         <MudTh Class="spb-th-updated">Updated</MudTh>
-        <MudTh>Chart</MudTh>
+        <MudTh>Actions</MudTh>
     </HeaderContent>
     <RowTemplate>
         @{
@@ -39,11 +39,6 @@
         }
         <MudTd Class="spb-td-name" title="@context.FullPath">
             <div class="spb-metric-name">
-                @if (Mode == SparkplugMetricViewMode.Hierarchy)
-                {
-                    <svg class="spb-metric-indent" width="@IndentWidth(context)" height="1"
-                         aria-hidden="true" focusable="false"></svg>
-                }
                 @if (context.HasChildren)
                 {
                     <button type="button" class="spb-metric-toggle"
@@ -54,10 +49,6 @@
                         <MudIcon Icon="@(context.IsExpanded ? LucideIcons.ChevronDown : LucideIcons.ChevronRight)"
                                  Size="Size.Small"/>
                     </button>
-                }
-                else if (Mode == SparkplugMetricViewMode.Hierarchy)
-                {
-                    <span class="spb-metric-toggle-spacer" aria-hidden="true"></span>
                 }
                 <span class="spb-metric-label">@context.Name</span>
                 @if (!context.IsMetric)
@@ -92,12 +83,33 @@
             }
         </MudTd>
         <MudTd Class="spb-td-chart">
-            @if (context.IsMetric && context.Snapshot is { } metric
-                 && OnAddToChart.HasDelegate && SparkplugChartTargets.IsChartable(metric))
+            @if (context.Snapshot is { } metric)
             {
-                <AddToChartButton JsonPath="@SparkplugChartTargets.JsonPath(context.FullPath)"
-                                  SeriesName="@context.FullPath"
-                                  OnAddToChart="@(selection => AddToChart(context, selection))" />
+                <div class="spb-metric-actions">
+                    @if (OnAddToChart.HasDelegate && SparkplugChartTargets.IsChartable(metric))
+                    {
+                        <AddToChartButton JsonPath="@SparkplugChartTargets.JsonPath(context.FullPath)"
+                                          SeriesName="@context.FullPath"
+                                          OnAddToChart="@(selection => AddToChart(context, selection))" />
+                    }
+                    @if (OnWriteMetric.HasDelegate && IsWritable(metric))
+                    {
+                        <span class="spb-write-wrap"
+                              title="@(AllowMetricWrites ? null : "Enable Allow metric writes in Settings, Sparkplug")">
+                            <button type="button" class="spb-write-btn"
+                                    title="@(AllowMetricWrites ? "Write metric" : null)"
+                                    aria-label="Write metric @metric.Name"
+                                    disabled="@(!AllowMetricWrites)"
+                                    @onclick="() => OnWriteMetric.InvokeAsync(metric)"
+                                    @onclick:stopPropagation="true">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                     aria-hidden="true" focusable="false">
+                                    @((MarkupString)LucideIcons.Pencil)
+                                </svg>
+                            </button>
+                        </span>
+                    }
+                </div>
             }
         </MudTd>
     </RowTemplate>
@@ -129,6 +141,12 @@
 
     [Parameter]
     public EventCallback<SparkplugChartSelection> OnAddToChart { get; set; }
+
+    [Parameter]
+    public bool AllowMetricWrites { get; set; }
+
+    [Parameter]
+    public EventCallback<SpbMetricSnapshot> OnWriteMetric { get; set; }
 
     protected override void OnParametersSet()
     {
@@ -257,13 +275,18 @@
         else
             baseClass = "spb-metric-row spb-metric-row--folder";
 
-        return row.EndsGroup ? $"{baseClass} spb-metric-row--group-end" : baseClass;
+        var withDepth = $"{baseClass} spb-depth-{IndentLevel(row)}";
+        return row.EndsGroup ? $"{withDepth} spb-metric-row--group-end" : withDepth;
     }
 
-    private static int IndentWidth(SparkplugMetricRow row) => Math.Min(row.Depth, 4) * 24;
+    private static int IndentLevel(SparkplugMetricRow row) => Math.Min(row.Depth, 4);
 
     private static string AliasText(SpbMetricSnapshot? snapshot) =>
         snapshot is null ? string.Empty : snapshot.Alias?.ToString() ?? "\u2014";
+
+    private static bool IsWritable(SpbMetricSnapshot metric) =>
+        SparkplugMetricValueEncoder.IsWritable(metric.DataType)
+        && !SparkplugControlMetrics.IsControlMetric(metric.Name);
 
     private Task AddToChart(SparkplugMetricRow row, ChartFieldSelection selection) =>
         OnAddToChart.InvokeAsync(new SparkplugChartSelection(

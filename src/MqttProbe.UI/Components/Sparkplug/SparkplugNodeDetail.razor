@@ -127,7 +127,9 @@ else
                                    Time="Time"
                                    Items="@Node.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
                                    Mode="@MetricViewMode"
-                                   OnAddToChart="OnAddMetricToChart" />
+                                   OnAddToChart="OnAddMetricToChart"
+                                   AllowMetricWrites="@AllowMetricWrites"
+                                   OnWriteMetric="@(metric => WriteMetric(null, metric))" />
         }
 
         <div class="spb-subsection-header">
@@ -182,7 +184,9 @@ else
                                 Time="Time"
                                 Items="@device.Metrics.OrderBy(m => m.Name, NaturalStringComparer.Instance)"
                                 Mode="@MetricViewMode"
-                                OnAddToChart="OnAddMetricToChart" />
+                                OnAddToChart="OnAddMetricToChart"
+                                AllowMetricWrites="@AllowMetricWrites"
+                                OnWriteMetric="@(metric => WriteMetric(device.DeviceId, metric))" />
                         }
                     </div>
                 }
@@ -218,6 +222,11 @@ else
         if ((args.Key == "ArrowRight" && !expanded) || (args.Key == "ArrowLeft" && expanded))
             await OnToggleDevice.InvokeAsync(device);
     }
+
+    private Task WriteMetric(string? deviceId, SpbMetricSnapshot metric) =>
+        Node is null
+            ? Task.CompletedTask
+            : OnWriteMetric.InvokeAsync(new SparkplugMetricWriteTarget(Node.GroupId, Node.NodeId, deviceId, metric));
 
     private static string NodeStatusClass(SpbNode node) => SparkplugNodeDisplay.IsStale(node)
         ? "spb-status--stale"
@@ -290,6 +299,9 @@ else
     public bool AllowNodeReboot { get; set; }
 
     [Parameter]
+    public bool AllowMetricWrites { get; set; }
+
+    [Parameter]
     public SparkplugMetricViewMode MetricViewMode { get; set; } = SparkplugMetricViewMode.Hierarchy;
 
     [Parameter]
@@ -309,4 +321,7 @@ else
 
     [Parameter]
     public EventCallback<SparkplugChartSelection> OnAddMetricToChart { get; set; }
+
+    [Parameter]
+    public EventCallback<SparkplugMetricWriteTarget> OnWriteMetric { get; set; }
 }

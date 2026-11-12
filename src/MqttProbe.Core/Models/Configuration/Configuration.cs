@@ -29,6 +29,7 @@ public class SparkplugSettings
     public int RebirthCooldownSeconds { get; set; } = 30;
     public bool EnrichAliasNames { get; set; } = true;
     public bool AllowNodeReboot { get; set; }
+    public bool AllowMetricWrites { get; set; }
     public int ReorderTimeoutMilliseconds
     {
         get => _reorderTimeoutMilliseconds;

@@ -105,6 +105,20 @@ public class SparkplugSectionTests : BunitTestContext
     }
 
     [Test]
+    public async Task AllowMetricWrites_Toggle_CallsSetter()
+    {
+        _mockStore.SetAllowMetricWritesAsync(Arg.Any<bool>()).Returns(Task.CompletedTask);
+        var cut = Render<SparkplugSection>();
+
+        var toggle = cut.FindComponents<MudSwitch<bool>>()
+            .First(s => s.Instance.Label == "Allow metric writes");
+        await cut.InvokeAsync(() => toggle.Instance.ValueChanged.InvokeAsync(true));
+
+        await _mockStore.Received(1).SetAllowMetricWritesAsync(true);
+        await _mockStore.DidNotReceive().SetAllowNodeRebootAsync(Arg.Any<bool>());
+    }
+
+    [Test]
     public async Task RebirthCooldown_NumericField_CallsSetter()
     {
         _mockStore.SetRebirthCooldownSecondsAsync(Arg.Any<int>()).Returns(Task.CompletedTask);

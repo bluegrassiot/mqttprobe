@@ -101,7 +101,8 @@ public sealed class SparkplugMetricsTableTreeClarityTests : BunitTestContext
             Metric("A/B/T2"),
             Metric("TempDelta"));
 
-        cut.FindAll(".spb-metric-indent").Should().BeEmpty();
+        cut.FindAll("tr.spb-metric-row").Should()
+            .OnlyContain(row => row.ClassList.Contains("spb-depth-0"));
         cut.FindAll("tr.spb-metric-row--group-end").Should().BeEmpty();
         cut.FindAll(".spb-metric-label").Select(label => label.TextContent.Trim())
             .Should().Equal("A/B/T1", "A/B/T2", "TempDelta");
@@ -111,7 +112,9 @@ public sealed class SparkplugMetricsTableTreeClarityTests : BunitTestContext
         Row(cut, fullPath).QuerySelector(".spb-metric-toggle")!.Click();
 
     private static int Indent(IRenderedComponent<SparkplugMetricsTable> cut, string fullPath) =>
-        int.Parse(Row(cut, fullPath).QuerySelector(".spb-metric-indent")!.GetAttribute("width")!);
+        int.Parse(Row(cut, fullPath).ClassList
+            .Single(name => name.StartsWith("spb-depth-", StringComparison.Ordinal))
+            ["spb-depth-".Length..]) * 24;
 
     private static IElement Row(IRenderedComponent<SparkplugMetricsTable> cut, string fullPath) =>
         cut.FindAll("tr.spb-metric-row")

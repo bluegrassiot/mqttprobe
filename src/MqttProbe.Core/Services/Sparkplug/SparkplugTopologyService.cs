@@ -30,6 +30,7 @@ public interface ISparkplugTopologyService
     public void ResetSequenceTracking() { }
     public void MarkSequenceObservationIncomplete(string topic) { }
     public void RecordSequenceConnectionEpoch(IReadOnlyList<TopologyEvent> events, long? connectionEpoch) { }
+    public uint? ResolveAdvertisedDatatype(string groupId, string nodeId, string? deviceId, string metricName) => null;
 }
 
 public sealed partial class SparkplugTopologyService(
@@ -343,7 +344,7 @@ public sealed partial class SparkplugTopologyService(
         for (var i = 0; i < metrics.Count; i++)
         {
             var m = metrics[i];
-            result[i] = new SpbMetricSnapshot(m.Name, m.DataType, m.Value, DateTime.UtcNow, m.Alias);
+            result[i] = new SpbMetricSnapshot(m.Name, m.DataType, m.Value, DateTime.UtcNow, m.Alias, m.EditValue);
         }
 
         return result;

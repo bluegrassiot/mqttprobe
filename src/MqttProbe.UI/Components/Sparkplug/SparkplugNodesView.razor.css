@@ -265,7 +265,7 @@
         }
 
         .spb-split__detail ::deep col.spb-col-chart {
-            width: 48px;
+            width: 76px;
         }
 
         .spb-split__detail ::deep .spb-th-type,
@@ -323,13 +323,8 @@
 }
 
 @media (max-width: 599.98px) {
-    /* Metric tables never fit ~360px. Rather than let each one scroll
-       horizontally under a capped height — which stacks two or three nested
-       scrollbars on top of the detail panel's own — collapse every row into a
-       stacked card, the same approach the Browser tab uses. Name + value read
-       as the headline; type/alias/updated drop to a muted meta line and the
-       chart action gets its own line. Only the detail panel's vertical scroll
-       remains. ::deep throughout because MudTable owns this markup without the
+    /* Rows collapse into stacked cards on phones because the table cannot fit
+       ~360px. ::deep throughout because MudTable owns this markup without the
        component's scope attribute. */
     .spb-split__detail ::deep .mud-table-container {
         overflow-x: hidden;
@@ -348,8 +343,8 @@
     .spb-split__detail ::deep .spb-metric-row {
         display: flex;
         flex-wrap: wrap;
-        align-items: baseline;
-        column-gap: 6px;
+        align-items: flex-start;
+        column-gap: 8px;
         padding: 8px 4px;
         border-bottom: 1px solid var(--mud-palette-divider);
     }
@@ -361,73 +356,55 @@
         min-width: 0;
     }
 
-    /* Headline: name on the left, value pinned flush-right by an auto margin so
-       values line up in a column. The wrap onto a second line is forced by the
-       ::after break below — margin:auto only right-aligns, it can't wrap.
-       Value keeps its mono font and value colour from the base rules. */
-    .spb-split__detail ::deep .spb-td-name {
+    /* Grow from a zero basis: WebKit can otherwise return a fraction of the
+       label's intrinsic width and break names mid word. The floor keeps 120px of
+       label and a wide value drops to its own line instead of narrowing it. */
+    .spb-split__detail ::deep .spb-metric-row .spb-td-name {
         order: 1;
-        flex: 0 1 auto;
-        min-width: 0;
+        flex: 1 1 0;
+        min-width: min(100%, calc(120px + var(--spb-indent, 0px)));
         font-size: 14px;
         color: var(--mud-palette-text-primary);
     }
 
-    .spb-split__detail ::deep .spb-td-value {
+    .spb-split__detail ::deep .spb-metric-row .spb-td-value {
         order: 2;
         flex: 0 0 auto;
         margin-left: auto;
+        max-width: 50%;
         text-align: right;
+        line-height: 20px;
+        overflow-wrap: anywhere;
     }
 
-    /* Meta line: type · alias · updated wrap together below the headline */
-    .spb-split__detail ::deep .spb-td-type,
-    .spb-split__detail ::deep .spb-td-alias,
-    .spb-split__detail ::deep .spb-td-updated {
-        margin-top: 2px;
-        font-size: 11px;
-        color: var(--mud-palette-text-secondary);
+    .spb-split__detail ::deep .spb-metric-meta {
+        display: flex;
     }
 
-    /* Full-width zero-height break between value (order 2) and the meta cells
-       (order 4-6). A flex container's ::after pseudo-element is itself a flex
-       item, so this drops the meta group onto its own second line no matter how
-       short the metric name is — margin:auto alone can't force that wrap. */
-    .spb-split__detail ::deep .spb-metric-row::after {
-        content: "";
+    .spb-split__detail ::deep .spb-metric-row .spb-td-type,
+    .spb-split__detail ::deep .spb-metric-row .spb-td-alias,
+    .spb-split__detail ::deep .spb-metric-row .spb-td-updated {
+        display: none;
+    }
+
+    /* The chart action hangs under the label, at the metric's own depth. */
+    .spb-split__detail ::deep .spb-metric-row .spb-td-chart {
         order: 3;
-        flex: 0 0 100%;
-        height: 0;
-    }
-
-    .spb-split__detail ::deep .spb-td-type    { order: 4; }
-    .spb-split__detail ::deep .spb-td-alias   { order: 5; text-align: left; }
-    .spb-split__detail ::deep .spb-td-updated { order: 6; }
-
-    .spb-split__detail ::deep .spb-td-chart {
-        order: 7;
         flex: 0 0 100%;
         margin-top: 4px;
         padding: 0;
+        padding-left: calc(var(--spb-indent, 0px) + var(--spb-lane, 0px));
+        box-sizing: border-box;
     }
 
-    .spb-split__detail ::deep .spb-metric-row--folder .spb-td-type,
-    .spb-split__detail ::deep .spb-metric-row--folder .spb-td-alias,
     .spb-split__detail ::deep .spb-metric-row--folder .spb-td-value,
-    .spb-split__detail ::deep .spb-metric-row--folder .spb-td-updated,
     .spb-split__detail ::deep .spb-metric-row--folder .spb-td-chart {
         display: none;
     }
 
     .spb-split__detail ::deep .spb-metric-row--folder .spb-td-name {
         flex: 1 1 100%;
-    }
-
-    .spb-split__detail ::deep .spb-td-alias::before,
-    .spb-split__detail ::deep .spb-td-updated::before {
-        content: "·";
-        margin-right: 6px;
-        color: var(--mud-palette-text-disabled);
+        min-width: 0;
     }
 }
 

@@ -13,7 +13,7 @@
   "inputs": {
     "files": {
       "global.json": "a4c16f708b406a9d1c56bdd74a46c730277d3e3ddc825efd6baed2e692bc60bf",
-      "Directory.Packages.props": "26e839881f4f67c8422fabca13355321cb8f80fb9f7d61c7c293f38695deb696",
+      "Directory.Packages.props": "94fc7f4886cae14a8bdc065dfc6588fb6349d41aa2c60a462cf4348cab7cc40d",
       "Directory.Build.props": "5b030b22a23b70b4378434208e44693013479cd56b981d331429dbf85c596621",
       ".github/actions/setup-dotnet-workload/action.yml": "e3f7736c4e8887df3019c24fea10702dcd5a6be3381679792148b66e238d0464",
       "src/MqttProbe.Core/MqttProbe.Core.csproj": "f17a0c8eaa5569f8bf877669173f5260700013ece29639e6dee0a30d49ede2ec",
@@ -316,8 +316,8 @@
     },
     {
       "id": "System.Formats.Cbor",
-      "version": "10.0.15",
-      "sha512": "8EBB814RXFnm/Klsuil8A6r+n6zvz4L/rQ1ROamxDZDt8lIjUl0tbSGlsYzea1jr/4V3Q6TNQbWfU/C8tjwPDQ=="
+      "version": "11.0.0",
+      "sha512": "2ULEPU67LRt4YVwBnCk1OhjsJspIBzg1JlDkN2hnZm9im3fC9bSbVQorLraOIcLMlA6/8eWQG1fjTpurHkIFZw=="
     },
     {
       "id": "System.Reflection.MetadataLoadContext",

@@ -1393,15 +1393,15 @@
       "licenseSourceUrl": "https://aka.ms/deprecateLicenseUrl"
     },
     {
-      "id": "nuget:system.formats.cbor@10.0.15",
+      "id": "nuget:system.formats.cbor@11.0.0",
       "name": "System.Formats.Cbor",
-      "version": "10.0.15",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
@@ -2943,6 +2943,16 @@
       "file": "3c76bd4c98a03091ab86a759e591a2c24ddeebc3a1489711c7e763492711798a.txt",
       "sha256": "3c76bd4c98a03091ab86a759e591a2c24ddeebc3a1489711c7e763492711798a",
       "sourceUrls": [],
+      "kind": "notice"
+    },
+    {
+      "id": "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+      "title": "System.Formats.Cbor package licence (THIRD-PARTY-NOTICES.TXT)",
+      "file": "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6.txt",
+      "sha256": "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+      "sourceUrls": [
+        "https://licenses.nuget.org/MIT"
+      ],
       "kind": "notice"
     },
     {

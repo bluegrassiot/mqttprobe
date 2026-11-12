@@ -364,8 +364,8 @@ jobs:
 
       - name: Verify legal notices
         run: |
-          python3 scripts/legal/notices.py profiles-check --scenario maui-maccatalyst
-          python3 scripts/legal/notices.py verify --scenario maui-maccatalyst
+          python3 scripts/legal/notices.py profiles-check --scenario maui-maccatalyst-app-store
+          python3 scripts/legal/notices.py verify --scenario maui-maccatalyst-app-store
 
       - name: Collect the package
         id: collect

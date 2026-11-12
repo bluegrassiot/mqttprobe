@@ -211,6 +211,14 @@ certificate, not the installer certificate. The Mac build reuses `IOS_DIST_CERT_
 `IOS_DIST_CERT_PASSWORD` for the Apple Distribution app signing; the
 `MAC_APP_STORE_INSTALLER_*` secrets are only for signing the package.
 
+The store package also has a legal package profile, `maui-maccatalyst-app-store`.
+It records the reviewed NuGet graph for the store publish, which excludes
+Velopack through `MqttProbeMacAppStore=true`.
+That profile lives under `legal/profiles`; it is not an Apple provisioning
+profile, so there is nothing to export, download, or create in the developer
+portal. The six environment signing secrets and the three existing `NOTARY_*`
+repository secrets stay as they are.
+
 ### Export and encode
 
 In **Keychain Access > My Certificates**, export each certificate with its

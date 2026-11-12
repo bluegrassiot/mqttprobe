@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[3]
 WORKFLOWS = ROOT / ".github" / "workflows"
 IOS_WORKFLOW = WORKFLOWS / "build-ios.yml"
 MAC_WORKFLOW = WORKFLOWS / "build-macos-app-store.yml"
+DIRECT_MAC_WORKFLOW = WORKFLOWS / "build-macos.yml"
 
 IOS_JOB = "build-ios-archive"
 MAC_JOB = "build-macos-app-store"
@@ -80,6 +81,10 @@ def step_run(step):
             continue
         return "\n".join(lines[start + 1:])
     raise AssertionError("step has no run command")
+
+
+def step_names(job):
+    return re.findall(r"^      - name: (.+)$", job, re.MULTILINE)
 
 
 class AppleWorkflowInputTests(unittest.TestCase):
@@ -440,6 +445,43 @@ class MacWorkflowTests(unittest.TestCase):
         self.assertNotIn("UseHardenedRuntime=true", build)
         self.assertNotIn("vpk pack", self.text)
         self.assertNotIn("notarytool", self.text)
+
+    def test_legal_checks_use_the_store_package_scenario(self):
+        legal = step_run(load_step("Verify legal notices", self.job))
+        commands = [line.strip() for line in legal.splitlines() if line.strip()]
+        self.assertEqual(
+            commands,
+            [
+                "python3 scripts/legal/notices.py profiles-check --scenario maui-maccatalyst-app-store",
+                "python3 scripts/legal/notices.py verify --scenario maui-maccatalyst-app-store",
+            ],
+        )
+        self.assertNotIn(
+            "continue-on-error", load_step("Verify legal notices", self.job)
+        )
+
+    def test_store_publish_is_immediately_followed_by_legal_checks(self):
+        names = step_names(self.job)
+        build_at = names.index("Build signed Mac App Store package")
+        self.assertEqual(names[build_at + 1], "Verify legal notices")
+        build = step_run(load_step("Build signed Mac App Store package", self.job))
+        self.assertIn("-p:MqttProbeMacAppStore=true", build)
+
+    def test_direct_catalyst_workflow_keeps_default_scenario(self):
+        text = DIRECT_MAC_WORKFLOW.read_text(encoding="utf-8")
+        job = load_job("build-maui-macos", text)
+        legal = step_run(load_step("Verify legal notices", job))
+        commands = [line.strip() for line in legal.splitlines() if line.strip()]
+        self.assertEqual(
+            commands,
+            [
+                "python3 scripts/legal/notices.py profiles-check --scenario maui-maccatalyst",
+                "python3 scripts/legal/notices.py verify --scenario maui-maccatalyst",
+            ],
+        )
+        publish_at = job.index("Publish (unsigned")
+        legal_at = job.index("Verify legal notices")
+        self.assertNotIn("MqttProbeMacAppStore", job[publish_at:legal_at])
 
     def test_package_verification_covers_signature_entitlements_and_slices(self):
         build = step_run(load_step("Build signed Mac App Store package", self.job))

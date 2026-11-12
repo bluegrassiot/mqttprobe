@@ -38,6 +38,7 @@ HEX64 = re.compile(r"\A[0-9a-f]{64}\Z")
 SHA512 = re.compile(r"\A[A-Za-z0-9+/]{86}==\Z")
 DIGEST_VALUE = re.compile(r"\A(?:[0-9a-f]{40}|[0-9a-f]{64}|[A-Za-z0-9+/]{86}==)\Z")
 PROFILE_NAME = re.compile(r"\A[a-z0-9][a-z0-9-]*\Z")
+MSBUILD_PROPERTY_NAME = re.compile(r"\A[A-Za-z_][A-Za-z0-9_]*\Z")
 PROPERTY_LINE = re.compile(r'^(?P<indent>\s*)"(?P<key>[^"\\]*)"\s*:\s*"(?P<value>[^"\\]*)"\s*,?\s*$')
 ITEM_LINE = re.compile(r'^(?P<indent>\s*)"(?P<value>[^"\\]*)"\s*,?\s*$')
 
@@ -377,6 +378,7 @@ def _profile(root, file):
         {
             "host", "project", "framework", "runtimeIdentifier",
             "runtimeIdentifiers", "selfContained", "targets",
+            "msbuildProperties",
         },
     )
     _require(data["schemaVersion"] == 1, "unsupported profile schema")
@@ -385,6 +387,15 @@ def _profile(root, file):
     _require(isinstance(data["inputs"]["files"], dict), "profile inputs are malformed")
     _require(isinstance(data["inputs"]["submodules"], dict), "profile submodules are malformed")
     _require(isinstance(data["packages"], list), "profile packages are malformed")
+
+    msbuild = data.get("msbuildProperties", {})
+    _require(isinstance(msbuild, dict), "profile msbuild properties are malformed")
+    for key, value in msbuild.items():
+        _require(
+            isinstance(key, str) and MSBUILD_PROPERTY_NAME.match(key) is not None,
+            "profile msbuild property name is invalid",
+        )
+        _require(isinstance(value, str), "profile msbuild property value is not a string")
 
     properties = collections.Counter()
     for relative, digest in data["inputs"]["files"].items():

@@ -100,9 +100,10 @@ upstream notice correspondence.
 ## Host profiles
 
 Committed profiles cover generic Web, Web RIDs (win-x64, linux-x64,
-linux-arm64), desktop linux-x64 and osx-arm64, MAUI Windows, MAUI Android, and
-the Apple targets ios-arm64 and maccatalyst with both RIDs. CI checks the
-matching profile after each publish job, including the Apple publish jobs.
+linux-arm64), desktop linux-x64 and osx-arm64, MAUI Windows, MAUI Android, the
+Apple targets ios-arm64 and maccatalyst with both RIDs, and
+maui-maccatalyst-app-store. CI checks the matching profile after each publish
+job, including the Apple publish jobs.
 
 The Apple profiles were exported on a Mac with the pinned SDK, Xcode and
 workloads. To regenerate them, use a Mac checkout at the same commit:
@@ -122,9 +123,17 @@ the Mac: it would rewrite the Windows and Linux graphs from a non-native host.
 python3 scripts/legal/notices.py refresh --scenario desktop-osx-arm64
 python3 scripts/legal/notices.py refresh --scenario maui-ios-arm64
 python3 scripts/legal/notices.py refresh --scenario maui-maccatalyst
+python3 scripts/legal/notices.py refresh --scenario maui-maccatalyst-app-store
 python3 scripts/legal/notices.py check
 python3 scripts/ci/inspect_legal_exceptions.py
 ```
+
+The Mac App Store publish sets `MqttProbeMacAppStore=true`, which excludes
+Velopack from the package graph. That
+store graph needs its own reviewed profile, `maui-maccatalyst-app-store`, next to
+the direct-download `maui-maccatalyst` profile. This is a legal package profile
+under `legal/profiles`, not an Apple provisioning profile, and it plays no part
+in App Store signing.
 
 Expected changes are the selected Apple profile, Apple additions or updates in
 `legal/extracted`, and catalogue or root `NOTICES` changes only where the Apple

@@ -1393,9 +1393,9 @@
       "licenseSourceUrl": "https://aka.ms/deprecateLicenseUrl"
     },
     {
-      "id": "nuget:system.formats.cbor@10.0.14",
+      "id": "nuget:system.formats.cbor@10.0.15",
       "name": "System.Formats.Cbor",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",

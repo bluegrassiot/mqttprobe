@@ -599,7 +599,7 @@ Verify:     python scripts/legal/notices.py check
     Source: https://github.com/protobuf-net/protobuf-net
     Texts: Apache License 2.0
 
-  System.Formats.Cbor 10.0.14
+  System.Formats.Cbor 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/

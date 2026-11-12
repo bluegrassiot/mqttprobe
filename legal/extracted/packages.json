@@ -2197,7 +2197,7 @@
     },
     {
       "id": "System.Formats.Cbor",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "metadata": {
         "license": "MIT",
         "licenseUrl": "https://licenses.nuget.org/MIT",

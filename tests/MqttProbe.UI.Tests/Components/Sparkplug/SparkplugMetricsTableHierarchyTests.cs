@@ -14,6 +14,31 @@ public sealed class SparkplugMetricsTableHierarchyTests : BunitTestContext
     public void Setup() => EnsureMudProviders();
 
     [Test]
+    public void HierarchyMode_IndentsByDepthAndOnlyExpandableRowsCarryAChevron()
+    {
+        var cut = RenderTable(
+            SparkplugMetricViewMode.Hierarchy,
+            Metric("A/T1"),
+            Metric("Standalone"));
+
+        var folder = Row(cut, "A");
+        folder.ClassList.Should().Contain("spb-depth-0");
+        folder.QuerySelector(".spb-metric-toggle").Should().NotBeNull();
+
+        var child = Row(cut, "A/T1");
+        child.ClassList.Should().Contain("spb-depth-1");
+        child.QuerySelector(".spb-metric-toggle").Should().BeNull(
+            "a metric with no children has nothing to expand");
+
+        var standalone = Row(cut, "Standalone");
+        standalone.ClassList.Should().Contain("spb-depth-0",
+            "a metric with no parent sits on the row edge");
+        standalone.QuerySelector(".spb-metric-toggle").Should().BeNull();
+        standalone.QuerySelector(".spb-metric-name")!.FirstElementChild!.ClassList
+            .Should().Contain("spb-metric-label", "nothing may reserve a chevron lane before the label");
+    }
+
+    [Test]
     public void HierarchyMode_ExposesNarrowLayoutHooks()
     {
         var cut = RenderTable(SparkplugMetricViewMode.Hierarchy, Metric("A/T1"));
@@ -205,7 +230,7 @@ public sealed class SparkplugMetricsTableHierarchyTests : BunitTestContext
         var row = Row(cut, "A/T1");
         row.QuerySelector(".spb-metric-label")!.TextContent.Should().Be("A/T1");
         row.QuerySelector(".spb-metric-toggle").Should().BeNull();
-        cut.FindAll(".spb-metric-indent").Should().BeEmpty();
+        row.ClassList.Should().Contain("spb-depth-0");
     }
 
     [Test]
@@ -225,7 +250,7 @@ public sealed class SparkplugMetricsTableHierarchyTests : BunitTestContext
 
         var row = Row(cut, fullPath);
         row.QuerySelector(".spb-td-name")!.GetAttribute("title").Should().Be(fullPath);
-        row.QuerySelector(".spb-metric-indent")!.GetAttribute("width").Should().Be("96");
+        row.ClassList.Should().Contain("spb-depth-4", "the indent adds one lane per level and stops at the fourth");
         row.QuerySelector(".spb-td-name")!.GetAttribute("style").Should().BeNull();
     }
 

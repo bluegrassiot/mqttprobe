@@ -14,6 +14,15 @@
     row-gap: 6px;
 }
 
+/* Filters sit below the title boundary, so keep the one divider under the row. */
+.app-tabpanel-header--has-filters {
+    border-bottom: 0;
+}
+
+.app-tabpanel-header--has-filters .app-tabpanel-header__row {
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
 .app-tabpanel-header__title {
     margin: 0;
     font-size: 1rem;
@@ -78,6 +87,10 @@
 
     .app-tabpanel-header__filters {
         padding-top: 4px;
+    }
+
+    .app-tabpanel-header--has-filters .app-tabpanel-header__row {
+        border-bottom-width: 2px;
     }
 
     /* Views with wide chip sets (e.g. Nodes) opt in via this modifier: the

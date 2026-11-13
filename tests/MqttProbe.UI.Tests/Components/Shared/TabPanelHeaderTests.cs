@@ -112,6 +112,50 @@ public class TabPanelHeaderTests : BunitTestContext
     }
 
     [Test]
+    public void Adds_FiltersModifier_WhenFiltersProvided()
+    {
+        EnsureMudProviders();
+
+        var cut = Render<TabPanelHeader>(p => p
+            .Add(x => x.Title, "Nodes")
+            .Add(x => x.HeaderFilters, (RenderFragment)(b =>
+                b.AddMarkupContent(0, "<input class=\"test-filter\" />"))));
+
+        cut.Find("div.app-tabpanel-header").ClassList.Should()
+            .Contain("app-tabpanel-header--has-filters",
+                "the divider belongs under the title row only when a filter row follows");
+    }
+
+    [Test]
+    public void Omits_FiltersModifier_WhenFiltersNotProvided()
+    {
+        EnsureMudProviders();
+
+        var cut = Render<TabPanelHeader>(p => p
+            .Add(x => x.Title, "Charts"));
+
+        cut.Find("div.app-tabpanel-header").ClassList.Should()
+            .NotContain("app-tabpanel-header--has-filters",
+                "an unfiltered header keeps its single root divider");
+    }
+
+    [Test]
+    public void Filtered_Header_DrawsOneDividerUnderTitleRow()
+    {
+        var css = ReadScopedCss();
+
+        DeclarationsOf(css, ".app-tabpanel-header--has-filters").Should()
+            .Contain("border-bottom: 0",
+                "the filtered root must drop its divider so only one line is drawn");
+        DeclarationsOf(css, ".app-tabpanel-header--has-filters .app-tabpanel-header__row").Should()
+            .Contain("border-bottom: 1px",
+                "the filtered header draws its divider under the title row");
+        DeclarationsOf(css, ".app-tabpanel-header--has-filters .app-tabpanel-header__row", fromEnd: true)
+            .Should().Contain("border-bottom-width: 2px",
+                "compact layouts thicken the filtered row divider so rounding cannot hide it");
+    }
+
+    [Test]
     public void Applies_BorderAndMargin_ToRoot()
     {
         EnsureMudProviders();
@@ -128,6 +172,17 @@ public class TabPanelHeaderTests : BunitTestContext
             "a 1px divider must separate header from body");
         css.Should().Contain("margin-bottom: 10px",
             "10px margin-bottom keeps the header dense without feeling cramped");
+    }
+
+    private static string DeclarationsOf(string css, string selector, bool fromEnd = false)
+    {
+        var start = fromEnd
+            ? css.LastIndexOf(selector + " {", StringComparison.Ordinal)
+            : css.IndexOf(selector + " {", StringComparison.Ordinal);
+        start.Should().BeGreaterThanOrEqualTo(0, $"the stylesheet must define '{selector}'");
+
+        var end = css.IndexOf('}', start);
+        return css[start..(end + 1)];
     }
 
     private static string ReadScopedCss()

@@ -7,6 +7,7 @@
 @inject IChartDataService ChartDataService
 @inject IUiSettings UiSettings
 @inject IDeviceTimeFormatter TimeFormatter
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <div class="chart-card-shell">
@@ -38,7 +39,7 @@
         <CardHeaderActions>
             <MudIconButton Icon="@(_live && !_hovering ? LucideIcons.PauseCircle : LucideIcons.PlayCircle)"
                            Color="@(_live && !_hovering ? MudBlazor.Color.Inherit : MudBlazor.Color.Success)"
-                           title="@(_live && !_hovering ? "Pause live updates (enables zoom/pan/export)" : "Resume live updates")"
+                           title="@(_live && !_hovering ? PauseTitle : "Resume live updates")"
                            Size="MudBlazor.Size.Small"
                             OnClick="ToggleLive" />
             <MudIconButton Icon="@LucideIcons.Pencil" Color="MudBlazor.Color.Inherit"
@@ -59,7 +60,16 @@
         else
         {
             <div class="chart-card-plot" @onmouseover="OnMouseOver" @onmouseleave="OnMouseLeave">
-                @if (_bridgeReady)
+                @if (!_bridgeReady)
+                {
+                    <div class="chart-card-plot__pending" aria-hidden="true"></div>
+                }
+                else if (Renderer == ChartRendererKind.ECharts)
+                {
+                    <div class="chart-card-echarts" @ref="_echartsElement"
+                         role="img" aria-label="@($"{Configuration.Name} chart")"></div>
+                }
+                else
                 {
                     <ApexChart TItem="ChartDataPoint"
                                Options="_options"
@@ -80,11 +90,21 @@
                         }
                     </ApexChart>
                 }
-                else
-                {
-                    <div class="chart-card-plot__pending" aria-hidden="true"></div>
-                }
             </div>
+            @if (Renderer == ChartRendererKind.ECharts && _echartsError is not null)
+            {
+                <div class="chart-card-echarts-error" role="alert">
+                    <MudText Typo="Typo.body2">@_echartsError</MudText>
+                    @if (_echartsErrorDetail is not null)
+                    {
+                        <MudText Typo="Typo.caption" Class="chart-card-echarts-error__detail">
+                            @_echartsErrorDetail
+                        </MudText>
+                    }
+                    <MudButton Variant="Variant.Outlined" Size="MudBlazor.Size.Small" Color="MudBlazor.Color.Warning"
+                               OnClick="RequestRendererRollback">Switch back to Apex</MudButton>
+                </div>
+            }
             @if (_zoneCaption.Length > 0)
             {
                 <div class="chart-card-zone-row">
@@ -102,6 +122,8 @@
     [Parameter, EditorRequired] public ChartConfiguration Configuration { get; set; } = null!;
     [Parameter] public EventCallback<ChartConfiguration> OnEdit { get; set; }
     [Parameter] public EventCallback<ChartConfiguration> OnDelete { get; set; }
+    [Parameter] public ChartRendererKind Renderer { get; set; } = ChartRendererKind.Apex;
+    [Parameter] public EventCallback OnRendererRollback { get; set; }
     [Parameter] public TimeProvider Clock { get; set; } = TimeProvider.System;
     [CascadingParameter(Name = "IsDarkMode")] public bool IsDarkMode { get; set; }
 
@@ -119,6 +141,7 @@
     private static readonly TimeSpan RenderThrottle = TimeSpan.FromMilliseconds(200);
     private int _lastSeriesCount = -1;
     private string _lastConfigFingerprint = "";
+    private string _lastDataShape = "";
     private bool _lastIsDarkMode;
 
     private ChartFreshnessReport _freshness = ChartFreshnessEvaluator.Evaluate([], null, DateTime.MinValue);
@@ -144,7 +167,11 @@
     }
 
     private string GetConfigFingerprint() =>
-        $"{Configuration.Type}|{string.Join(",", Configuration.Series.Select(s => $"{s.Id}:{s.DisplayName}:{s.Color}"))}";
+        $"{Configuration.Type}|{Configuration.TimeWindowMinutes}|{string.Join(",", Configuration.Series.Select(s => $"{s.Id}:{s.DisplayName}:{s.Color}"))}";
+
+    // Names and colours do not change which points a viewport shows, so they do not reset it.
+    private string GetDataShape() =>
+        $"{Configuration.Type}|{Configuration.TimeWindowMinutes}|{string.Join(",", Configuration.Series.Select(s => s.Id))}";
 
     protected override void OnInitialized()
     {
@@ -203,6 +230,7 @@
         ApplyAxisTheme();
         _lastSeriesCount = Configuration.Series.Count;
         _lastConfigFingerprint = GetConfigFingerprint();
+        _lastDataShape = GetDataShape();
         _lastIsDarkMode = IsDarkMode;
 
         RefreshReceipts();
@@ -228,17 +256,30 @@
 
     protected override void OnParametersSet()
     {
+        var rendererChanged = Renderer != _activeRenderer;
+        if (rendererChanged) SwitchRenderer();
+
         var darkModeChanged = IsDarkMode != _lastIsDarkMode;
         var fingerprint = GetConfigFingerprint();
         var configChanged = fingerprint != _lastConfigFingerprint;
+        var dataShape = GetDataShape();
+        var dataShapeChanged = dataShape != _lastDataShape;
 
         if (configChanged) RefreshReceipts();
         RefreshFreshness(render: false);
 
-        if (!darkModeChanged && !configChanged) return;
+        if (!darkModeChanged && !configChanged && !rendererChanged) return;
 
         _lastIsDarkMode = IsDarkMode;
         _lastConfigFingerprint = fingerprint;
+        _lastDataShape = dataShape;
+
+        if (dataShapeChanged)
+        {
+            _visibleFromMs = null;
+            _visibleToMs = null;
+            _zoneCaptionSignature = "";
+        }
 
         if (darkModeChanged)
         {
@@ -279,6 +320,22 @@
                 TimeSpan.FromSeconds(1),
                 TimeSpan.FromSeconds(1));
             await EnsureTimeBridgeAsync();
+        }
+
+        if (Renderer == ChartRendererKind.ECharts)
+        {
+            if (!_disposed && _bridgeReady && Configuration.Series.Count > 0)
+            {
+                await EnsureEChartsAsync();
+                if (_live && _echartsReady && (_pendingUpdate || _pendingOptionsUpdate))
+                    await ApplyEChartsDataAsync();
+            }
+            else
+            {
+                await ReleaseEChartsPlotAsync();
+            }
+
+            return;
         }
 
         if (_pendingOptionsUpdate && _chartReady && !_disposed && _chart is not null)
@@ -429,6 +486,7 @@
         _disposed = true;
         ChartDataService.OnDataUpdated -= OnDataUpdated;
         DisposeTimeDisplay();
+        await DisposeRendererAsync();
         if (_updateTimer is not null) await _updateTimer.DisposeAsync();
     }
 }

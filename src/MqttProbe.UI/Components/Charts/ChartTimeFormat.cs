@@ -8,16 +8,21 @@ internal static class ChartTimeFormat
     private const string Bridge = "window.mqttProbeTime";
     private const long DayMilliseconds = 86_400_000;
 
-    internal static string Options(MessageTimePreferences preferences) =>
-        JsonSerializer.Serialize(new
-        {
-            zone = preferences.Zone == MessageTimePreferences.ZoneUtc
-                ? MessageTimePreferences.ZoneUtc
-                : MessageTimePreferences.ZoneLocal,
-            clockFormat = preferences.ClockFormat == MessageTimePreferences.ClockFormat12Hour
-                ? MessageTimePreferences.ClockFormat12Hour
-                : MessageTimePreferences.ClockFormat24Hour
-        });
+    internal static (string Zone, string ClockFormat) Values(MessageTimePreferences preferences) =>
+    (
+        preferences.Zone == MessageTimePreferences.ZoneUtc
+            ? MessageTimePreferences.ZoneUtc
+            : MessageTimePreferences.ZoneLocal,
+        preferences.ClockFormat == MessageTimePreferences.ClockFormat12Hour
+            ? MessageTimePreferences.ClockFormat12Hour
+            : MessageTimePreferences.ClockFormat24Hour
+    );
+
+    internal static string Options(MessageTimePreferences preferences)
+    {
+        var (zone, clockFormat) = Values(preferences);
+        return JsonSerializer.Serialize(new { zone, clockFormat });
+    }
 
     internal static string AxisFormatter(MessageTimePreferences preferences) =>
         "function(value, timestamp, opts) {" +

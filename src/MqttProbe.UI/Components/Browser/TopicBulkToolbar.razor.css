@@ -3,8 +3,8 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 6px 10px;
-    padding: 6px 10px;
-    margin-bottom: 8px;
+    padding: 3px 10px;
+    margin-bottom: 6px;
     border: 1px solid var(--mud-palette-lines-default);
     border-radius: 8px;
     background: color-mix(in srgb, var(--mud-palette-primary) 7%, transparent);

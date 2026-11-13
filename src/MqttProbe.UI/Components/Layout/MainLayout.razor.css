@@ -15,7 +15,7 @@
 .app-shell-body {
     min-height: 0;
     flex: 1 1 auto;
-    padding-top: 12px;
+    padding-top: 8px;
     display: flex;
     flex-direction: column;
     overflow: hidden;

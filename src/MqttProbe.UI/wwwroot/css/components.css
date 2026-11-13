@@ -381,6 +381,17 @@ html.app-keyboard-open .browser-mobile-payload {
     }
 }
 
+/* The MudTabs internals never carry the page's isolation attribute, so the compact
+   tab height belongs here rather than in Index.razor.css. */
+.app-shell-body .desktop-tabs .mud-tabs-tabbar-inner,
+.app-shell-body .desktop-tabs .mud-tab {
+    min-height: 44px;
+}
+
+.app-shell-body .desktop-tabs .mud-tab {
+    padding: 4px 12px;
+}
+
 /* ── Metrics flyout (MudMenu popover) ───────────────────────────────────── */
 /* Global: MudPopover content is teleported outside MetricsStatsChip scope.  */
 /* Center on viewport so the panel is less likely to clip on small screens.  */

@@ -108,8 +108,7 @@ public sealed class DesktopSecretKeyProtector : ISecretProtectionStatus, IDispos
 
     private Task InitializeFileFallbackAsync()
     {
-        byte[]? rawKey;
-        rawKey = _raw.TryRead();
+        var rawKey = _raw.TryRead();
 
         if (rawKey is not null)
         {
@@ -141,8 +140,7 @@ public sealed class DesktopSecretKeyProtector : ISecretProtectionStatus, IDispos
     {
         if (_raw.Exists)
         {
-            byte[]? rawKey;
-            rawKey = _raw.TryRead();
+            var rawKey = _raw.TryRead();
 
             if (rawKey is not null && CryptographicOperations.FixedTimeEquals(osKey, rawKey))
             {
@@ -180,8 +178,7 @@ public sealed class DesktopSecretKeyProtector : ISecretProtectionStatus, IDispos
     {
         if (_raw.Exists)
         {
-            byte[]? rawKey;
-            rawKey = _raw.TryRead();
+            var rawKey = _raw.TryRead();
 
             if (rawKey is not null)
             {

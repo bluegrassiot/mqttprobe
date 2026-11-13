@@ -65,6 +65,24 @@ def _run_main(fake_run, fixture=None):
     return buf.getvalue(), calls
 
 
+def _run_main_expect_exit(fake_run, fixture=None):
+    ctx = fixture or _Fixture()
+    calls = []
+    def tracking_run(args, **kw):
+        calls.append(list(args))
+        return fake_run(args, **kw)
+    buf = io.StringIO()
+    code = 0
+    with ctx:
+        with patch("subprocess.run", side_effect=tracking_run):
+            with patch("sys.stdout", buf):
+                try:
+                    format_ci.main(["--fix"] if ctx._fix else [])
+                except SystemExit as exc:
+                    code = exc.code
+    return code, buf.getvalue(), calls
+
+
 class TestInvocationArgs(unittest.TestCase):
     """Verify formatting passes and their shared invocation options."""
 
@@ -244,7 +262,153 @@ class TestWorkspaceWarningExitZeroFails(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx:
             _run_main(fake_run)
         self.assertEqual(ctx.exception.code, 1)
-        self.assertEqual([c[2] for c in calls], ["whitespace", "style"])
+        self.assertEqual([c[2] for c in calls], ["whitespace", "style", "style"])
+        self.assertFalse(any("--diagnostics" in c for c in calls))
+        self.assertIn("--verbosity", calls[-1])
+
+
+class TestPrimaryPassesUseDefaultVerbosity(unittest.TestCase):
+    def test_no_primary_pass_requests_verbosity(self):
+        _, calls = _run_main(lambda a, **kw: _run())
+        self.assertEqual(len(calls), 3)
+        for call in calls:
+            self.assertNotIn("--verbosity", call, f"Unexpected --verbosity in: {call}")
+            self.assertIn("--verify-no-changes", call)
+
+    def test_scoped_and_fix_passes_stay_at_default_verbosity(self):
+        path = Path("/tmp/fake/src/changed.cs")
+        original_select = format_ci._select_files
+        format_ci._select_files = lambda selection: (False, [path])
+        try:
+            _, calls = _run_main(lambda a, **kw: _run())
+            _, fix_calls = _run_main(lambda a, **kw: _run(), _Fixture(fix=True))
+        finally:
+            format_ci._select_files = original_select
+        for call in calls + fix_calls:
+            self.assertNotIn("--verbosity", call, f"Unexpected --verbosity in: {call}")
+
+
+class TestWorkspaceWarningShowsDiagnostics(unittest.TestCase):
+    SUMMARY = ("Warnings were encountered while loading the workspace. "
+               "Set the verbosity option to the 'diagnostic' level to log warnings.")
+    DETAIL = (
+        "Msbuild failed when processing the file '/w/src/A.csproj' with message: boom",
+        "Project file not found",
+    )
+
+    def _detail(self):
+        return "\n".join(self.DETAIL)
+
+    def test_regular_warning_adds_single_diagnostic_pass(self):
+        def fake_run(args, **kw):
+            if "--verbosity" in args:
+                return _run(0, self._detail(), "")
+            if "style" in args:
+                return _run(0, self.SUMMARY, "")
+            return _run(0, "", "")
+
+        code, out, calls = _run_main_expect_exit(fake_run)
+        self.assertEqual(code, 1)
+        self.assertEqual([c[2] for c in calls], ["whitespace", "style", "style"])
+        self.assertFalse(any("--diagnostics" in c for c in calls))
+        diagnostic = calls[-1]
+        self.assertEqual(diagnostic[diagnostic.index("--verbosity") + 1], "diagnostic")
+        self.assertIn("--verify-no-changes", diagnostic)
+        self.assertIn("Warnings were encountered while loading the workspace", out)
+        for line in self.DETAIL:
+            self.assertIn(line, out)
+        self.assertNotIn("warn :", out)
+
+    def test_diagnostic_failure_cannot_turn_failure_into_pass(self):
+        def fake_run(args, **kw):
+            if "--verbosity" in args:
+                return _run(2, "", "error MSB1009: Project file does not exist.")
+            return _run(0, self.SUMMARY, "")
+
+        code, _, calls = _run_main_expect_exit(fake_run)
+        self.assertEqual(code, 1)
+        self.assertEqual([c[2] for c in calls], ["whitespace", "whitespace"])
+
+    def test_diagnostic_success_cannot_turn_failure_into_pass(self):
+        def fake_run(args, **kw):
+            if "--verbosity" in args:
+                return _run(0, "", "")
+            return _run(0, self.SUMMARY, "")
+
+        code, out, calls = _run_main_expect_exit(fake_run)
+        self.assertEqual(code, 1)
+        self.assertIn("Diagnostic detail only (result unchanged):", out)
+        self.assertEqual([c[2] for c in calls], ["whitespace", "whitespace"])
+
+    def test_fix_mode_diagnostic_pass_is_read_only(self):
+        def fake_run(args, **kw):
+            if "--verbosity" in args:
+                return _run(0, self._detail(), "")
+            if "style" in args:
+                return _run(0, self.SUMMARY, "")
+            return _run(0, "", "")
+
+        code, _, calls = _run_main_expect_exit(fake_run, _Fixture(fix=True))
+        self.assertEqual(code, 1)
+        self.assertNotIn("--verify-no-changes", calls[0])
+        self.assertNotIn("--verify-no-changes", calls[1])
+        self.assertIn("--verify-no-changes", calls[-1])
+        self.assertIn("--verbosity", calls[-1])
+
+    def test_targeted_warning_adds_diagnostic_pass(self):
+        def fake_run(args, **kw):
+            if "--verbosity" in args:
+                return _run(0, self._detail(), "")
+            if "--diagnostics" in args:
+                return _run(0, self.SUMMARY, "")
+            return _run(0, "", "")
+
+        code, out, calls = _run_main_expect_exit(fake_run)
+        self.assertEqual(code, 1)
+        self.assertEqual([c[2] for c in calls], ["whitespace", "style", "style", "style"])
+        diagnostic = calls[-1]
+        self.assertIn("--diagnostics", diagnostic)
+        self.assertEqual(diagnostic[diagnostic.index("--diagnostics") + 1], "IDE0005")
+        self.assertEqual(diagnostic[diagnostic.index("--verbosity") + 1], "diagnostic")
+        self.assertIn("--verify-no-changes", diagnostic)
+        for line in self.DETAIL:
+            self.assertIn(line, out)
+
+    def test_scoped_diagnostic_pass_reuses_scope_and_cwd(self):
+        path = Path("/tmp/fake/src/changed.cs")
+        captured = []
+
+        def fake_run(args, **kw):
+            captured.append((list(args), kw))
+            if "--verbosity" in args:
+                return _run(0, "Msbuild failed when processing the file", "")
+            if "style" in args:
+                return _run(0, self.SUMMARY, "")
+            return _run(0, "", "")
+
+        original_select = format_ci._select_files
+        format_ci._select_files = lambda selection: (False, [path])
+        try:
+            code, _, _ = _run_main_expect_exit(fake_run)
+        finally:
+            format_ci._select_files = original_select
+        self.assertEqual(code, 1)
+        diagnostic, kwargs = captured[-1]
+        self.assertEqual(
+            diagnostic[diagnostic.index("--include") + 1],
+            os.path.join("src", "changed.cs"),
+        )
+        self.assertEqual(diagnostic.count("--exclude"), len(format_ci.EXCLUDES))
+        self.assertEqual(kwargs["cwd"], Path("/tmp/fake"))
+
+    def test_success_has_no_diagnostic_pass_or_chatter(self):
+        chatter = "Loading workspace.\nDetermining formattable files.\nFormatted 0 of 0 files."
+        code, out, calls = _run_main_expect_exit(lambda a, **kw: _run(0, chatter, ""))
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), 3)
+        self.assertNotIn("Loading workspace", out)
+        self.assertNotIn("Diagnostic detail", out)
+        self.assertIn("OK", out)
 
 
 class TestWorkloadSkip(unittest.TestCase):

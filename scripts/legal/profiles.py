@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from common import (
 )
 
 SCENARIOS = ROOT / "legal" / "scenarios.json"
+PROPERTY_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 FINGERPRINT_FILES = (
     "global.json",
     "Directory.Packages.props",
@@ -26,9 +28,38 @@ FINGERPRINT_FILES = (
 )
 
 
+def scenario_properties(scenario):
+    raw = scenario.get("msbuildProperties")
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise LegalError(f"{scenario.get('name', '<scenario>')}: msbuildProperties must be an object")
+    properties = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not PROPERTY_NAME.match(key):
+            raise LegalError(
+                f"{scenario.get('name', '<scenario>')}: invalid MSBuild property name: {key!r}"
+            )
+        if isinstance(value, bool):
+            properties[key] = "true" if value else "false"
+        elif isinstance(value, int):
+            properties[key] = str(value)
+        elif isinstance(value, str):
+            properties[key] = value
+        else:
+            raise LegalError(
+                f"{scenario.get('name', '<scenario>')}: MSBuild property {key} must be a string, "
+                "boolean or integer"
+            )
+    return properties
+
+
 def scenario_map():
     data = read_json(SCENARIOS)
-    return {entry["name"]: entry for entry in data["scenarios"]}
+    scenarios = {entry["name"]: entry for entry in data["scenarios"]}
+    for scenario in scenarios.values():
+        scenario_properties(scenario)
+    return scenarios
 
 
 def target_keys(assets, scenario):
@@ -91,7 +122,7 @@ def inventory(scenario):
         for identity, digest in packages.items()
     ]
     result.sort(key=lambda item: (item["id"], item["version"]))
-    return {
+    metadata = {
         "schemaVersion": 1,
         "name": scenario["name"],
         "host": scenario["host"],
@@ -100,10 +131,14 @@ def inventory(scenario):
         "runtimeIdentifier": scenario.get("runtimeIdentifier"),
         "runtimeIdentifiers": scenario.get("runtimeIdentifiers"),
         "selfContained": scenario.get("selfContained", False),
-        "targets": keys,
-        "inputs": input_fingerprint(),
-        "packages": result,
     }
+    properties = scenario_properties(scenario)
+    if properties:
+        metadata["msbuildProperties"] = properties
+    metadata["targets"] = keys
+    metadata["inputs"] = input_fingerprint()
+    metadata["packages"] = result
+    return metadata
 
 
 def hash_dependency_file(path):
@@ -148,6 +183,12 @@ def compare(committed, current):
     for field in ("framework", "runtimeIdentifier", "runtimeIdentifiers", "selfContained", "targets"):
         if committed.get(field) != current.get(field):
             problems.append(f"profile {field} changed: {committed.get(field)!r} != {current.get(field)!r}")
+    committed_properties = committed.get("msbuildProperties") or {}
+    current_properties = current.get("msbuildProperties") or {}
+    if committed_properties != current_properties:
+        problems.append(
+            f"MSBuild properties changed: {committed_properties!r} != {current_properties!r}"
+        )
     expected = {(item["id"], item["version"]): item["sha512"] for item in committed["packages"]}
     actual = {(item["id"], item["version"]): item["sha512"] for item in current["packages"]}
     for identity in sorted(set(expected) | set(actual)):

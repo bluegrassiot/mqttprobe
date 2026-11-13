@@ -25,6 +25,7 @@ legal = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(legal)
 
 RULE = "DS173237"
+_ABSENT = object()
 CATALOGUE = legal.CATALOGUE
 EXTRACTED = legal.EXTRACTED
 DOCUMENTS = legal.DOCUMENTS
@@ -108,11 +109,12 @@ class Fixture(unittest.TestCase):
         self.write_json(EXTRACTED, {"schemaVersion": 1, "packages": [package]})
         return digest, extractor_digest
 
-    def profile(self, name="web-win-x64", input_text="<Project />\n"):
+    def profile(self, name="web-win-x64", input_text="<Project />\n",
+                msbuild_properties=_ABSENT):
         input_digest = sha256(input_text)
         self.write("global.json", input_text)
         sha512 = base64.b64encode(b"x" * 64).decode("ascii")
-        self.write_json(f"legal/profiles/{name}.json", {
+        data = {
             "schemaVersion": 1, "name": name, "host": "any",
             "project": "src/MqttProbe.Web/MqttProbe.Web.csproj", "framework": "net10.0",
             "runtimeIdentifier": None, "runtimeIdentifiers": None, "selfContained": False,
@@ -120,7 +122,10 @@ class Fixture(unittest.TestCase):
             "inputs": {"files": {"global.json": input_digest}, "submodules": {},
                        "sdk": "10.0.403"},
             "packages": [{"id": "Alpha", "version": "1.0.0", "sha512": sha512}],
-        })
+        }
+        if msbuild_properties is not _ABSENT:
+            data["msbuildProperties"] = msbuild_properties
+        self.write_json(f"legal/profiles/{name}.json", data)
         return input_digest, sha512
 
     def git_repo(self, relative, content="submodule\n"):
@@ -471,6 +476,50 @@ class TestProfiles(Fixture):
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         self.assertFalse(legal.is_legal_hash_exception(
             self.at(PROFILE, f'"global.json": "{input_digest}"'), self.root))
+
+    def test_store_msbuild_properties_are_accepted(self):
+        profile = "legal/profiles/maui-maccatalyst-app-store.json"
+        input_digest, sha512 = self.profile(
+            "maui-maccatalyst-app-store",
+            msbuild_properties={"MqttProbeMacAppStore": "true"},
+        )
+        self.assertTrue(legal.is_legal_hash_exception(
+            self.at(profile, f'"{input_digest}"'), self.root))
+        self.assertTrue(legal.is_legal_hash_exception(
+            self.at(profile, f'"{sha512}"'), self.root))
+
+    def test_empty_msbuild_properties_are_accepted(self):
+        input_digest, _ = self.profile(msbuild_properties={})
+        self.assertTrue(legal.is_legal_hash_exception(
+            self.at(PROFILE, f'"{input_digest}"'), self.root))
+
+    def test_invalid_msbuild_properties_block(self):
+        for properties in (
+            None,
+            ["MqttProbeMacAppStore=true"],
+            "MqttProbeMacAppStore=true",
+            {"9invalid": "true"},
+            {"invalid-name": "true"},
+            {"": "true"},
+            {"MqttProbeMacAppStore": True},
+            {"MqttProbeMacAppStore": 1},
+            {"MqttProbeMacAppStore": ["true"]},
+            {"MqttProbeMacAppStore": {"nested": "true"}},
+        ):
+            with self.subTest(properties=properties):
+                input_digest, _ = self.profile(msbuild_properties=properties)
+                self.assertFalse(legal.is_legal_hash_exception(
+                    self.at(PROFILE, f'"global.json": "{input_digest}"'), self.root))
+
+    def test_digest_shaped_msbuild_value_is_not_exception_eligible(self):
+        fake = "a" * 64
+        input_digest, _ = self.profile(
+            msbuild_properties={"MqttProbeMacAppStore": fake}
+        )
+        self.assertFalse(legal.is_legal_hash_exception(
+            self.at(PROFILE, f'"{fake}"'), self.root))
+        self.assertFalse(legal.is_legal_hash_exception(
+            self.at(PROFILE, f'"{input_digest}"'), self.root))
 
     def test_changed_input_blocks(self):
         self.profile()

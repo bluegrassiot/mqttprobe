@@ -29,6 +29,8 @@ def restore_command(scenario):
         command.extend(["-r", scenario["runtimeIdentifier"]])
     if scenario.get("selfContained"):
         command.append("-p:SelfContained=true")
+    for key, value in profiles.scenario_properties(scenario).items():
+        command.append(f"-p:{key}={value}")
     return command
 
 

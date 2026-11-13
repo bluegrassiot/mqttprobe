@@ -77,6 +77,7 @@ def scenario_environment(scenario):
         environment["RuntimeIdentifier"] = scenario["runtimeIdentifier"]
     if scenario.get("selfContained"):
         environment["SelfContained"] = "true"
+    environment.update(profiles.scenario_properties(scenario))
     return environment
 
 

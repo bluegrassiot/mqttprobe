@@ -20,6 +20,9 @@ Bug fixes and small improvements are welcome. For larger changes, open an issue 
 2. Clone the repo with submodules: `git clone --recurse-submodules https://github.com/bluegrassiot/mqttprobe`. If you already cloned without that flag, run `git submodule update --init --recursive`.
 3. Run tests: `dotnet test`
 
+Maintainers publishing the iOS or Mac Catalyst app to TestFlight should follow
+[.github/ios-testflight.md](.github/ios-testflight.md).
+
 ### Architecture and Development
 
 For the solution layout, library choices, and common development commands, see the [Development wiki](https://github.com/bluegrassiot/mqttprobe/wiki/07-Development).

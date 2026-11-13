@@ -118,6 +118,11 @@ System.IO.File.WriteAllText(FilePath, content);
 		     via a paired Mac. See that file's import at the top of this project. -->
 	</PropertyGroup>
 
+	<PropertyGroup Condition="'$(MqttProbeMacAppStore)' == 'true' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">
+		<DefineConstants>$(DefineConstants);MQTTPROBE_MAC_APP_STORE</DefineConstants>
+		<CodesignEntitlements>Platforms\MacCatalyst\AppStoreEntitlements.plist</CodesignEntitlements>
+	</PropertyGroup>
+
     <PropertyGroup>
         <ServerGarbageCollection>false</ServerGarbageCollection>
         <DefaultLanguage>en-US</DefaultLanguage>
@@ -168,7 +173,7 @@ System.IO.File.WriteAllText(FilePath, content);
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Velopack" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' Or $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'" />
+        <PackageReference Include="Velopack" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' Or ($([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst' And '$(MqttProbeMacAppStore)' != 'true')" />
     </ItemGroup>
 
     <ItemGroup>

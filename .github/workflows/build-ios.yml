@@ -1,20 +1,44 @@
 name: Build iOS (App Store archive)
 
-# Manual-only by design. Produces a signed .ipa for a person to upload with
-# Transporter. The IPA stays out of the GitHub Release assets: iOS installs come
-# from the App Store, so a public download link is not an install route.
+# Manual or release-coordinator entry point for a signed iOS App Store archive.
+# The archive is uploaded to TestFlight with App Store Connect API-key auth and
+# is never published as a workflow artifact or release asset.
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release tag to stamp, e.g. v1.0.9 (the same tag used for the other platform builds)'
+        description: 'Release tag to build, e.g. v1.2.3'
         required: true
         type: string
       build_number:
         description: 'Build number, a whole number 1-9999, higher than any build already uploaded for this version'
         required: true
         type: string
+  workflow_call:
+    inputs:
+      version:
+        description: 'Release tag to build, e.g. v1.2.3'
+        required: true
+        type: string
+      build_number:
+        description: 'Optional manual build number; leave empty to derive it from the workflow run'
+        required: false
+        default: ''
+        type: string
+    outputs:
+      source_sha:
+        description: Peeled immutable commit SHA used for the build
+        value: ${{ jobs.validate-source.outputs.source_sha }}
+      tag:
+        description: Validated release tag, or the requested version for a manual run
+        value: ${{ jobs.validate-source.outputs.tag }}
+      marketing:
+        description: Normalized marketing version
+        value: ${{ jobs.validate-source.outputs.marketing }}
+      build:
+        description: Validated App Store build number from the signing job
+        value: ${{ jobs.build-ios-archive.outputs.build }}
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
@@ -29,22 +53,203 @@ env:
   IOS_PROVISION_PROFILE_NAME: "MQTTProbe App Store"
 
 jobs:
+  validate-source:
+    name: Validate release source
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      tag: ${{ steps.source.outputs.tag }}
+      marketing: ${{ steps.source.outputs.marketing }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag and source
+        id: source
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          INPUT_VERSION: ${{ inputs.version }}
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          [[ "$INPUT_VERSION" =~ ^v(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})$ ]] || {
+            echo "::error::Version '$INPUT_VERSION' must be a strict version such as v1.2.3"
+            exit 1
+          }
+          [ "$INPUT_VERSION" != "v0.0.0" ] || {
+            echo "::error::Version v0.0.0 is the placeholder and cannot be released"
+            exit 1
+          }
+          # Only a pushed tag must exist in the checkout. A manual run labels an
+          # immutable commit and creates no tag.
+          if [ "$EVENT_NAME" = "push" ]; then
+            TAG_REF="refs/tags/$INPUT_VERSION"
+            git rev-parse --verify --quiet "$TAG_REF" > /dev/null || {
+              echo "::error::Tag $INPUT_VERSION does not exist in this checkout"
+              exit 1
+            }
+            TAG_SHA=$(git rev-parse --verify "${TAG_REF}^{commit}") || {
+              echo "::error::Tag $INPUT_VERSION does not peel to a commit"
+              exit 1
+            }
+          fi
+          if [ "$(git rev-parse --is-shallow-repository)" != "false" ]; then
+            echo "::error::The checkout is shallow, so ancestry cannot be proven. fetch-depth must stay 0 in this job."
+            exit 1
+          fi
+          if [ "$EVENT_NAME" = "push" ]; then
+            if ! git fetch --no-tags --prune origin '+refs/heads/main:refs/remotes/origin/main'; then
+              echo "::error::Could not fetch origin/main, so this run cannot prove that $INPUT_VERSION is on main. Refusing to build an unverified ref."
+              exit 1
+            fi
+            MAIN_SHA=$(git rev-parse --verify "refs/remotes/origin/main^{commit}") || {
+              echo "::error::No origin/main in this checkout, so it cannot be shown that $INPUT_VERSION is on main."
+              exit 1
+            }
+            if ! git merge-base --is-ancestor "$TAG_SHA" "$MAIN_SHA"; then
+              echo "::error::Tag $INPUT_VERSION resolves to a commit that is not contained in origin/main"
+              exit 1
+            fi
+            [ "$REF" = "refs/tags/$INPUT_VERSION" ] || {
+              echo "::error::Automated release runs must be the pushed tag refs/tags/$INPUT_VERSION, not $REF"
+              exit 1
+            }
+            [ "$INPUT_VERSION" = "$REF_NAME" ] || {
+              echo "::error::Automated release calls must pass the pushed tag, not '$INPUT_VERSION'"
+              exit 1
+            }
+            [ "$TAG_SHA" = "$(git rev-parse --verify "${SHA}^{commit}")" ] || {
+              echo "::error::Tag $INPUT_VERSION does not resolve to the commit that triggered this run"
+              exit 1
+            }
+            SOURCE_SHA="$TAG_SHA"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$REF" = "refs/heads/main" ]; then
+              BASE_REF="main"
+            elif [[ "$REF" =~ ^refs/heads/release/[^/]+$ ]]; then
+              BASE_REF="${REF#refs/heads/}"
+            else
+              echo "::error::Manual runs must be dispatched from main or a release branch such as release/1.2; found $REF"
+              exit 1
+            fi
+            if ! git fetch --no-tags --prune origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"; then
+              echo "::error::Could not fetch origin/$BASE_REF, so this run cannot prove the dispatch commit is on it. Refusing to build an unverified ref."
+              exit 1
+            fi
+            BASE_SHA=$(git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}") || {
+              echo "::error::No origin/$BASE_REF in this checkout, so it cannot be shown that the dispatch commit is on it."
+              exit 1
+            }
+            DISPATCH_SHA=$(git rev-parse --verify "${SHA}^{commit}") || {
+              echo "::error::Dispatch commit $SHA does not resolve to a commit"
+              exit 1
+            }
+            if ! git merge-base --is-ancestor "$DISPATCH_SHA" "$BASE_SHA"; then
+              echo "::error::Dispatch commit $DISPATCH_SHA is not contained in origin/$BASE_REF"
+              exit 1
+            fi
+            SOURCE_SHA="$DISPATCH_SHA"
+          else
+            echo "::error::Unsupported trigger '$EVENT_NAME'"
+            exit 1
+          fi
+          {
+            echo "tag=$INPUT_VERSION"
+            echo "source_sha=$SOURCE_SHA"
+            echo "marketing=${INPUT_VERSION#v}"
+          } >> "$GITHUB_OUTPUT"
+
   build-ios-archive:
-    name: Build (iOS archive)
+    name: Build and upload (iOS)
+    needs: validate-source
+    outputs:
+      marketing: ${{ steps.version.outputs.marketing }}
+      build: ${{ steps.version.outputs.build }}
     runs-on: xcode-27
-    timeout-minutes: 45
+    timeout-minutes: 65
     # The distribution secrets live in the ios-signing environment; its required
-    # reviewers and deployment branch rule are the real gate. The ref test is
-    # defense in depth, not a boundary: only repository settings can configure the
-    # environment, and a run before that setup auto-creates it unprotected.
+    # reviewers and deployment branch rule are the real gate. Source validation
+    # happens before this job, so the ref test is no longer the trust boundary.
     environment: ios-signing
-    if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: true
+          ref: ${{ needs.validate-source.outputs.source_sha }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Preflight required secrets
+        env:
+          IOS_DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_PROVISION_PROFILE: ${{ secrets.IOS_PROVISION_PROFILE }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+        run: |
+          missing=0
+          for name in \
+            IOS_DIST_CERT_P12 \
+            IOS_DIST_CERT_PASSWORD \
+            IOS_PROVISION_PROFILE \
+            NOTARY_KEY_ID \
+            NOTARY_ISSUER_ID \
+            NOTARY_KEY_P8; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name secret is not set in the ios-signing environment"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          [[ "$NOTARY_KEY_ID" =~ ^[A-Za-z0-9]+$ ]] || {
+            echo "::error::NOTARY_KEY_ID must be alphanumeric with no path separators or whitespace"
+            exit 1
+          }
+          [[ "$NOTARY_ISSUER_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || {
+            echo "::error::NOTARY_ISSUER_ID must be the issuer UUID (8-4-4-4-12 hex)"
+            exit 1
+          }
+          printf '%s\n' "$NOTARY_KEY_P8" | openssl pkey -noout > /dev/null 2>&1 || {
+            echo "::error::NOTARY_KEY_P8 is not a readable PEM private key"
+            exit 1
+          }
+
+      - name: Derive and validate version and build number
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RAW_VERSION: ${{ needs.validate-source.outputs.tag }}
+          INPUT_BUILD_NUMBER: ${{ inputs.build_number }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            [ -n "$INPUT_BUILD_NUMBER" ] || {
+              echo "::error::Manual runs require an explicit build_number"
+              exit 1
+            }
+            BUILD_NUMBER="$INPUT_BUILD_NUMBER"
+          elif [ -n "$INPUT_BUILD_NUMBER" ]; then
+            BUILD_NUMBER="$INPUT_BUILD_NUMBER"
+          else
+            BUILD_NUMBER=$(python3 -I scripts/ci/apple-build-number.py \
+              --run-number "$RUN_NUMBER" \
+              --run-attempt "$RUN_ATTEMPT")
+          fi
+          python3 -I scripts/ci/ios-version.py \
+            --version "$RAW_VERSION" \
+            --build-number "$BUILD_NUMBER" \
+            --github-output "$GITHUB_OUTPUT"
 
       - name: Select Xcode
         id: xcode
@@ -53,18 +258,6 @@ jobs:
       - uses: ./.github/actions/setup-dotnet-workload
         with:
           workload: maui-ios
-
-      - name: Validate version and build number
-        id: version
-        env:
-          RAW_VERSION: ${{ inputs.version }}
-          RAW_BUILD_NUMBER: ${{ inputs.build_number }}
-        run: |
-          python3 -I scripts/ci/ios-version.py \
-            --version "$RAW_VERSION" \
-            --build-number "$RAW_BUILD_NUMBER" \
-            --github-output "$GITHUB_OUTPUT"
-          echo "Stamping marketing version $(grep '^marketing=' "$GITHUB_OUTPUT" | cut -d= -f2), build number $(grep '^build=' "$GITHUB_OUTPUT" | cut -d= -f2)"
 
       - name: Import distribution certificate into temporary keychain
         env:
@@ -179,10 +372,10 @@ jobs:
         run: |
           IPA=$(find src/MqttProbe.Maui/bin/Release/net10.0-ios -name '*.ipa' -print -quit)
           test -n "$IPA" || { echo "::error::No .ipa produced under src/MqttProbe.Maui/bin/Release/net10.0-ios"; exit 1; }
-          mkdir -p publish/ios
-          cp "$IPA" "publish/ios/MqttProbe-$MARKETING_VERSION-$BUILD_NUMBER.ipa"
-          ls -la publish/ios
-          echo "IPA_PATH=publish/ios/MqttProbe-$MARKETING_VERSION-$BUILD_NUMBER.ipa" >> "$GITHUB_OUTPUT"
+          IPA_PATH="$RUNNER_TEMP/MqttProbe-$MARKETING_VERSION-$BUILD_NUMBER.ipa"
+          cp "$IPA" "$IPA_PATH"
+          echo "IPA_PATH=$IPA_PATH" >> "$GITHUB_OUTPUT"
+          echo "SOURCE_IPA_PATH=$IPA" >> "$GITHUB_OUTPUT"
 
       - name: Verify archive metadata and signature
         env:
@@ -244,43 +437,97 @@ jobs:
           }
           python3 -I scripts/ci/ios-privacy-manifest.py "$MANIFEST"
 
-      - name: Upload IPA artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: maui-ios-archive
-          path: ${{ steps.collect.outputs.IPA_PATH }}
-          if-no-files-found: error
-          retention-days: 90
+      - name: Prepare App Store Connect API key
+        id: api-key
+        env:
+          API_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          API_PRIVATE_KEY: ${{ secrets.NOTARY_KEY_P8 }}
+        run: |
+          test -n "$RUNNER_TEMP" || { echo "::error::RUNNER_TEMP is not set"; exit 1; }
+          API_KEY_DIR="$RUNNER_TEMP/appstoreconnect-keys"
+          rm -rf "$API_KEY_DIR"
+          umask 077
+          mkdir -p "$API_KEY_DIR"
+          printf '%s\n' "$API_PRIVATE_KEY" > "$API_KEY_DIR/AuthKey_$API_KEY_ID.p8"
+          chmod 600 "$API_KEY_DIR/AuthKey_$API_KEY_ID.p8"
+          echo "API_KEY_DIR=$API_KEY_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to TestFlight
+        id: upload
+        timeout-minutes: 20
+        env:
+          IPA_PATH: ${{ steps.collect.outputs.IPA_PATH }}
+          API_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          API_PRIVATE_KEYS_DIR: ${{ steps.api-key.outputs.API_KEY_DIR }}
+        run: |
+          xcrun altool --use-old-altool --upload-app --type ios --file "$IPA_PATH" \
+            --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER_ID"
 
       - name: Summarize
         if: always()
         env:
+          EVENT_NAME: ${{ github.event_name }}
           MARKETING_VERSION: ${{ steps.version.outputs.marketing }}
           BUILD_NUMBER: ${{ steps.version.outputs.build }}
+          SOURCE_TAG: ${{ needs.validate-source.outputs.tag }}
+          SOURCE_SHA: ${{ needs.validate-source.outputs.source_sha }}
+          UPLOAD_RESULT: ${{ steps.upload.outcome }}
         run: |
           {
-            echo "### iOS archive"
+            echo "### iOS build and TestFlight upload"
             echo
             echo "| Field | Value |"
             echo "| --- | --- |"
+            if [ "$EVENT_NAME" = "push" ]; then
+              echo "| Source tag | \`$SOURCE_TAG\` |"
+            else
+              echo "| Requested version | \`$SOURCE_TAG\` |"
+            fi
+            echo "| Source commit | \`$SOURCE_SHA\` |"
             echo "| Marketing version | \`${MARKETING_VERSION:-not derived}\` |"
             echo "| Build number | \`${BUILD_NUMBER:-not derived}\` |"
-            echo "| Bundle id | \`${IOS_BUNDLE_ID}\` |"
+            echo "| Bundle id | \`$IOS_BUNDLE_ID\` |"
             echo
-            echo "Upload the artifact with Transporter, then submit the build for review in App Store Connect. This workflow does not upload, submit, tag, or push anything."
-            echo "To rebuild after a rejected upload, pick a higher build number; Apple requires it to increase for a given version."
+            case "$UPLOAD_RESULT" in
+              success)
+                echo "Upload step succeeded: App Store Connect accepted the IPA for processing. Processing is automatic and can still fail; this run does not prove the build is available in TestFlight."
+                ;;
+              skipped)
+                echo "Upload was skipped because an earlier step did not succeed. Nothing was sent to App Store Connect."
+                ;;
+              cancelled)
+                echo "Upload was cancelled before it completed. Check App Store Connect before retrying, since Apple may have received the build."
+                ;;
+              *)
+                echo "Upload did not complete successfully; check App Store Connect before retrying, since Apple may have received the build. The job fails; fix the cause, and use a higher build number only if Apple already has this build."
+                ;;
+            esac
+            echo "The IPA is not published as a workflow artifact or release asset."
+            echo "After App Store Connect finishes processing, enable the build for TestFlight testing or submit it for App Review manually."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Clean up signing material
         if: always()
         env:
           PROFILE_UUID: ${{ steps.profile.outputs.uuid }}
+          IPA_PATH: ${{ steps.collect.outputs.IPA_PATH }}
+          SOURCE_IPA_PATH: ${{ steps.collect.outputs.SOURCE_IPA_PATH }}
         run: |
+          test -n "$RUNNER_TEMP" || { echo "::error::RUNNER_TEMP is not set"; exit 1; }
           security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
           # Only the files this run installed; the directories are shared runner state.
           if [ -n "$PROFILE_UUID" ]; then
             rm -f "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$PROFILE_UUID.mobileprovision" \
                   "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          fi
+          rm -rf "$RUNNER_TEMP/appstoreconnect-keys" \
+                 "$RUNNER_TEMP/ios-archive"
+          if [ -n "$IPA_PATH" ]; then
+            rm -f "$IPA_PATH"
+          fi
+          if [ -n "$SOURCE_IPA_PATH" ]; then
+            rm -f "$SOURCE_IPA_PATH"
           fi
           rm -f "$RUNNER_TEMP/keychain-password" \
                 "$RUNNER_TEMP/dist.p12" \

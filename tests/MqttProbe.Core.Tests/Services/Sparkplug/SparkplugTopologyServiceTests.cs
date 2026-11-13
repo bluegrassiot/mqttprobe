@@ -1,4 +1,5 @@
 using Google.Protobuf;
+using Microsoft.Extensions.Time.Testing;
 using MqttProbe.Core.Models.Sparkplug;
 using MqttProbe.Core.Services.Plugins.BuiltIn;
 using MqttProbe.Core.Services.Sparkplug;
@@ -1812,5 +1813,119 @@ public class SparkplugTopologyServiceTests
         metrics.Should().HaveCount(count);
         for (var i = 0; i < count; i++)
             metrics.Single(m => m.Name == $"m{i}").Value.Should().Be($"{i}.0000");
+    }
+
+    [Test]
+    public async Task ApplyTopologyEvents_NodeRebirthObserved_KnownNodeRecordsTimestampWithoutSideEffects()
+    {
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero));
+        var service = new SparkplugTopologyService(clock);
+        await service.ApplyTopologyEventsAsync(
+        [
+            new NodeBirthEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NBIRTH/n",
+                SequenceNumber = 4,
+                GroupId = "g",
+                NodeId = "n",
+                Metrics = [Ms("Temp")],
+                BirthDeathSequenceNumber = 1
+            }
+        ]);
+
+        var node = service.Groups["g"].Nodes["n"];
+        var lastBirthAt = node.LastBirthAt;
+        var sequence = node.Sequence;
+        var metrics = node.Metrics;
+
+        var raised = 0;
+        service.TopologyChanged += () => raised++;
+
+        await service.ApplyTopologyEventsAsync(
+        [
+            new NodeRebirthObservedEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NCMD/n",
+                GroupId = "g",
+                NodeId = "n"
+            }
+        ]);
+
+        node.LastRebirthRequestAt.Should().Be(clock.GetUtcNow().UtcDateTime);
+        node.Status.Should().Be(SpbNodeStatus.Online);
+        node.LastBirthAt.Should().Be(lastBirthAt);
+        node.LastDataAt.Should().BeNull();
+        node.LastDeathAt.Should().BeNull();
+        node.Sequence.Should().Be(sequence);
+        node.Metrics.Should().BeSameAs(metrics);
+        node.BirthDeathSequenceNumber.Should().Be(1);
+        raised.Should().Be(1);
+    }
+
+    [Test]
+    public async Task ApplyTopologyEvents_NodeRebirthObserved_UnknownNodeIsIgnored()
+    {
+        await SeedNodeAsync(Ms("Temp"));
+
+        var raised = 0;
+        _service.TopologyChanged += () => raised++;
+
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeRebirthObservedEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NCMD/ghost",
+                GroupId = "g",
+                NodeId = "ghost"
+            },
+            new NodeRebirthObservedEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/other/NCMD/n",
+                GroupId = "other",
+                NodeId = "n"
+            }
+        ]);
+
+        _service.Groups["g"].Nodes.Keys.Should().Equal("n");
+        _service.Groups.Should().NotContainKey("other");
+        raised.Should().Be(0);
+    }
+
+    [Test]
+    public async Task ApplyTopologyEvents_NodeRebirthObserved_OfflineNodeStaysOffline()
+    {
+        await SeedNodeAsync(Ms("Temp"));
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeDeathEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NDEATH/n",
+                GroupId = "g",
+                NodeId = "n"
+            }
+        ]);
+
+        var node = _service.Groups["g"].Nodes["n"];
+        var lastDeathAt = node.LastDeathAt;
+
+        await _service.ApplyTopologyEventsAsync(
+        [
+            new NodeRebirthObservedEvent
+            {
+                FormatId = "sparkplug-b",
+                Topic = "spBv1.0/g/NCMD/n",
+                GroupId = "g",
+                NodeId = "n"
+            }
+        ]);
+
+        node.Status.Should().Be(SpbNodeStatus.Offline);
+        node.LastDeathAt.Should().Be(lastDeathAt);
+        node.LastRebirthRequestAt.Should().NotBeNull();
     }
 }

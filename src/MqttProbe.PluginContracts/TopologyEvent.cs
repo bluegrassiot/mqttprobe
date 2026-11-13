@@ -23,6 +23,12 @@ public sealed class NodeDeathEvent : TopologyEvent
     public ulong? BirthDeathSequenceNumber { get; init; }
 }
 
+public sealed class NodeRebirthObservedEvent : TopologyEvent
+{
+    public required string GroupId { get; init; }
+    public required string NodeId { get; init; }
+}
+
 public sealed class NodeDataEvent : TopologyEvent
 {
     public required string GroupId { get; init; }

@@ -1,5 +1,9 @@
 @namespace MqttProbe.UI.Components.Sparkplug
+@using Microsoft.JSInterop
+@using MudBlazor.Services
 @using MqttProbe.Core.Models.Sparkplug
+@implements IAsyncDisposable
+@inject IKeyInterceptorService KeyInterceptorService
 
 @if (Node == null)
 {
@@ -14,7 +18,7 @@ else
     <MudPaper Elevation="0" Class="spb-detail-panel">
         <MudHidden Breakpoint="Breakpoint.MdAndUp">
             <AppTertiaryButton StartIcon="@LucideIcons.ArrowLeft"
-                               OnClick="@OnBack" Class="mb-2">
+                               OnClick="@OnBack" Class="mb-2 spb-detail-back">
                 Back
             </AppTertiaryButton>
         </MudHidden>
@@ -51,63 +55,92 @@ else
             </span>
         </div>
 
-        <section class="spb-sequence-panel spb-sequence-panel--@sequence.State.ToString().ToLowerInvariant()" aria-label="Sequence diagnostics">
-            <div class="spb-sequence-panel__heading">
-                <MudText Typo="Typo.subtitle2">Message sequence</MudText>
-                <span class="spb-sequence-state">@SequenceStateLabel(sequence.State)</span>
-            </div>
-            <div class="spb-sequence-values">
-                <span>Next expected <strong class="metrics-mono">@(sequence.ExpectedSequence?.ToString() ?? "Unknown")</strong></span>
-                <span>Last received <strong class="metrics-mono">@(sequence.ReceivedSequence?.ToString() ?? "Unknown")</strong></span>
-                @if (sequence.MissingSequences.Count > 0)
-                {
-                    <span>Missing sequences <strong class="metrics-mono">@FormatMissingSequences(sequence.MissingSequences)</strong></span>
-                }
-            </div>
-            <MudText Typo="Typo.caption" Class="spb-sequence-explanation">@SequenceExplanation(sequence.State)</MudText>
-            @if (sequence.State is SpbSequenceState.Reordering or SpbSequenceState.GapDetected)
-            {
-                <MudText Typo="Typo.caption" Class="spb-sequence-caveat">Filtered, excluded or rate-limited traffic can also appear as gaps. A gap does not prove broker loss.</MudText>
-            }
-        </section>
+        <div class="spb-node-details" id="@_rootId">
+            <MudExpansionPanels Dense="true" Elevation="0">
+                <MudExpansionPanel @ref="_detailsPanel" @bind-Expanded="_detailsExpanded" Dense="true">
+                    <TitleContent>
+                        <MudText Typo="Typo.subtitle2">Node details</MudText>
+                    </TitleContent>
+                    <ChildContent>
+                        <div class="spb-timestamps">
+                            @if (Node.LastDataAt != null)
+                            {
+                                <span class="spb-timestamp">
+                                    <span class="spb-timestamp__label">Last data</span>
+                                    <span class="spb-timestamp__value">
+                                        @TimestampValue(SparkplugTimeKeys.NodeLastData)
+                                        @if (Node.Status == SpbNodeStatus.Online)
+                                        {
+                                            <span class="spb-relative-time">@DisplayHelpers.GetRelativeTime(Node.LastDataAt)</span>
+                                        }
+                                    </span>
+                                </span>
+                            }
+                            @if (Node.LastBirthAt != null)
+                            {
+                                <span class="spb-timestamp">
+                                    <span class="spb-timestamp__label">Birth</span>
+                                    <span class="spb-timestamp__value">
+                                        @TimestampValue(SparkplugTimeKeys.NodeBirth)
+                                    </span>
+                                </span>
+                            }
+                            @if (Node.LastDeathAt != null)
+                            {
+                                <span class="spb-timestamp">
+                                    <span class="spb-timestamp__label">Last NDEATH</span>
+                                    <span class="spb-timestamp__value">
+                                        @TimestampValue(SparkplugTimeKeys.NodeDeath)
+                                    </span>
+                                </span>
+                            }
+                            @if (Node.LastRebirthRequestAt != null)
+                            {
+                                <span class="spb-timestamp">
+                                    <span class="spb-timestamp__label">Last rebirth request</span>
+                                    <span class="spb-timestamp__value">
+                                        @TimestampValue(SparkplugTimeKeys.NodeRebirthRequest)
+                                    </span>
+                                </span>
+                            }
+                            <span class="spb-timestamp spb-timestamp--session">
+                                <span class="spb-timestamp__label">
+                                    <abbr title="Birth/death session identifier">bdSeq</abbr>
+                                </span>
+                                <span class="spb-timestamp__value">
+                                    <span class="metrics-mono">@(Node.BirthDeathSequenceNumber?.ToString() ?? "Unknown")</span>
+                                    <span class="spb-timestamp__hint">session id</span>
+                                </span>
+                            </span>
+                        </div>
 
-        <div class="spb-timestamps d-flex flex-wrap gap-3 mb-3">
-            @if (Node.LastBirthAt != null)
-            {
-                <span class="spb-timestamp">
-                    Birth:
-                    @TimestampValue(SparkplugTimeKeys.NodeBirth)
-                </span>
-            }
-            @if (Node.LastDataAt != null)
-            {
-                <span class="spb-timestamp">
-                    Last data:
-                    @TimestampValue(SparkplugTimeKeys.NodeLastData)
-                    @if (Node.Status == SpbNodeStatus.Online)
-                    {
-                        <span class="spb-relative-time">(@DisplayHelpers.GetRelativeTime(Node.LastDataAt))</span>
-                    }
-                </span>
-            }
-            @if (Node.LastDeathAt != null && Node.Status == SpbNodeStatus.Offline)
-            {
-                <span class="spb-timestamp">
-                    Death:
-                    @TimestampValue(SparkplugTimeKeys.NodeDeath)
-                </span>
-            }
-            @if (Node.LastRebirthRequestAt != null)
-            {
-                <span class="spb-timestamp">
-                    Rebirth requested:
-                    @TimestampValue(SparkplugTimeKeys.NodeRebirthRequest)
-                </span>
-            }
-            <span>
-                Birth/death session identifier (bdSeq):
-                <span class="metrics-mono">@(Node.BirthDeathSequenceNumber?.ToString() ?? "Unknown")</span>
-            </span>
+                        <section class="spb-sequence-panel spb-sequence-panel--@sequence.State.ToString().ToLowerInvariant() spb-sequence-strip"
+                                 aria-label="Sequence diagnostics"
+                                 title="@SequenceExplanation(sequence.State)">
+                            <div class="spb-sequence-panel__heading">
+                                <span class="spb-sequence-title">Message sequence</span>
+                                <span class="spb-sequence-state">@SequenceStateLabel(sequence.State)</span>
+                            </div>
+                            <div class="spb-sequence-values">
+                                <span>Next expected <strong class="metrics-mono">@(sequence.ExpectedSequence?.ToString() ?? "Unknown")</strong></span>
+                                <span>Last received <strong class="metrics-mono">@(sequence.ReceivedSequence?.ToString() ?? "Unknown")</strong></span>
+                                @if (sequence.MissingSequences.Count > 0)
+                                {
+                                    <span>Missing sequences <strong class="metrics-mono">@FormatMissingSequences(sequence.MissingSequences)</strong></span>
+                                }
+                            </div>
+                            @if (sequence.State != SpbSequenceState.InOrder)
+                            {
+                                <MudText Typo="Typo.caption" Class="spb-sequence-explanation">@SequenceExplanation(sequence.State)</MudText>
+                            }
+                            @if (sequence.State is SpbSequenceState.Reordering or SpbSequenceState.GapDetected)
+                            {
+                                <MudText Typo="Typo.caption" Class="spb-sequence-caveat">Filtered, excluded or rate-limited traffic can also appear as gaps. A gap does not prove broker loss.</MudText>
+                            }
+                        </section>
+                    </ChildContent>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
         </div>
 
         <div class="spb-subsection-header">
@@ -196,7 +229,72 @@ else
 }
 
 @code {
-    private RenderFragment TimestampValue(string key) => @<span class="spb-timestamp__value">
+    private const string DetailsHeaderClass = "mud-expand-panel-header";
+
+    private readonly string _rootId = $"sparkplug-node-detail-{Guid.NewGuid():N}";
+    private MudExpansionPanel? _detailsPanel;
+    private bool _detailsExpanded = true;
+    private bool _detailsKeysAttached;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Node is null)
+        {
+            if (!_detailsKeysAttached)
+                return;
+
+            _detailsKeysAttached = false;
+            await UnsubscribeDetailsKeysAsync();
+            return;
+        }
+
+        if (_detailsKeysAttached)
+            return;
+
+        _detailsKeysAttached = true;
+        await KeyInterceptorService.SubscribeAsync(
+            _rootId,
+            new KeyInterceptorOptions(
+                DetailsHeaderClass,
+                new KeyOptions("ArrowRight", subscribeDown: true, ignoreDownRepeats: true),
+                new KeyOptions("ArrowLeft", subscribeDown: true, ignoreDownRepeats: true)),
+            HandleDetailsKeyDown);
+    }
+
+    private async Task HandleDetailsKeyDown(KeyboardEventArgs e)
+    {
+        if (_detailsPanel is null || e.Repeat || e.IsComposing ||
+            e.CtrlKey || e.AltKey || e.MetaKey || e.ShiftKey)
+            return;
+
+        if (e.Key == "ArrowRight")
+            await _detailsPanel.ExpandAsync();
+        else if (e.Key == "ArrowLeft")
+            await _detailsPanel.CollapseAsync();
+    }
+
+    private async Task UnsubscribeDetailsKeysAsync()
+    {
+        try
+        {
+            await KeyInterceptorService.UnsubscribeAsync(_rootId);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is gone; the browser drops the listener with the page.
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!_detailsKeysAttached)
+            return;
+
+        _detailsKeysAttached = false;
+        await UnsubscribeDetailsKeysAsync();
+    }
+
+    private RenderFragment TimestampValue(string key) => @<span class="spb-timestamp__parts">
         @{
             var time = Time.Find(key);
         }

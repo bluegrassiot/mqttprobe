@@ -158,6 +158,18 @@ body:has(.topic-picker-overlay) .mobile-primary-nav {
     display: none;
 }
 
+/* The compact Nodes takeover covers the shell chrome, so its controls leave the
+   tab order and the accessibility tree as well. The active-panel guard keeps a
+   node selected in a background tab from hiding chrome on the current one. The
+   delay matches the takeover's slide so the chrome does not flash away first. */
+@media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px) {
+    body:has(.mud-tab-panel-active .spb-nodes-shell--detail-open) .mobile-primary-nav,
+    body:has(.mud-tab-panel-active .spb-nodes-shell--detail-open) .app-shell-appbar {
+        visibility: hidden;
+        transition: visibility 0s linear 200ms;
+    }
+}
+
 /* The iOS keyboard leaves the fixed nav above itself; hide it and release the
    reserved nav padding while an editor is focused. */
 html.app-keyboard-open .mud-layout {

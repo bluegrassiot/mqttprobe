@@ -72,6 +72,10 @@
     gap: 0;
 }
 
+/* The shell is a selector anchor only, so the header and the split stay direct
+   flex children of the tab panel. */
+.spb-nodes-shell { display: contents; }
+
 .spb-split__nodes {
     width: 100%;
     min-height: 0;
@@ -92,6 +96,12 @@
     container-type: inline-size;
     container-name: spb-detail;
 }
+
+/* The takeover chrome is inert outside the compact layout, where the inline Back
+   button and the pane's own scroll stay in charge. */
+.spb-detail-bar { display: none; }
+
+.spb-detail-body { display: contents; }
 
 /* Node/detail rows (rendered by child components → ::deep) */
 
@@ -300,7 +310,8 @@
     }
 }
 
-/* Compact: give the detail the full pane instead of a short stacked split. */
+/* Compact: the selected node takes over the viewport like the mobile topic picker,
+   with a pinned Back bar, one scroll owner and the shell's safe-area insets. */
 @media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px) {
     .spb-split__nodes {
         max-height: none;
@@ -311,14 +322,84 @@
         display: none;
     }
 
+    .spb-nodes-shell--detail-open .spb-nodes-header {
+        display: none;
+    }
+
     .spb-split--detail-open .spb-split__nodes {
         display: none;
     }
 
+    /* Covers the app bar (--mud-zindex-appbar, 1300) and the fixed mobile nav (1200)
+       while staying under MudBlazor's dialog (1400) and snackbar (1500) layers. */
     .spb-split--detail-open .spb-split__detail {
+        position: fixed;
+        inset: 0;
+        z-index: calc(var(--mud-zindex-appbar) + 1);
+        display: flex;
+        flex-direction: column;
+        padding: 0;
+        overflow: hidden;
+        background: var(--mud-palette-surface);
+        animation: spb-detail-takeover 200ms ease-out;
+    }
+
+    .spb-split--detail-open .spb-detail-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+        min-width: 0;
+        padding-top: calc(4px + env(safe-area-inset-top, 0px));
+        padding-right: calc(12px + env(safe-area-inset-right, 0px));
+        padding-bottom: 4px;
+        padding-left: calc(4px + env(safe-area-inset-left, 0px));
+        border-bottom: 1px solid var(--mud-palette-divider);
+        background: var(--mud-palette-surface);
+    }
+
+    .spb-detail-bar__title {
+        min-width: 0;
+        overflow: hidden;
+        font-weight: 600;
+        color: var(--mud-palette-text-primary);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .spb-split--detail-open .spb-detail-body {
         display: block;
         flex: 1 1 auto;
+        min-height: 0;
+        overflow-x: hidden;
         overflow-y: auto;
+        overscroll-behavior: contain;
+        padding-top: 12px;
+        padding-right: calc(12px + env(safe-area-inset-right, 0px));
+        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+        padding-left: calc(12px + env(safe-area-inset-left, 0px));
+    }
+
+    /* The pinned bar carries the only Back control while the takeover is open. */
+    .spb-split--detail-open .spb-split__detail ::deep .spb-detail-back {
+        display: none;
+    }
+}
+
+@keyframes spb-detail-takeover {
+    from {
+        transform: translateY(100%);
+        opacity: 0.5;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spb-split--detail-open .spb-split__detail {
+        animation: none;
     }
 }
 
@@ -546,7 +627,7 @@
 ::deep .spb-timestamp--pending { letter-spacing: 0.12em; }
 
 ::deep .spb-sequence-panel {
-    margin: 0 0 16px;
+    margin: 0;
     padding: 14px 16px;
     border: 1px solid var(--mud-palette-divider);
     border-left: 3px solid var(--mud-palette-info);

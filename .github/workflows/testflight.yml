@@ -1,7 +1,8 @@
 name: TestFlight (manual)
 
-# Manual pre-release upload for both Apple targets from main. It needs no tag
-# and creates no GitHub release; production releases stay in release.yml.
+# Manual pre-release upload for both Apple targets from main or a release
+# branch. It needs no tag and creates no GitHub release; production releases
+# stay in release.yml.
 
 on:
   workflow_dispatch:

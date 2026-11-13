@@ -102,7 +102,18 @@ class AppleSourceValidationTests(unittest.TestCase):
         cls._write(cls.seed / "file.txt", "side")
         cls._commit(cls.seed, "side")
         cls._git(cls.seed, "tag", "v2.0.0")
-        cls._git(cls.seed, "push", "origin", "side")
+        cls._git(cls.seed, "branch", "release/1.2")
+        cls._git(cls.seed, "branch", "release/hotfix/1.2")
+        cls._git(cls.seed, "branch", "release/2.0")
+        cls._git(
+            cls.seed,
+            "push",
+            "origin",
+            "side",
+            "release/1.2",
+            "release/hotfix/1.2",
+            "release/2.0",
+        )
         cls._git(cls.seed, "push", "origin", "v2.0.0")
         cls._git(cls.seed, "checkout", "main")
         cls._write(cls.seed / "file.txt", "three")
@@ -113,6 +124,9 @@ class AppleSourceValidationTests(unittest.TestCase):
         cls.c1 = cls._git(cls.repo, "rev-parse", "v1.0.0^{commit}")
         cls.c2 = cls._git(cls.repo, "rev-parse", "origin/side^{commit}")
         cls.c3 = cls._git(cls.repo, "rev-parse", "main^{commit}")
+        # Deleted on the origin after the clone so a stale remote-tracking ref
+        # still exists locally when the run fetches the branch again.
+        cls._git(cls.origin, "update-ref", "-d", "refs/heads/release/2.0")
         scripts = cls.repo / "scripts" / "ci"
         scripts.mkdir(parents=True)
         cls._write(
@@ -356,6 +370,109 @@ class AppleSourceValidationTests(unittest.TestCase):
                     ref_name="side",
                     sha=self.c2,
                     version="v1.0.0",
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(helper)
+
+    def test_manual_dispatch_from_release_branch_builds_the_dispatched_sha(self):
+        for workflow_name in self.shells:
+            with self.subTest(workflow=workflow_name):
+                version = "v9.9.9"
+                result, output, helper = self._run_validation(
+                    workflow_name,
+                    event="workflow_dispatch",
+                    ref="refs/heads/release/1.2",
+                    ref_name="release/1.2",
+                    sha=self.c2,
+                    version=version,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output["source_sha"], self.c2)
+                self.assertEqual(output["tag"], version)
+                self.assertEqual(output["marketing"], version[1:])
+                self.assertFalse(helper)
+
+    def test_manual_dispatch_from_release_branch_keeps_the_dispatched_commit(self):
+        for workflow_name in self.shells:
+            with self.subTest(workflow=workflow_name):
+                result, output, helper = self._run_validation(
+                    workflow_name,
+                    event="workflow_dispatch",
+                    ref="refs/heads/release/1.2",
+                    ref_name="release/1.2",
+                    sha=self.c1,
+                    version="v1.0.0",
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(output["source_sha"], self.c1)
+                self.assertFalse(helper)
+
+    def test_manual_dispatch_from_release_branch_rejects_main_only_commit(self):
+        for workflow_name in self.shells:
+            with self.subTest(workflow=workflow_name):
+                result, _, helper = self._run_validation(
+                    workflow_name,
+                    event="workflow_dispatch",
+                    ref="refs/heads/release/1.2",
+                    ref_name="release/1.2",
+                    sha=self.c3,
+                    version="v1.0.0",
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(helper)
+
+    def test_manual_dispatch_from_deleted_release_branch_is_rejected(self):
+        for workflow_name in self.shells:
+            with self.subTest(workflow=workflow_name):
+                result, _, helper = self._run_validation(
+                    workflow_name,
+                    event="workflow_dispatch",
+                    ref="refs/heads/release/2.0",
+                    ref_name="release/2.0",
+                    sha=self.c2,
+                    version="v1.0.0",
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(helper)
+
+    def test_manual_dispatch_from_nested_release_branch_is_rejected(self):
+        for workflow_name in self.shells:
+            with self.subTest(workflow=workflow_name):
+                result, _, helper = self._run_validation(
+                    workflow_name,
+                    event="workflow_dispatch",
+                    ref="refs/heads/release/1.2/hotfix",
+                    ref_name="release/1.2/hotfix",
+                    sha=self.c2,
+                    version="v1.0.0",
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(helper)
+
+    def test_manual_dispatch_rejects_an_existing_two_level_release_branch(self):
+        for workflow_name in self.shells:
+            with self.subTest(workflow=workflow_name):
+                result, _, helper = self._run_validation(
+                    workflow_name,
+                    event="workflow_dispatch",
+                    ref="refs/heads/release/hotfix/1.2",
+                    ref_name="release/hotfix/1.2",
+                    sha=self.c2,
+                    version="v1.0.0",
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(helper)
+
+    def test_manual_dispatch_from_tag_ref_is_rejected(self):
+        for workflow_name in self.shells:
+            with self.subTest(workflow=workflow_name):
+                result, _, helper = self._run_validation(
+                    workflow_name,
+                    event="workflow_dispatch",
+                    ref="refs/tags/v2.0.0",
+                    ref_name="v2.0.0",
+                    sha=self.c2,
+                    version="v2.0.0",
                 )
                 self.assertNotEqual(result.returncode, 0)
                 self.assertFalse(helper)

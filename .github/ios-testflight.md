@@ -12,38 +12,75 @@ app is submitted for review or released automatically, and neither the IPA nor
 the Mac App Store package is published as a workflow artifact or release asset.
 
 For pre-release testing, `.github/workflows/testflight.yml` calls the same two
-workflows from a manual run on `main`. It needs no tag and creates no GitHub
-release.
+workflows from a manual run on `main` or a single-level `release/*` branch, such
+as `release/v1.1.0`, once its definition is registered on `main`. It needs no
+tag and creates no GitHub release.
 
 Only repository administrators should set this up, create release tags, or
-dispatch a run.
+dispatch a run. Every Apple job stops at the `ios-signing` environment and waits
+for approval before it imports a certificate, signs anything, or uploads.
 
 ## Test before tagging
 
 This is the fastest end-to-end check of a release candidate before any
 `vX.Y.Z` tag exists.
 
-1. Merge the changes to `main`.
-2. Open **Actions > TestFlight (manual) > Run workflow**.
-3. Select the `main` branch.
+1. Push the candidate to `main`, or to a single-level `release/*` branch such
+   as `release/v1.1.0`. A release branch run is useful when the candidate is
+   not on `main` yet. Nested paths such as `release/1.1/ios` are not supported.
+2. Open **Actions > TestFlight (manual) > Run workflow**. This entry point
+   appears only after its workflow definition is on `main`; see below.
+3. Select `main` or the `release/*` branch you pushed to. That branch must
+   already contain the workflow file. See
+   [Before the first manual run](#before-the-first-manual-run).
 4. Enter `version` as the intended release version, for example `v1.1.0`. It
    must be a strict `vX.Y.Z` label, and no tag is required.
 5. Enter `build_number` as an unused whole number from 1 to 9999 for that
    version, higher than every build already uploaded for it.
-6. Run the workflow and wait for both Apple uploads to be accepted.
+6. Run the workflow. Both Apple jobs wait at `ios-signing`. Approve each one,
+   then wait for both Apple uploads to be accepted.
 7. Wait for App Store Connect processing, install the build through TestFlight
    on an iPhone and a Mac, and exercise the real UI before tagging.
 
 This path creates no tag, GitHub release, App Store review submission, or
 public store publication. Both Apple jobs build the immutable commit SHA recorded
 when the workflow was dispatched. Before any repository script or signing step
-runs, they refresh `origin/main` and require that SHA to be an ancestor. A
-later push does not change what is built.
+runs, they refresh the branch that started the run and require that SHA to be an
+ancestor of it. A later push does not change what is built. A stable `v*` tag
+run is still checked against `main` only.
 
 Passing the signing, profile, bundle, and package checks proves credentials and
 packaging, not app behavior. App Store Connect acceptance is known only from
 the upload step, and a usable TestFlight build only after processing and an
 install on each platform. A green signing job is not proof that the UI works.
+
+## Before the first manual run
+
+GitHub lists a workflow in the **Run workflow** menu only after the workflow
+file exists on the default branch, `main`. A definition that exists only on
+`release/v1.1.0` has no manual Run button there, even though the branch holds
+the full file. A manual run on `release/v1.1.0` also needs the definition on
+`main` first; the selected branch must contain it too.
+
+What is registered on `main` today:
+
+- `build-ios.yml` is already registered. Its version on the selected branch
+  determines what it builds and uploads.
+- `testflight.yml` and `build-macos-app-store.yml` are not there yet, so
+  **TestFlight (manual)** and **Build macOS (Mac App Store)** do not appear in
+  the Run workflow menu.
+
+A two-platform manual run needs the coordinator definition on `main` before it
+can start. Its relative calls load both Apple workflows from the selected
+branch's commit, so those reusable definitions need not also be on `main`.
+Merging into `release/v1.1.0` alone does not register the coordinator. Direct
+single-platform Mac dispatch separately requires `build-macos-app-store.yml`
+on the default branch. No bootstrap trigger has been added for this.
+
+`gh workflow run --ref` does not bypass this registration requirement. No
+temporary push-triggered signing path is provided. Once the coordinator is on
+`main`, a manual run can select `main` or a `release/*` branch that contains all
+three workflows. No other merge is needed for the workflow to run.
 
 ## What a tag release does
 
@@ -93,27 +130,35 @@ channel and is unchanged. This follows the target decision in issue 273.
 
 ## 1. Create the protected environment first
 
-Both Apple workflows use the `ios-signing` environment. Create and protect it
+Both Apple workflows use the `ios-signing` environment. Its rules must exist
 before the first Apple run:
 
 1. Open the repository on GitHub, then **Settings > Environments**.
 2. Create an environment named `ios-signing`.
-3. Under **Deployment branches and tags**, allow `main` and a `v*` tag rule.
-   Tag-driven release runs need the tag policy; manual runs need `main`.
-4. Reviewers are optional. Adding them delays every Apple upload until someone
-   approves it, which is useful if another maintainer is available.
-5. Protect `main` and release tag creation so only maintainers can push the
-   commits and tags that start a build.
+3. Under **Deployment branches and tags**, allow `main`, a `release/*` rule,
+   and a `v*` tag rule. Tag-driven release runs need the tag policy; manual runs
+   need `main` or the release branch.
+4. Under **Environment protection rules**, add `bluegrassiot` (GitHub user ID
+   123216319) as a required reviewer.
+5. Leave **Prevent self-review** off, so the account that dispatches a run can
+   approve it too.
+6. Leave **Allow administrators to bypass** off, so the approval applies to
+   administrators as well.
+7. Protect `main`, `release/*`, and release tag creation so only maintainers can
+   push the commits and tags that start a build.
+
+The required reviewer is a deliberate speed bump. It makes the signing and
+upload step an explicit action instead of a side effect of a dispatch, and it
+does not add an independent code review. With self-review off, a solo
+maintainer approves their own run and is not blocked waiting for a second
+person. Turning self-review on would leave that maintainer unable to approve at
+all.
 
 The environment settings are the real protection. The `if` guards and tag
 checks in the workflow YAML are defense in depth, not a security boundary. A
-run started before the environment exists creates it without protection. Do
-not push a release tag or dispatch an Apple workflow until the environment,
-branch policy, and tag policy are in place.
-
-A solo maintainer cannot use a required reviewer who is someone else, so keep
-the protection in the environment and the branch and tag rules instead of
-blocking on review.
+run started before the environment exists creates it without protection. Do not
+push a release tag or dispatch an Apple workflow until the environment, branch
+policy, and tag policy are in place.
 
 ## 2. Set up the six environment signing secrets
 
@@ -121,7 +166,8 @@ There are nine secret names in total: six environment signing secrets and
 three repository API secrets that already exist.
 
 Add the signing secrets under **Settings > Environments > ios-signing >
-Environment secrets**. Enter them in the GitHub UI. Do not paste values into
+Environment secrets**. If they are already present, check them instead of
+entering them again. Enter values in the GitHub UI only. Do not paste them into
 chat, an issue, a pull request, or a commit.
 
 ### iOS signing
@@ -221,6 +267,9 @@ repository secrets stay as they are.
 
 ### Export and encode
 
+This step is only for replacing a missing or invalid secret. If the existing
+secrets still match the credentials above, leave them in place.
+
 In **Keychain Access > My Certificates**, export each certificate with its
 private key as a password-protected `.p12`. Confirm the private key is present
 before exporting. Download each provisioning profile from the developer portal:
@@ -269,7 +318,8 @@ App Store listing for review and do not release either app.
 
 ## 5. Manual uploads without a tag
 
-There are two ways to run a manual upload, both dispatched from `main`:
+There are two ways to run a manual upload. Both work from `main` or a
+single-level `release/*` branch:
 
 - **TestFlight (manual)** runs both Apple platforms and is the recommended
   pre-release check.
@@ -278,17 +328,20 @@ There are two ways to run a manual upload, both dispatched from `main`:
 
 All three use the same inputs:
 
-1. Select the `main` branch.
+1. Select `main` or a `release/*` branch that contains the workflow file.
 2. Enter `version` as the intended strict `vX.Y.Z` label, for example
    `v1.2.3`. No tag is required or created.
 3. Enter `build_number` as a whole number from 1 to 9999, higher than every
    build already uploaded for that version.
-4. Approve the deployment if the environment has required reviewers.
+4. Approve each job when `ios-signing` asks. The two TestFlight jobs ask
+   separately; a direct single-platform run asks once, and a tag release reaches
+   the same approval before its uploads.
 
 Manual runs build the immutable commit SHA recorded at dispatch. Before any
-repository script or signing step runs, the workflow refreshes `origin/main`
-and proves that SHA is an ancestor, so a later push does not change what is
-built.
+repository script or signing step runs, the workflow refreshes the branch that
+started the run and proves that SHA is an ancestor of it, so a later push does
+not change what is built. A stable `v*` tag is checked against `main` only, and
+no branch rule relaxes that.
 
 Manual runs do not create a tag or GitHub release, do not submit an app for
 review, and do not unblock a tag release that is waiting on the other Apple
@@ -317,19 +370,32 @@ exist even if TestFlight processing later fails.
 
 ## Current status
 
-The code change that adds these workflows is still a pending pull request and
-has not yet run in live CI or uploaded a Mac build. The six environment signing
-secrets are present, the macOS platform is added to the existing App Store
-Connect app record, and the signing profiles match. Merge first, then use
-**TestFlight (manual)** for the first live check.
+The `ios-signing` environment is configured and verified: required reviewer
+`bluegrassiot` (GitHub user ID 123216319), self-review allowed, administrator
+bypass disabled, and deployment branches `main`, `release/*`, and `v*` tags. The
+six signing secrets stay at environment scope, and the three `NOTARY_*`
+repository secrets stay as they are. Reuse the existing certificates and
+profiles in place; no export or profile recreation is part of this setup.
+
+Workflow registration is not complete. `build-ios.yml` is already on `main`, but
+the coordinator `testflight.yml` is not, so the two-platform manual run is not
+available yet. See
+[Before the first manual run](#before-the-first-manual-run).
+
+Registering the coordinator needs no tag or upload. Once it is on `main`, it
+can call both reusable workflows from the selected release branch. Until then,
+only the already-registered single-platform iOS dispatch is available.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 | --- | --- |
+| No **TestFlight (manual)** or **Build macOS (Mac App Store)** entry point | The coordinator or Mac App Store workflow definition is not on `main` yet. Register it there first; there is no bootstrap trigger |
+| Job waits on **Waiting for approval** | `ios-signing` has a required reviewer and this run is not approved. Approve it; approving your own run is allowed while Prevent self-review is disabled |
+| Manual run on a `release/*` branch is refused | The branch is nested deeper than one level, or the branch is not in the environment deployment policy |
 | Signing secret is not set in `ios-signing` | Missing or empty environment secret. Add it at environment scope so the protection rules apply |
 | `NOTARY_*` secret is not set | The existing repository API key secret is missing. Restore it rather than creating a second key |
-| Workflow cannot access the environment on a tag run | The environment policy allows `main` only. Add the `v*` tag rule |
+| Workflow cannot access the environment on a tag run | The policy is missing the `v*` tag rule. Allow it alongside `main` and `release/*` |
 | Tag is not stable, is not in `main`, or moved | Use a stable `vX.Y.Z` tag on a commit contained in `main`. Do not retag |
 | Apple Distribution identity not found | The `.p12` holds only a Development certificate, or it was exported without its private key |
 | Profile name, team, bundle ID, or platform mismatch | Wrong profile uploaded, or one created for another app, platform, or type |

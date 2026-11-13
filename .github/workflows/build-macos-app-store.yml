@@ -101,15 +101,15 @@ jobs:
             echo "::error::The checkout is shallow, so ancestry cannot be proven. fetch-depth must stay 0 in this job."
             exit 1
           fi
-          if ! git fetch --no-tags --prune origin '+refs/heads/main:refs/remotes/origin/main'; then
-            echo "::error::Could not fetch origin/main, so this run cannot prove that $INPUT_VERSION is on main. Refusing to build an unverified ref."
-            exit 1
-          fi
-          MAIN_SHA=$(git rev-parse --verify "refs/remotes/origin/main^{commit}") || {
-            echo "::error::No origin/main in this checkout, so it cannot be shown that $INPUT_VERSION is on main."
-            exit 1
-          }
           if [ "$EVENT_NAME" = "push" ]; then
+            if ! git fetch --no-tags --prune origin '+refs/heads/main:refs/remotes/origin/main'; then
+              echo "::error::Could not fetch origin/main, so this run cannot prove that $INPUT_VERSION is on main. Refusing to build an unverified ref."
+              exit 1
+            fi
+            MAIN_SHA=$(git rev-parse --verify "refs/remotes/origin/main^{commit}") || {
+              echo "::error::No origin/main in this checkout, so it cannot be shown that $INPUT_VERSION is on main."
+              exit 1
+            }
             if ! git merge-base --is-ancestor "$TAG_SHA" "$MAIN_SHA"; then
               echo "::error::Tag $INPUT_VERSION resolves to a commit that is not contained in origin/main"
               exit 1
@@ -128,16 +128,28 @@ jobs:
             }
             SOURCE_SHA="$TAG_SHA"
           elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            [ "$REF" = "refs/heads/main" ] || {
-              echo "::error::Manual runs must be dispatched from main; found $REF"
+            if [ "$REF" = "refs/heads/main" ]; then
+              BASE_REF="main"
+            elif [[ "$REF" =~ ^refs/heads/release/[^/]+$ ]]; then
+              BASE_REF="${REF#refs/heads/}"
+            else
+              echo "::error::Manual runs must be dispatched from main or a release branch such as release/1.2; found $REF"
+              exit 1
+            fi
+            if ! git fetch --no-tags --prune origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"; then
+              echo "::error::Could not fetch origin/$BASE_REF, so this run cannot prove the dispatch commit is on it. Refusing to build an unverified ref."
+              exit 1
+            fi
+            BASE_SHA=$(git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}") || {
+              echo "::error::No origin/$BASE_REF in this checkout, so it cannot be shown that the dispatch commit is on it."
               exit 1
             }
             DISPATCH_SHA=$(git rev-parse --verify "${SHA}^{commit}") || {
               echo "::error::Dispatch commit $SHA does not resolve to a commit"
               exit 1
             }
-            if ! git merge-base --is-ancestor "$DISPATCH_SHA" "$MAIN_SHA"; then
-              echo "::error::Dispatch commit $DISPATCH_SHA is not contained in origin/main"
+            if ! git merge-base --is-ancestor "$DISPATCH_SHA" "$BASE_SHA"; then
+              echo "::error::Dispatch commit $DISPATCH_SHA is not contained in origin/$BASE_REF"
               exit 1
             fi
             SOURCE_SHA="$DISPATCH_SHA"

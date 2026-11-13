@@ -6,16 +6,14 @@ public static class ChartFreshnessDisplay
 {
     public const string WaitingLabel = "Waiting for data";
     public const string PausedLabel = "Paused";
-    public const string DetectionOffLabel = "Freshness off";
 
     public static string SummaryLabel(ChartFreshnessState state, bool paused) => paused
         ? PausedLabel
         : state switch
         {
             ChartFreshnessState.Waiting => WaitingLabel,
-            ChartFreshnessState.Live => "Live",
+            ChartFreshnessState.Live or ChartFreshnessState.Disabled => "Live",
             ChartFreshnessState.Stale => "Stale",
-            ChartFreshnessState.Disabled => DetectionOffLabel,
             _ => WaitingLabel
         };
 
@@ -35,8 +33,7 @@ public static class ChartFreshnessDisplay
         return $"{(int)value.TotalDays}d ago";
     }
 
-    public static string TimeoutText(double? seconds) =>
-        seconds is { } value ? $"stale after {FormatSeconds(value)}" : DetectionOffLabel;
+    public static string TimeoutText(double seconds) => $"stale after {FormatSeconds(seconds)}";
 
     private static string FormatSeconds(double seconds) =>
         seconds < 1 ? $"{Math.Round(seconds, 1)}s" : $"{seconds:0.##}s";

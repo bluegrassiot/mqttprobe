@@ -20,7 +20,10 @@
                 {
                     <span> · last @Configuration.TimeWindowMinutes min</span>
                 }
-                <span> · @ChartFreshnessDisplay.TimeoutText(Configuration.StaleTimeoutSeconds)</span>
+                @if (Configuration.StaleTimeoutSeconds is { } staleAfter)
+                {
+                    <span> · @ChartFreshnessDisplay.TimeoutText(staleAfter)</span>
+                }
             </MudText>
             <div class="chart-card-status">
                 <MudChip T="string" Size="MudBlazor.Size.Small" Variant="Variant.Outlined" Color="@StatusColor">
@@ -133,9 +136,8 @@
             if (!_live || _hovering) return MudBlazor.Color.Default;
             return _freshness.State switch
             {
-                ChartFreshnessState.Live => MudBlazor.Color.Success,
+                ChartFreshnessState.Live or ChartFreshnessState.Disabled => MudBlazor.Color.Success,
                 ChartFreshnessState.Stale => MudBlazor.Color.Warning,
-                ChartFreshnessState.Disabled => MudBlazor.Color.Default,
                 _ => MudBlazor.Color.Info
             };
         }

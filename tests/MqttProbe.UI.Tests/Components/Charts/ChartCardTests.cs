@@ -155,28 +155,45 @@ public class ChartCardTests : BunitTestContext
     }
 
     [Test]
-    public void DetectionOff_ShowsFreshnessOffWithoutCallingDataStale()
+    public void DetectionOff_ShowsLiveWithoutAFreshnessLabel()
     {
         var a = new ChartSeries { DisplayName = "Temp" };
         Record(a, 300);
 
         var cut = RenderCard(Chart(null, a));
 
-        StatusChipText(cut).Should().Be("Freshness off");
+        StatusChipText(cut).Should().Be("Live");
         StatusAgeText(cut).Should().BeNull();
-        HeaderText(cut).Should().Contain("Freshness off").And.NotContain("stale after");
-        cut.Markup.Should().NotContain("Stale");
+        HeaderText(cut).Trim().Should().Be("1 series · max 500 pts");
+        cut.Markup.Should().NotContain("Freshness off").And.NotContain("Stale");
     }
 
     [Test]
-    public void DetectionOff_WithoutData_ShowsFreshnessOff()
+    public void DetectionOff_WithoutData_ShowsLiveInsteadOfAFreshnessLabel()
     {
         var a = new ChartSeries { DisplayName = "Temp" };
 
         var cut = RenderCard(Chart(null, a));
 
-        HeaderText(cut).Should().Contain("Freshness off").And.NotContain("stale after");
-        StatusChipText(cut).Should().Be("Freshness off");
+        HeaderText(cut).Trim().Should().Be("1 series · max 500 pts");
+        cut.Markup.Should().NotContain("Freshness off").And.NotContain("stale after");
+        StatusChipText(cut).Should().Be("Live");
+    }
+
+    [Test]
+    public void DetectionOff_PauseStillTakesPrecedence()
+    {
+        var a = new ChartSeries { DisplayName = "Temp" };
+        Record(a, 2);
+        var cut = RenderCard(Chart(null, a));
+        StatusChipText(cut).Should().Be("Live");
+
+        cut.Find("button[title='Pause live updates (enables zoom/pan/export)']").Click();
+        cut.WaitForAssertion(() => StatusChipText(cut).Should().Be("Paused"), TimeSpan.FromSeconds(5));
+        StatusAgeText(cut).Should().BeNull();
+
+        cut.Find("button[title='Resume live updates']").Click();
+        cut.WaitForAssertion(() => StatusChipText(cut).Should().Be("Live"), TimeSpan.FromSeconds(5));
     }
 
     [Test]
@@ -192,8 +209,8 @@ public class ChartCardTests : BunitTestContext
             .Add(c => c.Configuration, Chart(null, a))
             .Add(c => c.Clock, _clock));
 
-        HeaderText(cut).Should().Contain("Freshness off").And.NotContain("stale after 10s");
-        StatusChipText(cut).Should().Be("Freshness off");
+        HeaderText(cut).Should().NotContain("Freshness off").And.NotContain("stale after 10s");
+        StatusChipText(cut).Should().Be("Live");
         StatusAgeText(cut).Should().BeNull();
     }
 

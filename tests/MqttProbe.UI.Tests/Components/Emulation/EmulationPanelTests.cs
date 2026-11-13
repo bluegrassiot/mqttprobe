@@ -310,65 +310,65 @@ public class EmulationPanelTests : BunitTestContext
     }
 
     [Test]
-    public void NodeToggle_ArrowKeysExpandAndCollapseIdempotently()
+    public async Task NodeToggle_ArrowKeysExpandAndCollapseIdempotently()
     {
         _nodes.Add(Node("Press-01"));
         var cut = Render<EmulationPanel>();
 
         cut.Find("button.emu-node-row__toggle").GetAttribute("aria-expanded").Should().Be("false");
 
-        cut.Find("button.emu-node-row__toggle").KeyDown("ArrowRight");
+        await cut.Find("button.emu-node-row__toggle").KeyDownAsync("ArrowRight");
         cut.FindAll(".emu-node-editor").Should().ContainSingle();
         cut.Find("button.emu-node-row__toggle").GetAttribute("aria-expanded").Should().Be("true");
 
-        cut.Find("button.emu-node-row__toggle").KeyDown("ArrowRight");
+        await cut.Find("button.emu-node-row__toggle").KeyDownAsync("ArrowRight");
         cut.FindAll(".emu-node-editor").Should().ContainSingle("Right on an expanded node is a no-op");
 
-        cut.Find("button.emu-node-row__toggle").KeyDown("ArrowLeft");
+        await cut.Find("button.emu-node-row__toggle").KeyDownAsync("ArrowLeft");
         cut.FindAll(".emu-node-editor").Should().BeEmpty();
         cut.Find("button.emu-node-row__toggle").GetAttribute("aria-expanded").Should().Be("false");
 
-        cut.Find("button.emu-node-row__toggle").KeyDown("ArrowLeft");
+        await cut.Find("button.emu-node-row__toggle").KeyDownAsync("ArrowLeft");
         cut.FindAll(".emu-node-editor").Should().BeEmpty("Left on a collapsed node is a no-op");
 
         var toggle = cut.Find("button.emu-node-row__toggle");
-        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", CtrlKey = true });
-        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowLeft", AltKey = true });
-        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", ShiftKey = true });
-        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", MetaKey = true });
-        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", IsComposing = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", CtrlKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowLeft", AltKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", ShiftKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", MetaKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", IsComposing = true });
         cut.FindAll(".emu-node-editor").Should().BeEmpty("modifiers and IME composition stay untouched");
     }
 
     [Test]
-    public void DeviceToggle_ArrowKeysExpandAndCollapseIdempotently()
+    public async Task DeviceToggle_ArrowKeysExpandAndCollapseIdempotently()
     {
         _nodes.Add(Node("Press-01"));
         var cut = Render<EmulationPanel>();
-        cut.Find("button.emu-node-row__toggle").Click();
+        await cut.Find("button.emu-node-row__toggle").ClickAsync();
 
         cut.Find("button.emu-device-row__toggle").GetAttribute("aria-expanded").Should().Be("false");
 
-        cut.Find("button.emu-device-row__toggle").KeyDown("ArrowRight");
+        await cut.Find("button.emu-device-row__toggle").KeyDownAsync("ArrowRight");
         cut.FindAll(".emu-device-detail").Should().ContainSingle();
         cut.Find("button.emu-device-row__toggle").GetAttribute("aria-expanded").Should().Be("true");
 
-        cut.Find("button.emu-device-row__toggle").KeyDown("ArrowRight");
+        await cut.Find("button.emu-device-row__toggle").KeyDownAsync("ArrowRight");
         cut.FindAll(".emu-device-detail").Should().ContainSingle("Right on an expanded device is a no-op");
 
-        cut.Find("button.emu-device-row__toggle").KeyDown("ArrowLeft");
+        await cut.Find("button.emu-device-row__toggle").KeyDownAsync("ArrowLeft");
         cut.FindAll(".emu-device-detail").Should().BeEmpty();
         cut.Find("button.emu-device-row__toggle").GetAttribute("aria-expanded").Should().Be("false");
 
-        cut.Find("button.emu-device-row__toggle").KeyDown("ArrowLeft");
+        await cut.Find("button.emu-device-row__toggle").KeyDownAsync("ArrowLeft");
         cut.FindAll(".emu-device-detail").Should().BeEmpty("Left on a collapsed device is a no-op");
 
         var toggle = cut.Find("button.emu-device-row__toggle");
-        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", CtrlKey = true });
-        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", AltKey = true });
-        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", ShiftKey = true });
-        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", MetaKey = true });
-        toggle.KeyDown(new KeyboardEventArgs { Key = "ArrowRight", IsComposing = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", CtrlKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", AltKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", ShiftKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", MetaKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", IsComposing = true });
         cut.FindAll(".emu-device-detail").Should().BeEmpty("modifiers and IME composition stay untouched");
     }
 

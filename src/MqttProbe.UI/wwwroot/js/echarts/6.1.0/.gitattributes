@@ -1,0 +1,5 @@
+# Vendored upstream files must keep their exact bytes.
+*.mjs -text
+LICENSE text eol=lf
+NOTICE text eol=lf
+licenses/* text eol=lf

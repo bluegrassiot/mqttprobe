@@ -397,6 +397,7 @@ class CheckInputTests(unittest.TestCase):
         shutil.copy2(ROOT / "global.json", root / "global.json")
         for relative in (
             "src/MqttProbe.UI/wwwroot/fonts",
+            "src/MqttProbe.UI/wwwroot/js/echarts",
             "src/MqttProbe.Maui/Resources/Fonts",
         ):
             shutil.copytree(ROOT / relative, root / relative)

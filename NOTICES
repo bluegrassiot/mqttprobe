@@ -49,6 +49,20 @@ Verify:     python scripts/legal/notices.py check
     Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); Microsoft .NET runtime third-party notices (10.0.14)
     Note: Bundled by iOS, Android, MacCatalyst and self-contained desktop builds. The notice files are from Microsoft.NETCore.App.Runtime.Mono.ios-arm64 10.0.14, byte-identical to the android-arm64 and maccatalyst-arm64 packs of the same version.
 
+  d3.js (Apache ECharts subcomponent) bundled in ECharts 6.1.0
+    Licence: BSD-3-Clause
+    Copyright: Copyright 2010-2016 Mike Bostock
+    Source: https://github.com/d3/d3
+    Texts: Apache ECharts 6.1.0 d3.js License (upstream text)
+    Note: ECharts 6.1.0 embeds d3.js BSD-3-Clause code in its treemap, tree, force and number helpers. The ECharts package does not declare a d3 version, and the reproduced licence is the copy shipped in its licenses directory.
+
+  Apache ECharts JavaScript library 6.1.0
+    Licence: Apache-2.0
+    Copyright: Copyright 2017-2026 The Apache Software Foundation
+    Source: https://github.com/apache/echarts
+    Texts: Apache ECharts 6.1.0 NOTICE (upstream text); Apache ECharts 6.1.0 License (upstream text)
+    Note: Vendored unmodified as js/echarts/6.1.0/echarts.esm.min.mjs from the npm echarts@6.1.0 archive (SHA-256 681aff88cc1038c3fa941a3a53d1b177a52250b05335efc607d6105ae13be481; integrity sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==). The file is 1,121,654 bytes with SHA-256 28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da.
+
   Chakra Petch unversioned
     Licence: SIL Open Font License 1.1
     Copyright: Copyright 2018 The Chakra Petch Project Authors
@@ -1255,6 +1269,20 @@ Verify:     python scripts/legal/notices.py check
     Source: https://github.com/HaeMmer/SparkplugNet
     Texts: MIT License (generic text)
     Note: Consumed from the external/SparkplugNet git submodule as a project reference.
+
+  tslib 2.3.0
+    Licence: 0BSD
+    Copyright: Copyright (c) Microsoft Corporation.
+    Source: https://github.com/Microsoft/tslib
+    Texts: tslib 2.3.0 License (upstream text)
+    Note: Inlined in js/echarts/6.1.0/echarts.esm.min.mjs by the ECharts 6.1.0 build; its licence text is retained verbatim at the top of the bundle. The npm tslib@2.3.0 archive SHA-256 is ae285639feff7e3c39de4626352181a5d73b815725e42639b411c43848abffdb.
+
+  zrender JavaScript library 6.1.0
+    Licence: BSD-3-Clause
+    Copyright: Copyright (c) 2017, Baidu Inc.
+    Source: https://github.com/ecomfe/zrender
+    Texts: zrender 6.1.0 License (upstream text)
+    Note: Inlined in js/echarts/6.1.0/echarts.esm.min.mjs by the ECharts 6.1.0 build; not served as a separate file. The npm zrender@6.1.0 archive SHA-256 is 38f2fb722a638be016ca0175b139c40c886ef47fc2afdb741b2e7e7ae9683f9c.
 
 ==============================================================================
 

@@ -292,6 +292,56 @@
       "sourceUrls": [
         "https://unpkg.com/apex-commons@0.10.0/LICENSE.md"
       ]
+    },
+    {
+      "key": "echarts-6-1-0-license-upstream-text",
+      "title": "Apache ECharts 6.1.0 License (upstream text)",
+      "file": "texts/echarts-6-1-0-license-upstream-text.txt",
+      "sha256": "da36698199ad661aa706a88c116ed6f2e8aa11d33be22aeb230ae799bf3f7586",
+      "kind": "license",
+      "sourceUrls": [
+        "https://unpkg.com/echarts@6.1.0/LICENSE"
+      ]
+    },
+    {
+      "key": "echarts-6-1-0-notice-upstream-text",
+      "title": "Apache ECharts 6.1.0 NOTICE (upstream text)",
+      "file": "texts/echarts-6-1-0-notice-upstream-text.txt",
+      "sha256": "88c2418a8ab4dba3486b263600ab39e0c78c36142ddfa4167ed3d9c3a2d2ab38",
+      "kind": "notice",
+      "sourceUrls": [
+        "https://unpkg.com/echarts@6.1.0/NOTICE"
+      ]
+    },
+    {
+      "key": "echarts-6-1-0-license-d3-upstream-text",
+      "title": "Apache ECharts 6.1.0 d3.js License (upstream text)",
+      "file": "texts/echarts-6-1-0-license-d3-upstream-text.txt",
+      "sha256": "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304",
+      "kind": "license",
+      "sourceUrls": [
+        "https://unpkg.com/echarts@6.1.0/licenses/LICENSE-d3"
+      ]
+    },
+    {
+      "key": "zrender-6-1-0-license-upstream-text",
+      "title": "zrender 6.1.0 License (upstream text)",
+      "file": "texts/zrender-6-1-0-license-upstream-text.txt",
+      "sha256": "55ea01207028f76d844678511f29fc800f8a1e67a8a0fe80470128677847ad32",
+      "kind": "license",
+      "sourceUrls": [
+        "https://unpkg.com/zrender@6.1.0/LICENSE"
+      ]
+    },
+    {
+      "key": "tslib-2-3-0-license-upstream-text",
+      "title": "tslib 2.3.0 License (upstream text)",
+      "file": "texts/tslib-2-3-0-license-upstream-text.txt",
+      "sha256": "5989359645911c04a140c49d89496b13feca980bbf36d2250a12d3b9d06250d6",
+      "kind": "license",
+      "sourceUrls": [
+        "https://unpkg.com/tslib@2.3.0/LICENSE.txt"
+      ]
     }
   ]
 }

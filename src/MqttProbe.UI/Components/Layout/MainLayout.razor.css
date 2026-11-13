@@ -27,6 +27,13 @@
     }
 }
 
+/* The tab strip joins the app bar where it is shown, so the header reads as one block. */
+@media (min-width: 960px), (min-width: 600px) and (min-height: 800px) {
+    .app-shell-body {
+        padding-top: 0;
+    }
+}
+
 ::deep .app-chrome-panel {
     background: var(--mud-palette-surface);
     border: 1px solid var(--mud-palette-lines-default);

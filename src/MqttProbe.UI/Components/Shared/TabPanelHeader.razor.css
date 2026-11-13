@@ -68,6 +68,8 @@
     .app-tabpanel-header {
         padding: 2px 0;
         margin-bottom: 6px;
+        /* Fractional phone layouts can round a 1px divider away; 2px keeps it visible. */
+        border-bottom-width: 2px;
     }
 
     .app-tabpanel-header__title {

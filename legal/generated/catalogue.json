@@ -2,17 +2,30 @@
   "schemaVersion": 1,
   "components": [
     {
+      "id": "apex-commons",
+      "name": "Apex Commons JavaScript library",
+      "version": "0.10.0",
+      "license": "Apex Commons Community/Commercial dual license (unresolved)",
+      "copyright": "",
+      "sourceUrl": "https://github.com/apexcharts/projects/tree/main/libs/commons",
+      "documentIds": [
+        "3af1a0dde9ba417ba8dce494675b449ddc203fcb2939d75319a2666c947bf03e"
+      ],
+      "applicability": "runtime",
+      "notes": "Bundled inside js/apexcharts.full.min.js by ApexCharts 8.8.1 and served to the browser. Upstream terms are not resolved by this notice. They carry the same OEM/redistribution condition, and no such entitlement is established here."
+    },
+    {
       "id": "apexcharts-javascript",
       "name": "ApexCharts JavaScript library",
-      "version": "6.5.0",
+      "version": "8.8.1",
       "license": "ApexCharts Community/Commercial dual license (unresolved)",
       "copyright": "",
       "sourceUrl": "https://github.com/apexcharts/apexcharts.js",
       "documentIds": [
-        "92d44fa2449bcd22a461ab593d571795b0effa9cc228f3a42328cd38f67a896f"
+        "d3f4eb7ec97c10a740b390ae75c6387170082a73d6dad953e7a8432f399ee47c"
       ],
       "applicability": "runtime",
-      "notes": "Bundled by Blazor-ApexCharts as js/apexcharts.esm.js and served to the browser. Upstream terms are not MIT and are not resolved by this notice."
+      "notes": "Bundled by Blazor-ApexCharts 8.0.0 as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim, and served to the browser. That file is byte-identical to the npm apexcharts 8.8.1 full build. Upstream terms are not MIT and are not resolved by this notice. The 8.8.1 terms also require an OEM/redistribution licence to embed the library in a product used by other people, and no such entitlement is established here."
     },
     {
       "id": "dotnet-android-runtime",
@@ -31,7 +44,7 @@
     {
       "id": "dotnet-maui-platform-notices",
       "name": ".NET MAUI platform notices",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT and third-party terms",
       "copyright": "Copyright (c) Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -40,7 +53,7 @@
         "cdf3bd3c2efc85d4a9c3a544b8f6dfa63f79c74d7c8d26c1a0b944af3be0126d"
       ],
       "applicability": "runtime",
-      "notes": "The individual Microsoft.Maui.* packages also carry their own current third-party notice file, reproduced through those components."
+      "notes": "The Microsoft.Maui.* 10.0.130 packages ship the same THIRD-PARTY-NOTICES.TXT as 10.0.110, so the reproduced text is unchanged. The individual Microsoft.Maui.* packages also carry their own current third-party notice file, reproduced through those components."
     },
     {
       "id": "dotnet-runtime",
@@ -145,19 +158,19 @@
       "notes": "Installed workload pack Microsoft.MacCatalyst.Runtime.maccatalyst-arm64.net10.0_27.0/27.0.10742. Its SDK licence is byte-identical to the Microsoft.iOS copy reproduced here."
     },
     {
-      "id": "nuget:blazor-apexcharts@7.1.0",
+      "id": "nuget:blazor-apexcharts@8.0.0",
       "name": "Blazor-ApexCharts",
-      "version": "7.1.0",
+      "version": "8.0.0",
       "license": "MIT",
       "copyright": "Copyright 2022 (c) Joakim Dangården. All rights reserved.",
       "sourceUrl": "https://apexcharts.github.io/Blazor-ApexCharts/",
       "documentIds": [
-        "92d44fa2449bcd22a461ab593d571795b0effa9cc228f3a42328cd38f67a896f",
         "950607e7415c641f9cb136b29607a806e27d6ad5e0d2ecdcd8addcf4dae38a69",
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
+        "d3f4eb7ec97c10a740b390ae75c6387170082a73d6dad953e7a8432f399ee47c"
       ],
       "applicability": "runtime",
-      "notes": "The package is MIT. The bundled ApexCharts JavaScript library is separately licensed and unresolved."
+      "notes": "The package is MIT. The bundled ApexCharts JavaScript 8.8.1 library and its Apex Commons 0.10.0 code are separately licensed and unresolved."
     },
     {
       "id": "nuget:blazor.lucide@1.0.6",
@@ -247,9 +260,9 @@
       "applicability": "build"
     },
     {
-      "id": "nuget:meziantou.analyzer@3.0.322",
+      "id": "nuget:meziantou.analyzer@3.0.339",
       "name": "Meziantou.Analyzer",
-      "version": "3.0.322",
+      "version": "3.0.339",
       "license": "MIT",
       "copyright": "",
       "sourceUrl": "https://github.com/meziantou/Meziantou.Analyzer",
@@ -273,9 +286,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.aspnetcore.authentication.openidconnect@10.0.14",
+      "id": "nuget:microsoft.aspnetcore.authentication.openidconnect@10.0.15",
       "name": "Microsoft.AspNetCore.Authentication.OpenIdConnect",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://asp.net/",
@@ -286,9 +299,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.aspnetcore.authorization@10.0.14",
+      "id": "nuget:microsoft.aspnetcore.authorization@10.0.15",
       "name": "Microsoft.AspNetCore.Authorization",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://asp.net/",
@@ -299,9 +312,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.aspnetcore.components.analyzers@10.0.14",
+      "id": "nuget:microsoft.aspnetcore.components.analyzers@10.0.15",
       "name": "Microsoft.AspNetCore.Components.Analyzers",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://asp.net/",
@@ -312,9 +325,9 @@
       "applicability": "build"
     },
     {
-      "id": "nuget:microsoft.aspnetcore.components.authorization@10.0.14",
+      "id": "nuget:microsoft.aspnetcore.components.authorization@10.0.15",
       "name": "Microsoft.AspNetCore.Components.Authorization",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://asp.net/",
@@ -325,9 +338,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.aspnetcore.components.forms@10.0.14",
+      "id": "nuget:microsoft.aspnetcore.components.forms@10.0.15",
       "name": "Microsoft.AspNetCore.Components.Forms",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://asp.net/",
@@ -338,9 +351,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.aspnetcore.components.web@10.0.14",
+      "id": "nuget:microsoft.aspnetcore.components.web@10.0.15",
       "name": "Microsoft.AspNetCore.Components.Web",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://asp.net/",
@@ -351,9 +364,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.aspnetcore.components.webview.maui@10.0.110",
+      "id": "nuget:microsoft.aspnetcore.components.webview.maui@10.0.130",
       "name": "Microsoft.AspNetCore.Components.WebView.Maui",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -378,9 +391,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.aspnetcore.components.webview@10.0.14",
+      "id": "nuget:microsoft.aspnetcore.components.webview@10.0.15",
       "name": "Microsoft.AspNetCore.Components.WebView",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://asp.net/",
@@ -391,9 +404,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.aspnetcore.components@10.0.14",
+      "id": "nuget:microsoft.aspnetcore.components@10.0.15",
       "name": "Microsoft.AspNetCore.Components",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://asp.net/",
@@ -404,9 +417,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.aspnetcore.metadata@10.0.14",
+      "id": "nuget:microsoft.aspnetcore.metadata@10.0.15",
       "name": "Microsoft.AspNetCore.Metadata",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://asp.net/",
@@ -430,22 +443,22 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.configuration.abstractions@10.0.14",
+      "id": "nuget:microsoft.extensions.configuration.abstractions@11.0.0",
       "name": "Microsoft.Extensions.Configuration.Abstractions",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.configuration.binder@10.0.14",
+      "id": "nuget:microsoft.extensions.configuration.binder@10.0.15",
       "name": "Microsoft.Extensions.Configuration.Binder",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
@@ -456,74 +469,74 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.configuration.fileextensions@10.0.14",
+      "id": "nuget:microsoft.extensions.configuration.fileextensions@11.0.0",
       "name": "Microsoft.Extensions.Configuration.FileExtensions",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.configuration.json@10.0.14",
+      "id": "nuget:microsoft.extensions.configuration.json@11.0.0",
       "name": "Microsoft.Extensions.Configuration.Json",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.configuration@10.0.14",
+      "id": "nuget:microsoft.extensions.configuration@11.0.0",
       "name": "Microsoft.Extensions.Configuration",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.dependencyinjection.abstractions@10.0.14",
+      "id": "nuget:microsoft.extensions.dependencyinjection.abstractions@11.0.0",
       "name": "Microsoft.Extensions.DependencyInjection.Abstractions",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.dependencyinjection@10.0.14",
+      "id": "nuget:microsoft.extensions.dependencyinjection@11.0.0",
       "name": "Microsoft.Extensions.DependencyInjection",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.diagnostics.abstractions@10.0.14",
+      "id": "nuget:microsoft.extensions.diagnostics.abstractions@10.0.15",
       "name": "Microsoft.Extensions.Diagnostics.Abstractions",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
@@ -534,9 +547,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.diagnostics@10.0.14",
+      "id": "nuget:microsoft.extensions.diagnostics@10.0.15",
       "name": "Microsoft.Extensions.Diagnostics",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
@@ -547,15 +560,15 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.fileproviders.abstractions@10.0.14",
+      "id": "nuget:microsoft.extensions.fileproviders.abstractions@11.0.0",
       "name": "Microsoft.Extensions.FileProviders.Abstractions",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
@@ -573,9 +586,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.fileproviders.composite@10.0.14",
+      "id": "nuget:microsoft.extensions.fileproviders.composite@10.0.15",
       "name": "Microsoft.Extensions.FileProviders.Composite",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
@@ -598,9 +611,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.fileproviders.embedded@10.0.14",
+      "id": "nuget:microsoft.extensions.fileproviders.embedded@10.0.15",
       "name": "Microsoft.Extensions.FileProviders.Embedded",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://asp.net/",
@@ -610,28 +623,28 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.fileproviders.physical@10.0.14",
+      "id": "nuget:microsoft.extensions.fileproviders.physical@11.0.0",
       "name": "Microsoft.Extensions.FileProviders.Physical",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.filesystemglobbing@10.0.14",
+      "id": "nuget:microsoft.extensions.filesystemglobbing@11.0.0",
       "name": "Microsoft.Extensions.FileSystemGlobbing",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
@@ -688,15 +701,15 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.logging.abstractions@10.0.14",
+      "id": "nuget:microsoft.extensions.logging.abstractions@11.0.0",
       "name": "Microsoft.Extensions.Logging.Abstractions",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
@@ -729,35 +742,35 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.logging.debug@10.0.14",
+      "id": "nuget:microsoft.extensions.logging.debug@11.0.0",
       "name": "Microsoft.Extensions.Logging.Debug",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.logging@10.0.14",
+      "id": "nuget:microsoft.extensions.logging@11.0.0",
       "name": "Microsoft.Extensions.Logging",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.options.configurationextensions@10.0.14",
+      "id": "nuget:microsoft.extensions.options.configurationextensions@10.0.15",
       "name": "Microsoft.Extensions.Options.ConfigurationExtensions",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
@@ -768,35 +781,35 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.options@10.0.14",
+      "id": "nuget:microsoft.extensions.options@11.0.0",
       "name": "Microsoft.Extensions.Options",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.primitives@10.0.14",
+      "id": "nuget:microsoft.extensions.primitives@11.0.0",
       "name": "Microsoft.Extensions.Primitives",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.extensions.validation@10.0.14",
+      "id": "nuget:microsoft.extensions.validation@10.0.15",
       "name": "Microsoft.Extensions.Validation",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://asp.net/",
@@ -905,9 +918,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.jsinterop@10.0.14",
+      "id": "nuget:microsoft.jsinterop@10.0.15",
       "name": "Microsoft.JSInterop",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://asp.net/",
@@ -918,9 +931,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.maui.controls.build.tasks@10.0.110",
+      "id": "nuget:microsoft.maui.controls.build.tasks@10.0.130",
       "name": "Microsoft.Maui.Controls.Build.Tasks",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -932,9 +945,9 @@
       "applicability": "build"
     },
     {
-      "id": "nuget:microsoft.maui.controls.compatibility@10.0.110",
+      "id": "nuget:microsoft.maui.controls.compatibility@10.0.130",
       "name": "Microsoft.Maui.Controls.Compatibility",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -946,9 +959,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.maui.controls.core@10.0.110",
+      "id": "nuget:microsoft.maui.controls.core@10.0.130",
       "name": "Microsoft.Maui.Controls.Core",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -960,9 +973,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.maui.controls.xaml@10.0.110",
+      "id": "nuget:microsoft.maui.controls.xaml@10.0.130",
       "name": "Microsoft.Maui.Controls.Xaml",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -974,9 +987,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.maui.controls@10.0.110",
+      "id": "nuget:microsoft.maui.controls@10.0.130",
       "name": "Microsoft.Maui.Controls",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -988,9 +1001,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.maui.core@10.0.110",
+      "id": "nuget:microsoft.maui.core@10.0.130",
       "name": "Microsoft.Maui.Core",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -1002,9 +1015,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.maui.essentials@10.0.110",
+      "id": "nuget:microsoft.maui.essentials@10.0.130",
       "name": "Microsoft.Maui.Essentials",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -1016,9 +1029,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.maui.graphics.win2d.winui.desktop@10.0.110",
+      "id": "nuget:microsoft.maui.graphics.win2d.winui.desktop@10.0.130",
       "name": "Microsoft.Maui.Graphics.Win2D.WinUI.Desktop",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -1030,9 +1043,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.maui.graphics@10.0.110",
+      "id": "nuget:microsoft.maui.graphics@10.0.130",
       "name": "Microsoft.Maui.Graphics",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -1044,9 +1057,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:microsoft.maui.resizetizer@10.0.110",
+      "id": "nuget:microsoft.maui.resizetizer@10.0.130",
       "name": "Microsoft.Maui.Resizetizer",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -1084,9 +1097,9 @@
       "applicability": "build"
     },
     {
-      "id": "nuget:microsoft.web.webview2@1.0.3179.45",
+      "id": "nuget:microsoft.web.webview2@1.0.4314.35",
       "name": "Microsoft.Web.WebView2",
-      "version": "1.0.3179.45",
+      "version": "1.0.4314.35",
       "license": "BSD-3-Clause",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://aka.ms/webview",
@@ -1379,9 +1392,9 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:sonaranalyzer.csharp@10.35.0.4138",
+      "id": "nuget:sonaranalyzer.csharp@10.36.0.15337",
       "name": "SonarAnalyzer.CSharp",
-      "version": "10.35.0.4138",
+      "version": "10.36.0.15337",
       "license": "Sonar Source-Available License v1.0",
       "copyright": "Copyright © SonarSource Sàrl",
       "sourceUrl": "https://redirect.sonarsource.com/doc/sonar-visualstudio.html",
@@ -1391,6 +1404,32 @@
       "applicability": "build",
       "notes": "Build-only analyzer. Its nested license file is retained from the package payload.",
       "licenseSourceUrl": "https://aka.ms/deprecateLicenseUrl"
+    },
+    {
+      "id": "nuget:system.collections.immutable@11.0.0",
+      "name": "System.Collections.Immutable",
+      "version": "11.0.0",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "sourceUrl": "https://dot.net/",
+      "documentIds": [
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
+      ],
+      "applicability": "runtime"
+    },
+    {
+      "id": "nuget:system.diagnostics.diagnosticsource@11.0.0",
+      "name": "System.Diagnostics.DiagnosticSource",
+      "version": "11.0.0",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "sourceUrl": "https://dot.net/",
+      "documentIds": [
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
+      ],
+      "applicability": "runtime"
     },
     {
       "id": "nuget:system.formats.cbor@11.0.0",
@@ -1418,6 +1457,19 @@
       "applicability": "runtime"
     },
     {
+      "id": "nuget:system.io.pipelines@11.0.0",
+      "name": "System.IO.Pipelines",
+      "version": "11.0.0",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "sourceUrl": "https://dot.net/",
+      "documentIds": [
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
+      ],
+      "applicability": "runtime"
+    },
+    {
       "id": "nuget:system.numerics.tensors@9.0.0",
       "name": "System.Numerics.Tensors",
       "version": "9.0.0",
@@ -1432,41 +1484,80 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:system.reflection.metadataloadcontext@10.0.14",
+      "id": "nuget:system.reflection.metadata@11.0.0",
+      "name": "System.Reflection.Metadata",
+      "version": "11.0.0",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "sourceUrl": "https://dot.net/",
+      "documentIds": [
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
+      ],
+      "applicability": "runtime"
+    },
+    {
+      "id": "nuget:system.reflection.metadataloadcontext@11.0.0",
       "name": "System.Reflection.MetadataLoadContext",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:system.security.cryptography.protecteddata@10.0.14",
+      "id": "nuget:system.security.cryptography.protecteddata@11.0.0",
       "name": "System.Security.Cryptography.ProtectedData",
-      "version": "10.0.14",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
     {
-      "id": "nuget:system.threading.ratelimiting@10.0.14",
-      "name": "System.Threading.RateLimiting",
-      "version": "10.0.14",
+      "id": "nuget:system.text.encodings.web@11.0.0",
+      "name": "System.Text.Encodings.Web",
+      "version": "11.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://dot.net/",
       "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
+      ],
+      "applicability": "runtime"
+    },
+    {
+      "id": "nuget:system.text.json@11.0.0",
+      "name": "System.Text.Json",
+      "version": "11.0.0",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "sourceUrl": "https://dot.net/",
+      "documentIds": [
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
+      ],
+      "applicability": "runtime"
+    },
+    {
+      "id": "nuget:system.threading.ratelimiting@11.0.0",
+      "name": "System.Threading.RateLimiting",
+      "version": "11.0.0",
+      "license": "MIT",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "sourceUrl": "https://dot.net/",
+      "documentIds": [
+        "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
       ],
       "applicability": "runtime"
     },
@@ -2628,6 +2719,21 @@
       "applicability": "runtime"
     },
     {
+      "id": "nuget:xamarin.androidx.webkit@1.14.0.1",
+      "name": "Xamarin.AndroidX.WebKit",
+      "version": "1.14.0.1",
+      "license": "MIT AND Apache-2.0",
+      "copyright": "© Microsoft Corporation. All rights reserved.",
+      "sourceUrl": "https://aka.ms/android-libraries",
+      "documentIds": [
+        "27303c73cfcb754be74c3f4e68f863fa8063f96d15e17c1a1553c0bc65a81ff2",
+        "4c826d8b1373379f442e0edfcf5c9344fd1050b906f0eddd3858b5f36e75c5a4",
+        "72ca46e8f4fa7f7074ad74ae27ee32685ce79198b81da109c0131bf62eb622e8",
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
+      ],
+      "applicability": "runtime"
+    },
+    {
       "id": "nuget:xamarin.androidx.window.windowcore.jvm@1.4.0.1",
       "name": "Xamarin.AndroidX.Window.WindowCore.Jvm",
       "version": "1.4.0.1",
@@ -2938,6 +3044,16 @@
       "kind": "license"
     },
     {
+      "id": "3af1a0dde9ba417ba8dce494675b449ddc203fcb2939d75319a2666c947bf03e",
+      "title": "Apex Commons 0.10.0 License (upstream text)",
+      "file": "3af1a0dde9ba417ba8dce494675b449ddc203fcb2939d75319a2666c947bf03e.txt",
+      "sha256": "3af1a0dde9ba417ba8dce494675b449ddc203fcb2939d75319a2666c947bf03e",
+      "sourceUrls": [
+        "https://unpkg.com/apex-commons@0.10.0/LICENSE.md"
+      ],
+      "kind": "license"
+    },
+    {
       "id": "3c76bd4c98a03091ab86a759e591a2c24ddeebc3a1489711c7e763492711798a",
       "title": "Android binding notices - Error Prone annotations",
       "file": "3c76bd4c98a03091ab86a759e591a2c24ddeebc3a1489711c7e763492711798a.txt",
@@ -2947,7 +3063,7 @@
     },
     {
       "id": "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
-      "title": "System.Formats.Cbor package licence (THIRD-PARTY-NOTICES.TXT)",
+      "title": "Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT)",
       "file": "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6.txt",
       "sha256": "4790bb15f0edd1b105aecb05174fc6c589d4d9fad0c50616ef5f7dc365f1c8a6",
       "sourceUrls": [
@@ -3104,14 +3220,6 @@
       "sha256": "85c112ba23ef4e6bd899a1f3fa5d32342b878fcea3ce5ddf6cbf86d23f50165e",
       "sourceUrls": [],
       "kind": "notice"
-    },
-    {
-      "id": "92d44fa2449bcd22a461ab593d571795b0effa9cc228f3a42328cd38f67a896f",
-      "title": "ApexCharts 6.5.0 License (upstream text)",
-      "file": "92d44fa2449bcd22a461ab593d571795b0effa9cc228f3a42328cd38f67a896f.txt",
-      "sha256": "92d44fa2449bcd22a461ab593d571795b0effa9cc228f3a42328cd38f67a896f",
-      "sourceUrls": [],
-      "kind": "license"
     },
     {
       "id": "950607e7415c641f9cb136b29607a806e27d6ad5e0d2ecdcd8addcf4dae38a69",
@@ -3272,6 +3380,16 @@
       "kind": "notice"
     },
     {
+      "id": "d3f4eb7ec97c10a740b390ae75c6387170082a73d6dad953e7a8432f399ee47c",
+      "title": "ApexCharts 8.8.1 License (upstream text)",
+      "file": "d3f4eb7ec97c10a740b390ae75c6387170082a73d6dad953e7a8432f399ee47c.txt",
+      "sha256": "d3f4eb7ec97c10a740b390ae75c6387170082a73d6dad953e7a8432f399ee47c",
+      "sourceUrls": [
+        "https://unpkg.com/apexcharts@8.8.1/LICENSE.md"
+      ],
+      "kind": "license"
+    },
+    {
       "id": "d7b714319b75ef055fc54c800e49c826589e3b8a4ff25ee081bad0a124eb003f",
       "title": "Microsoft Windows App SDK NOTICE",
       "file": "d7b714319b75ef055fc54c800e49c826589e3b8a4ff25ee081bad0a124eb003f.txt",
@@ -3316,5 +3434,5 @@
       "kind": "notice"
     }
   ],
-  "provenance": "PROVENANCE NOTES\n----------------\n\nStatements about sources that could not be verified from this repository.\nThey are separate from the license texts above.\n\n1. ApexCharts. The bundled ApexCharts JavaScript library 6.5.0 is licensed\n   under upstream's dual Community/Commercial terms, not MIT. The library is\n   served as js/apexcharts.esm.js from the Blazor-ApexCharts package.\n\n2. Nerd Fonts. The OpenDyslexic files are patched builds made with the Nerd\n   Fonts patcher, whose license is reproduced above. The patcher version used\n   and the individual licenses of patched-in icon sets are not recorded in\n   this repository, so this notice does not enumerate them.\n\n3. Microsoft.Graphics.Win2D 1.4.0. The package carries no license file. Its\n   package metadata declares a legacy Win2D EULA URL and requires license\n   acceptance; the Win2D repository's LICENSE.txt is MIT and is reproduced\n   above. Which terms apply to the package is not established here.\n\n4. Android binding packages. The third-party notices reproduced above are the\n   notices shipped in the Microsoft binding packages. They identify the\n   licenses under which Microsoft received the upstream Android libraries.\n   The upstream projects' own NOTICE files are not reproduced, and their\n   correspondence with these texts has not been checked.\n\n5. Microsoft package notices. The four documents listed in section 8.3, the\n   MAUI notice in section 9.4 and the runtime notices in section 9 are\n   reproduced verbatim. Package-level notices for Microsoft packages not\n   listed in section 8.1 are not included."
+  "provenance": "PROVENANCE NOTES\n----------------\n\nStatements about sources that could not be verified from this repository.\nThey are separate from the license texts above.\n\n1. ApexCharts and Apex Commons. The bundled ApexCharts JavaScript library\n   8.8.1, and the Apex Commons 0.10.0 code inside it, are licensed under\n   upstream's dual Community/Commercial terms, not MIT. The library is served\n   as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim,\n   from the Blazor-ApexCharts package.\n\n2. Nerd Fonts. The OpenDyslexic files are patched builds made with the Nerd\n   Fonts patcher, whose license is reproduced above. The patcher version used\n   and the individual licenses of patched-in icon sets are not recorded in\n   this repository, so this notice does not enumerate them.\n\n3. Microsoft.Graphics.Win2D 1.4.0. The package carries no license file. Its\n   package metadata declares a legacy Win2D EULA URL and requires license\n   acceptance; the Win2D repository's LICENSE.txt is MIT and is reproduced\n   above. Which terms apply to the package is not established here.\n\n4. Android binding packages. The third-party notices reproduced above are the\n   notices shipped in the Microsoft binding packages. They identify the\n   licenses under which Microsoft received the upstream Android libraries.\n   The upstream projects' own NOTICE files are not reproduced, and their\n   correspondence with these texts has not been checked.\n\n5. Microsoft package notices. The ASP.NET Core app and components package\n   notices, the Microsoft.Extensions, System and cryptography package\n   notices, the Microsoft.Extensions.Logging and System.Numerics.Tensors\n   package notices, the MAUI notice and the runtime notices are reproduced\n   verbatim. Package-level notices for Microsoft packages not listed in\n   section 1 are not included."
 }

@@ -93,9 +93,9 @@ Glob entries under `annotations` may add a display note, but never grant a
 licence or validation exception. `requiredReview` lists families that must have
 an exact entry, such as Windows App SDK, WebView2 and Win2D.
 
-Known unresolved items stay explicit in the index: ApexCharts JavaScript 6.5
-terms, Win2D EULA versus MIT, Nerd Fonts patcher provenance, and the Android
-upstream notice correspondence.
+Known unresolved items stay explicit in the index: ApexCharts JavaScript 8.8.1
+and Apex Commons 0.10.0 terms, Win2D EULA versus MIT, Nerd Fonts patcher
+provenance, and the Android upstream notice correspondence.
 
 ## Host profiles
 

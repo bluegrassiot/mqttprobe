@@ -16,11 +16,17 @@ Verify:     python scripts/legal/notices.py check
 
 1. Shipped components
 
-  ApexCharts JavaScript library 6.5.0
+  Apex Commons JavaScript library 0.10.0
+    Licence: Apex Commons Community/Commercial dual license (unresolved)
+    Source: https://github.com/apexcharts/projects/tree/main/libs/commons
+    Texts: Apex Commons 0.10.0 License (upstream text)
+    Note: Bundled inside js/apexcharts.full.min.js by ApexCharts 8.8.1 and served to the browser. Upstream terms are not resolved by this notice. They carry the same OEM/redistribution condition, and no such entitlement is established here.
+
+  ApexCharts JavaScript library 8.8.1
     Licence: ApexCharts Community/Commercial dual license (unresolved)
     Source: https://github.com/apexcharts/apexcharts.js
-    Texts: ApexCharts 6.5.0 License (upstream text)
-    Note: Bundled by Blazor-ApexCharts as js/apexcharts.esm.js and served to the browser. Upstream terms are not MIT and are not resolved by this notice.
+    Texts: ApexCharts 8.8.1 License (upstream text)
+    Note: Bundled by Blazor-ApexCharts 8.0.0 as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim, and served to the browser. That file is byte-identical to the npm apexcharts 8.8.1 full build. Upstream terms are not MIT and are not resolved by this notice. The 8.8.1 terms also require an OEM/redistribution licence to embed the library in a product used by other people, and no such entitlement is established here.
 
   .NET for Android runtime 36.1.118
     Licence: MIT and third-party terms
@@ -29,12 +35,12 @@ Verify:     python scripts/legal/notices.py check
     Texts: xamarin-android third-party notices (.NET for Android runtime 36.1.118); LLVM Release License
     Note: Bundled from Microsoft.Android.Runtime.36.android/36.1.118.
 
-  .NET MAUI platform notices 10.0.110
+  .NET MAUI platform notices 10.0.130
     Licence: MIT and third-party terms
     Copyright: Copyright (c) Microsoft Corporation. All rights reserved.
     Source: https://github.com/dotnet/maui
     Texts: .NET MAUI third-party notices (10.0.110); License notice for IQKeyboardManager
-    Note: The individual Microsoft.Maui.* packages also carry their own current third-party notice file, reproduced through those components.
+    Note: The Microsoft.Maui.* 10.0.130 packages ship the same THIRD-PARTY-NOTICES.TXT as 10.0.110, so the reproduced text is unchanged. The individual Microsoft.Maui.* packages also carry their own current third-party notice file, reproduced through those components.
 
   .NET runtime 10.0.14
     Licence: MIT and third-party terms
@@ -88,12 +94,12 @@ Verify:     python scripts/legal/notices.py check
     Texts: Microsoft.iOS SDK License (27.1.10018)
     Note: Installed workload pack Microsoft.MacCatalyst.Runtime.maccatalyst-arm64.net10.0_27.0/27.0.10742. Its SDK licence is byte-identical to the Microsoft.iOS copy reproduced here.
 
-  Blazor-ApexCharts 7.1.0
+  Blazor-ApexCharts 8.0.0
     Licence: MIT
     Copyright: Copyright 2022 (c) Joakim Dangården. All rights reserved.
     Source: https://apexcharts.github.io/Blazor-ApexCharts/
-    Texts: ApexCharts 6.5.0 License (upstream text); MIT License; MIT License (generic text)
-    Note: The package is MIT. The bundled ApexCharts JavaScript library is separately licensed and unresolved.
+    Texts: MIT License; MIT License (generic text); ApexCharts 8.8.1 License (upstream text)
+    Note: The package is MIT. The bundled ApexCharts JavaScript 8.8.1 library and its Apex Commons 0.10.0 code are separately licensed and unresolved.
 
   Blazor.Lucide 1.0.6
     Licence: MIT
@@ -136,37 +142,37 @@ Verify:     python scripts/legal/notices.py check
     Source: https://asp.net/
     Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
 
-  Microsoft.AspNetCore.Authentication.OpenIdConnect 10.0.14
+  Microsoft.AspNetCore.Authentication.OpenIdConnect 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://asp.net/
     Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
 
-  Microsoft.AspNetCore.Authorization 10.0.14
+  Microsoft.AspNetCore.Authorization 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://asp.net/
     Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
 
-  Microsoft.AspNetCore.Components.Authorization 10.0.14
+  Microsoft.AspNetCore.Components.Authorization 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://asp.net/
     Texts: Microsoft.AspNetCore.Components packages third-party notices; MIT License (generic text)
 
-  Microsoft.AspNetCore.Components.Forms 10.0.14
+  Microsoft.AspNetCore.Components.Forms 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://asp.net/
     Texts: Microsoft.AspNetCore.Components packages third-party notices; MIT License (generic text)
 
-  Microsoft.AspNetCore.Components.Web 10.0.14
+  Microsoft.AspNetCore.Components.Web 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://asp.net/
     Texts: Microsoft.AspNetCore.Components packages third-party notices; MIT License (generic text)
 
-  Microsoft.AspNetCore.Components.WebView.Maui 10.0.110
+  Microsoft.AspNetCore.Components.WebView.Maui 10.0.130
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://github.com/dotnet/maui
@@ -178,19 +184,19 @@ Verify:     python scripts/legal/notices.py check
     Source: https://asp.net/
     Texts: Microsoft.AspNetCore.Components packages third-party notices; MIT License (generic text)
 
-  Microsoft.AspNetCore.Components.WebView 10.0.14
+  Microsoft.AspNetCore.Components.WebView 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://asp.net/
     Texts: Microsoft.AspNetCore.Components packages third-party notices; MIT License (generic text)
 
-  Microsoft.AspNetCore.Components 10.0.14
+  Microsoft.AspNetCore.Components 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://asp.net/
     Texts: Microsoft.AspNetCore.Components packages third-party notices; MIT License (generic text)
 
-  Microsoft.AspNetCore.Metadata 10.0.14
+  Microsoft.AspNetCore.Metadata 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://asp.net/
@@ -202,65 +208,65 @@ Verify:     python scripts/legal/notices.py check
     Source: https://dot.net/
     Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
 
-  Microsoft.Extensions.Configuration.Abstractions 10.0.14
+  Microsoft.Extensions.Configuration.Abstractions 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
+  Microsoft.Extensions.Configuration.Binder 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
     Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
 
-  Microsoft.Extensions.Configuration.Binder 10.0.14
+  Microsoft.Extensions.Configuration.FileExtensions 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
+  Microsoft.Extensions.Configuration.Json 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
+  Microsoft.Extensions.Configuration 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
+  Microsoft.Extensions.DependencyInjection.Abstractions 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
+  Microsoft.Extensions.DependencyInjection 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
+  Microsoft.Extensions.Diagnostics.Abstractions 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
     Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
 
-  Microsoft.Extensions.Configuration.FileExtensions 10.0.14
+  Microsoft.Extensions.Diagnostics 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
     Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
 
-  Microsoft.Extensions.Configuration.Json 10.0.14
+  Microsoft.Extensions.FileProviders.Abstractions 11.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
-
-  Microsoft.Extensions.Configuration 10.0.14
-    Licence: MIT
-    Copyright: © Microsoft Corporation. All rights reserved.
-    Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
-
-  Microsoft.Extensions.DependencyInjection.Abstractions 10.0.14
-    Licence: MIT
-    Copyright: © Microsoft Corporation. All rights reserved.
-    Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
-
-  Microsoft.Extensions.DependencyInjection 10.0.14
-    Licence: MIT
-    Copyright: © Microsoft Corporation. All rights reserved.
-    Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
-
-  Microsoft.Extensions.Diagnostics.Abstractions 10.0.14
-    Licence: MIT
-    Copyright: © Microsoft Corporation. All rights reserved.
-    Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
-
-  Microsoft.Extensions.Diagnostics 10.0.14
-    Licence: MIT
-    Copyright: © Microsoft Corporation. All rights reserved.
-    Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
-
-  Microsoft.Extensions.FileProviders.Abstractions 10.0.14
-    Licence: MIT
-    Copyright: © Microsoft Corporation. All rights reserved.
-    Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
 
   Microsoft.Extensions.FileProviders.Composite 10.0.0
     Licence: MIT
@@ -268,7 +274,7 @@ Verify:     python scripts/legal/notices.py check
     Source: https://dot.net/
     Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
 
-  Microsoft.Extensions.FileProviders.Composite 10.0.14
+  Microsoft.Extensions.FileProviders.Composite 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
@@ -280,23 +286,23 @@ Verify:     python scripts/legal/notices.py check
     Source: https://asp.net/
     Texts: MIT License (generic text)
 
-  Microsoft.Extensions.FileProviders.Embedded 10.0.14
+  Microsoft.Extensions.FileProviders.Embedded 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://asp.net/
     Texts: MIT License (generic text)
 
-  Microsoft.Extensions.FileProviders.Physical 10.0.14
+  Microsoft.Extensions.FileProviders.Physical 11.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
 
-  Microsoft.Extensions.FileSystemGlobbing 10.0.14
+  Microsoft.Extensions.FileSystemGlobbing 11.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
 
   Microsoft.Extensions.Hosting.Abstractions 10.0.0
     Licence: MIT
@@ -322,11 +328,11 @@ Verify:     python scripts/legal/notices.py check
     Source: https://asp.net/
     Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
 
-  Microsoft.Extensions.Logging.Abstractions 10.0.14
+  Microsoft.Extensions.Logging.Abstractions 11.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
 
   Microsoft.Extensions.Logging.Configuration 9.0.1
     Licence: MIT
@@ -340,37 +346,37 @@ Verify:     python scripts/legal/notices.py check
     Source: https://dot.net/
     Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); Microsoft.Extensions.Logging and System.Numerics.Tensors third-party notices; MIT License (generic text)
 
-  Microsoft.Extensions.Logging.Debug 10.0.14
+  Microsoft.Extensions.Logging.Debug 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
+  Microsoft.Extensions.Logging 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
+  Microsoft.Extensions.Options.ConfigurationExtensions 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
     Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
 
-  Microsoft.Extensions.Logging 10.0.14
+  Microsoft.Extensions.Options 11.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
 
-  Microsoft.Extensions.Options.ConfigurationExtensions 10.0.14
+  Microsoft.Extensions.Primitives 11.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
 
-  Microsoft.Extensions.Options 10.0.14
-    Licence: MIT
-    Copyright: © Microsoft Corporation. All rights reserved.
-    Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
-
-  Microsoft.Extensions.Primitives 10.0.14
-    Licence: MIT
-    Copyright: © Microsoft Corporation. All rights reserved.
-    Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
-
-  Microsoft.Extensions.Validation 10.0.14
+  Microsoft.Extensions.Validation 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://asp.net/
@@ -425,61 +431,61 @@ Verify:     python scripts/legal/notices.py check
     Source: https://github.com/Microsoft/Microsoft.IO.RecyclableMemoryStream
     Texts: MIT License (generic text)
 
-  Microsoft.JSInterop 10.0.14
+  Microsoft.JSInterop 10.0.15
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://asp.net/
     Texts: MIT License (generic text); Microsoft.AspNetCore app packages third-party notices
 
-  Microsoft.Maui.Controls.Compatibility 10.0.110
+  Microsoft.Maui.Controls.Compatibility 10.0.130
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://github.com/dotnet/maui
     Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
 
-  Microsoft.Maui.Controls.Core 10.0.110
+  Microsoft.Maui.Controls.Core 10.0.130
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://github.com/dotnet/maui
     Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
 
-  Microsoft.Maui.Controls.Xaml 10.0.110
+  Microsoft.Maui.Controls.Xaml 10.0.130
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://github.com/dotnet/maui
     Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
 
-  Microsoft.Maui.Controls 10.0.110
+  Microsoft.Maui.Controls 10.0.130
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://github.com/dotnet/maui
     Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
 
-  Microsoft.Maui.Core 10.0.110
+  Microsoft.Maui.Core 10.0.130
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://github.com/dotnet/maui
     Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
 
-  Microsoft.Maui.Essentials 10.0.110
+  Microsoft.Maui.Essentials 10.0.130
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://github.com/dotnet/maui
     Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
 
-  Microsoft.Maui.Graphics.Win2D.WinUI.Desktop 10.0.110
+  Microsoft.Maui.Graphics.Win2D.WinUI.Desktop 10.0.130
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://github.com/dotnet/maui
     Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
 
-  Microsoft.Maui.Graphics 10.0.110
+  Microsoft.Maui.Graphics 10.0.130
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://github.com/dotnet/maui
     Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); MIT License (generic text); Microsoft.AspNetCore.Components.WebView.Maui package licence (THIRD-PARTY-NOTICES.TXT)
 
-  Microsoft.Web.WebView2 1.0.3179.45
+  Microsoft.Web.WebView2 1.0.4314.35
     Licence: BSD-3-Clause
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://aka.ms/webview
@@ -599,11 +605,23 @@ Verify:     python scripts/legal/notices.py check
     Source: https://github.com/protobuf-net/protobuf-net
     Texts: Apache License 2.0
 
+  System.Collections.Immutable 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
+  System.Diagnostics.DiagnosticSource 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
   System.Formats.Cbor 11.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
-    Texts: System.Formats.Cbor package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
 
   System.IdentityModel.Tokens.Jwt 8.19.2
     Licence: MIT
@@ -611,29 +629,53 @@ Verify:     python scripts/legal/notices.py check
     Source: https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet
     Texts: MIT License (generic text)
 
+  System.IO.Pipelines 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
   System.Numerics.Tensors 9.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
     Texts: MIT License - .NET runtime (LICENSE.TXT, 10.0.14); Microsoft.Extensions.Logging and System.Numerics.Tensors third-party notices; MIT License (generic text)
 
-  System.Reflection.MetadataLoadContext 10.0.14
+  System.Reflection.Metadata 11.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
 
-  System.Security.Cryptography.ProtectedData 10.0.14
+  System.Reflection.MetadataLoadContext 11.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
 
-  System.Threading.RateLimiting 10.0.14
+  System.Security.Cryptography.ProtectedData 11.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
+  System.Text.Encodings.Web 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
+  System.Text.Json 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
+
+  System.Threading.RateLimiting 11.0.0
+    Licence: MIT
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://dot.net/
+    Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
 
   Velopack 1.2.161
     Licence: MIT
@@ -1098,6 +1140,12 @@ Verify:     python scripts/legal/notices.py check
     Source: https://aka.ms/android-libraries
     Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
 
+  Xamarin.AndroidX.WebKit 1.14.0.1
+    Licence: MIT AND Apache-2.0
+    Copyright: © Microsoft Corporation. All rights reserved.
+    Source: https://aka.ms/android-libraries
+    Texts: GoogleGson package licence (LICENSE.md); Android binding notices - AndroidX and Material set; Apache License 2.0; MIT License (generic text)
+
   Xamarin.AndroidX.Window.WindowCore.Jvm 1.4.0.1
     Licence: MIT AND Apache-2.0
     Copyright: © Microsoft Corporation. All rights reserved.
@@ -1217,16 +1265,16 @@ Not included in a shipped build. Listed so the set is auditable.
   MessagePackAnalyzer 3.1.12
     Licence: MIT
     Source: https://github.com/MessagePack-CSharp/MessagePack-CSharp
-  Meziantou.Analyzer 3.0.322
+  Meziantou.Analyzer 3.0.339
     Licence: MIT
     Source: https://github.com/meziantou/Meziantou.Analyzer
-  Microsoft.AspNetCore.Components.Analyzers 10.0.14
+  Microsoft.AspNetCore.Components.Analyzers 10.0.15
     Licence: MIT
     Source: https://asp.net/
-  Microsoft.Maui.Controls.Build.Tasks 10.0.110
+  Microsoft.Maui.Controls.Build.Tasks 10.0.130
     Licence: MIT
     Source: https://github.com/dotnet/maui
-  Microsoft.Maui.Resizetizer 10.0.110
+  Microsoft.Maui.Resizetizer 10.0.130
     Licence: MIT
     Source: https://github.com/dotnet/maui
   Microsoft.NET.ILLink.Tasks 10.0.14
@@ -1241,29 +1289,28 @@ Not included in a shipped build. Listed so the set is auditable.
   Microsoft.Windows.SDK.BuildTools 10.0.26100.8249
     Licence: Microsoft Windows SDK license terms
     Source: https://aka.ms/WinSDKProjectURL
-  SonarAnalyzer.CSharp 10.35.0.4138
+  SonarAnalyzer.CSharp 10.36.0.15337
     Licence: Sonar Source-Available License v1.0
     Source: https://redirect.sonarsource.com/doc/sonar-visualstudio.html
 
 Other build and test tooling, not included in a shipped publish graph:
 
-  Analyzers: Meziantou.Analyzer 3.0.322, SonarAnalyzer.CSharp 10.35.0.4138,
+  Analyzers: Meziantou.Analyzer 3.0.339, SonarAnalyzer.CSharp 10.36.0.15337,
   NUnit.Analyzers 4.15.0, MessagePackAnalyzer 3.1.12,
-  Microsoft.AspNetCore.Components.Analyzers 10.0.14.
+  Microsoft.AspNetCore.Components.Analyzers 10.0.15.
 
-  Test and benchmark: AngleSharp 1.9.0, AwesomeAssertions 9.6.0, bunit 2.13.3,
+  Test and benchmark: AngleSharp 1.10.2, AwesomeAssertions 9.6.0, bunit 2.15.2,
   coverlet.collector 10.1.0, JunitXml.TestLogger 8.1.0,
-  Microsoft.Extensions.TimeProvider.Testing 10.11.0,
-  Microsoft.NET.Test.Sdk 18.11.0, NSubstitute 6.2.0, NUnit 5.0.0,
-  NUnit3TestAdapter 6.3.1, Microsoft.AspNetCore.Mvc.Testing 10.0.14,
-  Microsoft.Playwright 1.64.1 and Microsoft.Playwright.NUnit 1.63.0,
-  Testcontainers 4.16.0, BenchmarkDotNet.
+  Microsoft.Extensions.TimeProvider.Testing 11.0.0, Microsoft.NET.Test.Sdk 18.12.0,
+  NSubstitute 6.2.0, NUnit 5.0.0, NUnit3TestAdapter 6.3.1,
+  Microsoft.AspNetCore.Mvc.Testing 10.0.15, Microsoft.Playwright 1.64.1 and
+  Microsoft.Playwright.NUnit 1.64.1, Testcontainers 4.16.0, BenchmarkDotNet.
 
   Build tooling: Microsoft.Windows.SDK.BuildTools 10.0.26100.8249,
   Microsoft.Windows.SDK.BuildTools.MSIX 1.7.20250829.1,
   Microsoft.NET.ILLink.Tasks 10.0.14, Microsoft.NET.StringTools 17.11.4,
   Microsoft.AspNetCore.App.Internal.Assets 10.0.14,
-  Microsoft.Maui.Resizetizer 10.0.110.
+  Microsoft.Maui.Resizetizer 10.0.130.
 
 ==============================================================================
 
@@ -1273,9 +1320,11 @@ PROVENANCE NOTES
 Statements about sources that could not be verified from this repository.
 They are separate from the license texts above.
 
-1. ApexCharts. The bundled ApexCharts JavaScript library 6.5.0 is licensed
-   under upstream's dual Community/Commercial terms, not MIT. The library is
-   served as js/apexcharts.esm.js from the Blazor-ApexCharts package.
+1. ApexCharts and Apex Commons. The bundled ApexCharts JavaScript library
+   8.8.1, and the Apex Commons 0.10.0 code inside it, are licensed under
+   upstream's dual Community/Commercial terms, not MIT. The library is served
+   as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim,
+   from the Blazor-ApexCharts package.
 
 2. Nerd Fonts. The OpenDyslexic files are patched builds made with the Nerd
    Fonts patcher, whose license is reproduced above. The patcher version used
@@ -1293,7 +1342,9 @@ They are separate from the license texts above.
    The upstream projects' own NOTICE files are not reproduced, and their
    correspondence with these texts has not been checked.
 
-5. Microsoft package notices. The four documents listed in section 8.3, the
-   MAUI notice in section 9.4 and the runtime notices in section 9 are
-   reproduced verbatim. Package-level notices for Microsoft packages not
-   listed in section 8.1 are not included.
+5. Microsoft package notices. The ASP.NET Core app and components package
+   notices, the Microsoft.Extensions, System and cryptography package
+   notices, the Microsoft.Extensions.Logging and System.Numerics.Tensors
+   package notices, the MAUI notice and the runtime notices are reproduced
+   verbatim. Package-level notices for Microsoft packages not listed in
+   section 1 are not included.

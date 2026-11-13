@@ -8,7 +8,9 @@
       "license": "SIL Open Font License 1.1",
       "copyright": "Copyright (c) 2016 The Inter Project Authors",
       "sourceUrl": "https://github.com/rsms/inter",
-      "documents": ["sil-open-font-license-1-1"]
+      "documents": [
+        "sil-open-font-license-1-1"
+      ]
     },
     {
       "id": "font-jetbrains-mono",
@@ -17,7 +19,9 @@
       "license": "SIL Open Font License 1.1",
       "copyright": "Copyright 2020 The JetBrains Mono Project Authors",
       "sourceUrl": "https://github.com/JetBrains/JetBrainsMono",
-      "documents": ["sil-open-font-license-1-1"]
+      "documents": [
+        "sil-open-font-license-1-1"
+      ]
     },
     {
       "id": "font-chakra-petch",
@@ -26,7 +30,9 @@
       "license": "SIL Open Font License 1.1",
       "copyright": "Copyright 2018 The Chakra Petch Project Authors",
       "sourceUrl": "https://github.com/m4rc1e/Chakra-Petch",
-      "documents": ["sil-open-font-license-1-1"]
+      "documents": [
+        "sil-open-font-license-1-1"
+      ]
     },
     {
       "id": "font-opendyslexic-nerd",
@@ -48,7 +54,9 @@
       "license": "ISC and MIT",
       "copyright": "Copyright (c) 2026 Lucide Icons and Contributors; Copyright (c) 2013-present Cole Bemis",
       "sourceUrl": "https://github.com/lucide-icons/lucide",
-      "documents": ["isc-license-and-feather-notice-lucide"]
+      "documents": [
+        "isc-license-and-feather-notice-lucide"
+      ]
     },
     {
       "id": "sparkplugnet",
@@ -57,7 +65,9 @@
       "license": "MIT",
       "copyright": "Copyright (c) Hämmer Electronics",
       "sourceUrl": "https://github.com/HaeMmer/SparkplugNet",
-      "documents": ["mit-license-generic-text"],
+      "documents": [
+        "mit-license-generic-text"
+      ],
       "notes": "Consumed from the external/SparkplugNet git submodule as a project reference."
     },
     {
@@ -67,18 +77,34 @@
       "license": "EPL-2.0",
       "copyright": "Copyright (c) 2015, 2018 Cirrus Link Solutions and others",
       "sourceUrl": "https://github.com/eclipse/tahu",
-      "documents": ["eclipse-public-license-2-0"],
+      "documents": [
+        "eclipse-public-license-2-0"
+      ],
       "notes": "Generated from the Eclipse Tahu protocol buffer definition. MQTTProbe extends the upstream #pragma warning disable list; there are no functional changes. Source is available from the MQTTProbe public repository under EPL-2.0."
     },
     {
       "id": "apexcharts-javascript",
       "name": "ApexCharts JavaScript library",
-      "version": "6.5.0",
+      "version": "8.8.1",
       "license": "ApexCharts Community/Commercial dual license (unresolved)",
       "copyright": "",
       "sourceUrl": "https://github.com/apexcharts/apexcharts.js",
-      "documents": ["apexcharts-6-5-0-license-upstream-text"],
-      "notes": "Bundled by Blazor-ApexCharts as js/apexcharts.esm.js and served to the browser. Upstream terms are not MIT and are not resolved by this notice."
+      "documents": [
+        "apexcharts-8-8-1-license-upstream-text"
+      ],
+      "notes": "Bundled by Blazor-ApexCharts 8.0.0 as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim, and served to the browser. That file is byte-identical to the npm apexcharts 8.8.1 full build. Upstream terms are not MIT and are not resolved by this notice. The 8.8.1 terms also require an OEM/redistribution licence to embed the library in a product used by other people, and no such entitlement is established here."
+    },
+    {
+      "id": "apex-commons",
+      "name": "Apex Commons JavaScript library",
+      "version": "0.10.0",
+      "license": "Apex Commons Community/Commercial dual license (unresolved)",
+      "copyright": "",
+      "sourceUrl": "https://github.com/apexcharts/projects/tree/main/libs/commons",
+      "documents": [
+        "apex-commons-0-10-0-license-upstream-text"
+      ],
+      "notes": "Bundled inside js/apexcharts.full.min.js by ApexCharts 8.8.1 and served to the browser. Upstream terms are not resolved by this notice. They carry the same OEM/redistribution condition, and no such entitlement is established here."
     },
     {
       "id": "dotnet-runtime",
@@ -100,7 +126,9 @@
       "license": "MIT and third-party terms",
       "copyright": "Copyright (c) .NET Foundation and Contributors",
       "sourceUrl": "https://github.com/dotnet/macios",
-      "documents": ["microsoft-ios-sdk-license-27-1-10018"],
+      "documents": [
+        "microsoft-ios-sdk-license-27-1-10018"
+      ],
       "notes": "Installed workload pack Microsoft.iOS.Runtime.ios-arm64.net10.0_27.1/27.1.10018 with .NET SDK 10.0.403."
     },
     {
@@ -110,7 +138,9 @@
       "license": "MIT and third-party terms",
       "copyright": "Copyright (c) .NET Foundation and Contributors",
       "sourceUrl": "https://github.com/dotnet/macios",
-      "documents": ["microsoft-ios-sdk-license-27-1-10018"],
+      "documents": [
+        "microsoft-ios-sdk-license-27-1-10018"
+      ],
       "notes": "Installed workload pack Microsoft.MacCatalyst.Runtime.maccatalyst-arm64.net10.0_27.0/27.0.10742. Its SDK licence is byte-identical to the Microsoft.iOS copy reproduced here."
     },
     {
@@ -129,7 +159,7 @@
     {
       "id": "dotnet-maui-platform-notices",
       "name": ".NET MAUI platform notices",
-      "version": "10.0.110",
+      "version": "10.0.130",
       "license": "MIT and third-party terms",
       "copyright": "Copyright (c) Microsoft Corporation. All rights reserved.",
       "sourceUrl": "https://github.com/dotnet/maui",
@@ -137,7 +167,7 @@
         "net-maui-third-party-notices-10-0-110",
         "license-notice-for-iqkeyboardmanager"
       ],
-      "notes": "The individual Microsoft.Maui.* packages also carry their own current third-party notice file, reproduced through those components."
+      "notes": "The Microsoft.Maui.* 10.0.130 packages ship the same THIRD-PARTY-NOTICES.TXT as 10.0.110, so the reproduced text is unchanged. The individual Microsoft.Maui.* packages also carry their own current third-party notice file, reproduced through those components."
     }
   ]
 }

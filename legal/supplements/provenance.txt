@@ -4,9 +4,11 @@ PROVENANCE NOTES
 Statements about sources that could not be verified from this repository.
 They are separate from the license texts above.
 
-1. ApexCharts. The bundled ApexCharts JavaScript library 6.5.0 is licensed
-   under upstream's dual Community/Commercial terms, not MIT. The library is
-   served as js/apexcharts.esm.js from the Blazor-ApexCharts package.
+1. ApexCharts and Apex Commons. The bundled ApexCharts JavaScript library
+   8.8.1, and the Apex Commons 0.10.0 code inside it, are licensed under
+   upstream's dual Community/Commercial terms, not MIT. The library is served
+   as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim,
+   from the Blazor-ApexCharts package.
 
 2. Nerd Fonts. The OpenDyslexic files are patched builds made with the Nerd
    Fonts patcher, whose license is reproduced above. The patcher version used
@@ -24,7 +26,9 @@ They are separate from the license texts above.
    The upstream projects' own NOTICE files are not reproduced, and their
    correspondence with these texts has not been checked.
 
-5. Microsoft package notices. The four documents listed in section 8.3, the
-   MAUI notice in section 9.4 and the runtime notices in section 9 are
-   reproduced verbatim. Package-level notices for Microsoft packages not
-   listed in section 8.1 are not included.
+5. Microsoft package notices. The ASP.NET Core app and components package
+   notices, the Microsoft.Extensions, System and cryptography package
+   notices, the Microsoft.Extensions.Logging and System.Numerics.Tensors
+   package notices, the MAUI notice and the runtime notices are reproduced
+   verbatim. Package-level notices for Microsoft packages not listed in
+   section 1 are not included.

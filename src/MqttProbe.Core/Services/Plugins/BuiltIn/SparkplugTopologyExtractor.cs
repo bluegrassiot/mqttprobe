@@ -36,6 +36,7 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
                 NodeId = node,
                 BirthDeathSequenceNumber = GetBirthDeathSequence(payload)
             }],
+            "NCMD" when device is null => HandleNcmd(envelope, payload, group, node),
             "NDATA" => HandleNData(envelope, payload, metadataStore, group, node),
             "DBIRTH" when device != null => HandleDBirth(envelope, payload, group, node, device),
             "DDEATH" when device != null => [new DeviceDeathEvent
@@ -68,6 +69,25 @@ public sealed class SparkplugTopologyExtractor : ITopologyExtractor
             Metrics = metrics,
             BirthDeathSequenceNumber = GetBirthDeathSequence(payload)
         }];
+    }
+
+    private IReadOnlyList<TopologyEvent> HandleNcmd(
+        DecodedPayloadEnvelope envelope, Payload payload, string group, string node)
+    {
+        var isRebirthRequest = payload.Metrics.Any(metric =>
+            string.Equals(metric.Name, SparkplugControlMetrics.NodeRebirth, StringComparison.Ordinal)
+            && metric.ValueCase == Payload.Types.Metric.ValueOneofCase.BooleanValue
+            && metric.BooleanValue);
+
+        return isRebirthRequest
+            ? [new NodeRebirthObservedEvent
+            {
+                FormatId = FormatId,
+                Topic = envelope.Topic,
+                GroupId = group,
+                NodeId = node
+            }]
+            : [];
     }
 
     private IReadOnlyList<TopologyEvent> HandleNData(

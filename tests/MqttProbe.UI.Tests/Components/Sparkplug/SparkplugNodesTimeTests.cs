@@ -93,7 +93,7 @@ public class SparkplugNodesTimeTests : BunitTestContext
                 "the caption follows the newest instant and shows the short abbreviation, not the IANA path");
             cut.FindAll(".spb-timestamp__value .spb-zone-token")
                 .Select(token => token.TextContent.Trim())
-                .Should().Equal(["BST", "GMT"], "each timestamp keeps its own DST abbreviation");
+                .Should().Equal(["GMT", "BST"], "each timestamp keeps its own DST abbreviation");
         }, TimeSpan.FromSeconds(5));
 
         TooltipFor(cut.Find("[data-time-zone-label]"))
@@ -120,12 +120,13 @@ public class SparkplugNodesTimeTests : BunitTestContext
             .Add(component => component.Time, display));
 
         cut.FindAll(".spb-timestamp__time").Select(element => element.TextContent.Trim())
-            .Should().Equal("01:55:07.250", "12:30:05.125");
+            .Should().Equal(new[] { "12:30:05.125", "01:55:07.250" },
+                "Last data is the first timestamp and Birth follows it");
 
         var tokens = cut.FindAll(".spb-timestamp__value .spb-zone-token");
-        tokens.Select(token => token.TextContent.Trim()).Should().Equal("BST", "GMT");
+        tokens.Select(token => token.TextContent.Trim()).Should().Equal("GMT", "BST");
         tokens[0].GetAttribute("aria-label")
-            .Should().Be("BST: Europe/London · British Summer Time · UTC+01:00",
+            .Should().Be("GMT: Europe/London · Greenwich Mean Time · UTC+00:00",
                 "the exact offset stays available without being printed beside every timestamp");
     }
 

@@ -231,6 +231,84 @@ public class SparkplugTopologyExtractorTests
         evt.Metrics[0].Value.Should().Be("101");
     }
 
+    [Test]
+    public void Extract_NcmdNodeRebirth_ReturnsObservedEvent()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics(
+            MakeBoolMetric(SparkplugControlMetrics.NodeRebirth, true),
+            MakeBoolMetric("Node Control/Reboot", false));
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NCMD/eon1", payload);
+
+        var evt = extractor.Extract(envelope)
+            .Should().ContainSingle().Subject.Should().BeOfType<NodeRebirthObservedEvent>().Subject;
+
+        evt.GroupId.Should().Be("mygroup");
+        evt.NodeId.Should().Be("eon1");
+        evt.FormatId.Should().Be("sparkplug-b");
+        evt.Topic.Should().Be("spBv1.0/mygroup/NCMD/eon1");
+        evt.SequenceNumber.Should().BeNull();
+    }
+
+    [Test]
+    public void Extract_NcmdRebirthFalse_ReturnsEmpty()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics(MakeBoolMetric(SparkplugControlMetrics.NodeRebirth, false));
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NCMD/eon1", payload);
+
+        extractor.Extract(envelope).Should().BeEmpty();
+    }
+
+    [Test]
+    public void Extract_NcmdRebirthWrongDatatype_ReturnsEmpty()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics(MakeStringMetric(SparkplugControlMetrics.NodeRebirth, "true"));
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NCMD/eon1", payload);
+
+        extractor.Extract(envelope).Should().BeEmpty();
+    }
+
+    [Test]
+    public void Extract_NcmdRebirthNameNotExact_ReturnsEmpty()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics(MakeBoolMetric("node control/rebirth", true));
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NCMD/eon1", payload);
+
+        extractor.Extract(envelope).Should().BeEmpty();
+    }
+
+    [Test]
+    public void Extract_NcmdUnrelatedCommand_ReturnsEmpty()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics(MakeBoolMetric("Node Control/Reboot", true));
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NCMD/eon1", payload);
+
+        extractor.Extract(envelope).Should().BeEmpty();
+    }
+
+    [Test]
+    public void Extract_DcmdRebirth_ReturnsEmpty()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics(MakeBoolMetric(SparkplugControlMetrics.NodeRebirth, true));
+        var envelope = MakeEnvelope("spBv1.0/mygroup/DCMD/eon1/device1", payload);
+
+        extractor.Extract(envelope).Should().BeEmpty();
+    }
+
+    [Test]
+    public void Extract_NcmdWithoutMetrics_ReturnsEmpty()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NCMD/eon1", new Payload { Timestamp = 1 });
+
+        extractor.Extract(envelope).Should().BeEmpty();
+    }
+
     // --- DBIRTH ---
 
     [Test]

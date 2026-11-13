@@ -312,6 +312,9 @@ public sealed partial class SparkplugTopologyService(
                 case NodeDeathEvent e:
                     HandleNDeath(e.GroupId, e.NodeId, e.BirthDeathSequenceNumber);
                     break;
+                case NodeRebirthObservedEvent e:
+                    RecordNodeRebirthObservation(e.GroupId, e.NodeId);
+                    break;
                 case NodeDataEvent e:
                     MarkObservationIncompleteIfNeeded(e.GroupId, e.NodeId, observationContext);
                     if (ObserveSequence(e.GroupId, e.NodeId, e.SequenceNumber))

@@ -1,19 +1,18 @@
 Other build and test tooling, not included in a shipped publish graph:
 
-  Analyzers: Meziantou.Analyzer 3.0.322, SonarAnalyzer.CSharp 10.35.0.4138,
+  Analyzers: Meziantou.Analyzer 3.0.339, SonarAnalyzer.CSharp 10.36.0.15337,
   NUnit.Analyzers 4.15.0, MessagePackAnalyzer 3.1.12,
-  Microsoft.AspNetCore.Components.Analyzers 10.0.14.
+  Microsoft.AspNetCore.Components.Analyzers 10.0.15.
 
-  Test and benchmark: AngleSharp 1.9.0, AwesomeAssertions 9.6.0, bunit 2.13.3,
+  Test and benchmark: AngleSharp 1.10.2, AwesomeAssertions 9.6.0, bunit 2.15.2,
   coverlet.collector 10.1.0, JunitXml.TestLogger 8.1.0,
-  Microsoft.Extensions.TimeProvider.Testing 10.11.0,
-  Microsoft.NET.Test.Sdk 18.11.0, NSubstitute 6.2.0, NUnit 5.0.0,
-  NUnit3TestAdapter 6.3.1, Microsoft.AspNetCore.Mvc.Testing 10.0.14,
-  Microsoft.Playwright 1.64.1 and Microsoft.Playwright.NUnit 1.63.0,
-  Testcontainers 4.16.0, BenchmarkDotNet.
+  Microsoft.Extensions.TimeProvider.Testing 11.0.0, Microsoft.NET.Test.Sdk 18.12.0,
+  NSubstitute 6.2.0, NUnit 5.0.0, NUnit3TestAdapter 6.3.1,
+  Microsoft.AspNetCore.Mvc.Testing 10.0.15, Microsoft.Playwright 1.64.1 and
+  Microsoft.Playwright.NUnit 1.64.1, Testcontainers 4.16.0, BenchmarkDotNet.
 
   Build tooling: Microsoft.Windows.SDK.BuildTools 10.0.26100.8249,
   Microsoft.Windows.SDK.BuildTools.MSIX 1.7.20250829.1,
   Microsoft.NET.ILLink.Tasks 10.0.14, Microsoft.NET.StringTools 17.11.4,
   Microsoft.AspNetCore.App.Internal.Assets 10.0.14,
-  Microsoft.Maui.Resizetizer 10.0.110.
+  Microsoft.Maui.Resizetizer 10.0.130.

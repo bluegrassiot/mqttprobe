@@ -82,14 +82,6 @@
       "sourceUrls": []
     },
     {
-      "key": "apexcharts-6-5-0-license-upstream-text",
-      "title": "ApexCharts 6.5.0 License (upstream text)",
-      "file": "texts/apexcharts-6-5-0-license-upstream-text.txt",
-      "sha256": "92d44fa2449bcd22a461ab593d571795b0effa9cc228f3a42328cd38f67a896f",
-      "kind": "license",
-      "sourceUrls": []
-    },
-    {
       "key": "microsoft-net-runtime-third-party-notices-10-0-14",
       "title": "Microsoft .NET runtime third-party notices (10.0.14)",
       "file": "texts/microsoft-net-runtime-third-party-notices-10-0-14.txt",
@@ -280,6 +272,26 @@
       "sha256": "58a15cd857ebf4d7f6f95cffa33e1b662c04ef418aac591f73a4bfb1092aca6e",
       "kind": "license",
       "sourceUrls": []
+    },
+    {
+      "key": "apexcharts-8-8-1-license-upstream-text",
+      "title": "ApexCharts 8.8.1 License (upstream text)",
+      "file": "texts/apexcharts-8-8-1-license-upstream-text.txt",
+      "sha256": "d3f4eb7ec97c10a740b390ae75c6387170082a73d6dad953e7a8432f399ee47c",
+      "kind": "license",
+      "sourceUrls": [
+        "https://unpkg.com/apexcharts@8.8.1/LICENSE.md"
+      ]
+    },
+    {
+      "key": "apex-commons-0-10-0-license-upstream-text",
+      "title": "Apex Commons 0.10.0 License (upstream text)",
+      "file": "texts/apex-commons-0-10-0-license-upstream-text.txt",
+      "sha256": "3af1a0dde9ba417ba8dce494675b449ddc203fcb2939d75319a2666c947bf03e",
+      "kind": "license",
+      "sourceUrls": [
+        "https://unpkg.com/apex-commons@0.10.0/LICENSE.md"
+      ]
     }
   ]
 }

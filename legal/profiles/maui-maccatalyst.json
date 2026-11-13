@@ -17,7 +17,7 @@
   "inputs": {
     "files": {
       "global.json": "a4c16f708b406a9d1c56bdd74a46c730277d3e3ddc825efd6baed2e692bc60bf",
-      "Directory.Packages.props": "94fc7f4886cae14a8bdc065dfc6588fb6349d41aa2c60a462cf4348cab7cc40d",
+      "Directory.Packages.props": "542eee4b065ba53acb09d8c7256d188b86fc9690055d38e5e48596ce1fb807b6",
       "Directory.Build.props": "5b030b22a23b70b4378434208e44693013479cd56b981d331429dbf85c596621",
       ".github/actions/setup-dotnet-workload/action.yml": "e3f7736c4e8887df3019c24fea10702dcd5a6be3381679792148b66e238d0464",
       "src/MqttProbe.Core/MqttProbe.Core.csproj": "f17a0c8eaa5569f8bf877669173f5260700013ece29639e6dee0a30d49ede2ec",
@@ -35,8 +35,8 @@
   "packages": [
     {
       "id": "Blazor-ApexCharts",
-      "version": "7.1.0",
-      "sha512": "QR5xWNETy0DkgFQ0TFQIdmHi7J402hBRpegzOlbFAAaYgcgM+YZs5LL1qaZRf8nMWP+jRE/R4JbnxFUqOPbZNw=="
+      "version": "8.0.0",
+      "sha512": "oQzHx0yiqlnM1EgaXv64tuQm+Silxbddb3zujIByjBsK/a3Tanm+U9LFRG/bbG1mcuF2tSFuhFWYaY7mkTx4bg=="
     },
     {
       "id": "Blazor.Lucide",
@@ -75,38 +75,38 @@
     },
     {
       "id": "Meziantou.Analyzer",
-      "version": "3.0.322",
-      "sha512": "aaynUqEHHeD0v1/RDW/Rq3d/gRkF8bRKJcvblhvuvyTAB+hGuzgFl4pBD9g6jGu+VqMWPinEGqu4hzG12TtnqQ=="
+      "version": "3.0.339",
+      "sha512": "oB0KVTYO0CkqscgCp2Fce6Q4G9gIVvVy39ULQLU2eOJfTNWS63Lk7VZbgerx6XMdUxPC4bprv87r8f7EZfp6gQ=="
     },
     {
       "id": "Microsoft.AspNetCore.Authorization",
-      "version": "10.0.14",
-      "sha512": "0iRuv9FevMH1TFuYBMY7M+Z/Xm1V8iEDM5p3i+oBWLEdlLyPgMA+RkQDN/1a0MMAEisPxHseTOJ5vnb3n9HARg=="
+      "version": "10.0.15",
+      "sha512": "1yF1VHbykhh+lSJpZcMlzicUqJ4J5xdexDpbTcar2w9t6Azwb74gYV8V4TYPF9UT+eBwHFSEjfHuL1ZeKMVLjA=="
     },
     {
       "id": "Microsoft.AspNetCore.Components",
-      "version": "10.0.14",
-      "sha512": "MAuPVtxnAmZcu0lFYVUW+xxuwufIwalz8Gp2b5D3ogLN4OKCBJ8LSO9j1f45LJs3c2LZ+/6Jj7nFtU0itUcJpg=="
+      "version": "10.0.15",
+      "sha512": "CUJ0p1AgNs7BRnpeSwNpOkSisa2hAXSDIsF/ae0xchSutaXJ1/Xo0ad8GtB1qLHG07G3BDyXPchr+WkEkvteAQ=="
     },
     {
       "id": "Microsoft.AspNetCore.Components.Analyzers",
-      "version": "10.0.14",
-      "sha512": "qWj8T3qD0MzxuradKXMYSX/68czXLIANyts7nlQitMSrdup3aeH6BXSULVXcXiHg4OGD5M82eKtQrY3O4YZd8A=="
+      "version": "10.0.15",
+      "sha512": "C59X9e1JEbJyst7jF7dYxtF2XWn5CZq0ILBsuHLcBZPzNvOqUjdb9zlBWLx5XmCfXceKmwW0F6OMhuDY1FxO5w=="
     },
     {
       "id": "Microsoft.AspNetCore.Components.Authorization",
-      "version": "10.0.14",
-      "sha512": "u7lHiI9Z7y9nch44Kfc60VMhzAXO2pxmRzDWTHM9ts4J2Oe9u+zgLucyxY/cZlIW6OjP8/GMvwR8YdnfQbfHRQ=="
+      "version": "10.0.15",
+      "sha512": "dAaM1HXVcnVkZGdATMRNTlEPPemqKaIvTUrPVBy9yLrXDpealF7cdaccv6cQkU/JP8GYOcK6dbG0QepmLrihCw=="
     },
     {
       "id": "Microsoft.AspNetCore.Components.Forms",
-      "version": "10.0.14",
-      "sha512": "fD6xw8fKERmW0OhngY42d3Pzjk6/oaFZzx1RzCJjB2Ory8pzzBTARiZZBVwW7oh/O25H5dtjTVTz2d+yxpYr+A=="
+      "version": "10.0.15",
+      "sha512": "O5DrX6kL/bbJDWN9P6jauMYd8L324CSUgWvIY0mEsbsaaj5mFcRlRS+AVSi9ukF/+tgQ6/D6O5XS2h2J5+/A9A=="
     },
     {
       "id": "Microsoft.AspNetCore.Components.Web",
-      "version": "10.0.14",
-      "sha512": "SVNV6nfDggaBCETwy6v/995JOBH6MKtuEmPQVh3mF6BxipOihl2Sd2d46nenXnadCp+d0QniKmUrahYC5VETPA=="
+      "version": "10.0.15",
+      "sha512": "o+ANG0DKR9KyPULTqwegrr9fQr6VLJaNqIPJtDwHn4fMwC1TK+WBqujttNZFIIR6mzSLk+mBCAUaLdlWAJWgdA=="
     },
     {
       "id": "Microsoft.AspNetCore.Components.WebView",
@@ -115,63 +115,63 @@
     },
     {
       "id": "Microsoft.AspNetCore.Components.WebView.Maui",
-      "version": "10.0.110",
-      "sha512": "kvMn5HbRuBS0092BKlraxSJeH/BsMeYQ/WwxLOQ7BrAONNVnW916UbBdHi+KrLsg0iTix8XtFbNtnGGVJk6VqA=="
+      "version": "10.0.130",
+      "sha512": "vTix02zwj+rkH3Xg6Gxh/GVoEVoJv3/8eqaPSB36OLZnZPHgliYh/Jh2Lkux1y6uI4Q6njJDy42cKXLfwfTOqA=="
     },
     {
       "id": "Microsoft.AspNetCore.Metadata",
-      "version": "10.0.14",
-      "sha512": "RXaeKIj2fJEEXghowZLAqTBOm2D+aGcLmQgCD/BMHkWjkhnBQ9QND0fOctxrisdojsg1lmF+aRWA7L5qa1pE8g=="
+      "version": "10.0.15",
+      "sha512": "MBSGFb/jgLXAXk6rLvRLVJb3RctI/dU7axHVMVkGZoedy9Neqt628PDdolczyCSQWN6sGayH55aggnDLlx2jrw=="
     },
     {
       "id": "Microsoft.Extensions.Configuration",
-      "version": "10.0.14",
-      "sha512": "UcnvaEaMvRckDDhyqY1OZkFwBqpZArkHFKB6dWaQWT9XTuNttNNX8Cqsb/Sic2LfJxsMLJUXnYrxY3iX5LN9pQ=="
+      "version": "11.0.0",
+      "sha512": "VQS/GkFU9oLQmXZv0AR/zluF0YAbEAoUQ5aYMqcRc2TWeKa6m2AjInAOnDhCcoWI5a6LQUCzTcl8B3DZZaPZLg=="
     },
     {
       "id": "Microsoft.Extensions.Configuration.Abstractions",
-      "version": "10.0.14",
-      "sha512": "4YdfvaoWn3tB1xQQHGrhRTFWJ8fGOqxThxduynSZy9ZFTiSaUi3vX4EK/kj8h2HQMwTlks9MWV1fv2WRBv5/1w=="
+      "version": "11.0.0",
+      "sha512": "oyBSWnEsEi9SZTiwAfuKIdVIiEZ7TvNOtdFaGqyzF9WtomNV+uZHCqhQbnz/ipjtM50BYJ4s0MWbYafolq2mAg=="
     },
     {
       "id": "Microsoft.Extensions.Configuration.Binder",
-      "version": "10.0.14",
-      "sha512": "brDb5kgle2iY2lWHgeV/KOqnBEpVnlMFigGJ/WW7KP9Nj6C/t53f/h5boYyVXB0bEhgpL+ctbewDJMI+zAMj1w=="
+      "version": "10.0.15",
+      "sha512": "VOjlZlv9b3woS1TcI8Ts1r2IsmsT7hqkx7o2sMSNzE5fPBGKfhJszlEIhtQVzUz4H8Uw/7Jtuj9x7wGlCUsi2A=="
     },
     {
       "id": "Microsoft.Extensions.Configuration.FileExtensions",
-      "version": "10.0.14",
-      "sha512": "NBIfm8vWNi3UJ9OI9thvREJeV6KzEdPjQ4ONdH+yPWutGBpVnwLbXiEqdEFaGAFYpAluGCfyCwKFgH9pd2scfw=="
+      "version": "11.0.0",
+      "sha512": "ViBZDt2Y7TfVIxiWG5HKfP1KHTzsxn7a31ikZSg/1mdOfGyGAPj278v63NOU+n4UqvaOR43t9MOCUfadSohjQA=="
     },
     {
       "id": "Microsoft.Extensions.Configuration.Json",
-      "version": "10.0.14",
-      "sha512": "4Tn8eNg85x+ICDN4OLC7Dl/xvZNREZIf7VSOAdT4Q4KYf5Ip1zAk+0BAx8BsRTomgEpCYV4kKsNNnP/ZXUbQkw=="
+      "version": "11.0.0",
+      "sha512": "WsNcEnVlq43lXBHAXtQg1b7job819SUf9BPtJrq44vhthL9Ijl2mkRBx5L3hIU1p2AN+wiRg47yhYj+vQxEgeQ=="
     },
     {
       "id": "Microsoft.Extensions.DependencyInjection",
-      "version": "10.0.14",
-      "sha512": "2LzcuVjemeXR+WdY9wGIr8iGb7fYsDAit+IScxXX2XJnX0b++mWcE/WO6fEGIqhdMfSQM2ZS5JGMHYZix7YXZg=="
+      "version": "11.0.0",
+      "sha512": "KygQMITBDDPXw7+AAgdwQvVAaTXuDsc1iCAuvhO73ERxKX+d92cdbgZmpoYF7DIUq2hfs/yO2KD87uIreRy3MA=="
     },
     {
       "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
-      "version": "10.0.14",
-      "sha512": "QtpQzuSZVyTPCuHW058yCs9Nj0394uUkNyFHS813nOmK9UgUdBdaprJ5PPsBgsQIpxADTsTkbaMMonykem6qdw=="
+      "version": "11.0.0",
+      "sha512": "a2c4Kp55miXT6G+DSb75pczXQJHgNMzPyZEyMxrrKxuQrgvctcDWJWD9fVe/uGbQdu4Z0c3B7AVKp1DXmD64nQ=="
     },
     {
       "id": "Microsoft.Extensions.Diagnostics",
-      "version": "10.0.14",
-      "sha512": "80VqW8eKxQaxBOLDNpLUdxOlxzWn/jqBSxNBCfD8GCjcshNDpFvUgKh8uvvZwvkfBbwmNPWPWHyy9F+RLd1dlQ=="
+      "version": "10.0.15",
+      "sha512": "+FK6gPJDZ+8abQ7WAXUSxK7jgwhATzHlt3TCiO/paVwx9I8VsdHHoapugUUZNHr0Re2UFDoxpPpCp5kp6TX5iQ=="
     },
     {
       "id": "Microsoft.Extensions.Diagnostics.Abstractions",
-      "version": "10.0.14",
-      "sha512": "vm+PPso6vOwGeX52MdOPh6z/R6KHgxQUwqq7k7Jc9jhy2JOxO2KB4xfoJQBBp2Ni8M4zKgJ4r2a1dgrYG7+MKw=="
+      "version": "10.0.15",
+      "sha512": "oD1xl7uoHGnVuCEo3bjj1W3cVTMe55QVdkeis9YYdcnLfU42X58XTx6A1Sl7kiqp5LbzVrUvdy7F/mNKaOnpLg=="
     },
     {
       "id": "Microsoft.Extensions.FileProviders.Abstractions",
-      "version": "10.0.14",
-      "sha512": "rAqf2Em2ZjLqNbcLJlboQnXNyJP604F960TsCKNiP00Ur6ExIc1mcwmNb8L2eTRT8RC8UKx/GjecoWcW2Sj7bw=="
+      "version": "11.0.0",
+      "sha512": "e3NvNYCuKZ42qlNCryuSmo+xxlhBZeS2Sh5sIPCn+wRSHc0F9N8oAC+r0ki1Yh/KMfw4H6KLh4p9u4TGWye7fw=="
     },
     {
       "id": "Microsoft.Extensions.FileProviders.Composite",
@@ -185,13 +185,13 @@
     },
     {
       "id": "Microsoft.Extensions.FileProviders.Physical",
-      "version": "10.0.14",
-      "sha512": "dcp6eCIk6ZpE3CTNmIna0ifgxsPel/MtOc23/Y/AJlD9SZZr7bhlKK2DAXYlrz81yMkMi6el/LHHUFKCZ3ufuQ=="
+      "version": "11.0.0",
+      "sha512": "lHezhjI8zoTpltXwNy6QMr4/6lIhbXsAYZnCrgRDNNzMHCKvh+x95mkBVXLMzs8axrw7J5Cy21K8lM5YHCfgAw=="
     },
     {
       "id": "Microsoft.Extensions.FileSystemGlobbing",
-      "version": "10.0.14",
-      "sha512": "xt6c/PWLL6+CiBiZA3PWRSfkwcPh+HCwiOLrgSUkhzBT7lrT/+QpIKPeuCQyDPspwOuG1q0cbJhuiGpRjr4UNQ=="
+      "version": "11.0.0",
+      "sha512": "Ycwu/y22NK/ZyJpaFRJc4FB88mjOnsttk2AVHaKgEeShq0vodXZ4FJErpMM2Jju3r3t/2VYWrcHuIxj3ZT/aow=="
     },
     {
       "id": "Microsoft.Extensions.Hosting.Abstractions",
@@ -215,88 +215,88 @@
     },
     {
       "id": "Microsoft.Extensions.Logging",
-      "version": "10.0.14",
-      "sha512": "O2fXL6JmtkFwkigxS8fPTQpLXxGDjgZco5D+h88s++Cl0bDCs023PVkpNoifciJ+f30I82jnp8tpwF0wCLdFtA=="
+      "version": "11.0.0",
+      "sha512": "zsse8MOgo0bj2KAEsSkg9WtNAfZbHbTlGeqfhy5PGozomM3zQM0XzumSQzQ0451IWNSJWLqYaSIQEpCi2j1sCA=="
     },
     {
       "id": "Microsoft.Extensions.Logging.Abstractions",
-      "version": "10.0.14",
-      "sha512": "SwcbEBtkECq3D2oywvHkm46fyrX9Dd2JPWphDnHUc2+cUWR1Mdo41atAjh/9iZjgQxuvbKfZKXqostT/LZfefA=="
+      "version": "11.0.0",
+      "sha512": "MTMO2V1eT9Dm5VIpJGLNwIjAjoBErUlfuB+DEaZ0tb8J+Nf/Xlj8he5AztK9p1iOJPIyuBeOrVy2u/CSdsfzPw=="
     },
     {
       "id": "Microsoft.Extensions.Logging.Debug",
-      "version": "10.0.14",
-      "sha512": "8e79uonXzgIsZbdgc5pa2Ybk5W+vUbd+gfGS50E+BW9ApRv9s0qL1DTyqLv7VQEPxTHS/l8Y0AtS7K8do+TczQ=="
+      "version": "11.0.0",
+      "sha512": "HPSW9js0C8PZUVG9Vl6mZXQyNIF/YDov99OwpTYHzTjIIa57QFRRoQW3sKCzVEGaIAEz++mErAF6IgVlf+Cw0g=="
     },
     {
       "id": "Microsoft.Extensions.Options",
-      "version": "10.0.14",
-      "sha512": "EeN/33S418m9oWEaZY4N5T+BNxtOqNTIFoFbIgBKwylh4OJPKIWFAzbIhpTdNbwUs26MhkmbLCAbdY+YCJ1dIQ=="
+      "version": "11.0.0",
+      "sha512": "AaNswJ3NqdNCNqQVlU7iTkvrrrzqrSSxkOC3bLlrwv/CPN7YRz3HoJk7o4ey5v6U8bOHocHsyYoJ7ihK1KUWyQ=="
     },
     {
       "id": "Microsoft.Extensions.Options.ConfigurationExtensions",
-      "version": "10.0.14",
-      "sha512": "4wcIU0rE04ejEfCwHTftu9O8fgH6CRYCe+tseRapikUBn1Kic3QdO7ku22SwFyLrzdWGYPUZMEgv57ZYuuc5gA=="
+      "version": "10.0.15",
+      "sha512": "yQX7dFAHm9xKBh2TLiA3aTrmOkgEeMRoS7UM/XuVy3CpddaluUXDIMiM8na5q6JMesH8zt3bKIDu/3hkEhVo7Q=="
     },
     {
       "id": "Microsoft.Extensions.Primitives",
-      "version": "10.0.14",
-      "sha512": "1bbZqqCJTPba3inTADExbp/9PsGVyvGOX3zr6tFr7ySCgVkX9Lpw7BV0TizktNItd3SsbUu1sQfSAYm1GZMoNw=="
+      "version": "11.0.0",
+      "sha512": "HH2akbW2HeY/xeZJA5UceuQQX+1Pv/Kxrz/x4XPoH6wYDtgPIlBeOTZlQXlT+b50b1Ym/xfP+WJCX9FW4uLBXQ=="
     },
     {
       "id": "Microsoft.Extensions.Validation",
-      "version": "10.0.14",
-      "sha512": "60BCCGjCU/CxDSqmMtRStBYTMy36G+0NJ5iiZWJTPtztcHvUkbpRSum4GIeyky/9yRyt/vQ4Gfe3zjyctyQoDA=="
+      "version": "10.0.15",
+      "sha512": "BYQdFlNSTKICcmE4MqQ8sBRqHDHzNuW/ofbnnjzPJV+tMT5mNUYMSmaPXMH52csP9RkJVq5dW/c38W+7xbQvpA=="
     },
     {
       "id": "Microsoft.JSInterop",
-      "version": "10.0.14",
-      "sha512": "YZZ99v5PYCdyn2r8nqEIg141m1BhlVqwewwL4Z87s1h7FFS6oJG6CPOyGBO8/W6jYV57Ur/EmQEhSVgka2w1NA=="
+      "version": "10.0.15",
+      "sha512": "mPbcHzcmIWGNKtZzxb6En97frT0f//rFjx0RQMXwkjxMnieiQ+qIp3hWHX95kklZHynOn4BY/FtRCIE9MfKTQQ=="
     },
     {
       "id": "Microsoft.Maui.Controls",
-      "version": "10.0.110",
-      "sha512": "QeXQZlZzqY+ynRb/trEgAA0NNFsmiXDKwsklDjY9hPfFJEjWXzNiaxq3XgmEFbse9yNTILG9LeIpmNthUh+ASQ=="
+      "version": "10.0.130",
+      "sha512": "F3VbGj25r51sC9B+XmLbJeRn+0CRQBx3HMG6RjXdNvjUy9FcDQSYE06VDSLzI9r69kIaWtF6OR31jAktOdpQkg=="
     },
     {
       "id": "Microsoft.Maui.Controls.Build.Tasks",
-      "version": "10.0.110",
-      "sha512": "+7Jg5SjRq0FvZLI2fT7HqLA01D+iywvYqFcCdJiYUO3GHh6EdQczyBvdDBjxd40OBK+taJp81ttNy/6mTYxMpQ=="
+      "version": "10.0.130",
+      "sha512": "V7wHo+UQYClcVo5uyo7h28ZkrkC23s3ikXUPG3clLqvewUpFlVauq7aRSok2f09XBgqS1qhwg7SE+mR44rAEAA=="
     },
     {
       "id": "Microsoft.Maui.Controls.Compatibility",
-      "version": "10.0.110",
-      "sha512": "Oq7iCfgaK9Qte/a+ZutoCvrKCwHdzoIkawD/4g24yZbcE7MVtybI3O2jHQ80kxIkwSg8g+qQeq28T7swz6Mpdg=="
+      "version": "10.0.130",
+      "sha512": "4xnfyC96nuGvBwbebzSje3oKxlNRAgQEnEWVJ/Z7IpA10x27BIkAcCTmLVAJTPbO00xQrXOFz+bzsTHwQVWWOw=="
     },
     {
       "id": "Microsoft.Maui.Controls.Core",
-      "version": "10.0.110",
-      "sha512": "86tIdXecm7E7HbFmB2B8JRGrzYqafM3W64cX3B4FQNX8IC6z//uW24yejXbvU9AhJiEEQZH3vzCb2MnxwVq1bA=="
+      "version": "10.0.130",
+      "sha512": "7ySnmBbl5r4p6hNwvxt/gBjqs7P+FzYimRGxSRjueerqA5oejXLbx5pm3pipx/mfHK0MNwqfS01l/aXUe9KsFw=="
     },
     {
       "id": "Microsoft.Maui.Controls.Xaml",
-      "version": "10.0.110",
-      "sha512": "FGvMa7vNfj5A+Lg/x9fRwC9p4+1ZWI9EkPYLaaWbgN4z11j4EePTc5bw5oZX61N9pPETm6aw0XflJeBEIF2GtA=="
+      "version": "10.0.130",
+      "sha512": "5mRQ1sPDlO9SBBg4wCmzN6u0AfTDWBs85SQ/5Iz5euw0js9/gVXuhcv5GlB4PxWBn6lePR6AjWQpsC4C9rItrQ=="
     },
     {
       "id": "Microsoft.Maui.Core",
-      "version": "10.0.110",
-      "sha512": "FsQqFkS5Qq+vHu9yHNy5KJPmbn1slX9QBzDriNcTvncvfoUHxPpEhtbegjY8kXOoZXc0nmovX1U7eD+NozR93Q=="
+      "version": "10.0.130",
+      "sha512": "2JRN5+JoI0O2oXq8SmE36IF3eLfwkJyIv7i38rhyhXefgD1aBUAqA4G+xO+h2mzS8Dc7hLDwTgac48hOwAahHQ=="
     },
     {
       "id": "Microsoft.Maui.Essentials",
-      "version": "10.0.110",
-      "sha512": "9QAmmko3oez5jO+bpT64Wsef0W2xrQtug5/UClYEPqkJo95UWHdTVOWfdypCl/26yoggflZU/Swd1w56+H+DWQ=="
+      "version": "10.0.130",
+      "sha512": "AGl2OjnY4YLVyJpcdv9qyvoibE/XhhUmbI6TRXbp+gDYM7MePC0lwRjq29alvrRuV2Wkv6nVJ8+Nn756v1pMfw=="
     },
     {
       "id": "Microsoft.Maui.Graphics",
-      "version": "10.0.110",
-      "sha512": "+7WK3GKUg+osnQEsgsun5s6VpwKegjpAnBnlMmgK9iX5KO0ImBQwiOqmHOslfDr8E9r44bNmUnj33wSbEE5RKg=="
+      "version": "10.0.130",
+      "sha512": "jutPpC3OlbsOVJKf52OOccxT6bxLPIWogBGW0G4kcEJp49iew4dhCIg+vinozUYp9j0h5ej+HVCLXIPTQu6/hQ=="
     },
     {
       "id": "Microsoft.Maui.Resizetizer",
-      "version": "10.0.110",
-      "sha512": "8b911sZEcqcQcJbtUaeaPJSkg+9tIbJ1Wz2s9UY13eqZFAeCgqOQbb/03kdlaV7cRTU/shS1ot52+536mlsp/g=="
+      "version": "10.0.130",
+      "sha512": "rWdGK8Z5GmOuMAo8TedVVbSSX/K83HJ5IN2teZY5ExCcseXYlazzodvCOJ1p4opFvTtrA6ahvY36OCi1uN95ag=="
     },
     {
       "id": "Microsoft.NET.ILLink.Tasks",
@@ -315,8 +315,18 @@
     },
     {
       "id": "SonarAnalyzer.CSharp",
-      "version": "10.35.0.4138",
-      "sha512": "T5o/tuyPw9pHRkyWxW07TkSri4I4pLpqwH922JuhphDjHAM7BUHaGE67h/w+65evHsIar8mYB2Ey6OmOLj9QDw=="
+      "version": "10.36.0.15337",
+      "sha512": "jGLAZUjheSURfe0T/dJYGUrMOrLt1fxaInpChq75YJvrywsxFoUKK/EM6PSfTjkt4pbaq2ywIQjgQzhrmmj5Ow=="
+    },
+    {
+      "id": "System.Collections.Immutable",
+      "version": "11.0.0",
+      "sha512": "Z3pTTvMGhsThIfPDboJDwBY+yCqfNCpYyL4fcPCNo4rVYhlS7Kmg4nkABanRYRSVDPZ3qiXPdGymBzMDuawPNg=="
+    },
+    {
+      "id": "System.Diagnostics.DiagnosticSource",
+      "version": "11.0.0",
+      "sha512": "+boRR9uSKiIPtFeRLGwO5xylhDF80xpwM+dmk5jgIqqeUKLbujGkGICMTKqQrBzKO6fIp8BU8DV6YZkQukqo3A=="
     },
     {
       "id": "System.Formats.Cbor",
@@ -324,14 +334,34 @@
       "sha512": "2ULEPU67LRt4YVwBnCk1OhjsJspIBzg1JlDkN2hnZm9im3fC9bSbVQorLraOIcLMlA6/8eWQG1fjTpurHkIFZw=="
     },
     {
+      "id": "System.IO.Pipelines",
+      "version": "11.0.0",
+      "sha512": "F3biHUDT5JWIKhEcZrRjKuYy7XGZOe3GOU2N6rSOQeZBx+Ko/PY7K+VaC3BwD+ofQ9k0MXIhEB7uqJSRkZAkQQ=="
+    },
+    {
+      "id": "System.Reflection.Metadata",
+      "version": "11.0.0",
+      "sha512": "6mLHh96MZR4PJbNH8dUOjCkYWLR7N4FYseSjqGIgEYj8so3j1CvQTpTjouI2jInKnJYSGYLFHwdQEJtMKWvlQQ=="
+    },
+    {
       "id": "System.Reflection.MetadataLoadContext",
-      "version": "10.0.14",
-      "sha512": "TBqKGTYnKq/glgpGAM8iOSpSNlO++ZLbdOHHvxO/+QpvBYNfcP8dCi7m/da1tbG5zwmthf9+UHpjVq664HNnAg=="
+      "version": "11.0.0",
+      "sha512": "IixPUjMvqADBklO1Cz9OiEcfxIwFptmAwnm02DVTmW5JW4k06HU76boTVxPMChOvalE6FFJH3H82gO8+sgDhwQ=="
+    },
+    {
+      "id": "System.Text.Encodings.Web",
+      "version": "11.0.0",
+      "sha512": "yNdu/KHBHq1rCu0d6TwKWNL1SvomZB4c/S0l4XKF1PX0gOIlPfnGVeBg7sQ3dmgy5e3UA+JGidak3abyBdlYAQ=="
+    },
+    {
+      "id": "System.Text.Json",
+      "version": "11.0.0",
+      "sha512": "hyLfq7fRYbq8m3ENGqgEYkqxLeLx2xmNMlf6UG1a7RQo9OsTsfm4Ch/E6O+A5vYQ2ThneLUn1CHF644lmH5QhA=="
     },
     {
       "id": "System.Threading.RateLimiting",
-      "version": "10.0.14",
-      "sha512": "SLoXh2YBBLFmUMQwmPNky45ETCK/0qpp+bCjTaYC4MctQG4FVCPDMfeMt/mN2nxJG7VIRMGOovCJEKsx5nj7VQ=="
+      "version": "11.0.0",
+      "sha512": "/XV8cRRUkl+uyvVdPBCo+p/QUSMFI7JdPHgpeWvnVmh/Ao/TRn7gSjo1XS0qJGGhd7Pkjn/9ePSNXtKQN0kutA=="
     },
     {
       "id": "Velopack",

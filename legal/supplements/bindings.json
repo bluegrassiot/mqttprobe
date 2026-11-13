@@ -80,18 +80,25 @@
   ],
   "packageFiles": [
     {
-      "component": "apexcharts-javascript",
-      "id": "Blazor-ApexCharts",
-      "version": "7.1.0",
-      "path": "staticwebassets/js/apexcharts.esm.js",
-      "sha256": "58da7625d09f5b6d836e905d17b709ccbf56a13b8b300f5a6c6fda6cc47418e2"
-    },
-    {
       "component": "lucide-icons",
       "id": "Blazor.Lucide",
       "version": "1.0.6",
       "path": "lib/net9.0/Blazor.Lucide.dll",
       "sha256": "07625fc2b1e9a3c7721571cdf641c81b6aa8e15c80f79a696d1ec522c9f04674"
+    },
+    {
+      "component": "apexcharts-javascript",
+      "id": "Blazor-ApexCharts",
+      "version": "8.0.0",
+      "path": "staticwebassets/js/apexcharts.full.min.js",
+      "sha256": "5cb59f52b4ffd834fd0e600fa13ef3434804533691a520da8b3eb31fdbe96f7f"
+    },
+    {
+      "component": "apexcharts-javascript",
+      "id": "Blazor-ApexCharts",
+      "version": "8.0.0",
+      "path": "staticwebassets/js/apexcharts.esm.js",
+      "sha256": "6ba286f0357cb13a84d445d7f86eb5a159bb9d2fa622b9d834413404d4e98084"
     }
   ]
 }

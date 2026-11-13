@@ -78,7 +78,7 @@
     ::deep .emu-btn-starting svg { animation: none; }
 }
 
-::deep .emu-filter-text { min-width: 160px; font-size: 0.85rem; }
+::deep .emu-filter-text { min-width: 160px; font-size: 0.85rem; flex: 0 0 auto; }
 
 /* ── Interval helper renders the projected msg/s figure (data → mono) ────── */
 

@@ -1,5 +1,5 @@
 .app-tabpanel-header {
-    padding: 8px 0;
+    padding: 3px 0;
     border-bottom: 1px solid var(--mud-palette-divider);
     margin-bottom: 10px;
 }
@@ -14,8 +14,18 @@
     row-gap: 6px;
 }
 
+/* Filters sit below the title boundary, so keep the one divider under the row. */
+.app-tabpanel-header--has-filters {
+    border-bottom: 0;
+}
+
+.app-tabpanel-header--has-filters .app-tabpanel-header__row {
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
 .app-tabpanel-header__title {
     margin: 0;
+    font-size: 1rem;
     line-height: 1.2;
 }
 
@@ -23,6 +33,11 @@
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.app-tabpanel-header__chips ::deep .mud-chip {
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
 .app-tabpanel-header__actions {
@@ -60,16 +75,22 @@
 /* Compact: tighten further so header chrome doesn't dominate the viewport. */
 @media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px) {
     .app-tabpanel-header {
-        padding: 4px 0;
+        padding: 2px 0;
         margin-bottom: 6px;
+        /* Fractional phone layouts can round a 1px divider away; 2px keeps it visible. */
+        border-bottom-width: 2px;
     }
 
     .app-tabpanel-header__title {
-        font-size: 1.1rem;
+        font-size: 1rem;
     }
 
     .app-tabpanel-header__filters {
         padding-top: 4px;
+    }
+
+    .app-tabpanel-header--has-filters .app-tabpanel-header__row {
+        border-bottom-width: 2px;
     }
 
     /* Views with wide chip sets (e.g. Nodes) opt in via this modifier: the

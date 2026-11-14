@@ -2,6 +2,7 @@
 
 const ECHARTS_MODULE_PATH = './echarts/6.1.0/echarts.esm.min.js';
 const MILLISECONDS_PER_DAY = 86_400_000;
+const MARKER_SIZE = 5;
 // Mirrors the host --font-mono profile; canvas text cannot resolve a CSS variable.
 const FONT_FAMILIES = {
     standard: 'JetBrains Mono, monospace',
@@ -195,8 +196,10 @@ function buildSeries(spec) {
             return series;
         }
 
-        series.symbol = 'none';
-        series.showSymbol = false;
+        // A one point line has no segment, so its visible symbol is the only mark on the plot.
+        series.symbol = 'circle';
+        series.symbolSize = MARKER_SIZE;
+        series.showSymbol = true;
         series.smooth = true;
         series.lineStyle = { width: 2, color: entry.color };
 

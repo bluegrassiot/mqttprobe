@@ -214,7 +214,9 @@ test('create applies an explicit time-series option synchronously', async () => 
             'every stored instant and value survives, including the seven second gap');
         assert.equal(option.series[0].encode.x, 0);
         assert.equal(option.series[0].encode.y, 1);
-        assert.equal(option.series[0].showSymbol, false);
+        assert.equal(option.series[0].showSymbol, true, 'sparse points keep a visible marker');
+        assert.equal(option.series[0].symbol, 'circle');
+        assert.equal(option.series[0].symbolSize, 5);
         assert.equal(option.series[0].smooth, true, 'the current chart draws smoothed lines');
     } finally {
         layout.restore();
@@ -238,6 +240,64 @@ test('area and bar selections map to the matching ECharts series', async () => {
         assert.equal(area.legend.show, false, 'one series needs no legend');
         assert.equal(bar.series[0].type, 'bar');
         assert.equal(bar.series[0].areaStyle, null, 'a bar has no fill under it');
+        assert.equal(bar.series[0].barMaxWidth, 24);
+        assert.equal(bar.series[0].showSymbol, undefined, 'a bar draws its own shape, not a line marker');
+        assert.equal(bar.series[0].symbol, undefined);
+        assert.equal(bar.series[0].symbolSize, undefined);
+    } finally {
+        layout.restore();
+    }
+});
+
+test('a single point gets a visible marker on line and area charts', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    try {
+        await createChart(createElement(), uniqueId(), createDotNetRef(),
+            spec({ series: [series('only', 'Temp', '#F97316', [[1000, 42]])] }), { echarts });
+        await createChart(createElement(), uniqueId(), createDotNetRef(),
+            spec({ type: 'area', series: [series('only', 'Temp', '#A78BFA', [[1000, 42]])] }), { echarts });
+
+        const line = echarts.charts[0].options[0].option.series[0];
+        const area = echarts.charts[1].options[0].option.series[0];
+
+        assert.equal(line.showSymbol, true,
+            'a one point line has no segment to draw, so its symbol is the plot');
+        assert.equal(line.symbol, 'circle');
+        assert.equal(line.symbolSize, 5);
+        assert.equal(line.itemStyle.color, '#F97316', 'the marker follows the series colour');
+        assert.equal(area.showSymbol, true, 'a one point area has no fill without its marker');
+        assert.equal(area.symbolSize, 5);
+        assert.equal(area.itemStyle.color, '#A78BFA');
+    } finally {
+        layout.restore();
+    }
+});
+
+test('every point keeps its marker, including dense 61 and 500 point series', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    try {
+        const base = 1767225600000;
+        const densePoints = count =>
+            Array.from({ length: count }, (_, index) => [base + index * 1000, 10 + index]);
+
+        await createChart(createElement(), uniqueId(), createDotNetRef(), spec({
+            series: [
+                series('sparse', 'Temp', '#F97316', [[base, 10], [base + 60000, 11]]),
+                series('sixty-one', 'Pressure', '#A78BFA', densePoints(61)),
+                series('five-hundred', 'Flow', '#22C55E', densePoints(500)),
+            ],
+        }), { echarts });
+
+        const [sparse, sixtyOne, fiveHundred] = echarts.charts[0].options[0].option.series;
+        for (const entry of [sparse, sixtyOne, fiveHundred]) {
+            assert.equal(entry.showSymbol, true, 'a dense series still marks each point');
+            assert.equal(entry.symbol, 'circle');
+            assert.equal(entry.symbolSize, 5);
+        }
+        assert.equal(fiveHundred.data.length, 500);
+        assert.equal(fiveHundred.lineStyle.color, '#22C55E');
     } finally {
         layout.restore();
     }
@@ -922,6 +982,63 @@ function realSpec(type) {
         ],
     };
 }
+
+function markerCount(chart) {
+    return (chart.renderToSVGString().match(/ecmeta_data_index="\d+"/g) ?? []).length;
+}
+
+function singleSeriesSpec(type, points, color = '#F97316') {
+    return {
+        type,
+        dark: false,
+        zone: 'utc',
+        clockFormat: '24h',
+        series: [series('a', 'Temp', color, points)],
+    };
+}
+
+test('real bundle: one point on a line or area chart draws its marker', async () => {
+    for (const type of ['line', 'area']) {
+        const { echarts, state } = await createRealEcharts();
+        const id = uniqueId();
+        try {
+            await createChart({ isConnected: true }, id, createDotNetRef(),
+                singleSeriesSpec(type, [[1767225600000, 42]]), { echarts });
+
+            assert.equal(markerCount(state.instance), 1, `${type} draws its only data point`);
+            assert.match(state.instance.renderToSVGString(), /fill="#F97316"/,
+                'the marker uses the series colour');
+        } finally {
+            disposeChart(id);
+        }
+    }
+});
+
+test('real bundle: markers stay on every point from one to the 500 point cap', async () => {
+    const { echarts, state } = await createRealEcharts();
+    const id = uniqueId();
+    const base = 1767225600000;
+    const points = count => Array.from({ length: count }, (_, index) => [base + index * 1000, 42 + index]);
+    try {
+        await createChart({ isConnected: true }, id, createDotNetRef(),
+            singleSeriesSpec('line', points(1)), { echarts });
+        assert.equal(markerCount(state.instance), 1);
+
+        updateChart(id, singleSeriesSpec('line', points(3)));
+        assert.equal(markerCount(state.instance), 3, 'growth from one point keeps every marker');
+        assert.match(state.instance.renderToSVGString(), /fill="#F97316"/);
+
+        updateChart(id, singleSeriesSpec('line', points(61)));
+        assert.equal(state.instance.getOption().series[0].showSymbol, true);
+        assert.equal(markerCount(state.instance), 61, 'a 61 point series still marks every point');
+
+        updateChart(id, singleSeriesSpec('line', points(500)));
+        assert.equal(state.instance.getOption().series[0].showSymbol, true);
+        assert.equal(markerCount(state.instance), 500, 'the 500 point cap still marks every point');
+    } finally {
+        disposeChart(id);
+    }
+});
 
 test('real bundle: area to line clears the fill, resets the window and keeps legend state', async () => {
     const { echarts, state } = await createRealEcharts();

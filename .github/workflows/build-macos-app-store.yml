@@ -1,0 +1,618 @@
+name: Build macOS (Mac App Store)
+
+# Manual or release-coordinator entry point for a signed Mac App Store package.
+# The package is uploaded to TestFlight with App Store Connect API-key auth and
+# is never published as a workflow artifact or release asset.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag to build, e.g. v1.2.3'
+        required: true
+        type: string
+      build_number:
+        description: 'Build number, a whole number 1-9999, higher than any build already uploaded for this version'
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        description: 'Release tag to build, e.g. v1.2.3'
+        required: true
+        type: string
+      build_number:
+        description: 'Optional manual build number; leave empty to derive it from the workflow run'
+        required: false
+        default: ''
+        type: string
+    outputs:
+      source_sha:
+        description: Peeled immutable commit SHA used for the build
+        value: ${{ jobs.validate-source.outputs.source_sha }}
+      tag:
+        description: Validated release tag, or the requested version for a manual run
+        value: ${{ jobs.validate-source.outputs.tag }}
+      marketing:
+        description: Normalized marketing version
+        value: ${{ jobs.validate-source.outputs.marketing }}
+      build:
+        description: Validated App Store build number from the signing job
+        value: ${{ jobs.build-macos-app-store.outputs.build }}
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  SIGN_APP_IDENTITY: "Apple Distribution: Bluegrass IOT LLC (XVKMB6CQ72)"
+  SIGN_INSTALL_IDENTITY: "3rd Party Mac Developer Installer: Bluegrass IOT LLC (XVKMB6CQ72)"
+  APPLE_TEAM_ID: "XVKMB6CQ72"
+  MAC_BUNDLE_ID: "com.bluegrassiot.mqttprobe"
+  MAC_PROVISION_PROFILE_NAME: "MQTTProbe Mac App Store"
+
+jobs:
+  validate-source:
+    name: Validate release source
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
+      tag: ${{ steps.source.outputs.tag }}
+      marketing: ${{ steps.source.outputs.marketing }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag and source
+        id: source
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          INPUT_VERSION: ${{ inputs.version }}
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          [[ "$INPUT_VERSION" =~ ^v(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})$ ]] || {
+            echo "::error::Version '$INPUT_VERSION' must be a strict version such as v1.2.3"
+            exit 1
+          }
+          [ "$INPUT_VERSION" != "v0.0.0" ] || {
+            echo "::error::Version v0.0.0 is the placeholder and cannot be released"
+            exit 1
+          }
+          # Only a pushed tag must exist in the checkout. A manual run labels an
+          # immutable commit and creates no tag.
+          if [ "$EVENT_NAME" = "push" ]; then
+            TAG_REF="refs/tags/$INPUT_VERSION"
+            git rev-parse --verify --quiet "$TAG_REF" > /dev/null || {
+              echo "::error::Tag $INPUT_VERSION does not exist in this checkout"
+              exit 1
+            }
+            TAG_SHA=$(git rev-parse --verify "${TAG_REF}^{commit}") || {
+              echo "::error::Tag $INPUT_VERSION does not peel to a commit"
+              exit 1
+            }
+          fi
+          if [ "$(git rev-parse --is-shallow-repository)" != "false" ]; then
+            echo "::error::The checkout is shallow, so ancestry cannot be proven. fetch-depth must stay 0 in this job."
+            exit 1
+          fi
+          if [ "$EVENT_NAME" = "push" ]; then
+            if ! git fetch --no-tags --prune origin '+refs/heads/main:refs/remotes/origin/main'; then
+              echo "::error::Could not fetch origin/main, so this run cannot prove that $INPUT_VERSION is on main. Refusing to build an unverified ref."
+              exit 1
+            fi
+            MAIN_SHA=$(git rev-parse --verify "refs/remotes/origin/main^{commit}") || {
+              echo "::error::No origin/main in this checkout, so it cannot be shown that $INPUT_VERSION is on main."
+              exit 1
+            }
+            if ! git merge-base --is-ancestor "$TAG_SHA" "$MAIN_SHA"; then
+              echo "::error::Tag $INPUT_VERSION resolves to a commit that is not contained in origin/main"
+              exit 1
+            fi
+            [ "$REF" = "refs/tags/$INPUT_VERSION" ] || {
+              echo "::error::Automated release runs must be the pushed tag refs/tags/$INPUT_VERSION, not $REF"
+              exit 1
+            }
+            [ "$INPUT_VERSION" = "$REF_NAME" ] || {
+              echo "::error::Automated release calls must pass the pushed tag, not '$INPUT_VERSION'"
+              exit 1
+            }
+            [ "$TAG_SHA" = "$(git rev-parse --verify "${SHA}^{commit}")" ] || {
+              echo "::error::Tag $INPUT_VERSION does not resolve to the commit that triggered this run"
+              exit 1
+            }
+            SOURCE_SHA="$TAG_SHA"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$REF" = "refs/heads/main" ]; then
+              BASE_REF="main"
+            elif [[ "$REF" =~ ^refs/heads/release/[^/]+$ ]]; then
+              BASE_REF="${REF#refs/heads/}"
+            else
+              echo "::error::Manual runs must be dispatched from main or a release branch such as release/1.2; found $REF"
+              exit 1
+            fi
+            if ! git fetch --no-tags --prune origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"; then
+              echo "::error::Could not fetch origin/$BASE_REF, so this run cannot prove the dispatch commit is on it. Refusing to build an unverified ref."
+              exit 1
+            fi
+            BASE_SHA=$(git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}") || {
+              echo "::error::No origin/$BASE_REF in this checkout, so it cannot be shown that the dispatch commit is on it."
+              exit 1
+            }
+            DISPATCH_SHA=$(git rev-parse --verify "${SHA}^{commit}") || {
+              echo "::error::Dispatch commit $SHA does not resolve to a commit"
+              exit 1
+            }
+            if ! git merge-base --is-ancestor "$DISPATCH_SHA" "$BASE_SHA"; then
+              echo "::error::Dispatch commit $DISPATCH_SHA is not contained in origin/$BASE_REF"
+              exit 1
+            fi
+            SOURCE_SHA="$DISPATCH_SHA"
+          else
+            echo "::error::Unsupported trigger '$EVENT_NAME'"
+            exit 1
+          fi
+          {
+            echo "tag=$INPUT_VERSION"
+            echo "source_sha=$SOURCE_SHA"
+            echo "marketing=${INPUT_VERSION#v}"
+          } >> "$GITHUB_OUTPUT"
+
+  build-macos-app-store:
+    name: Build and upload (Mac App Store)
+    needs: validate-source
+    outputs:
+      marketing: ${{ steps.version.outputs.marketing }}
+      build: ${{ steps.version.outputs.build }}
+    runs-on: xcode-27
+    timeout-minutes: 70
+    environment: ios-signing
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate-source.outputs.source_sha }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Preflight required secrets
+        env:
+          IOS_DIST_CERT_P12: ${{ secrets.IOS_DIST_CERT_P12 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          MAC_APP_STORE_INSTALLER_CERT_P12: ${{ secrets.MAC_APP_STORE_INSTALLER_CERT_P12 }}
+          MAC_APP_STORE_INSTALLER_CERT_PASSWORD: ${{ secrets.MAC_APP_STORE_INSTALLER_CERT_PASSWORD }}
+          MAC_APP_STORE_PROVISION_PROFILE: ${{ secrets.MAC_APP_STORE_PROVISION_PROFILE }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+        run: |
+          missing=0
+          for name in \
+            IOS_DIST_CERT_P12 \
+            IOS_DIST_CERT_PASSWORD \
+            MAC_APP_STORE_INSTALLER_CERT_P12 \
+            MAC_APP_STORE_INSTALLER_CERT_PASSWORD \
+            MAC_APP_STORE_PROVISION_PROFILE \
+            NOTARY_KEY_ID \
+            NOTARY_ISSUER_ID \
+            NOTARY_KEY_P8; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name secret is not set in the ios-signing environment"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          [[ "$NOTARY_KEY_ID" =~ ^[A-Za-z0-9]+$ ]] || {
+            echo "::error::NOTARY_KEY_ID must be alphanumeric with no path separators or whitespace"
+            exit 1
+          }
+          [[ "$NOTARY_ISSUER_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || {
+            echo "::error::NOTARY_ISSUER_ID must be the issuer UUID (8-4-4-4-12 hex)"
+            exit 1
+          }
+          printf '%s\n' "$NOTARY_KEY_P8" | openssl pkey -noout > /dev/null 2>&1 || {
+            echo "::error::NOTARY_KEY_P8 is not a readable PEM private key"
+            exit 1
+          }
+
+      - name: Derive and validate version and build number
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RAW_VERSION: ${{ needs.validate-source.outputs.tag }}
+          INPUT_BUILD_NUMBER: ${{ inputs.build_number }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            [ -n "$INPUT_BUILD_NUMBER" ] || {
+              echo "::error::Manual runs require an explicit build_number"
+              exit 1
+            }
+            BUILD_NUMBER="$INPUT_BUILD_NUMBER"
+          elif [ -n "$INPUT_BUILD_NUMBER" ]; then
+            BUILD_NUMBER="$INPUT_BUILD_NUMBER"
+          else
+            BUILD_NUMBER=$(python3 -I scripts/ci/apple-build-number.py \
+              --run-number "$RUN_NUMBER" \
+              --run-attempt "$RUN_ATTEMPT")
+          fi
+          python3 -I scripts/ci/ios-version.py \
+            --version "$RAW_VERSION" \
+            --build-number "$BUILD_NUMBER" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Select Xcode
+        id: xcode
+        uses: ./.github/actions/select-xcode
+
+      - uses: ./.github/actions/setup-dotnet-workload
+        with:
+          workload: maui-maccatalyst
+
+      - name: Import app and installer certificates into temporary keychain
+        env:
+          CERT_P12_B64: ${{ secrets.IOS_DIST_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          INSTALLER_CERT_P12_B64: ${{ secrets.MAC_APP_STORE_INSTALLER_CERT_P12 }}
+          INSTALLER_CERT_PASSWORD: ${{ secrets.MAC_APP_STORE_INSTALLER_CERT_PASSWORD }}
+        run: |
+          [ -n "$CERT_P12_B64" ] || { echo "::error::IOS_DIST_CERT_P12 secret is not set"; exit 1; }
+          [ -n "$CERT_PASSWORD" ] || { echo "::error::IOS_DIST_CERT_PASSWORD secret is not set"; exit 1; }
+          [ -n "$INSTALLER_CERT_P12_B64" ] || { echo "::error::MAC_APP_STORE_INSTALLER_CERT_P12 secret is not set"; exit 1; }
+          [ -n "$INSTALLER_CERT_PASSWORD" ] || { echo "::error::MAC_APP_STORE_INSTALLER_CERT_PASSWORD secret is not set"; exit 1; }
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          echo "$KEYCHAIN_PASSWORD" > "$RUNNER_TEMP/keychain-password"
+          chmod 600 "$RUNNER_TEMP/keychain-password"
+          echo "$CERT_P12_B64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/dist.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/dist.p12"
+          echo "$INSTALLER_CERT_P12_B64" | base64 --decode > "$RUNNER_TEMP/installer.p12"
+          security import "$RUNNER_TEMP/installer.p12" -k "$KEYCHAIN" -P "$INSTALLER_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productbuild \
+            -T /usr/bin/productsign -T /usr/bin/pkgbuild
+          rm -f "$RUNNER_TEMP/installer.p12"
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign:,productsign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain
+
+      - name: Verify signing identities
+        id: identity
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          echo "Identities present in the CI keychain:"
+          security find-identity -v "$KEYCHAIN"
+          for IDENTITY in "$SIGN_APP_IDENTITY" "$SIGN_INSTALL_IDENTITY"; do
+            security find-identity -v "$KEYCHAIN" | grep -qF "$IDENTITY" || {
+              echo "::error::Signing identity not found: $IDENTITY"
+              exit 1
+            }
+          done
+          security find-identity -v "$KEYCHAIN" | grep -qF "Apple Distribution" || {
+            echo "::error::No Apple Distribution identity in the keychain"
+            exit 1
+          }
+          security find-identity -v "$KEYCHAIN" | grep -qF "3rd Party Mac Developer Installer" || {
+            echo "::error::No Mac App Store installer identity in the keychain"
+            exit 1
+          }
+          CERT_PEM="$RUNNER_TEMP/dist-cert.pem"
+          security find-certificate -a -c "$SIGN_APP_IDENTITY" -p "$KEYCHAIN" > "$CERT_PEM"
+          CERT_COUNT=$(grep -c -- "-----BEGIN CERTIFICATE-----" "$CERT_PEM" || true)
+          [ "$CERT_COUNT" = "1" ] || {
+            echo "::error::Expected exactly one certificate matching '$SIGN_APP_IDENTITY', found $CERT_COUNT"
+            exit 1
+          }
+          INSTALLER_PEM="$RUNNER_TEMP/installer-cert.pem"
+          security find-certificate -a -c "$SIGN_INSTALL_IDENTITY" -p "$KEYCHAIN" > "$INSTALLER_PEM"
+          INSTALLER_COUNT=$(grep -c -- "-----BEGIN CERTIFICATE-----" "$INSTALLER_PEM" || true)
+          [ "$INSTALLER_COUNT" = "1" ] || {
+            echo "::error::Expected exactly one certificate matching '$SIGN_INSTALL_IDENTITY', found $INSTALLER_COUNT"
+            exit 1
+          }
+          CERT_SHA256=$(python3 -I scripts/ci/ios-certificate.py "$CERT_PEM" \
+            --common-name "$SIGN_APP_IDENTITY")
+          echo "$CERT_SHA256" > "$RUNNER_TEMP/cert-sha256.txt"
+          rm -f "$CERT_PEM" "$INSTALLER_PEM"
+
+      - name: Install and verify provisioning profile
+        id: profile
+        env:
+          PROFILE_B64: ${{ secrets.MAC_APP_STORE_PROVISION_PROFILE }}
+        run: |
+          [ -n "$PROFILE_B64" ] || { echo "::error::MAC_APP_STORE_PROVISION_PROFILE secret is not set"; exit 1; }
+          echo "$PROFILE_B64" | base64 --decode > "$RUNNER_TEMP/profile.provisionprofile"
+          security cms -D -i "$RUNNER_TEMP/profile.provisionprofile" > "$RUNNER_TEMP/profile.plist"
+          python3 -I scripts/ci/ios-profile.py "$RUNNER_TEMP/profile.plist" \
+            --platform macos \
+            --team "$APPLE_TEAM_ID" \
+            --bundle-id "$MAC_BUNDLE_ID" \
+            --name "$MAC_PROVISION_PROFILE_NAME" \
+            --certificate-sha256 "$(cat "$RUNNER_TEMP/cert-sha256.txt")" \
+            --github-output "$GITHUB_OUTPUT"
+          PROFILE_UUID=$(grep '^uuid=' "$GITHUB_OUTPUT" | cut -d= -f2)
+          for PROFILE_DIR in \
+            "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" \
+            "$HOME/Library/MobileDevice/Provisioning Profiles"; do
+            mkdir -p "$PROFILE_DIR"
+            cp "$RUNNER_TEMP/profile.provisionprofile" \
+               "$PROFILE_DIR/$PROFILE_UUID.provisionprofile"
+          done
+          echo "Installed provisioning profile $PROFILE_UUID.provisionprofile"
+
+      - name: Build signed Mac App Store package
+        timeout-minutes: 45
+        run: >-
+          dotnet publish src/MqttProbe.Maui/MqttProbe.Maui.csproj
+          -f:net10.0-maccatalyst
+          -p:MqttProbeMauiMacTargetFrameworksOverride=net10.0-maccatalyst
+          -c:Release
+          -p:RuntimeIdentifiers='"maccatalyst-x64;maccatalyst-arm64"'
+          -p:MqttProbeMacAppStore=true
+          -p:CreatePackage=true
+          -p:EnableCodeSigning=true
+          -p:EnablePackageSigning=true
+          -p:UseHardenedRuntime=false
+          -p:CodesignKey="${{ env.SIGN_APP_IDENTITY }}"
+          -p:CodesignProvision="${{ env.MAC_PROVISION_PROFILE_NAME }}"
+          -p:CodesignEntitlements=Platforms/MacCatalyst/AppStoreEntitlements.plist
+          -p:PackageSigningKey="${{ env.SIGN_INSTALL_IDENTITY }}"
+          -p:ApplicationDisplayVersion=${{ steps.version.outputs.marketing }}
+          -p:ApplicationVersion=${{ steps.version.outputs.build }}
+
+      - name: Verify legal notices
+        run: |
+          python3 scripts/legal/notices.py profiles-check --scenario maui-maccatalyst-app-store
+          python3 scripts/legal/notices.py verify --scenario maui-maccatalyst-app-store
+
+      - name: Collect the package
+        id: collect
+        env:
+          MARKETING_VERSION: ${{ steps.version.outputs.marketing }}
+          BUILD_NUMBER: ${{ steps.version.outputs.build }}
+        run: |
+          PKG_COUNT=$(find src/MqttProbe.Maui/bin/Release/net10.0-maccatalyst -name '*.pkg' | wc -l | tr -d ' ')
+          [ "$PKG_COUNT" = "1" ] || { echo "::error::Expected exactly one .pkg under src/MqttProbe.Maui/bin/Release/net10.0-maccatalyst, found $PKG_COUNT"; exit 1; }
+          PKG=$(find src/MqttProbe.Maui/bin/Release/net10.0-maccatalyst -name '*.pkg' -print -quit)
+          PKG_PATH="$RUNNER_TEMP/MqttProbe-$MARKETING_VERSION-$BUILD_NUMBER.pkg"
+          cp "$PKG" "$PKG_PATH"
+          echo "PKG_PATH=$PKG_PATH" >> "$GITHUB_OUTPUT"
+          echo "SOURCE_PKG_PATH=$PKG" >> "$GITHUB_OUTPUT"
+
+      - name: Verify package and app signature
+        env:
+          PKG_PATH: ${{ steps.collect.outputs.PKG_PATH }}
+          EXPECTED_MARKETING: ${{ steps.version.outputs.marketing }}
+          EXPECTED_BUILD: ${{ steps.version.outputs.build }}
+        run: |
+          SIGNATURE="$RUNNER_TEMP/pkg-signature.txt"
+          pkgutil --check-signature "$PKG_PATH" > "$SIGNATURE"
+          sed -n 's/^/  /p' "$SIGNATURE"
+          grep -qF "$SIGN_INSTALL_IDENTITY" "$SIGNATURE" || {
+            echo "::error::Package is not signed by $SIGN_INSTALL_IDENTITY"
+            exit 1
+          }
+
+          UNPACK="$RUNNER_TEMP/macos-package"
+          rm -rf "$UNPACK"
+          pkgutil --expand-full "$PKG_PATH" "$UNPACK"
+          APP=$(find "$UNPACK" -name '*.app' -print -quit)
+          test -n "$APP" || { echo "::error::No .app inside $PKG_PATH"; exit 1; }
+          echo "App bundle: $APP"
+
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")
+          SHORT_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")
+          BUNDLE_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")
+          EXE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")
+          echo "CFBundleIdentifier=$BUNDLE_ID CFBundleShortVersionString=$SHORT_VERSION CFBundleVersion=$BUNDLE_VERSION"
+          [ "$BUNDLE_ID" = "$MAC_BUNDLE_ID" ] || { echo "::error::Bundle id '$BUNDLE_ID' is not $MAC_BUNDLE_ID"; exit 1; }
+          [ "$SHORT_VERSION" = "$EXPECTED_MARKETING" ] || { echo "::error::CFBundleShortVersionString '$SHORT_VERSION' is not $EXPECTED_MARKETING"; exit 1; }
+          [ "$BUNDLE_VERSION" = "$EXPECTED_BUILD" ] || { echo "::error::CFBundleVersion '$BUNDLE_VERSION' is not $EXPECTED_BUILD"; exit 1; }
+          [ "$BUNDLE_VERSION" -le 9999 ] 2>/dev/null || { echo "::error::CFBundleVersion '$BUNDLE_VERSION' exceeds Apple's four-digit limit for the first integer."; exit 1; }
+
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          CODESIGN_INFO="$RUNNER_TEMP/codesign-info.txt"
+          codesign -dv --verbose=4 "$APP" 2> "$CODESIGN_INFO"
+          sed -n 's/^/  /p' "$CODESIGN_INFO"
+          grep -qF "Authority=$SIGN_APP_IDENTITY" "$CODESIGN_INFO" || {
+            echo "::error::App is not signed by $SIGN_APP_IDENTITY"
+            exit 1
+          }
+          grep -qF "TeamIdentifier=$APPLE_TEAM_ID" "$CODESIGN_INFO" || {
+            echo "::error::App team identifier is not $APPLE_TEAM_ID"
+            exit 1
+          }
+          if grep -q 'flags=.*runtime' "$CODESIGN_INFO"; then
+            echo "::error::Mac App Store package must not use the hardened runtime flag"
+            exit 1
+          fi
+
+          ENTITLEMENTS="$RUNNER_TEMP/entitlements.plist"
+          codesign -d --entitlements :- "$APP" > "$ENTITLEMENTS" 2>/dev/null || true
+          require_true() {
+            VALUE=$(/usr/libexec/PlistBuddy -c "Print :$1" "$ENTITLEMENTS" 2>/dev/null || echo "")
+            [ "$VALUE" = "true" ] || {
+              echo "::error::App entitlement $1 is not true"
+              exit 1
+            }
+          }
+          require_true com.apple.security.app-sandbox
+          require_true com.apple.security.network.client
+          require_true com.apple.security.files.user-selected.read-write
+          {
+            printf '%s\n' \
+              'import json, sys' \
+              'entitlements = json.load(sys.stdin)' \
+              'expected = sys.argv[1]' \
+              'debug_keys = ("get-task-allow", "com.apple.security.get-task-allow")' \
+              'enabled = [key for key in debug_keys if key in entitlements and entitlements[key] is not False]' \
+              'if enabled:' \
+              '    raise SystemExit("::error::App debug entitlements are not false: " + ", ".join(enabled))' \
+              'id_keys = ("com.apple.application-identifier", "application-identifier")' \
+              'ids = [entitlements[key] for key in id_keys if key in entitlements and entitlements[key] is not None]' \
+              'if len(ids) > 1 and any(value != ids[0] for value in ids[1:]):' \
+              '    raise SystemExit("::error::App has conflicting application-identifier entitlements")' \
+              'if ids and (not isinstance(ids[0], str) or ids[0] != expected):' \
+              '    raise SystemExit(f"::error::Signed application-identifier {ids[0]!r} does not match {expected}")'
+          } > "$RUNNER_TEMP/check-entitlements.py"
+          plutil -convert json -o - "$ENTITLEMENTS" | python3 -I "$RUNNER_TEMP/check-entitlements.py" "$APPLE_TEAM_ID.$MAC_BUNDLE_ID"
+          SIGNED_TEAM=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.team-identifier' "$ENTITLEMENTS" 2>/dev/null || echo "")
+          if [ -n "$SIGNED_TEAM" ] && [ "$SIGNED_TEAM" != "$APPLE_TEAM_ID" ]; then
+            echo "::error::Signed team identifier '$SIGNED_TEAM' is not $APPLE_TEAM_ID"
+            exit 1
+          fi
+
+          EMBEDDED="$APP/Contents/embedded.provisionprofile"
+          test -f "$EMBEDDED" || { echo "::error::No embedded.provisionprofile in the app bundle"; exit 1; }
+          security cms -D -i "$EMBEDDED" > "$RUNNER_TEMP/embedded.plist"
+          python3 -I scripts/ci/ios-profile.py "$RUNNER_TEMP/embedded.plist" \
+            --platform macos \
+            --team "$APPLE_TEAM_ID" \
+            --bundle-id "$MAC_BUNDLE_ID" \
+            --name "$MAC_PROVISION_PROFILE_NAME" \
+            --certificate-sha256 "$(cat "$RUNNER_TEMP/cert-sha256.txt")" \
+            > /dev/null
+          echo "Embedded profile matches the validated Mac App Store profile and certificate."
+
+          EXE="$APP/Contents/MacOS/$EXE_NAME"
+          test -x "$EXE" || { echo "::error::Main executable not found: $EXE"; exit 1; }
+          ARCHS=$(lipo -archs "$EXE")
+          echo "Architectures: $ARCHS"
+          grep -qw x86_64 <<< "$ARCHS" || { echo "::error::Executable is missing the x86_64 slice"; exit 1; }
+          grep -qw arm64 <<< "$ARCHS" || { echo "::error::Executable is missing the arm64 slice"; exit 1; }
+
+          STALE=$(find "$APP" -type f \( -iname '*velopack*' -o -iname 'UpdateMac*' -o -iname 'vpk*' \) -print -quit)
+          [ -z "$STALE" ] || { echo "::error::Store bundle contains a Velopack/update artifact: $STALE"; exit 1; }
+
+      - name: Verify privacy manifest
+        run: |
+          UNPACK="$RUNNER_TEMP/macos-package"
+          APP=$(find "$UNPACK" -name '*.app' -print -quit)
+          MANIFEST="$APP/Contents/Resources/PrivacyInfo.xcprivacy"
+          if [ ! -f "$MANIFEST" ]; then
+            MANIFEST="$APP/PrivacyInfo.xcprivacy"
+          fi
+          test -f "$MANIFEST" || {
+            echo "::error::No PrivacyInfo.xcprivacy in the Mac App Store bundle. App Store Connect rejects the upload without one."
+            exit 1
+          }
+          python3 -I scripts/ci/ios-privacy-manifest.py "$MANIFEST"
+
+      - name: Prepare App Store Connect API key
+        id: api-key
+        env:
+          API_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          API_PRIVATE_KEY: ${{ secrets.NOTARY_KEY_P8 }}
+        run: |
+          test -n "$RUNNER_TEMP" || { echo "::error::RUNNER_TEMP is not set"; exit 1; }
+          API_KEY_DIR="$RUNNER_TEMP/appstoreconnect-keys"
+          rm -rf "$API_KEY_DIR"
+          umask 077
+          mkdir -p "$API_KEY_DIR"
+          printf '%s\n' "$API_PRIVATE_KEY" > "$API_KEY_DIR/AuthKey_$API_KEY_ID.p8"
+          chmod 600 "$API_KEY_DIR/AuthKey_$API_KEY_ID.p8"
+          echo "API_KEY_DIR=$API_KEY_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to TestFlight
+        id: upload
+        timeout-minutes: 20
+        env:
+          PKG_PATH: ${{ steps.collect.outputs.PKG_PATH }}
+          API_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          API_PRIVATE_KEYS_DIR: ${{ steps.api-key.outputs.API_KEY_DIR }}
+        run: |
+          xcrun altool --use-old-altool --upload-app --type macos --file "$PKG_PATH" \
+            --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER_ID"
+
+      - name: Summarize
+        if: always()
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MARKETING_VERSION: ${{ steps.version.outputs.marketing }}
+          BUILD_NUMBER: ${{ steps.version.outputs.build }}
+          SOURCE_TAG: ${{ needs.validate-source.outputs.tag }}
+          SOURCE_SHA: ${{ needs.validate-source.outputs.source_sha }}
+          UPLOAD_RESULT: ${{ steps.upload.outcome }}
+        run: |
+          {
+            echo "### macOS build and TestFlight upload"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            if [ "$EVENT_NAME" = "push" ]; then
+              echo "| Source tag | \`$SOURCE_TAG\` |"
+            else
+              echo "| Requested version | \`$SOURCE_TAG\` |"
+            fi
+            echo "| Source commit | \`$SOURCE_SHA\` |"
+            echo "| Marketing version | \`${MARKETING_VERSION:-not derived}\` |"
+            echo "| Build number | \`${BUILD_NUMBER:-not derived}\` |"
+            echo "| Bundle id | \`$MAC_BUNDLE_ID\` |"
+            echo
+            case "$UPLOAD_RESULT" in
+              success)
+                echo "Upload step succeeded: App Store Connect accepted the package for processing. Processing is automatic and can still fail; this run does not prove the build is available in TestFlight."
+                ;;
+              skipped)
+                echo "Upload was skipped because an earlier step did not succeed. Nothing was sent to App Store Connect."
+                ;;
+              cancelled)
+                echo "Upload was cancelled before it completed. Check App Store Connect before retrying, since Apple may have received the build."
+                ;;
+              *)
+                echo "Upload did not complete successfully; check App Store Connect before retrying, since Apple may have received the build. The job fails; fix the cause, and use a higher build number only if Apple already has this build."
+                ;;
+            esac
+            echo "The package is not published as a workflow artifact or release asset."
+            echo "After App Store Connect finishes processing, enable the build for TestFlight testing or submit it for App Review manually."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean up signing material
+        if: always()
+        env:
+          PROFILE_UUID: ${{ steps.profile.outputs.uuid }}
+          PKG_PATH: ${{ steps.collect.outputs.PKG_PATH }}
+          SOURCE_PKG_PATH: ${{ steps.collect.outputs.SOURCE_PKG_PATH }}
+        run: |
+          test -n "$RUNNER_TEMP" || { echo "::error::RUNNER_TEMP is not set"; exit 1; }
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          if [ -n "$PROFILE_UUID" ]; then
+            rm -f "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$PROFILE_UUID.provisionprofile" \
+                  "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.provisionprofile"
+          fi
+          rm -rf "$RUNNER_TEMP/appstoreconnect-keys" \
+                 "$RUNNER_TEMP/macos-package"
+          if [ -n "$PKG_PATH" ]; then
+            rm -f "$PKG_PATH"
+          fi
+          if [ -n "$SOURCE_PKG_PATH" ]; then
+            rm -f "$SOURCE_PKG_PATH"
+          fi
+          rm -f "$RUNNER_TEMP/keychain-password" \
+                "$RUNNER_TEMP/dist.p12" \
+                "$RUNNER_TEMP/installer.p12" \
+                "$RUNNER_TEMP/dist-cert.pem" \
+                "$RUNNER_TEMP/installer-cert.pem" \
+                "$RUNNER_TEMP/cert-sha256.txt" \
+                "$RUNNER_TEMP/profile.provisionprofile" \
+                "$RUNNER_TEMP/profile.plist" \
+                "$RUNNER_TEMP/embedded.plist" \
+                "$RUNNER_TEMP/entitlements.plist" \
+                "$RUNNER_TEMP/check-entitlements.py" \
+                "$RUNNER_TEMP/pkg-signature.txt" \
+                "$RUNNER_TEMP/codesign-info.txt"

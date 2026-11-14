@@ -44,13 +44,15 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
         string label = "temp") =>
         new("sensors/temp", label, Depth: 2, HasChildren: hasChildren, TopicCount: topicCount,
             MessageCount: messageCount, IsExpanded: expanded, IsValueBearer: hasDirectMessages, Kind: kind,
-            Owner: owner);
+            Owner: owner)
+        {
+            Branch = new TopicBranchTarget(TopicBranchKind.Raw, Path: "sensors/temp")
+        };
 
     private IRenderedComponent<TopicTreeRow> RenderRow(TopicTreeRowModel row) =>
         Render<TopicTreeRow>(parameters => parameters
             .Add(component => component.Row, row)
-            .Add(component => component.OnExpandToggled, (string p) => { })
-            .Add(component => component.OnSelected, (TopicSelection p) => { }));
+            .Add(component => component.OnExpandToggled, (string p) => { }));
 
     private static IElement NodeGlyph(IRenderedComponent<TopicTreeRow> cut) =>
         cut.Find(".topic-node-icon");
@@ -137,6 +139,7 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
             Row(hasChildren: true, hasDirectMessages: false, kind: TopicTreeRowKind.SparkplugNode),
             Row(hasChildren: true, hasDirectMessages: false, kind: TopicTreeRowKind.Devices),
             Row(hasChildren: true, hasDirectMessages: false, kind: TopicTreeRowKind.SparkplugDevice),
+            Row(hasChildren: true, hasDirectMessages: false, kind: TopicTreeRowKind.SparkplugMetricsGroup),
             Row(hasChildren: false, hasDirectMessages: false, kind: TopicTreeRowKind.MessageType)
         ];
 
@@ -192,6 +195,43 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
 
         NodeGlyph(cut).ClassList.Should().Contain($"topic-role--{role}",
             "each exposed hierarchy category has its own hue; the Devices folder shares the device hue");
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void TheMetricsGroupUsesTheChartGlyph(bool expanded)
+    {
+        var cut = RenderRow(Row(hasChildren: true, hasDirectMessages: false, expanded: expanded,
+            kind: TopicTreeRowKind.SparkplugMetricsGroup, owner: TopicTreeOwner.Node));
+
+        GlyphShape(cut).Should().Be(TopicIconShape.OfConstant(LucideIcons.ChartLine),
+            "a metrics group is a chartable collection, not an MQTT folder");
+        GlyphShape(cut).Should().NotBe(TopicIconShape.OfConstant(LucideIcons.Folder));
+        GlyphShape(cut).Should().NotBe(TopicIconShape.OfConstant(LucideIcons.FolderOpen));
+    }
+
+    [Test]
+    public void MetricLeafKeepsTheActivityGlyph()
+    {
+        var cut = RenderRow(Row(hasChildren: false, hasDirectMessages: false,
+            kind: TopicTreeRowKind.SparkplugMetric, owner: TopicTreeOwner.Node) with
+        {
+            MetricName = "Temp"
+        });
+
+        GlyphShape(cut).Should().Be(TopicIconShape.OfConstant(LucideIcons.Activity));
+        GlyphShape(cut).Should().NotBe(TopicIconShape.OfConstant(LucideIcons.ChartLine),
+            "only the metrics group takes the chart shape");
+    }
+
+    [TestCase(TopicTreeOwner.Node, "node")]
+    [TestCase(TopicTreeOwner.Device, "device")]
+    public void MetricsGroupTakesItsOwnersColour(TopicTreeOwner owner, string role)
+    {
+        var cut = RenderRow(Row(hasChildren: true, hasDirectMessages: false,
+            kind: TopicTreeRowKind.SparkplugMetricsGroup, owner: owner));
+
+        NodeGlyph(cut).ClassList.Should().Contain($"topic-role--{role}");
     }
 
     [Test]
@@ -300,7 +340,7 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
     {
         var cut = RenderRow(Row(hasChildren: true, hasDirectMessages: false, kind: kind) with
         {
-            SelectionTopics = ["spBv1.0/plant1/node1/dev1", "spBv1.0/plant1/node1/dev2"],
+            TopicCount = 2,
         });
 
         cut.Find(".topic-tree-row").GetAttribute("title").Should().Be(
@@ -313,7 +353,7 @@ public sealed class TopicTreeRowIconLanguageTests : BunitTestContext
         var cut = RenderRow(Row(hasChildren: true, hasDirectMessages: false,
             kind: TopicTreeRowKind.SparkplugNode) with
         {
-            SelectionTopics = ["spBv1.0/plant1/NDATA/node1"],
+            TopicCount = 1,
         });
 
         cut.Find(".topic-tree-row").GetAttribute("title").Should().Be(

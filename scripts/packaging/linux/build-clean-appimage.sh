@@ -223,8 +223,10 @@ echo ""
 echo "=== Step 5: Reading build configuration ==="
 GLOBAL_JSON="$WORK/global.json"
 DOTNET_SDK_VERSION=$(python3 -c "import json; print(json.load(open('$GLOBAL_JSON'))['sdk']['version'])")
+WORKLOAD_VERSION=$(python3 -c "import json; print(json.load(open('$GLOBAL_JSON'))['sdk'].get('workloadVersion', ''))")
 VPK_VERSION="1.2.161"
 echo "SDK: $DOTNET_SDK_VERSION, vpk: $VPK_VERSION"
+echo "Workload set: ${WORKLOAD_VERSION:-none}"
 
 # ── Step 6: System prerequisites ─────────────────────────────────────────────
 
@@ -244,6 +246,16 @@ export PATH="/usr/share/dotnet:$PATH"
 export DOTNET_ROOT="/usr/share/dotnet"
 INSTALLED_SDK=$(dotnet --version 2>/dev/null || echo "unknown")
 echo "SDK installed: $INSTALLED_SDK"
+
+if [[ -n "$WORKLOAD_VERSION" ]]; then
+    echo ""
+    echo "=== Step 7b: .NET workload set $WORKLOAD_VERSION ==="
+    if ! ( cd "$WORK" && dotnet workload update --source https://api.nuget.org/v3/index.json ); then
+        echo "FATAL: dotnet workload update failed for workload set $WORKLOAD_VERSION"
+        exit 1
+    fi
+    echo "Workload set installed: $WORKLOAD_VERSION"
+fi
 
 # ── Step 8: Velopack CLI ─────────────────────────────────────────────────────
 

@@ -35,9 +35,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       - name: Restore NuGet cache
         uses: actions/cache@v6
@@ -53,6 +51,13 @@ jobs:
       # silently checks nothing still exits 0. Needs no dotnet and runs in ~15s.
       - name: Script tests
         run: python3 -m unittest discover -s scripts/ci/tests
+
+      - name: JavaScript tests
+        working-directory: tests/MqttProbe.UI.JsTests
+        run: node --test
+
+      - name: Legal notices
+        run: python3 scripts/legal/notices.py check
 
       # Same gate as .githooks/pre-commit. Keep --fail-on matching there so a commit
       # that passes locally cannot fail here. ~5s, so it runs before the slow steps.
@@ -131,9 +136,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       # Testcontainers reads the Docker config written by this login, so an
       # untrusted or unauthenticated run just falls back to anonymous pulls.
@@ -182,9 +185,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       - name: Restore NuGet cache
         uses: actions/cache@v6
@@ -195,6 +196,11 @@ jobs:
 
       - name: Publish
         run: dotnet publish src\MqttProbe.Web\MqttProbe.Web.csproj -f:net10.0 -c:Release --output publish/web
+
+      - name: Verify legal notices
+        run: |
+          python scripts/legal/notices.py profiles-check --scenario web-framework-dependent
+          python scripts/legal/notices.py verify --scenario web-framework-dependent
 
       - name: Archive
         shell: pwsh
@@ -214,7 +220,6 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -223,33 +228,12 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Resolve image tag
-        id: tag
-        run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            # latest is the multiarch release image; CI here is amd64-only, so it gets its own tag
-            echo "value=main" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "value=pr-${{ github.event.number }}" >> "$GITHUB_OUTPUT"
-          else
-            # Docker tags cannot contain slashes (e.g. release/v1.0.1)
-            echo "value=$(echo "${{ github.ref_name }}" | tr '/' '-')" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build and push
+      - name: Build
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
-          push: ${{ github.event_name == 'push' }}
-          tags: ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.value }}
+          push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -266,7 +250,6 @@ jobs:
       - uses: ./.github/actions/setup-dotnet-workload
         with:
           workload: maui-windows
-          workload-version: '10.0.402'
 
       - name: Publish
         run: >
@@ -275,6 +258,11 @@ jobs:
           -p:MqttProbeMauiWindowsTargetFrameworksOverride=net10.0-windows10.0.19041.0
           -c:Debug
           --output publish/windows
+
+      - name: Verify legal notices
+        run: |
+          python scripts/legal/notices.py profiles-check --scenario maui-windows
+          python scripts/legal/notices.py verify --scenario maui-windows
 
       - name: Archive
         shell: pwsh
@@ -301,7 +289,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-java@v6.1.0
+      - uses: actions/setup-java@v6.2.0
         with:
           distribution: 'microsoft'
           java-version: '17'
@@ -316,7 +304,6 @@ jobs:
       - uses: ./.github/actions/setup-dotnet-workload
         with:
           workload: maui-android
-          workload-version: '10.0.402'
 
       # Release config exercises the trimmer/linker like a real release,
       # but AOT is disabled to keep the smoke build fast.
@@ -329,6 +316,11 @@ jobs:
           -p:RunAOTCompilation=false
           -p:AndroidEnableProfiledAot=false
           --output publish/android
+
+      - name: Verify legal notices
+        run: |
+          python3 scripts/legal/notices.py profiles-check --scenario maui-android
+          python3 scripts/legal/notices.py verify --scenario maui-android
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v7
@@ -349,9 +341,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       - name: Restore NuGet cache
         uses: actions/cache@v6
@@ -370,6 +360,11 @@ jobs:
           -r:linux-x64
           --self-contained
           --output publish/desktop
+
+      - name: Verify legal notices
+        run: |
+          python3 scripts/legal/notices.py profiles-check --scenario desktop-linux-x64
+          python3 scripts/legal/notices.py verify --scenario desktop-linux-x64
 
       - name: Archive
         run: |

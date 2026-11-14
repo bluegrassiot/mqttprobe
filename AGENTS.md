@@ -1,5 +1,19 @@
 # Agent Instructions
 
+## Agent skills
+
+### Issue tracker
+
+Use GitHub Issues in `bluegrassiot/mqttprobe`. See `D:/Projects/Open/mqttprobe-docs/Projects/mqttprobe/docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Label automation is disabled for now. Do not create or apply triage labels.
+
+### Domain docs
+
+Use the single-context documentation in the external docs tree. See `D:/Projects/Open/mqttprobe-docs/Projects/mqttprobe/docs/agents/domain.md`.
+
 ## Repository setup
 
 - Create new worktrees under `.worktrees/<task-name>` in the main repository root, not in tool-managed storage, sibling folders, or temporary directories. When already in a worktree, use the main repository's `.worktrees` directory rather than nesting another `.worktrees` inside the current worktree.
@@ -122,3 +136,19 @@ Two traps: a folder named `Integration` under `MqttProbe.Core.Tests` holds in-pr
 - After the run, close the browser, stop only the processes this run started, and verify the port stopped listening. Never kill a Docker-owned listener or unrelated dotnet, MSBuild or browser infrastructure.
 - Retain resource ownership until cleanup succeeds. If shutdown fails, preserve live config and handles for retry while still attempting independent cleanup.
 - If you stop making progress, report the last action and the blocker instead of idling.
+
+## Native iOS simulator acceptance (Mac)
+
+This workflow was exercised with Xcode 27.1, an iOS 27.1 Duo simulator and an iOS 27.0 iPad simulator. Re-check tool versions and current device state before reusing it.
+
+- Target an explicit simulator UDID, never an ambiguous `booted` target. Record its runtime, posture, foreground app and keyboard state. Before replacing an app, preserve its artifact and data; verify built and installed assembly/JS hashes. Do not uninstall or reset user data.
+- For Duo fold/rotation, the verified tool was `skarol/duoctl` 0.2.1, commit `c6ff3e961a9858fb061907448e702d7d1617dc4a`. Use `duoctl -d <UDID> state`, `open`, `close`, `rotate portrait|landscape`, and `screenshot <path>`. Its private simulator APIs require explicit approval and version checks; never ship them in the app.
+- Confirm the active display, point dimensions and actual screenshot after each posture change. On this Duo, `devicectl` and `XCUIDevice.orientation` setters did not rotate it. `app.frame` could remain portrait while the inner display rendered landscape, and XCTest screenshots could be black. Use `duoctl` screenshots for inner-display evidence.
+- Use a temporary native XCTest harness for real interactions. Reuse a known working harness only after checking it still exists; scratch paths are not permanent tooling. Give every run a unique `-resultBundlePath`, disable parallel testing, and use `-collect-test-diagnostics never` to avoid the observed diagnostic-collection stall. Bound waits and the overall run.
+- Inspect fresh accessibility labels and roles rather than guessing. Verified Duo controls were `ON CONNECT` as a button, `Topic` as a text field, `X` as a keyboard key (not a button), and the keyboard accessory dismiss button labelled `selected`. On iPad, the system Hide keyboard key worked when that accessory did not.
+- Reacquire elements after folding or rotation. An `isHittable` activation-point exception is not by itself an app failure. Try the uniquely identified real control, then assert the resulting panel or dialog state from a fresh query. Element existence alone does not prove visibility or interaction.
+- If semantic input fails, derive point coordinates from a fresh screenshot and display state: `point = pixel * sizePoints / imagePixels`. `duoctl tap` takes active-display points, not screenshot pixels; its label-based inner-display mapping was unreliable. Validate a harmless tab, never calibrate against Connect or another broker action.
+- Prove software input with full visible key rows, a real on-screen key tap and the resulting synthetic field value. `typeText`, paste and hardware input do not prove keyboard geometry. A private keyboard-toggle helper needs separate approval for the target/runtime and reversal in `finally`. If its setting has no getter, record the approved restore choice and visible outcome, not a claimed readback.
+- Cover cold Topic-first editing, real dismissal/refocus, keyboard-open fold/reopen and retained text. Capture the reopened view before any healing action: compact Close/Connect and all step tabs must remain visible. Exercise tabs and Close, then assert their effects. Do not connect, save, add subscriptions or publish during a layout check.
+- Keep diagnostics temporary and read-only. Await JavaScript evaluation asynchronously; never block UIKit with `Wait` or `Result`. Capture before and after geometry probes, since reads can affect layout. Reloads, forced dimensions/insets, focus resets and scripted scrolling are not evidence that the original flow passes.
+- Store sanitized screenshots, stage logs and manifests in approved temp storage, not the repo. In `finally`, reverse approved keyboard changes, clear only synthetic edits, restore the agreed artifact/data/posture and shut down simulators that were initially stopped. Stop only processes you own, retain backups until cleanup succeeds, and report the exact build left installed.

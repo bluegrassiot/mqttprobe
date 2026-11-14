@@ -16,6 +16,7 @@ Pick the desktop app if you want a window, or one of the web builds if you would
 | `MQTTProbe.AppImage` | Linux desktop app, recommended: bundles WebKit, GTK, and GStreamer, so it needs only `libfuse2` on Ubuntu 22.04+. Auto-updates. |
 | `mqttprobe-desktop-linux-x64-{{VERSION}}.zip` | Linux desktop app, portable: Photino and Blazor, self-contained .NET. Does not bundle WebKit, so it needs `sudo apt install libwebkit2gtk-4.1-0`. |
 | `mqttprobe-android-{{VERSION}}.apk` | Android app: sideload the APK on Android 7.0 or newer (API 24). |
+| `chirpstack-1.0.2.zip` | ChirpStack v4 protobuf schemas: gateway and application topic mappings, installed from Settings → Plugins → Install plugin. |
 | `mqttprobe-web-linux-x64-{{VERSION}}.zip` | Web app (Blazor Server): single binary for Linux x64. |
 | `mqttprobe-web-linux-arm64-{{VERSION}}.zip` | Web app (Blazor Server): single binary for Linux arm64, for a Raspberry Pi or NAS. |
 | `mqttprobe-web-win-x64-{{VERSION}}.zip` | Web app (Blazor Server): single exe for Windows x64. |

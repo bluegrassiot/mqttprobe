@@ -46,6 +46,8 @@ public interface IUiSettings
     public Task SetFontProfileAsync(string fontProfile);
     public Task SetAutoResubscribeAsync(bool autoResubscribe);
     public Task SetGroupSparkplugTopicsByNodeAndDeviceAsync(bool value);
+    public Task SetTopicTreeMultiSelectAsync(bool value);
+    public Task SetMessageTimeAsync(MessageTimePreferences preferences);
     public Task DismissHintAsync(string hintId);
     public bool IsHintDismissed(string hintId);
 }
@@ -60,6 +62,7 @@ public interface ISparkplugSettings
     public Task SetRebirthCooldownSecondsAsync(int seconds);
     public Task SetEnrichAliasNamesAsync(bool enrich);
     public Task SetAllowNodeRebootAsync(bool allow);
+    public Task SetAllowMetricWritesAsync(bool allow);
     public Task SetReorderTimeoutMillisecondsAsync(int milliseconds);
 }
 

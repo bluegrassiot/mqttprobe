@@ -1,0 +1,40 @@
+@using System.Collections.Immutable
+
+<MudDialog DefaultFocus="DefaultFocus.None">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Clear messages for selected topics</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="topic-clear-dialog__lead">
+            Clear messages from the selected topics?
+        </MudText>
+        <TopicTargetList Topics="Labels"/>
+    </DialogContent>
+    <DialogActions>
+        <AppTertiaryButton @ref="_cancelButton" Class="topic-clear-dialog__cancel" OnClick="Cancel">Cancel</AppTertiaryButton>
+        <AppDestructiveButton Class="topic-clear-dialog__confirm" OnClick="Confirm"
+                              StartIcon="@LucideIcons.Trash2">
+            Clear messages
+        </AppDestructiveButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public IReadOnlyList<TopicBranchTarget> Topics { get; set; } = [];
+
+    private ImmutableArray<string> Labels => [.. Topics.Select(TopicBranchTargetDisplay.Label)];
+
+    private AppTertiaryButton? _cancelButton;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _cancelButton is not null)
+            await _cancelButton.FocusAsync();
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(Topics));
+}

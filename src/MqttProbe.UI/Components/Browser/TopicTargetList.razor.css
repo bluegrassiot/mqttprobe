@@ -1,0 +1,23 @@
+.topic-target-list {
+    /* The one scroll owner for a long target list. Full paths wrap; nothing scrolls sideways. */
+    margin: 8px 0;
+    padding: 0;
+    list-style: none;
+    max-height: min(40vh, 18rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 6px;
+}
+
+.topic-target-list__item {
+    padding: 6px 8px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.topic-target-list__item + .topic-target-list__item {
+    border-top: 1px solid var(--mud-palette-lines-default);
+}

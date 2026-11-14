@@ -1,0 +1,222 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "id": "font-inter",
+      "name": "Inter",
+      "version": "variable",
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright (c) 2016 The Inter Project Authors",
+      "sourceUrl": "https://github.com/rsms/inter",
+      "documents": [
+        "sil-open-font-license-1-1"
+      ]
+    },
+    {
+      "id": "font-jetbrains-mono",
+      "name": "JetBrains Mono",
+      "version": "unversioned",
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright 2020 The JetBrains Mono Project Authors",
+      "sourceUrl": "https://github.com/JetBrains/JetBrainsMono",
+      "documents": [
+        "sil-open-font-license-1-1"
+      ]
+    },
+    {
+      "id": "font-chakra-petch",
+      "name": "Chakra Petch",
+      "version": "unversioned",
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright 2018 The Chakra Petch Project Authors",
+      "sourceUrl": "https://github.com/m4rc1e/Chakra-Petch",
+      "documents": [
+        "sil-open-font-license-1-1"
+      ]
+    },
+    {
+      "id": "font-opendyslexic-nerd",
+      "name": "OpenDyslexic, Nerd Font patched builds",
+      "version": "unrecorded patcher build",
+      "license": "Bitstream Vera License",
+      "copyright": "Copyright (c) 2003 by Bitstream, Inc. All Rights Reserved",
+      "sourceUrl": "https://github.com/antijingoist/opendyslexic",
+      "documents": [
+        "bitstream-vera-license-opendyslexic",
+        "nerd-fonts-patcher-license"
+      ],
+      "notes": "The patcher version used for these files and the individual notices for patched-in icon sets are not recorded in this repository."
+    },
+    {
+      "id": "lucide-icons",
+      "name": "Lucide and Feather icon path data",
+      "version": "unversioned",
+      "license": "ISC and MIT",
+      "copyright": "Copyright (c) 2026 Lucide Icons and Contributors; Copyright (c) 2013-present Cole Bemis",
+      "sourceUrl": "https://github.com/lucide-icons/lucide",
+      "documents": [
+        "isc-license-and-feather-notice-lucide"
+      ]
+    },
+    {
+      "id": "sparkplugnet",
+      "name": "SparkplugNet",
+      "version": "1.4.1",
+      "license": "MIT",
+      "copyright": "Copyright (c) Hämmer Electronics",
+      "sourceUrl": "https://github.com/HaeMmer/SparkplugNet",
+      "documents": [
+        "mit-license-generic-text"
+      ],
+      "notes": "Consumed from the external/SparkplugNet git submodule as a project reference."
+    },
+    {
+      "id": "sparkplug-b-generated-code",
+      "name": "Sparkplug B generated code (SparkplugBProtobuf.cs)",
+      "version": "e33d56d2f427",
+      "license": "EPL-2.0",
+      "copyright": "Copyright (c) 2015, 2018 Cirrus Link Solutions and others",
+      "sourceUrl": "https://github.com/eclipse/tahu",
+      "documents": [
+        "eclipse-public-license-2-0"
+      ],
+      "notes": "Generated from the Eclipse Tahu protocol buffer definition. MQTTProbe extends the upstream #pragma warning disable list; there are no functional changes. Source is available from the MQTTProbe public repository under EPL-2.0."
+    },
+    {
+      "id": "apexcharts-javascript",
+      "name": "ApexCharts JavaScript library",
+      "version": "8.8.1",
+      "license": "ApexCharts Community/Commercial dual license (unresolved)",
+      "copyright": "",
+      "sourceUrl": "https://github.com/apexcharts/apexcharts.js",
+      "documents": [
+        "apexcharts-8-8-1-license-upstream-text"
+      ],
+      "notes": "Bundled by Blazor-ApexCharts 8.0.0 as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim, and served to the browser. That file is byte-identical to the npm apexcharts 8.8.1 full build. Upstream terms are not MIT and are not resolved by this notice. The 8.8.1 terms also require an OEM/redistribution licence to embed the library in a product used by other people, and no such entitlement is established here."
+    },
+    {
+      "id": "apex-commons",
+      "name": "Apex Commons JavaScript library",
+      "version": "0.10.0",
+      "license": "Apex Commons Community/Commercial dual license (unresolved)",
+      "copyright": "",
+      "sourceUrl": "https://github.com/apexcharts/projects/tree/main/libs/commons",
+      "documents": [
+        "apex-commons-0-10-0-license-upstream-text"
+      ],
+      "notes": "Bundled inside js/apexcharts.full.min.js by ApexCharts 8.8.1 and served to the browser. Upstream terms are not resolved by this notice. They carry the same OEM/redistribution condition, and no such entitlement is established here."
+    },
+    {
+      "id": "echarts-javascript",
+      "name": "Apache ECharts JavaScript library",
+      "version": "6.1.0",
+      "license": "Apache-2.0",
+      "copyright": "Copyright 2017-2026 The Apache Software Foundation",
+      "sourceUrl": "https://github.com/apache/echarts",
+      "documents": [
+        "echarts-6-1-0-license-upstream-text",
+        "echarts-6-1-0-notice-upstream-text"
+      ],
+      "notes": "Vendored unmodified as js/echarts/6.1.0/echarts.esm.min.js from the npm echarts@6.1.0 archive (SHA-256 681aff88cc1038c3fa941a3a53d1b177a52250b05335efc607d6105ae13be481; integrity sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==). The file is 1,121,654 bytes with SHA-256 28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da."
+    },
+    {
+      "id": "echarts-d3-javascript",
+      "name": "d3.js (Apache ECharts subcomponent)",
+      "version": "bundled in ECharts 6.1.0",
+      "license": "BSD-3-Clause",
+      "copyright": "Copyright 2010-2016 Mike Bostock",
+      "sourceUrl": "https://github.com/d3/d3",
+      "documents": [
+        "echarts-6-1-0-license-d3-upstream-text"
+      ],
+      "notes": "ECharts 6.1.0 embeds d3.js BSD-3-Clause code in its treemap, tree, force and number helpers. The ECharts package does not declare a d3 version, and the reproduced licence is the copy shipped in its licenses directory."
+    },
+    {
+      "id": "zrender-javascript",
+      "name": "zrender JavaScript library",
+      "version": "6.1.0",
+      "license": "BSD-3-Clause",
+      "copyright": "Copyright (c) 2017, Baidu Inc.",
+      "sourceUrl": "https://github.com/ecomfe/zrender",
+      "documents": [
+        "zrender-6-1-0-license-upstream-text"
+      ],
+      "notes": "Inlined in js/echarts/6.1.0/echarts.esm.min.js by the ECharts 6.1.0 build; not served as a separate file. The npm zrender@6.1.0 archive SHA-256 is 38f2fb722a638be016ca0175b139c40c886ef47fc2afdb741b2e7e7ae9683f9c."
+    },
+    {
+      "id": "tslib-javascript",
+      "name": "tslib",
+      "version": "2.3.0",
+      "license": "0BSD",
+      "copyright": "Copyright (c) Microsoft Corporation.",
+      "sourceUrl": "https://github.com/Microsoft/tslib",
+      "documents": [
+        "tslib-2-3-0-license-upstream-text"
+      ],
+      "notes": "Inlined in js/echarts/6.1.0/echarts.esm.min.js by the ECharts 6.1.0 build; its licence text is retained verbatim at the top of the bundle. The npm tslib@2.3.0 archive SHA-256 is ae285639feff7e3c39de4626352181a5d73b815725e42639b411c43848abffdb."
+    },
+    {
+      "id": "dotnet-runtime",
+      "name": ".NET runtime",
+      "version": "10.0.14",
+      "license": "MIT and third-party terms",
+      "copyright": "Copyright (c) .NET Foundation and Contributors",
+      "sourceUrl": "https://github.com/dotnet/runtime",
+      "documents": [
+        "mit-license-net-runtime-license-txt-10-0-14",
+        "microsoft-net-runtime-third-party-notices-10-0-14"
+      ],
+      "notes": "Bundled by iOS, Android, MacCatalyst and self-contained desktop builds. The notice files are from Microsoft.NETCore.App.Runtime.Mono.ios-arm64 10.0.14, byte-identical to the android-arm64 and maccatalyst-arm64 packs of the same version."
+    },
+    {
+      "id": "microsoft-ios-sdk",
+      "name": "Microsoft.iOS SDK",
+      "version": "27.1.10018",
+      "license": "MIT and third-party terms",
+      "copyright": "Copyright (c) .NET Foundation and Contributors",
+      "sourceUrl": "https://github.com/dotnet/macios",
+      "documents": [
+        "microsoft-ios-sdk-license-27-1-10018"
+      ],
+      "notes": "Installed workload pack Microsoft.iOS.Runtime.ios-arm64.net10.0_27.1/27.1.10018 with .NET SDK 10.0.403."
+    },
+    {
+      "id": "microsoft-maccatalyst-sdk",
+      "name": "Microsoft.MacCatalyst SDK",
+      "version": "27.0.10742",
+      "license": "MIT and third-party terms",
+      "copyright": "Copyright (c) .NET Foundation and Contributors",
+      "sourceUrl": "https://github.com/dotnet/macios",
+      "documents": [
+        "microsoft-ios-sdk-license-27-1-10018"
+      ],
+      "notes": "Installed workload pack Microsoft.MacCatalyst.Runtime.maccatalyst-arm64.net10.0_27.0/27.0.10742. Its SDK licence is byte-identical to the Microsoft.iOS copy reproduced here."
+    },
+    {
+      "id": "dotnet-android-runtime",
+      "name": ".NET for Android runtime",
+      "version": "36.1.118",
+      "license": "MIT and third-party terms",
+      "copyright": "Copyright (c) .NET Foundation and Contributors",
+      "sourceUrl": "https://github.com/dotnet/android",
+      "documents": [
+        "xamarin-android-third-party-notices-net-for-android-runtime-36-1",
+        "llvm-release-license"
+      ],
+      "notes": "Bundled from Microsoft.Android.Runtime.36.android/36.1.118."
+    },
+    {
+      "id": "dotnet-maui-platform-notices",
+      "name": ".NET MAUI platform notices",
+      "version": "10.0.130",
+      "license": "MIT and third-party terms",
+      "copyright": "Copyright (c) Microsoft Corporation. All rights reserved.",
+      "sourceUrl": "https://github.com/dotnet/maui",
+      "documents": [
+        "net-maui-third-party-notices-10-0-110",
+        "license-notice-for-iqkeyboardmanager"
+      ],
+      "notes": "The Microsoft.Maui.* 10.0.130 packages ship the same THIRD-PARTY-NOTICES.TXT as 10.0.110, so the reproduced text is unchanged. The individual Microsoft.Maui.* packages also carry their own current third-party notice file, reproduced through those components."
+    }
+  ]
+}

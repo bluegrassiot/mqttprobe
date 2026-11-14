@@ -55,14 +55,24 @@ public class TopicBrowserGroupingTests : BunitTestContext
         return cut;
     }
 
-    private static void ExpandAll(IRenderedComponent<TopicBrowser> cut) =>
-        cut.FindAll(".mud-toolbar button")[0].Click();
+    private static void ExpandAll(IRenderedComponent<TopicBrowser> cut)
+    {
+        cut.Find("[aria-label='Expand all']").Click();
+        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row[data-depth='1']").Should().NotBeEmpty(
+            "Expand all should render the child rows"));
+    }
 
     private static void CollapseAll(IRenderedComponent<TopicBrowser> cut) =>
         cut.FindAll(".mud-toolbar button")[1].Click();
 
-    private static IElement RowWith(IRenderedComponent<TopicBrowser> cut, string text) =>
-        cut.FindAll(".topic-tree-row").First(row => row.TextContent.Contains(text, StringComparison.Ordinal));
+    private static IElement RowWith(IRenderedComponent<TopicBrowser> cut, string text)
+    {
+        cut.WaitForAssertion(() => cut.FindAll(".topic-tree-row")
+            .Any(row => row.TextContent.Contains(text, StringComparison.Ordinal))
+            .Should().BeTrue("the expanded tree should render a row containing '{0}'", text));
+
+        return cut.FindAll(".topic-tree-row").First(row => row.TextContent.Contains(text, StringComparison.Ordinal));
+    }
 
     private void ApplyPreference(bool grouped)
     {
@@ -109,7 +119,7 @@ public class TopicBrowserGroupingTests : BunitTestContext
     }
 
     [Test]
-    public async Task GroupingRows_AreMarkedAndOnlyTheSelectedRowIsHighlighted()
+    public async Task GroupingRows_AreMarkedAndACheckedScopeHighlightsItsMembers()
     {
         var cut = RenderGrouped(grouped: true);
         RowWith(cut, "node1").Click();
@@ -118,13 +128,15 @@ public class TopicBrowserGroupingTests : BunitTestContext
         var groupingRows = cut.FindAll(".topic-tree-row--group");
         var selectedRows = cut.FindAll(".topic-tree-row--selected");
 
-        selectedRows.Should().ContainSingle()
-            .Which.ClassList.Should().Contain("topic-tree-row--group");
-        groupingRows.Should().Contain(row => row.ClassList.Contains("topic-tree-row--selected"));
+        groupingRows.Should().Contain(row => row.ClassList.Contains("topic-tree-row--selected"),
+            "the node scope itself is checked");
+        selectedRows.Should().Contain(row => row.TextContent.Contains("node1"),
+            "and so is every row the scope covers");
+        selectedRows.Should().Contain(row => row.TextContent.Contains(NodeTip));
     }
 
     [Test]
-    public void ClickingRealTopicRow_SelectsThatTopicAndPublishesIt()
+    public void ClickingRealTopicRow_ChecksThatBranchAndPublishesIt()
     {
         SelectedTopicState? callbackState = null;
         var cut = RenderGrouped(grouped: true, onSelected: state =>
@@ -136,9 +148,11 @@ public class TopicBrowserGroupingTests : BunitTestContext
         RowWith(cut, NodeTip).Click();
 
         _mockMsgStore.Received(1).SelectTopics(Arg.Is<TopicSelection>(selection =>
-            selection.Key == NodeTip && selection.Topics.SequenceEqual(new[] { NodeTip })));
+            selection.Mode == TopicSelectionMode.Branches
+            && selection.Branches.Length == 1
+            && selection.Branches[0].Path == NodeTip));
         callbackState.Should().NotBeNull();
-        callbackState!.Key.Should().Be(NodeTip);
+        callbackState!.Branches.Should().ContainSingle().Which.Path.Should().Be(NodeTip);
     }
 
     [Test]
@@ -155,13 +169,13 @@ public class TopicBrowserGroupingTests : BunitTestContext
         RowWith(cut, "node1").Click();
 
         _fixture.Adapter.Selections.Should().ContainSingle();
-        _fixture.Adapter.Selections[0]!.Topics.Should().BeEquivalentTo(
-        [
-            NodeTip,
-            "spBv1.0/plant1/NBIRTH/node1",
-            DeviceTip
-        ]);
+        var request = _fixture.Adapter.Selections[0]!;
+        request.Mode.Should().Be(TopicSelectionMode.Branches);
+        request.Branches.Should().ContainSingle().Which.Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"));
         callbackState.Should().NotBeNull();
+        callbackState!.MessageCount.Should().Be(6,
+            "the node scope covers every verb, device and future member");
         cut.Markup.Should().Contain("NDATA", "the click selected rather than collapsed");
     }
 
@@ -173,7 +187,8 @@ public class TopicBrowserGroupingTests : BunitTestContext
         RowWith(cut, "dev1").Click();
 
         _fixture.Adapter.Selections.Should().ContainSingle();
-        _fixture.Adapter.Selections[0]!.Topics.Should().BeEquivalentTo([DeviceTip]);
+        _fixture.Adapter.Selections[0]!.Branches.Should().ContainSingle().Which.Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Device, "spBv1.0/plant1", "node1", "dev1"));
     }
 
     [Test]
@@ -184,7 +199,10 @@ public class TopicBrowserGroupingTests : BunitTestContext
         RowWith(cut, "NBIRTH").Click();
 
         _fixture.Adapter.Selections.Should().ContainSingle();
-        _fixture.Adapter.Selections[0]!.Topics.Should().BeEquivalentTo(["spBv1.0/plant1/NBIRTH/node1"]);
+        var branch = _fixture.Adapter.Selections[0]!.Branches.Should().ContainSingle().Which;
+        branch.Scope.Should().Be(
+            new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"));
+        branch.MessageType.Should().Be("NBIRTH");
     }
 
     [Test]
@@ -227,6 +245,42 @@ public class TopicBrowserGroupingTests : BunitTestContext
             cut.Markup.Should().NotContain(NodeTip);
         });
     }
+
+    [Test]
+    public void ARawVerbBranch_KeepsItsMessages_AndChecksTheGroupedTypeRowItCovers()
+    {
+        var cut = RenderGrouped(grouped: false);
+        cut.WaitForAssertion(() => cut.FindAll(".topic-select-checkbox").Should().NotBeEmpty());
+
+        RowByPath(cut, "spBv1.0/plant1/NDATA").QuerySelector(".topic-select-checkbox-wrap")!.Click();
+
+        var selected = _fixture.Adapter.Store.GetSelectedTopicState();
+        selected.Branches.Should().ContainSingle().Which.Path.Should().Be("spBv1.0/plant1/NDATA");
+        selected.MessageCount.Should().Be(3);
+
+        ApplyPreference(true);
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Grouped by node and device"));
+        ExpandAll(cut);
+        var after = _fixture.Adapter.Store.GetSelectedTopicState();
+        after.Branches.Should().ContainSingle().Which.Path.Should().Be("spBv1.0/plant1/NDATA",
+            "changing the presentation does not drop the selection");
+        _fixture.Adapter.Store.GetSelectedMessages(after.Token, 10)!.Messages.Should().HaveCount(3,
+            "the messages stay selected");
+
+        RowByLabel(cut, "NDATA").QuerySelector(".topic-select-checkbox input[checked]").Should().NotBeNull(
+            "every topic the NDATA row names is under the selected verb row");
+        RowByLabel(cut, "node1").QuerySelector(".topic-select-checkbox .mud-checkbox-null").Should().NotBeNull(
+            "the node row also names other verbs, so it is only partly selected");
+        RowByLabel(cut, "NBIRTH").QuerySelector(".topic-select-checkbox input[checked]").Should().BeNull();
+    }
+
+    private static IElement RowByPath(IRenderedComponent<TopicBrowser> cut, string path) =>
+        cut.FindAll(".topic-tree-row").First(row => row.GetAttribute("data-topic-path") == path);
+
+    private static IElement RowByLabel(IRenderedComponent<TopicBrowser> cut, string label) =>
+        cut.FindAll(".topic-tree-row")
+            .First(row => row.QuerySelector(".topic-name")?.TextContent.Trim() == label);
 
     [Test]
     public void UnrelatedPreferenceChange_DoesNotRegroupTheTree()

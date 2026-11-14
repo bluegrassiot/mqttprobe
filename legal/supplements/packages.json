@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "annotations": [
+    {
+      "match": "Microsoft.WindowsAppSDK*",
+      "notes": "Windows MAUI builds. The component packages ship under their own copies of the same Microsoft terms; the DWrite and ML variants are reproduced with their packages."
+    }
+  ],
+  "requiredReview": [
+    "Microsoft.WindowsAppSDK*",
+    "Microsoft.Graphics.Win2D",
+    "Microsoft.Web.WebView2"
+  ],
+  "packages": {
+    "Blazor-ApexCharts@8.0.0": {
+      "documents": [
+        "apexcharts-8-8-1-license-upstream-text"
+      ],
+      "notes": "The package is MIT. The bundled ApexCharts JavaScript 8.8.1 library and its Apex Commons 0.10.0 code are separately licensed and unresolved."
+    },
+    "MQTTnet@5.2.0.1603": {
+      "license": "MIT"
+    },
+    "Microsoft.Graphics.Win2D@1.4.0": {
+      "license": "Unresolved: package metadata declares a legacy Win2D EULA and the repository license is MIT",
+      "documents": [
+        "microsoft-graphics-win2d-repository-license-mit"
+      ],
+      "notes": "The package ships no license file. Its EULA URL is legacy and the repository LICENSE.txt is MIT; which terms apply is not established here."
+    },
+    "Microsoft.Web.WebView2@1.0.4314.35": {
+      "license": "BSD-3-Clause",
+      "documents": [
+        "microsoft-edge-webview2-license",
+        "microsoft-edge-webview2-notice"
+      ],
+      "notes": "Windows MAUI builds. The package licence text is BSD-3-Clause and its NOTICE is reproduced here."
+    },
+    "Microsoft.Windows.SDK.BuildTools@10.0.26100.8249": {
+      "license": "Microsoft Windows SDK license terms",
+      "applicability": "build",
+      "documents": [],
+      "notes": "Build-only. Not included in a shipped build."
+    },
+    "Microsoft.Windows.SDK.BuildTools.MSIX@1.7.20250829.1": {
+      "license": "Microsoft Windows SDK license terms",
+      "applicability": "build",
+      "notes": "Build-only. Its NOTICE and SDK licence files are included from the package."
+    },
+    "Microsoft.WindowsAppSDK@1.8.260529003": {
+      "license": "Microsoft proprietary terms",
+      "documents": [
+        "microsoft-windows-app-sdk-license-terms",
+        "microsoft-windows-app-sdk-notice"
+      ]
+    },
+    "Microsoft.WindowsAppSDK.AI@1.8.76": {
+      "license": "Microsoft proprietary terms",
+      "documents": [
+        "microsoft-windows-app-sdk-license-terms",
+        "microsoft-windows-app-sdk-notice"
+      ]
+    },
+    "Microsoft.WindowsAppSDK.Base@1.8.251216001": {
+      "license": "Microsoft proprietary terms",
+      "documents": [
+        "microsoft-windows-app-sdk-license-terms",
+        "microsoft-windows-app-sdk-notice"
+      ]
+    },
+    "Microsoft.WindowsAppSDK.DWrite@1.8.25122902": {
+      "license": "Microsoft proprietary terms",
+      "documents": [
+        "microsoft-windows-app-sdk-dwrite-license-terms",
+        "microsoft-windows-app-sdk-notice"
+      ]
+    },
+    "Microsoft.WindowsAppSDK.Foundation@1.8.260527000": {
+      "license": "Microsoft proprietary terms",
+      "documents": [
+        "microsoft-windows-app-sdk-license-terms",
+        "microsoft-windows-app-sdk-notice"
+      ]
+    },
+    "Microsoft.WindowsAppSDK.InteractiveExperiences@1.8.260525001": {
+      "license": "Microsoft proprietary terms",
+      "documents": [
+        "microsoft-windows-app-sdk-license-terms",
+        "microsoft-windows-app-sdk-notice"
+      ]
+    },
+    "Microsoft.WindowsAppSDK.ML@1.8.2197": {
+      "license": "Microsoft proprietary terms",
+      "documents": [
+        "microsoft-windows-app-sdk-ml-license-terms",
+        "microsoft-windows-app-sdk-notice"
+      ]
+    },
+    "Microsoft.WindowsAppSDK.Runtime@1.8.260529003": {
+      "license": "Microsoft proprietary terms",
+      "documents": [
+        "microsoft-windows-app-sdk-license-terms",
+        "microsoft-windows-app-sdk-notice"
+      ]
+    },
+    "Microsoft.WindowsAppSDK.Widgets@1.8.251231004": {
+      "license": "Microsoft proprietary terms",
+      "documents": [
+        "microsoft-windows-app-sdk-license-terms",
+        "microsoft-windows-app-sdk-notice"
+      ]
+    },
+    "Microsoft.WindowsAppSDK.WinUI@1.8.260528001": {
+      "license": "Microsoft proprietary terms",
+      "documents": [
+        "microsoft-windows-app-sdk-license-terms",
+        "microsoft-windows-app-sdk-notice"
+      ]
+    },
+    "SonarAnalyzer.CSharp@10.36.0.15337": {
+      "license": "Sonar Source-Available License v1.0",
+      "applicability": "build",
+      "notes": "Build-only analyzer. Its nested license file is retained from the package payload."
+    },
+    "Velopack@1.2.161": {
+      "notes": "Installer and auto-update channel. Upstream also credits Copyright (c) 2021 Caelan Sayler."
+    },
+    "Meziantou.Analyzer@3.0.339": {
+      "applicability": "build"
+    },
+    "MessagePackAnalyzer@3.1.12": {
+      "applicability": "build"
+    },
+    "Microsoft.AspNetCore.Components.Analyzers@10.0.15": {
+      "applicability": "build"
+    },
+    "Microsoft.Maui.Controls.Build.Tasks@10.0.130": {
+      "applicability": "build"
+    },
+    "Microsoft.Maui.Resizetizer@10.0.130": {
+      "applicability": "build"
+    },
+    "Microsoft.NET.ILLink.Tasks@10.0.14": {
+      "applicability": "build"
+    },
+    "Microsoft.NET.StringTools@17.11.4": {
+      "applicability": "build"
+    }
+  }
+}

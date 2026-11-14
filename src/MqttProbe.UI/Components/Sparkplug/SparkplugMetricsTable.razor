@@ -1,46 +1,296 @@
 @namespace MqttProbe.UI.Components.Sparkplug
 @using MqttProbe.Core.Models.Sparkplug
 
-<MudTable Items="@Items"
-          Dense="true" Hover="true" Elevation="0"
-          Breakpoint="Breakpoint.None" Class="@Class" RowClass="spb-metric-row">
+<div class="spb-metric-table">
+<MudTable @key="Mode" Items="@_rows"
+          Dense="true" Hover="true" Elevation="0" HorizontalScrollbar="false"
+          Breakpoint="Breakpoint.None" Class="@Class" RowClassFunc="GetRowClass">
     <ColGroup>
-        <col style="width: 30%;" />
-        <col style="width: 15%;" />
-        <col style="width: 15%;" />
-        <col style="width: 25%;" />
-        <col style="width: 15%;" />
+        <col />
+        <col class="spb-col-type" />
+        <col class="spb-col-alias" />
+        <col class="spb-col-value" />
+        <col class="spb-col-updated" />
+        <col class="spb-col-chart" />
     </ColGroup>
     <HeaderContent>
         <MudTh>
-            <MudTableSortLabel SortBy="new Func<SpbMetricSnapshot, object>(m => m.Name)">
-                Name
-            </MudTableSortLabel>
+            @if (Mode == SparkplugMetricViewMode.Flat)
+            {
+                <MudTableSortLabel SortBy="new Func<SparkplugMetricRow, object>(m => m.Name)">
+                    Name
+                </MudTableSortLabel>
+            }
+            else
+            {
+                <text>Name</text>
+            }
         </MudTh>
-        <MudTh>Type</MudTh>
-        <MudTh Class="spb-th-right">Alias</MudTh>
+        <MudTh Class="spb-th-type">Type</MudTh>
+        <MudTh Class="spb-th-alias spb-th-right">Alias</MudTh>
         <MudTh Class="spb-th-right">Value</MudTh>
-        <MudTh>Updated</MudTh>
+        <MudTh Class="spb-th-updated">Updated</MudTh>
+        <MudTh>Actions</MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd Class="spb-td-name">@context.Name</MudTd>
-        <MudTd Class="spb-td-type">@context.DataType</MudTd>
-        <MudTd Class="spb-td-alias spb-th-right">
-            @(context.Alias.HasValue ? context.Alias.Value.ToString() : "\u2014")
+        @{
+            var timeKey = SparkplugTimeKeys.Metric(Topic, context.FullPath);
+            var time = Time.Find(timeKey);
+        }
+        <MudTd Class="spb-td-name" title="@context.FullPath">
+            <div class="spb-metric-name">
+                @if (context.HasChildren)
+                {
+                    <button type="button" class="spb-metric-toggle"
+                            title="@(context.IsExpanded ? "Collapse" : "Expand") @context.Name"
+                            aria-label="@(context.IsExpanded ? "Collapse" : "Expand") @context.Name"
+                            aria-expanded="@(context.IsExpanded ? "true" : "false")"
+                            @onclick="() => Toggle(context)" @onclick:stopPropagation="true">
+                        <MudIcon Icon="@(context.IsExpanded ? LucideIcons.ChevronDown : LucideIcons.ChevronRight)"
+                                 Size="Size.Small"/>
+                    </button>
+                }
+                <span class="spb-metric-label">@context.Name</span>
+                @if (!context.IsMetric)
+                {
+                    <span class="spb-metric-count">@context.MetricCount</span>
+                }
+            </div>
+            @if (context.IsMetric)
+            {
+                <div class="spb-metric-meta">
+                    <span class="spb-metric-meta-type">@context.Snapshot!.DataType</span>
+                    <span class="spb-metric-meta-alias">Alias @AliasText(context.Snapshot)</span>
+                    <span class="spb-metric-meta-updated"
+                          title="@(time?.FullText ?? SparkplugTimeDisplay.PendingTitle)">@(time?.TimeText ?? SparkplugTimeDisplay.PendingMarker)</span>
+                </div>
+            }
         </MudTd>
-        <MudTd Class="spb-td-value" Style="@($"color:{SparkplugNodeDisplay.ValueColor(context)}")">
-            @context.Value
+        <MudTd Class="spb-td-type">@(context.Snapshot?.DataType)</MudTd>
+        <MudTd Class="spb-td-alias spb-th-right">
+            @AliasText(context.Snapshot)
+        </MudTd>
+        <MudTd Class="@(context.IsMetric ? $"spb-td-value {SparkplugNodeDisplay.ValueClass(context.Snapshot!)}" : "spb-td-value")">
+            @(context.Snapshot?.Value)
         </MudTd>
         <MudTd Class="spb-td-updated">
-            @context.LastUpdated.ToLocalTime().ToString("HH:mm:ss")
+            @if (context.IsMetric)
+            {
+                <span class="spb-time-value @(time is null ? "spb-time-value--pending" : "")"
+                      data-time-value="@timeKey"
+                      data-time-pending="@(time is null ? "true" : null)"
+                      title="@(time?.FullText ?? SparkplugTimeDisplay.PendingTitle)">@(time?.TimeText ?? SparkplugTimeDisplay.PendingMarker)</span>
+            }
+        </MudTd>
+        <MudTd Class="spb-td-chart">
+            @if (context.Snapshot is { } metric)
+            {
+                <div class="spb-metric-actions">
+                    @if (OnAddToChart.HasDelegate && SparkplugChartTargets.IsChartable(metric))
+                    {
+                        <AddToChartButton JsonPath="@SparkplugChartTargets.JsonPath(context.FullPath)"
+                                          SeriesName="@context.FullPath"
+                                          OnAddToChart="@(selection => AddToChart(context, selection))" />
+                    }
+                    @if (OnWriteMetric.HasDelegate && IsWritable(metric))
+                    {
+                        <span class="spb-write-wrap"
+                              title="@(AllowMetricWrites ? null : "Enable Allow metric writes in Settings, Sparkplug")">
+                            <button type="button" class="spb-write-btn"
+                                    title="@(AllowMetricWrites ? "Write metric" : null)"
+                                    aria-label="Write metric @metric.Name"
+                                    disabled="@(!AllowMetricWrites)"
+                                    @onclick="() => OnWriteMetric.InvokeAsync(metric)"
+                                    @onclick:stopPropagation="true">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                     aria-hidden="true" focusable="false">
+                                    @((MarkupString)LucideIcons.Pencil)
+                                </svg>
+                            </button>
+                        </span>
+                    }
+                </div>
+            }
         </MudTd>
     </RowTemplate>
 </MudTable>
+</div>
 
 @code {
+    private readonly Dictionary<string, SparkplugMetricRow> _rowsByKey = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _expandedPaths = new(StringComparer.Ordinal);
+    private List<SparkplugMetricRow> _rows = [];
+    private IReadOnlyList<SparkplugMetricNode> _roots = [];
+    private string? _topic;
+    private bool _autoExpanded;
+
     [Parameter, EditorRequired]
     public IEnumerable<SpbMetricSnapshot> Items { get; set; } = [];
 
     [Parameter]
     public string? Class { get; set; }
+
+    [Parameter]
+    public SparkplugTimeDisplay Time { get; set; } = SparkplugTimeDisplay.Empty;
+
+    [Parameter, EditorRequired]
+    public string Topic { get; set; } = "";
+
+    [Parameter]
+    public SparkplugMetricViewMode Mode { get; set; } = SparkplugMetricViewMode.Flat;
+
+    [Parameter]
+    public EventCallback<SparkplugChartSelection> OnAddToChart { get; set; }
+
+    [Parameter]
+    public bool AllowMetricWrites { get; set; }
+
+    [Parameter]
+    public EventCallback<SpbMetricSnapshot> OnWriteMetric { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (!string.Equals(_topic, Topic, StringComparison.Ordinal))
+        {
+            _topic = Topic;
+            _expandedPaths.Clear();
+            _autoExpanded = false;
+        }
+
+        if (Mode == SparkplugMetricViewMode.Flat)
+        {
+            _roots = [];
+            BuildFlatRows();
+            return;
+        }
+
+        _roots = SparkplugMetricHierarchy.Build(Items);
+        if (_roots.Count == 0)
+        {
+            _autoExpanded = false;
+        }
+        else if (!_autoExpanded)
+        {
+            foreach (var path in SparkplugMetricHierarchy.SingleChildPaths(_roots))
+                _expandedPaths.Add(path);
+            _autoExpanded = true;
+        }
+
+        BuildHierarchyRows();
+    }
+
+    internal int CachedRowCountForTest => _rowsByKey.Count;
+
+    private void BuildFlatRows()
+    {
+        var rows = new List<SparkplugMetricRow>();
+        foreach (var metric in Items
+                     .OrderBy(item => item.Name, NaturalStringComparer.Instance)
+                     .ThenBy(item => item.Name, StringComparer.Ordinal))
+        {
+            if (string.IsNullOrWhiteSpace(metric.Name))
+                continue;
+
+            var row = GetOrCreate(metric.Name, metric.Name, metric.Name, metric, 0, false, false, 0, false);
+            rows.Add(row);
+        }
+
+        Prune(rows);
+        _rows = rows;
+    }
+
+    private void BuildHierarchyRows()
+    {
+        var visible = SparkplugMetricHierarchy.Flatten(_roots, _expandedPaths);
+        var rows = new List<SparkplugMetricRow>(visible.Count);
+        for (var index = 0; index < visible.Count; index++)
+        {
+            var node = visible[index];
+            var expanded = _expandedPaths.Contains(node.FullPath);
+            var endsGroup = node.Depth > 0
+                && (index == visible.Count - 1 || visible[index + 1].Depth < node.Depth);
+            var row = GetOrCreate(
+                node.FullPath, node.Label, node.FullPath, node.Metric,
+                node.Depth, node.HasChildren, expanded, node.MetricCount, endsGroup);
+            rows.Add(row);
+        }
+
+        Prune(rows);
+        _rows = rows;
+    }
+
+    private SparkplugMetricRow GetOrCreate(
+        string key,
+        string name,
+        string fullPath,
+        SpbMetricSnapshot? snapshot,
+        int depth,
+        bool hasChildren,
+        bool isExpanded,
+        int metricCount,
+        bool endsGroup)
+    {
+        if (!_rowsByKey.TryGetValue(key, out var row))
+        {
+            row = new SparkplugMetricRow(key, name, fullPath, snapshot, depth, hasChildren, isExpanded, metricCount, endsGroup);
+            _rowsByKey.Add(key, row);
+        }
+
+        row.Name = name;
+        row.FullPath = fullPath;
+        row.Snapshot = snapshot;
+        row.Depth = depth;
+        row.HasChildren = hasChildren;
+        row.IsExpanded = isExpanded;
+        row.MetricCount = metricCount;
+        row.EndsGroup = endsGroup;
+        return row;
+    }
+
+    private void Prune(List<SparkplugMetricRow> rows)
+    {
+        var keys = rows.Select(row => row.Key).ToHashSet(StringComparer.Ordinal);
+        foreach (var key in _rowsByKey.Keys.Where(key => !keys.Contains(key)).ToList())
+            _rowsByKey.Remove(key);
+    }
+
+    private void Toggle(SparkplugMetricRow row)
+    {
+        if (!row.HasChildren)
+            return;
+
+        if (!_expandedPaths.Remove(row.FullPath))
+            _expandedPaths.Add(row.FullPath);
+
+        BuildHierarchyRows();
+    }
+
+    private static string GetRowClass(SparkplugMetricRow row, int _)
+    {
+        string baseClass;
+        if (!row.HasChildren)
+            baseClass = "spb-metric-row";
+        else if (row.IsMetric)
+            baseClass = "spb-metric-row spb-metric-row--branch";
+        else
+            baseClass = "spb-metric-row spb-metric-row--folder";
+
+        var withDepth = $"{baseClass} spb-depth-{IndentLevel(row)}";
+        return row.EndsGroup ? $"{withDepth} spb-metric-row--group-end" : withDepth;
+    }
+
+    private static int IndentLevel(SparkplugMetricRow row) => Math.Min(row.Depth, 4);
+
+    private static string AliasText(SpbMetricSnapshot? snapshot) =>
+        snapshot is null ? string.Empty : snapshot.Alias?.ToString() ?? "\u2014";
+
+    private static bool IsWritable(SpbMetricSnapshot metric) =>
+        SparkplugMetricValueEncoder.IsWritable(metric.DataType)
+        && !SparkplugControlMetrics.IsControlMetric(metric.Name);
+
+    private Task AddToChart(SparkplugMetricRow row, ChartFieldSelection selection) =>
+        OnAddToChart.InvokeAsync(new SparkplugChartSelection(
+            Topic,
+            selection.JsonPath,
+            ChartSeriesLabels.FromSelection(selection.SeriesName ?? row.FullPath, selection.JsonPath)));
 }

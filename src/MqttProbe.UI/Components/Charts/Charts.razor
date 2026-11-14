@@ -9,11 +9,20 @@
 
 <TabPanelHeader Title="Charts" Icon="@LucideIcons.Activity">
     <HeaderActions>
-        <AppPrimaryButton
-                   StartIcon="@LucideIcons.Plus" OnClick="CreateChart">
+        <AppPrimaryButton Size="Size.Small"
+                          StartIcon="@LucideIcons.Plus" OnClick="CreateChart">
             Configure New
         </AppPrimaryButton>
     </HeaderActions>
+    <HeaderFilters>
+        <MudSelect T="ChartRendererKind" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                   Value="@_renderer" ValueChanged="@OnRendererChanged"
+                   Label="Renderer" Class="charts-renderer-select"
+                   RelativeWidth="DropdownWidth.Adaptive">
+            <MudSelectItem T="ChartRendererKind" Value="ChartRendererKind.Apex">ApexCharts</MudSelectItem>
+            <MudSelectItem T="ChartRendererKind" Value="ChartRendererKind.ECharts">ECharts (preview)</MudSelectItem>
+        </MudSelect>
+    </HeaderFilters>
 </TabPanelHeader>
 
 @{
@@ -24,19 +33,10 @@
     @if (!charts.Any())
     {
         <div class="d-flex flex-column align-center justify-center charts-empty-state">
-            <MudIcon Icon="@LucideIcons.Activity" Style="font-size:64px; color:var(--mud-palette-text-disabled)"/>
+            <MudIcon Icon="@LucideIcons.Activity" Class="charts-empty-icon"/>
             <MudText Typo="Typo.h6" Color="Color.Secondary">No charts yet</MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Style="max-width:380px">
-                Open a JSON message in the <strong>Browse</strong> tab, then click a numeric field
-                to create a chart or add it to an existing one.
-            </MudText>
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Style="max-width:420px">
-                <MudText Typo="Typo.caption">
-                    Look for the <MudIcon Icon="@LucideIcons.ChartLine" Style="font-size:14px; vertical-align:middle"/> icon next to numeric fields in the payload viewer.
-                </MudText>
-            </MudAlert>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                Choose <strong>Create New Chart</strong> to start fresh or <strong>Add to Existing</strong> to append a series.
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="charts-empty-copy">
+                Choose the chart icon beside a value in <strong>Browser</strong> or <strong>Nodes</strong> to start a chart.
             </MudText>
         </div>
     }
@@ -47,6 +47,8 @@
             {
                 <ChartCard @key="config.Id"
                            Configuration="config"
+                           Renderer="_renderer"
+                           OnRendererRollback="UseApex"
                            OnEdit="EditChart"
                            OnDelete="DeleteChart" />
             }
@@ -55,6 +57,17 @@
 </div>
 
 @code {
+    private ChartRendererKind _renderer = ChartRendererKind.Apex;
+
+    private void OnRendererChanged(ChartRendererKind renderer)
+    {
+        if (renderer == _renderer) return;
+        _renderer = renderer;
+        StateHasChanged();
+    }
+
+    private void UseApex() => OnRendererChanged(ChartRendererKind.Apex);
+
     protected override async Task OnInitializedAsync()
     {
         await ChartDataService.StartAsync();

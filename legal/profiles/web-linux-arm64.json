@@ -1,0 +1,213 @@
+{
+  "schemaVersion": 1,
+  "name": "web-linux-arm64",
+  "host": "linux",
+  "project": "src/MqttProbe.Web/MqttProbe.Web.csproj",
+  "framework": "net10.0",
+  "runtimeIdentifier": "linux-arm64",
+  "runtimeIdentifiers": null,
+  "selfContained": false,
+  "targets": [
+    "net10.0/linux-arm64"
+  ],
+  "inputs": {
+    "files": {
+      "global.json": "a4c16f708b406a9d1c56bdd74a46c730277d3e3ddc825efd6baed2e692bc60bf",
+      "Directory.Packages.props": "542eee4b065ba53acb09d8c7256d188b86fc9690055d38e5e48596ce1fb807b6",
+      "Directory.Build.props": "5b030b22a23b70b4378434208e44693013479cd56b981d331429dbf85c596621",
+      ".github/actions/setup-dotnet-workload/action.yml": "e3f7736c4e8887df3019c24fea10702dcd5a6be3381679792148b66e238d0464",
+      "src/MqttProbe.Core/MqttProbe.Core.csproj": "f17a0c8eaa5569f8bf877669173f5260700013ece29639e6dee0a30d49ede2ec",
+      "src/MqttProbe.Desktop/MqttProbe.Desktop.csproj": "83d7bdfd02fa814797b5b66b3f09bbe4bacb7585d8d849ad883b399a20cf2da7",
+      "src/MqttProbe.Maui/MqttProbe.Maui.csproj": "5f05ad1ee688925a5db6895d14b8dfd0f5e7517507ffa5af0d565f0d3dda2d57",
+      "src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj": "ad64a32de96245d593d3c03f9ca581d8affce7f0d147e3947a08a6a6d2797612",
+      "src/MqttProbe.UI/MqttProbe.UI.csproj": "984773e2f9588a641a4b2fd1aabf34826435f798f88ce958af98ff045ae4ed09",
+      "src/MqttProbe.Web/MqttProbe.Web.csproj": "235a7f45c35d0d50d8201f9be0eab8475f90163eb43296aed78d687dd419eea6"
+    },
+    "submodules": {
+      "external/SparkplugNet": "95366c3915db71bdf661c5ea29f2fc87c2da5866"
+    },
+    "sdk": "10.0.403"
+  },
+  "packages": [
+    {
+      "id": "Blazor-ApexCharts",
+      "version": "8.0.0",
+      "sha512": "oQzHx0yiqlnM1EgaXv64tuQm+Silxbddb3zujIByjBsK/a3Tanm+U9LFRG/bbG1mcuF2tSFuhFWYaY7mkTx4bg=="
+    },
+    {
+      "id": "Blazor.Lucide",
+      "version": "1.0.6",
+      "sha512": "UgssRLV/BlqFrXj3YgJL7DNkjTYzInFdKHHETQ+HUm5SYRgROqvDXjXX7VrGzyGHcqBRZ2/CBeFSjZFhnf9sUA=="
+    },
+    {
+      "id": "FluentValidation",
+      "version": "12.2.0",
+      "sha512": "DR3lFbdnKucaaj1/8zMNOACMz/64igzox1yVZSFVsLxYB5mxAB+wFP1WZ8fjwrZnbU1KA1DoMzHKYKxUfuZ4wQ=="
+    },
+    {
+      "id": "Google.Protobuf",
+      "version": "3.36.2",
+      "sha512": "Ci1q1iJg74qAE5riTA2FbMS0wPbpruPQI/JQ9DrAsRo2VsSxgt1e/pmxGxgrci+pXJEgrSYg2vPl8rrStZkclQ=="
+    },
+    {
+      "id": "MQTTnet",
+      "version": "5.2.0.1603",
+      "sha512": "iNuWVo/568aRo2ExEN2qkC4J5b07ckKqt+9Uok2kIbbK7PMBsXvYiKVENPHmOBWFB5ExhlNQb/qQ8M9/IYRTdQ=="
+    },
+    {
+      "id": "MessagePack",
+      "version": "3.1.12",
+      "sha512": "m1QEsd59gUj82ji5tEQbZiyjV6y0F7cYfGVhil6pAlNZpyzR7ze9TucMu4lPpi8cZAV8aNl3D9/T9J1HbFz15Q=="
+    },
+    {
+      "id": "MessagePack.Annotations",
+      "version": "3.1.12",
+      "sha512": "LdI67sY7F3KK+JsrG02+DP1XFkowaZSoyfL2M88hjm1MOOsjf8amBLAJolV+zxoPUZf3uGbKzq1cMQD8PlpSpA=="
+    },
+    {
+      "id": "MessagePackAnalyzer",
+      "version": "3.1.12",
+      "sha512": "iNSNatPh6bafRUbkQKlClExjpPpd8hiZgfZsodGf7bheIlkizGbMzsJ2mPui8jOHRe4Ky9eg5ou/fFzI7CT3fg=="
+    },
+    {
+      "id": "Meziantou.Analyzer",
+      "version": "3.0.339",
+      "sha512": "oB0KVTYO0CkqscgCp2Fce6Q4G9gIVvVy39ULQLU2eOJfTNWS63Lk7VZbgerx6XMdUxPC4bprv87r8f7EZfp6gQ=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.App.Internal.Assets",
+      "version": "10.0.14",
+      "sha512": "T1IOYbID1msKjQEh684HebnN+Xnq/pocMXDukOMZtzzPTf9c4/30+/JndM/1txrqwuSYqWvLiAQWzu4U93cshw=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Authentication.OpenIdConnect",
+      "version": "10.0.15",
+      "sha512": "e+YnssZ13Vs9wMi4Jvw+nA46oh+0I3bZKASmASHX4x2IQh4Ns9ilcNw30YC1lnyMLF6mIF4Fe7U0Mn0WJbr3Hg=="
+    },
+    {
+      "id": "Microsoft.Bcl.Cryptography",
+      "version": "10.0.2",
+      "sha512": "LG9Yll3B5aNpxv0+D47g6LiOiKBIlodhcHdQwcYzo8VeexFLGqx5ymetmA2aBRyo9cCcWsQWrFsdbsr8LvmWDw=="
+    },
+    {
+      "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+      "version": "11.0.0",
+      "sha512": "a2c4Kp55miXT6G+DSb75pczXQJHgNMzPyZEyMxrrKxuQrgvctcDWJWD9fVe/uGbQdu4Z0c3B7AVKp1DXmD64nQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Abstractions",
+      "version": "11.0.0",
+      "sha512": "MTMO2V1eT9Dm5VIpJGLNwIjAjoBErUlfuB+DEaZ0tb8J+Nf/Xlj8he5AztK9p1iOJPIyuBeOrVy2u/CSdsfzPw=="
+    },
+    {
+      "id": "Microsoft.Extensions.Options",
+      "version": "11.0.0",
+      "sha512": "AaNswJ3NqdNCNqQVlU7iTkvrrrzqrSSxkOC3bLlrwv/CPN7YRz3HoJk7o4ey5v6U8bOHocHsyYoJ7ihK1KUWyQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Primitives",
+      "version": "11.0.0",
+      "sha512": "HH2akbW2HeY/xeZJA5UceuQQX+1Pv/Kxrz/x4XPoH6wYDtgPIlBeOTZlQXlT+b50b1Ym/xfP+WJCX9FW4uLBXQ=="
+    },
+    {
+      "id": "Microsoft.IdentityModel.Abstractions",
+      "version": "8.23.0",
+      "sha512": "JjiBkKj12OKvuWr+kB5sQwb7fmWW5bi03Mq/rd2Fu/7YwZ1RWQO9KhI9lBxki4o1VvY0wzqny8c7nwx1uuZzVg=="
+    },
+    {
+      "id": "Microsoft.IdentityModel.JsonWebTokens",
+      "version": "8.23.0",
+      "sha512": "ePEm+mv5iswzckE3mygh52uFUeQpVlHa1B10nS4jpEyNV5tL1mLgRS9U5sMaRlhsPRsZ1DJP0+FhxSrOIfMGIg=="
+    },
+    {
+      "id": "Microsoft.IdentityModel.Logging",
+      "version": "8.23.0",
+      "sha512": "wSXXOoV4b4hhRcC492jyNBZkO0LWrcWtWP5Cl5ujrON3vTMlufXDT39gTZfBhFAZCV2XJtNU6DLHMDR6E9YpUg=="
+    },
+    {
+      "id": "Microsoft.IdentityModel.Protocols",
+      "version": "8.19.2",
+      "sha512": "sGxSsSrZXNmca6D+jHH2rVRyo2nNRd/g4H9CFbPmLLq0xgoH1U0orLWE5minfijw7+zq49tBs7txenbfAErRoQ=="
+    },
+    {
+      "id": "Microsoft.IdentityModel.Protocols.OpenIdConnect",
+      "version": "8.19.2",
+      "sha512": "1XOcyY36cVymzE3qKdzKaUEZ4Pzt7ZpSa14JZoPPK1NLFUkQDs85TCqpV6XDo0YjFXj6nVK00AfOHppjghjhtw=="
+    },
+    {
+      "id": "Microsoft.IdentityModel.Tokens",
+      "version": "8.23.0",
+      "sha512": "PUowLq8gqICt+oepHWmKBOJmnVmWoQ5dOVn2CgwFMBZZOAEMHgCQLWs8ONYdsjAyjhDHaFy+AAx0OMG/oV06Zw=="
+    },
+    {
+      "id": "Microsoft.NET.ILLink.Tasks",
+      "version": "10.0.14",
+      "sha512": "YlTamXppEQls6DYWt7RdUuwWDb0lyw/vXCaGeQpLCpsLmfwGuCkOz/vIGgMTV7ECsJcavkCOkxZXv9s8rdAHkQ=="
+    },
+    {
+      "id": "Microsoft.NET.StringTools",
+      "version": "17.11.4",
+      "sha512": "mudqUHhNpeqIdJoUx2YDWZO/I9uEDYVowan89R6wsomfnUJQk6HteoQTlNjZDixhT2B4IXMkMtgZtoceIjLRmA=="
+    },
+    {
+      "id": "MudBlazor",
+      "version": "9.12.0",
+      "sha512": "T6PQUCJe60UTSy3u1F8R2nuC06Cox6WEhon5GA2/AZNVI1WstlPSJZdGPyp6pHFpWdjPpla65piLpyJsbW+1rA=="
+    },
+    {
+      "id": "SonarAnalyzer.CSharp",
+      "version": "10.36.0.15337",
+      "sha512": "jGLAZUjheSURfe0T/dJYGUrMOrLt1fxaInpChq75YJvrywsxFoUKK/EM6PSfTjkt4pbaq2ywIQjgQzhrmmj5Ow=="
+    },
+    {
+      "id": "System.Collections.Immutable",
+      "version": "11.0.0",
+      "sha512": "Z3pTTvMGhsThIfPDboJDwBY+yCqfNCpYyL4fcPCNo4rVYhlS7Kmg4nkABanRYRSVDPZ3qiXPdGymBzMDuawPNg=="
+    },
+    {
+      "id": "System.Diagnostics.DiagnosticSource",
+      "version": "11.0.0",
+      "sha512": "+boRR9uSKiIPtFeRLGwO5xylhDF80xpwM+dmk5jgIqqeUKLbujGkGICMTKqQrBzKO6fIp8BU8DV6YZkQukqo3A=="
+    },
+    {
+      "id": "System.Formats.Cbor",
+      "version": "11.0.0",
+      "sha512": "2ULEPU67LRt4YVwBnCk1OhjsJspIBzg1JlDkN2hnZm9im3fC9bSbVQorLraOIcLMlA6/8eWQG1fjTpurHkIFZw=="
+    },
+    {
+      "id": "System.IdentityModel.Tokens.Jwt",
+      "version": "8.19.2",
+      "sha512": "gqhDC/icByKEutygpr+OFgAmjwTVowyzFjWB8K0q1ww8uFj5a1BQNL+QvijUl9uhq4p8OdDwcAIrjVC+eC9FVA=="
+    },
+    {
+      "id": "System.Reflection.Metadata",
+      "version": "11.0.0",
+      "sha512": "6mLHh96MZR4PJbNH8dUOjCkYWLR7N4FYseSjqGIgEYj8so3j1CvQTpTjouI2jInKnJYSGYLFHwdQEJtMKWvlQQ=="
+    },
+    {
+      "id": "System.Reflection.MetadataLoadContext",
+      "version": "11.0.0",
+      "sha512": "IixPUjMvqADBklO1Cz9OiEcfxIwFptmAwnm02DVTmW5JW4k06HU76boTVxPMChOvalE6FFJH3H82gO8+sgDhwQ=="
+    },
+    {
+      "id": "System.Threading.RateLimiting",
+      "version": "11.0.0",
+      "sha512": "/XV8cRRUkl+uyvVdPBCo+p/QUSMFI7JdPHgpeWvnVmh/Ao/TRn7gSjo1XS0qJGGhd7Pkjn/9ePSNXtKQN0kutA=="
+    },
+    {
+      "id": "protobuf-net",
+      "version": "3.2.56",
+      "sha512": "4IPJeTYAMNewlN8MDaFkcmR/9hLhJeo9eARnTh104zh7mf+vXT2gu5MUfUnkSQU+CH578Q6vcdU7LQDQPG6eaw=="
+    },
+    {
+      "id": "protobuf-net.Core",
+      "version": "3.4.40",
+      "sha512": "UDQ8fbEKqpQktJfFyqkZ22S7P01sJWNmqkYjzbwZdZUHFwHIDigmWIzxmExF7NjbNoTqmv2Dfsu3rOpRHXK5EA=="
+    },
+    {
+      "id": "protobuf-net.Reflection",
+      "version": "3.4.40",
+      "sha512": "1wlf2O6sqEypWMu5IMGOTcovVicQ+QP9PRNelsRcx823UWO9ytVuDFLRaJ5sVg8zoSxzgOT9sBdYbmv3i/wgaw=="
+    }
+  ]
+}

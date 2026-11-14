@@ -1,0 +1,58 @@
+.chart-card__title {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.chart-card-status {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    margin-top: 4px;
+    min-width: 0;
+}
+
+.chart-card-status__age {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--mud-palette-text-secondary);
+    white-space: nowrap;
+}
+
+.chart-card-plot__pending {
+    height: 300px;
+}
+
+/* The ECharts preview sizes itself from this box; the adapter observes it for width changes. */
+.chart-card-echarts {
+    width: 100%;
+    height: 300px;
+}
+
+.chart-card-echarts-error {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 4px 0 8px;
+    padding: 12px;
+    border: 1px solid var(--mud-palette-warning);
+    border-radius: var(--mud-default-borderradius);
+}
+
+.chart-card-echarts-error__detail {
+    font-family: var(--font-mono);
+    overflow-wrap: anywhere;
+    color: var(--mud-palette-text-secondary);
+}
+
+.chart-card-zone-row {
+    margin: 0 8px 2px;
+    text-align: right;
+}
+
+@media (max-width: 600px) {
+    .chart-card-shell ::deep .mud-card-header {
+        padding: 12px 12px 10px;
+    }
+}

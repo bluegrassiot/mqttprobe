@@ -8,32 +8,109 @@
     flex-wrap: wrap;
 }
 
+/* Desktop split: MudSplitPanel (same component and divider as the Browser tab)
+   owns both pane widths, so these shells just fill their panel and keep one
+   scroll owner each. */
+.spb-split-wrap {
+    /* Shared with sparkplug-nodes-split-bounds.js, which clamps the drag at the same
+       bound so the inline width, aria-valuenow and the rendered width stay in step. */
+    --spb-list-max-share: 55%;
+    --spb-detail-min: 500px;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.spb-split-wrap ::deep .spb-split-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.spb-split-wrap ::deep .child-panel {
+    min-height: 0;
+}
+
+.spb-split-wrap ::deep .spb-split__nodes,
+.spb-split-wrap ::deep .spb-split__detail {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 auto;
+}
+
+.spb-split-wrap ::deep .spb-split__nodes {
+    border-right: none;
+}
+
+/* The list stops before the detail pane gets too narrow for the metrics table;
+   the panel keeps MudSplitPanel's own 220px floor. flex-basis stays fixed so a
+   split mounted inside a hidden tab still renders at its initial width. The
+   trailing 6px is the split's PanelGap, matching the drag bound in the companion
+   script. The 8px gutter keeps the native scrollbar, which sits flush against the
+   pane edge, clear of the divider's hover target. */
+.spb-split-wrap ::deep .spb-panel-nodes {
+    flex: 0 0 auto;
+    max-width: min(var(--spb-list-max-share), calc(100% - var(--spb-detail-min) - 6px));
+    padding-right: 8px;
+}
+
+/* MudSplitPanel's divider overlay reaches 12px into the list, past the gutter. Pull
+   its left edge back so the scrollbar is never part of the resize drag target. */
+.spb-split-wrap ::deep .divider::before {
+    left: -4px;
+}
+
+/* Stacked and phone layouts: the plain split, no divider, no resizing. */
 .spb-split {
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     flex: 1;
+    min-width: 0;
     min-height: 0;
     gap: 0;
 }
 
+/* The shell is a selector anchor only, so the header and the split stay direct
+   flex children of the tab panel. */
+.spb-nodes-shell { display: contents; }
+
 .spb-split__nodes {
-    width: 35%;
-    min-width: 260px;
+    width: 100%;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     border-right: 1px solid var(--mud-palette-divider);
-    flex-shrink: 0;
 }
 
+/* overflow-x is pinned so the detail pane never grows a second, sideways
+   scrollbar; the metrics table fits by design and wraps long names and values. */
 .spb-split__detail {
     flex: 1;
     min-width: 0;
     min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     padding: 16px;
+    container-type: inline-size;
+    container-name: spb-detail;
 }
 
+/* The takeover chrome is inert outside the compact layout, where the inline Back
+   button and the pane's own scroll stay in charge. */
+.spb-detail-bar { display: none; }
+
+.spb-detail-body { display: contents; }
+
 /* Node/detail rows (rendered by child components → ::deep) */
+
+::deep .spb-list-header {
+    display: flex;
+    justify-content: flex-end;
+    padding: 3px 12px 5px;
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
 
 ::deep .spb-group-header {
     padding: 6px 12px 4px;
@@ -44,16 +121,60 @@
     background: var(--mud-palette-background-grey);
     text-transform: uppercase;
     border-bottom: 1px solid var(--mud-palette-divider);
+    overflow-wrap: anywhere;
 }
 
 ::deep .spb-node-row {
+    position: relative;
     display: flex;
     flex-direction: column;
-    padding: 10px 12px;
-    cursor: pointer;
     border-bottom: 1px solid var(--mud-palette-divider);
     transition: background 0.1s;
     box-shadow: inset 3px 0 0 transparent;
+}
+
+/* The row and the selection button cover the full width, so a click anywhere except the
+   delete control still selects; the native button adds the tab stop, role and Enter/Space. */
+::deep .spb-node-select {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 12px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+/* Inset so the list's scroll owner cannot clip the ring on the first or last row. */
+::deep .spb-node-select:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+::deep .spb-node-row--removable .spb-node-head {
+    padding-right: 44px;
+}
+
+/* Overlaid rather than a sibling column: the row underneath stays one full-width click target. */
+::deep .spb-node-remove {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: flex;
+    padding: 10px 12px 0 0;
+}
+
+::deep .spb-node-remove .mud-icon-button:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
 }
 
 ::deep .spb-node-row:hover { background: var(--mud-palette-action-default-hover); }
@@ -75,9 +196,47 @@
 ::deep .spb-device-row {
     display: flex;
     align-items: center;
-    padding: 8px 16px;
-    cursor: pointer;
+    flex-wrap: wrap;
+    row-gap: 4px;
     border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+/* The row keeps pointer selection anywhere outside the rebirth control; the native button
+   supplies the tab stop, role and Enter/Space activation. */
+::deep .spb-device-select {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    row-gap: 4px;
+    padding: 8px 16px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+/* Inset so the detail pane's scroll owner cannot clip the ring on the first or last row. */
+::deep .spb-device-select:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+::deep .spb-device-rebirth {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    padding: 8px 16px 8px 0;
+}
+
+::deep .spb-device-rebirth .mud-button-root:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 2px;
 }
 
 ::deep .spb-device-row:hover { background: var(--mud-palette-action-default-hover); }
@@ -94,13 +253,53 @@
     padding: 0;
 }
 
-@media (max-width: 959px) {
-    .spb-split {
-        flex-direction: column;
-    }
+.spb-split__detail ::deep .spb-metric-row--folder .spb-metric-label {
+    color: var(--mud-palette-text-primary);
+    font-weight: 500;
+}
 
+@media (min-width: 600px) {
+    @container spb-detail (max-width: 720px) {
+        .spb-split__detail ::deep .spb-td-name .spb-metric-meta {
+            display: flex;
+        }
+
+        .spb-split__detail ::deep col.spb-col-type,
+        .spb-split__detail ::deep col.spb-col-alias,
+        .spb-split__detail ::deep col.spb-col-updated {
+            display: none;
+        }
+
+        .spb-split__detail ::deep col.spb-col-value {
+            width: 22%;
+        }
+
+        .spb-split__detail ::deep col.spb-col-chart {
+            width: 76px;
+        }
+
+        .spb-split__detail ::deep .spb-th-type,
+        .spb-split__detail ::deep .spb-th-alias,
+        .spb-split__detail ::deep .spb-th-updated,
+        .spb-split__detail ::deep .spb-td-type,
+        .spb-split__detail ::deep .spb-td-alias,
+        .spb-split__detail ::deep .spb-td-updated {
+            display: none;
+        }
+
+        .spb-split__detail ::deep .spb-td-chart .json-chart-btn__label {
+            display: none;
+        }
+    }
+}
+
+.spb-split__detail ::deep .mud-table-cell {
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
+@media (max-width: 959.98px) {
     .spb-split__nodes {
-        width: 100%;
         border-right: none;
         border-bottom: 1px solid var(--mud-palette-divider);
         max-height: 40vh;
@@ -111,12 +310,9 @@
     }
 }
 
-/* ── Phone layout: in-place swap ───────────────────────────────────────────
-   The stacked split is too cramped below 600px, so mirror the Browser tab's
-   Message Details pattern instead: the list fills the pane until a node is
-   selected, then the detail takes over the full pane and the existing Back
-   button (already rendered below 960px) returns to the list. */
-@media (max-width: 599.98px) {
+/* Compact: the selected node takes over the viewport like the mobile topic picker,
+   with a pinned Back bar, one scroll owner and the shell's safe-area insets. */
+@media (max-width: 599.98px), (max-width: 959.98px) and (max-height: 799.98px) {
     .spb-split__nodes {
         max-height: none;
         flex: 1 1 auto;
@@ -126,23 +322,91 @@
         display: none;
     }
 
+    .spb-nodes-shell--detail-open .spb-nodes-header {
+        display: none;
+    }
+
     .spb-split--detail-open .spb-split__nodes {
         display: none;
     }
 
+    /* Covers the app bar (--mud-zindex-appbar, 1300) and the fixed mobile nav (1200)
+       while staying under MudBlazor's dialog (1400) and snackbar (1500) layers. */
     .spb-split--detail-open .spb-split__detail {
-        display: block;
-        flex: 1 1 auto;
-        overflow-y: auto;
+        position: fixed;
+        inset: 0;
+        z-index: calc(var(--mud-zindex-appbar) + 1);
+        display: flex;
+        flex-direction: column;
+        padding: 0;
+        overflow: hidden;
+        background: var(--mud-palette-surface);
+        animation: spb-detail-takeover 200ms ease-out;
     }
 
-    /* Metric tables have 5 columns that never fit ~360px. Rather than let each
-       one scroll horizontally under a capped height — which stacks two or three
-       nested scrollbars on top of the detail panel's own — collapse every row
-       into a stacked card, the same approach the Browser tab uses. Name + value
-       read as the headline; type/alias/updated drop to a muted meta line. Only
-       the detail panel's vertical scroll remains. ::deep throughout because
-       MudTable owns this markup without the component's scope attribute. */
+    .spb-split--detail-open .spb-detail-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+        min-width: 0;
+        padding-top: calc(4px + env(safe-area-inset-top, 0px));
+        padding-right: calc(12px + env(safe-area-inset-right, 0px));
+        padding-bottom: 4px;
+        padding-left: calc(4px + env(safe-area-inset-left, 0px));
+        border-bottom: 1px solid var(--mud-palette-divider);
+        background: var(--mud-palette-surface);
+    }
+
+    .spb-detail-bar__title {
+        min-width: 0;
+        overflow: hidden;
+        font-weight: 600;
+        color: var(--mud-palette-text-primary);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .spb-split--detail-open .spb-detail-body {
+        display: block;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding-top: 12px;
+        padding-right: calc(12px + env(safe-area-inset-right, 0px));
+        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+        padding-left: calc(12px + env(safe-area-inset-left, 0px));
+    }
+
+    /* The pinned bar carries the only Back control while the takeover is open. */
+    .spb-split--detail-open .spb-split__detail ::deep .spb-detail-back {
+        display: none;
+    }
+}
+
+@keyframes spb-detail-takeover {
+    from {
+        transform: translateY(100%);
+        opacity: 0.5;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spb-split--detail-open .spb-split__detail {
+        animation: none;
+    }
+}
+
+@media (max-width: 599.98px) {
+    /* Rows collapse into stacked cards on phones because the table cannot fit
+       ~360px. ::deep throughout because MudTable owns this markup without the
+       component's scope attribute. */
     .spb-split__detail ::deep .mud-table-container {
         overflow-x: hidden;
     }
@@ -160,8 +424,8 @@
     .spb-split__detail ::deep .spb-metric-row {
         display: flex;
         flex-wrap: wrap;
-        align-items: baseline;
-        column-gap: 6px;
+        align-items: flex-start;
+        column-gap: 8px;
         padding: 8px 4px;
         border-bottom: 1px solid var(--mud-palette-divider);
     }
@@ -173,72 +437,90 @@
         min-width: 0;
     }
 
-    /* Headline: name on the left, value pinned flush-right by an auto margin so
-       values line up in a column. The wrap onto a second line is forced by the
-       ::after break below — margin:auto only right-aligns, it can't wrap.
-       Value keeps its mono font and value colour from the base rules. */
-    .spb-split__detail ::deep .spb-td-name {
+    /* Grow from a zero basis: WebKit can otherwise return a fraction of the
+       label's intrinsic width and break names mid word. The floor keeps 120px of
+       label and a wide value drops to its own line instead of narrowing it. */
+    .spb-split__detail ::deep .spb-metric-row .spb-td-name {
         order: 1;
-        flex: 0 1 auto;
-        min-width: 0;
+        flex: 1 1 0;
+        min-width: min(100%, calc(120px + var(--spb-indent, 0px)));
         font-size: 14px;
         color: var(--mud-palette-text-primary);
     }
 
-    .spb-split__detail ::deep .spb-td-value {
+    .spb-split__detail ::deep .spb-metric-row .spb-td-value {
         order: 2;
         flex: 0 0 auto;
         margin-left: auto;
+        max-width: 50%;
         text-align: right;
+        line-height: 20px;
+        overflow-wrap: anywhere;
     }
 
-    /* Meta line: type · alias · updated wrap together below the headline */
-    .spb-split__detail ::deep .spb-td-type,
-    .spb-split__detail ::deep .spb-td-alias,
-    .spb-split__detail ::deep .spb-td-updated {
-        margin-top: 2px;
-        font-size: 11px;
-        color: var(--mud-palette-text-secondary);
+    .spb-split__detail ::deep .spb-metric-meta {
+        display: flex;
     }
 
-    /* Full-width zero-height break between value (order 2) and the meta cells
-       (order 4-6). A flex container's ::after pseudo-element is itself a flex
-       item, so this drops the meta group onto its own second line no matter how
-       short the metric name is — margin:auto alone can't force that wrap. */
-    .spb-split__detail ::deep .spb-metric-row::after {
-        content: "";
+    .spb-split__detail ::deep .spb-metric-row .spb-td-type,
+    .spb-split__detail ::deep .spb-metric-row .spb-td-alias,
+    .spb-split__detail ::deep .spb-metric-row .spb-td-updated {
+        display: none;
+    }
+
+    /* The chart action hangs under the label, at the metric's own depth. */
+    .spb-split__detail ::deep .spb-metric-row .spb-td-chart {
         order: 3;
         flex: 0 0 100%;
-        height: 0;
+        margin-top: 4px;
+        padding: 0;
+        padding-left: calc(var(--spb-indent, 0px) + var(--spb-lane, 0px));
+        box-sizing: border-box;
     }
 
-    .spb-split__detail ::deep .spb-td-type    { order: 4; }
-    .spb-split__detail ::deep .spb-td-alias   { order: 5; text-align: left; }
-    .spb-split__detail ::deep .spb-td-updated { order: 6; }
+    .spb-split__detail ::deep .spb-metric-row--folder .spb-td-value,
+    .spb-split__detail ::deep .spb-metric-row--folder .spb-td-chart {
+        display: none;
+    }
 
-    .spb-split__detail ::deep .spb-td-alias::before,
-    .spb-split__detail ::deep .spb-td-updated::before {
-        content: "·";
-        margin-right: 6px;
-        color: var(--mud-palette-text-disabled);
+    .spb-split__detail ::deep .spb-metric-row--folder .spb-td-name {
+        flex: 1 1 100%;
+        min-width: 0;
     }
 }
 
 /* ── Header chips and filters ────────────────────────────────────────────── */
 
+/* TabPanelHeader is a child component, so it carries no scope attribute of this
+   component and a leading ::deep would compile to [b-scope] .class with nothing to
+   match. This display:contents wrapper is that anchor and adds no layout box. */
+.spb-nodes-header { display: contents; }
+
 /* ::deep because MudChip renders the element; scoped selector won't reach it */
 ::deep .spb-section-title { font-weight: 600; }
 
-::deep .spb-count-chip {
+.spb-nodes-header ::deep .spb-count-chip {
     height: 20px;
     font-size: 0.7rem;
     padding: 0 6px;
 }
 
-::deep .spb-count-chip--online  { color: var(--mud-palette-success); }
-::deep .spb-count-chip--offline { color: var(--mud-palette-error); }
-::deep .spb-filter-select { min-width: 120px; font-size: 0.85rem; }
-::deep .spb-filter-text   { min-width: 160px; font-size: 0.85rem; }
+.spb-nodes-header ::deep .spb-count-chip--online  { color: var(--mud-palette-success); }
+.spb-nodes-header ::deep .spb-count-chip--offline { color: var(--mud-palette-error); }
+.spb-nodes-header ::deep .spb-filter-select { min-width: 120px; font-size: 0.85rem; }
+.spb-nodes-header ::deep .spb-filter-text   { min-width: 160px; font-size: 0.85rem; }
+.spb-nodes-header ::deep .spb-metric-hierarchy-switch { min-width: 0; }
+
+.spb-nodes-header ::deep .spb-metric-hierarchy-switch .mud-typography {
+    font-size: 0.85rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.spb-nodes-header ::deep .app-tabpanel-header__filters {
+    flex-wrap: wrap;
+    row-gap: 6px;
+}
 
 /* ── Node list ───────────────────────────────────────────────────────────── */
 
@@ -250,10 +532,13 @@
 }
 
 ::deep .spb-node-secondary {
+    display: block;
     font-size: 12px;
     color: var(--mud-palette-text-secondary);
     margin-top: 2px;
     margin-left: 14px;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 ::deep .spb-sequence-warning {
@@ -293,13 +578,23 @@
     font-size: 18px;
     font-weight: 700;
     color: var(--mud-palette-text-primary);
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
+/* A long group id wraps inside the chip instead of running past the detail pane. */
 ::deep .spb-group-chip {
     font-size: 11px;
     color: var(--mud-palette-text-secondary);
     border-color: var(--mud-palette-divider);
-    height: 20px;
+    height: auto;
+    min-height: 20px;
+    max-width: 100%;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 ::deep .spb-timestamps {
@@ -307,8 +602,32 @@
     color: var(--mud-palette-text-secondary);
 }
 
+::deep .spb-timestamp {
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    min-width: 0;
+}
+
+::deep .spb-timestamp__value {
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 2px 5px;
+    min-width: 0;
+}
+
+::deep .spb-timestamp__time {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--mud-palette-text-primary);
+}
+
+::deep .spb-timestamp--pending { letter-spacing: 0.12em; }
+
 ::deep .spb-sequence-panel {
-    margin: 0 0 16px;
+    margin: 0;
     padding: 14px 16px;
     border: 1px solid var(--mud-palette-divider);
     border-left: 3px solid var(--mud-palette-info);
@@ -364,13 +683,22 @@
     font-family: var(--font-mono);
     font-size: 13px;
     overflow-wrap: anywhere;
-    /* color kept inline — driven by ValueColor() */
 }
+
+/* Doubling the class clears MudBlazor's .mud-table-body .mud-table-cell colour
+   without !important. */
+.spb-split__detail ::deep .spb-td-value.spb-td-value--numeric { color: var(--mud-palette-success); }
+.spb-split__detail ::deep .spb-td-value.spb-td-value--text    { color: var(--mud-palette-text-secondary); }
 
 ::deep .spb-td-updated {
     font-family: var(--font-mono);
     font-size: 12px;
     color: var(--mud-palette-text-secondary);
+}
+
+::deep .spb-td-chart .json-chart-btn {
+    margin-left: 0;
+    white-space: nowrap;
 }
 
 /* ── Device list ─────────────────────────────────────────────────────────── */

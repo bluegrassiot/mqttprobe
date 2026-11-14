@@ -72,9 +72,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       - name: Restore NuGet cache
         uses: actions/cache@v6
@@ -182,6 +180,11 @@ jobs:
           --self-contained
           -p:Version=${{ steps.version.outputs.value }}
           --output publish/desktop
+
+      - name: Verify legal notices
+        run: |
+          python3 scripts/legal/notices.py profiles-check --scenario desktop-osx-arm64
+          python3 scripts/legal/notices.py verify --scenario desktop-osx-arm64
 
       - name: Generate .icns from icon.png
         # Velopack auto-creates the .app bundle from a plain folder ONLY when

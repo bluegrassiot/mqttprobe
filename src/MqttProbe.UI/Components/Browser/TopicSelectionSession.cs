@@ -1,4 +1,6 @@
+using System.Collections.Immutable;
 using MqttProbe.Core.Models.Mqtt;
+using MqttProbe.Core.Models.Sparkplug;
 using MqttProbe.Core.Services.Mqtt;
 
 namespace MqttProbe.UI.Components.Browser;
@@ -12,6 +14,9 @@ internal interface ITopicSelectionStore
     public void SelectTopics(TopicSelection? selection);
 
     public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection);
+
+    public bool TryReplaceSelection(
+        long treeVersion, SelectedTopicState expectedSelection, TopicSelection? replacement);
 
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit);
 }
@@ -27,6 +32,10 @@ internal sealed class MessageStoreSelectionAdapter(IMessageStoreManager manager)
     public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection) =>
         manager.TryClearSelection(treeVersion, expectedSelection);
 
+    public bool TryReplaceSelection(
+        long treeVersion, SelectedTopicState expectedSelection, TopicSelection? replacement) =>
+        manager.TryReplaceSelection(treeVersion, expectedSelection, replacement);
+
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit) =>
         manager.GetSelectedMessagesAsync(expectedSelection, limit);
 }
@@ -34,7 +43,8 @@ internal sealed class MessageStoreSelectionAdapter(IMessageStoreManager manager)
 internal sealed record TopicSelectionFrame(
     IReadOnlyList<TopicTreeRowModel> Rows,
     SelectedTopicState Selection,
-    int RootCount);
+    int RootCount,
+    ImmutableArray<TopicNodeSnapshot> Roots);
 
 internal sealed class TopicSelectionSession(ITopicSelectionStore store)
 {
@@ -47,7 +57,9 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
         string? filter,
         IReadOnlySet<string> expandedPaths,
         bool grouped,
-        bool force = false)
+        bool force = false,
+        bool selectionMode = false,
+        Func<SparkplugSelectionScope, IReadOnlyList<SpbMetricSnapshot>>? metricSource = null)
     {
         var snapshot = store.GetTopicTreeSnapshot();
         var selection = store.GetSelectedTopicState();
@@ -58,10 +70,33 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
             && selection.Token.IsSameSelection(acceptedSelection))
             return null;
 
-        var rows = TopicTreeProjection.CreateRows(
-            snapshot.Roots, filter, expandedPaths, grouped, selection.Key, out var selectionRepresented);
+        var metricProjection = metricSource is null ? null : new MetricProjection(metricSource);
 
-        if (selection.Key is not null && !selectionRepresented)
+        List<TopicTreeRowModel> rows;
+        bool selectionRepresented;
+        if (selectionMode)
+        {
+            rows = TopicTreeProjection.CreateRows(
+                snapshot.Roots, filter, expandedPaths, grouped,
+                selectionPath: null, out _, out _, metrics: metricProjection);
+            selectionRepresented = true;
+        }
+        else
+        {
+            // Only a single-topic key names a real path. A branch or multi key is an identity,
+            // so treating it as a path would find no row and clear a live selection.
+            var selectionPath = selection.Mode == TopicSelectionMode.SingleTopic ? selection.Key : null;
+            rows = TopicTreeProjection.CreateRows(
+                snapshot.Roots, filter, expandedPaths, grouped, selectionPath, out selectionRepresented,
+                out _, metrics: metricProjection);
+        }
+
+        if (!TryPruneSelection(ref selection, snapshot, grouped, metricSource))
+            return null;
+
+        var pathSelectionGone = selection.Mode == TopicSelectionMode.SingleTopic
+            && selection.Key is not null && !selectionRepresented;
+        if (pathSelectionGone)
         {
             if (!store.TryClearSelection(snapshot.Version, selection))
                 return null;
@@ -69,17 +104,59 @@ internal sealed class TopicSelectionSession(ITopicSelectionStore store)
             selection = store.GetSelectedTopicState();
         }
 
-        var frame = new TopicSelectionFrame(rows, selection, snapshot.Roots.Length);
+        var frame = new TopicSelectionFrame(rows, selection, snapshot.Roots.Length, snapshot.Roots);
         _acceptedTreeVersion = snapshot.Version;
         _acceptedSelection = selection.Token;
         Frame = frame;
         return frame;
     }
 
-    public SelectedTopicState? Select(TopicSelection? request)
+    private bool TryPruneSelection(
+        ref SelectedTopicState selection,
+        TopicTreeSnapshot snapshot,
+        bool grouped,
+        Func<SparkplugSelectionScope, IReadOnlyList<SpbMetricSnapshot>>? metricSource)
     {
-        store.SelectTopics(request);
-        var selected = store.GetSelectedTopicState();
-        return string.Equals(selected.Key, request?.Key, StringComparison.Ordinal) ? selected : null;
+        if (selection.Mode != TopicSelectionMode.SparkplugMetric)
+            return true;
+
+        var survivors = PruneMetrics(selection, snapshot.Roots, grouped, metricSource);
+        if (survivors.Length == selection.Metrics.Length)
+            return true;
+
+        var replacement = survivors.Length == 0
+            ? null
+            : TopicSelection.ForSparkplugMetrics(survivors);
+        if (!store.TryReplaceSelection(snapshot.Version, selection, replacement))
+            return false;
+
+        selection = store.GetSelectedTopicState();
+        return true;
+    }
+
+    // Pruning ignores search, collapse, offline state and zero stored matches. A metric survives
+    // while its observed owner row remains and the current topology still lists its exact name.
+    private static ImmutableArray<MqttSparkplugMetricTarget> PruneMetrics(
+        SelectedTopicState selection,
+        ImmutableArray<TopicNodeSnapshot> roots,
+        bool grouped,
+        Func<SparkplugSelectionScope, IReadOnlyList<SpbMetricSnapshot>>? metricSource)
+    {
+        var metrics = selection.Metrics;
+        if (metrics.IsDefaultOrEmpty)
+            return metrics;
+
+        if (!grouped || metricSource is null)
+            return [];
+
+        var owners = TopicTreeProjection.RepresentedMetricOwners(
+            roots, grouped, metrics.Select(metric => metric.Scope));
+        var survivors = new List<MqttSparkplugMetricTarget>(metrics.Length);
+        survivors.AddRange(metrics.Where(metric =>
+            owners.Contains(metric.Scope)
+            && metricSource(metric.Scope).Any(item =>
+                string.Equals(item.Name, metric.MetricName, StringComparison.Ordinal))));
+
+        return [.. survivors];
     }
 }

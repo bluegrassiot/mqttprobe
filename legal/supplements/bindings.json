@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "global": {
+    "sdkVersion": "10.0.403",
+    "workloadVersion": "10.0.403",
+    "components": [
+      "dotnet-runtime",
+      "microsoft-ios-sdk",
+      "microsoft-maccatalyst-sdk",
+      "dotnet-android-runtime",
+      "dotnet-maui-platform-notices"
+    ]
+  },
+  "repoFiles": [
+    {
+      "component": "font-inter",
+      "path": "src/MqttProbe.UI/wwwroot/fonts/InterVariable.woff2",
+      "sha256": "693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3"
+    },
+    {
+      "component": "font-inter",
+      "path": "src/MqttProbe.Maui/Resources/Fonts/Inter-Variable.ttf",
+      "sha256": "4989b125924991b90d05b2d16e0e388c48f7d5bb8b30539bbf9c755278d0ccaf"
+    },
+    {
+      "component": "font-jetbrains-mono",
+      "path": "src/MqttProbe.UI/wwwroot/fonts/JetBrainsMono-Regular.woff2",
+      "sha256": "a9cb1cd82332b23a47e3a1239d25d13c86d16c4220695e34b243effa999f45f2"
+    },
+    {
+      "component": "font-jetbrains-mono",
+      "path": "src/MqttProbe.UI/wwwroot/fonts/JetBrainsMono-Medium.woff2",
+      "sha256": "086c48dfbea9ddaff1320f7e09399b8e2924e88ce67453721255db3bdbb5a353"
+    },
+    {
+      "component": "font-chakra-petch",
+      "path": "src/MqttProbe.UI/wwwroot/fonts/ChakraPetch-500.woff2",
+      "sha256": "36ad966cb653de70ba37355c41003b02de8940b2df6cbcd46480a6ad8cadd65d"
+    },
+    {
+      "component": "font-chakra-petch",
+      "path": "src/MqttProbe.UI/wwwroot/fonts/ChakraPetch-600.woff2",
+      "sha256": "a5888696e9eb1b4bbbecc8eb3922b8369f49d4bddb72263e033cbd17f399be76"
+    },
+    {
+      "component": "font-chakra-petch",
+      "path": "src/MqttProbe.UI/wwwroot/fonts/ChakraPetch-700.woff2",
+      "sha256": "ce5095dc1cb200aaa939e38067a0677018d10e9f26ec38cdcf1557ac524fc775"
+    },
+    {
+      "component": "font-opendyslexic-nerd",
+      "path": "src/MqttProbe.UI/wwwroot/fonts/OpenDyslexicNerdFont-Regular.woff2",
+      "sha256": "094979b161978e72973f5de1f4bf75e5a9c4a55e2ddc2ada4a1fb4d33835dc50"
+    },
+    {
+      "component": "font-opendyslexic-nerd",
+      "path": "src/MqttProbe.UI/wwwroot/fonts/OpenDyslexicNerdFont-Bold.woff2",
+      "sha256": "7fc5bf32543735f89f7166e2398abaec55ddb8d27c72447e9fceec6eee9a20f4"
+    },
+    {
+      "component": "font-opendyslexic-nerd",
+      "path": "src/MqttProbe.UI/wwwroot/fonts/OpenDyslexicNerdFont-Italic.woff2",
+      "sha256": "db3b4da6aac164d992dce601c17b9aed8b48617e815f8d745c7c1d8e3fed70ea"
+    },
+    {
+      "component": "font-opendyslexic-nerd",
+      "path": "src/MqttProbe.UI/wwwroot/fonts/OpenDyslexicMNerdFontMono-Regular.woff2",
+      "sha256": "47ce5b298c9e7c7935092538a0a25ed56ebc963be496e61b4fe0ca919337ae56"
+    },
+    {
+      "component": "font-opendyslexic-nerd",
+      "path": "src/MqttProbe.UI/wwwroot/fonts/OpenDyslexic-LICENSE.txt",
+      "sha256": "c9838b435817b7319ec53239c9785f47ddce643e6c6b2f2dc160cb4aa00df043"
+    },
+    {
+      "component": "sparkplug-b-generated-code",
+      "path": "src/MqttProbe.Core/Models/Sparkplug/SparkplugBProtobuf.cs",
+      "sha256": "add1459374234868037ea75c1156ee5c78aae071cbab22dcf4c99d997f480b3d"
+    },
+    {
+      "component": "echarts-javascript",
+      "path": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/echarts.esm.min.js",
+      "sha256": "28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da"
+    },
+    {
+      "component": "echarts-javascript",
+      "path": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/LICENSE",
+      "sha256": "634293835b43a6dd2094fa39182a3d9a6b9ca43b7fdb9ac354e8037af2a3093a"
+    },
+    {
+      "component": "echarts-javascript",
+      "path": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/NOTICE",
+      "sha256": "d491d358344f842685c1b1585970999db65fe30ecf7ef3867af8814f4016c016"
+    },
+    {
+      "component": "echarts-d3-javascript",
+      "path": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/licenses/LICENSE-d3",
+      "sha256": "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304"
+    }
+  ],
+  "packageFiles": [
+    {
+      "component": "lucide-icons",
+      "id": "Blazor.Lucide",
+      "version": "1.0.6",
+      "path": "lib/net9.0/Blazor.Lucide.dll",
+      "sha256": "07625fc2b1e9a3c7721571cdf641c81b6aa8e15c80f79a696d1ec522c9f04674"
+    },
+    {
+      "component": "apexcharts-javascript",
+      "id": "Blazor-ApexCharts",
+      "version": "8.0.0",
+      "path": "staticwebassets/js/apexcharts.full.min.js",
+      "sha256": "5cb59f52b4ffd834fd0e600fa13ef3434804533691a520da8b3eb31fdbe96f7f"
+    },
+    {
+      "component": "apexcharts-javascript",
+      "id": "Blazor-ApexCharts",
+      "version": "8.0.0",
+      "path": "staticwebassets/js/apexcharts.esm.js",
+      "sha256": "6ba286f0357cb13a84d445d7f86eb5a159bb9d2fa622b9d834413404d4e98084"
+    }
+  ]
+}

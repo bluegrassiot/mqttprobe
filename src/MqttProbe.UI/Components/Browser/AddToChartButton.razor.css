@@ -18,6 +18,8 @@ button {
     font-size: 0.62rem;
     font-weight: 600;
     letter-spacing: 0.05em;
+    /* Callers may pass a shorter label; keep the small-caps button voice. */
+    text-transform: uppercase;
 }
 
 button:hover {

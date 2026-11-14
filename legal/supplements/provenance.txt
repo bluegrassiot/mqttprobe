@@ -1,0 +1,34 @@
+PROVENANCE NOTES
+----------------
+
+Statements about sources that could not be verified from this repository.
+They are separate from the license texts above.
+
+1. ApexCharts and Apex Commons. The bundled ApexCharts JavaScript library
+   8.8.1, and the Apex Commons 0.10.0 code inside it, are licensed under
+   upstream's dual Community/Commercial terms, not MIT. The library is served
+   as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim,
+   from the Blazor-ApexCharts package.
+
+2. Nerd Fonts. The OpenDyslexic files are patched builds made with the Nerd
+   Fonts patcher, whose license is reproduced above. The patcher version used
+   and the individual licenses of patched-in icon sets are not recorded in
+   this repository, so this notice does not enumerate them.
+
+3. Microsoft.Graphics.Win2D 1.4.0. The package carries no license file. Its
+   package metadata declares a legacy Win2D EULA URL and requires license
+   acceptance; the Win2D repository's LICENSE.txt is MIT and is reproduced
+   above. Which terms apply to the package is not established here.
+
+4. Android binding packages. The third-party notices reproduced above are the
+   notices shipped in the Microsoft binding packages. They identify the
+   licenses under which Microsoft received the upstream Android libraries.
+   The upstream projects' own NOTICE files are not reproduced, and their
+   correspondence with these texts has not been checked.
+
+5. Microsoft package notices. The ASP.NET Core app and components package
+   notices, the Microsoft.Extensions, System and cryptography package
+   notices, the Microsoft.Extensions.Logging and System.Numerics.Tensors
+   package notices, the MAUI notice and the runtime notices are reproduced
+   verbatim. Package-level notices for Microsoft packages not listed in
+   section 1 are not included.

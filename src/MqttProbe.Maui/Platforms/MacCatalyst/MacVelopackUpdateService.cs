@@ -1,3 +1,4 @@
+#if !MQTTPROBE_MAC_APP_STORE
 using Microsoft.Extensions.Logging;
 using MqttProbe.Core.Services.Platform;
 using Velopack;
@@ -64,3 +65,4 @@ public sealed class MacVelopackUpdateService : IUpdateService
         }
     }
 }
+#endif

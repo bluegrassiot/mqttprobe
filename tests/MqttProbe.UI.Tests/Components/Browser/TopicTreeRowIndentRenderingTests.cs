@@ -7,30 +7,37 @@ using MqttProbe.UI.Tests.TestHelpers;
 namespace MqttProbe.UI.Tests.Components.Browser;
 
 // A row draws its whole indent with one SVG, so its element count must not grow with depth: the
-// old spacer-per-level markup cost thousands of nodes per row on a deep topic.
+// old spacer-per-level markup cost thousands of nodes per row on a deep topic. The indent itself
+// is bounded so a 360px pane never needs a horizontal scrollbar.
 [TestFixture]
 public class TopicTreeRowIndentRenderingTests : BunitTestContext
 {
     private static TopicTreeRowModel Row(int depth, TopicTreeRowKind kind = TopicTreeRowKind.Devices) =>
         new($"spBv1.0/plant1/{depth}", $"level-{depth}", depth, HasChildren: true,
-            TopicCount: 3, MessageCount: 42, IsExpanded: true, IsValueBearer: false, Kind: kind);
+            TopicCount: 3, MessageCount: 42, IsExpanded: true, IsValueBearer: false, Kind: kind)
+        {
+            Branch = new TopicBranchTarget(TopicBranchKind.Raw, Path: $"spBv1.0/plant1/{depth}")
+        };
 
     private IRenderedComponent<TopicTreeRow> RenderRow(
         TopicTreeRowModel row,
         Action<string>? onExpandToggled = null,
-        Action<TopicSelection>? onSelected = null)
+        Action<TopicTreeRowModel>? onSelectionToggled = null)
     {
         Action<string> toggled = onExpandToggled ?? (_ => { });
-        Action<TopicSelection> selected = onSelected ?? (_ => { });
+        Action<TopicTreeRowModel> selectionToggled = onSelectionToggled ?? (_ => { });
 
         return Render<TopicTreeRow>(parameters => parameters
             .Add(component => component.Row, row)
             .Add(component => component.OnExpandToggled, toggled)
-            .Add(component => component.OnSelected, selected));
+            .Add(component => component.OnSelectionToggled, selectionToggled));
     }
 
     private static int ElementsIn(IRenderedComponent<TopicTreeRow> cut) =>
         Descendants(cut.Find(".topic-tree-row"));
+
+    private static int IndentWidth(IRenderedComponent<TopicTreeRow> cut) =>
+        int.Parse(cut.Find(".topic-tree-indent").GetAttribute("width")!, CultureInfo.InvariantCulture);
 
     private static int Descendants(IElement element) =>
         element.ChildElementCount + element.Children.Sum(Descendants);
@@ -49,10 +56,12 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
 
     [TestCase(0, 0)]
     [TestCase(1, 16)]
-    [TestCase(7, 112)]
-    [TestCase(1000, 16000)]
-    [TestCase(4096, 65536)]
-    public void IndentIsOneElementSizedByDepth(int depth, int expectedWidth)
+    [TestCase(6, 96)]
+    [TestCase(7, 96)]
+    [TestCase(12, 96)]
+    [TestCase(1000, 96)]
+    [TestCase(4096, 96)]
+    public void IndentIsBoundedSoNarrowPanesNeverScrollSideways(int depth, int expectedWidth)
     {
         var cut = RenderRow(Row(depth));
 
@@ -60,6 +69,50 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
         indent.Should().ContainSingle();
         indent[0].GetAttribute("width").Should().Be(expectedWidth.ToString(CultureInfo.InvariantCulture));
         indent[0].GetAttribute("aria-hidden").Should().Be("true");
+        cut.Find(".topic-tree-row").GetAttribute("data-depth").Should().Be(depth.ToString(CultureInfo.InvariantCulture));
+    }
+
+    [TestCase(0, 0)]
+    [TestCase(3, 48)]
+    [TestCase(4, 64)]
+    [TestCase(6, 96)]
+    [TestCase(1000, 96)]
+    public void MetricRowsUseTheSharedIndentScale(int depth, int expectedWidth)
+    {
+        var row = Row(depth, TopicTreeRowKind.SparkplugMetric) with
+        {
+            MetricName = "Motor/Temp",
+            MetricValue = "22.5000",
+            Scope = new SparkplugSelectionScope(SparkplugSelectionKind.Node, "spBv1.0/plant1", "node1"),
+            Branch = null!
+        };
+        var cut = RenderRow(row);
+
+        cut.Find(".topic-tree-indent").GetAttribute("width")
+            .Should().Be(expectedWidth.ToString(CultureInfo.InvariantCulture));
+        cut.Find(".topic-tree-row--metric").Should().NotBeNull();
+        cut.Find(".topic-metric-value").GetAttribute("title").Should().Be("22.5000");
+    }
+
+    [Test]
+    public void MetricGroupAndItsChildrenStayOneStepInsideTheirOwner()
+    {
+        var device = RenderRow(Row(3, TopicTreeRowKind.SparkplugDevice));
+        var group = RenderRow(Row(4, TopicTreeRowKind.SparkplugMetricsGroup) with
+        {
+            Owner = TopicTreeOwner.Device
+        });
+        var metric = RenderRow(Row(5, TopicTreeRowKind.SparkplugMetric) with
+        {
+            Owner = TopicTreeOwner.Device,
+            MetricName = "Temp",
+            Branch = null!
+        });
+
+        IndentWidth(device).Should().Be(48);
+        IndentWidth(group).Should().Be(64);
+        IndentWidth(metric).Should().Be(80,
+            "a metric group must not flatten into its owner or its metric children");
     }
 
     [TestCase(0)]
@@ -74,36 +127,42 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
     }
 
     [Test]
-    public void DeepGroupingRowClickSelectsTheTopicsItStandsForWithoutTogglingExpand()
+    public void DeepGroupingRowClickChecksTheScopeItStandsForWithoutTogglingExpand()
     {
         var row = Row(1000, TopicTreeRowKind.Devices) with
         {
-            SelectionTopics = ["spBv1.0/plant1/node1/dev1", "spBv1.0/plant1/node1/dev2"],
+            TopicCount = 2,
+            Branch = new TopicBranchTarget(
+                TopicBranchKind.Sparkplug,
+                Scope: new SparkplugSelectionScope(SparkplugSelectionKind.Devices, "spBv1.0/plant1", "node1"))
         };
         string? toggled = null;
-        TopicSelection? selected = null;
-        var cut = RenderRow(row, path => toggled = path, request => selected = request);
+        TopicTreeRowModel? checkedRow = null;
+        var cut = RenderRow(row, path => toggled = path, model => checkedRow = model);
 
         cut.Find(".topic-tree-row").Click();
 
-        selected.Should().NotBeNull();
-        selected.Key.Should().Be(row.FullPath);
-        selected.Topics.Should().Equal(row.SelectionTopics);
+        checkedRow.Should().BeSameAs(row);
+        row.ToSelection().Branches.Should().ContainSingle().Which.Should().Be(row.Branch);
         toggled.Should().BeNull("expansion belongs to the chevron");
     }
 
     [Test]
-    public void DeepRealRowClickSelectsTheTopic()
+    public void DeepRealRowClickChecksTheTopicBranch()
     {
-        var row = Row(1000, TopicTreeRowKind.Topic);
-        TopicSelection? selected = null;
-        var cut = RenderRow(row, null, request => selected = request);
+        var row = Row(1000, TopicTreeRowKind.Topic) with
+        {
+            Branch = new TopicBranchTarget(
+                TopicBranchKind.Raw, Path: "spBv1.0/plant1/1000")
+        };
+        TopicTreeRowModel? checkedRow = null;
+        var cut = RenderRow(row, null, model => checkedRow = model);
 
         cut.Find(".topic-tree-row").Click();
 
-        selected.Should().NotBeNull();
-        selected.Key.Should().Be(row.FullPath);
-        selected.Topics.Should().Equal(row.FullPath);
+        checkedRow.Should().BeSameAs(row);
+        row.ToSelection().Key.Should().Be("spBv1.0/plant1/1000");
+        row.ToSelection().Topics.Should().Equal("spBv1.0/plant1/1000");
     }
 
     [Test]
@@ -123,7 +182,7 @@ public class TopicTreeRowIndentRenderingTests : BunitTestContext
     {
         var cut = RenderRow(Row(1000, TopicTreeRowKind.Devices) with
         {
-            SelectionTopics = ["spBv1.0/plant1/node1/dev1", "spBv1.0/plant1/node1/dev2"],
+            TopicCount = 2,
         });
 
         cut.Find(".topic-tree-row").GetAttribute("title")

@@ -1,11 +1,23 @@
+using ApexCharts;
+using Google.Protobuf;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using MQTTnet;
 using MqttProbe.Core.Models.Chart;
+using MqttProbe.Core.Models.Configuration;
 using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Chart;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
+using MqttProbe.Core.Services.Plugins.BuiltIn;
+using MqttProbe.Core.Services.Plugins.Pipeline;
+using MqttProbe.Core.Services.Plugins.Registry;
+using MqttProbe.UI.Services.Formatting;
 using MqttProbe.UI.Tests.TestHelpers;
+using MudBlazor;
+using Org.Eclipse.Tahu.Protobuf;
+using ChartCardComponent = MqttProbe.UI.Components.Charts.ChartCard;
 using ChartsComponent = MqttProbe.UI.Components.Charts.Charts;
 
 namespace MqttProbe.UI.Tests.Components.Charts;
@@ -38,6 +50,7 @@ public class ChartsComponentTests : BunitTestContext
         Services.AddSingleton(_mockChartDataService);
         Services.AddSingleton(_mockSessionState);
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
 
         EnsureMudProviders();
     }
@@ -50,6 +63,10 @@ public class ChartsComponentTests : BunitTestContext
         var cut = Render<ChartsComponent>();
 
         cut.Markup.Should().Contain("No charts yet");
+        cut.Markup.Should().Contain("Choose the chart icon beside a value in");
+        cut.Markup.Should().NotContain("stable metric name");
+        cut.Markup.Should().NotContain("indexed path");
+        cut.Markup.Should().NotContain("Add to Existing");
         return Task.CompletedTask;
     }
 
@@ -67,6 +84,7 @@ public class ChartsComponentTests : BunitTestContext
 
         cut.Markup.Should().Contain("Temp Chart");
         cut.Markup.Should().Contain("Pressure Chart");
+        cut.Markup.Should().NotContain("Choose the chart icon");
         return Task.CompletedTask;
     }
 
@@ -170,7 +188,224 @@ public class ChartsComponentTests : BunitTestContext
         cut.Markup.Should().Contain("app-tabpanel-header__row");
         cut.Markup.Should().Contain("mud-typography-h6");
         cut.Markup.Should().Contain(">Charts<");
-        cut.Markup.Should().Contain("Create");
-        cut.Markup.Should().NotContain("Create chart", "label was shortened to verb-only");
+        cut.Markup.Should().Contain("Configure New");
+        cut.Markup.Should().NotContain("Create chart");
+    }
+
+    [Test]
+    public void RendererSwitch_StartsOnApexAndSwitchesBackFromECharts()
+    {
+        var configs = new List<ChartConfiguration>
+        {
+            new()
+            {
+                Name = "Temp Chart",
+                Series = [new ChartSeries { DisplayName = "Temp" }]
+            }
+        };
+        _mockChartStore.GetCharts(_testConnectionId).Returns(configs);
+        var module = JSInterop.SetupModule(ChartRendererInterop.ModulePath);
+        module.Setup<bool>("createChart", _ => true).SetResult(true);
+        module.Setup<bool>("updateChart", _ => true).SetResult(true);
+        module.Setup<bool>("disposeChart", _ => true).SetResult(true);
+
+        var cut = Render<ChartsComponent>();
+
+        cut.FindComponent<ChartCardComponent>().Instance.Renderer.Should().Be(ChartRendererKind.Apex);
+        cut.Markup.Should().Contain("ApexCharts");
+        cut.FindAll(".charts-renderer-note").Should().BeEmpty();
+
+        var select = cut.FindComponent<MudSelect<ChartRendererKind>>();
+        cut.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync(ChartRendererKind.ECharts));
+
+        cut.WaitForAssertion(
+            () => cut.FindAll(".chart-card-echarts").Should().ContainSingle(),
+            TimeSpan.FromSeconds(5));
+        cut.FindComponent<ChartCardComponent>().Instance.Renderer.Should().Be(ChartRendererKind.ECharts);
+        cut.FindAll(".charts-renderer-note").Should().BeEmpty(
+            "the preview notice is no longer shown");
+        module.VerifyInvoke("createChart", 1);
+
+        cut.InvokeAsync(() => cut.FindComponent<MudSelect<ChartRendererKind>>()
+            .Instance.ValueChanged.InvokeAsync(ChartRendererKind.Apex));
+
+        cut.WaitForAssertion(
+            () => cut.FindComponents<ApexChart<ChartDataPoint>>().Should().ContainSingle(),
+            TimeSpan.FromSeconds(5));
+        cut.FindComponent<ChartCardComponent>().Instance.Renderer.Should().Be(ChartRendererKind.Apex);
+        cut.FindAll(".charts-renderer-note").Should().BeEmpty();
+        module.VerifyInvoke("disposeChart", 1);
+    }
+}
+
+[TestFixture]
+public class ChartsRealCollectorComponentTests : BunitTestContext
+{
+    private static readonly Guid _testConnectionId = Guid.NewGuid();
+    private ChartSettings _chartSettings = null!;
+    private FakeSettingsDocument _document = null!;
+    private ISessionState _sessionState = null!;
+    private IMqttManagedClient _client = null!;
+    private ChartDataService _chartDataService = null!;
+    private Func<MqttApplicationMessageReceivedEventArgs, Task>? _handler;
+
+    [SetUp]
+    public void Setup()
+    {
+        const string nodeTopic = "spBv1.0/g/NDATA/node-1";
+        const string deviceTopic = "spBv1.0/g/DDATA/node-1/device-1";
+        _sessionState = Substitute.For<ISessionState>();
+        _sessionState.SelectedConnection.Returns(new Connection { Id = _testConnectionId });
+        _document = new FakeSettingsDocument();
+        _chartSettings = new ChartSettings(_document);
+        _document.Config.ChartsByConnection[_testConnectionId] =
+        [
+            new ChartConfiguration
+            {
+                Name = "Sparkplug chart",
+                Series =
+                [
+                    new ChartSeries { Id = Guid.NewGuid(), Topic = nodeTopic, JsonPath = "metrics.Set Point" },
+                    new ChartSeries { Id = Guid.NewGuid(), Topic = deviceTopic, JsonPath = "metrics.Device Temp" }
+                ]
+            }
+        ];
+        _client = Substitute.For<IMqttManagedClient>();
+        _client.When(x => x.ApplicationMessageReceivedAsync += Arg.Any<Func<MqttApplicationMessageReceivedEventArgs, Task>>())
+            .Do(x => _handler = x.Arg<Func<MqttApplicationMessageReceivedEventArgs, Task>>());
+        var registryBuilder = new PluginRegistryBuilder();
+        BuiltInPluginRegistration.RegisterBuiltIns(registryBuilder);
+        var pipeline = new PayloadPipeline(registryBuilder.Build(), Substitute.For<ILogger<PayloadPipeline>>());
+        var sparkplugSettings = Substitute.For<ISparkplugSettings>();
+        sparkplugSettings.Sparkplug.Returns(new SparkplugSettings());
+        _chartDataService = new ChartDataService(_client, new JsonFieldExtractor(), new ChartFieldRegistry(),
+            _chartSettings, pipeline, sparkplugSettings);
+
+        Services.AddChartSettings(_chartSettings);
+        Services.AddSingleton<IChartDataService>(_chartDataService);
+        Services.AddSingleton(_sessionState);
+        Services.AddSingleton(Substitute.For<IUxMetricsService>());
+        Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
+        Services.AddSingleton<IDeviceTimeFormatter>(new ChartTimeFormatterStub());
+        EnsureMudProviders();
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _chartDataService.Dispose();
+        _client.Dispose();
+    }
+
+    [Test]
+    public async Task Charts_RendersNodeAndDevicePointsCollectedBeforeInitialization()
+    {
+        const string nodeTopic = "spBv1.0/g/NDATA/node-1";
+        const string deviceTopic = "spBv1.0/g/DDATA/node-1/device-1";
+        var config = _chartSettings.GetCharts(_testConnectionId).Single();
+        var nodeSeries = config.Series[0];
+        var deviceSeries = config.Series[1];
+        _chartDataService.SetConnection(_testConnectionId);
+        await _chartDataService.StartAsync();
+
+        var nodePayload = new Payload();
+        nodePayload.Metrics.Add(new Payload.Types.Metric { Name = "Set Point", Datatype = 10, DoubleValue = 22.5 });
+        await _handler!(MakeSparkplugArgs(nodeTopic, nodePayload.ToByteArray()));
+        var devicePayload = new Payload();
+        devicePayload.Metrics.Add(new Payload.Types.Metric { Name = "Device Temp", Datatype = 10, DoubleValue = 18.25 });
+        await _handler!(MakeSparkplugArgs(deviceTopic, devicePayload.ToByteArray()));
+
+        var cut = Render<ChartsComponent>();
+
+        var series = cut.FindComponents<ApexPointSeries<ChartDataPoint>>();
+        series.Should().HaveCount(2);
+        series[0].Instance.Items.Should().ContainSingle()
+            .Which.Value.Should().Be(22.5);
+        series[1].Instance.Items.Should().ContainSingle()
+            .Which.Value.Should().Be(18.25);
+        _chartDataService.GetPoints(nodeSeries.Id).Should().ContainSingle();
+        _chartDataService.GetPoints(deviceSeries.Id).Should().ContainSingle();
+
+        var connectionB = Guid.NewGuid();
+        var seriesBId = Guid.NewGuid();
+        _document.Config.ChartsByConnection[connectionB] =
+        [
+            new ChartConfiguration
+            {
+                Name = "Connection B chart",
+                Series = [new ChartSeries { Id = seriesBId, Topic = nodeTopic, JsonPath = "metrics.Set Point" }]
+            }
+        ];
+        var newConnection = new Connection { Id = connectionB };
+        _sessionState.SelectedConnection.Returns(newConnection);
+        _sessionState.SelectedConnectionChanged += Raise.Event<Action<Connection>>(newConnection);
+
+        cut.WaitForAssertion(() =>
+        {
+            _chartDataService.GetPoints(nodeSeries.Id).Should().BeEmpty();
+            _chartDataService.GetPoints(deviceSeries.Id).Should().BeEmpty();
+            cut.Markup.Should().Contain("Connection B chart");
+        });
+        cut.FindComponents<ApexPointSeries<ChartDataPoint>>().Should().ContainSingle()
+            .Which.Instance.Items.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task ChartRename_KeepsRenderedAndBufferedHistory()
+    {
+        const string nodeTopic = "spBv1.0/g/NDATA/node-1";
+        var config = _chartSettings.GetCharts(_testConnectionId).Single();
+        var nodeSeries = config.Series[0];
+        _chartDataService.SetConnection(_testConnectionId);
+        await _chartDataService.StartAsync();
+
+        var payload = new Payload();
+        payload.Metrics.Add(new Payload.Types.Metric { Name = "Set Point", Datatype = 10, DoubleValue = 22.5 });
+        await _handler!(MakeSparkplugArgs(nodeTopic, payload.ToByteArray()));
+
+        var cut = Render<ChartsComponent>();
+        cut.FindComponents<ApexPointSeries<ChartDataPoint>>()[0].Instance.Items.Should().ContainSingle()
+            .Which.Value.Should().Be(22.5);
+
+        await _chartSettings.UpdateChartAsync(_testConnectionId, new ChartConfiguration
+        {
+            Id = config.Id,
+            Name = "Renamed Chart",
+            Type = config.Type,
+            MaxPoints = config.MaxPoints,
+            TimeWindowMinutes = config.TimeWindowMinutes,
+            StaleTimeoutSeconds = config.StaleTimeoutSeconds,
+            Series = config.Series
+        });
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Markup.Should().Contain("Renamed Chart");
+            cut.FindComponents<ApexPointSeries<ChartDataPoint>>()[0].Instance.Items.Should().ContainSingle()
+                .Which.Value.Should().Be(22.5);
+        });
+        _chartDataService.GetPoints(nodeSeries.Id).Should().ContainSingle();
+    }
+
+    private static MqttApplicationMessageReceivedEventArgs MakeSparkplugArgs(string topic, byte[] payload)
+    {
+        var message = new MqttApplicationMessageBuilder().WithTopic(topic).WithPayload(payload).Build();
+        return new MqttApplicationMessageReceivedEventArgs("test-client", message,
+            new MQTTnet.Packets.MqttPublishPacket { Topic = topic }, null);
+    }
+
+    private sealed class FakeSettingsDocument : ISettingsDocument
+    {
+        public AppConfiguration Config { get; } = new();
+
+        public Task MutateAndSaveAsync(Action<AppConfiguration> mutate)
+        {
+            mutate(Config);
+            return Task.CompletedTask;
+        }
+
+        public Task ExclusiveAsync(Func<Task> action) => action();
+
+        public Task SaveAsync() => Task.CompletedTask;
     }
 }

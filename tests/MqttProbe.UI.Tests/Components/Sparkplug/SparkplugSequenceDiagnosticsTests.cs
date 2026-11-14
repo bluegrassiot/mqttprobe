@@ -45,14 +45,17 @@ public class SparkplugSequenceDiagnosticsTests : BunitTestContext
         cut.Markup.Should().Contain("Next expected");
         cut.Markup.Should().Contain("Last received");
         cut.FindAll(".spb-sequence-values").Single().TextContent.Should().Contain("Next expected 0").And.Contain("Last received 0");
-        cut.Markup.Should().Contain("Birth/death session identifier (bdSeq):");
-        cut.Markup.Should().Contain("<span class=\"metrics-mono\">0</span>");
+        cut.Find(".spb-timestamp--session abbr").GetAttribute("title")
+            .Should().Be("Birth/death session identifier");
+        cut.Find(".spb-timestamps > span:last-child .metrics-mono").TextContent.Trim().Should().Be("0");
 
         node.BirthDeathSequenceNumber = null;
         var unknown = Render<SparkplugNodeDetail>(parameters => parameters
             .Add(component => component.Node, node));
-        unknown.Markup.Should().Contain("Birth/death session identifier (bdSeq):");
-        unknown.Markup.Should().Contain("<span class=\"metrics-mono\">Unknown</span>");
+        unknown.Find(".spb-timestamp--session abbr").GetAttribute("title")
+            .Should().Be("Birth/death session identifier");
+        unknown.Find(".spb-timestamps > span:last-child .metrics-mono").TextContent.Trim()
+            .Should().Be("Unknown");
     }
 
     [TestCase(new byte[] { 10 }, "10")]

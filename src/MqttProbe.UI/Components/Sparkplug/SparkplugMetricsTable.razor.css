@@ -1,0 +1,145 @@
+/* Fixed columns stay narrow enough for the detail pane at its smallest size;
+   the metric name takes whatever is left and wraps. Updated also has to fit
+   "02:32:05.123 PM", so it is wide enough for a 12-hour time with milliseconds. */
+.spb-col-type { width: 64px; }
+.spb-col-alias { width: 44px; }
+.spb-col-value { width: 18%; }
+.spb-col-updated { width: 136px; }
+.spb-col-chart { width: 118px; }
+
+.spb-time-value {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.spb-time-value--pending { letter-spacing: 0.12em; }
+
+.spb-metric-table {
+    min-width: 0;
+}
+
+.spb-metric-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.spb-write-wrap {
+    display: inline-flex;
+}
+
+.spb-write-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 5px;
+    border: 1px solid var(--mud-palette-primary);
+    border-radius: 3px;
+    background: none;
+    color: var(--mud-palette-primary);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.spb-write-btn:hover:not(:disabled) {
+    opacity: 1;
+    background: var(--mud-palette-primary-hover);
+}
+
+.spb-write-btn:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 1px;
+    opacity: 1;
+}
+
+.spb-write-btn:disabled {
+    border-color: var(--mud-palette-text-disabled);
+    color: var(--mud-palette-text-disabled);
+    cursor: not-allowed;
+}
+
+.spb-metric-table ::deep .mud-table-root > .mud-table-body > .spb-metric-row--group-end > .mud-table-cell {
+    border-bottom-color: color-mix(in srgb, var(--mud-palette-text-secondary) 40%, transparent);
+    border-bottom-width: 2px;
+}
+
+@media (max-width: 599.98px) {
+    .spb-metric-table ::deep .mud-table-root > .mud-table-body > tr.spb-metric-row--group-end {
+        border-bottom-color: color-mix(in srgb, var(--mud-palette-text-secondary) 40%, transparent);
+        border-bottom-width: 2px;
+    }
+}
+
+/* Lane width matches the chevron, so label, meta and chart share a left edge. */
+.spb-metric-table ::deep .spb-depth-0 { --spb-indent: 0px; }
+.spb-metric-table ::deep .spb-depth-1 { --spb-indent: 24px; }
+.spb-metric-table ::deep .spb-depth-2 { --spb-indent: 48px; }
+.spb-metric-table ::deep .spb-depth-3 { --spb-indent: 72px; }
+.spb-metric-table ::deep .spb-depth-4 { --spb-indent: 96px; }
+
+.spb-metric-table ::deep .spb-metric-row--folder,
+.spb-metric-table ::deep .spb-metric-row--branch {
+    --spb-lane: 24px;
+}
+
+.spb-metric-name {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    margin-left: var(--spb-indent, 0px);
+}
+
+.spb-metric-toggle {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    min-height: 24px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--mud-palette-text-secondary);
+    cursor: pointer;
+}
+
+.spb-metric-toggle:hover {
+    color: var(--mud-palette-primary);
+}
+
+.spb-metric-toggle:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+.spb-metric-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.spb-metric-count {
+    flex: 0 0 auto;
+    margin-left: 6px;
+    font-size: 11px;
+    color: var(--mud-palette-text-secondary);
+}
+
+.spb-metric-meta {
+    display: none;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    margin-top: 2px;
+    margin-left: calc(var(--spb-indent, 0px) + var(--spb-lane, 0px));
+    font-size: 11px;
+    color: var(--mud-palette-text-secondary);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.spb-metric-meta-alias::before,
+.spb-metric-meta-updated::before {
+    content: "·";
+    margin-right: 6px;
+    color: var(--mud-palette-text-disabled);
+}

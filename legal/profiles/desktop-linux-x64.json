@@ -1,0 +1,353 @@
+{
+  "schemaVersion": 1,
+  "name": "desktop-linux-x64",
+  "host": "linux",
+  "project": "src/MqttProbe.Desktop/MqttProbe.Desktop.csproj",
+  "framework": "net10.0",
+  "runtimeIdentifier": "linux-x64",
+  "runtimeIdentifiers": null,
+  "selfContained": true,
+  "targets": [
+    "net10.0/linux-x64"
+  ],
+  "inputs": {
+    "files": {
+      "global.json": "a4c16f708b406a9d1c56bdd74a46c730277d3e3ddc825efd6baed2e692bc60bf",
+      "Directory.Packages.props": "542eee4b065ba53acb09d8c7256d188b86fc9690055d38e5e48596ce1fb807b6",
+      "Directory.Build.props": "5b030b22a23b70b4378434208e44693013479cd56b981d331429dbf85c596621",
+      ".github/actions/setup-dotnet-workload/action.yml": "e3f7736c4e8887df3019c24fea10702dcd5a6be3381679792148b66e238d0464",
+      "src/MqttProbe.Core/MqttProbe.Core.csproj": "f17a0c8eaa5569f8bf877669173f5260700013ece29639e6dee0a30d49ede2ec",
+      "src/MqttProbe.Desktop/MqttProbe.Desktop.csproj": "83d7bdfd02fa814797b5b66b3f09bbe4bacb7585d8d849ad883b399a20cf2da7",
+      "src/MqttProbe.Maui/MqttProbe.Maui.csproj": "5f05ad1ee688925a5db6895d14b8dfd0f5e7517507ffa5af0d565f0d3dda2d57",
+      "src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj": "ad64a32de96245d593d3c03f9ca581d8affce7f0d147e3947a08a6a6d2797612",
+      "src/MqttProbe.UI/MqttProbe.UI.csproj": "984773e2f9588a641a4b2fd1aabf34826435f798f88ce958af98ff045ae4ed09",
+      "src/MqttProbe.Web/MqttProbe.Web.csproj": "235a7f45c35d0d50d8201f9be0eab8475f90163eb43296aed78d687dd419eea6"
+    },
+    "submodules": {
+      "external/SparkplugNet": "95366c3915db71bdf661c5ea29f2fc87c2da5866"
+    },
+    "sdk": "10.0.403"
+  },
+  "packages": [
+    {
+      "id": "Blazor-ApexCharts",
+      "version": "8.0.0",
+      "sha512": "oQzHx0yiqlnM1EgaXv64tuQm+Silxbddb3zujIByjBsK/a3Tanm+U9LFRG/bbG1mcuF2tSFuhFWYaY7mkTx4bg=="
+    },
+    {
+      "id": "Blazor.Lucide",
+      "version": "1.0.6",
+      "sha512": "UgssRLV/BlqFrXj3YgJL7DNkjTYzInFdKHHETQ+HUm5SYRgROqvDXjXX7VrGzyGHcqBRZ2/CBeFSjZFhnf9sUA=="
+    },
+    {
+      "id": "FluentValidation",
+      "version": "12.2.0",
+      "sha512": "DR3lFbdnKucaaj1/8zMNOACMz/64igzox1yVZSFVsLxYB5mxAB+wFP1WZ8fjwrZnbU1KA1DoMzHKYKxUfuZ4wQ=="
+    },
+    {
+      "id": "Google.Protobuf",
+      "version": "3.36.2",
+      "sha512": "Ci1q1iJg74qAE5riTA2FbMS0wPbpruPQI/JQ9DrAsRo2VsSxgt1e/pmxGxgrci+pXJEgrSYg2vPl8rrStZkclQ=="
+    },
+    {
+      "id": "MQTTnet",
+      "version": "5.2.0.1603",
+      "sha512": "iNuWVo/568aRo2ExEN2qkC4J5b07ckKqt+9Uok2kIbbK7PMBsXvYiKVENPHmOBWFB5ExhlNQb/qQ8M9/IYRTdQ=="
+    },
+    {
+      "id": "MessagePack",
+      "version": "3.1.12",
+      "sha512": "m1QEsd59gUj82ji5tEQbZiyjV6y0F7cYfGVhil6pAlNZpyzR7ze9TucMu4lPpi8cZAV8aNl3D9/T9J1HbFz15Q=="
+    },
+    {
+      "id": "MessagePack.Annotations",
+      "version": "3.1.12",
+      "sha512": "LdI67sY7F3KK+JsrG02+DP1XFkowaZSoyfL2M88hjm1MOOsjf8amBLAJolV+zxoPUZf3uGbKzq1cMQD8PlpSpA=="
+    },
+    {
+      "id": "MessagePackAnalyzer",
+      "version": "3.1.12",
+      "sha512": "iNSNatPh6bafRUbkQKlClExjpPpd8hiZgfZsodGf7bheIlkizGbMzsJ2mPui8jOHRe4Ky9eg5ou/fFzI7CT3fg=="
+    },
+    {
+      "id": "Meziantou.Analyzer",
+      "version": "3.0.339",
+      "sha512": "oB0KVTYO0CkqscgCp2Fce6Q4G9gIVvVy39ULQLU2eOJfTNWS63Lk7VZbgerx6XMdUxPC4bprv87r8f7EZfp6gQ=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Authorization",
+      "version": "10.0.15",
+      "sha512": "1yF1VHbykhh+lSJpZcMlzicUqJ4J5xdexDpbTcar2w9t6Azwb74gYV8V4TYPF9UT+eBwHFSEjfHuL1ZeKMVLjA=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components",
+      "version": "10.0.15",
+      "sha512": "CUJ0p1AgNs7BRnpeSwNpOkSisa2hAXSDIsF/ae0xchSutaXJ1/Xo0ad8GtB1qLHG07G3BDyXPchr+WkEkvteAQ=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components.Analyzers",
+      "version": "10.0.15",
+      "sha512": "C59X9e1JEbJyst7jF7dYxtF2XWn5CZq0ILBsuHLcBZPzNvOqUjdb9zlBWLx5XmCfXceKmwW0F6OMhuDY1FxO5w=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components.Authorization",
+      "version": "10.0.15",
+      "sha512": "dAaM1HXVcnVkZGdATMRNTlEPPemqKaIvTUrPVBy9yLrXDpealF7cdaccv6cQkU/JP8GYOcK6dbG0QepmLrihCw=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components.Forms",
+      "version": "10.0.15",
+      "sha512": "O5DrX6kL/bbJDWN9P6jauMYd8L324CSUgWvIY0mEsbsaaj5mFcRlRS+AVSi9ukF/+tgQ6/D6O5XS2h2J5+/A9A=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components.Web",
+      "version": "10.0.15",
+      "sha512": "o+ANG0DKR9KyPULTqwegrr9fQr6VLJaNqIPJtDwHn4fMwC1TK+WBqujttNZFIIR6mzSLk+mBCAUaLdlWAJWgdA=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Components.WebView",
+      "version": "10.0.15",
+      "sha512": "JpOLj0FuzRXIT2u5VaQqU/Va4G6hP/c1MC//SeFkLdI/cKAYBdOuSxhrYbgE/2Q9JQPe0Xr2iwbKLAG+MENMbQ=="
+    },
+    {
+      "id": "Microsoft.AspNetCore.Metadata",
+      "version": "10.0.15",
+      "sha512": "MBSGFb/jgLXAXk6rLvRLVJb3RctI/dU7axHVMVkGZoedy9Neqt628PDdolczyCSQWN6sGayH55aggnDLlx2jrw=="
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration",
+      "version": "11.0.0",
+      "sha512": "VQS/GkFU9oLQmXZv0AR/zluF0YAbEAoUQ5aYMqcRc2TWeKa6m2AjInAOnDhCcoWI5a6LQUCzTcl8B3DZZaPZLg=="
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.Abstractions",
+      "version": "11.0.0",
+      "sha512": "oyBSWnEsEi9SZTiwAfuKIdVIiEZ7TvNOtdFaGqyzF9WtomNV+uZHCqhQbnz/ipjtM50BYJ4s0MWbYafolq2mAg=="
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.Binder",
+      "version": "10.0.15",
+      "sha512": "VOjlZlv9b3woS1TcI8Ts1r2IsmsT7hqkx7o2sMSNzE5fPBGKfhJszlEIhtQVzUz4H8Uw/7Jtuj9x7wGlCUsi2A=="
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.FileExtensions",
+      "version": "11.0.0",
+      "sha512": "ViBZDt2Y7TfVIxiWG5HKfP1KHTzsxn7a31ikZSg/1mdOfGyGAPj278v63NOU+n4UqvaOR43t9MOCUfadSohjQA=="
+    },
+    {
+      "id": "Microsoft.Extensions.Configuration.Json",
+      "version": "11.0.0",
+      "sha512": "WsNcEnVlq43lXBHAXtQg1b7job819SUf9BPtJrq44vhthL9Ijl2mkRBx5L3hIU1p2AN+wiRg47yhYj+vQxEgeQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.DependencyInjection",
+      "version": "11.0.0",
+      "sha512": "KygQMITBDDPXw7+AAgdwQvVAaTXuDsc1iCAuvhO73ERxKX+d92cdbgZmpoYF7DIUq2hfs/yO2KD87uIreRy3MA=="
+    },
+    {
+      "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+      "version": "11.0.0",
+      "sha512": "a2c4Kp55miXT6G+DSb75pczXQJHgNMzPyZEyMxrrKxuQrgvctcDWJWD9fVe/uGbQdu4Z0c3B7AVKp1DXmD64nQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Diagnostics",
+      "version": "10.0.15",
+      "sha512": "+FK6gPJDZ+8abQ7WAXUSxK7jgwhATzHlt3TCiO/paVwx9I8VsdHHoapugUUZNHr0Re2UFDoxpPpCp5kp6TX5iQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Diagnostics.Abstractions",
+      "version": "10.0.15",
+      "sha512": "oD1xl7uoHGnVuCEo3bjj1W3cVTMe55QVdkeis9YYdcnLfU42X58XTx6A1Sl7kiqp5LbzVrUvdy7F/mNKaOnpLg=="
+    },
+    {
+      "id": "Microsoft.Extensions.FileProviders.Abstractions",
+      "version": "11.0.0",
+      "sha512": "e3NvNYCuKZ42qlNCryuSmo+xxlhBZeS2Sh5sIPCn+wRSHc0F9N8oAC+r0ki1Yh/KMfw4H6KLh4p9u4TGWye7fw=="
+    },
+    {
+      "id": "Microsoft.Extensions.FileProviders.Composite",
+      "version": "10.0.15",
+      "sha512": "gRrwej0NqF2Soq1PVPvPkg+uLHvxeRrf1QpNDYTOtcJRER1bgx07kQrBGwTmxEtCmMnBSYcX8dzkXfjrs6IGKg=="
+    },
+    {
+      "id": "Microsoft.Extensions.FileProviders.Embedded",
+      "version": "10.0.15",
+      "sha512": "1uOmE46L6BeIEQv7x4lynMzeSO3cRe8DeDSvFMcWZRCIHblNRpiAWFGiDP0d8HRy06DKdCBC0GtYEkSS+/fg0w=="
+    },
+    {
+      "id": "Microsoft.Extensions.FileProviders.Physical",
+      "version": "11.0.0",
+      "sha512": "lHezhjI8zoTpltXwNy6QMr4/6lIhbXsAYZnCrgRDNNzMHCKvh+x95mkBVXLMzs8axrw7J5Cy21K8lM5YHCfgAw=="
+    },
+    {
+      "id": "Microsoft.Extensions.FileSystemGlobbing",
+      "version": "11.0.0",
+      "sha512": "Ycwu/y22NK/ZyJpaFRJc4FB88mjOnsttk2AVHaKgEeShq0vodXZ4FJErpMM2Jju3r3t/2VYWrcHuIxj3ZT/aow=="
+    },
+    {
+      "id": "Microsoft.Extensions.Http",
+      "version": "10.0.0",
+      "sha512": "r+mSvm/Ryc/iYcc9zcUG5VP9EBB8PL1rgVU6macEaYk45vmGRk9PntM3aynFKN6s3Q4WW36kedTycIctctpTUQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Localization",
+      "version": "10.0.1",
+      "sha512": "yJBI3IRm9uTRu7cPc7i90/8+CuiiJJ5M4khj6iWQcYnq6VrG+H2U5GzpRLtkVCsgxc1LjtkNMEbSDatfBA+z5g=="
+    },
+    {
+      "id": "Microsoft.Extensions.Localization.Abstractions",
+      "version": "10.0.1",
+      "sha512": "TQSQWF+iZdtGNgPiu7gKUqrTEeRD/mhk7KeYiuEwmTUPbawsYfPSNzSvOOeueJ0nU1697X8HZ2vCp2ByHNHkZg=="
+    },
+    {
+      "id": "Microsoft.Extensions.Logging",
+      "version": "11.0.0",
+      "sha512": "zsse8MOgo0bj2KAEsSkg9WtNAfZbHbTlGeqfhy5PGozomM3zQM0XzumSQzQ0451IWNSJWLqYaSIQEpCi2j1sCA=="
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Abstractions",
+      "version": "11.0.0",
+      "sha512": "MTMO2V1eT9Dm5VIpJGLNwIjAjoBErUlfuB+DEaZ0tb8J+Nf/Xlj8he5AztK9p1iOJPIyuBeOrVy2u/CSdsfzPw=="
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Configuration",
+      "version": "9.0.1",
+      "sha512": "MeZePlyu3/74Wk4FHYSzXijADJUhWa7gxtaphLxhS8zEPWdJuBCrPo0sezdCSZaKCL+cZLSLobrb7xt2zHOxZQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Console",
+      "version": "9.0.1",
+      "sha512": "YUzguHYlWfp4upfYlpVe3dnY59P25wc+/YLJ9/NQcblT3EvAB1CObQulClll7NtnFbbx4Js0a0UfyS8SbRsWXQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Debug",
+      "version": "11.0.0",
+      "sha512": "HPSW9js0C8PZUVG9Vl6mZXQyNIF/YDov99OwpTYHzTjIIa57QFRRoQW3sKCzVEGaIAEz++mErAF6IgVlf+Cw0g=="
+    },
+    {
+      "id": "Microsoft.Extensions.Options",
+      "version": "11.0.0",
+      "sha512": "AaNswJ3NqdNCNqQVlU7iTkvrrrzqrSSxkOC3bLlrwv/CPN7YRz3HoJk7o4ey5v6U8bOHocHsyYoJ7ihK1KUWyQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Options.ConfigurationExtensions",
+      "version": "10.0.15",
+      "sha512": "yQX7dFAHm9xKBh2TLiA3aTrmOkgEeMRoS7UM/XuVy3CpddaluUXDIMiM8na5q6JMesH8zt3bKIDu/3hkEhVo7Q=="
+    },
+    {
+      "id": "Microsoft.Extensions.Primitives",
+      "version": "11.0.0",
+      "sha512": "HH2akbW2HeY/xeZJA5UceuQQX+1Pv/Kxrz/x4XPoH6wYDtgPIlBeOTZlQXlT+b50b1Ym/xfP+WJCX9FW4uLBXQ=="
+    },
+    {
+      "id": "Microsoft.Extensions.Validation",
+      "version": "10.0.15",
+      "sha512": "BYQdFlNSTKICcmE4MqQ8sBRqHDHzNuW/ofbnnjzPJV+tMT5mNUYMSmaPXMH52csP9RkJVq5dW/c38W+7xbQvpA=="
+    },
+    {
+      "id": "Microsoft.JSInterop",
+      "version": "10.0.15",
+      "sha512": "mPbcHzcmIWGNKtZzxb6En97frT0f//rFjx0RQMXwkjxMnieiQ+qIp3hWHX95kklZHynOn4BY/FtRCIE9MfKTQQ=="
+    },
+    {
+      "id": "Microsoft.NET.StringTools",
+      "version": "17.11.4",
+      "sha512": "mudqUHhNpeqIdJoUx2YDWZO/I9uEDYVowan89R6wsomfnUJQk6HteoQTlNjZDixhT2B4IXMkMtgZtoceIjLRmA=="
+    },
+    {
+      "id": "MudBlazor",
+      "version": "9.12.0",
+      "sha512": "T6PQUCJe60UTSy3u1F8R2nuC06Cox6WEhon5GA2/AZNVI1WstlPSJZdGPyp6pHFpWdjPpla65piLpyJsbW+1rA=="
+    },
+    {
+      "id": "Photino.Blazor",
+      "version": "4.0.13",
+      "sha512": "+Jr/6DGSF8AZOuWvGTU/ndB8v9DEINmcrxhh/XbCxdRzz2jJEY4UfbFtoAoiBgOonPskf4l2eC+o+Wx2c+mJPQ=="
+    },
+    {
+      "id": "Photino.NET",
+      "version": "4.0.16",
+      "sha512": "2oTFsxt8XpLlVvtChlBD8HzLw6MgfHF+DQ4aLEDfgc4GbYjumEywB1JMfWDChm2Whfkr4ZF7DV2deRrpitiBcw=="
+    },
+    {
+      "id": "Photino.Native",
+      "version": "4.0.22",
+      "sha512": "VIHipEOe4CZ7HElZE8zTwcvANOsCZ2yak/4nQ4LXzjdlwIjdbY8htmHfNR6rRPgWlCfTfT349GCa6V6Id2/Xyg=="
+    },
+    {
+      "id": "SonarAnalyzer.CSharp",
+      "version": "10.36.0.15337",
+      "sha512": "jGLAZUjheSURfe0T/dJYGUrMOrLt1fxaInpChq75YJvrywsxFoUKK/EM6PSfTjkt4pbaq2ywIQjgQzhrmmj5Ow=="
+    },
+    {
+      "id": "System.Collections.Immutable",
+      "version": "11.0.0",
+      "sha512": "Z3pTTvMGhsThIfPDboJDwBY+yCqfNCpYyL4fcPCNo4rVYhlS7Kmg4nkABanRYRSVDPZ3qiXPdGymBzMDuawPNg=="
+    },
+    {
+      "id": "System.Diagnostics.DiagnosticSource",
+      "version": "11.0.0",
+      "sha512": "+boRR9uSKiIPtFeRLGwO5xylhDF80xpwM+dmk5jgIqqeUKLbujGkGICMTKqQrBzKO6fIp8BU8DV6YZkQukqo3A=="
+    },
+    {
+      "id": "System.Formats.Cbor",
+      "version": "11.0.0",
+      "sha512": "2ULEPU67LRt4YVwBnCk1OhjsJspIBzg1JlDkN2hnZm9im3fC9bSbVQorLraOIcLMlA6/8eWQG1fjTpurHkIFZw=="
+    },
+    {
+      "id": "System.IO.Pipelines",
+      "version": "11.0.0",
+      "sha512": "F3biHUDT5JWIKhEcZrRjKuYy7XGZOe3GOU2N6rSOQeZBx+Ko/PY7K+VaC3BwD+ofQ9k0MXIhEB7uqJSRkZAkQQ=="
+    },
+    {
+      "id": "System.Reflection.Metadata",
+      "version": "11.0.0",
+      "sha512": "6mLHh96MZR4PJbNH8dUOjCkYWLR7N4FYseSjqGIgEYj8so3j1CvQTpTjouI2jInKnJYSGYLFHwdQEJtMKWvlQQ=="
+    },
+    {
+      "id": "System.Reflection.MetadataLoadContext",
+      "version": "11.0.0",
+      "sha512": "IixPUjMvqADBklO1Cz9OiEcfxIwFptmAwnm02DVTmW5JW4k06HU76boTVxPMChOvalE6FFJH3H82gO8+sgDhwQ=="
+    },
+    {
+      "id": "System.Security.Cryptography.ProtectedData",
+      "version": "11.0.0",
+      "sha512": "iS9iyAMwLDPFBzTdcREDkzRBYmwy7aENYl7EXxAvnNJNCbl7+UVRgJfWaVLtVjSeDmT3JIItgGODmuAPljXFww=="
+    },
+    {
+      "id": "System.Text.Encodings.Web",
+      "version": "11.0.0",
+      "sha512": "yNdu/KHBHq1rCu0d6TwKWNL1SvomZB4c/S0l4XKF1PX0gOIlPfnGVeBg7sQ3dmgy5e3UA+JGidak3abyBdlYAQ=="
+    },
+    {
+      "id": "System.Text.Json",
+      "version": "11.0.0",
+      "sha512": "hyLfq7fRYbq8m3ENGqgEYkqxLeLx2xmNMlf6UG1a7RQo9OsTsfm4Ch/E6O+A5vYQ2ThneLUn1CHF644lmH5QhA=="
+    },
+    {
+      "id": "System.Threading.RateLimiting",
+      "version": "11.0.0",
+      "sha512": "/XV8cRRUkl+uyvVdPBCo+p/QUSMFI7JdPHgpeWvnVmh/Ao/TRn7gSjo1XS0qJGGhd7Pkjn/9ePSNXtKQN0kutA=="
+    },
+    {
+      "id": "Velopack",
+      "version": "1.2.161",
+      "sha512": "OpHNacIumnkhaaX3ZlQ/TCR4YPOJvud2/PAOoWb6o+mIrLwIVA275I5wAgt4q/1O2VrJeDwR1qFQyqzG4lUArg=="
+    },
+    {
+      "id": "protobuf-net",
+      "version": "3.2.56",
+      "sha512": "4IPJeTYAMNewlN8MDaFkcmR/9hLhJeo9eARnTh104zh7mf+vXT2gu5MUfUnkSQU+CH578Q6vcdU7LQDQPG6eaw=="
+    },
+    {
+      "id": "protobuf-net.Core",
+      "version": "3.4.40",
+      "sha512": "UDQ8fbEKqpQktJfFyqkZ22S7P01sJWNmqkYjzbwZdZUHFwHIDigmWIzxmExF7NjbNoTqmv2Dfsu3rOpRHXK5EA=="
+    },
+    {
+      "id": "protobuf-net.Reflection",
+      "version": "3.4.40",
+      "sha512": "1wlf2O6sqEypWMu5IMGOTcovVicQ+QP9PRNelsRcx823UWO9ytVuDFLRaJ5sVg8zoSxzgOT9sBdYbmv3i/wgaw=="
+    }
+  ]
+}

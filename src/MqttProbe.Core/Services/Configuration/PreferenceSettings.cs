@@ -27,6 +27,12 @@ internal sealed class PreferenceSettings(ISettingsDocument document)
     public Task SetGroupSparkplugTopicsByNodeAndDeviceAsync(bool value) =>
         SetUiAsync(ui => ui.GroupSparkplugTopicsByNodeAndDevice = value);
 
+    public Task SetTopicTreeMultiSelectAsync(bool value) =>
+        SetUiAsync(ui => ui.TopicTreeMultiSelect = value);
+
+    public Task SetMessageTimeAsync(MessageTimePreferences preferences) =>
+        SetUiAsync(ui => ui.MessageTime = MessageTimePreferences.Normalize(preferences));
+
     public Task DismissHintAsync(string hintId) =>
         IsHintDismissed(hintId)
             ? Task.CompletedTask
@@ -45,6 +51,9 @@ internal sealed class PreferenceSettings(ISettingsDocument document)
 
     public Task SetAllowNodeRebootAsync(bool allow) =>
         SetSparkplugAsync(s => s.AllowNodeReboot = allow);
+
+    public Task SetAllowMetricWritesAsync(bool allow) =>
+        SetSparkplugAsync(s => s.AllowMetricWrites = allow);
 
     public Task SetReorderTimeoutMillisecondsAsync(int milliseconds) =>
         SetSparkplugAsync(s => s.ReorderTimeoutMilliseconds = Math.Clamp(milliseconds, 0, 60000));

@@ -60,17 +60,24 @@ internal sealed class AliasAwareKnownMetricStorage : SparkplugBase<Metric>.Known
             or SparkplugMessageType.DeviceBirth;
 
         var aliasOnlyMetrics = new List<Metric>();
+        var deviceRebirthMetrics = new List<Metric>();
         var otherMetrics = new List<Metric>();
 
         foreach (var metric in metrics)
         {
             if (!isBirth && string.IsNullOrWhiteSpace(metric.Name) && metric.Alias.HasValue)
                 aliasOnlyMetrics.Add(metric);
+            else if (sparkplugMessageType == SparkplugMessageType.DeviceCommand && IsDeviceRebirth(metric))
+                deviceRebirthMetrics.Add(metric);
             else
                 otherMetrics.Add(metric);
         }
 
         var result = new List<Metric>(base.FilterMetrics(otherMetrics, sparkplugMessageType));
+
+        // SparkplugNet filters DCMD metrics against the node's metrics, where a device
+        // control metric is never known, so it would be dropped before the handler runs.
+        result.AddRange(deviceRebirthMetrics);
 
         // Accept alias-only data metrics that match a known alias + datatype.
         // Unknown aliases or datatype mismatches are silently dropped (no arbitrary aliases).
@@ -85,13 +92,18 @@ internal sealed class AliasAwareKnownMetricStorage : SparkplugBase<Metric>.Known
 
         return result;
     }
+
+    internal const string DeviceRebirthMetricName = "Device Control/Rebirth";
+
+    internal static bool IsDeviceRebirth(Metric metric) =>
+        string.Equals(metric.Name, DeviceRebirthMetricName, StringComparison.Ordinal)
+        && metric.DataType == DataType.Boolean;
 }
 
 internal sealed class SparkplugNodeAdapter : ISparkplugNode
 {
     private readonly SparkplugNode _node;
     private readonly ILogger? _logger;
-    private readonly IReadOnlyList<Metric> _knownMetrics;
     private readonly IReadOnlyList<string>? _deviceIds;
     private readonly Func<string, IReadOnlyList<Metric>>? _getDeviceBirthMetrics;
     private readonly CancellationToken _revocationToken;
@@ -103,12 +115,48 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
         CancellationToken revocationToken = default)
     {
         _node = node;
-        _knownMetrics = knownMetrics;
         _deviceIds = deviceIds;
         _getDeviceBirthMetrics = getDeviceBirthMetrics;
         _logger = logger;
         _revocationToken = revocationToken;
         _node.NodeCommandReceived += OnNodeCommandReceived;
+        _node.DeviceCommandReceived += OnDeviceCommandReceived;
+    }
+
+    private async Task OnDeviceCommandReceived(SparkplugNodeBase<Metric>.DeviceCommandEventArgs args)
+    {
+        var hasRebirth = args.Metrics.Any(m =>
+            AliasAwareKnownMetricStorage.IsDeviceRebirth(m) && m.Value is bool b && b);
+        if (!hasRebirth || _revocationToken.IsCancellationRequested || !_node.IsConnected)
+            return;
+
+        var deviceId = args.DeviceIdentifier;
+        IReadOnlyList<Metric>? metrics = null;
+        if (_getDeviceBirthMetrics is not null && _deviceIds?.Contains(deviceId, StringComparer.Ordinal) == true)
+            metrics = _getDeviceBirthMetrics(deviceId);
+        else if (_node.KnownDevices.TryGetValue(deviceId, out var knownDevice))
+            metrics = knownDevice.Metrics;
+
+        if (metrics is null)
+        {
+            _logger?.LogWarning("Device rebirth ignored for {GroupId}/{NodeId}/{DeviceId}: unknown device",
+                args.GroupIdentifier, args.EdgeNodeIdentifier, deviceId);
+            return;
+        }
+
+        if (_logger?.IsEnabled(LogLevel.Information) == true)
+            _logger.LogInformation("Rebirth command received for device {GroupId}/{NodeId}/{DeviceId}",
+                args.GroupIdentifier, args.EdgeNodeIdentifier, deviceId);
+
+        try
+        {
+            await PublishDeviceBirthMessage(deviceId, metrics).ConfigureAwait(false);
+        }
+        catch (MQTTnet.Exceptions.MqttClientDisconnectedException ex)
+        {
+            _logger?.LogWarning(ex, "Device rebirth aborted for {GroupId}/{NodeId}/{DeviceId}: disconnected",
+                args.GroupIdentifier, args.EdgeNodeIdentifier, deviceId);
+        }
     }
 
     private async Task OnNodeCommandReceived(SparkplugNodeBase<Metric>.NodeCommandEventArgs args)
@@ -142,7 +190,8 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
     {
         try
         {
-            await _node.Rebirth(_knownMetrics).ConfigureAwait(false);
+            // Not SparkplugNet's Rebirth: it publishes an NDEATH first, which a rebirth must not do.
+            await InvokeNodeMethod("PublishNodeAndDeviceBirthsInternal").ConfigureAwait(false);
         }
         catch (MQTTnet.Exceptions.MqttClientDisconnectedException ex)
         {
@@ -158,15 +207,7 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
             return;
         }
 
-        RestoreAliasAwareStorage();
         await RepublishDeviceBirthsAsync().ConfigureAwait(false);
-    }
-
-    private void RestoreAliasAwareStorage()
-    {
-        var field = typeof(SparkplugBase<Metric>).GetField("knownMetrics",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        field?.SetValue(_node, new AliasAwareKnownMetricStorage(_knownMetrics));
     }
 
     private async Task RepublishDeviceBirthsAsync()
@@ -210,16 +251,18 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
         return _node.PublishMetrics(metrics);
     }
 
-    public Task PublishNodeDeathMessage()
+    public Task PublishNodeDeathMessage() => InvokeNodeMethod("SendNodeDeathMessage");
+
+    private Task InvokeNodeMethod(string name)
     {
         System.Reflection.MethodInfo? method = null;
         for (var type = _node.GetType(); type is not null; type = type.BaseType)
         {
             method = type.GetMethod(
-                "SendNodeDeathMessage",
+                name,
                 System.Reflection.BindingFlags.NonPublic
                     | System.Reflection.BindingFlags.Instance
-                    | System.Reflection.BindingFlags.DeclaredOnly); // NOSONAR — SendNodeDeathMessage is not exposed publicly by SparkplugNet
+                    | System.Reflection.BindingFlags.DeclaredOnly); // NOSONAR — not exposed publicly by SparkplugNet
             if (method is not null)
                 break;
         }
@@ -228,9 +271,9 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
             return (Task)method.Invoke(_node, null)!;
 
         throw new InvalidOperationException(
-            "SparkplugNet method 'SendNodeDeathMessage' was not found via reflection. " +
+            $"SparkplugNet method '{name}' was not found via reflection. " +
             "The method may have been renamed or removed in a SparkplugNet update. " +
-            "Update the reflection call in SparkplugNodeAdapter.PublishNodeDeathMessage.");
+            "Update the reflection call in SparkplugNodeAdapter.");
     }
 
     public async Task PublishDeviceBirthMessage(string deviceId, IReadOnlyList<Metric> metrics)

@@ -27,7 +27,3 @@
 .charts-renderer-select {
     min-width: 190px;
 }
-
-.charts-renderer-note {
-    color: var(--mud-palette-text-secondary);
-}

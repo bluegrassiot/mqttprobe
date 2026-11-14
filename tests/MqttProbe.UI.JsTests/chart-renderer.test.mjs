@@ -12,17 +12,35 @@ function createFakeEcharts() {
     return {
         charts,
         init(element) {
+            const zrHandlers = new Map();
             const chart = {
                 element,
                 disposed: false,
                 options: [],
                 resizes: 0,
                 handlers: new Map(),
+                actions: [],
+                events: [],
+                inGrid: true,
                 setOption(option, options) {
                     this.options.push({ option, options });
+                    this.events.push({ type: 'setOption' });
                 },
                 on(name, handler) {
                     this.handlers.set(name, handler);
+                },
+                getZr() {
+                    return {
+                        on: (name, handler) => zrHandlers.set(name, handler),
+                        emit: (name, payload) => zrHandlers.get(name)?.(payload),
+                    };
+                },
+                containPixel() {
+                    return this.inGrid;
+                },
+                dispatchAction(action) {
+                    this.actions.push(action);
+                    this.events.push(action);
                 },
                 resize() {
                     this.resizes++;
@@ -33,6 +51,9 @@ function createFakeEcharts() {
                 emit(name, payload) {
                     this.handlers.get(name)?.(payload);
                 },
+                emitZr(name, payload) {
+                    zrHandlers.get(name)?.(payload);
+                },
             };
             charts.push(chart);
             return chart;
@@ -41,7 +62,29 @@ function createFakeEcharts() {
 }
 
 function createElement() {
-    return { isConnected: true, clientWidth: 640, clientHeight: 300 };
+    const listeners = new Map();
+    return {
+        isConnected: true,
+        clientWidth: 640,
+        clientHeight: 300,
+        addEventListener(name, handler) {
+            listeners.set(name, handler);
+        },
+        removeEventListener(name, handler) {
+            if (listeners.get(name) === handler) {
+                listeners.delete(name);
+            }
+        },
+        getBoundingClientRect() {
+            return { left: 0, top: 0, width: 640, height: 300 };
+        },
+        emit(name, event) {
+            listeners.get(name)?.(event);
+        },
+        listenerCount() {
+            return listeners.size;
+        },
+    };
 }
 
 function createDotNetRef() {
@@ -140,6 +183,14 @@ test('create applies an explicit time-series option synchronously', async () => 
         assert.equal(option.dataZoom[0].filterMode, 'none');
         assert.equal(option.tooltip.trigger, 'axis');
         assert.equal(option.tooltip.renderMode, 'richText', 'rich text keeps series names out of HTML');
+        assert.equal(option.tooltip.triggerOn, 'mousemove', 'the tooltip follows the pointer, not a click');
+        assert.notEqual(option.tooltip.alwaysShowContent, true, 'a hidden pointer must be able to hide the tooltip');
+        assert.equal(option.tooltip.axisPointer.type, 'cross', 'both crosshair lines mark the hovered instant');
+        assert.deepEqual(option.tooltip.axisPointer.lineStyle,
+            { color: '#CBD5E1', type: 'dashed', width: 1 });
+        assert.deepEqual(option.tooltip.axisPointer.crossStyle,
+            { color: '#CBD5E1', type: 'dashed', width: 1 });
+        assert.equal(option.tooltip.textStyle.rich, undefined, 'the built-in params marker owns its rich style');
         assert.equal(option.legend.show, true);
         assert.equal(option.legend.textStyle.color, '#0F172A', 'legend labels use the chart foreground');
         assert.equal(option.xAxis.splitLine.show, true, 'the Apex baseline draws both axis grids');
@@ -210,13 +261,234 @@ test('duplicate display names keep separate legend entries and visible labels', 
         assert.equal(option.legend.formatter('serie-b'), 'Temp');
 
         const tooltip = option.tooltip.formatter([
-            { seriesName: 'serie-a', value: [1000, 1], color: '#F97316' },
-            { seriesName: 'serie-b', value: [1000, 2], color: '#A78BFA' },
+            { seriesName: 'serie-a', value: [1000, 1], color: '#F97316', marker: '{__EC_aUTo_1|}  ' },
+            { seriesName: 'serie-b', value: [1000, 2], color: '#A78BFA', marker: '{__EC_aUTo_2|}  ' },
         ]);
         assert.match(tooltip, /Temp: 1/);
         assert.match(tooltip, /Temp: 2/);
-        assert.match(tooltip, /\{marker_F97316\|/u, 'each line carries its own series colour');
-        assert.match(tooltip, /\{marker_A78BFA\|/u);
+        assert.match(tooltip, /\{__EC_aUTo_1\|/u, 'each line keeps the per-series marker ECharts registered');
+        assert.match(tooltip, /\{__EC_aUTo_2\|/u);
+    } finally {
+        layout.restore();
+    }
+});
+
+test('the tooltip shows the shared timestamp, duplicate labels, colours and raw values', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    const previous = globalThis.mqttProbeTime;
+    globalThis.mqttProbeTime = {
+        formatAxis: () => '09:21:00.111',
+        formatTooltip: () => '2026-11-14 09:21:00.111 AM EST',
+    };
+    try {
+        await createChart(createElement(), uniqueId(), createDotNetRef(), spec({
+            series: [
+                series('serie-a', 'System/Uptime', '#F97316', [[1767225600000, 3]]),
+                series('serie-b', 'System/Uptime', '#A78BFA', [[1767225600000, 3.456]]),
+            ],
+        }), { echarts });
+
+        const option = echarts.charts[0].options[0].option;
+        const tooltip = option.tooltip.formatter([
+            { seriesName: 'serie-a', value: [1767225600000, 3], color: '#F97316', marker: '{__EC_aUTo_1|}  ' },
+            { seriesName: 'serie-b', value: [1767225600000, 3.456], color: '#A78BFA', marker: '{__EC_aUTo_2|}  ' },
+        ]);
+        const lines = tooltip.split('\n');
+
+        assert.equal(lines[0], '2026-11-14 09:21:00.111 AM EST',
+            'the header uses the bridge clock, zone and 12-hour policy');
+        assert.deepEqual(lines.slice(1), [
+            '{__EC_aUTo_1|}  System/Uptime: 3',
+            '{__EC_aUTo_2|}  System/Uptime: 3.46',
+        ], 'duplicate labels stay distinct and values are not padded with forced decimals');
+    } finally {
+        globalThis.mqttProbeTime = previous;
+        layout.restore();
+    }
+});
+
+test('axis pointer labels use the shared time preferences for x and numeric y', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    const previous = globalThis.mqttProbeTime;
+    const seen = [];
+    globalThis.mqttProbeTime = {
+        formatAxis(epochMs, options) {
+            seen.push({ epochMs, options });
+            return '09:21:00.111 AM';
+        },
+        formatTooltip: () => '2026-11-14 09:21:00.111 AM EST',
+    };
+    try {
+        await createChart(createElement(), uniqueId(), createDotNetRef(),
+            spec({ zone: 'utc', clockFormat: '12h' }), { echarts });
+
+        const label = echarts.charts[0].options[0].option.tooltip.axisPointer.label;
+        assert.equal(label.formatter({
+            value: 1767225600000,
+            axisDimension: 'x',
+            axisIndex: 0,
+            seriesData: [],
+            axisValue: 1,
+        }), '09:21:00.111 AM');
+        assert.deepEqual(seen, [{
+            epochMs: 1767225600000,
+            options: { zone: 'utc', clockFormat: '12h' },
+        }], 'the x pointer label reads value and follows the chart zone and clock format');
+        assert.equal(label.formatter({
+            value: 3.456,
+            axisDimension: 'y',
+            axisIndex: 1,
+            seriesData: [],
+            axisValue: 1,
+        }), '3.46', 'the y pointer label reads value and stays numeric');
+        assert.equal(seen.length, 1);
+    } finally {
+        globalThis.mqttProbeTime = previous;
+        layout.restore();
+    }
+});
+
+test('axis pointer labels pick up a changed time preference', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    const previous = globalThis.mqttProbeTime;
+    const seen = [];
+    globalThis.mqttProbeTime = {
+        formatAxis(epochMs, options) {
+            seen.push({ epochMs, options });
+            return options.clockFormat === '12h' ? '09:21:00.111 AM' : '09:21:00.111';
+        },
+        formatTooltip: () => '2026-11-14 09:21:00.111 EST',
+    };
+    try {
+        const id = uniqueId();
+        await createChart(createElement(), id, createDotNetRef(),
+            spec({ zone: 'local', clockFormat: '24h' }), { echarts });
+        const chart = echarts.charts[0];
+
+        chart.options[0].option.tooltip.axisPointer.label.formatter({
+            value: 1767225600000,
+            axisDimension: 'x',
+            axisIndex: 0,
+            seriesData: [],
+        });
+        assert.deepEqual(seen[0].options, { zone: 'local', clockFormat: '24h' });
+
+        updateChart(id, spec({ zone: 'utc', clockFormat: '12h' }));
+        const updated = chart.options[1].option.tooltip.axisPointer.label;
+        assert.equal(updated.formatter({
+            value: 1767225600000,
+            axisDimension: 'x',
+            axisIndex: 0,
+            seriesData: [],
+        }), '09:21:00.111 AM');
+        assert.deepEqual(seen[1].options, { zone: 'utc', clockFormat: '12h' },
+            'a time preference update rebuilds the pointer label formatter');
+        assert.equal(updated.formatter({
+            value: 7,
+            axisDimension: 'y',
+            axisIndex: 1,
+            seriesData: [],
+        }), '7');
+    } finally {
+        globalThis.mqttProbeTime = previous;
+        layout.restore();
+    }
+});
+
+test('an update re-shows the tooltip at the tracked pointer', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    try {
+        const id = uniqueId();
+        await createChart(createElement(), id, createDotNetRef(), spec(), { echarts });
+        const chart = echarts.charts[0];
+        chart.element.emit('mousemove', { clientX: 200, clientY: 120 });
+
+        updateChart(id, spec({
+            series: [
+                series('serie-a', 'Temp', '#F97316', [[1767225600000, 21.5], [1767225619000, 23]]),
+                series('serie-b', 'Flow', '#A78BFA', [[1767225603000, 3]]),
+            ],
+        }));
+
+        assert.deepEqual(chart.actions, [{ type: 'showTip', x: 200, y: 120 }],
+            'the tooltip is refreshed after the series update, without a frame callback');
+        assert.deepEqual(chart.events.at(-1), { type: 'showTip', x: 200, y: 120 },
+            'the refresh happens after setOption has applied the new arrays');
+        assert.equal(chart.events.filter(event => event.type === 'hideTip').length, 0,
+            'an ordinary update does not flicker through a hidden tooltip');
+    } finally {
+        layout.restore();
+    }
+});
+
+test('a membership or chrome change hides the tooltip before replacing and shows it after', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    try {
+        const id = uniqueId();
+        await createChart(createElement(), id, createDotNetRef(), spec(), { echarts });
+        const chart = echarts.charts[0];
+        chart.events.length = 0;
+        chart.element.emit('mousemove', { clientX: 220, clientY: 130 });
+
+        updateChart(id, spec({ series: [series('serie-b', 'Flow', '#A78BFA', [[1767225603000, 4]])] }));
+
+        assert.deepEqual(chart.events, [
+            { type: 'hideTip' },
+            { type: 'setOption' },
+            { type: 'showTip', x: 220, y: 130 },
+        ], 'membership replacement drops the cached series tooltip before it is shown again');
+    } finally {
+        layout.restore();
+    }
+});
+
+test('theme changes refresh the rich tooltip', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    try {
+        const id = uniqueId();
+        await createChart(createElement(), id, createDotNetRef(), spec(), { echarts });
+        const chart = echarts.charts[0];
+        chart.events.length = 0;
+        chart.element.emit('mousemove', { clientX: 180, clientY: 90 });
+
+        updateChart(id, spec({ dark: true }));
+
+        assert.deepEqual(chart.events.map(event => event.type), ['hideTip', 'setOption', 'showTip']);
+    } finally {
+        layout.restore();
+    }
+});
+
+test('the tooltip is not re-shown outside the plot or after the pointer leaves', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    try {
+        const id = uniqueId();
+        await createChart(createElement(), id, createDotNetRef(), spec(), { echarts });
+        const chart = echarts.charts[0];
+
+        updateChart(id, spec());
+        assert.deepEqual(chart.actions, [], 'no pointer means no tooltip action');
+
+        chart.element.emit('mousemove', { clientX: 999, clientY: 999 });
+        chart.inGrid = false;
+        updateChart(id, spec());
+        assert.deepEqual(chart.actions, [], 'the pointer is outside the grid');
+
+        chart.inGrid = true;
+        chart.element.emit('mouseleave');
+        updateChart(id, spec());
+        assert.deepEqual(chart.actions, [], 'leaving the chart clears the tracked pointer');
+
+        chart.element.emit('mouseenter', { clientX: 210, clientY: 115 });
+        assert.deepEqual(chart.actions, [{ type: 'showTip', x: 210, y: 115 }],
+            're-entering the chart after an overlay restores the hover tooltip');
     } finally {
         layout.restore();
     }
@@ -406,6 +678,7 @@ test('dispose tears down the chart and observer, and later updates are ignored',
 
         assert.equal(disposeChart(id), true);
         assert.equal(chart.disposed, true, 'the canvas and its handlers are released');
+        assert.equal(chart.element.listenerCount(), 0, 'the pointer listeners are removed with the chart');
         assert.equal(layout.observers[0].disconnected, true, 'the resize observer stops observing');
 
         assert.equal(disposeChart(id), false, 'a second dispose is harmless');
@@ -608,10 +881,19 @@ test('a missing ECharts module fails the create instead of rendering nothing', a
     await assert.rejects(createChart(createElement(), uniqueId(), createDotNetRef(), spec()));
 });
 
+test('the renderer imports the vendored ECharts bundle from a .js module path', async () => {
+    const specifier = source.match(/['"](\.[^'"]*echarts[^'"]*)['"]/)?.[1];
+    assert.ok(specifier, 'the renderer must reference the vendored ECharts module');
+    assert.match(specifier, /\.js$/,
+        'WebView2 rejects a module served as application/octet-stream, and the Windows static provider serves .mjs that way');
+    const module = await readFile(new URL(specifier, modulePath));
+    assert.ok(module.length > 0, 'the referenced module must be the shipped bundle');
+});
+
 // The fake chart records what we ask for; these tests use the real bundle in SSR mode to prove
 // the merge semantics ECharts actually applies when only the chart type changes.
 const bundleUrl = new URL(
-    '../../src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/echarts.esm.min.mjs',
+    '../../src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/echarts.esm.min.js',
     import.meta.url);
 
 async function createRealEcharts() {
@@ -774,3 +1056,8 @@ test('real bundle: line to bar uses a zero baseline and reverses back', async ()
         disposeChart(id);
     }
 });
+
+
+
+
+

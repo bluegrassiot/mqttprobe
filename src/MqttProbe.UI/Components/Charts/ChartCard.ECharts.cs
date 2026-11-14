@@ -36,6 +36,7 @@ public partial class ChartCard
         _visibleFromMs = null;
         _visibleToMs = null;
         _zoneCaptionSignature = "";
+        _hovering = false;
         _pendingUpdate = true;
 
         _ = InvokeAsync(DisposeChartQuietlyAsync);

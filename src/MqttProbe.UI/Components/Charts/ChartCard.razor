@@ -37,9 +37,9 @@
             </div>
         </CardHeaderContent>
         <CardHeaderActions>
-            <MudIconButton Icon="@(_live && !_hovering ? LucideIcons.PauseCircle : LucideIcons.PlayCircle)"
-                           Color="@(_live && !_hovering ? MudBlazor.Color.Inherit : MudBlazor.Color.Success)"
-                           title="@(_live && !_hovering ? PauseTitle : "Resume live updates")"
+            <MudIconButton Icon="@(ShowsPausedState ? LucideIcons.PlayCircle : LucideIcons.PauseCircle)"
+                           Color="@(ShowsPausedState ? MudBlazor.Color.Success : MudBlazor.Color.Inherit)"
+                           title="@(ShowsPausedState ? "Resume live updates" : PauseTitle)"
                            Size="MudBlazor.Size.Small"
                             OnClick="ToggleLive" />
             <MudIconButton Icon="@LucideIcons.Pencil" Color="MudBlazor.Color.Inherit"
@@ -148,15 +148,19 @@
     private string _freshnessSignature = "";
     private readonly Dictionary<Guid, DateTime?> _lastReceipts = [];
 
-    private string StatusLabel => ChartFreshnessDisplay.SummaryLabel(_freshness.State, !_live || _hovering);
+    private bool HoverPausesUpdates => Renderer != ChartRendererKind.ECharts;
 
-    private string? AgeLabel => !_live || _hovering ? null : ChartFreshnessDisplay.AgeText(_freshness.Age);
+    private bool ShowsPausedState => !_live || (HoverPausesUpdates && _hovering);
+
+    private string StatusLabel => ChartFreshnessDisplay.SummaryLabel(_freshness.State, ShowsPausedState);
+
+    private string? AgeLabel => ShowsPausedState ? null : ChartFreshnessDisplay.AgeText(_freshness.Age);
 
     private MudBlazor.Color StatusColor
     {
         get
         {
-            if (!_live || _hovering) return MudBlazor.Color.Default;
+            if (ShowsPausedState) return MudBlazor.Color.Default;
             return _freshness.State switch
             {
                 ChartFreshnessState.Live or ChartFreshnessState.Disabled => MudBlazor.Color.Success,
@@ -402,7 +406,7 @@
         RefreshFreshness(render: true);
         RefreshChart();
 
-        if (_live && !_hovering && _visibleFromMs is null)
+        if (_live && !(HoverPausesUpdates && _hovering) && _visibleFromMs is null)
             _ = InvokeAsync(() => RefreshZoneCaptionAsync());
     });
 
@@ -443,7 +447,7 @@
 
     private void RefreshChart()
     {
-        if (_disposed || !_chartReady || !_live || !_hasNewData || _hovering) return;
+        if (_disposed || !_chartReady || !_live || !_hasNewData || (HoverPausesUpdates && _hovering)) return;
 
         var now = DateTime.UtcNow;
         if (now - _lastRender < RenderThrottle) return;
@@ -470,12 +474,16 @@
 
     private void OnMouseOver()
     {
+        if (!HoverPausesUpdates) return;
+
         _hovering = true;
         StateHasChanged();
     }
 
     private void OnMouseLeave()
     {
+        if (!HoverPausesUpdates) return;
+
         _hovering = false;
         RefreshFreshness(render: true);
         StateHasChanged();

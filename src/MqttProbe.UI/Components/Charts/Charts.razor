@@ -22,13 +22,6 @@
             <MudSelectItem T="ChartRendererKind" Value="ChartRendererKind.Apex">ApexCharts</MudSelectItem>
             <MudSelectItem T="ChartRendererKind" Value="ChartRendererKind.ECharts">ECharts (preview)</MudSelectItem>
         </MudSelect>
-        @if (_renderer == ChartRendererKind.ECharts)
-        {
-            <MudText Typo="Typo.caption" Class="charts-renderer-note">
-                Zoom and pan work. The chart toolbar and export are not available in this preview;
-                switch back to Apex for those.
-            </MudText>
-        }
     </HeaderFilters>
 </TabPanelHeader>
 

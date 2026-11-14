@@ -222,8 +222,8 @@ public class ChartsComponentTests : BunitTestContext
             () => cut.FindAll(".chart-card-echarts").Should().ContainSingle(),
             TimeSpan.FromSeconds(5));
         cut.FindComponent<ChartCardComponent>().Instance.Renderer.Should().Be(ChartRendererKind.ECharts);
-        cut.Find(".charts-renderer-note").TextContent.Should()
-            .Contain("chart toolbar and export", "the preview names what it cannot do");
+        cut.FindAll(".charts-renderer-note").Should().BeEmpty(
+            "the preview notice is no longer shown");
         module.VerifyInvoke("createChart", 1);
 
         cut.InvokeAsync(() => cut.FindComponent<MudSelect<ChartRendererKind>>()

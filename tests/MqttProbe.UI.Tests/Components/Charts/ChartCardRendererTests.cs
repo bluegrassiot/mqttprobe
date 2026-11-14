@@ -389,6 +389,67 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
+    public void EChartsHover_KeepsLiveUpdatesAndThePauseControl()
+    {
+        AllowAdapterCalls();
+        var series = new ChartSeries { DisplayName = "Temp" };
+        Record(series, 1, 21.5);
+        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
+
+        cut.Find(".chart-card-plot").MouseOver();
+
+        cut.WaitForAssertion(
+            () => cut.Find(".chart-card-status .mud-chip").TextContent.Trim().Should().Be("Live"),
+            TimeSpan.FromSeconds(5));
+        cut.FindAll("button[title='Resume live updates']").Should().BeEmpty(
+            "hovering must not replace the pause control with a resume control");
+        cut.Find("button[title='Pause live updates (keeps the view still)']").Should().NotBeNull();
+
+        Record(series, 0, 23);
+        _chartData.OnDataUpdated += Raise.Event<Action>();
+
+        cut.WaitForAssertion(() => _module.VerifyInvoke("updateChart", 1), TimeSpan.FromSeconds(5));
+        UpdateSpec().Series[0].Points.Should().HaveCount(2,
+            "an ECharts card keeps applying live data while the pointer is over the plot");
+    }
+
+    [Test]
+    public async Task EChartsManualPause_SurvivesHoverAndPointerLeave()
+    {
+        AllowAdapterCalls();
+        var series = new ChartSeries { DisplayName = "Temp" };
+        Record(series, 1, 21.5);
+        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
+
+        cut.Find("button[title='Pause live updates (keeps the view still)']").Click();
+        cut.WaitForAssertion(
+            () => cut.Find(".chart-card-status .mud-chip").TextContent.Trim().Should().Be("Paused"),
+            TimeSpan.FromSeconds(5));
+
+        cut.Find(".chart-card-plot").MouseOver();
+        cut.Find(".chart-card-status .mud-chip").TextContent.Trim().Should().Be("Paused");
+        cut.Find("button[title='Resume live updates']").Should().NotBeNull(
+            "the manual pause control stays visible and invokable while hovering");
+
+        cut.Find(".chart-card-plot").TriggerEvent("onmouseleave", new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        cut.Find(".chart-card-status .mud-chip").TextContent.Trim().Should().Be("Paused",
+            "a manual pause must outlive the pointer");
+
+        Record(series, 0, 23);
+        _chartData.OnDataUpdated += Raise.Event<Action>();
+        await cut.InvokeAsync(() => { });
+
+        JSInterop.Invocations.Identifiers.Should().NotContain("updateChart",
+            "a manual pause keeps buffered data out of the renderer");
+
+        cut.Find("button[title='Resume live updates']").Click();
+        cut.WaitForAssertion(() => _module.VerifyInvoke("updateChart", 1), TimeSpan.FromSeconds(5));
+        UpdateSpec().Series[0].Points.Should().HaveCount(2);
+    }
+
+    [Test]
     public void PausedEChartsCard_DefersUpdatesUntilResumed()
     {
         AllowAdapterCalls();

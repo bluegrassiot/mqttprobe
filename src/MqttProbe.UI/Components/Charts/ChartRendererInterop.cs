@@ -7,7 +7,7 @@ internal sealed class ChartRendererInterop(IJSRuntime js) : IAsyncDisposable
 {
     // Bump when the exported module contract changes so browsers cannot reuse an older module URL.
     internal const string ModulePath =
-        "./_content/MqttProbe.UI/js/chart-renderer.js?v=2";
+        "./_content/MqttProbe.UI/js/chart-renderer.js?v=3";
 
     // Disposal waits on this gate so an in-flight create cannot outlive the card.
     private readonly SemaphoreSlim _gate = new(1, 1);

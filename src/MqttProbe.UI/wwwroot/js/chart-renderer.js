@@ -1,6 +1,6 @@
 // Points arrive already windowed by ChartCard; this module only draws and never collects data.
 
-const ECHARTS_MODULE_PATH = './echarts/6.1.0/echarts.esm.min.mjs';
+const ECHARTS_MODULE_PATH = './echarts/6.1.0/echarts.esm.min.js';
 const MILLISECONDS_PER_DAY = 86_400_000;
 // Mirrors the host --font-mono profile; canvas text cannot resolve a CSS variable.
 const FONT_FAMILIES = {
@@ -98,6 +98,23 @@ function axisLabelFormatter(spec) {
     };
 }
 
+function axisPointerLabelFormatter(spec) {
+    const preferences = timePreferences(spec);
+
+    return params => {
+        const value = params?.value;
+        if (params?.axisDimension === 'x') {
+            const when = Array.isArray(value) ? value[0] : value;
+            const bridge = globalThis.mqttProbeTime;
+            return bridge && typeof when === 'number'
+                ? bridge.formatAxis(when, preferences)
+                : formatNumber(when);
+        }
+
+        return formatNumber(value);
+    };
+}
+
 // Legend and tooltip show display labels; the ECharts series name stays the stable series id.
 function displayLabels(spec) {
     const labels = new Map();
@@ -129,28 +146,7 @@ function legendFormatter(spec) {
     return name => labels.get(name) ?? name;
 }
 
-function markerStyleName(color) {
-    if (typeof color !== 'string') {
-        return null;
-    }
-
-    const key = color.replace(/[^0-9a-zA-Z]/g, '');
-    return key ? `marker_${key}` : null;
-}
-
-function tooltipRich(spec) {
-    const rich = {};
-    for (const entry of spec?.series ?? []) {
-        const style = markerStyleName(entry.color);
-        if (style && !(style in rich)) {
-            rich[style] = { color: entry.color, fontSize: 10 };
-        }
-    }
-
-    return rich;
-}
-
-function tooltipFormatter(spec, rich) {
+function tooltipFormatter(spec) {
     const preferences = timePreferences(spec);
     const labels = displayLabels(spec);
 
@@ -170,8 +166,7 @@ function tooltipFormatter(spec, rich) {
 
         for (const item of list) {
             const value = Array.isArray(item.value) ? item.value[1] : item.value;
-            const style = markerStyleName(item.color);
-            const marker = style && Object.hasOwn(rich, style) ? `{${style}|●} ` : '';
+            const marker = typeof item.marker === 'string' ? item.marker : '';
             lines.push(`${marker}${labels.get(item.seriesName) ?? item.seriesName}: ${formatNumber(value)}`);
         }
 
@@ -235,20 +230,29 @@ function buildAxes(spec, theme) {
 }
 
 function buildTooltip(spec, theme) {
-    const rich = tooltipRich(spec);
-
     return {
         trigger: 'axis',
+        triggerOn: 'mousemove',
         renderMode: 'richText',
         confine: true,
         backgroundColor: theme.tooltipBackground,
         borderColor: theme.axisLine,
         borderWidth: 1,
-        padding: 8,
+        borderRadius: 6,
+        padding: [8, 10],
         textStyle: { color: theme.foreground, fontFamily: fontFamilyFor(spec), fontSize: 12 },
-        axisPointer: { type: 'line', lineStyle: { color: theme.axisLine } },
-        rich,
-        formatter: tooltipFormatter(spec, rich),
+        axisPointer: {
+            type: 'cross',
+            lineStyle: { color: theme.axisLine, type: 'dashed', width: 1 },
+            crossStyle: { color: theme.axisLine, type: 'dashed', width: 1 },
+            label: {
+                backgroundColor: theme.tooltipBackground,
+                borderColor: theme.axisLine,
+                color: theme.foreground,
+                formatter: axisPointerLabelFormatter(spec),
+            },
+        },
+        formatter: tooltipFormatter(spec),
     };
 }
 
@@ -349,6 +353,45 @@ function sameViewport(left, right) {
     return left?.from === right?.from && left?.to === right?.to;
 }
 
+function dispatchTip(instance, action) {
+    if (typeof instance?.chart?.dispatchAction === 'function') {
+        instance.chart.dispatchAction(action);
+    }
+}
+
+function pointerInGrid(instance) {
+    const pointer = instance.pointer;
+    if (!pointer || typeof instance.chart.containPixel !== 'function') {
+        return false;
+    }
+
+    try {
+        return instance.chart.containPixel({ gridIndex: 0 }, [pointer.x, pointer.y]);
+    } catch {
+        return false;
+    }
+}
+
+// ECharts caches the tooltip's raw data indices across setOption, so a live update must
+// re-show at the same pointer to refresh the timestamp and values it is showing.
+function refreshTooltip(instance) {
+    if (!pointerInGrid(instance)) {
+        return;
+    }
+
+    dispatchTip(instance, { type: 'showTip', x: instance.pointer.x, y: instance.pointer.y });
+
+    // A stationary pointer receives no further mousemove events, and ECharts can schedule a
+    // delayed hide after re-rendering under it. One recovery show keeps the same tooltip alive.
+    clearTimeout(instance.tooltipRecovery);
+    instance.tooltipRecovery = setTimeout(() => {
+        instance.tooltipRecovery = null;
+        if (!instance.disposed && pointerInGrid(instance)) {
+            dispatchTip(instance, { type: 'showTip', x: instance.pointer.x, y: instance.pointer.y });
+        }
+    }, 150);
+}
+
 // A percent window drifts as the data extent grows, so a user range is stored as absolute values.
 function applyViewport(instance, pinned) {
     instance.applyingViewport = true;
@@ -358,6 +401,7 @@ function applyViewport(instance, pinned) {
                 ? { startValue: pinned.from, endValue: pinned.to }
                 : { start: 0, end: 100 }],
         }, { lazyUpdate: false });
+        refreshTooltip(instance);
     } finally {
         instance.applyingViewport = false;
     }
@@ -402,6 +446,15 @@ function release(instance) {
         elementCharts.delete(instance.element);
     }
 
+    if (instance.pointerListeners) {
+        instance.element.removeEventListener('mousemove', instance.pointerListeners.onMove);
+        instance.element.removeEventListener('mouseenter', instance.pointerListeners.onEnter);
+        instance.element.removeEventListener('mouseleave', instance.pointerListeners.onLeave);
+        instance.pointerListeners = null;
+    }
+
+    clearTimeout(instance.tooltipRecovery);
+    instance.tooltipRecovery = null;
     instance.observer?.disconnect();
     instance.observer = null;
     instance.chart.dispose();
@@ -439,6 +492,9 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
         disposed: false,
         pinned: null,
         applyingViewport: false,
+        pointer: null,
+        pointerListeners: null,
+        tooltipRecovery: null,
     };
 
     try {
@@ -460,6 +516,38 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
         instance.observer.observe(element);
     }
 
+    if (typeof element.addEventListener === 'function') {
+        const trackPointer = event => {
+            const rect = element.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                return false;
+            }
+
+            instance.pointer = { x, y };
+            return true;
+        };
+        const onMove = event => {
+            trackPointer(event);
+        };
+        const onEnter = event => {
+            if (trackPointer(event)) {
+                refreshTooltip(instance);
+            }
+        };
+        const onLeave = () => {
+            instance.pointer = null;
+            clearTimeout(instance.tooltipRecovery);
+            instance.tooltipRecovery = null;
+        };
+
+        element.addEventListener('mousemove', onMove);
+        element.addEventListener('mouseenter', onEnter);
+        element.addEventListener('mouseleave', onLeave);
+        instance.pointerListeners = { onMove, onEnter, onLeave };
+    }
+
     chart.on('dataZoom', payload => notifyViewport(instance, dotNetRef, payload));
     return true;
 }
@@ -478,11 +566,10 @@ export function updateChart(chartId, spec) {
         || instance.spec?.clockFormat !== spec?.clockFormat
         || instance.spec?.fontProfile !== spec?.fontProfile;
     const replaceSeries = membershipChanged || typeChanged;
+    const tooltipChromeChanged = chromeChanged || typeChanged || labelsChanged || membershipChanged;
 
     // The axis scale follows the series type, so a type change refreshes the chrome as well.
-    const option = chromeChanged || typeChanged || labelsChanged || membershipChanged
-        ? buildChromeOption(spec)
-        : {};
+    const option = tooltipChromeChanged ? buildChromeOption(spec) : {};
     option.series = buildSeries(spec);
 
     if (membershipChanged) {
@@ -496,6 +583,10 @@ export function updateChart(chartId, spec) {
         option.dataZoom = [{ start: 0, end: 100 }];
     }
 
+    if (tooltipChromeChanged) {
+        dispatchTip(instance, { type: 'hideTip' });
+    }
+
     try {
         instance.chart.setOption(option, {
             lazyUpdate: false,
@@ -506,6 +597,7 @@ export function updateChart(chartId, spec) {
         throw error;
     }
 
+    refreshTooltip(instance);
     instance.spec = spec;
     return true;
 }

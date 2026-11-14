@@ -109,12 +109,14 @@ def is_source_line_exception(finding, root):
 # ES module bundle. They name SVG and XML vocabularies and are never fetched; the
 # minified line cannot carry a suppression comment. The entry pins the whole file
 # by SHA-256, so any edit retires the exception instead of inheriting it.
+# The bundle ships as .js because the Windows static content provider reports
+# .mjs as application/octet-stream, which WebView2 rejects for module scripts.
 VENDOR_NAMESPACE_EXCEPTIONS = [
     {
         "rule": "DS137138",
-        "file": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/echarts.esm.min.mjs",
+        "file": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/echarts.esm.min.js",
         "line": 45,
-        # echarts@6.1.0 dist/echarts.esm.min.mjs, 1121654 bytes.
+        # echarts@6.1.0 dist/echarts.esm.min.js, 1121654 bytes.
         "sha256": "28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da",  # DevSkim: ignore DS173237 public upstream bundle digest
         "urls": {
             "http://www.w3.org/2000/svg",  # DevSkim: ignore DS137138 XML namespace

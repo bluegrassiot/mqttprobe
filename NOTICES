@@ -61,7 +61,7 @@ Verify:     python scripts/legal/notices.py check
     Copyright: Copyright 2017-2026 The Apache Software Foundation
     Source: https://github.com/apache/echarts
     Texts: Apache ECharts 6.1.0 NOTICE (upstream text); Apache ECharts 6.1.0 License (upstream text)
-    Note: Vendored unmodified as js/echarts/6.1.0/echarts.esm.min.mjs from the npm echarts@6.1.0 archive (SHA-256 681aff88cc1038c3fa941a3a53d1b177a52250b05335efc607d6105ae13be481; integrity sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==). The file is 1,121,654 bytes with SHA-256 28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da.
+    Note: Vendored unmodified as js/echarts/6.1.0/echarts.esm.min.js from the npm echarts@6.1.0 archive (SHA-256 681aff88cc1038c3fa941a3a53d1b177a52250b05335efc607d6105ae13be481; integrity sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==). The file is 1,121,654 bytes with SHA-256 28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da.
 
   Chakra Petch unversioned
     Licence: SIL Open Font License 1.1
@@ -1275,14 +1275,14 @@ Verify:     python scripts/legal/notices.py check
     Copyright: Copyright (c) Microsoft Corporation.
     Source: https://github.com/Microsoft/tslib
     Texts: tslib 2.3.0 License (upstream text)
-    Note: Inlined in js/echarts/6.1.0/echarts.esm.min.mjs by the ECharts 6.1.0 build; its licence text is retained verbatim at the top of the bundle. The npm tslib@2.3.0 archive SHA-256 is ae285639feff7e3c39de4626352181a5d73b815725e42639b411c43848abffdb.
+    Note: Inlined in js/echarts/6.1.0/echarts.esm.min.js by the ECharts 6.1.0 build; its licence text is retained verbatim at the top of the bundle. The npm tslib@2.3.0 archive SHA-256 is ae285639feff7e3c39de4626352181a5d73b815725e42639b411c43848abffdb.
 
   zrender JavaScript library 6.1.0
     Licence: BSD-3-Clause
     Copyright: Copyright (c) 2017, Baidu Inc.
     Source: https://github.com/ecomfe/zrender
     Texts: zrender 6.1.0 License (upstream text)
-    Note: Inlined in js/echarts/6.1.0/echarts.esm.min.mjs by the ECharts 6.1.0 build; not served as a separate file. The npm zrender@6.1.0 archive SHA-256 is 38f2fb722a638be016ca0175b139c40c886ef47fc2afdb741b2e7e7ae9683f9c.
+    Note: Inlined in js/echarts/6.1.0/echarts.esm.min.js by the ECharts 6.1.0 build; not served as a separate file. The npm zrender@6.1.0 archive SHA-256 is 38f2fb722a638be016ca0175b139c40c886ef47fc2afdb741b2e7e7ae9683f9c.
 
 ==============================================================================
 

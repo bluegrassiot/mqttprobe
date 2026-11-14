@@ -79,7 +79,7 @@
     },
     {
       "component": "echarts-javascript",
-      "path": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/echarts.esm.min.mjs",
+      "path": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/echarts.esm.min.js",
       "sha256": "28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da"
     },
     {

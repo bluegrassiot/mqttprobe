@@ -48,8 +48,8 @@ class TestDevSkimMjsPass(unittest.TestCase):
     def test_scan_scope_is_every_es_module(self):
         self.assertEqual(inspect_ci.MJS_GLOB, "**/*.mjs")
         for path in (
-            ENTRY["file"],
             "src/MqttProbe.UI/wwwroot/js/chart-renderer.mjs",
+            "tests/MqttProbe.UI.JsTests/chart-renderer.test.mjs",
             "handwritten.mjs",
         ):
             self.assertTrue(in_mjs_scope(path), path)
@@ -103,8 +103,8 @@ class TestDevSkimMjsPass(unittest.TestCase):
 class TestVendorNamespaceRealBundle(unittest.TestCase):
     """The shipped bundle must match the pinned digest and namespace set."""
 
-    def test_vendored_file_is_scanned(self):
-        self.assertTrue(in_mjs_scope(ENTRY["file"]))
+    def test_vendored_file_is_scanned_by_the_tree_pass(self):
+        self.assertFalse(in_mjs_scope(ENTRY["file"]))
         for glob in inspect_ci.DEVSKIM_GLOBS:
             self.assertFalse(fnmatch.fnmatch(ENTRY["file"], glob), glob)
 
@@ -124,7 +124,7 @@ class TestVendorNamespaceRealBundle(unittest.TestCase):
     def test_entry_limits_rule_span_and_urls(self):
         self.assertEqual(ENTRY["rule"], "DS137138")
         self.assertEqual(ENTRY["file"],
-                         "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/echarts.esm.min.mjs")
+                         "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/echarts.esm.min.js")
         self.assertGreaterEqual(ENTRY["line"], 1)
         self.assertEqual(
             ENTRY["urls"],

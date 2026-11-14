@@ -277,12 +277,12 @@
         _lastIsDarkMode = IsDarkMode;
         _lastConfigFingerprint = fingerprint;
         _lastDataShape = dataShape;
-
         if (dataShapeChanged)
         {
             _visibleFromMs = null;
             _visibleToMs = null;
             _zoneCaptionSignature = "";
+            _pendingViewportReset = true;
         }
 
         if (darkModeChanged)

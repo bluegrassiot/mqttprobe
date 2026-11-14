@@ -842,6 +842,78 @@ test('the accessible font profile reaches every chart label', async () => {
     }
 });
 
+test('a data-only update refreshes the axis label formatter for the new extent', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    const previous = globalThis.mqttProbeTime;
+    globalThis.mqttProbeTime = {
+        formatAxis: () => '09:21:00.111',
+        formatTooltip: () => '2026-11-14 09:21:00.111 UTC',
+    };
+    try {
+        const id = uniqueId();
+        const base = 1767225600000;
+        await createChart(createElement(), id, createDotNetRef(),
+            spec({ series: [series('only', 'Temp', '#F97316', [])] }), { echarts });
+        const chart = echarts.charts[0];
+
+        assert.equal(chart.options[0].option.xAxis.axisLabel.formatter(base), '09:21:00.111',
+            'an empty series has no day span');
+
+        updateChart(id, spec({
+            series: [series('only', 'Temp', '#F97316', [[base, 1], [base + 3 * 86_400_000, 2]])],
+        }));
+
+        const multiDay = chart.options[1].option;
+        assert.equal(multiDay.xAxis.axisLabel.formatter(base), '2026-11-14\n09:21:00.111',
+            'a data-only update applies the multi-day label decision');
+        assert.equal(multiDay.xAxis.axisLine, undefined, 'only the label formatter is refreshed');
+        assert.equal(multiDay.dataZoom, undefined, 'the refresh leaves the viewport alone');
+
+        updateChart(id, spec({
+            series: [series('only', 'Temp', '#F97316', [[base, 1], [base + 60_000, 2]])],
+        }));
+
+        assert.equal(chart.options[2].option.xAxis.axisLabel.formatter(base), '09:21:00.111',
+            'a short extent drops the date line again without recreating the chart');
+    } finally {
+        globalThis.mqttProbeTime = previous;
+        layout.restore();
+    }
+});
+
+test('a data shape update resets a pinned viewport once', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    try {
+        const id = uniqueId();
+        await createChart(createElement(), id, createDotNetRef(), spec(), { echarts });
+        const chart = echarts.charts[0];
+        const from = 1767225603000;
+        const to = 1767225607000;
+        chart.emit('dataZoom', { batch: [{ startValue: from, endValue: to }] });
+
+        const next = spec({
+            series: [
+                series('serie-a', 'Temp', '#F97316', [[1767225600000, 21.5], [1767225619000, 23]]),
+                series('serie-b', 'Flow', '#A78BFA', [[1767225603000, 3]]),
+            ],
+        });
+        updateChart(id, next, true);
+
+        assert.deepEqual(chart.options[2].option.dataZoom, [{ start: 0, end: 100 }],
+            'a data shape change returns the renderer window to the data');
+        assert.equal(chart.options[2].option.series[0].data.length, 2);
+        assert.equal(chart.options[2].options.lazyUpdate, false);
+
+        updateChart(id, next);
+        assert.equal(chart.options[3].option.dataZoom, undefined,
+            'later data updates keep the reset window');
+    } finally {
+        layout.restore();
+    }
+});
+
 test('a user zoom becomes an absolute window that ordinary updates keep', async () => {
     const echarts = createFakeEcharts();
     const layout = installResizeObserver();
@@ -1109,6 +1181,63 @@ test('real bundle: a pinned window keeps its absolute range as data grows and re
         assert.equal(following.startValue, 1767225600000);
         assert.equal(following.endValue, 1767225780000,
             'after a reset the window follows the new extent');
+    } finally {
+        disposeChart(id);
+    }
+});
+
+test('real bundle: a data-only update refreshes the axis date line', async () => {
+    const previous = globalThis.mqttProbeTime;
+    globalThis.mqttProbeTime = {
+        formatAxis: () => '09:21:00.111',
+        formatTooltip: () => '2026-11-14 09:21:00.111 UTC',
+    };
+    const { echarts, state } = await createRealEcharts();
+    const id = uniqueId();
+    const base = 1767225600000;
+    try {
+        await createChart({ isConnected: true }, id, createDotNetRef(),
+            singleSeriesSpec('line', []), { echarts });
+        assert.equal(state.instance.getOption().xAxis[0].axisLabel.formatter(base), '09:21:00.111');
+
+        updateChart(id, singleSeriesSpec('line', [[base, 1], [base + 3 * 86_400_000, 2]]));
+
+        assert.equal(state.instance.getOption().xAxis[0].axisLabel.formatter(base),
+            '2026-11-14\n09:21:00.111',
+            'the merged axis label formatter reads the current extent');
+    } finally {
+        disposeChart(id);
+        globalThis.mqttProbeTime = previous;
+    }
+});
+
+test('real bundle: a data shape reset returns a pinned window to the data', async () => {
+    const { echarts, state } = await createRealEcharts();
+    const id = uniqueId();
+    try {
+        await createChart({ isConnected: true }, id, createDotNetRef(), realSpec('line'), { echarts });
+        const chart = state.instance;
+
+        chart.dispatchAction({ type: 'dataZoom', start: 20, end: 60 });
+        assert.equal(chart.getOption().dataZoom[0].startValue, 1767225612000);
+
+        updateChart(id, realSpec('line'), true);
+        const reset = chart.getOption().dataZoom[0];
+        assert.equal(reset.start, 0);
+        assert.equal(reset.end, 100);
+
+        updateChart(id, {
+            type: 'line',
+            dark: false,
+            zone: 'utc',
+            clockFormat: '24h',
+            series: [
+                series('a', 'Temp', '#F97316', [[1767225600000, 100], [1767225660000, 200], [1767225720000, 300]]),
+                series('b', 'Flow', '#A78BFA', [[1767225600000, 50], [1767225660000, 150], [1767225720000, 250]]),
+            ],
+        });
+        assert.equal(chart.getOption().dataZoom[0].start, 0,
+            'later data updates keep the reset window');
     } finally {
         disposeChart(id);
     }

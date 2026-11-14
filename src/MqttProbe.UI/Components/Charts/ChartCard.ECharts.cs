@@ -18,6 +18,7 @@ public partial class ChartCard
     private bool _echartsReady;
     private bool _echartsStarting;
     private bool _echartsLive;
+    private bool _pendingViewportReset;
     private string? _echartsError;
     private string? _echartsErrorDetail;
     private int _rendererGeneration;
@@ -38,6 +39,7 @@ public partial class ChartCard
         _zoneCaptionSignature = "";
         _hovering = false;
         _pendingUpdate = true;
+        _pendingViewportReset = false;
 
         _ = InvokeAsync(DisposeChartQuietlyAsync);
 
@@ -59,6 +61,7 @@ public partial class ChartCard
         var spec = BuildEChartsSpec();
         _pendingUpdate = false;
         _pendingOptionsUpdate = false;
+        _pendingViewportReset = false;
         _echartsStarting = true;
         bool created;
         JSException? createFailure = null;
@@ -134,12 +137,14 @@ public partial class ChartCard
             return;
 
         var spec = BuildEChartsSpec();
+        var resetViewport = _pendingViewportReset;
         _pendingUpdate = false;
         _pendingOptionsUpdate = false;
+        _pendingViewportReset = false;
 
         try
         {
-            if (!await RendererInterop.UpdateAsync(_rendererChartId, spec))
+            if (!await RendererInterop.UpdateAsync(_rendererChartId, spec, resetViewport))
                 FailECharts(failure: null);
         }
         catch (JSDisconnectedException)

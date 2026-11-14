@@ -555,7 +555,7 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
     return true;
 }
 
-export function updateChart(chartId, spec) {
+export function updateChart(chartId, spec, resetViewport = false) {
     const instance = instances.get(chartId);
     if (!instance || instance.disposed) {
         return false;
@@ -574,6 +574,14 @@ export function updateChart(chartId, spec) {
     // The axis scale follows the series type, so a type change refreshes the chrome as well.
     const option = tooltipChromeChanged ? buildChromeOption(spec) : {};
     option.series = buildSeries(spec);
+    // The date line depends on the current data extent, so every update refreshes that decision.
+    option.xAxis = {
+        ...(option.xAxis ?? {}),
+        axisLabel: {
+            ...(option.xAxis?.axisLabel ?? {}),
+            formatter: axisLabelFormatter(spec),
+        },
+    };
 
     if (membershipChanged) {
         option.legend = { ...(option.legend ?? {}), show: (spec?.series ?? []).length > 1 };
@@ -581,7 +589,7 @@ export function updateChart(chartId, spec) {
 
     // A configuration change can remove the data a pinned window was looking at; incoming
     // message updates never take this path.
-    if (replaceSeries && instance.pinned) {
+    if ((resetViewport || replaceSeries) && instance.pinned) {
         instance.pinned = null;
         option.dataZoom = [{ start: 0, end: 100 }];
     }

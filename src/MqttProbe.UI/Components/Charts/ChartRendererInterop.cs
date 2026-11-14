@@ -7,7 +7,7 @@ internal sealed class ChartRendererInterop(IJSRuntime js) : IAsyncDisposable
 {
     // Bump when the exported module contract changes so browsers cannot reuse an older module URL.
     internal const string ModulePath =
-        "./_content/MqttProbe.UI/js/chart-renderer.js?v=3";
+        "./_content/MqttProbe.UI/js/chart-renderer.js?v=4";
 
     // Disposal waits on this gate so an in-flight create cannot outlive the card.
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -38,7 +38,7 @@ internal sealed class ChartRendererInterop(IJSRuntime js) : IAsyncDisposable
         }
     }
 
-    internal async Task<bool> UpdateAsync(string chartId, ChartRendererSpec spec)
+    internal async Task<bool> UpdateAsync(string chartId, ChartRendererSpec spec, bool resetViewport = false)
     {
         await _gate.WaitAsync();
         try
@@ -46,7 +46,7 @@ internal sealed class ChartRendererInterop(IJSRuntime js) : IAsyncDisposable
             if (_disposed || _module is null)
                 return false;
 
-            return await _module.InvokeAsync<bool>("updateChart", chartId, spec);
+            return await _module.InvokeAsync<bool>("updateChart", chartId, spec, resetViewport);
         }
         finally
         {

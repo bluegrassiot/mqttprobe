@@ -100,6 +100,9 @@ public class ChartCardRendererTests : BunitTestContext
         JSInterop.Invocations["updateChart"][index].Arguments[1]
             .Should().BeOfType<ChartRendererSpec>().Subject;
 
+    private bool UpdateResetsViewport(int index = 0) =>
+        JSInterop.Invocations["updateChart"][index].Arguments[2].Should().BeOfType<bool>().Subject;
+
     private static long Epoch(double secondsAgo) =>
         new DateTimeOffset(_start.UtcDateTime.AddSeconds(-secondsAgo)).ToUnixTimeMilliseconds();
 
@@ -250,6 +253,48 @@ public class ChartCardRendererTests : BunitTestContext
 
         cut.WaitForAssertion(() => _module.VerifyInvoke("updateChart", 1), TimeSpan.FromSeconds(5));
         UpdateSpec().Series[0].Points.Should().ContainSingle().Which[1].Should().Be(2);
+    }
+
+    [Test]
+    public async Task TimeWindowChange_ResetsThePinnedAdapterViewportAndTheZoneCaption()
+    {
+        AllowAdapterCalls();
+        var transition = new DateTimeOffset(DateTime.UtcNow.AddMinutes(-2)).ToUnixTimeMilliseconds();
+        _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneLocal };
+        _formatter.ZoneLabel = "America/New_York";
+        _formatter.ItemFor = epoch => epoch < transition
+            ? ("EDT", "Eastern Daylight Time", "UTC-04:00")
+            : ("EST", "Eastern Standard Time", "UTC-05:00");
+        var series = new ChartSeries { DisplayName = "Temp" };
+        _chartData.GetPoints(series.Id).Returns(
+        [
+            new ChartDataPoint(DateTime.UtcNow.AddMinutes(-4), 1),
+            new ChartDataPoint(DateTime.UtcNow.AddMinutes(-1), 2)
+        ]);
+        var chart = Chart(series);
+        var cut = RenderCard(chart, ChartRendererKind.ECharts);
+        cut.WaitForAssertion(
+            () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EDT / EST"),
+            TimeSpan.FromSeconds(5));
+
+        await cut.InvokeAsync(() => cut.Instance.OnEChartsViewportChanged(transition, transition + 60_000));
+        cut.WaitForAssertion(
+            () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EST"),
+            TimeSpan.FromSeconds(5));
+
+        chart.TimeWindowMinutes = 30;
+        Rerender(cut, chart, ChartRendererKind.ECharts);
+
+        cut.WaitForAssertion(() => _module.VerifyInvoke("updateChart", 1), TimeSpan.FromSeconds(5));
+        UpdateResetsViewport().Should().BeTrue(
+            "the renderer must clear the pinned window the host just cleared");
+        cut.WaitForAssertion(
+            () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EDT / EST"),
+            TimeSpan.FromSeconds(5));
+
+        _chartData.OnDataUpdated += Raise.Event<Action>();
+        cut.WaitForAssertion(() => _module.VerifyInvoke("updateChart", 2), TimeSpan.FromSeconds(5));
+        UpdateResetsViewport(1).Should().BeFalse("a later data update keeps the reset window");
     }
 
     [Test]

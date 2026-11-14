@@ -1,0 +1,8 @@
+[
+  {
+    "language": ["javascript"],
+    "inline": "//",
+    "prefix": "/*",
+    "suffix": "*/"
+  }
+]

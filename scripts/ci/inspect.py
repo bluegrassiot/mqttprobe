@@ -6,7 +6,8 @@ Markdown report for an AI agent (or a human) to read.
   jb inspectcode  ReSharper's inspections -- code smells, redundancies, and
                   nullability findings the Roslyn analyzers do not cover.
   devskim         Microsoft's security-pattern scanner -- hardcoded secrets,
-                  weak crypto, unsafe API use. Scans every file type, not just C#.
+                  weak crypto, unsafe API use. Scans every file type, not just C#;
+                  .mjs needs a second pass, see devskim_commands.
 
 Both emit SARIF, so both are parsed by the same code and merged into one file
 grouped by tool, severity, and rule. Raw SARIF is kept with --keep-sarif.
@@ -44,10 +45,10 @@ def find_repo_root() -> Path:
 
 ROOT = find_repo_root()
 
-# Source-line exception definitions live in inspect_source_exceptions.py to
-# keep this file within the repository's 500-line limit.  importlib.util is
-# used because the script directory may not be on sys.path (e.g. when the test
-# suite loads this file via exec_module).
+# Source-line exception definitions live in inspect_source_exceptions.py to keep
+# this file focused on the scan pipeline.  importlib.util is used because the
+# script directory may not be on sys.path (e.g. when the test suite loads this
+# file via exec_module).
 _se_path = Path(__file__).resolve().parent / "inspect_source_exceptions.py"
 _se_spec = _ilu.spec_from_file_location("_inspect_source_exceptions", _se_path)
 if _se_spec is None or _se_spec.loader is None:
@@ -55,6 +56,8 @@ if _se_spec is None or _se_spec.loader is None:
 _se_mod = _ilu.module_from_spec(_se_spec)
 _se_spec.loader.exec_module(_se_mod)
 SOURCE_LINE_EXCEPTIONS = _se_mod.SOURCE_LINE_EXCEPTIONS
+VENDOR_NAMESPACE_EXCEPTIONS = _se_mod.VENDOR_NAMESPACE_EXCEPTIONS
+namespace_url_tokens = _se_mod.namespace_url_tokens
 
 _legal_path = Path(__file__).resolve().parent / "inspect_legal_exceptions.py"
 _legal_spec = _ilu.spec_from_file_location("_inspect_legal_exceptions", _legal_path)
@@ -87,6 +90,14 @@ DEVSKIM_SKIP_FILES = SKIP_FILES + ["build-macos-desktop.yml"]
 # devskim needs the leading **/ or it only matches at the repo root -- a plain
 # "TestResults/**" silently missed TestResults\CoverageReport\main.js.
 DEVSKIM_GLOBS = [f"**/{d}/**" for d in SKIP_DIRS] + [f"**/{f}" for f in DEVSKIM_SKIP_FILES]
+
+# DevSkim's built-in language table has no .mjs mapping, so a tree scan silently
+# skips ES modules. A second pass scans them as JavaScript with a table limited
+# to .mjs, so no other file changes how it is scanned.
+MJS_GLOB = "**/*.mjs"
+MJS_LANGUAGES = Path(__file__).resolve().parent / "devskim-mjs-languages.json"
+MJS_COMMENTS = Path(__file__).resolve().parent / "devskim-mjs-comments.json"
+
 JB_EXCLUDE = ";".join([f"**/{d}/**/*" for d in SKIP_DIRS] + [f"**/{f}" for f in SKIP_FILES])
 
 # SARIF levels, worst first. Anything unrecognised sorts last under "other".
@@ -213,6 +224,10 @@ def is_source_line_exception(finding):
     return _se_mod.is_source_line_exception(finding, ROOT)
 
 
+def is_vendor_namespace_exception(finding):
+    return _se_mod.is_vendor_namespace_exception(finding, ROOT)
+
+
 def is_legal_hash_exception(finding, cache=None):
     """True only for a schema-checked public digest line in the legal data."""
     return _legal_mod.is_legal_hash_exception(finding, ROOT, cache)
@@ -245,6 +260,25 @@ def run_tool(name, cmd, sarif_path):
 
     print(" done")
     return sarif_path
+
+
+def devskim_commands(sarif_path):
+    base = ["dotnet", "devskim", "analyze", "-I", ".", "-f", "sarif",
+            # DS162092 flags every localhost/127.0.0.1 as possible debug code. This is an
+            # MQTT client whose users connect to local brokers, so all 72 hits were dev
+            # config, test fixtures, and loopback proxy allowlists -- enough noise to bury
+            # a real one. Drop the flag to see them again.
+            "--ignore-rule-ids", "DS162092", "-g", *DEVSKIM_GLOBS]
+    mjs_sarif = sarif_path.with_name(f"{sarif_path.stem}-mjs{sarif_path.suffix}")
+    return [
+        ("devskim (security patterns)", base + ["-O", str(sarif_path)], sarif_path),
+        ("devskim (ECMAScript modules)",
+         base + ["-O", str(mjs_sarif),
+                 "--include-globs", MJS_GLOB,
+                 "--languages", str(MJS_LANGUAGES),
+                 "--comments", str(MJS_COMMENTS)],
+         mjs_sarif),
+    ]
 
 
 def parse_sarif(path):
@@ -403,18 +437,11 @@ def main():
             failures += 1
 
     if args.tool in ("all", "devskim"):
-        cmd = ["dotnet", "devskim", "analyze",
-               "-I", ".", "-O", str(devskim_sarif), "-f", "sarif",
-               # DS162092 flags every localhost/127.0.0.1 as possible debug code. This is an
-               # MQTT client whose users connect to local brokers, so all 72 hits were dev
-               # config, test fixtures, and loopback proxy allowlists -- enough noise to bury
-               # a real one. Drop the flag to see them again.
-               "--ignore-rule-ids", "DS162092",
-               "-g", *DEVSKIM_GLOBS]
-        if run_tool("devskim", cmd, devskim_sarif):
-            runs.append(("devskim (security patterns)", devskim_sarif))
-        else:
-            failures += 1
+        for label, cmd, sarif in devskim_commands(devskim_sarif):
+            if run_tool(label, cmd, sarif):
+                runs.append((label, sarif))
+            else:
+                failures += 1
 
     if not runs:
         print("\n=== No analyzer produced results ===")
@@ -448,6 +475,7 @@ def main():
                 if (is_gated_exception(finding)
                         or is_spec_identifier_exception(finding)
                         or is_source_line_exception(finding)
+                        or is_vendor_namespace_exception(finding)
                         or is_legal_hash_exception(finding, legal_cache)):
                     accepted.append(finding)
                 else:

@@ -14,6 +14,15 @@
             Configure New
         </AppPrimaryButton>
     </HeaderActions>
+    <HeaderFilters>
+        <MudSelect T="ChartRendererKind" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                   Value="@_renderer" ValueChanged="@OnRendererChanged"
+                   Label="Renderer" Class="charts-renderer-select"
+                   RelativeWidth="DropdownWidth.Adaptive">
+            <MudSelectItem T="ChartRendererKind" Value="ChartRendererKind.Apex">ApexCharts</MudSelectItem>
+            <MudSelectItem T="ChartRendererKind" Value="ChartRendererKind.ECharts">ECharts (preview)</MudSelectItem>
+        </MudSelect>
+    </HeaderFilters>
 </TabPanelHeader>
 
 @{
@@ -38,6 +47,8 @@
             {
                 <ChartCard @key="config.Id"
                            Configuration="config"
+                           Renderer="_renderer"
+                           OnRendererRollback="UseApex"
                            OnEdit="EditChart"
                            OnDelete="DeleteChart" />
             }
@@ -46,6 +57,17 @@
 </div>
 
 @code {
+    private ChartRendererKind _renderer = ChartRendererKind.Apex;
+
+    private void OnRendererChanged(ChartRendererKind renderer)
+    {
+        if (renderer == _renderer) return;
+        _renderer = renderer;
+        StateHasChanged();
+    }
+
+    private void UseApex() => OnRendererChanged(ChartRendererKind.Apex);
+
     protected override async Task OnInitializedAsync()
     {
         await ChartDataService.StartAsync();

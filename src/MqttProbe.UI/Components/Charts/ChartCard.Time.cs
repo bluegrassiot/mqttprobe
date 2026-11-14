@@ -12,6 +12,7 @@ public partial class ChartCard
     private const int MaxCaptionAttempts = 5;
 
     private MessageTimePreferences _preferences = new();
+    private string _lastFontProfile = FontProfiles.Standard;
     private bool _bridgeReady;
     private int _bridgeAttempts;
     private int _captionAttempts;
@@ -32,6 +33,7 @@ public partial class ChartCard
     private void InitializeTimeDisplay()
     {
         _preferences = ReadPreferences();
+        _lastFontProfile = FontProfiles.Normalize(UiSettings.Ui.FontProfile);
         UiSettings.UiPreferencesChanged += OnUiPreferencesChanged;
     }
 
@@ -311,11 +313,14 @@ public partial class ChartCard
             return;
 
         var next = ReadPreferences();
-        if (next == _preferences)
+        var fontProfile = FontProfiles.Normalize(UiSettings.Ui.FontProfile);
+        var fontChanged = fontProfile != _lastFontProfile;
+        if (next == _preferences && !fontChanged)
             return;
 
         var zoneChanged = next.Zone != _preferences.Zone;
         _preferences = next;
+        _lastFontProfile = fontProfile;
         ApplyTimeFormatPreferences();
         _pendingOptionsUpdate = true;
 

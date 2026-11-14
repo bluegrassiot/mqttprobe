@@ -15,7 +15,9 @@ using MqttProbe.Core.Services.Plugins.Pipeline;
 using MqttProbe.Core.Services.Plugins.Registry;
 using MqttProbe.UI.Services.Formatting;
 using MqttProbe.UI.Tests.TestHelpers;
+using MudBlazor;
 using Org.Eclipse.Tahu.Protobuf;
+using ChartCardComponent = MqttProbe.UI.Components.Charts.ChartCard;
 using ChartsComponent = MqttProbe.UI.Components.Charts.Charts;
 
 namespace MqttProbe.UI.Tests.Components.Charts;
@@ -188,6 +190,51 @@ public class ChartsComponentTests : BunitTestContext
         cut.Markup.Should().Contain(">Charts<");
         cut.Markup.Should().Contain("Configure New");
         cut.Markup.Should().NotContain("Create chart");
+    }
+
+    [Test]
+    public void RendererSwitch_StartsOnApexAndSwitchesBackFromECharts()
+    {
+        var configs = new List<ChartConfiguration>
+        {
+            new()
+            {
+                Name = "Temp Chart",
+                Series = [new ChartSeries { DisplayName = "Temp" }]
+            }
+        };
+        _mockChartStore.GetCharts(_testConnectionId).Returns(configs);
+        var module = JSInterop.SetupModule(ChartRendererInterop.ModulePath);
+        module.Setup<bool>("createChart", _ => true).SetResult(true);
+        module.Setup<bool>("updateChart", _ => true).SetResult(true);
+        module.Setup<bool>("disposeChart", _ => true).SetResult(true);
+
+        var cut = Render<ChartsComponent>();
+
+        cut.FindComponent<ChartCardComponent>().Instance.Renderer.Should().Be(ChartRendererKind.Apex);
+        cut.Markup.Should().Contain("ApexCharts");
+        cut.FindAll(".charts-renderer-note").Should().BeEmpty();
+
+        var select = cut.FindComponent<MudSelect<ChartRendererKind>>();
+        cut.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync(ChartRendererKind.ECharts));
+
+        cut.WaitForAssertion(
+            () => cut.FindAll(".chart-card-echarts").Should().ContainSingle(),
+            TimeSpan.FromSeconds(5));
+        cut.FindComponent<ChartCardComponent>().Instance.Renderer.Should().Be(ChartRendererKind.ECharts);
+        cut.FindAll(".charts-renderer-note").Should().BeEmpty(
+            "the preview notice is no longer shown");
+        module.VerifyInvoke("createChart", 1);
+
+        cut.InvokeAsync(() => cut.FindComponent<MudSelect<ChartRendererKind>>()
+            .Instance.ValueChanged.InvokeAsync(ChartRendererKind.Apex));
+
+        cut.WaitForAssertion(
+            () => cut.FindComponents<ApexChart<ChartDataPoint>>().Should().ContainSingle(),
+            TimeSpan.FromSeconds(5));
+        cut.FindComponent<ChartCardComponent>().Instance.Renderer.Should().Be(ChartRendererKind.Apex);
+        cut.FindAll(".charts-renderer-note").Should().BeEmpty();
+        module.VerifyInvoke("disposeChart", 1);
     }
 }
 

@@ -70,6 +70,33 @@
       "notes": "Bundled by iOS, Android, MacCatalyst and self-contained desktop builds. The notice files are from Microsoft.NETCore.App.Runtime.Mono.ios-arm64 10.0.14, byte-identical to the android-arm64 and maccatalyst-arm64 packs of the same version."
     },
     {
+      "id": "echarts-d3-javascript",
+      "name": "d3.js (Apache ECharts subcomponent)",
+      "version": "bundled in ECharts 6.1.0",
+      "license": "BSD-3-Clause",
+      "copyright": "Copyright 2010-2016 Mike Bostock",
+      "sourceUrl": "https://github.com/d3/d3",
+      "documentIds": [
+        "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304"
+      ],
+      "applicability": "runtime",
+      "notes": "ECharts 6.1.0 embeds d3.js BSD-3-Clause code in its treemap, tree, force and number helpers. The ECharts package does not declare a d3 version, and the reproduced licence is the copy shipped in its licenses directory."
+    },
+    {
+      "id": "echarts-javascript",
+      "name": "Apache ECharts JavaScript library",
+      "version": "6.1.0",
+      "license": "Apache-2.0",
+      "copyright": "Copyright 2017-2026 The Apache Software Foundation",
+      "sourceUrl": "https://github.com/apache/echarts",
+      "documentIds": [
+        "88c2418a8ab4dba3486b263600ab39e0c78c36142ddfa4167ed3d9c3a2d2ab38",
+        "da36698199ad661aa706a88c116ed6f2e8aa11d33be22aeb230ae799bf3f7586"
+      ],
+      "applicability": "runtime",
+      "notes": "Vendored unmodified as js/echarts/6.1.0/echarts.esm.min.js from the npm echarts@6.1.0 archive (SHA-256 681aff88cc1038c3fa941a3a53d1b177a52250b05335efc607d6105ae13be481; integrity sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==). The file is 1,121,654 bytes with SHA-256 28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da."
+    },
+    {
       "id": "font-chakra-petch",
       "name": "Chakra Petch",
       "version": "unversioned",
@@ -2998,6 +3025,32 @@
       ],
       "applicability": "runtime",
       "notes": "Consumed from the external/SparkplugNet git submodule as a project reference."
+    },
+    {
+      "id": "tslib-javascript",
+      "name": "tslib",
+      "version": "2.3.0",
+      "license": "0BSD",
+      "copyright": "Copyright (c) Microsoft Corporation.",
+      "sourceUrl": "https://github.com/Microsoft/tslib",
+      "documentIds": [
+        "5989359645911c04a140c49d89496b13feca980bbf36d2250a12d3b9d06250d6"
+      ],
+      "applicability": "runtime",
+      "notes": "Inlined in js/echarts/6.1.0/echarts.esm.min.js by the ECharts 6.1.0 build; its licence text is retained verbatim at the top of the bundle. The npm tslib@2.3.0 archive SHA-256 is ae285639feff7e3c39de4626352181a5d73b815725e42639b411c43848abffdb."
+    },
+    {
+      "id": "zrender-javascript",
+      "name": "zrender JavaScript library",
+      "version": "6.1.0",
+      "license": "BSD-3-Clause",
+      "copyright": "Copyright (c) 2017, Baidu Inc.",
+      "sourceUrl": "https://github.com/ecomfe/zrender",
+      "documentIds": [
+        "55ea01207028f76d844678511f29fc800f8a1e67a8a0fe80470128677847ad32"
+      ],
+      "applicability": "runtime",
+      "notes": "Inlined in js/echarts/6.1.0/echarts.esm.min.js by the ECharts 6.1.0 build; not served as a separate file. The npm zrender@6.1.0 archive SHA-256 is 38f2fb722a638be016ca0175b139c40c886ef47fc2afdb741b2e7e7ae9683f9c."
     }
   ],
   "documents": [
@@ -3090,11 +3143,31 @@
       "kind": "notice"
     },
     {
+      "id": "55ea01207028f76d844678511f29fc800f8a1e67a8a0fe80470128677847ad32",
+      "title": "zrender 6.1.0 License (upstream text)",
+      "file": "55ea01207028f76d844678511f29fc800f8a1e67a8a0fe80470128677847ad32.txt",
+      "sha256": "55ea01207028f76d844678511f29fc800f8a1e67a8a0fe80470128677847ad32",
+      "sourceUrls": [
+        "https://unpkg.com/zrender@6.1.0/LICENSE"
+      ],
+      "kind": "license"
+    },
+    {
       "id": "58a15cd857ebf4d7f6f95cffa33e1b662c04ef418aac591f73a4bfb1092aca6e",
       "title": "Microsoft.Graphics.Win2D repository license (MIT)",
       "file": "58a15cd857ebf4d7f6f95cffa33e1b662c04ef418aac591f73a4bfb1092aca6e.txt",
       "sha256": "58a15cd857ebf4d7f6f95cffa33e1b662c04ef418aac591f73a4bfb1092aca6e",
       "sourceUrls": [],
+      "kind": "license"
+    },
+    {
+      "id": "5989359645911c04a140c49d89496b13feca980bbf36d2250a12d3b9d06250d6",
+      "title": "tslib 2.3.0 License (upstream text)",
+      "file": "5989359645911c04a140c49d89496b13feca980bbf36d2250a12d3b9d06250d6.txt",
+      "sha256": "5989359645911c04a140c49d89496b13feca980bbf36d2250a12d3b9d06250d6",
+      "sourceUrls": [
+        "https://unpkg.com/tslib@2.3.0/LICENSE.txt"
+      ],
       "kind": "license"
     },
     {
@@ -3219,6 +3292,16 @@
       "file": "85c112ba23ef4e6bd899a1f3fa5d32342b878fcea3ce5ddf6cbf86d23f50165e.txt",
       "sha256": "85c112ba23ef4e6bd899a1f3fa5d32342b878fcea3ce5ddf6cbf86d23f50165e",
       "sourceUrls": [],
+      "kind": "notice"
+    },
+    {
+      "id": "88c2418a8ab4dba3486b263600ab39e0c78c36142ddfa4167ed3d9c3a2d2ab38",
+      "title": "Apache ECharts 6.1.0 NOTICE (upstream text)",
+      "file": "88c2418a8ab4dba3486b263600ab39e0c78c36142ddfa4167ed3d9c3a2d2ab38.txt",
+      "sha256": "88c2418a8ab4dba3486b263600ab39e0c78c36142ddfa4167ed3d9c3a2d2ab38",
+      "sourceUrls": [
+        "https://unpkg.com/echarts@6.1.0/NOTICE"
+      ],
       "kind": "notice"
     },
     {
@@ -3398,12 +3481,32 @@
       "kind": "notice"
     },
     {
+      "id": "da36698199ad661aa706a88c116ed6f2e8aa11d33be22aeb230ae799bf3f7586",
+      "title": "Apache ECharts 6.1.0 License (upstream text)",
+      "file": "da36698199ad661aa706a88c116ed6f2e8aa11d33be22aeb230ae799bf3f7586.txt",
+      "sha256": "da36698199ad661aa706a88c116ed6f2e8aa11d33be22aeb230ae799bf3f7586",
+      "sourceUrls": [
+        "https://unpkg.com/echarts@6.1.0/LICENSE"
+      ],
+      "kind": "license"
+    },
+    {
       "id": "dafb7de77796bf6adf2544f7b27560f41b11b5be4391b2324e5a6fb335888ecd",
       "title": "The MIT License (MIT)",
       "file": "dafb7de77796bf6adf2544f7b27560f41b11b5be4391b2324e5a6fb335888ecd.txt",
       "sha256": "dafb7de77796bf6adf2544f7b27560f41b11b5be4391b2324e5a6fb335888ecd",
       "sourceUrls": [
         "https://aka.ms/deprecateLicenseUrl"
+      ],
+      "kind": "license"
+    },
+    {
+      "id": "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304",
+      "title": "Apache ECharts 6.1.0 d3.js License (upstream text)",
+      "file": "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304.txt",
+      "sha256": "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304",
+      "sourceUrls": [
+        "https://unpkg.com/echarts@6.1.0/licenses/LICENSE-d3"
       ],
       "kind": "license"
     },

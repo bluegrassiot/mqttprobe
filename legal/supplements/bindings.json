@@ -76,6 +76,26 @@
       "component": "sparkplug-b-generated-code",
       "path": "src/MqttProbe.Core/Models/Sparkplug/SparkplugBProtobuf.cs",
       "sha256": "add1459374234868037ea75c1156ee5c78aae071cbab22dcf4c99d997f480b3d"
+    },
+    {
+      "component": "echarts-javascript",
+      "path": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/echarts.esm.min.js",
+      "sha256": "28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da"
+    },
+    {
+      "component": "echarts-javascript",
+      "path": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/LICENSE",
+      "sha256": "634293835b43a6dd2094fa39182a3d9a6b9ca43b7fdb9ac354e8037af2a3093a"
+    },
+    {
+      "component": "echarts-javascript",
+      "path": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/NOTICE",
+      "sha256": "d491d358344f842685c1b1585970999db65fe30ecf7ef3867af8814f4016c016"
+    },
+    {
+      "component": "echarts-d3-javascript",
+      "path": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/licenses/LICENSE-d3",
+      "sha256": "e1211892da0b0e0585b7aebe8f98c1274fba15bafe47fa1f4ee8a7a502c06304"
     }
   ],
   "packageFiles": [

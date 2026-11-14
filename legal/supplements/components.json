@@ -107,6 +107,55 @@
       "notes": "Bundled inside js/apexcharts.full.min.js by ApexCharts 8.8.1 and served to the browser. Upstream terms are not resolved by this notice. They carry the same OEM/redistribution condition, and no such entitlement is established here."
     },
     {
+      "id": "echarts-javascript",
+      "name": "Apache ECharts JavaScript library",
+      "version": "6.1.0",
+      "license": "Apache-2.0",
+      "copyright": "Copyright 2017-2026 The Apache Software Foundation",
+      "sourceUrl": "https://github.com/apache/echarts",
+      "documents": [
+        "echarts-6-1-0-license-upstream-text",
+        "echarts-6-1-0-notice-upstream-text"
+      ],
+      "notes": "Vendored unmodified as js/echarts/6.1.0/echarts.esm.min.js from the npm echarts@6.1.0 archive (SHA-256 681aff88cc1038c3fa941a3a53d1b177a52250b05335efc607d6105ae13be481; integrity sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==). The file is 1,121,654 bytes with SHA-256 28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da."
+    },
+    {
+      "id": "echarts-d3-javascript",
+      "name": "d3.js (Apache ECharts subcomponent)",
+      "version": "bundled in ECharts 6.1.0",
+      "license": "BSD-3-Clause",
+      "copyright": "Copyright 2010-2016 Mike Bostock",
+      "sourceUrl": "https://github.com/d3/d3",
+      "documents": [
+        "echarts-6-1-0-license-d3-upstream-text"
+      ],
+      "notes": "ECharts 6.1.0 embeds d3.js BSD-3-Clause code in its treemap, tree, force and number helpers. The ECharts package does not declare a d3 version, and the reproduced licence is the copy shipped in its licenses directory."
+    },
+    {
+      "id": "zrender-javascript",
+      "name": "zrender JavaScript library",
+      "version": "6.1.0",
+      "license": "BSD-3-Clause",
+      "copyright": "Copyright (c) 2017, Baidu Inc.",
+      "sourceUrl": "https://github.com/ecomfe/zrender",
+      "documents": [
+        "zrender-6-1-0-license-upstream-text"
+      ],
+      "notes": "Inlined in js/echarts/6.1.0/echarts.esm.min.js by the ECharts 6.1.0 build; not served as a separate file. The npm zrender@6.1.0 archive SHA-256 is 38f2fb722a638be016ca0175b139c40c886ef47fc2afdb741b2e7e7ae9683f9c."
+    },
+    {
+      "id": "tslib-javascript",
+      "name": "tslib",
+      "version": "2.3.0",
+      "license": "0BSD",
+      "copyright": "Copyright (c) Microsoft Corporation.",
+      "sourceUrl": "https://github.com/Microsoft/tslib",
+      "documents": [
+        "tslib-2-3-0-license-upstream-text"
+      ],
+      "notes": "Inlined in js/echarts/6.1.0/echarts.esm.min.js by the ECharts 6.1.0 build; its licence text is retained verbatim at the top of the bundle. The npm tslib@2.3.0 archive SHA-256 is ae285639feff7e3c39de4626352181a5d73b815725e42639b411c43848abffdb."
+    },
+    {
       "id": "dotnet-runtime",
       "name": ".NET runtime",
       "version": "10.0.14",

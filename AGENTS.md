@@ -1,5 +1,19 @@
 # Agent Instructions
 
+## Agent skills
+
+### Issue tracker
+
+Use GitHub Issues in `bluegrassiot/mqttprobe`. See `D:/Projects/Open/mqttprobe-docs/Projects/mqttprobe/docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Label automation is disabled for now. Do not create or apply triage labels.
+
+### Domain docs
+
+Use the single-context documentation in the external docs tree. See `D:/Projects/Open/mqttprobe-docs/Projects/mqttprobe/docs/agents/domain.md`.
+
 ## Repository setup
 
 - Create new worktrees under `.worktrees/<task-name>` in the main repository root, not in tool-managed storage, sibling folders, or temporary directories. When already in a worktree, use the main repository's `.worktrees` directory rather than nesting another `.worktrees` inside the current worktree.

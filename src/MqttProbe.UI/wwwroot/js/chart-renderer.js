@@ -3,6 +3,7 @@
 const ECHARTS_MODULE_PATH = './echarts/6.1.0/echarts.esm.min.js';
 const MILLISECONDS_PER_DAY = 86_400_000;
 const MARKER_SIZE = 5;
+const CLOCK_TIME_PATTERN = /^(\d{2}:\d{2}):(\d{2})\.(\d{3})( .*)?$/;
 // Mirrors the host --font-mono profile; canvas text cannot resolve a CSS variable.
 const FONT_FAMILIES = {
     standard: 'JetBrains Mono, monospace',
@@ -78,23 +79,43 @@ function formatNumber(value) {
     return String(Math.round(value * 100) / 100);
 }
 
+// ECharts reports each tick's granularity as the formatter's third argument.
+function axisTimeText(time, unit) {
+    const match = CLOCK_TIME_PATTERN.exec(time);
+    if (!match || !unit) {
+        return time;
+    }
+
+    const [, hourMinute, second, fraction, suffix = ''] = match;
+    if (unit === 'millisecond' || fraction !== '000') {
+        return time;
+    }
+
+    if (unit === 'second' || second !== '00') {
+        return `${hourMinute}:${second}${suffix}`;
+    }
+
+    return `${hourMinute}${suffix}`;
+}
+
 // Mirrors the Apex axis formatter: a second date line at midnight or across more than a day.
 function axisLabelFormatter(spec) {
     const extent = dataExtent(spec?.series);
     const span = extent ? extent[1] - extent[0] : 0;
     const preferences = timePreferences(spec);
 
-    return value => {
+    return (value, _index, extra) => {
         const when = Array.isArray(value) ? value[0] : value;
         const bridge = globalThis.mqttProbeTime;
         if (!bridge || typeof when !== 'number') {
             return '';
         }
 
-        const time = bridge.formatAxis(when, preferences);
+        const clock = bridge.formatAxis(when, preferences);
+        const time = axisTimeText(clock, extra?.time?.upperTimeUnit);
         const full = bridge.formatTooltip(when, preferences);
         const date = typeof full === 'string' ? full.slice(0, 10) : '';
-        const midnight = time.startsWith('00:00:00') || time.startsWith('12:00:00.000 AM');
+        const midnight = clock.startsWith('00:00:00') || clock.startsWith('12:00:00.000 AM');
         return span > MILLISECONDS_PER_DAY || midnight ? `${date}\n${time}` : time;
     };
 }
@@ -274,7 +295,9 @@ function buildInitialOption(spec) {
             right: 56,
             top: 8,
             bottom: showLegend ? 30 : 8,
-            containLabel: true,
+            containLabel: false,
+            outerBoundsMode: 'same',
+            outerBoundsContain: 'axisLabel',
         },
         legend: {
             show: showLegend,

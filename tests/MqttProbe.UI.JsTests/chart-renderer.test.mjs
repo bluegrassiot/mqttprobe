@@ -194,6 +194,10 @@ test('create applies an explicit time-series option synchronously', async () => 
         assert.equal(option.legend.show, true);
         assert.equal(option.legend.textStyle.color, '#0F172A', 'legend labels use the chart foreground');
         assert.equal(option.xAxis.splitLine.show, true, 'the Apex baseline draws both axis grids');
+        assert.equal(option.grid.containLabel, false,
+            'the deprecated containLabel layout can place labels outside the grid');
+        assert.equal(option.grid.outerBoundsMode, 'same');
+        assert.equal(option.grid.outerBoundsContain, 'axisLabel');
         assert.deepEqual(option.xAxis.splitLine.lineStyle, { color: '#CBD5E1', type: [4, 4] });
         assert.equal(typeof option.grid.left, 'number', 'the layout is stated, not inherited from defaults');
         assert.equal(typeof option.textStyle.color, 'string');
@@ -608,6 +612,84 @@ test('axis labels follow the shared time bridge preferences', async () => {
 
         const midday = option.xAxis.axisLabel.formatter(1767225600001);
         assert.equal(midday, '12:34:56.789');
+    } finally {
+        globalThis.mqttProbeTime = previous;
+        layout.restore();
+    }
+});
+
+test('axis labels shorten to the tick granularity without changing tooltip precision', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    const previous = globalThis.mqttProbeTime;
+    let current = '09:21:00.000';
+    globalThis.mqttProbeTime = {
+        formatAxis: () => current,
+        formatTooltip: () => '2026-11-14 09:21:00.000 UTC',
+    };
+    try {
+        await createChart(createElement(), uniqueId(), createDotNetRef(), spec(), { echarts });
+        const option = echarts.charts[0].options[0].option;
+        const formatter = option.xAxis.axisLabel.formatter;
+        const at = unit => formatter(1767225600000, 0, { time: { upperTimeUnit: unit } });
+
+        assert.equal(at('minute'), '09:21');
+        current = '09:21:42.000';
+        assert.equal(at('second'), '09:21:42');
+        current = '09:21:42.123';
+        assert.equal(at('millisecond'), '09:21:42.123');
+        current = '09:21:00.000 AM';
+        assert.equal(at('minute'), '09:21 AM');
+        current = '09:21:42.000 PM';
+        assert.equal(at('second'), '09:21:42 PM');
+        current = '09:21:42.123 PM';
+        assert.equal(at('millisecond'), '09:21:42.123 PM');
+
+        current = '09:21:42.000';
+        assert.equal(at('minute'), '09:21:42', 'a non-whole minute keeps its seconds');
+        current = '09:21:42.123';
+        assert.equal(at('second'), '09:21:42.123', 'a non-whole second keeps its fraction');
+        current = '09:21:42.123';
+        assert.equal(formatter(1767225600000), '09:21:42.123',
+            'a formatter call without tick metadata keeps the full clock');
+
+        const tooltip = option.tooltip.formatter([
+            { seriesName: 'serie-a', value: [1767225600000, 21.5], marker: '', color: '#F97316' },
+        ]);
+        assert.match(tooltip, /2026-11-14 09:21:00\.000 UTC/);
+        assert.equal(option.tooltip.axisPointer.label.formatter({
+            value: 1767225600000,
+            axisDimension: 'x',
+        }), '09:21:42.123', 'the crosshair keeps the full clock');
+    } finally {
+        globalThis.mqttProbeTime = previous;
+        layout.restore();
+    }
+});
+
+test('axis labels keep the date line when tick precision is shortened', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    const previous = globalThis.mqttProbeTime;
+    const base = 1767225600000;
+    let current = '09:21:00.000';
+    globalThis.mqttProbeTime = {
+        formatAxis: () => current,
+        formatTooltip: () => '2026-11-14 09:21:00.000 UTC',
+    };
+    try {
+        await createChart(createElement(), uniqueId(), createDotNetRef(), spec({
+            series: [series('only', 'Temp', '#F97316', [[base, 1], [base + 3 * 86_400_000, 2]])],
+        }), { echarts });
+        const formatter = echarts.charts[0].options[0].option.xAxis.axisLabel.formatter;
+        const at = unit => formatter(base, 0, { time: { upperTimeUnit: unit } });
+
+        assert.equal(at('minute'), '2026-11-14\n09:21');
+
+        current = '00:00:00.000';
+        assert.equal(at('minute'), '2026-11-14\n00:00', 'midnight still carries the date');
+        current = '12:00:00.000 AM';
+        assert.equal(at('minute'), '2026-11-14\n12:00 AM');
     } finally {
         globalThis.mqttProbeTime = previous;
         layout.restore();
@@ -1183,6 +1265,73 @@ test('real bundle: a pinned window keeps its absolute range as data grows and re
             'after a reset the window follows the new extent');
     } finally {
         disposeChart(id);
+    }
+});
+
+test('real bundle: time labels follow the visible tick precision', async () => {
+    const previous = globalThis.mqttProbeTime;
+    globalThis.mqttProbeTime = {
+        formatAxis: epoch => new Date(epoch).toISOString().slice(11, 23),
+        formatTooltip: epoch => {
+            const iso = new Date(epoch).toISOString();
+            return `${iso.slice(0, 10)} ${iso.slice(11, 23)} UTC`;
+        },
+    };
+    const base = Date.parse('2026-11-14T09:00:00Z');
+    const labelsFor = chart => [...chart.renderToSVGString().matchAll(/<text[^>]*>([^<]+)<\/text>/g)]
+        .map(match => match[1])
+        .filter(text => /^\d{2}:\d{2}/.test(text));
+    try {
+        const minute = await createRealEcharts();
+        const minuteId = uniqueId();
+        try {
+            await createChart({ isConnected: true }, minuteId, createDotNetRef(),
+                singleSeriesSpec('line', Array.from({ length: 6 }, (_, index) => [base + index * 300_000, index])),
+                { echarts: minute.echarts });
+            const labels = labelsFor(minute.state.instance);
+            assert.ok(labels.length > 1);
+            assert.ok(labels.every(label => /^\d{2}:\d{2}$/.test(label)),
+                `minute ticks omit seconds: ${labels.join(', ')}`);
+        } finally {
+            disposeChart(minuteId);
+        }
+
+        const second = await createRealEcharts();
+        const secondId = uniqueId();
+        try {
+            await createChart({ isConnected: true }, secondId, createDotNetRef(),
+                singleSeriesSpec('line', Array.from({ length: 9 }, (_, index) => [base + index * 5000, index])),
+                { echarts: second.echarts });
+            const labels = labelsFor(second.state.instance);
+            assert.ok(labels.some(label => /^\d{2}:\d{2}:\d{2}$/.test(label)),
+                `second ticks show seconds: ${labels.join(', ')}`);
+            assert.ok(labels.every(label => !label.includes('.')),
+                `second ticks omit milliseconds: ${labels.join(', ')}`);
+        } finally {
+            disposeChart(secondId);
+        }
+
+        const zoomed = await createRealEcharts();
+        const zoomId = uniqueId();
+        try {
+            await createChart({ isConnected: true }, zoomId, createDotNetRef(),
+                singleSeriesSpec('line', Array.from({ length: 200 }, (_, index) => [base + index * 100, index])),
+                { echarts: zoomed.echarts });
+            zoomed.state.instance.dispatchAction({
+                type: 'dataZoom',
+                startValue: base + 19_600,
+                endValue: base + 19_900,
+            });
+            const labels = labelsFor(zoomed.state.instance);
+            assert.ok(labels.some(label => label.includes('.')),
+                `a subsecond window shows fractions: ${labels.join(', ')}`);
+            assert.equal(new Set(labels).size, labels.length,
+                `subsecond labels stay distinct: ${labels.join(', ')}`);
+        } finally {
+            disposeChart(zoomId);
+        }
+    } finally {
+        globalThis.mqttProbeTime = previous;
     }
 });
 

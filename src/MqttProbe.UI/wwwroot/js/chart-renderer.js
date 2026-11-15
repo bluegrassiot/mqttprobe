@@ -655,3 +655,17 @@ export function updateChart(chartId, spec, resetViewport = false) {
 export function disposeChart(chartId) {
     return release(instances.get(chartId));
 }
+
+export function getChartExportSnapshot(chartId) {
+    const instance = instances.get(chartId);
+    if (!instance || instance.disposed) {
+        return null;
+    }
+
+    return {
+        spec: instance.spec,
+        option: instance.chart.getOption(),
+        width: instance.chart.getWidth(),
+        height: instance.chart.getHeight(),
+    };
+}

@@ -529,7 +529,7 @@ test('theme changes refresh the rich tooltip', async () => {
     }
 });
 
-test('the tooltip is not re-shown outside the plot or after the pointer leaves', async () => {
+test('the tooltip is hidden outside the plot and after the pointer leaves', async () => {
     const echarts = createFakeEcharts();
     const layout = installResizeObserver();
     try {
@@ -543,8 +543,10 @@ test('the tooltip is not re-shown outside the plot or after the pointer leaves',
         chart.element.emit('mousemove', { clientX: 999, clientY: 999 });
         chart.inGrid = false;
         updateChart(id, spec());
-        assert.deepEqual(chart.actions, [], 'the pointer is outside the grid');
+        assert.deepEqual(chart.actions, [{ type: 'hideTip' }],
+            'a grid relayout that puts the pointer outside clears stale content');
 
+        chart.actions.length = 0;
         chart.inGrid = true;
         chart.element.emit('mouseleave');
         updateChart(id, spec());
@@ -553,6 +555,51 @@ test('the tooltip is not re-shown outside the plot or after the pointer leaves',
         chart.element.emit('mouseenter', { clientX: 210, clientY: 115 });
         assert.deepEqual(chart.actions, [{ type: 'showTip', x: 210, y: 115 }],
             're-entering the chart after an overlay restores the hover tooltip');
+    } finally {
+        layout.restore();
+    }
+});
+
+test('a resize hides the tooltip when the pointer falls outside the new grid', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    try {
+        const id = uniqueId();
+        await createChart(createElement(), id, createDotNetRef(), spec(), { echarts });
+        const chart = echarts.charts[0];
+        chart.element.emit('mousemove', { clientX: 200, clientY: 120 });
+        chart.actions.length = 0;
+        chart.inGrid = false;
+
+        layout.observers[0].trigger();
+
+        assert.equal(chart.resizes, 1);
+        assert.deepEqual(chart.actions, [{ type: 'hideTip' }],
+            'a resize that puts the tracked pointer outside clears the stale tooltip');
+    } finally {
+        layout.restore();
+    }
+});
+
+test('hiding clears a pending tooltip recovery', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    try {
+        const id = uniqueId();
+        await createChart(createElement(), id, createDotNetRef(), spec(), { echarts });
+        const chart = echarts.charts[0];
+        chart.element.emit('mousemove', { clientX: 200, clientY: 120 });
+
+        updateChart(id, spec());
+        chart.actions.length = 0;
+        chart.element.emit('mousemove', { clientX: 900, clientY: 900 });
+        chart.inGrid = false;
+        updateChart(id, spec());
+        chart.inGrid = true;
+        await new Promise(resolve => setTimeout(resolve, 220));
+
+        assert.deepEqual(chart.actions, [{ type: 'hideTip' }],
+            'a pending recovery must not re-show after the tooltip was hidden');
     } finally {
         layout.restore();
     }
@@ -740,6 +787,33 @@ test('update replaces the series set when membership changes', async () => {
         assert.deepEqual(option.series.map(entry => entry.id), ['serie-b']);
         assert.equal(option.legend.show, false, 'the legend visibility follows the new series count');
         assert.equal(option.legend.selected, undefined);
+        assert.equal(option.grid.bottom, 8, 'without a legend the axis labels own the bottom band');
+    } finally {
+        layout.restore();
+    }
+});
+
+test('adding a series after creation reserves the legend band', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    try {
+        const id = uniqueId();
+        await createChart(createElement(), id, createDotNetRef(),
+            spec({ series: [series('serie-a', 'Temp', '#F97316', [[1767225600000, 21.5]])] }), { echarts });
+        const chart = echarts.charts[0];
+
+        const created = chart.options[0].option;
+        assert.equal(created.grid.bottom, 8, 'one series leaves the bottom to the axis labels');
+        assert.equal(created.grid.outerBoundsContain, 'axisLabel');
+
+        updateChart(id, spec());
+
+        const { option } = chart.options[1];
+        assert.equal(option.legend.show, true);
+        assert.equal(option.grid.bottom, 30,
+            'the new legend must not share the axis label band');
+        assert.equal(option.grid.outerBoundsContain, undefined,
+            'the applied grid merge keeps the containment set at creation');
     } finally {
         layout.restore();
     }
@@ -1329,6 +1403,68 @@ test('real bundle: time labels follow the visible tick precision', async () => {
                 `subsecond labels stay distinct: ${labels.join(', ')}`);
         } finally {
             disposeChart(zoomId);
+        }
+    } finally {
+        globalThis.mqttProbeTime = previous;
+    }
+});
+
+test('real bundle: a series added after creation keeps the legend below the axis labels', async () => {
+    const previous = globalThis.mqttProbeTime;
+    globalThis.mqttProbeTime = {
+        formatAxis: epoch => new Date(epoch).toISOString().slice(11, 19),
+        formatTooltip: epoch => `${new Date(epoch).toISOString().slice(0, 19)} UTC`,
+    };
+    const base = Date.parse('2026-11-14T09:00:00Z');
+    const points = Array.from({ length: 500 }, (_, index) => [base + index * 50, 20 + (index % 40)]);
+    const bands = chart => {
+        const nodes = [...chart.renderToSVGString().matchAll(/<text([^>]*)>([^<]*)<\/text>/g)]
+            .map(match => ({
+                text: match[2],
+                y: Number(/translate\([-\d.]+ ([-\d.]+)\)/.exec(match[1])?.[1]),
+            }));
+        return {
+            legend: nodes.filter(node => node.text === 'Temp' || node.text === 'Flow').map(node => node.y),
+            labels: nodes.filter(node => /^\d{2}:\d{2}/.test(node.text)).map(node => node.y),
+        };
+    };
+    const twoSeries = {
+        type: 'line',
+        dark: false,
+        zone: 'utc',
+        clockFormat: '24h',
+        series: [
+            series('a', 'Temp', '#F97316', points),
+            series('b', 'Flow', '#A78BFA', points),
+        ],
+    };
+    try {
+        const both = await createRealEcharts();
+        const bothId = uniqueId();
+        try {
+            await createChart({ isConnected: true }, bothId, createDotNetRef(), twoSeries, { echarts: both.echarts });
+            const created = bands(both.state.instance);
+            assert.equal(created.legend.length, 2);
+            assert.ok(Math.min(...created.legend) - Math.max(...created.labels) > 10,
+                `a chart created with both series keeps its legend below the labels: legend ${created.legend} labels ${created.labels}`);
+        } finally {
+            disposeChart(bothId);
+        }
+
+        const added = await createRealEcharts();
+        const addedId = uniqueId();
+        try {
+            await createChart({ isConnected: true }, addedId, createDotNetRef(),
+                singleSeriesSpec('line', points), { echarts: added.echarts });
+            updateChart(addedId, twoSeries);
+
+            const grown = bands(added.state.instance);
+            assert.equal(grown.legend.length, 2, 'the legend appears for the added series');
+            assert.ok(grown.labels.length > 0, 'the time axis still draws labels');
+            assert.ok(Math.min(...grown.legend) - Math.max(...grown.labels) > 10,
+                `the legend must not cover the axis labels: legend ${grown.legend} labels ${grown.labels}`);
+        } finally {
+            disposeChart(addedId);
         }
     } finally {
         globalThis.mqttProbeTime = previous;

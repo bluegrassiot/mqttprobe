@@ -36,7 +36,7 @@
                 }
             </div>
         </CardHeaderContent>
-        <CardHeaderActions>
+        <CardHeaderActions>@ExportButton
             <MudIconButton Icon="@(ShowsPausedState ? LucideIcons.PlayCircle : LucideIcons.PauseCircle)"
                            Color="@(ShowsPausedState ? MudBlazor.Color.Success : MudBlazor.Color.Inherit)"
                            title="@(ShowsPausedState ? "Resume live updates" : PauseTitle)"

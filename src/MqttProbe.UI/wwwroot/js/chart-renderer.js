@@ -3,6 +3,9 @@
 const ECHARTS_MODULE_PATH = './echarts/6.1.0/echarts.esm.min.js';
 const MILLISECONDS_PER_DAY = 86_400_000;
 const MARKER_SIZE = 5;
+// The axis labels need their own band; a visible legend row sits below it.
+const AXIS_LABEL_BAND = 8;
+const LEGEND_BAND = 30;
 const CLOCK_TIME_PATTERN = /^(\d{2}:\d{2}):(\d{2})\.(\d{3})( .*)?$/;
 // Mirrors the host --font-mono profile; canvas text cannot resolve a CSS variable.
 const FONT_FAMILIES = {
@@ -147,6 +150,10 @@ function displayLabels(spec) {
     return labels;
 }
 
+function showsLegend(spec) {
+    return (spec?.series ?? []).length > 1;
+}
+
 function sameDisplayLabels(current, next) {
     const before = displayLabels(current);
     const after = displayLabels(next);
@@ -282,7 +289,7 @@ function buildTooltip(spec, theme) {
 
 function buildInitialOption(spec) {
     const theme = themeFor(spec);
-    const showLegend = (spec?.series ?? []).length > 1;
+    const showLegend = showsLegend(spec);
 
     return {
         animation: false,
@@ -294,7 +301,7 @@ function buildInitialOption(spec) {
             left: 8,
             right: 56,
             top: 8,
-            bottom: showLegend ? 30 : 8,
+            bottom: showLegend ? LEGEND_BAND : AXIS_LABEL_BAND,
             containLabel: false,
             outerBoundsMode: 'same',
             outerBoundsContain: 'axisLabel',
@@ -402,6 +409,12 @@ function pointerInGrid(instance) {
 // re-show at the same pointer to refresh the timestamp and values it is showing.
 function refreshTooltip(instance) {
     if (!pointerInGrid(instance)) {
+        // A relayout or resize can move the grid under a stationary pointer; stale content must not remain.
+        clearTimeout(instance.tooltipRecovery);
+        instance.tooltipRecovery = null;
+        if (instance.pointer) {
+            dispatchTip(instance, { type: 'hideTip' });
+        }
         return;
     }
 
@@ -537,6 +550,7 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
         instance.observer = new ResizeObserver(() => {
             if (!instance.disposed) {
                 instance.chart.resize();
+                refreshTooltip(instance);
             }
         });
         instance.observer.observe(element);
@@ -607,7 +621,9 @@ export function updateChart(chartId, spec, resetViewport = false) {
     };
 
     if (membershipChanged) {
-        option.legend = { ...(option.legend ?? {}), show: (spec?.series ?? []).length > 1 };
+        const showLegend = showsLegend(spec);
+        option.legend = { ...(option.legend ?? {}), show: showLegend };
+        option.grid = { bottom: showLegend ? LEGEND_BAND : AXIS_LABEL_BAND };
     }
 
     // A configuration change can remove the data a pinned window was looking at; incoming
@@ -638,4 +654,18 @@ export function updateChart(chartId, spec, resetViewport = false) {
 
 export function disposeChart(chartId) {
     return release(instances.get(chartId));
+}
+
+export function getChartExportSnapshot(chartId) {
+    const instance = instances.get(chartId);
+    if (!instance || instance.disposed) {
+        return null;
+    }
+
+    return {
+        spec: instance.spec,
+        option: instance.chart.getOption(),
+        width: instance.chart.getWidth(),
+        height: instance.chart.getHeight(),
+    };
 }

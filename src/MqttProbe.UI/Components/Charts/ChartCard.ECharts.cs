@@ -118,6 +118,9 @@ public partial class ChartCard
         _echartsReady = true;
         if (_live && (_pendingUpdate || _pendingOptionsUpdate))
             await ApplyEChartsDataAsync();
+
+        if (!_disposed)
+            StateHasChanged();
     }
 
     private void HandleEChartsCreateFailure(JSException failure, int generation)
@@ -180,6 +183,7 @@ public partial class ChartCard
 
     private async Task DisposeChartQuietlyAsync()
     {
+        CloseExportDialog();
         _echartsReady = false;
         if (_rendererInterop is null || (!_echartsLive && !_echartsStarting))
             return;
@@ -198,6 +202,7 @@ public partial class ChartCard
 
     private async Task DisposeRendererAsync()
     {
+        await DisposeExportAsync();
         await DisposeChartQuietlyAsync();
 
         _rendererOwner?.Dispose();

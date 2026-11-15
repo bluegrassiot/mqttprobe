@@ -1,0 +1,148 @@
+.chart-export {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+}
+
+.chart-export__section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.chart-export__section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    min-width: 0;
+}
+
+.chart-export__selection-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+}
+
+.chart-export__selection-actions ::deep .mud-button-root {
+    padding-inline: 8px;
+    min-width: 0;
+}
+
+.chart-export__series-list {
+    display: flex;
+    flex-direction: column;
+    padding: 2px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    min-width: 0;
+}
+
+.chart-export__series {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    min-width: 0;
+}
+
+.chart-export__series:hover {
+    background: var(--mud-palette-action-default-hover);
+}
+
+.chart-export__swatch {
+    flex: 0 0 auto;
+}
+
+.chart-export__series ::deep .chart-export__check {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+}
+
+.chart-export__series ::deep .chart-export__check .mud-checkbox {
+    align-items: flex-start;
+    width: 100%;
+}
+
+.chart-export__series-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    padding-top: 3px;
+    text-align: left;
+}
+
+.chart-export__name-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.chart-export__name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.chart-export__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 8px;
+    min-width: 0;
+    padding-left: 18px;
+}
+
+.chart-export__hint,
+.chart-export__count {
+    font-size: 0.72rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.chart-export__hint {
+    font-family: var(--font-mono);
+    overflow-wrap: anywhere;
+}
+
+.chart-export__count {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.chart-export__formats {
+    align-self: flex-start;
+}
+
+.chart-export__filename {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 6px;
+    font-size: 0.72rem;
+    color: var(--mud-palette-text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.chart-export__filename-label {
+    white-space: nowrap;
+}
+
+.chart-export ::deep .chart-export__error-detail {
+    overflow-wrap: anywhere;
+    color: var(--mud-palette-error);
+}
+
+.chart-export__spinner {
+    display: inline-flex;
+    margin-right: 8px;
+}
+
+.chart-export__spinner ::deep svg {
+    width: 16px;
+    height: 16px;
+}

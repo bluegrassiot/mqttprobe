@@ -14,6 +14,7 @@ namespace MqttProbe.Core.Services.Chart;
 public interface IChartDataService : IDisposable
 {
     public IReadOnlyList<ChartDataPoint> GetPoints(Guid seriesId);
+    public DateTime? GetLastPointTimestamp(Guid seriesId);
     public event Action? OnDataUpdated;
     public Task StartAsync();
     public Task StopAsync();
@@ -35,6 +36,7 @@ public class ChartDataService(
     : IChartDataService
 {
     private readonly ConcurrentDictionary<Guid, ConcurrentQueue<ChartDataPoint>> _buffers = new();
+    private readonly ConcurrentDictionary<Guid, DateTime> _lastPointTimestamps = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Lock _stateLock = new();
     private ImmutableDictionary<Guid, SeriesIdentity> _sources = ImmutableDictionary<Guid, SeriesIdentity>.Empty;
@@ -57,6 +59,7 @@ public class ChartDataService(
             _connectionId = connectionId;
             _epoch++;
             _buffers.Clear();
+            _lastPointTimestamps.Clear();
             _sources = CaptureSources(connectionId);
             _sourcesInitialized = true;
         }
@@ -68,6 +71,7 @@ public class ChartDataService(
         {
             _epoch++;
             _buffers.Clear();
+            _lastPointTimestamps.Clear();
         }
 
         OnDataUpdated?.Invoke();
@@ -75,6 +79,9 @@ public class ChartDataService(
 
     public IReadOnlyList<ChartDataPoint> GetPoints(Guid seriesId) =>
         _buffers.TryGetValue(seriesId, out var q) ? [.. q] : [];
+
+    public DateTime? GetLastPointTimestamp(Guid seriesId) =>
+        _lastPointTimestamps.TryGetValue(seriesId, out var timestamp) ? timestamp : null;
 
     public async Task StartAsync()
     {
@@ -226,8 +233,16 @@ public class ChartDataService(
         {
             foreach (var series in config.Series)
             {
-                if (!predicate(series.Topic) || !_buffers.TryRemove(series.Id, out _))
+                if (!predicate(series.Topic))
                     continue;
+
+                lock (_stateLock)
+                {
+                    if (!_buffers.TryRemove(series.Id, out _))
+                        continue;
+
+                    _lastPointTimestamps.TryRemove(series.Id, out _);
+                }
 
                 changed = true;
             }
@@ -301,7 +316,10 @@ public class ChartDataService(
                 }
 
                 if (existing is not null)
+                {
                     _buffers.TryRemove(series.Id, out _);
+                    _lastPointTimestamps.TryRemove(series.Id, out _);
+                }
 
                 builder[series.Id] = new SeriesIdentity(new object(), series.Topic, series.JsonPath, config.MaxPoints);
             }
@@ -310,7 +328,10 @@ public class ChartDataService(
         foreach (var (seriesId, _) in _sources)
         {
             if (!builder.ContainsKey(seriesId))
+            {
                 _buffers.TryRemove(seriesId, out _);
+                _lastPointTimestamps.TryRemove(seriesId, out _);
+            }
         }
 
         return builder.ToImmutable();
@@ -427,6 +448,7 @@ public class ChartDataService(
 
             buffer.Enqueue(point);
             TrimBuffer(buffer, current.MaxPoints);
+            _lastPointTimestamps[seriesId] = point.Timestamp;
             return true;
         }
     }

@@ -22,6 +22,8 @@ public class ChartCardTests : BunitTestContext
         _chartData = Substitute.For<IChartDataService>();
         _chartData.GetPoints(Arg.Any<Guid>())
             .Returns(call => (IReadOnlyList<ChartDataPoint>)PointsFor(call.Arg<Guid>()));
+        _chartData.GetLastPointTimestamp(Arg.Any<Guid>())
+            .Returns(call => LastTimestampFor(call.Arg<Guid>()));
         _clock = new FakeTimeProvider(_start);
 
         Services.AddSingleton(_chartData);
@@ -31,6 +33,9 @@ public class ChartCardTests : BunitTestContext
 
     private IReadOnlyList<ChartDataPoint> PointsFor(Guid seriesId) =>
         _points.TryGetValue(seriesId, out var points) ? [.. points] : [];
+
+    private DateTime? LastTimestampFor(Guid seriesId) =>
+        _points.TryGetValue(seriesId, out var points) && points.Count > 0 ? points[^1].Timestamp : null;
 
     private void Record(ChartSeries series, double secondsAgo, double value = 1)
     {

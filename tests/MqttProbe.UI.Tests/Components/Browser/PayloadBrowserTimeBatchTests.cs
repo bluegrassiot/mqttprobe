@@ -149,7 +149,7 @@ public class PayloadBrowserTimeBatchTests : BunitTestContext
         Publish(3);
         browser.WaitForAssertion(() => _queries.Should().BeGreaterThan(queries), TimeSpan.FromSeconds(10));
 
-        browser.FindAll(".payload-row")[0].Click();
+        browser.WaitForElement(".payload-row").Click();
 
         browser.WaitForAssertion(
             () => browser.FindAll(".pb-received-instant").Should().ContainSingle(),

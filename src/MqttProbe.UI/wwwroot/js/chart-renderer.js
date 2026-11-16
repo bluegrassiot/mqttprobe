@@ -175,7 +175,7 @@ function legendFormatter(spec) {
     return name => labels.get(name) ?? name;
 }
 
-function tooltipFormatter(spec) {
+function tooltipFormatter(spec, perfState) {
     const preferences = timePreferences(spec);
     const labels = displayLabels(spec);
 
@@ -185,6 +185,7 @@ function tooltipFormatter(spec) {
             return '';
         }
 
+        recordPerfTooltip(perfState, list);
         const first = list[0];
         const when = first.axisValue ?? (Array.isArray(first.value) ? first.value[0] : first.value);
         const bridge = globalThis.mqttProbeTime;
@@ -260,7 +261,7 @@ function buildAxes(spec, theme) {
     };
 }
 
-function buildTooltip(spec, theme) {
+function buildTooltip(spec, theme, perfState) {
     return {
         trigger: 'axis',
         triggerOn: 'mousemove',
@@ -283,11 +284,11 @@ function buildTooltip(spec, theme) {
                 formatter: axisPointerLabelFormatter(spec),
             },
         },
-        formatter: tooltipFormatter(spec),
+        formatter: tooltipFormatter(spec, perfState),
     };
 }
 
-function buildInitialOption(spec) {
+function buildInitialOption(spec, perfState) {
     const theme = themeFor(spec);
     const showLegend = showsLegend(spec);
 
@@ -316,7 +317,7 @@ function buildInitialOption(spec) {
             textStyle: { color: theme.foreground, fontFamily: fontFamilyFor(spec), fontSize: 11 },
             formatter: legendFormatter(spec),
         },
-        tooltip: buildTooltip(spec, theme),
+        tooltip: buildTooltip(spec, theme, perfState),
         ...buildAxes(spec, theme),
         dataZoom: [{ type: 'inside', xAxisIndex: 0, filterMode: 'none' }],
         series: buildSeries(spec),
@@ -324,7 +325,7 @@ function buildInitialOption(spec) {
 }
 
 // Chrome-only option for theme and time-preference changes; series data is applied separately.
-function buildChromeOption(spec) {
+function buildChromeOption(spec, perfState) {
     const theme = themeFor(spec);
     const axes = buildAxes(spec, theme);
 
@@ -334,7 +335,7 @@ function buildChromeOption(spec) {
             textStyle: { color: theme.foreground, fontFamily: fontFamilyFor(spec) },
             formatter: legendFormatter(spec),
         },
-        tooltip: buildTooltip(spec, theme),
+        tooltip: buildTooltip(spec, theme, perfState),
         xAxis: axes.xAxis,
         yAxis: axes.yAxis,
     };
@@ -494,23 +495,732 @@ function release(instance) {
 
     clearTimeout(instance.tooltipRecovery);
     instance.tooltipRecovery = null;
+    closePending(instance, 'unavailable');
     instance.observer?.disconnect();
     instance.observer = null;
     instance.chart.dispose();
     return true;
 }
 
-export async function createChart(element, chartId, dotNetRef, spec, options = {}) {
+// Temporary #209 sampler. A harness enables it by preinjecting
+// globalThis.__mqttProbeChartPerfEnabled = true before the app starts; records are drained
+// through globalThis.__mqttProbeChartPerf.drain(maxChars), at most 32 KiB per call.
+const PERF_ENABLED_KEY = '__mqttProbeChartPerfEnabled';
+const PERF_API_KEY = '__mqttProbeChartPerf';
+const PERF_DRIVER_KEY = '__mqttProbeChartPerfDriver';
+const PERF_VERSION = 1;
+const PERF_MAX_LINES = 4096;
+const PERF_MAX_DRAIN_CHARS = 32 * 1024;
+const PERF_DEADLINE_MS = 250;
+const PERF_FINALIZER_SLACK_MS = 25;
+
+let perfBuffer = [];
+let perfChars = 0;
+let perfDropped = 0;
+let perfCounts = null;
+let perfOriginUtc = 0;
+let perfEpoch = 0;
+let perfNow = () => performance.now();
+let perfSchedule = (callback, delay) => setTimeout(callback, delay);
+let perfCancel = handle => clearTimeout(handle);
+let perfRequestFrame = callback => (typeof globalThis.requestAnimationFrame === 'function'
+    ? globalThis.requestAnimationFrame(callback)
+    : 0);
+let perfCancelFrame = handle => {
+    if (typeof globalThis.cancelAnimationFrame === 'function') {
+        globalThis.cancelAnimationFrame(handle);
+    }
+};
+let perfHidden = () => globalThis.document?.hidden === true;
+
+function perfEnabled() {
+    return globalThis[PERF_ENABLED_KEY] === true;
+}
+
+function ensurePerf() {
+    if (perfCounts !== null) {
+        return;
+    }
+
+    const driver = globalThis[PERF_DRIVER_KEY];
+    if (driver) {
+        if (typeof driver.now === 'function') {
+            perfNow = () => driver.now();
+        }
+        if (typeof driver.setTimeout === 'function') {
+            perfSchedule = (callback, delay) => driver.setTimeout(callback, delay);
+        }
+        if (typeof driver.clearTimeout === 'function') {
+            perfCancel = handle => driver.clearTimeout(handle);
+        }
+        if (typeof driver.requestAnimationFrame === 'function') {
+            perfRequestFrame = callback => driver.requestAnimationFrame(callback);
+        }
+        if (typeof driver.cancelAnimationFrame === 'function') {
+            perfCancelFrame = handle => driver.cancelAnimationFrame(handle);
+        }
+        if (typeof driver.hidden === 'function') {
+            perfHidden = () => driver.hidden();
+        }
+    }
+
+    perfOriginUtc = Math.round(Date.now() - performance.now());
+    perfCounts = {
+        creates: 0,
+        updates: 0,
+        rejected: 0,
+        notApplied: 0,
+        applyErrors: 0,
+        finished: 0,
+        finishedLate: 0,
+        finishedMissing: 0,
+        finishedAmbiguous: 0,
+        frames: 0,
+        framesLate: 0,
+        framesMissing: 0,
+        framesHidden: 0,
+        framesSuperseded: 0,
+        framesUnavailable: 0,
+        resetDropped: 0,
+        linesDropped: 0,
+    };
+    globalThis[PERF_API_KEY] = {
+        version: PERF_VERSION,
+        enabled: true,
+        drain: drainPerf,
+        snapshot: snapshotPerf,
+        reset: resetPerf,
+    };
+}
+
+const PERF_TOOLTIP_MAX = 32;
+
+function newPerfState(chartId) {
+    return { c: chartId, entered: null, applied: null, series: [], tooltip: null };
+}
+
+function perfToken(token) {
+    if (typeof token !== 'string') {
+        return null;
+    }
+
+    const parts = token.split(':');
+    const g = Number(parts[0]);
+    const s = Number(parts[1]);
+    return Number.isFinite(g) && Number.isFinite(s) ? { g, s } : null;
+}
+
+function recordPerfEntered(state, token, operation, at, atPerf) {
+    if (!state) {
+        return;
+    }
+
+    const parsed = perfToken(token);
+    if (parsed) {
+        state.entered = { ...parsed, op: operation, at, atp: atPerf };
+    }
+}
+
+function recordPerfApplied(instance, spec, at, atPerf) {
+    const state = instance?.perfState;
+    if (!state) {
+        return;
+    }
+
+    const entered = state.entered;
+    state.applied = entered
+        ? { ...entered, at, atp: atPerf }
+        : { g: -1, s: -1, op: '?', at, atp: atPerf };
+    state.series = (spec?.series ?? []).map(entry => {
+        const points = entry?.points ?? [];
+        const last = points.length > 0 ? points[points.length - 1] : null;
+        return { n: points.length, t: Number.isFinite(last?.[0]) ? last[0] : null };
+    });
+}
+
+function recordPerfTooltip(state, list) {
+    if (!state) {
+        return;
+    }
+
+    const stamps = [];
+    for (const item of list) {
+        const value = Array.isArray(item?.value) ? item.value[0] : null;
+        if (Number.isFinite(value)) {
+            stamps.push(value);
+        }
+    }
+
+    if (stamps.length > 0) {
+        state.tooltip = {
+            t: stamps.slice(0, PERF_TOOLTIP_MAX),
+            at: Date.now(),
+            atp: perfNow(),
+        };
+    }
+}
+
+function perfVisible() {
+    return !perfHidden();
+}
+
+function roundOrNull(value) {
+    return Number.isFinite(value) ? Math.round(value * 100) / 100 : null;
+}
+
+function tokenState(token) {
+    return token
+        ? { g: token.g, s: token.s, op: token.op, at: token.at, atp: token.atp }
+        : null;
+}
+
+function dimension(read) {
+    try {
+        const value = read();
+        return Number.isFinite(value) ? Math.round(value) : null;
+    } catch {
+        return null;
+    }
+}
+
+function perfViewport(instance) {
+    try {
+        const model = instance.chart.getModel?.();
+        const axis = model?.getComponent?.('xAxis', 0);
+        const extent = axis?.axis?.scale?.getExtent?.();
+        if (Array.isArray(extent) && Number.isFinite(extent[0]) && Number.isFinite(extent[1])) {
+            return { from: Math.min(extent[0], extent[1]), to: Math.max(extent[0], extent[1]), source: 'scale' };
+        }
+    } catch {
+        // Older ECharts builds do not expose the internal model; the pinned range stays available.
+    }
+
+    return instance.pinned
+        ? { from: instance.pinned.from, to: instance.pinned.to, source: 'pinned' }
+        : null;
+}
+
+function perfInRange(spec, view) {
+    return (spec?.series ?? []).map(entry => {
+        let count = 0;
+        let latest = null;
+        for (const point of entry?.points ?? []) {
+            const timestamp = point?.[0];
+            if (Number.isFinite(timestamp) && timestamp >= view.from && timestamp <= view.to) {
+                count++;
+                latest = latest === null || timestamp > latest ? timestamp : latest;
+            }
+        }
+
+        return { n: count, t: latest };
+    });
+}
+
+function perfLatestPoint(instance) {
+    const seriesList = instance.spec?.series ?? [];
+    let latest = null;
+    for (let index = 0; index < seriesList.length; index++) {
+        for (const point of seriesList[index]?.points ?? []) {
+            if (Number.isFinite(point?.[0]) && (!latest || point[0] > latest.t)) {
+                latest = { t: point[0], y: point[1], index };
+            }
+        }
+    }
+
+    if (!latest) {
+        return null;
+    }
+
+    let pixel = null;
+    try {
+        const converted = instance.chart.convertToPixel?.({ seriesIndex: latest.index }, [latest.t, latest.y]);
+        if (Array.isArray(converted)) {
+            pixel = converted;
+        }
+    } catch {
+        pixel = null;
+    }
+
+    const x = pixel && Number.isFinite(pixel[0]) ? pixel[0] : null;
+    const y = pixel && Number.isFinite(pixel[1]) ? pixel[1] : null;
+    let grid = null;
+    if (x !== null && y !== null) {
+        try {
+            grid = instance.chart.containPixel?.({ gridIndex: 0 }, [x, y]) ?? null;
+        } catch {
+            grid = null;
+        }
+    }
+
+    return { t: latest.t, x, y, grid };
+}
+
+function snapshotInstance(instance) {
+    const state = instance.perfState;
+    const view = perfViewport(instance);
+    const box = instance.element?.getBoundingClientRect?.();
+    return {
+        c: instance.id,
+        entered: tokenState(state.entered),
+        applied: tokenState(state.applied),
+        series: state.series,
+        pinned: instance.pinned
+            ? { from: roundOrNull(instance.pinned.from), to: roundOrNull(instance.pinned.to) }
+            : null,
+        disposed: instance.disposed === true,
+        connected: instance.element?.isConnected !== false,
+        canvas: {
+            w: dimension(() => instance.chart.getWidth()),
+            h: dimension(() => instance.chart.getHeight()),
+        },
+        box: { w: roundOrNull(box?.width), h: roundOrNull(box?.height) },
+        visible: perfVisible(),
+        view,
+        inRange: view ? perfInRange(instance.spec, view) : null,
+        latest: perfLatestPoint(instance),
+        tooltip: state.tooltip,
+    };
+}
+
+function snapshotInstances() {
+    const entries = [];
+    for (const instance of instances.values()) {
+        if (perfEnabled() && !instance.perfState) {
+            instance.perfState = newPerfState(instance.id);
+        }
+        if (instance.perfState) {
+            entries.push(snapshotInstance(instance));
+        }
+    }
+
+    return entries;
+}
+
+function perfEntryTime() {
+    if (!perfEnabled()) {
+        return 0;
+    }
+
+    ensurePerf();
+    return perfNow();
+}
+
+function drainPerf(maxChars = PERF_MAX_DRAIN_CHARS) {
+    ensurePerf();
+    const limit = Number.isFinite(maxChars)
+        ? Math.min(Math.max(1024, maxChars), PERF_MAX_DRAIN_CHARS)
+        : PERF_MAX_DRAIN_CHARS;
+    let chars = 0;
+    let count = 0;
+
+    while (count < perfBuffer.length) {
+        const next = perfBuffer[count].length + 1;
+        if (chars + next > limit) {
+            break;
+        }
+        chars += next;
+        count++;
+    }
+
+    if (count === 0) {
+        return '';
+    }
+
+    const lines = perfBuffer.slice(0, count).join('\n');
+    perfBuffer = perfBuffer.slice(count);
+    perfChars -= chars;
+    return lines;
+}
+
+function snapshotPerf() {
+    ensurePerf();
+    let pending = 0;
+    for (const instance of instances.values()) {
+        if (instance.perfRecord && !instance.perfRecord.emitted) {
+            pending++;
+        }
+    }
+
+    return {
+        version: PERF_VERSION,
+        enabled: true,
+        epoch: perfEpoch,
+        utc: Date.now(),
+        mono: perfNow(),
+        pending,
+        bufferedLines: perfBuffer.length,
+        bufferedChars: perfChars,
+        dropped: perfDropped,
+        originUtc: perfOriginUtc,
+        counts: { ...perfCounts },
+        instances: snapshotInstances(),
+    };
+}
+
+function resetPerf() {
+    ensurePerf();
+    perfEpoch++;
+    perfBuffer = [];
+    perfChars = 0;
+    perfDropped = 0;
+    for (const key of Object.keys(perfCounts)) {
+        perfCounts[key] = 0;
+    }
+
+    for (const instance of instances.values()) {
+        const record = instance.perfRecord;
+        if (!record || record.emitted) {
+            continue;
+        }
+
+        record.emitted = true;
+        detachPerf(record);
+        instance.perfRecord = null;
+        perfCounts.resetDropped++;
+    }
+}
+
+function pushPerfLine(line) {
+    if (perfBuffer.length >= PERF_MAX_LINES) {
+        perfDropped++;
+        perfCounts.linesDropped++;
+        return;
+    }
+
+    perfBuffer.push(line);
+    perfChars += line.length + 1;
+}
+
+function elapsedUs(start) {
+    return Math.round((perfNow() - start) * 1000);
+}
+
+function perfValue(value) {
+    return value === null || value === undefined ? 'null' : value;
+}
+
+function perfLine(record) {
+    const generation = Number.isFinite(record.g) ? record.g : -1;
+    const sequence = Number.isFinite(record.s) ? record.s : -1;
+    return `{"k":"js","op":"${record.op}","c":"${record.c}","g":${generation},"s":${sequence},"t":${record.t},"o":${perfOriginUtc},"ap":${record.applied ? 1 : 0},"why":"${record.why}","n":${perfValue(record.n)},"a":${perfValue(record.a)},"f":${perfValue(record.f)},"r":${perfValue(record.r)},"rt":${perfValue(record.rt)},"fs":"${record.fs}","rs":"${record.rs}"}`;
+}
+
+function newPerfRecord(instance, chartId, token, operation, entryTime) {
+    const parts = typeof token === 'string' ? token.split(':') : [];
+    return {
+        instance,
+        c: chartId,
+        op: operation,
+        // Renderer invocation identity per card; it is not the shared MQTT data generation.
+        g: Number(parts[0]),
+        s: Number(parts[1]),
+        epoch: perfEpoch,
+        t0: entryTime,
+        t: Math.round(entryTime),
+        deadline: entryTime + PERF_DEADLINE_MS,
+        tAppliedEnd: 0,
+        tFinished: 0,
+        n: null,
+        a: null,
+        f: null,
+        r: null,
+        rt: null,
+        fs: 'pending',
+        rs: 'pending',
+        applied: instance !== null,
+        why: '',
+        rafId: 0,
+        timerId: 0,
+        detachFinished: null,
+        emitted: false,
+    };
+}
+
+function beginPerf(instance, chartId, token, operation, entryTime) {
+    if (!perfEnabled()) {
+        return null;
+    }
+
+    ensurePerf();
+    closePending(instance, 'superseded');
+    const record = newPerfRecord(instance, chartId, token, operation, entryTime);
+    instance.perfRecord = record;
+    return record;
+}
+
+function rejectPerf(entryTime, chartId, token, operation, why) {
+    if (!perfEnabled()) {
+        return;
+    }
+
+    ensurePerf();
+    const record = newPerfRecord(null, chartId, token, operation, entryTime);
+    record.applied = false;
+    record.why = why;
+    record.fs = 'missing';
+    record.rs = 'unavailable';
+    finishPerf(null, record);
+}
+
+// Entry to option ready; a create includes module load, prior-instance release and echarts.init.
+function optionReady(record) {
+    if (record) {
+        record.n = elapsedUs(record.t0);
+    }
+}
+
+// Must run before setOption: ECharts can dispatch 'finished' while the option is being applied.
+function watchFinished(record) {
+    if (!record) {
+        return;
+    }
+
+    const chart = record.instance.chart;
+    if (typeof chart.on !== 'function') {
+        record.fs = 'unavailable';
+        return;
+    }
+
+    const detach = () => {
+        if (typeof chart.off === 'function') {
+            chart.off('finished', onFinished);
+        }
+    };
+    const onFinished = () => {
+        if (record.tFinished === 0) {
+            record.tFinished = perfNow();
+            record.f = Math.round((record.tFinished - record.t0) * 1000);
+            record.fs = record.tFinished > record.deadline ? 'late' : 'ok';
+        }
+        detach();
+        record.detachFinished = null;
+    };
+
+    record.detachFinished = detach;
+    chart.on('finished', onFinished);
+}
+
+function applyStart(record) {
+    return record ? perfNow() : 0;
+}
+
+function applyDone(record, start) {
+    if (!record) {
+        return;
+    }
+
+    const applied = perfNow();
+    record.a = Math.round((applied - start) * 1000);
+    record.tAppliedEnd = applied;
+    scheduleFrame(record);
+}
+
+function failPerf(record, why) {
+    if (!record) {
+        return;
+    }
+
+    record.applied = false;
+    record.why = why;
+    record.fs = 'error';
+    if (record.rs === 'pending') {
+        record.rs = 'unavailable';
+    }
+    finishPerf(record.instance, record);
+}
+
+function closePending(instance, status) {
+    const record = instance?.perfRecord;
+    if (!record || record.emitted) {
+        return;
+    }
+
+    if (record.fs === 'pending') {
+        record.fs = status === 'superseded' ? 'ambiguous' : 'unavailable';
+    }
+    if (record.rs === 'pending') {
+        record.rs = status;
+    }
+    finishPerf(instance, record);
+}
+
+function detachPerf(record) {
+    if (record.rafId) {
+        perfCancelFrame(record.rafId);
+        record.rafId = 0;
+    }
+    if (record.timerId) {
+        perfCancel(record.timerId);
+        record.timerId = 0;
+    }
+    if (record.detachFinished) {
+        record.detachFinished();
+        record.detachFinished = null;
+    }
+}
+
+function finishPerf(instance, record) {
+    if (!record || record.emitted) {
+        return;
+    }
+
+    record.emitted = true;
+    detachPerf(record);
+    if (instance && instance.perfRecord === record) {
+        instance.perfRecord = null;
+    }
+
+    if (record.epoch !== perfEpoch) {
+        perfCounts.resetDropped++;
+        return;
+    }
+
+    if (record.fs === 'pending') {
+        record.fs = 'missing';
+    }
+    if (record.rs === 'pending') {
+        record.rs = 'missing';
+    }
+
+    if (!record.applied) {
+        perfCounts.rejected++;
+        if (record.why === 'apply') {
+            perfCounts.applyErrors++;
+        }
+        if (record.why === 'nochart') {
+            perfCounts.notApplied++;
+        }
+    } else if (record.op === 'c') {
+        perfCounts.creates++;
+    } else {
+        perfCounts.updates++;
+    }
+
+    if (record.fs === 'ok') {
+        perfCounts.finished++;
+    } else if (record.fs === 'late') {
+        perfCounts.finishedLate++;
+    } else if (record.fs === 'ambiguous') {
+        perfCounts.finishedAmbiguous++;
+    } else if (record.fs === 'missing') {
+        perfCounts.finishedMissing++;
+    }
+
+    if (record.rs === 'ok') {
+        perfCounts.frames++;
+    } else if (record.rs === 'late') {
+        perfCounts.framesLate++;
+    } else if (record.rs === 'hidden') {
+        perfCounts.framesHidden++;
+    } else if (record.rs === 'superseded') {
+        perfCounts.framesSuperseded++;
+    } else if (record.rs === 'unavailable') {
+        perfCounts.framesUnavailable++;
+    } else if (record.rs === 'missing') {
+        perfCounts.framesMissing++;
+    }
+
+    pushPerfLine(perfLine(record));
+}
+
+// The frame baseline is always the setOption return, so r is a fixed-baseline opportunity.
+// Arrival latency is monotonic (callback arrival minus apply return); the supplied rAF timestamp
+// is supplemental only and never used as latency.
+function scheduleFrame(record) {
+    if (perfHidden()) {
+        record.rs = 'hidden';
+        armFinalizer(record);
+        return;
+    }
+
+    record.rafId = perfRequestFrame(timestamp => {
+        record.rafId = 0;
+        if (record.emitted) {
+            return;
+        }
+
+        const arrival = perfNow();
+        record.rt = Number.isFinite(timestamp) ? Math.round(timestamp * 1000) : null;
+        // Recheck at arrival: the document can become hidden after the frame was requested.
+        if (perfHidden()) {
+            record.rs = 'hidden';
+            record.r = null;
+            return;
+        }
+
+        const latency = arrival - record.tAppliedEnd;
+        if (!Number.isFinite(latency) || latency < 0) {
+            record.rs = 'missing';
+            return;
+        }
+
+        record.r = Math.round(latency * 1000);
+        record.rs = arrival > record.deadline ? 'late' : 'ok';
+    });
+
+    if (!record.rafId) {
+        record.rs = 'unavailable';
+    }
+    armFinalizer(record);
+}
+
+function armFinalizer(record) {
+    const delay = Math.max(0, record.deadline - perfNow());
+    record.timerId = perfSchedule(() => {
+        record.timerId = 0;
+        finalizePerf(record);
+    }, delay);
+}
+
+function finalizePerf(record) {
+    if (!record || record.emitted) {
+        return;
+    }
+
+    const arrival = perfNow();
+    const late = arrival > record.deadline + PERF_FINALIZER_SLACK_MS;
+    if (record.rs === 'pending') {
+        if (perfHidden()) {
+            record.rs = 'hidden';
+        } else {
+            record.rs = late ? 'late' : 'missing';
+        }
+    }
+
+    if (record.fs === 'pending') {
+        record.fs = late ? 'late' : 'missing';
+    }
+
+    finishPerf(record.instance, record);
+}
+
+if (perfEnabled()) {
+    ensurePerf();
+}
+
+export async function createChart(element, chartId, dotNetRef, spec, options = {}, perfToken) {
+    const perfStart = perfEntryTime();
+    const perfDate = perfEnabled() ? Date.now() : 0;
     if (!element) {
+        rejectPerf(perfStart, chartId, perfToken, 'c', 'element');
         throw new Error('chart container is required');
     }
 
-    const echarts = options.echarts ?? await loadEcharts();
+    let echarts;
+    try {
+        echarts = options.echarts ?? await loadEcharts();
+    } catch (error) {
+        rejectPerf(perfStart, chartId, perfToken, 'c', 'load');
+        throw error;
+    }
+
     if (!echarts || typeof echarts.init !== 'function') {
+        rejectPerf(perfStart, chartId, perfToken, 'c', 'module');
         throw new Error('the ECharts module did not load before the chart was created');
     }
 
     if (element.isConnected === false) {
+        rejectPerf(perfStart, chartId, perfToken, 'c', 'detached');
         throw new Error('the chart container is no longer attached');
     }
 
@@ -521,7 +1231,14 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
 
     release(instances.get(chartId));
 
-    const chart = echarts.init(element, null, { renderer: 'canvas' });
+    let chart;
+    try {
+        chart = echarts.init(element, null, { renderer: 'canvas' });
+    } catch (error) {
+        rejectPerf(perfStart, chartId, perfToken, 'c', 'init');
+        throw error;
+    }
+
     const instance = {
         id: chartId,
         element,
@@ -534,11 +1251,26 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
         pointer: null,
         pointerListeners: null,
         tooltipRecovery: null,
+        perfRecord: null,
+        perfState: perfEnabled() ? newPerfState(chartId) : null,
     };
 
+    const perf = beginPerf(instance, chartId, perfToken, 'c', perfStart);
+    recordPerfEntered(instance.perfState, perfToken, 'c', perfDate, perfStart);
+    let stage = 'build';
     try {
-        chart.setOption(buildInitialOption(spec), { notMerge: true, lazyUpdate: false });
+        const option = buildInitialOption(spec, instance.perfState);
+        optionReady(perf);
+        watchFinished(perf);
+        stage = 'apply';
+        const applyStarted = applyStart(perf);
+        chart.setOption(option, { notMerge: true, lazyUpdate: false });
+        applyDone(perf, applyStarted);
+        if (instance.perfState) {
+            recordPerfApplied(instance, spec, Date.now(), perfNow());
+        }
     } catch (error) {
+        failPerf(perf, stage);
         release(instance);
         throw error;
     }
@@ -592,63 +1324,83 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
     return true;
 }
 
-export function updateChart(chartId, spec, resetViewport = false) {
+export function updateChart(chartId, spec, resetViewport = false, perfToken) {
+    const perfStart = perfEntryTime();
+    const perfDate = perfEnabled() ? Date.now() : 0;
     const instance = instances.get(chartId);
     if (!instance || instance.disposed) {
+        rejectPerf(perfStart, chartId, perfToken, 'u', 'nochart');
         return false;
     }
 
-    const membershipChanged = !sameSeriesIds(instance.spec, spec);
-    const typeChanged = instance.spec?.type !== spec?.type;
-    const labelsChanged = !sameDisplayLabels(instance.spec, spec);
-    const chromeChanged = instance.spec?.dark !== spec?.dark
-        || instance.spec?.zone !== spec?.zone
-        || instance.spec?.clockFormat !== spec?.clockFormat
-        || instance.spec?.fontProfile !== spec?.fontProfile;
-    const replaceSeries = membershipChanged || typeChanged;
-    const tooltipChromeChanged = chromeChanged || typeChanged || labelsChanged || membershipChanged;
+    const perf = beginPerf(instance, chartId, perfToken, 'u', perfStart);
+    recordPerfEntered(instance.perfState, perfToken, 'u', perfDate, perfStart);
+    let option;
+    let replaceSeries = false;
+    try {
+        const membershipChanged = !sameSeriesIds(instance.spec, spec);
+        const typeChanged = instance.spec?.type !== spec?.type;
+        const labelsChanged = !sameDisplayLabels(instance.spec, spec);
+        const chromeChanged = instance.spec?.dark !== spec?.dark
+            || instance.spec?.zone !== spec?.zone
+            || instance.spec?.clockFormat !== spec?.clockFormat
+            || instance.spec?.fontProfile !== spec?.fontProfile;
+        replaceSeries = membershipChanged || typeChanged;
+        const tooltipChromeChanged = chromeChanged || typeChanged || labelsChanged || membershipChanged;
 
-    // The axis scale follows the series type, so a type change refreshes the chrome as well.
-    const option = tooltipChromeChanged ? buildChromeOption(spec) : {};
-    option.series = buildSeries(spec);
-    // The date line depends on the current data extent, so every update refreshes that decision.
-    option.xAxis = {
-        ...(option.xAxis ?? {}),
-        axisLabel: {
-            ...(option.xAxis?.axisLabel ?? {}),
-            formatter: axisLabelFormatter(spec),
-        },
-    };
+        // The axis scale follows the series type, so a type change refreshes the chrome as well.
+        option = tooltipChromeChanged ? buildChromeOption(spec, instance.perfState) : {};
+        option.series = buildSeries(spec);
+        // The date line depends on the current data extent, so every update refreshes that decision.
+        option.xAxis = {
+            ...(option.xAxis ?? {}),
+            axisLabel: {
+                ...(option.xAxis?.axisLabel ?? {}),
+                formatter: axisLabelFormatter(spec),
+            },
+        };
 
-    if (membershipChanged) {
-        const showLegend = showsLegend(spec);
-        option.legend = { ...(option.legend ?? {}), show: showLegend };
-        option.grid = { bottom: showLegend ? LEGEND_BAND : AXIS_LABEL_BAND };
+        if (membershipChanged) {
+            const showLegend = showsLegend(spec);
+            option.legend = { ...(option.legend ?? {}), show: showLegend };
+            option.grid = { bottom: showLegend ? LEGEND_BAND : AXIS_LABEL_BAND };
+        }
+
+        // A configuration change can remove the data a pinned window was looking at; incoming
+        // message updates never take this path.
+        if ((resetViewport || replaceSeries) && instance.pinned) {
+            instance.pinned = null;
+            option.dataZoom = [{ start: 0, end: 100 }];
+        }
+
+        if (tooltipChromeChanged) {
+            dispatchTip(instance, { type: 'hideTip' });
+        }
+    } catch (error) {
+        failPerf(perf, 'build');
+        throw error;
     }
 
-    // A configuration change can remove the data a pinned window was looking at; incoming
-    // message updates never take this path.
-    if ((resetViewport || replaceSeries) && instance.pinned) {
-        instance.pinned = null;
-        option.dataZoom = [{ start: 0, end: 100 }];
-    }
-
-    if (tooltipChromeChanged) {
-        dispatchTip(instance, { type: 'hideTip' });
-    }
-
+    optionReady(perf);
+    watchFinished(perf);
+    const applyStarted = applyStart(perf);
     try {
         instance.chart.setOption(option, {
             lazyUpdate: false,
             ...(replaceSeries ? { replaceMerge: ['series'] } : {}),
         });
     } catch (error) {
+        failPerf(perf, 'apply');
         release(instance);
         throw error;
     }
 
+    applyDone(perf, applyStarted);
     refreshTooltip(instance);
     instance.spec = spec;
+    if (instance.perfState) {
+        recordPerfApplied(instance, spec, Date.now(), perfNow());
+    }
     return true;
 }
 

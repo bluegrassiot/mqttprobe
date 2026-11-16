@@ -18,10 +18,15 @@ public partial class ChartCard
     private bool _echartsReady;
     private bool _echartsStarting;
     private bool _echartsLive;
+    private bool _echartsApplyActive;
     private bool _pendingViewportReset;
     private string? _echartsError;
     private string? _echartsErrorDetail;
     private int _rendererGeneration;
+    private int _perfSequence;
+    private ChartPerformanceProbe.StorageSampler? _storageSampler;
+    private int _storageSamplerGeneration = -1;
+    private Guid[] _storageSamplerSeries = [];
 
     private string PauseTitle => Renderer == ChartRendererKind.ECharts
         ? "Pause live updates (keeps the view still)"
@@ -58,7 +63,17 @@ public partial class ChartCard
         }
 
         var generation = _rendererGeneration;
+        var specStart = ChartPerformanceProbe.Mark();
         var spec = BuildEChartsSpec();
+        var perfToken = ChartPerformanceProbe.SpecPrepared(
+            _rendererChartId,
+            generation,
+            NextPerfSequence(),
+            ChartPerformanceProbe.Create,
+            specStart,
+            spec,
+            new ChartPerformanceProbe.SpecState(
+                _live, _echartsReady, _pendingUpdate || _pendingOptionsUpdate, _pendingViewportReset));
         _pendingUpdate = false;
         _pendingOptionsUpdate = false;
         _pendingViewportReset = false;
@@ -69,7 +84,7 @@ public partial class ChartCard
         {
             _rendererOwner ??= DotNetObjectReference.Create(this);
             created = await RendererInterop.CreateAsync(
-                _echartsElement, _rendererChartId, _rendererOwner, spec);
+                _echartsElement, _rendererChartId, _rendererOwner, spec, perfToken);
         }
         catch (JSDisconnectedException)
         {
@@ -116,6 +131,7 @@ public partial class ChartCard
 
         _echartsLive = true;
         _echartsReady = true;
+        EnsureStorageSampler(generation);
         if (_live && (_pendingUpdate || _pendingOptionsUpdate))
             await ApplyEChartsDataAsync();
 
@@ -136,29 +152,114 @@ public partial class ChartCard
 
     private async Task ApplyEChartsDataAsync()
     {
-        if (_disposed || !_echartsReady)
+        if (_disposed || !_echartsReady || !_live)
             return;
 
-        var spec = BuildEChartsSpec();
+        // One apply owns this card's interop slot. Requests that arrive while it waits only leave
+        // the pending flags set, so the owner draws them from the newest buffer after it returns
+        // instead of queueing another snapshot behind it.
+        if (_echartsApplyActive)
+            return;
+
+        _echartsApplyActive = true;
+        try
+        {
+            while (!_disposed && _live && _echartsReady && (_pendingUpdate || _pendingOptionsUpdate))
+            {
+                if (!await ApplyEChartsSnapshotAsync())
+                    return;
+            }
+        }
+        finally
+        {
+            _echartsApplyActive = false;
+        }
+    }
+
+    private async Task<bool> ApplyEChartsSnapshotAsync()
+    {
+        var generation = _rendererGeneration;
+        EnsureStorageSampler(generation);
         var resetViewport = _pendingViewportReset;
+        var specStart = ChartPerformanceProbe.Mark();
+        var spec = BuildEChartsSpec();
+        var perfToken = ChartPerformanceProbe.SpecPrepared(
+            _rendererChartId,
+            generation,
+            NextPerfSequence(),
+            ChartPerformanceProbe.Update,
+            specStart,
+            spec,
+            new ChartPerformanceProbe.SpecState(
+                _live, _echartsReady, true, resetViewport));
         _pendingUpdate = false;
         _pendingOptionsUpdate = false;
         _pendingViewportReset = false;
 
+        bool applied;
         try
         {
-            if (!await RendererInterop.UpdateAsync(_rendererChartId, spec, resetViewport))
-                FailECharts(failure: null);
+            applied = await RendererInterop.UpdateAsync(_rendererChartId, spec, resetViewport, perfToken);
         }
         catch (JSDisconnectedException)
         {
             _echartsReady = false;
+            return false;
         }
         catch (JSException ex)
         {
-            if (!_disposed)
+            if (!_disposed && generation == _rendererGeneration)
                 FailECharts(ex);
+            return false;
         }
+
+        if (_disposed || generation != _rendererGeneration)
+            return false;
+
+        if (!applied)
+        {
+            FailECharts(failure: null);
+            return false;
+        }
+
+        return true;
+    }
+
+    private int NextPerfSequence() => ChartPerformanceProbe.Enabled ? ++_perfSequence : 0;
+
+    private void EnsureStorageSampler(int generation)
+    {
+        if (!ChartPerformanceProbe.Enabled)
+        {
+            if (_storageSampler is not null)
+                StopStorageSampler();
+            return;
+        }
+
+        var seriesIds = Configuration.Series.Select(series => series.Id).ToArray();
+        if (_storageSampler is not null
+            && generation == _storageSamplerGeneration
+            && seriesIds.SequenceEqual(_storageSamplerSeries))
+        {
+            return;
+        }
+
+        StopStorageSampler();
+        _storageSamplerGeneration = generation;
+        _storageSamplerSeries = seriesIds;
+        _storageSampler = ChartPerformanceProbe.StorageSampler.Start(
+            _rendererChartId,
+            generation,
+            seriesIds,
+            ChartDataService.GetLastPointTimestamp);
+    }
+
+    private void StopStorageSampler()
+    {
+        _storageSampler?.Dispose();
+        _storageSampler = null;
+        _storageSamplerGeneration = -1;
+        _storageSamplerSeries = [];
     }
 
     private void FailECharts(Exception? failure)
@@ -174,6 +275,7 @@ public partial class ChartCard
     // The plot markup disappears with the last series, so the old instance must not survive it.
     private async Task ReleaseEChartsPlotAsync()
     {
+        StopStorageSampler();
         if (!_echartsReady && !_echartsLive && !_echartsStarting)
             return;
 
@@ -183,6 +285,7 @@ public partial class ChartCard
 
     private async Task DisposeChartQuietlyAsync()
     {
+        StopStorageSampler();
         CloseExportDialog();
         _echartsReady = false;
         if (_rendererInterop is null || (!_echartsLive && !_echartsStarting))

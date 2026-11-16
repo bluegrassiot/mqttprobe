@@ -365,11 +365,8 @@
         }
     }
 
-    private List<ChartDataPoint> GetPoints(Guid seriesId)
-    {
-        var points = ChartDataService.GetPoints(seriesId);
-        return [.. TimeWindowFilter.Apply(points, Configuration.TimeWindowMinutes)];
-    }
+    private IReadOnlyList<ChartDataPoint> GetPoints(Guid seriesId) =>
+        TimeWindowFilter.Apply(ChartDataService.GetPoints(seriesId), Configuration.TimeWindowMinutes);
 
     private SeriesType GetSeriesType() => Configuration.Type switch
     {

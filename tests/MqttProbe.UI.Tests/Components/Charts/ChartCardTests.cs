@@ -338,6 +338,24 @@ public class ChartCardTests : BunitTestContext
     }
 
     [Test]
+    public void PointsWithoutADisplayWindow_ReachApexWithoutACopy()
+    {
+        var series = new ChartSeries { DisplayName = "Temp" };
+        IReadOnlyList<ChartDataPoint> snapshot =
+        [
+            new(_start.UtcDateTime.AddMinutes(-5), 1),
+            new(_start.UtcDateTime, 2)
+        ];
+        _chartData.GetPoints(series.Id).Returns(snapshot);
+
+        var cut = RenderCard(Chart(null, series));
+
+        var items = cut.FindComponents<ApexCharts.ApexPointSeries<ChartDataPoint>>()
+            .Should().ContainSingle().Which.Instance.Items;
+        items.Should().BeSameAs(snapshot, "an unfiltered snapshot needs no further copy");
+    }
+
+    [Test]
     public void ChartWithoutSeries_KeepsTheEmptySeriesMessage()
     {
         var cut = RenderCard(Chart(10));

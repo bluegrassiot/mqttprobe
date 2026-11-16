@@ -10,7 +10,7 @@ internal static class TimeWindowFilter
         DateTime? now = null)
     {
         if (!timeWindowMinutes.HasValue)
-            return [.. points];
+            return points;
 
         var cutoff = (now ?? DateTime.UtcNow).AddMinutes(-timeWindowMinutes.Value);
         return [.. points.Where(p => p.Timestamp >= cutoff)];

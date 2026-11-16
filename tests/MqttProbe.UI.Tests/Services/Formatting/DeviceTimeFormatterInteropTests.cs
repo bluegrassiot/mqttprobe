@@ -47,6 +47,102 @@ public class DeviceTimeFormatterInteropTests
     }
 
     [Test]
+    public async Task FormatAsync_AtTheBatchLimitKeepsTheSingleCallPath()
+    {
+        var runtime = new FakeRuntime();
+        await using var interop = new DeviceTimeFormatterInterop(runtime);
+        var items = Items(64);
+
+        var result = await interop.FormatAsync(items, new MessageTimePreferences());
+
+        runtime.Module.Identifiers.Should().ContainSingle();
+        runtime.Module.Arguments[0][0].Should().BeSameAs(items);
+        result.Should().BeSameAs(runtime.Module.Result);
+    }
+
+    [Test]
+    public async Task FormatAsync_LongListsAreSplitIntoBoundedBatches()
+    {
+        var runtime = new FakeRuntime();
+        await using var interop = new DeviceTimeFormatterInterop(runtime);
+        var items = Items(500);
+        runtime.Module.ResultFor = (call, args) =>
+        {
+            var batch = (IReadOnlyList<DeviceTimeFormatRequest>)args[0]!;
+            return new DeviceTimeFormatResult(
+                $"zone-{call}",
+                $"Zone Name {call}",
+                [.. batch.Select(item => new DeviceTimeFormatItem(
+                    item.Key, $"time-{call}-{item.EpochMs}", "2026-11-15", "full", "EST", "", ""))]);
+        };
+
+        var result = await interop.FormatAsync(items, new MessageTimePreferences());
+
+        runtime.Module.Identifiers.Should().Equal(Enumerable.Repeat("formatInstants", 8));
+        runtime.Module.Arguments.Select(args => ((IReadOnlyList<DeviceTimeFormatRequest>)args[0]!).Count)
+            .Should().Equal(64, 64, 64, 64, 64, 64, 64, 52);
+        result.Should().NotBeNull();
+        var merged = result.Items;
+        merged.Should().NotBeNull();
+        merged!.Select(item => item.Key).Should().Equal(items.Select(item => item.Key));
+        merged[0].TimeText.Should().Be($"time-0-{items[0].EpochMs}");
+        merged[^1].TimeText.Should().Be($"time-7-{items[^1].EpochMs}");
+    }
+
+    [Test]
+    public async Task FormatAsync_ReturnsNullWhenALaterBatchHasNoItems()
+    {
+        var runtime = new FakeRuntime();
+        await using var interop = new DeviceTimeFormatterInterop(runtime);
+        runtime.Module.ResultFor = (call, _) => new DeviceTimeFormatResult(
+            "UTC", "Coordinated Universal Time", call == 0 ? [] : null);
+
+        var result = await interop.FormatAsync(Items(100), new MessageTimePreferences());
+
+        result.Should().BeNull("a partially formatted reply must not reach the message list");
+        runtime.Module.Identifiers.Should().HaveCount(2, "later batches must not run after an unusable reply");
+    }
+
+    [Test]
+    public async Task FormatAsync_PropagatesALaterBatchFailure()
+    {
+        var runtime = new FakeRuntime();
+        await using var interop = new DeviceTimeFormatterInterop(runtime);
+        runtime.Module.OnCall = (call, _) =>
+        {
+            if (call == 1)
+                throw new JSException("circuit closed");
+        };
+
+        await FluentActions.Awaiting(() => interop.FormatAsync(Items(200), new MessageTimePreferences()))
+            .Should().ThrowAsync<JSException>();
+
+        runtime.Module.Identifiers.Should().HaveCount(2, "the failure stops the remaining batches");
+    }
+
+    [Test]
+    public async Task FormatAsync_DisposalBetweenBatchesStopsTheRemainingBatches()
+    {
+        var runtime = new FakeRuntime();
+        var interop = new DeviceTimeFormatterInterop(runtime);
+        runtime.Module.OnCall = (call, args) =>
+        {
+            if (call == 0)
+                _ = interop.DisposeAsync();
+        };
+
+        var result = await interop.FormatAsync(Items(200), new MessageTimePreferences());
+
+        result.Should().BeNull();
+        runtime.Module.Identifiers.Should().ContainSingle("a disposed formatter must not issue the next batch");
+        runtime.Module.DisposeCount.Should().Be(1);
+    }
+
+    private static List<DeviceTimeFormatRequest> Items(int count) =>
+        [.. Enumerable.Range(0, count).Select(index =>
+            new DeviceTimeFormatRequest(Guid.NewGuid(), 1_700_000_000_000 + index, Detail: false))];
+
+    [Test]
     public async Task EnsureBridgeAsync_InstallsTheGlobalBridgeFromTheSameModule()
     {
         var runtime = new FakeRuntime();
@@ -255,7 +351,13 @@ public class DeviceTimeFormatterInteropTests
             "Coordinated Universal Time",
             []);
 
+        internal Func<int, object?[], DeviceTimeFormatResult?>? ResultFor { get; set; }
+
+        internal Action<int, object?[]>? OnCall { get; set; }
+
         internal int DisposeCount { get; private set; }
+
+        private int _formatCalls;
 
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)
         {
@@ -263,7 +365,11 @@ public class DeviceTimeFormatterInteropTests
             Arguments.Add(args ?? []);
             if (identifier == "installTimeBridge")
                 return default;
-            return new ValueTask<TValue>(Task.FromResult((TValue)(object)Result!));
+
+            var call = _formatCalls++;
+            OnCall?.Invoke(call, args ?? []);
+            var result = ResultFor?.Invoke(call, args ?? []) ?? Result;
+            return new ValueTask<TValue>(Task.FromResult((TValue)(object)result!));
         }
 
         public ValueTask<TValue> InvokeAsync<TValue>(

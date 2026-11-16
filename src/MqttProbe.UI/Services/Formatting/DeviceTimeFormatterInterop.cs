@@ -40,6 +40,10 @@ internal sealed class DeviceTimeFormatterInterop(IJSRuntime js) : IDeviceTimeFor
     private Task<IJSObjectReference?>? _moduleLoad;
     private bool _disposed;
 
+    // A client-to-server interop frame (this reply) is capped at 32 KB, and it carries one
+    // formatted item per requested row, so a long message list must travel in bounded batches.
+    private const int MaxItemsPerRequest = 64;
+
     public async Task<DeviceTimeFormatResult?> FormatAsync(
         IReadOnlyList<DeviceTimeFormatRequest> items,
         MessageTimePreferences preferences)
@@ -51,11 +55,46 @@ internal sealed class DeviceTimeFormatterInterop(IJSRuntime js) : IDeviceTimeFor
         if (module is null || _disposed)
             return null;
 
-        return await module.InvokeAsync<DeviceTimeFormatResult?>(
+        if (items.Count <= MaxItemsPerRequest)
+            return await FormatBatchAsync(module, items, preferences);
+
+        var merged = new List<DeviceTimeFormatItem>(items.Count);
+        string? zoneLabel = null;
+        string? zoneName = null;
+        for (var start = 0; start < items.Count; start += MaxItemsPerRequest)
+        {
+            if (_disposed)
+                return null;
+
+            var count = Math.Min(MaxItemsPerRequest, items.Count - start);
+            var batch = new List<DeviceTimeFormatRequest>(count);
+            for (var index = 0; index < count; index++)
+                batch.Add(items[start + index]);
+
+            var result = await FormatBatchAsync(module, batch, preferences);
+            if (result?.Items is not { } batchItems)
+                return null;
+
+            if (zoneLabel is null)
+            {
+                zoneLabel = result.ZoneLabel;
+                zoneName = result.ZoneName;
+            }
+
+            merged.AddRange(batchItems);
+        }
+
+        return new DeviceTimeFormatResult(zoneLabel ?? "", zoneName ?? "", merged);
+    }
+
+    private static ValueTask<DeviceTimeFormatResult?> FormatBatchAsync(
+        IJSObjectReference module,
+        IReadOnlyList<DeviceTimeFormatRequest> items,
+        MessageTimePreferences preferences) =>
+        module.InvokeAsync<DeviceTimeFormatResult?>(
             "formatInstants",
             items,
             new { zone = preferences.Zone, clockFormat = preferences.ClockFormat });
-    }
 
     public async Task<bool> EnsureBridgeAsync()
     {

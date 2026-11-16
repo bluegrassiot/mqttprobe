@@ -18,6 +18,8 @@ using MqttProbe.Web;
 using MqttProbe.Web.Authentication;
 using MqttProbe.Web.Services;
 
+NullReferenceCapture.InstallFromEnvironment();
+
 var builder = WebApplication.CreateBuilder(args);
 
 StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configuration);

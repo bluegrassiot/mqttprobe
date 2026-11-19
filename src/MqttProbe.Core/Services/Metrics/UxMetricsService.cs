@@ -31,7 +31,16 @@ public sealed record UxMetricsSnapshot(
     int EmulatorPublishersOnline,
     long EmulatorPublishCycles,
     int EmulatorNodesInError,
-    long MessagesExcluded = 0);
+    long MessagesExcluded = 0,
+    IReadOnlyList<ChartRendererCallMetricsSnapshot>? ChartRendererCalls = null);
+
+public sealed record ChartRendererCallMetricsSnapshot(
+    string Renderer,
+    long CompletedCalls,
+    long FailedCalls,
+    double AverageCallMilliseconds,
+    double MaximumCallMilliseconds,
+    double LastCompletedCallAgeSeconds);
 
 public interface IUxMetricsService
 {
@@ -40,6 +49,7 @@ public interface IUxMetricsService
     public void RecordConnectFailure();
     public void RecordPublishOutcome(bool success);
     public void RecordChartFunnel(string source, bool createdNewChart);
+    public void RecordChartRendererCall(string renderer, TimeSpan elapsed, bool failed);
     public void RecordMessageProcessed(string format);
     public void RecordMessageDropped();
     public void RecordMessageExcluded();
@@ -54,6 +64,10 @@ public interface IUxMetricsService
 public sealed class UxMetricsService : IUxMetricsService
 {
     public const int RateWindowSeconds = 60;
+    public const int ChartRendererCallWindow = 64;
+
+    private const string ApexRenderer = "Apex";
+    private const string EChartsRenderer = "ECharts";
 
     private readonly ILogger<UxMetricsService> _logger;
     private readonly IPerformanceSettings _performanceSettings;
@@ -74,6 +88,8 @@ public sealed class UxMetricsService : IUxMetricsService
     private long _chartsCreated;
     private long _seriesAddedToExistingCharts;
     private readonly ConcurrentDictionary<string, long> _chartFunnelBySource = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ChartRendererCallBucket _apexCalls = new();
+    private readonly ChartRendererCallBucket _echartsCalls = new();
 
     private long _messagesProcessed;
     private long _messagesDropped;
@@ -156,6 +172,17 @@ public sealed class UxMetricsService : IUxMetricsService
         if (_logger.IsEnabled(LogLevel.Information))
             _logger.LogInformation("UX metrics: chart funnel source={Source} newChart={CreatedNewChart}",
                 source, createdNewChart);
+    }
+
+    public void RecordChartRendererCall(string renderer, TimeSpan elapsed, bool failed)
+    {
+        var bucket = renderer switch
+        {
+            ApexRenderer => _apexCalls,
+            EChartsRenderer => _echartsCalls,
+            _ => null,
+        };
+        bucket?.Record(elapsed.TotalMilliseconds, failed, _tickCount64Ms());
     }
 
     public void RecordMessageProcessed(string format)
@@ -273,8 +300,77 @@ public sealed class UxMetricsService : IUxMetricsService
             EmulatorPublishersOnline: _emulatorPublishersOnline,
             EmulatorPublishCycles: Volatile.Read(ref _emulatorPublishCycles),
             EmulatorNodesInError: _emulatorNodesInError,
-            MessagesExcluded: Interlocked.Read(ref _messagesExcluded));
+            MessagesExcluded: Interlocked.Read(ref _messagesExcluded),
+            ChartRendererCalls: BuildChartRendererCalls());
         return snapshot;
+    }
+
+    private List<ChartRendererCallMetricsSnapshot>? BuildChartRendererCalls()
+    {
+        var nowMs = _tickCount64Ms();
+        var apex = _apexCalls.Snapshot(ApexRenderer, nowMs);
+        var echarts = _echartsCalls.Snapshot(EChartsRenderer, nowMs);
+        if (apex is null && echarts is null)
+            return null;
+
+        var calls = new List<ChartRendererCallMetricsSnapshot>(2);
+        if (apex is not null) calls.Add(apex);
+        if (echarts is not null) calls.Add(echarts);
+        return calls;
+    }
+
+    private sealed class ChartRendererCallBucket
+    {
+        private readonly Lock _sync = new();
+        private readonly double[] _durationsMs = new double[ChartRendererCallWindow];
+        private int _next;
+        private int _sampleCount;
+        private long _completedCalls;
+        private long _failedCalls;
+        private long _lastCallTickMs = -1;
+
+        public void Record(double elapsedMs, bool failed, long nowMs)
+        {
+            lock (_sync)
+            {
+                _completedCalls++;
+                if (failed)
+                    _failedCalls++;
+
+                _durationsMs[_next] = elapsedMs;
+                _next = (_next + 1) % _durationsMs.Length;
+                if (_sampleCount < _durationsMs.Length)
+                    _sampleCount++;
+                _lastCallTickMs = nowMs;
+            }
+        }
+
+        public ChartRendererCallMetricsSnapshot? Snapshot(string renderer, long nowMs)
+        {
+            lock (_sync)
+            {
+                if (_sampleCount == 0)
+                    return null;
+
+                var sum = 0.0;
+                var maximum = 0.0;
+                for (var index = 0; index < _sampleCount; index++)
+                {
+                    var duration = _durationsMs[index];
+                    sum += duration;
+                    if (duration > maximum) maximum = duration;
+                }
+
+                var ageMs = _lastCallTickMs < 0 ? 0 : Math.Max(0, nowMs - _lastCallTickMs);
+                return new ChartRendererCallMetricsSnapshot(
+                    renderer,
+                    _completedCalls,
+                    _failedCalls,
+                    sum / _sampleCount,
+                    maximum,
+                    ageMs / 1000.0);
+            }
+        }
     }
 
 }

@@ -356,11 +356,21 @@
         if (_pendingUpdate && _chartReady && !_disposed && _chart is not null)
         {
             _pendingUpdate = false;
-            try { await _chart.UpdateSeriesAsync(animate: false); }
+            var stopwatch = BeginRendererCall();
+            var failed = true;
+            try
+            {
+                await _chart.UpdateSeriesAsync(animate: false);
+                failed = false;
+            }
             catch (Exception ex) when (ex is ArgumentNullException or JSException)
             {
                 // Chart component disposed mid-render; these exceptions are expected during teardown.
                 _ = ex;
+            }
+            finally
+            {
+                RecordRendererCall("Apex", stopwatch?.Elapsed, failed);
             }
         }
     }

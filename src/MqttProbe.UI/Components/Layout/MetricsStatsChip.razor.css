@@ -45,3 +45,24 @@
 .metrics-error {
     color: var(--mud-palette-error);
 }
+
+.metrics-charts .metrics-subsection + .metrics-subsection {
+    margin-top: 10px;
+}
+
+.metrics-value {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+::deep .metrics-note {
+    display: block;
+    margin: 0 0 6px;
+    color: var(--mud-palette-text-secondary);
+    line-height: 1.45;
+}
+
+::deep .metrics-note:last-child {
+    margin-bottom: 0;
+}

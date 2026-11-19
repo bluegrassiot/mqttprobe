@@ -32,8 +32,8 @@ public class ChartCardRendererTests : BunitTestContext
         _chartData = Substitute.For<IChartDataService>();
         _chartData.GetPoints(Arg.Any<Guid>())
             .Returns(call => (IReadOnlyList<ChartDataPoint>)PointsFor(call.Arg<Guid>()));
-        _chartData.GetLastPointTimestamp(Arg.Any<Guid>())
-            .Returns(call => LastTimestampFor(call.Arg<Guid>()));
+        _chartData.GetPointBounds(Arg.Any<Guid>())
+            .Returns(call => BoundsFor(call.Arg<Guid>()));
         _clock = new FakeTimeProvider(_start);
         _formatter = new ChartTimeFormatterStub();
         _ui = SettingsSubstituteRegistration.CreateUiSettings();
@@ -58,8 +58,10 @@ public class ChartCardRendererTests : BunitTestContext
     private IReadOnlyList<ChartDataPoint> PointsFor(Guid seriesId) =>
         _points.TryGetValue(seriesId, out var points) ? [.. points] : [];
 
-    private DateTime? LastTimestampFor(Guid seriesId) =>
-        _points.TryGetValue(seriesId, out var points) && points.Count > 0 ? points[^1].Timestamp : null;
+    private (DateTime First, DateTime Last)? BoundsFor(Guid seriesId) =>
+        _points.TryGetValue(seriesId, out var points) && points.Count > 0
+            ? (points[0].Timestamp, points[^1].Timestamp)
+            : null;
 
     private GatedChartModule GateAdapterCreation()
     {
@@ -344,78 +346,6 @@ public class ChartCardRendererTests : BunitTestContext
         chart.Series.Should().ContainSingle().Which.Id.Should().Be(series.Id);
         cut.FindAll(".chart-card-echarts").Should().BeEmpty();
         _module.VerifyInvoke("disposeChart", 1);
-    }
-
-    [Test]
-    public async Task EChartsUpdateDisconnect_RecordsATerminalInteropFailure()
-    {
-        var output = Path.Combine(Path.GetTempPath(), "mqttprobe-perf-" + Guid.NewGuid().ToString("N") + ".jsonl");
-        await ChartPerformanceProbe.UseOutputPathForTestsAsync(output);
-        try
-        {
-            _module.Setup<bool>("createChart", _ => true).SetResult(true);
-            _module.Setup<bool>("disposeChart", _ => true).SetResult(true);
-            _module.Setup<bool>("updateChart", _ => true).SetException(new JSDisconnectedException("circuit closed"));
-
-            var series = new ChartSeries { DisplayName = "Temp" };
-            Record(series, 1, 21.5);
-            var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
-            cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
-
-            Record(series, 0, 22.5);
-            _chartData.OnDataUpdated += Raise.Event<Action>();
-            cut.WaitForAssertion(() => _module.VerifyInvoke("updateChart", 1), TimeSpan.FromSeconds(5));
-
-            await ChartPerformanceProbe.FlushForTestsAsync(drain: true);
-
-            File.ReadAllLines(output).Should().Contain(line =>
-                line.Contains("\"ph\":\"interop\"", StringComparison.Ordinal)
-                && line.Contains("\"op\":\"update\"", StringComparison.Ordinal)
-                && line.Contains("\"ok\":0", StringComparison.Ordinal),
-                "a disconnected update must leave a correlated terminal record");
-        }
-        finally
-        {
-            await ChartPerformanceProbe.UseOutputPathForTestsAsync(null);
-            foreach (var suffix in new[] { "", ".health", ".drained", ".tmp" })
-            {
-                if (File.Exists(output + suffix))
-                    File.Delete(output + suffix);
-            }
-        }
-    }
-
-    [Test]
-    public async Task EChartsLifecycle_StartsAndStopsTheStorageSampler()
-    {
-        var output = Path.Combine(Path.GetTempPath(), "mqttprobe-perf-" + Guid.NewGuid().ToString("N") + ".jsonl");
-        await ChartPerformanceProbe.UseOutputPathForTestsAsync(output);
-        try
-        {
-            AllowAdapterCalls();
-            var series = new ChartSeries { DisplayName = "Temp" };
-            Record(series, 1, 21.5);
-            var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
-
-            cut.WaitForAssertion(
-                () => ChartPerformanceProbe.StorageSampler.ActiveCount.Should().Be(1),
-                TimeSpan.FromSeconds(5));
-
-            Rerender(cut, Chart(series), ChartRendererKind.Apex);
-
-            cut.WaitForAssertion(
-                () => ChartPerformanceProbe.StorageSampler.ActiveCount.Should().Be(0),
-                TimeSpan.FromSeconds(5));
-        }
-        finally
-        {
-            await ChartPerformanceProbe.UseOutputPathForTestsAsync(null);
-            foreach (var suffix in new[] { "", ".health", ".drained", ".drain", ".tmp" })
-            {
-                if (File.Exists(output + suffix))
-                    File.Delete(output + suffix);
-            }
-        }
     }
 
     [Test]

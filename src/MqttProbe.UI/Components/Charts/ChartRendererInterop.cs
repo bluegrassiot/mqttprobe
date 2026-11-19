@@ -12,87 +12,45 @@ internal sealed class ChartRendererInterop(IJSRuntime js) : IAsyncDisposable
     // Disposal waits on this gate so an in-flight create cannot outlive the card.
     private readonly SemaphoreSlim _gate = new(1, 1);
     private IJSObjectReference? _module;
-    private int _queued;
     private volatile bool _disposed;
 
     internal async Task<bool> CreateAsync(
         ElementReference container,
         string chartId,
         DotNetObjectReference<ChartCard> owner,
-        ChartRendererSpec spec,
-        ChartPerformanceProbe.Token? perfToken = null)
+        ChartRendererSpec spec)
     {
-        var watch = ChartPerformanceProbe.InteropWatch.Start(
-            perfToken,
-            perfToken is null ? 0 : Interlocked.Increment(ref _queued));
-        var succeeded = false;
+        await _gate.WaitAsync();
         try
         {
-            await _gate.WaitAsync();
-            watch?.Acquired();
-            try
-            {
-                if (_disposed)
-                    return false;
+            if (_disposed)
+                return false;
 
-                var module = await EnsureModuleAsync();
-                if (module is null)
-                    return false;
+            var module = await EnsureModuleAsync();
+            if (module is null)
+                return false;
 
-                watch?.Dispatch();
-                succeeded = perfToken is null
-                    ? await module.InvokeAsync<bool>("createChart", container, chartId, owner, spec)
-                    : await module.InvokeAsync<bool>("createChart", container, chartId, owner, spec, new { }, perfToken.Value.Text);
-                return succeeded;
-            }
-            finally
-            {
-                _gate.Release();
-            }
+            return await module.InvokeAsync<bool>("createChart", container, chartId, owner, spec);
         }
         finally
         {
-            if (perfToken is not null)
-                Interlocked.Decrement(ref _queued);
-            watch?.Complete(succeeded);
+            _gate.Release();
         }
     }
 
-    internal async Task<bool> UpdateAsync(
-        string chartId,
-        ChartRendererSpec spec,
-        bool resetViewport = false,
-        ChartPerformanceProbe.Token? perfToken = null)
+    internal async Task<bool> UpdateAsync(string chartId, ChartRendererSpec spec, bool resetViewport = false)
     {
-        var watch = ChartPerformanceProbe.InteropWatch.Start(
-            perfToken,
-            perfToken is null ? 0 : Interlocked.Increment(ref _queued));
-        var succeeded = false;
+        await _gate.WaitAsync();
         try
         {
-            await _gate.WaitAsync();
-            watch?.Acquired();
-            try
-            {
-                if (_disposed || _module is null)
-                    return false;
+            if (_disposed || _module is null)
+                return false;
 
-                watch?.Dispatch();
-                succeeded = perfToken is null
-                    ? await _module.InvokeAsync<bool>("updateChart", chartId, spec, resetViewport)
-                    : await _module.InvokeAsync<bool>("updateChart", chartId, spec, resetViewport, perfToken.Value.Text);
-                return succeeded;
-            }
-            finally
-            {
-                _gate.Release();
-            }
+            return await _module.InvokeAsync<bool>("updateChart", chartId, spec, resetViewport);
         }
         finally
         {
-            if (perfToken is not null)
-                Interlocked.Decrement(ref _queued);
-            watch?.Complete(succeeded);
+            _gate.Release();
         }
     }
 

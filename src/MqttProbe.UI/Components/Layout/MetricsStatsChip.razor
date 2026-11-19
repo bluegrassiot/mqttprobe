@@ -136,6 +136,32 @@
                     }
                 </MudExpansionPanel>
             </MudExpansionPanels>
+
+            @if (_snapshot.ChartRendererCalls is { Count: > 0 } rendererCalls)
+            {
+                <MudExpansionPanels Elevation="0" Class="mt-2">
+                    <MudExpansionPanel Text="Charts" Dense="true" @bind-Expanded="_chartsExpanded">
+                        <div class="metrics-charts">
+                            @foreach (var calls in rendererCalls)
+                            {
+                                <div class="metrics-subsection">
+                                    <MudText Typo="Typo.caption" Class="metrics-subsection-title">@calls.Renderer</MudText>
+                                    <div class="metrics-row"><span>Completed update calls</span><span class="metrics-value">@Fmt(calls.CompletedCalls)</span></div>
+                                    <div class="metrics-row"><span>Failed calls</span><span class="metrics-value @(calls.FailedCalls > 0 ? "metrics-error" : "")">@Fmt(calls.FailedCalls)</span></div>
+                                    <div class="metrics-row"><span>Call time (avg / max)</span><span class="metrics-value">@FmtCallTime(calls)</span></div>
+                                    <div class="metrics-row"><span>Last completed call</span><span class="metrics-value">@FmtLastCall(calls)</span></div>
+                                </div>
+                            }
+
+                            <MudDivider Class="my-2" />
+
+                            <MudText Typo="Typo.caption" Class="metrics-note">Average and maximum cover the last 64 completed update calls, including failures.</MudText>
+                            <MudText Typo="Typo.caption" Class="metrics-note">Call time measures the wait for the renderer API to return, not paint or end-to-end latency.</MudText>
+                            <MudText Typo="Typo.caption" Class="metrics-note">Counts are totals for this session. Failed calls are included in completed calls.</MudText>
+                        </div>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
         </div>
     </ChildContent>
 </MudMenu>
@@ -151,6 +177,7 @@
     private bool _processingExpanded;
     private bool _resourcesExpanded;
     private bool _systemExpanded;
+    private bool _chartsExpanded;
 
     private string ChipClass =>
         _droppingRecently ? "metrics-chip metrics-chip--dropping" : "metrics-chip";
@@ -194,6 +221,7 @@
             _processingExpanded = false;
             _resourcesExpanded = false;
             _systemExpanded = false;
+            _chartsExpanded = false;
         }
     }
 
@@ -241,6 +269,28 @@
         var d when d.TotalHours >= 1 => $"{(int)d.TotalHours}h {d.Minutes:D2}m",
         var d when d.TotalMinutes >= 1 => $"{(int)d.TotalMinutes}m {d.Seconds:D2}s",
         var d => $"{d.TotalSeconds:N0}s"
+    };
+
+    private static string FmtCallTime(ChartRendererCallMetricsSnapshot calls) =>
+        HasCallSamples(calls)
+            ? $"{FmtMs(calls.AverageCallMilliseconds)} / {FmtMs(calls.MaximumCallMilliseconds)} ms"
+            : "N/A";
+
+    private static string FmtLastCall(ChartRendererCallMetricsSnapshot calls) =>
+        HasCallSamples(calls) && double.IsFinite(calls.LastCompletedCallAgeSeconds)
+            ? $"{FmtDuration(Math.Max(0, calls.LastCompletedCallAgeSeconds))} ago"
+            : "N/A";
+
+    private static bool HasCallSamples(ChartRendererCallMetricsSnapshot calls) =>
+        calls.CompletedCalls + calls.FailedCalls > 0
+        && double.IsFinite(calls.AverageCallMilliseconds)
+        && double.IsFinite(calls.MaximumCallMilliseconds);
+
+    private static string FmtMs(double ms) => ms switch
+    {
+        >= 100 => ms.ToString("N0", CultureInfo.CurrentCulture),
+        >= 10 => ms.ToString("N1", CultureInfo.CurrentCulture),
+        _ => ms.ToString("N2", CultureInfo.CurrentCulture)
     };
 
     public void Dispose()

@@ -35,6 +35,8 @@ public class ChartCardPendingApplyWorkTests : BunitTestContext
             .Returns(call => (IReadOnlyList<ChartDataPoint>)PointsFor(call.Arg<Guid>()));
         _chartData.GetLastPointTimestamp(Arg.Any<Guid>())
             .Returns(call => LastTimestampFor(call.Arg<Guid>()));
+        _chartData.GetPointBounds(Arg.Any<Guid>())
+            .Returns(call => BoundsFor(call.Arg<Guid>()));
         _clock = new FakeTimeProvider(_start);
         _formatter = new ChartTimeFormatterStub();
         _ui = SettingsSubstituteRegistration.CreateUiSettings();
@@ -54,6 +56,11 @@ public class ChartCardPendingApplyWorkTests : BunitTestContext
     private DateTime? LastTimestampFor(Guid seriesId) =>
         _points.TryGetValue(seriesId, out var points) && points.Count > 0 ? points[^1].Timestamp : null;
 
+    private (DateTime First, DateTime Last)? BoundsFor(Guid seriesId) =>
+        _points.TryGetValue(seriesId, out var points) && points.Count > 0
+            ? (points[0].Timestamp, points[^1].Timestamp)
+            : null;
+
     private void Record(ChartSeries series)
     {
         if (!_points.TryGetValue(series.Id, out var points))
@@ -65,6 +72,9 @@ public class ChartCardPendingApplyWorkTests : BunitTestContext
 
     private int PointReads() => _chartData.ReceivedCalls()
         .Count(call => call.GetMethodInfo().Name == nameof(IChartDataService.GetPoints));
+
+    private int BoundReads() => _chartData.ReceivedCalls()
+        .Count(call => call.GetMethodInfo().Name == nameof(IChartDataService.GetPointBounds));
 
     private IRenderedComponent<ChartCardComponent> RenderCard(ChartConfiguration configuration) =>
         Render<ChartCardComponent>(parameters => parameters
@@ -114,6 +124,7 @@ public class ChartCardPendingApplyWorkTests : BunitTestContext
             await PumpAsync(cut);
 
             var readsBefore = PointReads();
+            var boundsBefore = BoundReads();
             var formatsBefore = _formatter.Requests.Count;
 
             // 500 ms steps cross the 5 s caption signature bucket on the fake clock, not on wall-clock waits.
@@ -127,15 +138,17 @@ public class ChartCardPendingApplyWorkTests : BunitTestContext
             }
 
             var reads = PointReads() - readsBefore;
+            var boundsReads = BoundReads() - boundsBefore;
             var formats = _formatter.Requests.Count - formatsBefore;
             NUnit.Framework.TestContext.Out.WriteLine(
                 $"pending apply: notifications={Notifications} series={SeriesCount} pointsPerSeries={PointsPerSeries} "
-                + $"pointReads={reads} captionFormats={formats} chartUpdates={_module.UpdateCount}");
+                + $"pointReads={reads} boundReads={boundsReads} captionFormats={formats} chartUpdates={_module.UpdateCount}");
 
             _module.UpdateCount.Should().Be(1, "notifications must not queue chart submissions behind the blocked apply");
             _module.MaxInFlight.Should().Be(1);
-            reads.Should().BeLessThanOrEqualTo((Notifications + 2) * SeriesCount,
-                "point reads per notification stay linear in the series count while chart applies coalesce");
+            reads.Should().Be(0,
+                "a windowless caption reads the point bounds instead of taking a full snapshot per series");
+            boundsReads.Should().BeGreaterThan(0, "the caption still tracks the data range");
             formats.Should().BeGreaterThan(0,
                     "the caption still formats while the chart apply is blocked")
                 .And.BeLessThan(Notifications,

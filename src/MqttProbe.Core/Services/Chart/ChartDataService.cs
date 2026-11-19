@@ -15,6 +15,7 @@ public interface IChartDataService : IDisposable
 {
     public IReadOnlyList<ChartDataPoint> GetPoints(Guid seriesId);
     public DateTime? GetLastPointTimestamp(Guid seriesId);
+    public (DateTime First, DateTime Last)? GetPointBounds(Guid seriesId);
     public event Action? OnDataUpdated;
     public Task StartAsync();
     public Task StopAsync();
@@ -82,6 +83,19 @@ public class ChartDataService(
 
     public DateTime? GetLastPointTimestamp(Guid seriesId) =>
         _lastPointTimestamps.TryGetValue(seriesId, out var timestamp) ? timestamp : null;
+
+    public (DateTime First, DateTime Last)? GetPointBounds(Guid seriesId)
+    {
+        lock (_stateLock)
+        {
+            if (!_buffers.TryGetValue(seriesId, out var buffer) || !buffer.TryPeek(out var first))
+                return null;
+
+            return _lastPointTimestamps.TryGetValue(seriesId, out var last)
+                ? (first.Timestamp, last)
+                : null;
+        }
+    }
 
     public async Task StartAsync()
     {

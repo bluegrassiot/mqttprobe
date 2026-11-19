@@ -392,6 +392,7 @@ public class ChartDataServiceMessageHandlerTests
 
         registry.GetTopics().Should().BeEmpty();
         service.GetPoints(series).Should().BeEmpty();
+        service.GetPointBounds(series).Should().BeNull();
         await handler!(MakeArgs("sensors/temp", "{\"value\": 2}"));
         service.GetPoints(series).Should().BeEmpty();
         excludes.Dispose();

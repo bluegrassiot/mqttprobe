@@ -235,19 +235,28 @@ public partial class ChartCard
 
         foreach (var series in Configuration.Series)
         {
-            var points = GetPoints(series.Id);
-            if (points.Count == 0)
+            if (SeriesRange(series.Id) is not { } range)
                 continue;
 
-            var first = Epoch(points[0].Timestamp);
-            var last = Epoch(points[^1].Timestamp);
-            var low = Math.Min(first, last);
-            var high = Math.Max(first, last);
+            var low = Math.Min(range.From, range.To);
+            var high = Math.Max(range.From, range.To);
             min = min is null ? low : Math.Min(min.Value, low);
             max = max is null ? high : Math.Max(max.Value, high);
         }
 
         return min is null ? null : (min.Value, max!.Value);
+    }
+
+    private (long From, long To)? SeriesRange(Guid seriesId)
+    {
+        if (Configuration.TimeWindowMinutes is null
+            && ChartDataService.GetPointBounds(seriesId) is { } bounds)
+        {
+            return (Epoch(bounds.First), Epoch(bounds.Last));
+        }
+
+        var points = GetPoints(seriesId);
+        return points.Count == 0 ? null : (Epoch(points[0].Timestamp), Epoch(points[^1].Timestamp));
     }
 
     private string CaptionSignature(long from, long to) =>

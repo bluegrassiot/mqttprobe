@@ -27,6 +27,40 @@ public class TimeWindowFilterTests
     }
 
     [Test]
+    public void Apply_NoTimeWindow_ReturnsTheGivenSnapshotWithoutCopying()
+    {
+        var list = new List<ChartDataPoint>
+        {
+            new(_now.AddMinutes(-60), 1.0),
+            new(_now, 3.0)
+        };
+        IReadOnlyList<ChartDataPoint> readOnly = [.. list];
+
+        TimeWindowFilter.Apply(list, timeWindowMinutes: null, _now).Should().BeSameAs(list);
+        TimeWindowFilter.Apply(readOnly, timeWindowMinutes: null, _now).Should().BeSameAs(readOnly);
+    }
+
+    [Test]
+    public void Apply_TimeWindow_KeepsOrderAndLeavesTheSourceSnapshotIntact()
+    {
+        var cutoff = _now.AddMinutes(-5);
+        var owned = new List<ChartDataPoint>
+        {
+            new(_now.AddMinutes(-30), 1.0),
+            new(cutoff, 2.0),
+            new(_now.AddMinutes(-1), 3.0),
+            new(_now, 4.0)
+        };
+
+        var filtered = TimeWindowFilter.Apply(owned, timeWindowMinutes: 5, _now);
+
+        filtered.Select(point => point.Value).Should().Equal([2.0, 3.0, 4.0]);
+        filtered.Should().NotBeSameAs(owned);
+        owned.Select(point => point.Value).Should().Equal([1.0, 2.0, 3.0, 4.0],
+            "filtering must not mutate the caller's snapshot");
+    }
+
+    [Test]
     public void Apply_PositiveTimeWindow_ExcludesOldAndIncludesRecent()
     {
         var allPoints = new List<ChartDataPoint>

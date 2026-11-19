@@ -356,20 +356,27 @@
         if (_pendingUpdate && _chartReady && !_disposed && _chart is not null)
         {
             _pendingUpdate = false;
-            try { await _chart.UpdateSeriesAsync(animate: false); }
+            var stopwatch = BeginRendererCall();
+            var failed = true;
+            try
+            {
+                await _chart.UpdateSeriesAsync(animate: false);
+                failed = false;
+            }
             catch (Exception ex) when (ex is ArgumentNullException or JSException)
             {
                 // Chart component disposed mid-render; these exceptions are expected during teardown.
                 _ = ex;
             }
+            finally
+            {
+                RecordRendererCall("Apex", stopwatch?.Elapsed, failed);
+            }
         }
     }
 
-    private List<ChartDataPoint> GetPoints(Guid seriesId)
-    {
-        var points = ChartDataService.GetPoints(seriesId);
-        return [.. TimeWindowFilter.Apply(points, Configuration.TimeWindowMinutes)];
-    }
+    private IReadOnlyList<ChartDataPoint> GetPoints(Guid seriesId) =>
+        TimeWindowFilter.Apply(ChartDataService.GetPoints(seriesId), Configuration.TimeWindowMinutes);
 
     private SeriesType GetSeriesType() => Configuration.Type switch
     {
@@ -384,31 +391,6 @@
         AppChartType.Bar => ApexCharts.ChartType.Bar,
         _ => ApexCharts.ChartType.Line
     };
-
-    // The receipt time is the newest buffered point, which the display window never filters.
-    private DateTime? LastReceiptUtc(Guid seriesId)
-    {
-        var points = ChartDataService.GetPoints(seriesId);
-        return points.Count == 0 ? null : points[^1].Timestamp;
-    }
-
-    private void RefreshReceipts()
-    {
-        _lastReceipts.Clear();
-        foreach (var seriesId in Configuration.Series.Select(series => series.Id))
-            _lastReceipts[seriesId] = LastReceiptUtc(seriesId);
-    }
-
-    private void OnDataUpdated() => InvokeAsync(() =>
-    {
-        _hasNewData = true;
-        RefreshReceipts();
-        RefreshFreshness(render: true);
-        RefreshChart();
-
-        if (_live && !(HoverPausesUpdates && _hovering) && _visibleFromMs is null)
-            _ = InvokeAsync(() => RefreshZoneCaptionAsync());
-    });
 
     // Runs even without messages so last-received ages stay current.
     internal void Tick()

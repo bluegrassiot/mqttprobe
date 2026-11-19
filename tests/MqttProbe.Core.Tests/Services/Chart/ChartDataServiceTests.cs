@@ -463,6 +463,114 @@ public class ChartDataServiceTests
         _mockChartSettings.Received(1).GetCharts(connId);
     }
 
+    [Test]
+    public async Task GetPointBounds_ReturnsFirstAndLastBufferedTimestamps()
+    {
+        var connectionId = Guid.NewGuid();
+        var series = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/topic", JsonPath = "value" };
+        _mockChartSettings.GetCharts(connectionId).Returns([ConfigWith(series)]);
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/topic", """{"value": 1}"""));
+        await _handler!(MakeArgs("test/topic", """{"value": 2}"""));
+
+        var points = _service.GetPoints(series.Id);
+        _service.GetPointBounds(series.Id).Should().Be((points[0].Timestamp, points[^1].Timestamp));
+        _service.GetPointBounds(series.Id)!.Value.Last.Should().Be(_service.GetLastPointTimestamp(series.Id));
+    }
+
+    [Test]
+    public void GetPointBounds_UnknownSeries_ReturnsNull() =>
+        _service.GetPointBounds(Guid.NewGuid()).Should().BeNull();
+
+    [Test]
+    public async Task GetPointBounds_AfterClearBuffers_ReturnsNull()
+    {
+        var connectionId = Guid.NewGuid();
+        var series = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/topic", JsonPath = "value" };
+        _mockChartSettings.GetCharts(connectionId).Returns([ConfigWith(series)]);
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/topic", """{"value": 1}"""));
+
+        _service.ClearBuffers();
+
+        _service.GetPointBounds(series.Id).Should().BeNull();
+    }
+
+    [Test]
+    public async Task GetPointBounds_AfterClearAndRefill_ReportsOnlyTheNewGeneration()
+    {
+        var connectionId = Guid.NewGuid();
+        var series = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/topic", JsonPath = "value" };
+        _mockChartSettings.GetCharts(connectionId).Returns([ConfigWith(series)]);
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/topic", """{"value": 1}"""));
+
+        _service.ClearBuffers();
+        await _handler!(MakeArgs("test/topic", """{"value": 2}"""));
+
+        var points = _service.GetPoints(series.Id);
+        points.Should().ContainSingle().Which.Value.Should().Be(2);
+        _service.GetPointBounds(series.Id).Should().Be((points[0].Timestamp, points[^1].Timestamp));
+    }
+
+    [Test]
+    public async Task GetPointBounds_AfterConnectionChange_ReturnsNull()
+    {
+        var connectionId = Guid.NewGuid();
+        var series = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/topic", JsonPath = "value" };
+        _mockChartSettings.GetCharts(connectionId).Returns([ConfigWith(series)]);
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/topic", """{"value": 1}"""));
+
+        _service.SetConnection(Guid.NewGuid());
+
+        _service.GetPointBounds(series.Id).Should().BeNull();
+    }
+
+    [Test]
+    public async Task GetPointBounds_WhenSeriesIsRemoved_ReturnsNull()
+    {
+        var connectionId = Guid.NewGuid();
+        var keptSeries = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/kept", JsonPath = "value" };
+        var removedSeries = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/removed", JsonPath = "value" };
+        _mockChartSettings.GetCharts(connectionId).Returns([ConfigWith(keptSeries, removedSeries)]);
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/kept", """{"value": 1}"""));
+        await _handler!(MakeArgs("test/removed", """{"value": 2}"""));
+
+        _mockChartSettings.GetCharts(connectionId).Returns([ConfigWith(keptSeries)]);
+        _mockChartSettings.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
+
+        _service.GetPointBounds(removedSeries.Id).Should().BeNull();
+        _service.GetPointBounds(keptSeries.Id).Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task GetPointBounds_AfterRetentionShrinks_ReportsTheTrimmedFirstAndKeptLast()
+    {
+        var connectionId = Guid.NewGuid();
+        var series = new ChartSeries { Id = Guid.NewGuid(), Topic = "test/topic", JsonPath = "value" };
+        _mockChartSettings.GetCharts(connectionId).Returns([ConfigWith(series)]);
+        _service.SetConnection(connectionId);
+        await _service.StartAsync();
+        await _handler!(MakeArgs("test/topic", """{"value": 1}"""));
+        await _handler!(MakeArgs("test/topic", """{"value": 2}"""));
+        await _handler!(MakeArgs("test/topic", """{"value": 3}"""));
+
+        _mockChartSettings.GetCharts(connectionId).Returns([
+            new ChartConfiguration { MaxPoints = 2, Series = [series] }]);
+        _mockChartSettings.ChartsChanged += Raise.Event<Action<Guid>>(connectionId);
+
+        var points = _service.GetPoints(series.Id);
+        points.Should().HaveCount(2);
+        _service.GetPointBounds(series.Id).Should().Be((points[0].Timestamp, points[^1].Timestamp));
+    }
+
     private static ChartConfiguration ConfigWith(params ChartSeries[] series) =>
         new() { MaxPoints = 100, Series = [.. series] };
 

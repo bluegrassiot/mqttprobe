@@ -190,14 +190,23 @@
 
     protected override void OnInitialized()
     {
-        _intervalMs = EmulationService.PublishIntervalMs;
         EmulationService.StateChanged += OnServiceStateChanged;
-        EmulationService.SetConnection(SessionState.SelectedConnection.Id);
         SessionState.SelectedConnectionChanged += OnSelectedConnectionChanged;
+        BindSelectedConnection();
     }
 
     private void OnSelectedConnectionChanged(Connection _) =>
-        InvokeAsync(() => EmulationService.SetConnection(SessionState.SelectedConnection.Id));
+        InvokeAsync(() =>
+        {
+            BindSelectedConnection();
+            StateHasChanged();
+        });
+
+    private void BindSelectedConnection()
+    {
+        EmulationService.SetConnection(SessionState.SelectedConnection.Id);
+        _intervalMs = EmulationService.PublishIntervalMs;
+    }
 
     private void OnServiceStateChanged() => InvokeAsync(StateHasChanged);
 

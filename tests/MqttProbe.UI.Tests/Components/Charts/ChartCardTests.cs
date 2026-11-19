@@ -22,6 +22,8 @@ public class ChartCardTests : BunitTestContext
         _chartData = Substitute.For<IChartDataService>();
         _chartData.GetPoints(Arg.Any<Guid>())
             .Returns(call => (IReadOnlyList<ChartDataPoint>)PointsFor(call.Arg<Guid>()));
+        _chartData.GetLastPointTimestamp(Arg.Any<Guid>())
+            .Returns(call => LastTimestampFor(call.Arg<Guid>()));
         _clock = new FakeTimeProvider(_start);
 
         Services.AddSingleton(_chartData);
@@ -31,6 +33,9 @@ public class ChartCardTests : BunitTestContext
 
     private IReadOnlyList<ChartDataPoint> PointsFor(Guid seriesId) =>
         _points.TryGetValue(seriesId, out var points) ? [.. points] : [];
+
+    private DateTime? LastTimestampFor(Guid seriesId) =>
+        _points.TryGetValue(seriesId, out var points) && points.Count > 0 ? points[^1].Timestamp : null;
 
     private void Record(ChartSeries series, double secondsAgo, double value = 1)
     {
@@ -330,6 +335,24 @@ public class ChartCardTests : BunitTestContext
         StatusAgeText(cut).Should().Be("10m 0s ago", "the receipt age ignores the display window");
         cut.FindComponents<ApexCharts.ApexPointSeries<ChartDataPoint>>().Should().ContainSingle()
             .Which.Instance.Items.Should().BeEmpty("the point is outside the five-minute display window");
+    }
+
+    [Test]
+    public void PointsWithoutADisplayWindow_ReachApexWithoutACopy()
+    {
+        var series = new ChartSeries { DisplayName = "Temp" };
+        IReadOnlyList<ChartDataPoint> snapshot =
+        [
+            new(_start.UtcDateTime.AddMinutes(-5), 1),
+            new(_start.UtcDateTime, 2)
+        ];
+        _chartData.GetPoints(series.Id).Returns(snapshot);
+
+        var cut = RenderCard(Chart(null, series));
+
+        var items = cut.FindComponents<ApexCharts.ApexPointSeries<ChartDataPoint>>()
+            .Should().ContainSingle().Which.Instance.Items;
+        items.Should().BeSameAs(snapshot, "an unfiltered snapshot needs no further copy");
     }
 
     [Test]

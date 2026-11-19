@@ -32,6 +32,8 @@ public class ChartCardRendererTests : BunitTestContext
         _chartData = Substitute.For<IChartDataService>();
         _chartData.GetPoints(Arg.Any<Guid>())
             .Returns(call => (IReadOnlyList<ChartDataPoint>)PointsFor(call.Arg<Guid>()));
+        _chartData.GetPointBounds(Arg.Any<Guid>())
+            .Returns(call => BoundsFor(call.Arg<Guid>()));
         _clock = new FakeTimeProvider(_start);
         _formatter = new ChartTimeFormatterStub();
         _ui = SettingsSubstituteRegistration.CreateUiSettings();
@@ -55,6 +57,11 @@ public class ChartCardRendererTests : BunitTestContext
 
     private IReadOnlyList<ChartDataPoint> PointsFor(Guid seriesId) =>
         _points.TryGetValue(seriesId, out var points) ? [.. points] : [];
+
+    private (DateTime First, DateTime Last)? BoundsFor(Guid seriesId) =>
+        _points.TryGetValue(seriesId, out var points) && points.Count > 0
+            ? (points[0].Timestamp, points[^1].Timestamp)
+            : null;
 
     private GatedChartModule GateAdapterCreation()
     {

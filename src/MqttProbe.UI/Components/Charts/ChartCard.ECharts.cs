@@ -18,6 +18,7 @@ public partial class ChartCard
     private bool _echartsReady;
     private bool _echartsStarting;
     private bool _echartsLive;
+    private bool _echartsApplyActive;
     private bool _pendingViewportReset;
     private string? _echartsError;
     private string? _echartsErrorDetail;
@@ -136,29 +137,88 @@ public partial class ChartCard
 
     private async Task ApplyEChartsDataAsync()
     {
-        if (_disposed || !_echartsReady)
+        if (_disposed || !_echartsReady || !_live)
             return;
 
-        var spec = BuildEChartsSpec();
+        // One apply owns this card's interop slot. Requests that arrive while it waits only leave
+        // the pending flags set, so the owner draws them from the newest buffer after it returns
+        // instead of queueing another snapshot behind it.
+        if (_echartsApplyActive)
+            return;
+
+        _echartsApplyActive = true;
+        try
+        {
+            while (!_disposed && _live && _echartsReady && (_pendingUpdate || _pendingOptionsUpdate))
+            {
+                if (!await ApplyEChartsSnapshotAsync())
+                    return;
+            }
+        }
+        finally
+        {
+            _echartsApplyActive = false;
+        }
+    }
+
+    private async Task<bool> ApplyEChartsSnapshotAsync()
+    {
+        var generation = _rendererGeneration;
         var resetViewport = _pendingViewportReset;
+        var spec = BuildEChartsSpec();
         _pendingUpdate = false;
         _pendingOptionsUpdate = false;
         _pendingViewportReset = false;
 
+        var applied = false;
+        var stopwatch = BeginRendererCall();
+        var disconnected = false;
+        JSException? failure = null;
         try
         {
-            if (!await RendererInterop.UpdateAsync(_rendererChartId, spec, resetViewport))
-                FailECharts(failure: null);
+            applied = await RendererInterop.UpdateAsync(_rendererChartId, spec, resetViewport);
         }
         catch (JSDisconnectedException)
         {
-            _echartsReady = false;
+            disconnected = true;
         }
         catch (JSException ex)
         {
-            if (!_disposed)
-                FailECharts(ex);
+            failure = ex;
         }
+        finally
+        {
+            RecordRendererCall("ECharts", stopwatch?.Elapsed, failed: !applied);
+        }
+
+        if (disconnected)
+        {
+            _echartsReady = false;
+            return false;
+        }
+
+        if (failure is not null)
+        {
+            if (!_disposed && generation == _rendererGeneration)
+                FailECharts(failure);
+            return false;
+        }
+
+        return ApplyEChartsUpdateOutcome(applied, generation);
+    }
+
+    private bool ApplyEChartsUpdateOutcome(bool applied, int generation)
+    {
+        if (_disposed || generation != _rendererGeneration)
+            return false;
+
+        if (!applied)
+        {
+            FailECharts(failure: null);
+            return false;
+        }
+
+        return true;
     }
 
     private void FailECharts(Exception? failure)

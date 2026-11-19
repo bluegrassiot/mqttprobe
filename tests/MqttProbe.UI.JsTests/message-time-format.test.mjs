@@ -116,6 +116,22 @@ test('batch items keep request order and only details resolve zone metadata', ()
     assert.equal(result.items[1].offsetLabel, 'UTC+00:00');
 });
 
+test('a full 64-item reply stays under half of the 32 KB inbound frame cap', () => {
+    const base = Date.parse('2026-11-15T17:00:00.000Z');
+    const items = Array.from({ length: 64 }, (_, index) => ({
+        key: `8f1c2d3e-4a5b-4c6d-8e9f-${String(index).padStart(12, '0')}`,
+        epochMs: base + index * 250,
+        detail: index === 0,
+    }));
+
+    const reply = formatInstants(items, { zone: 'local', clockFormat: '12h', timeZone: newYork });
+    const encoded = Buffer.byteLength(JSON.stringify(reply), 'utf8');
+
+    assert.ok(encoded > 64 * 100, 'every item carries its own timestamp text');
+    assert.ok(encoded < 16 * 1024,
+        `a representative 64-item reply is ${encoded} bytes; it must stay under half the 32768-byte inbound cap for these locale strings`);
+});
+
 test('missing options fall back to the device zone and a 24-hour clock', () => {
     withDeviceZone(newYork, () => {
         const result = formatInstants([{ key: 'one', epochMs: Date.parse('2026-10-29T22:41:07.123Z') }]);

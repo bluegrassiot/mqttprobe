@@ -1,4 +1,4 @@
-import { getChartExportSnapshot } from './chart-renderer.js?v=6';
+import { getChartExportSnapshot } from './chart-renderer.js?v=8';
 import { formatChartCsv } from './chart-csv.js';
 import { downloadFile } from './chart-file-delivery.js';
 
@@ -69,6 +69,24 @@ function legendOption(option, ids) {
     return entries.map(entry => ({ ...entry, data: [...ids], selected }));
 }
 
+// Live line and area charts hide point markers for throughput, which leaves a lone point with
+// nothing to draw. An image export re-enables the marker for singleton series only, on its copy.
+function showSingletonMarkers(option, spec) {
+    if (spec?.type === 'bar') {
+        return;
+    }
+
+    const singletonIds = new Set((spec?.series ?? [])
+        .filter(entry => (entry.points ?? []).length === 1)
+        .map(entry => entry.id));
+
+    for (const entry of option.series) {
+        if (singletonIds.has(entry.id)) {
+            entry.showSymbol = true;
+        }
+    }
+}
+
 function imageOption(snapshot, ids) {
     const option = cloneValue(snapshot.option);
     option.animation = false;
@@ -78,6 +96,7 @@ function imageOption(snapshot, ids) {
     option.tooltip = { show: false };
     option.legend = legendOption(option, ids);
     option.series = (option.series ?? []).filter(entry => ids.includes(entry.id));
+    showSingletonMarkers(option, snapshot.spec);
     return option;
 }
 

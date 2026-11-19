@@ -55,6 +55,9 @@ public class ChartCardTimeTests : BunitTestContext
     private static string SummaryText(IRenderedComponent<ChartCardComponent> cut) =>
         cut.Find(".chart-card-status .mud-chip").TextContent.Trim();
 
+    private static long Epoch(DateTime timestamp) =>
+        new DateTimeOffset(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+
     [Test]
     public void AxisAndTooltipFormatters_UseTheSelectedLocalTwelveHourClock()
     {
@@ -660,6 +663,109 @@ public class ChartCardTimeTests : BunitTestContext
             () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EST"),
             TimeSpan.FromSeconds(5));
         _formatter.Requests.Should().ContainSingle("the first valid caption request was not replaced");
+    }
+
+    [Test]
+    public void ZoneCaption_NoTimeWindow_UsesTheCheapPointBounds()
+    {
+        var series = new ChartSeries { DisplayName = "Temp" };
+        var older = _start.UtcDateTime.AddMinutes(-10);
+        var newer = _start.UtcDateTime;
+        _chartData.GetPoints(series.Id).Returns([new ChartDataPoint(newer, 1)]);
+        (DateTime First, DateTime Last)? bounds = (older, newer);
+        _chartData.GetPointBounds(series.Id).Returns(bounds);
+        var epochs = new List<long>();
+        _formatter.ItemFor = epoch =>
+        {
+            epochs.Add(epoch);
+            return ("UTC", "Coordinated Universal Time", "UTC+00:00");
+        };
+
+        var cut = RenderCard(series);
+
+        cut.WaitForAssertion(() => _formatter.Requests.Should().NotBeEmpty(), TimeSpan.FromSeconds(5));
+        epochs.Min().Should().Be(Epoch(older), "the caption starts at the buffered first point");
+        epochs.Max().Should().Be(Epoch(newer), "the caption ends at the buffered last point");
+    }
+
+    [Test]
+    public void ZoneCaption_NoTimeWindow_SpansReversedEndpointsAcrossSeries()
+    {
+        var first = new ChartSeries { DisplayName = "First" };
+        var second = new ChartSeries { DisplayName = "Second" };
+        var t0 = _start.UtcDateTime.AddMinutes(-30);
+        var t1 = _start.UtcDateTime.AddMinutes(-20);
+        var t2 = _start.UtcDateTime.AddMinutes(-10);
+        var t3 = _start.UtcDateTime;
+        _chartData.GetPoints(Arg.Any<Guid>()).Returns([]);
+        (DateTime First, DateTime Last)? firstBounds = (t2, t1);
+        (DateTime First, DateTime Last)? secondBounds = (t3, t0);
+        _chartData.GetPointBounds(first.Id).Returns(firstBounds);
+        _chartData.GetPointBounds(second.Id).Returns(secondBounds);
+        var epochs = new List<long>();
+        _formatter.ItemFor = epoch =>
+        {
+            epochs.Add(epoch);
+            return ("UTC", "Coordinated Universal Time", "UTC+00:00");
+        };
+
+        var cut = RenderCard(first, second);
+
+        cut.WaitForAssertion(() => _formatter.Requests.Should().NotBeEmpty(), TimeSpan.FromSeconds(5));
+        epochs.Min().Should().Be(Epoch(t0), "a reversed series still contributes its low endpoint");
+        epochs.Max().Should().Be(Epoch(t3), "the caption spans every configured series");
+    }
+
+    [Test]
+    public void ZoneCaption_NoTimeWindow_UnavailableBoundsFallBackToTheBufferedPoints()
+    {
+        var series = new ChartSeries { DisplayName = "Temp" };
+        var buffered = _start.UtcDateTime.AddMinutes(-5);
+        _chartData.GetPoints(series.Id).Returns([new ChartDataPoint(buffered, 1)]);
+        _chartData.GetPointBounds(series.Id).Returns(((DateTime First, DateTime Last)?)null);
+        var epochs = new List<long>();
+        _formatter.ItemFor = epoch =>
+        {
+            epochs.Add(epoch);
+            return ("UTC", "Coordinated Universal Time", "UTC+00:00");
+        };
+
+        var cut = RenderCard(series);
+
+        cut.WaitForAssertion(() => _formatter.Requests.Should().NotBeEmpty(), TimeSpan.FromSeconds(5));
+        epochs.Should().OnlyContain(epoch => epoch == Epoch(buffered),
+            "a bound that is not reliably available falls back to the existing buffered points");
+    }
+
+    [Test]
+    public void ZoneCaption_ConfiguredTimeWindow_KeepsTheFilteredPointsPath()
+    {
+        var series = new ChartSeries { DisplayName = "Temp" };
+        var now = DateTime.UtcNow;
+        var inside = now.AddMinutes(-1);
+        var outside = now.AddMinutes(-10);
+        _chartData.GetPoints(series.Id).Returns([
+            new ChartDataPoint(outside, 1),
+            new ChartDataPoint(inside, 2)
+        ]);
+        (DateTime First, DateTime Last)? wideBounds = (now.AddDays(-1), now);
+        _chartData.GetPointBounds(series.Id).Returns(wideBounds);
+        var epochs = new List<long>();
+        _formatter.ItemFor = epoch =>
+        {
+            epochs.Add(epoch);
+            return ("UTC", "Coordinated Universal Time", "UTC+00:00");
+        };
+        _configuration = new ChartConfiguration { Name = "Chart", TimeWindowMinutes = 5, Series = [series] };
+
+        var cut = Render<ChartCardComponent>(parameters => parameters
+            .Add(c => c.Configuration, _configuration)
+            .Add(c => c.Clock, _clock));
+
+        cut.WaitForAssertion(() => _formatter.Requests.Should().NotBeEmpty(), TimeSpan.FromSeconds(5));
+        _chartData.DidNotReceive().GetPointBounds(Arg.Any<Guid>());
+        epochs.Should().OnlyContain(epoch => epoch == Epoch(inside),
+            "a configured window keeps the existing inclusive cutoff and source order");
     }
 
     [Test]

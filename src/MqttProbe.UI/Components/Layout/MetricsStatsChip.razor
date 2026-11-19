@@ -147,7 +147,7 @@
                                 <div class="metrics-subsection">
                                     <MudText Typo="Typo.caption" Class="metrics-subsection-title">@calls.Renderer</MudText>
                                     <div class="metrics-row"><span>Completed update calls</span><span class="metrics-value">@Fmt(calls.CompletedCalls)</span></div>
-                                    <div class="metrics-row"><span>Failed calls</span><span class="metrics-value @(calls.FailedCalls > 0 ? "metrics-error" : "")">@Fmt(calls.FailedCalls)</span></div>
+                                    <div class="metrics-row"><span>Failures surfaced</span><span class="metrics-value @(calls.FailedCalls > 0 ? "metrics-error" : "")">@Fmt(calls.FailedCalls)</span></div>
                                     <div class="metrics-row"><span>Call time (avg / max)</span><span class="metrics-value">@FmtCallTime(calls)</span></div>
                                     <div class="metrics-row"><span>Last completed call</span><span class="metrics-value">@FmtLastCall(calls)</span></div>
                                 </div>
@@ -155,9 +155,10 @@
 
                             <MudDivider Class="my-2" />
 
-                            <MudText Typo="Typo.caption" Class="metrics-note">Average and maximum cover the last 64 completed update calls, including failures.</MudText>
-                            <MudText Typo="Typo.caption" Class="metrics-note">Call time measures the wait for the renderer API to return, not paint or end-to-end latency.</MudText>
-                            <MudText Typo="Typo.caption" Class="metrics-note">Counts are totals for this session. Failed calls are included in completed calls.</MudText>
+                            <MudText Typo="Typo.caption" Class="metrics-note">Completed calls are renderer API or wrapper calls that finished, whether they returned or threw. They do not confirm the chart redrew.</MudText>
+                            <MudText Typo="Typo.caption" Class="metrics-note">Call time is the wait for that call to finish. Apex also builds and serializes the series; neither renderer includes paint or end-to-end latency.</MudText>
+                            <MudText Typo="Typo.caption" Class="metrics-note">Failures are only the ones the renderer surfaced. A call the Apex wrapper skips, or a disconnect it absorbs, still counts as completed.</MudText>
+                            <MudText Typo="Typo.caption" Class="metrics-note">Averages and maximums cover the last 64 completed calls. Counts are session totals and include failures.</MudText>
                         </div>
                     </MudExpansionPanel>
                 </MudExpansionPanels>

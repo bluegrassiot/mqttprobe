@@ -36,8 +36,7 @@ public class ChartDataService(
     ITopicExcludeService? topicExcludeService = null)
     : IChartDataService
 {
-    private readonly ConcurrentDictionary<Guid, ConcurrentQueue<ChartDataPoint>> _buffers = new();
-    private readonly ConcurrentDictionary<Guid, DateTime> _lastPointTimestamps = new();
+    private readonly ConcurrentDictionary<Guid, SeriesState> _seriesStates = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Lock _stateLock = new();
     private ImmutableDictionary<Guid, SeriesIdentity> _sources = ImmutableDictionary<Guid, SeriesIdentity>.Empty;
@@ -59,8 +58,7 @@ public class ChartDataService(
 
             _connectionId = connectionId;
             _epoch++;
-            _buffers.Clear();
-            _lastPointTimestamps.Clear();
+            _seriesStates.Clear();
             _sources = CaptureSources(connectionId);
             _sourcesInitialized = true;
         }
@@ -71,29 +69,26 @@ public class ChartDataService(
         lock (_stateLock)
         {
             _epoch++;
-            _buffers.Clear();
-            _lastPointTimestamps.Clear();
+            _seriesStates.Clear();
         }
 
         OnDataUpdated?.Invoke();
     }
 
     public IReadOnlyList<ChartDataPoint> GetPoints(Guid seriesId) =>
-        _buffers.TryGetValue(seriesId, out var q) ? [.. q] : [];
+        _seriesStates.TryGetValue(seriesId, out var state) ? [.. state.Buffer] : [];
 
     public DateTime? GetLastPointTimestamp(Guid seriesId) =>
-        _lastPointTimestamps.TryGetValue(seriesId, out var timestamp) ? timestamp : null;
+        _seriesStates.TryGetValue(seriesId, out var state) ? state.LastTimestamp : null;
 
     public (DateTime First, DateTime Last)? GetPointBounds(Guid seriesId)
     {
         lock (_stateLock)
         {
-            if (!_buffers.TryGetValue(seriesId, out var buffer) || !buffer.TryPeek(out var first))
+            if (!_seriesStates.TryGetValue(seriesId, out var state) || !state.Buffer.TryPeek(out var first))
                 return null;
 
-            return _lastPointTimestamps.TryGetValue(seriesId, out var last)
-                ? (first.Timestamp, last)
-                : null;
+            return state.LastTimestamp is { } last ? (first.Timestamp, last) : null;
         }
     }
 
@@ -252,13 +247,8 @@ public class ChartDataService(
 
                 lock (_stateLock)
                 {
-                    if (!_buffers.TryRemove(series.Id, out _))
-                        continue;
-
-                    _lastPointTimestamps.TryRemove(series.Id, out _);
+                    changed |= _seriesStates.TryRemove(series.Id, out _);
                 }
-
-                changed = true;
             }
         }
 
@@ -324,16 +314,13 @@ public class ChartDataService(
                     && string.Equals(existing.JsonPath, series.JsonPath, StringComparison.Ordinal))
                 {
                     builder[series.Id] = existing with { MaxPoints = config.MaxPoints };
-                    if (_buffers.TryGetValue(series.Id, out var buffer))
-                        TrimBuffer(buffer, config.MaxPoints);
+                    if (_seriesStates.TryGetValue(series.Id, out var state))
+                        state.TrimTo(config.MaxPoints);
                     continue;
                 }
 
                 if (existing is not null)
-                {
-                    _buffers.TryRemove(series.Id, out _);
-                    _lastPointTimestamps.TryRemove(series.Id, out _);
-                }
+                    _seriesStates.TryRemove(series.Id, out _);
 
                 builder[series.Id] = new SeriesIdentity(new object(), series.Topic, series.JsonPath, config.MaxPoints);
             }
@@ -342,10 +329,7 @@ public class ChartDataService(
         foreach (var (seriesId, _) in _sources)
         {
             if (!builder.ContainsKey(seriesId))
-            {
-                _buffers.TryRemove(seriesId, out _);
-                _lastPointTimestamps.TryRemove(seriesId, out _);
-            }
+                _seriesStates.TryRemove(seriesId, out _);
         }
 
         return builder.ToImmutable();
@@ -422,15 +406,6 @@ public class ChartDataService(
         return updated;
     }
 
-    private static void TrimBuffer(ConcurrentQueue<ChartDataPoint> buffer, int maxPoints)
-    {
-        while (buffer.Count > maxPoints)
-        {
-            if (!buffer.TryDequeue(out _))
-                break;
-        }
-    }
-
     private bool TryEnqueue(
         HandlerState state,
         Guid seriesId,
@@ -458,12 +433,42 @@ public class ChartDataService(
                 return false;
             }
 
-            var buffer = _buffers.GetOrAdd(seriesId, _ => new ConcurrentQueue<ChartDataPoint>());
-
-            buffer.Enqueue(point);
-            TrimBuffer(buffer, current.MaxPoints);
-            _lastPointTimestamps[seriesId] = point.Timestamp;
+            _seriesStates.GetOrAdd(seriesId, static _ => new SeriesState()).Append(point, current.MaxPoints);
             return true;
+        }
+    }
+
+    private sealed class SeriesState
+    {
+        private const long NoTicks = 0;
+        // Ticks + 1, so zero means no point yet: one word the lock-free receipt read cannot tear.
+        private long _lastTicks;
+
+        public ConcurrentQueue<ChartDataPoint> Buffer { get; } = new();
+
+        public DateTime? LastTimestamp
+        {
+            get
+            {
+                var ticks = Volatile.Read(ref _lastTicks);
+                return ticks == NoTicks ? null : new DateTime(ticks - 1, DateTimeKind.Utc);
+            }
+        }
+
+        public void Append(ChartDataPoint point, int maxPoints)
+        {
+            Buffer.Enqueue(point);
+            TrimTo(maxPoints);
+            Volatile.Write(ref _lastTicks, point.Timestamp.Ticks + 1);
+        }
+
+        public void TrimTo(int maxPoints)
+        {
+            while (Buffer.Count > maxPoints)
+            {
+                if (!Buffer.TryDequeue(out _))
+                    break;
+            }
         }
     }
 

@@ -102,6 +102,12 @@ internal sealed class SlowUpdateModule : IJSObjectReference
         }
     }
 
+    private void WakeWaitersLocked()
+    {
+        _startWaiter?.TrySetResult();
+        _startWaiter = null;
+    }
+
     internal void ReleaseNextUpdate()
     {
         TaskCompletionSource? gate;
@@ -135,7 +141,11 @@ internal sealed class SlowUpdateModule : IJSObjectReference
         {
             case "createChart":
                 lock (_sync)
+                {
                     _creates.Add((ChartRendererSpec)args![3]!);
+                    WakeWaitersLocked();
+                }
+
                 return (TValue)(object)true;
             case "disposeChart":
                 return (TValue)(object)true;
@@ -162,8 +172,7 @@ internal sealed class SlowUpdateModule : IJSObjectReference
             _resets.Add(resetViewport);
             _inFlight++;
             _maxInFlight = Math.Max(_maxInFlight, _inFlight);
-            _startWaiter?.TrySetResult();
-            _startWaiter = null;
+            WakeWaitersLocked();
             failure = NextUpdateFailure;
             NextUpdateFailure = null;
             if (HoldUpdates)

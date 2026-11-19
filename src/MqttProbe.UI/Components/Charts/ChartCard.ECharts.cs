@@ -170,35 +170,38 @@ public partial class ChartCard
         _pendingOptionsUpdate = false;
         _pendingViewportReset = false;
 
-        bool applied;
+        var applied = false;
         var stopwatch = BeginRendererCall();
-        var elapsed = TimeSpan.Zero;
-        var failed = true;
+        var disconnected = false;
+        JSException? failure = null;
         try
         {
             applied = await RendererInterop.UpdateAsync(_rendererChartId, spec, resetViewport);
-            if (stopwatch is not null) elapsed = stopwatch.Elapsed;
-            failed = !applied;
         }
         catch (JSDisconnectedException)
         {
-            if (stopwatch is not null) elapsed = stopwatch.Elapsed;
-            _echartsReady = false;
-            return false;
+            disconnected = true;
         }
         catch (JSException ex)
         {
-            if (stopwatch is not null) elapsed = stopwatch.Elapsed;
-            if (!_disposed && generation == _rendererGeneration)
-                FailECharts(ex);
-            return false;
+            failure = ex;
         }
         finally
         {
-            // An unexpected throw skips the captures above, so the elapsed time is taken here instead.
-            if (elapsed == TimeSpan.Zero && stopwatch is { } watch)
-                elapsed = watch.Elapsed;
-            RecordRendererCall("ECharts", elapsed, failed);
+            RecordRendererCall("ECharts", stopwatch?.Elapsed, failed: !applied);
+        }
+
+        if (disconnected)
+        {
+            _echartsReady = false;
+            return false;
+        }
+
+        if (failure is not null)
+        {
+            if (!_disposed && generation == _rendererGeneration)
+                FailECharts(failure);
+            return false;
         }
 
         return ApplyEChartsUpdateOutcome(applied, generation);

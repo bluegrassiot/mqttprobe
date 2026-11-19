@@ -91,12 +91,13 @@ public class MetricsStatsChipRendererCallsTests : BunitTestContext
             var titles = provider.FindAll(".mud-expand-panel-text").Select(e => e.TextContent.Trim()).ToList();
             titles.Should().Equal("Processing", "Resources", "System");
             provider.Markup.Should().NotContain("Completed update calls");
+            provider.Markup.Should().NotContain("Failures surfaced");
             provider.Markup.Should().NotContain("Call time (avg / max)");
         });
     }
 
     [Test]
-    public void ChartsPanel_ShowsBothRenderers_WithCountsFailuresAndCallTimes()
+    public void ChartsPanel_ShowsBothRenderers_WithCallCountsSurfacedFailuresAndCallTimes()
     {
         _mockMetrics.GetSnapshot().Returns(CreateSnapshot(
             new ChartRendererCallMetricsSnapshot("Apex", CompletedCalls: 120, FailedCalls: 3,
@@ -111,7 +112,7 @@ public class MetricsStatsChipRendererCallsTests : BunitTestContext
 
             var apex = FindRenderer(charts, "Apex");
             RowValue(apex, "Completed update calls").Should().Be("120");
-            RowValue(apex, "Failed calls").Should().Be("3");
+            RowValue(apex, "Failures surfaced").Should().Be("3");
             RowValue(apex, "Call time (avg / max)").Should().Be(
                 $"{2.25.ToString("N2", CultureInfo.CurrentCulture)} / {12.5.ToString("N1", CultureInfo.CurrentCulture)} ms");
             RowValue(apex, "Last completed call").Should().Be("4s ago");
@@ -119,13 +120,15 @@ public class MetricsStatsChipRendererCallsTests : BunitTestContext
 
             var echarts = FindRenderer(charts, "ECharts");
             RowValue(echarts, "Completed update calls").Should().Be("60");
-            RowValue(echarts, "Failed calls").Should().Be("1");
+            RowValue(echarts, "Failures surfaced").Should().Be("1");
             RowValue(echarts, "Last completed call").Should().Be("1m 15s ago");
             echarts.QuerySelectorAll(".metrics-error").Should().NotBeEmpty();
 
-            charts.TextContent.Should().Contain("Average and maximum cover the last 64 completed update calls, including failures.");
-            charts.TextContent.Should().Contain("Call time measures the wait for the renderer API to return, not paint or end-to-end latency.");
-            charts.TextContent.Should().Contain("Counts are totals for this session. Failed calls are included in completed calls.");
+            charts.TextContent.Should().Contain("Completed calls are renderer API or wrapper calls that finished, whether they returned or threw. They do not confirm the chart redrew.");
+            charts.TextContent.Should().Contain("Call time is the wait for that call to finish. Apex also builds and serializes the series; neither renderer includes paint or end-to-end latency.");
+            charts.TextContent.Should().Contain("Failures are only the ones the renderer surfaced. A call the Apex wrapper skips, or a disconnect it absorbs, still counts as completed.");
+            charts.TextContent.Should().Contain("Averages and maximums cover the last 64 completed calls. Counts are session totals and include failures.");
+            charts.TextContent.Should().NotContain("Failed calls");
         });
     }
 
@@ -140,12 +143,13 @@ public class MetricsStatsChipRendererCallsTests : BunitTestContext
         provider.WaitForAssertion(() =>
         {
             var charts = FindPanel(provider, "Charts");
-            charts.TextContent.Should().Contain("ECharts");
-            charts.TextContent.Should().NotContain("Apex");
+            charts.QuerySelectorAll(".metrics-subsection-title")
+                .Select(title => title.TextContent.Trim())
+                .Should().Equal("ECharts");
 
             var echarts = FindRenderer(charts, "ECharts");
             RowValue(echarts, "Completed update calls").Should().Be("10");
-            RowValue(echarts, "Failed calls").Should().Be("0");
+            RowValue(echarts, "Failures surfaced").Should().Be("0");
             RowValue(echarts, "Last completed call").Should().Be("12s ago");
             echarts.QuerySelectorAll(".metrics-error").Should().BeEmpty();
         });

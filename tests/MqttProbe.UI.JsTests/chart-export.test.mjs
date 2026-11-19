@@ -210,6 +210,13 @@ function firstAxisFill(svg) {
     return entries.find(([, , content]) => /^(\d+|[\d:.]+ (AM|PM))$/.test(content))?.[1] ?? null;
 }
 
+// A point marker is a filled path placed by a transform; a line or area body has no transform.
+function markerPath(svg, color) {
+    const paths = [...svg.matchAll(/<path[^>]*>/g)].map(match => match[0]);
+    return paths.find(path =>
+        path.includes(`fill="${color}"`) && path.includes('transform="matrix(')) ?? null;
+}
+
 function series(id, name, color, points) {
     return { id, name, color, points };
 }
@@ -613,6 +620,152 @@ test('image exports paint the captured theme surface and keep legend and axis te
             'axis label contrast against the export surface is at least 4.5');
         assert.doesNotMatch(svg, /fill="#ccc(?:ccc)?"/i, 'no legend text falls back to inactive gray');
         live.state.instance.dispose();
+    }
+});
+
+test('image exports enable the point marker only for singleton series on the export copy', async () => {
+    resetStubs();
+    const chartModuleUrl = rendererUrl();
+    const renderer = await import(chartModuleUrl);
+    const exporter = await loadExport(chartModuleUrl);
+    const liveEcharts = createRendererEcharts();
+    await createChart(renderer, liveEcharts, 'chart-1', spec({
+        series: [
+            series('serie-a', 'Temp', '#F97316', [[1767225600000, 100]]),
+            series('serie-b', 'Flow', '#A78BFA', [[1767225600000, 50], [1767225660000, 150]]),
+        ],
+    }));
+    const { id } = exporter.captureSnapshot('chart-1');
+
+    await withFakeDocument(async () => {
+        await exporter.exportSnapshot(id, ['serie-a', 'serie-b'], 'png', 'chart.png');
+        await exporter.exportSnapshot(id, ['serie-a', 'serie-b'], 'svg', 'chart.svg');
+    });
+
+    const instances = globalThis.__chartExportEcharts.instances;
+    assert.equal(instances.length, 2);
+    for (const instance of instances) {
+        const [option] = instance.applied;
+        const singleton = option.series.find(entry => entry.id === 'serie-a');
+        const multiPoint = option.series.find(entry => entry.id === 'serie-b');
+        assert.equal(singleton.showSymbol, true, 'a lone point must draw a dot in the exported image');
+        assert.equal(singleton.symbol, 'circle');
+        assert.equal(singleton.symbolSize, 5, 'the export marker keeps the live size');
+        assert.equal(multiPoint.showSymbol, false, 'a multi-point series keeps markers off in the export');
+    }
+
+    const liveSeries = liveEcharts.charts[0].option.series;
+    assert.deepEqual(liveSeries.map(entry => entry.showSymbol), [false, false],
+        'the live chart never gains markers from an export');
+});
+
+test('area singleton exports keep their dot while bar exports stay unchanged', async () => {
+    resetStubs();
+    const chartModuleUrl = rendererUrl();
+    const renderer = await import(chartModuleUrl);
+    const exporter = await loadExport(chartModuleUrl);
+    await createChart(renderer, createRendererEcharts(), 'chart-area', spec({
+        type: 'area',
+        series: [series('only', 'Temp', '#F97316', [[1767225600000, 100]])],
+    }));
+    await createChart(renderer, createRendererEcharts(), 'chart-bar', spec({
+        type: 'bar',
+        series: [series('only', 'Temp', '#F97316', [[1767225600000, 100]])],
+    }));
+    const area = exporter.captureSnapshot('chart-area');
+    const bar = exporter.captureSnapshot('chart-bar');
+
+    await withFakeDocument(async () => {
+        await exporter.exportSnapshot(area.id, ['only'], 'svg', 'area.svg');
+        await exporter.exportSnapshot(bar.id, ['only'], 'svg', 'bar.svg');
+    });
+
+    const [areaInstance, barInstance] = globalThis.__chartExportEcharts.instances;
+    assert.equal(areaInstance.applied[0].series[0].showSymbol, true,
+        'a single area point also needs its marker in the image');
+    assert.ok(areaInstance.applied[0].series[0].areaStyle, 'the area fill is still exported');
+    assert.equal(Object.hasOwn(barInstance.applied[0].series[0], 'showSymbol'), false,
+        'a bar draws itself and keeps the renderer option untouched');
+});
+
+test('CSV export and the captured spec never carry the export-only marker option', async () => {
+    resetStubs();
+    const chartModuleUrl = rendererUrl();
+    const renderer = await import(chartModuleUrl);
+    const exporter = await loadExport(chartModuleUrl);
+    const points = [[1767225600000, 100]];
+    await createChart(renderer, createRendererEcharts(), 'chart-1', spec({
+        series: [series('serie-a', 'Temp', '#F97316', points)],
+    }));
+    const { id } = exporter.captureSnapshot('chart-1');
+
+    await exporter.exportSnapshot(id, ['serie-a'], 'csv', 'chart.csv');
+
+    const [call] = globalThis.__chartExportCsv;
+    assert.deepEqual(call.snapshot.series,
+        [series('serie-a', 'Temp', '#F97316', points)],
+        'the CSV snapshot keeps exactly the captured spec and gains no marker option');
+    assert.deepEqual(call.selectedSeriesIds, ['serie-a']);
+    assert.equal(globalThis.__chartExportEcharts.instances.length, 0,
+        'a CSV export never builds an image option');
+    assert.equal(globalThis.__chartExportDeliveries[0].content, '\uFEFFstub-csv');
+});
+
+test('real bundle: a singleton line and area export paints the point marker', async () => {
+    for (const type of ['line', 'area']) {
+        resetStubs();
+        const chartModuleUrl = rendererUrl();
+        const renderer = await import(chartModuleUrl);
+        const exporter = await loadExport(chartModuleUrl, realEchartsUrl(), `singleton-${type}`);
+        const live = await createLiveRealChart();
+        await createChart(renderer, live.echarts, 'chart-1', spec({
+            type,
+            series: [series('only', 'Temp', '#F97316', [[1767225600000, 100]])],
+        }));
+        const { id } = exporter.captureSnapshot('chart-1');
+
+        await exporter.exportSnapshot(id, ['only'], 'svg', 'chart.svg');
+
+        const svg = globalThis.__chartExportDeliveries[0].content;
+        assert.equal(globalThis.__chartExportReal.applied[0].series[0].showSymbol, true,
+            `${type} export opts its only point into a marker`);
+        assert.ok(markerPath(svg, '#F97316'),
+            `${type} export draws a visible dot for its only point`);
+        assert.equal(live.state.instance.getOption().series[0].showSymbol, false,
+            'the live chart keeps its markers off across the export');
+        live.state.instance.dispose();
+    }
+});
+
+test('real bundle: dense 61 and 500 point exports keep markers off and still draw the series', async () => {
+    const base = 1767225600000;
+    const dense = count =>
+        Array.from({ length: count }, (_, index) => [base + index * 1000, 10 + index]);
+
+    for (const type of ['line', 'area']) {
+        for (const count of [61, 500]) {
+            resetStubs();
+            const chartModuleUrl = rendererUrl();
+            const renderer = await import(chartModuleUrl);
+            const exporter = await loadExport(
+                chartModuleUrl, realEchartsUrl(), `dense-${type}-${count}`);
+            const live = await createLiveRealChart();
+            await createChart(renderer, live.echarts, 'chart-1', spec({
+                type,
+                series: [series('only', 'Temp', '#F97316', dense(count))],
+            }));
+            const { id } = exporter.captureSnapshot('chart-1');
+
+            await exporter.exportSnapshot(id, ['only'], 'svg', 'chart.svg');
+
+            const svg = globalThis.__chartExportDeliveries[0].content;
+            assert.equal(globalThis.__chartExportReal.applied[0].series[0].showSymbol, false,
+                `${count} point ${type} export must not re-enable markers`);
+            assert.equal(markerPath(svg, '#F97316'), null,
+                `${count} point ${type} export draws no point markers`);
+            assert.match(svg, /stroke="#F97316"/, 'the series body is still exported');
+            live.state.instance.dispose();
+        }
     }
 });
 

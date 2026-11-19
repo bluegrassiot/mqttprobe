@@ -271,6 +271,43 @@ test('dense 61 and 500 point series keep every point and the series colour', asy
     }
 });
 
+test('live line and area markers stay off for singleton and dense series on create and update', async () => {
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    const base = 1767225600000;
+    const dense = count =>
+        Array.from({ length: count }, (_, index) => [base + index * 1000, 10 + index]);
+    const chartSpec = type => spec({
+        type,
+        series: [
+            series('one', 'Temp', '#F97316', [[base, 10]]),
+            series('sixty-one', 'Pressure', '#A78BFA', dense(61)),
+            series('five-hundred', 'Flow', '#22C55E', dense(500)),
+        ],
+    });
+    try {
+        for (const type of ['line', 'area']) {
+            const id = uniqueId();
+            await createChart(createElement(), id, createDotNetRef(), chartSpec(type), { echarts });
+            const chart = echarts.charts.at(-1);
+
+            const created = chart.options[0].option;
+            assert.deepEqual(created.series.map(entry => entry.showSymbol), [false, false, false],
+                `a ${type} chart draws no point markers when it is created`);
+            assert.deepEqual(created.series.map(entry => entry.symbolSize), [5, 5, 5],
+                'the marker size stays configured for the image export');
+
+            updateChart(id, chartSpec(type));
+
+            const updated = chart.options[1].option;
+            assert.deepEqual(updated.series.map(entry => entry.showSymbol), [false, false, false],
+                `a ${type} update keeps point markers off, including for a singleton series`);
+        }
+    } finally {
+        layout.restore();
+    }
+});
+
 test('duplicate display names keep separate legend entries and visible labels', async () => {
     const echarts = createFakeEcharts();
     const layout = installResizeObserver();
@@ -1481,6 +1518,44 @@ test('real bundle: duplicate labels toggle independently and a rename keeps the 
         assert.equal(option.legend[0].formatter('serie-b'), 'Temp');
     } finally {
         disposeChart(id);
+    }
+});
+
+test('real bundle: live markers stay off after create and update for singleton and dense series', async () => {
+    const base = 1767225600000;
+    const dense = count =>
+        Array.from({ length: count }, (_, index) => [base + index * 1000, 10 + index]);
+    const { echarts, state } = await createRealEcharts();
+    const id = uniqueId();
+    try {
+        await createChart({ isConnected: true }, id, createDotNetRef(),
+            singleSeriesSpec('line', dense(61)), { echarts });
+        const chart = state.instance;
+        assert.equal(chart.getOption().series[0].showSymbol, false,
+            'a dense line is created without markers');
+
+        updateChart(id, singleSeriesSpec('line', [[base, 10]]));
+        assert.equal(chart.getOption().series[0].showSymbol, false,
+            'a singleton update must not start drawing markers live');
+        assert.equal(chart.renderToSVGString().includes('fill="#F97316"'), false,
+            'the live singleton line still paints no point marker');
+
+        updateChart(id, singleSeriesSpec('line', dense(500)));
+        assert.equal(chart.getOption().series[0].showSymbol, false,
+            'a dense update keeps markers off');
+    } finally {
+        disposeChart(id);
+    }
+
+    const area = await createRealEcharts();
+    const areaId = uniqueId();
+    try {
+        await createChart({ isConnected: true }, areaId, createDotNetRef(),
+            singleSeriesSpec('area', [[base, 10]]), { echarts: area.echarts });
+        assert.equal(area.state.instance.getOption().series[0].showSymbol, false,
+            'a singleton area is created without markers');
+    } finally {
+        disposeChart(areaId);
     }
 });
 

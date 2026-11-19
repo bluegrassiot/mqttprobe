@@ -110,7 +110,7 @@ public class PayloadBrowserTimeBatchTests : BunitTestContext
     }
 
     [Test]
-    public void SnapshotArrivingDuringABatch_KeepsEarlierTimestampsAndFormatsTheNewest()
+    public async Task SnapshotArrivingDuringABatch_KeepsEarlierTimestampsAndFormatsTheNewest()
     {
         Publish(200);
         var browser = RenderBrowser();
@@ -121,9 +121,15 @@ public class PayloadBrowserTimeBatchTests : BunitTestContext
         var gate = _runtime.Module.GateNextFormatCall();
         var queries = _queries;
         Publish(3);
-        browser.WaitForAssertion(() => _queries.Should().BeGreaterThan(queries), TimeSpan.FromSeconds(10));
-
-        gate.SetResult();
+        try
+        {
+            browser.WaitForAssertion(() => _queries.Should().BeGreaterThan(queries), TimeSpan.FromSeconds(10));
+            await gate.Entered.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            gate.Release();
+        }
 
         browser.WaitForAssertion(() =>
         {
@@ -136,7 +142,7 @@ public class PayloadBrowserTimeBatchTests : BunitTestContext
     }
 
     [Test]
-    public void ClickingARowDuringABatch_OpensTheMessageDetails()
+    public async Task ClickingARowDuringABatch_OpensTheMessageDetails()
     {
         Publish(200);
         var browser = RenderBrowser();
@@ -147,15 +153,21 @@ public class PayloadBrowserTimeBatchTests : BunitTestContext
         var gate = _runtime.Module.GateNextFormatCall();
         var queries = _queries;
         Publish(3);
-        browser.WaitForAssertion(() => _queries.Should().BeGreaterThan(queries), TimeSpan.FromSeconds(10));
+        try
+        {
+            browser.WaitForAssertion(() => _queries.Should().BeGreaterThan(queries), TimeSpan.FromSeconds(10));
+            await gate.Entered.WaitAsync(TimeSpan.FromSeconds(10));
 
-        browser.WaitForElement(".payload-row").Click();
+            browser.WaitForElement(".payload-row").Click();
 
-        browser.WaitForAssertion(
-            () => browser.FindAll(".pb-received-instant").Should().ContainSingle(),
-            TimeSpan.FromSeconds(5));
-
-        gate.SetResult();
+            browser.WaitForAssertion(
+                () => browser.FindAll(".pb-received-instant").Should().ContainSingle(),
+                TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     private sealed class ScriptedRuntime : IJSRuntime
@@ -176,12 +188,12 @@ public class PayloadBrowserTimeBatchTests : BunitTestContext
     {
         internal List<int> BatchSizes { get; } = [];
         internal int Calls => BatchSizes.Count;
-        private TaskCompletionSource? _gate;
+        private FormatGate? _gate;
 
-        internal TaskCompletionSource GateNextFormatCall()
+        internal FormatGate GateNextFormatCall()
         {
-            var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            _gate = gate;
+            var gate = new FormatGate();
+            Volatile.Write(ref _gate, gate);
             return gate;
         }
 
@@ -197,10 +209,12 @@ public class PayloadBrowserTimeBatchTests : BunitTestContext
         {
             var batch = (IReadOnlyList<DeviceTimeFormatRequest>)args![0]!;
             BatchSizes.Add(batch.Count);
-            var gate = _gate;
-            _gate = null;
+            var gate = Interlocked.Exchange(ref _gate, null);
             if (gate is not null)
-                await gate.Task;
+            {
+                gate.Enter();
+                await gate.Released;
+            }
 
             var result = new DeviceTimeFormatResult(
                 "America/New_York",
@@ -217,5 +231,19 @@ public class PayloadBrowserTimeBatchTests : BunitTestContext
             InvokeAsync<TValue>(identifier, args);
 
         public ValueTask DisposeAsync() => default;
+    }
+
+    private sealed class FormatGate
+    {
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal Task Entered => _entered.Task;
+
+        internal Task Released => _released.Task;
+
+        internal void Enter() => _entered.TrySetResult();
+
+        internal void Release() => _released.TrySetResult();
     }
 }

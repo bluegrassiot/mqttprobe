@@ -1,4 +1,4 @@
-import { getChartExportSnapshot } from './chart-renderer.js?v=6';
+import { getChartExportSnapshot } from './chart-renderer.js?v=8';
 import { formatChartCsv } from './chart-csv.js';
 import { downloadFile } from './chart-file-delivery.js';
 

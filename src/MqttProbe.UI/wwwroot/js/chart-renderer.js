@@ -225,10 +225,9 @@ function buildSeries(spec) {
             return series;
         }
 
-        // A one point line has no segment, so its visible symbol is the only mark on the plot.
         series.symbol = 'circle';
         series.symbolSize = MARKER_SIZE;
-        series.showSymbol = true;
+        series.showSymbol = false;
         series.smooth = true;
         series.lineStyle = { width: 2, color: entry.color };
 
@@ -1198,6 +1197,17 @@ if (perfEnabled()) {
     ensurePerf();
 }
 
+// ECharts sizes the canvas from the container's integer client box, so that is the value a
+// real resize must change.
+function containerSize(element) {
+    const width = element?.clientWidth;
+    const height = element?.clientHeight;
+    return {
+        width: Number.isFinite(width) ? width : 0,
+        height: Number.isFinite(height) ? height : 0,
+    };
+}
+
 export async function createChart(element, chartId, dotNetRef, spec, options = {}, perfToken) {
     const perfStart = perfEntryTime();
     const perfDate = perfEnabled() ? Date.now() : 0;
@@ -1224,6 +1234,8 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
         throw new Error('the chart container is no longer attached');
     }
 
+    const initialSize = containerSize(element);
+
     const previousId = elementCharts.get(element);
     if (previousId !== undefined) {
         release(instances.get(previousId));
@@ -1246,6 +1258,8 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
         spec,
         observer: null,
         disposed: false,
+        resizeWidth: initialSize.width,
+        resizeHeight: initialSize.height,
         pinned: null,
         applyingViewport: false,
         pointer: null,
@@ -1280,10 +1294,23 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
 
     if (typeof ResizeObserver === 'function') {
         instance.observer = new ResizeObserver(() => {
-            if (!instance.disposed) {
-                instance.chart.resize();
-                refreshTooltip(instance);
+            if (instance.disposed) {
+                return;
             }
+
+            const size = containerSize(instance.element);
+            if (size.width <= 0 || size.height <= 0) {
+                return;
+            }
+
+            if (size.width === instance.resizeWidth && size.height === instance.resizeHeight) {
+                return;
+            }
+
+            instance.chart.resize();
+            instance.resizeWidth = size.width;
+            instance.resizeHeight = size.height;
+            refreshTooltip(instance);
         });
         instance.observer.observe(element);
     }

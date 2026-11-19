@@ -83,7 +83,7 @@ export function init(container, theme, options) {
 
 async function loadExport(chartModuleUrl, echartsUrl = fakeEchartsUrl(), cacheToken = '') {
     const source = exportSource
-        .replace('./chart-renderer.js?v=6', chartModuleUrl)
+        .replace('./chart-renderer.js?v=8', chartModuleUrl)
         .replace('./echarts/6.1.0/echarts.esm.min.js', echartsUrl)
         .replace('./chart-csv.js', csvStubUrl())
         .replace('./chart-file-delivery.js', deliveryStubUrl())
@@ -274,10 +274,30 @@ test('the renderer exposes a synchronous export snapshot accessor', async () => 
         'an unavailable chart cannot produce a snapshot');
 });
 
-test('the export module reads the renderer through the versioned module URL', () => {
-    assert.match(exportSource, /from '\.\/chart-renderer\.js\?v=6'/,
+const interopDir = new URL('../../src/MqttProbe.UI/Components/Charts/', import.meta.url);
+
+function interopModulePath(source) {
+    const match = source.match(/"\.\/_content\/MqttProbe\.UI\/js\/(chart-(?:renderer|export)\.js)\?v=(\d+)"/);
+    assert.ok(match, 'each interop declares a versioned chart module URL');
+    return { file: match[1], version: match[2] };
+}
+
+test('the export module reads the renderer through the same versioned module URL as the interop', async () => {
+    assert.match(exportSource, /from '\.\/chart-renderer\.js\?v=8'/,
         'the export module must share the live renderer registry, not a second unversioned module');
     assert.equal(exportSource.match(/chart-renderer\.js/g)?.length, 1);
+
+    const rendererInterop = interopModulePath(
+        await readFile(new URL('ChartRendererInterop.cs', interopDir), 'utf8'));
+    const exportInterop = interopModulePath(
+        await readFile(new URL('ChartExportInterop.cs', interopDir), 'utf8'));
+    const rendererImport = exportSource.match(/from '\.\/(chart-renderer\.js)\?v=(\d+)'/);
+
+    assert.ok(rendererImport);
+    assert.equal(rendererImport[1], rendererInterop.file);
+    assert.equal(rendererImport[2], rendererInterop.version,
+        'the export module and ChartRendererInterop must load the same renderer instance registry');
+    assert.equal(exportInterop.file, 'chart-export.js');
 });
 
 test('capture reports the applied zone, clock format and stable series metadata', async () => {

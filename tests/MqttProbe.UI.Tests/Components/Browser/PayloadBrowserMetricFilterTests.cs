@@ -161,7 +161,7 @@ public sealed class PayloadBrowserMetricFilterTests : BunitTestContext
     }
 
     [Test]
-    public void SeveralMetrics_ClearRemovesTheWholeSetOnce()
+    public async Task SeveralMetrics_ClearRemovesTheWholeSetOnce()
     {
         _selection = new SelectedTopicState(_selection.Token, "metrics:key", 0, "2 metrics")
         {
@@ -177,28 +177,28 @@ public sealed class PayloadBrowserMetricFilterTests : BunitTestContext
         var cut = Render<PayloadBrowser>();
 
         cut.WaitForAssertion(() => cut.FindAll(".pb-metric-filter").Should().ContainSingle());
-        cut.Find(".pb-metric-filter__clear").Click();
+        await cut.InvokeAsync(() => cut.Find(".pb-metric-filter__clear").ClickAsync());
 
-        _mockMsgStore.Received(1).SelectTopics(null);
         cut.WaitForAssertion(() => cut.FindAll(".pb-metric-filter").Should().BeEmpty());
+        _mockMsgStore.Received(1).SelectTopics(null);
     }
 
     [Test]
-    public void ClearMetricFilter_RemovesTheFilterAndAsksCoreToClear()
+    public async Task ClearMetricFilter_RemovesTheFilterAndAsksCoreToClear()
     {
         ReturnMessages();
         EnsureMudProviders();
         var cut = Render<PayloadBrowser>();
         cut.WaitForAssertion(() => cut.FindAll(".pb-metric-filter").Should().ContainSingle());
 
-        cut.Find(".pb-metric-filter__clear").Click();
+        await cut.InvokeAsync(() => cut.Find(".pb-metric-filter__clear").ClickAsync());
 
-        _mockMsgStore.Received(1).SelectTopics(null);
         cut.WaitForAssertion(() =>
         {
             cut.FindAll(".pb-metric-filter").Should().BeEmpty();
             cut.Markup.Should().Contain("Select a topic to see messages");
         });
+        _mockMsgStore.Received(1).SelectTopics(null);
     }
 
     [Test]

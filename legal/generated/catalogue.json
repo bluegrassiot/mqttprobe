@@ -246,9 +246,9 @@
       "applicability": "build"
     },
     {
-      "id": "nuget:meziantou.analyzer@3.0.339",
+      "id": "nuget:meziantou.analyzer@3.0.341",
       "name": "Meziantou.Analyzer",
-      "version": "3.0.339",
+      "version": "3.0.341",
       "license": "MIT",
       "copyright": "",
       "sourceUrl": "https://github.com/meziantou/Meziantou.Analyzer",
@@ -1280,9 +1280,9 @@
       "licenseSourceUrl": "https://aka.ms/deprecateLicenseUrl"
     },
     {
-      "id": "nuget:mudblazor@9.12.0",
+      "id": "nuget:mudblazor@9.13.0",
       "name": "MudBlazor",
-      "version": "9.12.0",
+      "version": "9.13.0",
       "license": "MIT",
       "copyright": "Copyright 2026 MudBlazor",
       "sourceUrl": "https://mudblazor.com/",

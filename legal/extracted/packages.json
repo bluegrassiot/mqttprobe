@@ -156,7 +156,7 @@
     },
     {
       "id": "Meziantou.Analyzer",
-      "version": "3.0.339",
+      "version": "3.0.341",
       "metadata": {
         "license": "MIT",
         "licenseUrl": "https://licenses.nuget.org/MIT",
@@ -2051,7 +2051,7 @@
     },
     {
       "id": "MudBlazor",
-      "version": "9.12.0",
+      "version": "9.13.0",
       "metadata": {
         "license": "MIT",
         "licenseUrl": "https://licenses.nuget.org/MIT",

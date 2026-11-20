@@ -32,3 +32,16 @@ html, body {
 .blazor-error-boundary::after {
     content: "An error has occurred."
 }
+
+/* The desktop shell wraps the router so a platform marker can sit above the app shell.
+   display: contents keeps that wrapper out of the layout chain. */
+.desktop-host {
+    display: contents;
+}
+
+/* WebKitGTK floats its scrollbar over the Topics tree instead of taking a gutter, so the
+   row-end counts and chart buttons sat under the overlay track. Reserve the track plus a
+   gap for the button; only this host carries the marker, and only this tree is padded. */
+.desktop-host--linux .topic-browser-panel .topic-tree-wrap {
+    padding-right: 16px;
+}

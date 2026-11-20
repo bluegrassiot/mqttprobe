@@ -44,18 +44,15 @@ public class ChartRendererCallMetricsTests
     }
 
     [Test]
-    public void RecordChartRendererCall_AccumulatesCountsPerRenderer()
+    public void RecordChartRendererCall_AccumulatesCountsForTheRenderer()
     {
-        _service.RecordChartRendererCall("Apex", TimeSpan.FromMilliseconds(3), failed: false);
-        _service.RecordChartRendererCall("Apex", TimeSpan.FromMilliseconds(5), failed: false);
+        _service.RecordChartRendererCall("ECharts", TimeSpan.FromMilliseconds(3), failed: false);
+        _service.RecordChartRendererCall("ECharts", TimeSpan.FromMilliseconds(5), failed: false);
         _service.RecordChartRendererCall("ECharts", TimeSpan.FromMilliseconds(7), failed: true);
 
         var snapshot = _service.GetSnapshot();
-        snapshot.ChartRendererCalls.Should().HaveCount(2);
-        snapshot.ChartRendererCalls![0].Should().BeEquivalentTo(
-            new ChartRendererCallMetricsSnapshot("Apex", 2, 0, 4, 5, 0));
-        snapshot.ChartRendererCalls[1].Should().BeEquivalentTo(
-            new ChartRendererCallMetricsSnapshot("ECharts", 1, 1, 7, 7, 0),
+        snapshot.ChartRendererCalls.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new ChartRendererCallMetricsSnapshot("ECharts", 3, 1, 5, 7, 0),
             "a failed call still settles, so it counts as completed as well as failed");
     }
 
@@ -75,12 +72,12 @@ public class ChartRendererCallMetricsTests
     [Test]
     public void RecordChartRendererCall_KeepsCountsButAveragesOnlyTheLastWindow()
     {
-        _service.RecordChartRendererCall("Apex", TimeSpan.FromMilliseconds(1000), failed: false);
+        _service.RecordChartRendererCall("ECharts", TimeSpan.FromMilliseconds(1000), failed: false);
         var window = UxMetricsService.ChartRendererCallWindow;
         for (var index = 1; index < window + 1; index++)
-            _service.RecordChartRendererCall("Apex", TimeSpan.FromMilliseconds(2), failed: false);
+            _service.RecordChartRendererCall("ECharts", TimeSpan.FromMilliseconds(2), failed: false);
 
-        var renderer = Renderer("Apex");
+        var renderer = Renderer("ECharts");
         renderer.CompletedCalls.Should().Be(window + 1);
         renderer.AverageCallMilliseconds.Should().Be(2, "the 1000 ms sample falls out of the fixed window");
         renderer.MaximumCallMilliseconds.Should().Be(2);
@@ -90,16 +87,16 @@ public class ChartRendererCallMetricsTests
     public void RecordChartRendererCall_ReportsAgeFromTheInjectedTick()
     {
         _nowMs = 1_000;
-        _service.RecordChartRendererCall("Apex", TimeSpan.FromMilliseconds(4), failed: false);
+        _service.RecordChartRendererCall("ECharts", TimeSpan.FromMilliseconds(4), failed: false);
 
         _nowMs = 6_500;
-        Renderer("Apex").LastCompletedCallAgeSeconds.Should().Be(5.5);
+        Renderer("ECharts").LastCompletedCallAgeSeconds.Should().Be(5.5);
     }
 
     [Test]
     public void RecordChartRendererCall_IgnoresUnknownRendererNames()
     {
-        _service.RecordChartRendererCall("apex", TimeSpan.FromMilliseconds(4), failed: false);
+        _service.RecordChartRendererCall("Apex", TimeSpan.FromMilliseconds(4), failed: false);
         _service.RecordChartRendererCall("", TimeSpan.FromMilliseconds(4), failed: true);
 
         _service.GetSnapshot().ChartRendererCalls.Should().BeNull();

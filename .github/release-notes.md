@@ -40,12 +40,6 @@ sudo apt install libwebkit2gtk-4.1-0
 chmod +x MqttProbe.Desktop && ./MqttProbe.Desktop
 ```
 
-### Charts
-
-Charts now use ECharts only. Your saved chart settings carry over. The Charts export menu still offers CSV, PNG, and SVG. Native save and share are not included.
-
-If you self-host the web app and are upgrading from a build that included ApexCharts, unpack this build into a clean app directory and carry over your `config` directory. Don't extract over the old app: doing so leaves files behind that are no longer shipped. For Docker, recreate the container from the new image and keep your config volume.
-
 ### Windows
 
 Download `MQTTProbe-win-Setup.exe` for a per-user install with auto-updates, or `mqttprobe-windows-{{VERSION}}.zip` if you prefer a portable copy. `MQTTProbe-win-Portable.zip` is the same app packaged by Velopack, which is what the installer is built from, and it does not auto-update. All three are unsigned, so Windows SmartScreen shows a warning the first time: choose More info, then Run anyway.

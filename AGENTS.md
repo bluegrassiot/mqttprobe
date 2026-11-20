@@ -120,6 +120,7 @@ Two traps: a folder named `Integration` under `MqttProbe.Core.Tests` holds in-pr
 - An opt-in manual browser-smoke project exists at `tests/MqttProbe.BrowserSmokeTests/README.md`, deliberately kept out of the solution and CI. Run it only when asked, not as a default gate.
 - Reuse shared fixtures for local app/broker setup. Isolate config and credentials, use dynamic ports, and override inherited settings that could redirect the test environment.
 - For one-off exploratory checks, keep using a temporary harness under the approved temp directory, outside the repo. Never treat that scratch path as a permanent command.
+- Ask before creating a medium or complex throwaway test harness. If the user can verify the behavior manually, offer a short checklist first.
 - Use a fresh browser context per check, with `IgnoreHTTPSErrors = true` for a local CA and no saved auth state unless the test requires it.
 - Bound every wait: action timeout around 15s, navigation timeout 30-45s, and an overall process budget for the run.
 - Launch headed when the check is user-visible, headless otherwise, and report which one ran. Close the browser in `finally`.

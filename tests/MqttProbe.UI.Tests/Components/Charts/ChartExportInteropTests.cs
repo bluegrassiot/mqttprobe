@@ -9,7 +9,7 @@ public class ChartExportInteropTests
     public void ModulePath_IsTheVersionedExportModule()
     {
         ChartExportInterop.ModulePath.Should()
-            .Be("./_content/MqttProbe.UI/js/chart-export.js?v=4");
+            .Be("./_content/MqttProbe.UI/js/chart-export.js?v=5");
     }
 
     [Test]

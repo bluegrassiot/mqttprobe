@@ -6,6 +6,8 @@ const MARKER_SIZE = 5;
 // The axis labels need their own band; a visible legend row sits below it.
 const AXIS_LABEL_BAND = 8;
 const LEGEND_BAND = 30;
+const FONT_LOAD_TIMEOUT_MS = 2500;
+const FALLBACK_FONT_FAMILY = 'monospace';
 const CLOCK_TIME_PATTERN = /^(\d{2}:\d{2}):(\d{2})\.(\d{3})( .*)?$/;
 // Mirrors the host --font-mono profile; canvas text cannot resolve a CSS variable.
 const FONT_FAMILIES = {
@@ -46,6 +48,100 @@ function themeFor(spec) {
 
 function fontFamilyFor(spec) {
     return spec?.fontProfile === 'accessible' ? FONT_FAMILIES.accessible : FONT_FAMILIES.standard;
+}
+
+const fontStates = new Map();
+
+async function loadFontFace(fontFamily) {
+    const fonts = globalThis.document?.fonts;
+    if (!fonts || typeof fonts.load !== 'function') {
+        return true;
+    }
+
+    try {
+        const faces = await fonts.load(`11px ${fontFamily}`);
+        return Array.isArray(faces) && faces.length > 0;
+    } catch {
+        return false;
+    }
+}
+
+function fontStateFor(fontFamily) {
+    let state = fontStates.get(fontFamily);
+    if (!state) {
+        state = { ready: false, late: false, promise: loadFontFace(fontFamily) };
+        fontStates.set(fontFamily, state);
+    }
+
+    return state;
+}
+
+function fontTimeout(ms) {
+    let timer;
+    const promise = new Promise(resolve => {
+        timer = setTimeout(() => resolve(false), ms);
+    });
+
+    return { promise, cancel: () => clearTimeout(timer) };
+}
+
+// zrender caches text widths per font string, so a fallback measurement must never use the selected family.
+async function fontReadyWithin(fontFamily, timeoutMs = FONT_LOAD_TIMEOUT_MS) {
+    const state = fontStateFor(fontFamily);
+    if (state.ready) {
+        return true;
+    }
+
+    const timeout = fontTimeout(timeoutMs);
+    try {
+        const loaded = await Promise.race([state.promise, timeout.promise]);
+        if (loaded) {
+            state.ready = true;
+            return true;
+        }
+    } finally {
+        timeout.cancel();
+    }
+
+    if (!state.late) {
+        state.late = true;
+        state.promise.then(late => {
+            if (!late || state.ready) {
+                return;
+            }
+
+            state.ready = true;
+            useLoadedFont(fontFamily);
+        });
+    }
+
+    // The face can settle while the timeout is resolving; prefer it over the fallback.
+    const arrived = await Promise.race([state.promise, Promise.resolve(false)]);
+    if (arrived) {
+        state.ready = true;
+        return true;
+    }
+
+    return false;
+}
+
+function useLoadedFont(fontFamily) {
+    for (const instance of instances.values()) {
+        if (instance.disposed || instance.fontFamily === fontFamily
+            || fontFamilyFor(instance.spec) !== fontFamily) {
+            continue;
+        }
+
+        instance.fontFamily = fontFamily;
+        try {
+            instance.chart.setOption(buildChromeOption(instance.spec, fontFamily), { lazyUpdate: false });
+        } catch {
+            release(instance);
+            continue;
+        }
+
+        refreshTooltip(instance);
+    }
 }
 
 function timePreferences(spec) {
@@ -259,7 +355,7 @@ function buildAxes(spec, theme) {
     };
 }
 
-function buildTooltip(spec, theme) {
+function buildTooltip(spec, theme, fontFamily) {
     return {
         trigger: 'axis',
         triggerOn: 'mousemove',
@@ -270,7 +366,7 @@ function buildTooltip(spec, theme) {
         borderWidth: 1,
         borderRadius: 6,
         padding: [8, 10],
-        textStyle: { color: theme.foreground, fontFamily: fontFamilyFor(spec), fontSize: 12 },
+        textStyle: { color: theme.foreground, fontFamily, fontSize: 12 },
         axisPointer: {
             type: 'cross',
             lineStyle: { color: theme.axisLine, type: 'dashed', width: 1 },
@@ -286,7 +382,7 @@ function buildTooltip(spec, theme) {
     };
 }
 
-function buildInitialOption(spec) {
+function buildInitialOption(spec, fontFamily) {
     const theme = themeFor(spec);
     const showLegend = showsLegend(spec);
 
@@ -294,7 +390,7 @@ function buildInitialOption(spec) {
         animation: false,
         progressive: 0,
         backgroundColor: 'transparent',
-        textStyle: { color: theme.foreground, fontFamily: fontFamilyFor(spec), fontSize: 11 },
+        textStyle: { color: theme.foreground, fontFamily, fontSize: 11 },
         color: (spec?.series ?? []).map(entry => entry.color),
         grid: {
             left: 8,
@@ -312,10 +408,10 @@ function buildInitialOption(spec) {
             left: 'center',
             itemWidth: 12,
             itemHeight: 12,
-            textStyle: { color: theme.foreground, fontFamily: fontFamilyFor(spec), fontSize: 11 },
+            textStyle: { color: theme.foreground, fontFamily, fontSize: 11 },
             formatter: legendFormatter(spec),
         },
-        tooltip: buildTooltip(spec, theme),
+        tooltip: buildTooltip(spec, theme, fontFamily),
         ...buildAxes(spec, theme),
         dataZoom: [{ type: 'inside', xAxisIndex: 0, filterMode: 'none' }],
         series: buildSeries(spec),
@@ -323,17 +419,17 @@ function buildInitialOption(spec) {
 }
 
 // Chrome-only option for theme and time-preference changes; series data is applied separately.
-function buildChromeOption(spec) {
+function buildChromeOption(spec, fontFamily) {
     const theme = themeFor(spec);
     const axes = buildAxes(spec, theme);
 
     return {
-        textStyle: { color: theme.foreground, fontFamily: fontFamilyFor(spec) },
+        textStyle: { color: theme.foreground, fontFamily },
         legend: {
-            textStyle: { color: theme.foreground, fontFamily: fontFamilyFor(spec) },
+            textStyle: { color: theme.foreground, fontFamily },
             formatter: legendFormatter(spec),
         },
-        tooltip: buildTooltip(spec, theme),
+        tooltip: buildTooltip(spec, theme, fontFamily),
         xAxis: axes.xAxis,
         yAxis: axes.yAxis,
     };
@@ -515,10 +611,20 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
         throw new Error('chart container is required');
     }
 
+    const desiredFontFamily = fontFamilyFor(spec);
+    const fontPending = fontReadyWithin(desiredFontFamily, options.fontTimeoutMs);
     const echarts = options.echarts ?? await loadEcharts();
     if (!echarts || typeof echarts.init !== 'function') {
         throw new Error('the ECharts module did not load before the chart was created');
     }
+
+    if (element.isConnected === false) {
+        throw new Error('the chart container is no longer attached');
+    }
+
+    const fontFamily = ((await fontPending) || fontStateFor(desiredFontFamily).ready)
+        ? desiredFontFamily
+        : FALLBACK_FONT_FAMILY;
 
     if (element.isConnected === false) {
         throw new Error('the chart container is no longer attached');
@@ -539,6 +645,7 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
         element,
         chart,
         spec,
+        fontFamily,
         observer: null,
         disposed: false,
         resizeWidth: initialSize.width,
@@ -551,7 +658,7 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
     };
 
     try {
-        chart.setOption(buildInitialOption(spec), { notMerge: true, lazyUpdate: false });
+        chart.setOption(buildInitialOption(spec, fontFamily), { notMerge: true, lazyUpdate: false });
     } catch (error) {
         release(instance);
         throw error;
@@ -619,24 +726,37 @@ export async function createChart(element, chartId, dotNetRef, spec, options = {
     return true;
 }
 
-export function updateChart(chartId, spec, resetViewport = false) {
+export async function updateChart(chartId, spec, resetViewport = false, options = {}) {
     const instance = instances.get(chartId);
     if (!instance || instance.disposed) {
         return false;
     }
 
+    const desiredFontFamily = fontFamilyFor(spec);
+    const fontChanged = desiredFontFamily !== fontFamilyFor(instance.spec);
     const membershipChanged = !sameSeriesIds(instance.spec, spec);
     const typeChanged = instance.spec?.type !== spec?.type;
     const labelsChanged = !sameDisplayLabels(instance.spec, spec);
     const chromeChanged = instance.spec?.dark !== spec?.dark
         || instance.spec?.zone !== spec?.zone
         || instance.spec?.clockFormat !== spec?.clockFormat
-        || instance.spec?.fontProfile !== spec?.fontProfile;
+        || fontChanged;
     const replaceSeries = membershipChanged || typeChanged;
     const tooltipChromeChanged = chromeChanged || typeChanged || labelsChanged || membershipChanged;
 
+    if (fontChanged) {
+        const loaded = await fontReadyWithin(desiredFontFamily, options.fontTimeoutMs);
+        if (instance.disposed || instances.get(chartId) !== instance) {
+            return false;
+        }
+
+        instance.fontFamily = (loaded || fontStateFor(desiredFontFamily).ready)
+            ? desiredFontFamily
+            : FALLBACK_FONT_FAMILY;
+    }
+
     // The axis scale follows the series type, so a type change refreshes the chrome as well.
-    const option = tooltipChromeChanged ? buildChromeOption(spec) : {};
+    const option = tooltipChromeChanged ? buildChromeOption(spec, instance.fontFamily) : {};
     option.series = buildSeries(spec);
     // The date line depends on the current data extent, so every update refreshes that decision.
     option.xAxis = {

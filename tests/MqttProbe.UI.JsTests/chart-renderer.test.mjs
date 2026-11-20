@@ -7,6 +7,12 @@ const source = await readFile(modulePath, 'utf8');
 const renderer = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 const { createChart, updateChart, disposeChart } = renderer;
 
+let rendererGeneration = 0;
+async function freshRenderer() {
+    const token = ++rendererGeneration;
+    return import(`data:text/javascript;base64,${Buffer.from(`${source}\n// ${token}`).toString('base64')}`);
+}
+
 function createFakeEcharts() {
     const charts = [];
     return {
@@ -128,6 +134,30 @@ function installResizeObserver() {
                 delete globalThis.ResizeObserver;
             } else {
                 globalThis.ResizeObserver = previous;
+            }
+        },
+    };
+}
+
+function installFontSet(load) {
+    const calls = [];
+    const previous = globalThis.document;
+    globalThis.document = {
+        fonts: {
+            load(font) {
+                calls.push(font);
+                return load(font);
+            },
+        },
+    };
+
+    return {
+        calls,
+        restore() {
+            if (previous === undefined) {
+                delete globalThis.document;
+            } else {
+                globalThis.document = previous;
             }
         },
     };
@@ -754,7 +784,7 @@ test('update merges series without resending zoom or legend selection', async ()
         await createChart(createElement(), id, createDotNetRef(), spec(), { echarts });
         const chart = echarts.charts[0];
 
-        const applied = updateChart(id, spec({
+        const applied = await updateChart(id, spec({
             series: [
                 series('serie-a', 'Temp', '#F97316', [[1767225600000, 21.5], [1767225607000, 22.25], [1767225619000, 23]]),
                 series('serie-b', 'Flow', '#A78BFA', [[1767225603000, 3]]),
@@ -901,7 +931,7 @@ test('dispose tears down the chart and observer, and later updates are ignored',
         assert.equal(layout.observers[0].disconnected, true, 'the resize observer stops observing');
 
         assert.equal(disposeChart(id), false, 'a second dispose is harmless');
-        assert.equal(updateChart(id, spec()), false, 'a late update cannot revive a disposed chart');
+        assert.equal(await updateChart(id, spec()), false, 'a late update cannot revive a disposed chart');
         assert.equal(chart.options.length, 1);
     } finally {
         layout.restore();
@@ -921,7 +951,7 @@ test('creating a chart twice on the same element disposes the earlier instance',
         assert.equal(echarts.charts[0].disposed, true, 'the replaced instance is released');
         assert.equal(echarts.charts[1].disposed, false);
         assert.equal(layout.observers[0].disconnected, true);
-        assert.equal(updateChart(id, spec({ series: [series('one', 'Temp', '#F97316', [[2000, 2]])] })), true);
+        assert.equal(await updateChart(id, spec({ series: [series('one', 'Temp', '#F97316', [[2000, 2]])] })), true);
         assert.deepEqual(echarts.charts[1].options[1].option.series[0].data, [[2000, 2]]);
     } finally {
         layout.restore();
@@ -988,15 +1018,191 @@ test('the accessible font profile reaches every chart label', async () => {
         assert.equal(created.legend.textStyle.fontFamily, 'OpenDyslexic Mono, monospace');
         assert.equal(created.tooltip.textStyle.fontFamily, 'OpenDyslexic Mono, monospace');
 
-        updateChart(id, spec({ fontProfile: 'standard' }));
+        await updateChart(id, spec({ fontProfile: 'standard' }));
         assert.equal(chart.options[1].option.textStyle.fontFamily, 'JetBrains Mono, monospace',
             'a profile change repaints the chart with the host font');
         assert.equal(chart.options[1].option.legend.textStyle.fontFamily, 'JetBrains Mono, monospace');
 
-        updateChart(id, spec({ fontProfile: 'standard' }));
+        await updateChart(id, spec({ fontProfile: 'standard' }));
         assert.equal(chart.options[2].option.textStyle, undefined,
             'an ordinary update does not resend chrome');
     } finally {
+        layout.restore();
+    }
+});
+
+test('create waits for the selected webfont before applying the first option', async () => {
+    const chartRenderer = await freshRenderer();
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    let resolveFont;
+    const pending = new Promise(resolve => {
+        resolveFont = resolve;
+    });
+    const fontSet = installFontSet(() => pending);
+    try {
+        const created = chartRenderer.createChart(createElement(), uniqueId(), createDotNetRef(),
+            spec({ fontProfile: 'accessible' }), { echarts });
+
+        assert.equal(echarts.charts.length, 0, 'the chart is not created before the face is ready');
+        assert.match(fontSet.calls[0], /^11px .*OpenDyslexic Mono/);
+
+        resolveFont([{ family: 'OpenDyslexic Mono' }]);
+        assert.equal(await created, true);
+        assert.equal(echarts.charts[0].options[0].option.textStyle.fontFamily,
+            'OpenDyslexic Mono, monospace');
+    } finally {
+        fontSet.restore();
+        layout.restore();
+    }
+});
+
+test('a steady data update keeps the current face and does not wait', async () => {
+    const chartRenderer = await freshRenderer();
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    const fontSet = installFontSet(() => Promise.resolve([{ family: 'OpenDyslexic Mono' }]));
+    try {
+        const id = uniqueId();
+        await chartRenderer.createChart(createElement(), id, createDotNetRef(),
+            spec({ fontProfile: 'accessible' }), { echarts });
+        const chart = echarts.charts[0];
+        fontSet.calls.length = 0;
+
+        chartRenderer.updateChart(id, spec({
+            fontProfile: 'accessible',
+            series: [
+                series('serie-a', 'Temp', '#F97316', [[1767225600000, 21.5], [1767225619000, 23]]),
+                series('serie-b', 'Flow', '#A78BFA', [[1767225603000, 3]]),
+            ],
+        }));
+
+        assert.equal(chart.options.length, 2, 'a data update applies without waiting');
+        assert.equal(fontSet.calls.length, 0, 'the face is not reloaded');
+        assert.equal(chart.options[1].option.textStyle, undefined,
+            'a data update does not resend chrome');
+    } finally {
+        fontSet.restore();
+        layout.restore();
+    }
+});
+
+test('a failed webfont load draws with the fallback-only family', async () => {
+    const chartRenderer = await freshRenderer();
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    const fontSet = installFontSet(() => Promise.reject(new Error('missing face')));
+    try {
+        await chartRenderer.createChart(createElement(), uniqueId(), createDotNetRef(),
+            spec({ fontProfile: 'accessible' }), { echarts });
+
+        const option = echarts.charts[0].options[0].option;
+        assert.equal(option.textStyle.fontFamily, 'monospace');
+        assert.equal(option.legend.textStyle.fontFamily, 'monospace');
+        assert.equal(option.tooltip.textStyle.fontFamily, 'monospace',
+            'a failed load must not measure fallback widths under the selected family');
+    } finally {
+        fontSet.restore();
+        layout.restore();
+    }
+});
+
+test('a stalled webfont load draws with the fallback-only family within the bound', async () => {
+    const chartRenderer = await freshRenderer();
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    const fontSet = installFontSet(() => new Promise(() => {}));
+    try {
+        const started = Date.now();
+        await chartRenderer.createChart(createElement(), uniqueId(), createDotNetRef(),
+            spec({ fontProfile: 'accessible' }), { echarts, fontTimeoutMs: 20 });
+
+        assert.ok(Date.now() - started < 1000, 'the chart does not wait indefinitely for the face');
+        assert.equal(echarts.charts[0].options[0].option.textStyle.fontFamily, 'monospace');
+    } finally {
+        fontSet.restore();
+        layout.restore();
+    }
+});
+
+test('a webfont that arrives after the timeout repaints the fallback chart', async () => {
+    const chartRenderer = await freshRenderer();
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    let resolveFont;
+    const pending = new Promise(resolve => {
+        resolveFont = resolve;
+    });
+    const fontSet = installFontSet(() => pending);
+    try {
+        await chartRenderer.createChart(createElement(), uniqueId(), createDotNetRef(),
+            spec({ fontProfile: 'accessible' }), { echarts, fontTimeoutMs: 10 });
+        const chart = echarts.charts[0];
+        assert.equal(chart.options[0].option.textStyle.fontFamily, 'monospace');
+
+        resolveFont([{ family: 'OpenDyslexic Mono' }]);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        assert.equal(chart.options.at(-1).option.textStyle.fontFamily,
+            'OpenDyslexic Mono, monospace',
+            'the chart switches to the real face once it arrives');
+    } finally {
+        fontSet.restore();
+        layout.restore();
+    }
+});
+
+test('a font wait that outlives the chart does not apply a stale update', async () => {
+    const chartRenderer = await freshRenderer();
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    let resolveFont;
+    const pending = new Promise(resolve => {
+        resolveFont = resolve;
+    });
+    const fontSet = installFontSet(font => font.includes('OpenDyslexic')
+        ? pending
+        : Promise.resolve([{ family: 'JetBrains Mono' }]));
+    try {
+        const id = uniqueId();
+        await chartRenderer.createChart(createElement(), id, createDotNetRef(),
+            spec({ fontProfile: 'standard' }), { echarts });
+        const chart = echarts.charts[0];
+        const applied = chart.options.length;
+
+        const update = chartRenderer.updateChart(id, spec({ fontProfile: 'accessible' }), false,
+            { fontTimeoutMs: 50 });
+        chartRenderer.disposeChart(id);
+        resolveFont([{ family: 'OpenDyslexic Mono' }]);
+
+        assert.equal(await update, false);
+        assert.equal(chart.options.length, applied, 'a disposed chart is not updated after the wait');
+    } finally {
+        fontSet.restore();
+        layout.restore();
+    }
+});
+
+test('a create that loses its container during the font wait fails instead of registering', async () => {
+    const chartRenderer = await freshRenderer();
+    const echarts = createFakeEcharts();
+    const layout = installResizeObserver();
+    let resolveFont;
+    const pending = new Promise(resolve => {
+        resolveFont = resolve;
+    });
+    const fontSet = installFontSet(() => pending);
+    const element = createElement();
+    try {
+        const created = chartRenderer.createChart(element, uniqueId(), createDotNetRef(),
+            spec({ fontProfile: 'accessible' }), { echarts, fontTimeoutMs: 50 });
+        element.isConnected = false;
+        resolveFont([{ family: 'OpenDyslexic Mono' }]);
+
+        await assert.rejects(created, /no longer attached/);
+        assert.equal(echarts.charts.length, 0, 'a detached container must not register a chart');
+    } finally {
+        fontSet.restore();
         layout.restore();
     }
 });

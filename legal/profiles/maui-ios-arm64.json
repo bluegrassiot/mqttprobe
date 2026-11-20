@@ -13,7 +13,7 @@
   "inputs": {
     "files": {
       "global.json": "a4c16f708b406a9d1c56bdd74a46c730277d3e3ddc825efd6baed2e692bc60bf",
-      "Directory.Packages.props": "7b2d1fe95b6765f6534ff06cfd66a32eee03588b987f3b3afc37eecf5c231295",
+      "Directory.Packages.props": "e9e6e10ba26674fbe1e0fec138e78c8178620c875e690c02d7c1fc61699da3ab",
       "Directory.Build.props": "5b030b22a23b70b4378434208e44693013479cd56b981d331429dbf85c596621",
       ".github/actions/setup-dotnet-workload/action.yml": "e3f7736c4e8887df3019c24fea10702dcd5a6be3381679792148b66e238d0464",
       "src/MqttProbe.Core/MqttProbe.Core.csproj": "f17a0c8eaa5569f8bf877669173f5260700013ece29639e6dee0a30d49ede2ec",
@@ -66,8 +66,8 @@
     },
     {
       "id": "Meziantou.Analyzer",
-      "version": "3.0.339",
-      "sha512": "oB0KVTYO0CkqscgCp2Fce6Q4G9gIVvVy39ULQLU2eOJfTNWS63Lk7VZbgerx6XMdUxPC4bprv87r8f7EZfp6gQ=="
+      "version": "3.0.341",
+      "sha512": "zpogT6IwYBgNRa9+oETzs7aTU6Te3M/Osdkk/HN1TlJTDjz9dZwoUgh/yWqovT3jTofQGGLB1JqEK8I4uA6+yA=="
     },
     {
       "id": "Microsoft.AspNetCore.Authorization",
@@ -296,8 +296,8 @@
     },
     {
       "id": "MudBlazor",
-      "version": "9.12.0",
-      "sha512": "T6PQUCJe60UTSy3u1F8R2nuC06Cox6WEhon5GA2/AZNVI1WstlPSJZdGPyp6pHFpWdjPpla65piLpyJsbW+1rA=="
+      "version": "9.13.0",
+      "sha512": "li89Y1afb7LAbdh6I/3PAoXx1zUtyjhA6LuVQC8hGAItRCu4tpITAmL7o3KhK2b7PTlzl8PMZ43lAZgXJOVfzw=="
     },
     {
       "id": "SonarAnalyzer.CSharp",

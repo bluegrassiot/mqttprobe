@@ -557,7 +557,7 @@ Verify:     python scripts/legal/notices.py check
     Source: https://github.com/dotnet/MQTTnet
     Texts: The MIT License (MIT)
 
-  MudBlazor 9.12.0
+  MudBlazor 9.13.0
     Licence: MIT
     Copyright: Copyright 2026 MudBlazor
     Source: https://mudblazor.com/
@@ -1268,7 +1268,7 @@ Not included in a shipped build. Listed so the set is auditable.
   MessagePackAnalyzer 3.1.12
     Licence: MIT
     Source: https://github.com/MessagePack-CSharp/MessagePack-CSharp
-  Meziantou.Analyzer 3.0.339
+  Meziantou.Analyzer 3.0.341
     Licence: MIT
     Source: https://github.com/meziantou/Meziantou.Analyzer
   Microsoft.AspNetCore.Components.Analyzers 10.0.15
@@ -1298,12 +1298,12 @@ Not included in a shipped build. Listed so the set is auditable.
 
 Other build and test tooling, not included in a shipped publish graph:
 
-  Analyzers: Meziantou.Analyzer 3.0.339, SonarAnalyzer.CSharp 10.36.0.15337,
+  Analyzers: Meziantou.Analyzer 3.0.341, SonarAnalyzer.CSharp 10.36.0.15337,
   NUnit.Analyzers 4.15.0, MessagePackAnalyzer 3.1.12,
   Microsoft.AspNetCore.Components.Analyzers 10.0.15.
 
-  Test and benchmark: AngleSharp 1.10.2, AwesomeAssertions 9.6.0, bunit 2.15.2,
-  coverlet.collector 10.1.0, JunitXml.TestLogger 8.1.0,
+  Test and benchmark: AngleSharp 1.10.3, AwesomeAssertions 9.6.0, bunit 2.15.2,
+  coverlet.collector 10.1.1, JunitXml.TestLogger 8.1.0,
   Microsoft.Extensions.TimeProvider.Testing 11.0.0, Microsoft.NET.Test.Sdk 18.12.0,
   NSubstitute 6.2.0, NUnit 5.0.0, NUnit3TestAdapter 6.3.1,
   Microsoft.AspNetCore.Mvc.Testing 10.0.15, Microsoft.Playwright 1.64.1 and

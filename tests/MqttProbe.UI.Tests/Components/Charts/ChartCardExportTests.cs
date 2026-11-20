@@ -91,13 +91,10 @@ public class ChartCardExportTests : BunitTestContext
             [.. series.Select(entry => new ChartExportSeriesSummary(
                 entry.Id.ToString(), entry.DisplayName, entry.Color, 2))]);
 
-    private IRenderedComponent<ChartCardComponent> RenderCard(
-        ChartConfiguration configuration,
-        ChartRendererKind renderer = ChartRendererKind.ECharts) =>
+    private IRenderedComponent<ChartCardComponent> RenderCard(ChartConfiguration configuration) =>
         Render<ChartCardComponent>(parameters => parameters
             .Add(card => card.Configuration, configuration)
-            .Add(card => card.Clock, _clock)
-            .Add(card => card.Renderer, renderer));
+            .Add(card => card.Clock, _clock));
 
     private void WaitForChart(IRenderedComponent<ChartCardComponent> cut) =>
         cut.WaitForAssertion(
@@ -121,24 +118,19 @@ public class ChartCardExportTests : BunitTestContext
             .Single(button => button.TextContent.Trim() == label).HasAttribute("disabled");
 
     [Test]
-    public void ExportControl_IsOnlyOfferedForTheEChartsRenderer()
+    public void ExportControl_IsOfferedOnceTheChartDraws()
     {
         var series = Series("Temp");
         Record(series, 1, 21.5);
         var chart = Chart(series);
 
-        var apex = RenderCard(chart, ChartRendererKind.Apex);
-
-        apex.FindAll("button[title='Export chart data or image']").Should().BeEmpty(
-            "Apex keeps its own toolbar export");
-
-        var echarts = RenderCard(chart);
-        WaitForChart(echarts);
-        echarts.Find("button[title='Export chart data or image']").HasAttribute("disabled").Should().BeFalse();
+        var cut = RenderCard(chart);
+        WaitForChart(cut);
+        cut.Find("button[title='Export chart data or image']").HasAttribute("disabled").Should().BeFalse();
     }
 
     [Test]
-    public void RendererFailure_MarksExportUnavailableAndApexHidesIt()
+    public void RendererFailure_MarksExportUnavailable()
     {
         _runtime.Renderer.Handler = (identifier, _) => identifier == "createChart"
             ? Task.FromException<object?>(new JSException("Failed to fetch dynamically imported module"))
@@ -154,14 +146,6 @@ public class ChartCardExportTests : BunitTestContext
             TimeSpan.FromSeconds(5));
         cut.Find("button[title='Export unavailable because the chart could not start']")
             .HasAttribute("disabled").Should().BeTrue();
-
-        cut.Render(parameters => parameters
-            .Add(card => card.Configuration, chart)
-            .Add(card => card.Clock, _clock)
-            .Add(card => card.Renderer, ChartRendererKind.Apex));
-
-        cut.FindAll("button[aria-label='Export unavailable because the chart could not start']")
-            .Should().BeEmpty("Apex keeps its own toolbar export");
     }
 
     [Test]
@@ -445,7 +429,7 @@ public class ChartCardExportTests : BunitTestContext
     }
 
     [Test]
-    public async Task RollingBackDuringCapture_ReleasesTheSnapshotAndOpensNoDialog()
+    public async Task RemovingThePlotDuringCapture_ReleasesTheSnapshotAndOpensNoDialog()
     {
         var series = Series("Temp");
         Record(series, 1, 21.5);
@@ -468,9 +452,8 @@ public class ChartCardExportTests : BunitTestContext
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         cut.Render(parameters => parameters
-            .Add(card => card.Configuration, chart)
-            .Add(card => card.Clock, _clock)
-            .Add(card => card.Renderer, ChartRendererKind.Apex));
+            .Add(card => card.Configuration, Chart())
+            .Add(card => card.Clock, _clock));
 
         resume.SetResult();
 
@@ -481,11 +464,11 @@ public class ChartCardExportTests : BunitTestContext
         _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty();
         _runtime.Export.Invoked("exportSnapshot").Should().Be(0);
         _snackbar.ReceivedCalls().Should().BeEmpty(
-            "a capture superseded by a renderer change is not an error");
+            "a capture superseded by a removed plot is not an error");
     }
 
     [Test]
-    public void RollingBackWithTheDialogOpen_ClosesItAndReleasesTheCapture()
+    public void RemovingThePlotWithTheDialogOpen_ClosesItAndReleasesTheCapture()
     {
         var series = Series("Temp");
         Record(series, 1, 21.5);
@@ -497,9 +480,8 @@ public class ChartCardExportTests : BunitTestContext
         WaitForDialog();
 
         cut.Render(parameters => parameters
-            .Add(card => card.Configuration, chart)
-            .Add(card => card.Clock, _clock)
-            .Add(card => card.Renderer, ChartRendererKind.Apex));
+            .Add(card => card.Configuration, Chart())
+            .Add(card => card.Clock, _clock));
 
         cut.WaitForAssertion(
             () => _dialogProvider.FindAll(".mud-dialog").Should().BeEmpty(),

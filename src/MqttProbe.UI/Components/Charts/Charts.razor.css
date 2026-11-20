@@ -23,7 +23,3 @@
 .charts-empty-state ::deep .charts-empty-copy {
     max-width: 340px;
 }
-
-.charts-renderer-select {
-    min-width: 190px;
-}

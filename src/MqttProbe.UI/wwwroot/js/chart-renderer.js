@@ -101,7 +101,7 @@ function axisTimeText(time, unit) {
     return `${hourMinute}${suffix}`;
 }
 
-// Mirrors the Apex axis formatter: a second date line at midnight or across more than a day.
+// A second date line at midnight or across more than a day.
 function axisLabelFormatter(spec) {
     const extent = dataExtent(spec?.series);
     const span = extent ? extent[1] - extent[0] : 0;

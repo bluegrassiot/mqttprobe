@@ -193,7 +193,7 @@ test('create applies an explicit time-series option synchronously', async () => 
         assert.equal(option.tooltip.textStyle.rich, undefined, 'the built-in params marker owns its rich style');
         assert.equal(option.legend.show, true);
         assert.equal(option.legend.textStyle.color, '#0F172A', 'legend labels use the chart foreground');
-        assert.equal(option.xAxis.splitLine.show, true, 'the Apex baseline draws both axis grids');
+        assert.equal(option.xAxis.splitLine.show, true, 'both axis grids are drawn');
         assert.equal(option.grid.containLabel, false,
             'the deprecated containLabel layout can place labels outside the grid');
         assert.equal(option.grid.outerBoundsMode, 'same');

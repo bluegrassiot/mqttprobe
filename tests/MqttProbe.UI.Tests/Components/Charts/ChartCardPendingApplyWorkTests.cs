@@ -79,13 +79,11 @@ public class ChartCardPendingApplyWorkTests : BunitTestContext
     private IRenderedComponent<ChartCardComponent> RenderCard(ChartConfiguration configuration) =>
         Render<ChartCardComponent>(parameters => parameters
             .Add(c => c.Configuration, configuration)
-            .Add(c => c.Clock, _clock)
-            .Add(c => c.Renderer, ChartRendererKind.ECharts));
+            .Add(c => c.Clock, _clock));
 
     private static void Rerender(IRenderedComponent<ChartCardComponent> cut, ChartConfiguration configuration) =>
         cut.Render(parameters => parameters
-            .Add(c => c.Configuration, configuration)
-            .Add(c => c.Renderer, ChartRendererKind.ECharts));
+            .Add(c => c.Configuration, configuration));
 
     private static Task PumpAsync(IRenderedComponent<ChartCardComponent> cut) =>
         cut.InvokeAsync(() => { });

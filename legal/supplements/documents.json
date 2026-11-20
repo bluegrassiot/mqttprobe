@@ -274,26 +274,6 @@
       "sourceUrls": []
     },
     {
-      "key": "apexcharts-8-8-1-license-upstream-text",
-      "title": "ApexCharts 8.8.1 License (upstream text)",
-      "file": "texts/apexcharts-8-8-1-license-upstream-text.txt",
-      "sha256": "d3f4eb7ec97c10a740b390ae75c6387170082a73d6dad953e7a8432f399ee47c",
-      "kind": "license",
-      "sourceUrls": [
-        "https://unpkg.com/apexcharts@8.8.1/LICENSE.md"
-      ]
-    },
-    {
-      "key": "apex-commons-0-10-0-license-upstream-text",
-      "title": "Apex Commons 0.10.0 License (upstream text)",
-      "file": "texts/apex-commons-0-10-0-license-upstream-text.txt",
-      "sha256": "3af1a0dde9ba417ba8dce494675b449ddc203fcb2939d75319a2666c947bf03e",
-      "kind": "license",
-      "sourceUrls": [
-        "https://unpkg.com/apex-commons@0.10.0/LICENSE.md"
-      ]
-    },
-    {
       "key": "echarts-6-1-0-license-upstream-text",
       "title": "Apache ECharts 6.1.0 License (upstream text)",
       "file": "texts/echarts-6-1-0-license-upstream-text.txt",

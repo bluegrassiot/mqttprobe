@@ -17,14 +17,14 @@
   "inputs": {
     "files": {
       "global.json": "a4c16f708b406a9d1c56bdd74a46c730277d3e3ddc825efd6baed2e692bc60bf",
-      "Directory.Packages.props": "542eee4b065ba53acb09d8c7256d188b86fc9690055d38e5e48596ce1fb807b6",
+      "Directory.Packages.props": "7b2d1fe95b6765f6534ff06cfd66a32eee03588b987f3b3afc37eecf5c231295",
       "Directory.Build.props": "5b030b22a23b70b4378434208e44693013479cd56b981d331429dbf85c596621",
       ".github/actions/setup-dotnet-workload/action.yml": "e3f7736c4e8887df3019c24fea10702dcd5a6be3381679792148b66e238d0464",
       "src/MqttProbe.Core/MqttProbe.Core.csproj": "f17a0c8eaa5569f8bf877669173f5260700013ece29639e6dee0a30d49ede2ec",
       "src/MqttProbe.Desktop/MqttProbe.Desktop.csproj": "83d7bdfd02fa814797b5b66b3f09bbe4bacb7585d8d849ad883b399a20cf2da7",
       "src/MqttProbe.Maui/MqttProbe.Maui.csproj": "5f05ad1ee688925a5db6895d14b8dfd0f5e7517507ffa5af0d565f0d3dda2d57",
       "src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj": "ad64a32de96245d593d3c03f9ca581d8affce7f0d147e3947a08a6a6d2797612",
-      "src/MqttProbe.UI/MqttProbe.UI.csproj": "984773e2f9588a641a4b2fd1aabf34826435f798f88ce958af98ff045ae4ed09",
+      "src/MqttProbe.UI/MqttProbe.UI.csproj": "0915a9674613a0c49b5296c5eaa08b1959c3af0baff7d4be35c8dd8af5cc5e48",
       "src/MqttProbe.Web/MqttProbe.Web.csproj": "235a7f45c35d0d50d8201f9be0eab8475f90163eb43296aed78d687dd419eea6"
     },
     "submodules": {
@@ -33,11 +33,6 @@
     "sdk": "10.0.403"
   },
   "packages": [
-    {
-      "id": "Blazor-ApexCharts",
-      "version": "8.0.0",
-      "sha512": "oQzHx0yiqlnM1EgaXv64tuQm+Silxbddb3zujIByjBsK/a3Tanm+U9LFRG/bbG1mcuF2tSFuhFWYaY7mkTx4bg=="
-    },
     {
       "id": "Blazor.Lucide",
       "version": "1.0.6",
@@ -197,11 +192,6 @@
       "id": "Microsoft.Extensions.Hosting.Abstractions",
       "version": "10.0.0",
       "sha512": "KrN6TGFwCwqOkLLk/idW/XtDQh+8In+CL9T4M1Dx+5ScsjTq4TlVbal8q532m82UYrMr6RiQJF2HvYCN0QwVsA=="
-    },
-    {
-      "id": "Microsoft.Extensions.Http",
-      "version": "10.0.0",
-      "sha512": "r+mSvm/Ryc/iYcc9zcUG5VP9EBB8PL1rgVU6macEaYk45vmGRk9PntM3aynFKN6s3Q4WW36kedTycIctctpTUQ=="
     },
     {
       "id": "Microsoft.Extensions.Localization",

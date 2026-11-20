@@ -105,7 +105,7 @@ public class ChartCardNotificationTests : BunitTestContext
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 60);
         var cut = RenderCard(Chart(10, series));
-        cut.Find("button[title='Pause live updates (enables zoom/pan/export)']").Click();
+        cut.Find("button[title='Pause live updates (keeps the view still)']").Click();
         cut.WaitForAssertion(() => StatusChipText(cut).Should().Be("Paused"), TimeSpan.FromSeconds(5));
 
         Record(series, 0, 21.5);

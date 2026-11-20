@@ -7,14 +7,13 @@ namespace MqttProbe.UI.Components.Charts;
 
 public partial class ChartCard
 {
-    private const string EChartsUnavailableMessage =
-        "ECharts could not start, so this chart is not drawing. Switch back to Apex to keep using it.";
+    private const string ChartUnavailableMessage = "The chart could not draw.";
+    private const string PauseTitle = "Pause live updates (keeps the view still)";
 
     private readonly string _rendererChartId = Guid.NewGuid().ToString("N");
     private ChartRendererInterop? _rendererInterop;
     private DotNetObjectReference<ChartCard>? _rendererOwner;
     private ElementReference _echartsElement;
-    private ChartRendererKind _activeRenderer = ChartRendererKind.Apex;
     private bool _echartsReady;
     private bool _echartsStarting;
     private bool _echartsLive;
@@ -24,13 +23,11 @@ public partial class ChartCard
     private string? _echartsErrorDetail;
     private int _rendererGeneration;
 
-    private string PauseTitle => Renderer == ChartRendererKind.ECharts
-        ? "Pause live updates (keeps the view still)"
-        : "Pause live updates (enables zoom/pan/export)";
-
-    private void SwitchRenderer()
+    private void RetryECharts()
     {
-        _activeRenderer = Renderer;
+        if (_disposed)
+            return;
+
         _rendererGeneration++;
         _echartsReady = false;
         _echartsError = null;
@@ -38,15 +35,10 @@ public partial class ChartCard
         _visibleFromMs = null;
         _visibleToMs = null;
         _zoneCaptionSignature = "";
-        _hovering = false;
-        _pendingUpdate = true;
         _pendingViewportReset = false;
+        StateHasChanged();
 
-        _ = InvokeAsync(DisposeChartQuietlyAsync);
-
-        if (Renderer == ChartRendererKind.Apex)
-            _pendingOptionsUpdate = true;
-        else if (_bridgeReady)
+        if (_bridgeReady)
             _ = InvokeAsync(() => RefreshZoneCaptionAsync(force: true));
     }
 
@@ -130,9 +122,14 @@ public partial class ChartCard
             return;
 
         if (generation == _rendererGeneration)
+        {
             FailECharts(failure);
-        else if (Renderer == ChartRendererKind.ECharts)
-            StateHasChanged();
+            return;
+        }
+
+        // A replaced plot can miss its own create while the stale one is still starting, so the
+        // rerender is what lets the current generation create its chart.
+        StateHasChanged();
     }
 
     private async Task ApplyEChartsDataAsync()
@@ -224,7 +221,7 @@ public partial class ChartCard
     private void FailECharts(Exception? failure)
     {
         _echartsReady = false;
-        _echartsError = EChartsUnavailableMessage;
+        _echartsError = ChartUnavailableMessage;
         _echartsErrorDetail = failure?.Message;
         _ = InvokeAsync(DisposeChartQuietlyAsync);
         if (!_disposed)
@@ -300,12 +297,10 @@ public partial class ChartCard
                     new[] { (double)Epoch(point.Timestamp), point.Value })]))]);
     }
 
-    private Task RequestRendererRollback() => OnRendererRollback.InvokeAsync();
-
     [JSInvokable]
     public async Task OnEChartsViewportChanged(double? fromMs, double? toMs)
     {
-        if (_disposed || Renderer != ChartRendererKind.ECharts)
+        if (_disposed)
             return;
 
         if (fromMs is { } from && toMs is { } to)

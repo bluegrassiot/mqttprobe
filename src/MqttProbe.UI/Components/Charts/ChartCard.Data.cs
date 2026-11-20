@@ -32,7 +32,7 @@ public partial class ChartCard
         RefreshFreshness(render: true);
         RefreshChart();
 
-        if (_live && !(HoverPausesUpdates && _hovering) && _visibleFromMs is null)
+        if (_live && _visibleFromMs is null)
             _ = InvokeAsync(() => RefreshZoneCaptionAsync());
     }
 }

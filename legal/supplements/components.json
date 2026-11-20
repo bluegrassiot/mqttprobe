@@ -83,30 +83,6 @@
       "notes": "Generated from the Eclipse Tahu protocol buffer definition. MQTTProbe extends the upstream #pragma warning disable list; there are no functional changes. Source is available from the MQTTProbe public repository under EPL-2.0."
     },
     {
-      "id": "apexcharts-javascript",
-      "name": "ApexCharts JavaScript library",
-      "version": "8.8.1",
-      "license": "ApexCharts Community/Commercial dual license (unresolved)",
-      "copyright": "",
-      "sourceUrl": "https://github.com/apexcharts/apexcharts.js",
-      "documents": [
-        "apexcharts-8-8-1-license-upstream-text"
-      ],
-      "notes": "Bundled by Blazor-ApexCharts 8.0.0 as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim, and served to the browser. That file is byte-identical to the npm apexcharts 8.8.1 full build. Upstream terms are not MIT and are not resolved by this notice. The 8.8.1 terms also require an OEM/redistribution licence to embed the library in a product used by other people, and no such entitlement is established here."
-    },
-    {
-      "id": "apex-commons",
-      "name": "Apex Commons JavaScript library",
-      "version": "0.10.0",
-      "license": "Apex Commons Community/Commercial dual license (unresolved)",
-      "copyright": "",
-      "sourceUrl": "https://github.com/apexcharts/projects/tree/main/libs/commons",
-      "documents": [
-        "apex-commons-0-10-0-license-upstream-text"
-      ],
-      "notes": "Bundled inside js/apexcharts.full.min.js by ApexCharts 8.8.1 and served to the browser. Upstream terms are not resolved by this notice. They carry the same OEM/redistribution condition, and no such entitlement is established here."
-    },
-    {
       "id": "echarts-javascript",
       "name": "Apache ECharts JavaScript library",
       "version": "6.1.0",

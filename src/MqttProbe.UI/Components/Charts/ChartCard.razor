@@ -1,9 +1,6 @@
-@using ApexCharts
 @using Microsoft.JSInterop
-@using MqttProbe.Core.Models.Configuration
 @using MqttProbe.Core.Services.Configuration
 @using MqttProbe.UI.Services.Formatting
-@using AppChartType = MqttProbe.Core.Models.Chart.ChartType
 @inject IChartDataService ChartDataService
 @inject IUiSettings UiSettings
 @inject IDeviceTimeFormatter TimeFormatter
@@ -59,52 +56,34 @@
         }
         else
         {
-            <div class="chart-card-plot" @onmouseover="OnMouseOver" @onmouseleave="OnMouseLeave">
+            <div class="chart-card-plot">
                 @if (!_bridgeReady)
                 {
                     <div class="chart-card-plot__pending" aria-hidden="true"></div>
                 }
-                else if (Renderer == ChartRendererKind.ECharts)
+                else if (_echartsError is not null)
+                {
+                    <div class="chart-card-echarts-error" role="alert">
+                        <MudText Typo="Typo.body2">@_echartsError</MudText>
+                        @if (_echartsErrorDetail is not null)
+                        {
+                            <MudText Typo="Typo.caption" Class="chart-card-echarts-error__detail">
+                                @_echartsErrorDetail
+                            </MudText>
+                        }
+                        <MudText Typo="Typo.caption" Class="chart-card-echarts-error__hint">
+                            If it keeps failing, reload the page.
+                        </MudText>
+                        <MudButton Variant="Variant.Outlined" Size="MudBlazor.Size.Small" Color="MudBlazor.Color.Warning"
+                                   OnClick="RetryECharts">Try again</MudButton>
+                    </div>
+                }
+                else
                 {
                     <div class="chart-card-echarts" @ref="_echartsElement"
                          role="img" aria-label="@($"{Configuration.Name} chart")"></div>
                 }
-                else
-                {
-                    <ApexChart TItem="ChartDataPoint"
-                               Options="_options"
-                               @ref="_chart"
-                               Height="300"
-                               OnZoomed="OnChartZoomed"
-                               OnScrolled="OnChartScrolled">
-                        @foreach (var series in Configuration.Series)
-                        {
-                            var s = series;
-                            <ApexPointSeries TItem="ChartDataPoint"
-                                             Items="@GetPoints(s.Id)"
-                                             Name="@s.DisplayName"
-                                             SeriesType="@GetSeriesType()"
-                                             XValue="@(p => (decimal)new DateTimeOffset(p.Timestamp).ToUnixTimeMilliseconds())"
-                                             YValue="@(p => (decimal)p.Value)"
-                                             Color="@s.Color" />
-                        }
-                    </ApexChart>
-                }
             </div>
-            @if (Renderer == ChartRendererKind.ECharts && _echartsError is not null)
-            {
-                <div class="chart-card-echarts-error" role="alert">
-                    <MudText Typo="Typo.body2">@_echartsError</MudText>
-                    @if (_echartsErrorDetail is not null)
-                    {
-                        <MudText Typo="Typo.caption" Class="chart-card-echarts-error__detail">
-                            @_echartsErrorDetail
-                        </MudText>
-                    }
-                    <MudButton Variant="Variant.Outlined" Size="MudBlazor.Size.Small" Color="MudBlazor.Color.Warning"
-                               OnClick="RequestRendererRollback">Switch back to Apex</MudButton>
-                </div>
-            }
             @if (_zoneCaption.Length > 0)
             {
                 <div class="chart-card-zone-row">
@@ -122,13 +101,9 @@
     [Parameter, EditorRequired] public ChartConfiguration Configuration { get; set; } = null!;
     [Parameter] public EventCallback<ChartConfiguration> OnEdit { get; set; }
     [Parameter] public EventCallback<ChartConfiguration> OnDelete { get; set; }
-    [Parameter] public ChartRendererKind Renderer { get; set; } = ChartRendererKind.Apex;
-    [Parameter] public EventCallback OnRendererRollback { get; set; }
     [Parameter] public TimeProvider Clock { get; set; } = TimeProvider.System;
     [CascadingParameter(Name = "IsDarkMode")] public bool IsDarkMode { get; set; }
 
-    private ApexChart<ChartDataPoint>? _chart;
-    private ApexChartOptions<ChartDataPoint> _options = null!;
     private Timer? _updateTimer;
     private bool _chartReady;
     private bool _disposed;
@@ -136,10 +111,8 @@
     private bool _pendingOptionsUpdate;
     private bool _hasNewData;
     private bool _live = true;
-    private bool _hovering;
     private DateTime _lastRender = DateTime.MinValue;
     private static readonly TimeSpan RenderThrottle = TimeSpan.FromMilliseconds(200);
-    private int _lastSeriesCount = -1;
     private string _lastConfigFingerprint = "";
     private string _lastDataShape = "";
     private bool _lastIsDarkMode;
@@ -148,9 +121,7 @@
     private string _freshnessSignature = "";
     private readonly Dictionary<Guid, DateTime?> _lastReceipts = [];
 
-    private bool HoverPausesUpdates => Renderer != ChartRendererKind.ECharts;
-
-    private bool ShowsPausedState => !_live || (HoverPausesUpdates && _hovering);
+    private bool ShowsPausedState => !_live;
 
     private string StatusLabel => ChartFreshnessDisplay.SummaryLabel(_freshness.State, ShowsPausedState);
 
@@ -180,59 +151,6 @@
     protected override void OnInitialized()
     {
         InitializeTimeDisplay();
-        _options = new ApexChartOptions<ChartDataPoint>
-        {
-            Chart = new Chart
-            {
-                Type = GetApexChartType(),
-                Toolbar = new Toolbar { Show = true },
-                Animations = new Animations { Enabled = false },
-                ForeColor = IsDarkMode ? "#F1F5F9" : "#0F172A",
-                FontFamily = "var(--font-mono)"
-            },
-            Colors = Configuration.Series.Count > 0
-                ? Configuration.Series.Select(s => s.Color).ToList()
-                : null,
-            Grid = new Grid
-            {
-                StrokeDashArray = 4,
-                Padding = new ApexCharts.Padding { Left = 24, Right = 56 },
-                Xaxis = new GridXAxis { Lines = new Lines { Show = true } },
-                Yaxis = new GridYAxis { Lines = new Lines { Show = true } }
-            },
-            Xaxis = new XAxis
-            {
-                Type = XAxisType.Datetime,
-                Labels = new XAxisLabels
-                {
-                    DatetimeUTC = _preferences.Zone == MessageTimePreferences.ZoneUtc,
-                    Formatter = ChartTimeFormat.AxisFormatter(_preferences),
-                    HideOverlappingLabels = true,
-                    Rotate = -45,
-                    RotateAlways = false,
-                    MinHeight = 30,
-                    Style = new AxisLabelStyle { FontSize = "11px" }
-                },
-                AxisBorder = new AxisBorder { Show = true },
-                AxisTicks = new AxisTicks { Show = true }
-            },
-            Stroke = new Stroke { Curve = Curve.Smooth, Width = [2] },
-            Tooltip = new Tooltip
-            {
-                X = new TooltipX { Formatter = ChartTimeFormat.TooltipFormatter(_preferences) },
-                Theme = IsDarkMode ? Mode.Dark : Mode.Light
-            },
-            Yaxis = [new YAxis
-            {
-                DecimalsInFloat = 2,
-                Labels = new YAxisLabels { Style = new AxisLabelStyle { FontSize = "11px" } },
-                AxisBorder = new AxisBorder { Show = true },
-                AxisTicks = new AxisTicks { Show = true }
-            }],
-            Legend = new Legend { Show = Configuration.Series.Count > 1 }
-        };
-        ApplyAxisTheme();
-        _lastSeriesCount = Configuration.Series.Count;
         _lastConfigFingerprint = GetConfigFingerprint();
         _lastDataShape = GetDataShape();
         _lastIsDarkMode = IsDarkMode;
@@ -242,27 +160,8 @@
         ChartDataService.OnDataUpdated += OnDataUpdated;
     }
 
-    private void ApplyAxisTheme()
-    {
-        var labelColor = IsDarkMode ? "#94A3B8" : "#475569";
-        var lineColor = IsDarkMode ? "#334155" : "#CBD5E1";
-
-        _options.Grid.BorderColor = lineColor;
-        _options.Xaxis.Labels.Style.Colors = labelColor;
-        _options.Xaxis.AxisBorder.Color = lineColor;
-        _options.Xaxis.AxisTicks.Color = lineColor;
-
-        var yaxis = _options.Yaxis[0];
-        yaxis.Labels.Style.Colors = labelColor;
-        yaxis.AxisBorder.Color = lineColor;
-        yaxis.AxisTicks.Color = lineColor;
-    }
-
     protected override void OnParametersSet()
     {
-        var rendererChanged = Renderer != _activeRenderer;
-        if (rendererChanged) SwitchRenderer();
-
         var darkModeChanged = IsDarkMode != _lastIsDarkMode;
         var fingerprint = GetConfigFingerprint();
         var configChanged = fingerprint != _lastConfigFingerprint;
@@ -272,7 +171,7 @@
         if (configChanged) RefreshReceipts();
         RefreshFreshness(render: false);
 
-        if (!darkModeChanged && !configChanged && !rendererChanged) return;
+        if (!darkModeChanged && !configChanged) return;
 
         _lastIsDarkMode = IsDarkMode;
         _lastConfigFingerprint = fingerprint;
@@ -283,27 +182,6 @@
             _visibleToMs = null;
             _zoneCaptionSignature = "";
             _pendingViewportReset = true;
-        }
-
-        if (darkModeChanged)
-        {
-            _options.Chart.ForeColor = IsDarkMode ? "#F1F5F9" : "#0F172A";
-            _options.Tooltip.Theme = IsDarkMode ? Mode.Dark : Mode.Light;
-            ApplyAxisTheme();
-        }
-
-        if (configChanged)
-        {
-            _options.Chart.Type = GetApexChartType();
-
-            if (Configuration.Series.Count != _lastSeriesCount)
-            {
-                _lastSeriesCount = Configuration.Series.Count;
-                _options.Colors = Configuration.Series.Count > 0
-                    ? Configuration.Series.Select(s => s.Color).ToList()
-                    : null;
-                _options.Legend = new Legend { Show = Configuration.Series.Count > 1 };
-            }
         }
 
         _pendingOptionsUpdate = true;
@@ -326,71 +204,20 @@
             await EnsureTimeBridgeAsync();
         }
 
-        if (Renderer == ChartRendererKind.ECharts)
+        if (!_disposed && _bridgeReady && Configuration.Series.Count > 0)
         {
-            if (!_disposed && _bridgeReady && Configuration.Series.Count > 0)
-            {
-                await EnsureEChartsAsync();
-                if (_live && _echartsReady && (_pendingUpdate || _pendingOptionsUpdate))
-                    await ApplyEChartsDataAsync();
-            }
-            else
-            {
-                await ReleaseEChartsPlotAsync();
-            }
-
-            return;
+            await EnsureEChartsAsync();
+            if (_live && _echartsReady && (_pendingUpdate || _pendingOptionsUpdate))
+                await ApplyEChartsDataAsync();
         }
-
-        if (_pendingOptionsUpdate && _chartReady && !_disposed && _chart is not null)
+        else
         {
-            _pendingOptionsUpdate = false;
-            try { await _chart.UpdateOptionsAsync(false, false, false); }
-            catch (Exception ex) when (ex is ArgumentNullException or JSException)
-            {
-                // Chart component disposed mid-render; these exceptions are expected during teardown.
-                _ = ex;
-            }
-        }
-
-        if (_pendingUpdate && _chartReady && !_disposed && _chart is not null)
-        {
-            _pendingUpdate = false;
-            var stopwatch = BeginRendererCall();
-            var failed = true;
-            try
-            {
-                await _chart.UpdateSeriesAsync(animate: false);
-                failed = false;
-            }
-            catch (Exception ex) when (ex is ArgumentNullException or JSException)
-            {
-                // Chart component disposed mid-render; these exceptions are expected during teardown.
-                _ = ex;
-            }
-            finally
-            {
-                RecordRendererCall("Apex", stopwatch?.Elapsed, failed);
-            }
+            await ReleaseEChartsPlotAsync();
         }
     }
 
     private IReadOnlyList<ChartDataPoint> GetPoints(Guid seriesId) =>
         TimeWindowFilter.Apply(ChartDataService.GetPoints(seriesId), Configuration.TimeWindowMinutes);
-
-    private SeriesType GetSeriesType() => Configuration.Type switch
-    {
-        AppChartType.Area => SeriesType.Area,
-        AppChartType.Bar => SeriesType.Bar,
-        _ => SeriesType.Line
-    };
-
-    private ApexCharts.ChartType GetApexChartType() => Configuration.Type switch
-    {
-        AppChartType.Area => ApexCharts.ChartType.Area,
-        AppChartType.Bar => ApexCharts.ChartType.Bar,
-        _ => ApexCharts.ChartType.Line
-    };
 
     // Runs even without messages so last-received ages stay current.
     internal void Tick()
@@ -429,7 +256,7 @@
 
     private void RefreshChart()
     {
-        if (_disposed || !_chartReady || !_live || !_hasNewData || (HoverPausesUpdates && _hovering)) return;
+        if (_disposed || !_chartReady || !_live || !_hasNewData) return;
 
         var now = DateTime.UtcNow;
         if (now - _lastRender < RenderThrottle) return;
@@ -451,23 +278,6 @@
             RefreshChart();
             _ = InvokeAsync(() => RefreshZoneCaptionAsync());
         }
-        StateHasChanged();
-    }
-
-    private void OnMouseOver()
-    {
-        if (!HoverPausesUpdates) return;
-
-        _hovering = true;
-        StateHasChanged();
-    }
-
-    private void OnMouseLeave()
-    {
-        if (!HoverPausesUpdates) return;
-
-        _hovering = false;
-        RefreshFreshness(render: true);
         StateHasChanged();
     }
 

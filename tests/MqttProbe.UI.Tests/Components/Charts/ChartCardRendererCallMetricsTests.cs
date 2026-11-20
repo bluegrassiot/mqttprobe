@@ -1,4 +1,3 @@
-using ApexCharts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.JSInterop;
@@ -69,13 +68,11 @@ public class ChartCardRendererCallMetricsTests : BunitTestContext
 
     private IRenderedComponent<ChartCardComponent> RenderCard(
         ChartConfiguration configuration,
-        ChartRendererKind renderer,
         bool withMetrics = true) =>
         Render<ChartCardComponent>(parameters =>
         {
             parameters.Add(c => c.Configuration, configuration)
-                .Add(c => c.Clock, _clock)
-                .Add(c => c.Renderer, renderer);
+                .Add(c => c.Clock, _clock);
             if (withMetrics)
                 parameters.Add(c => c.Metrics, _metrics);
         });
@@ -105,7 +102,7 @@ public class ChartCardRendererCallMetricsTests : BunitTestContext
         var module = UseGatedUpdates();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 30, 1);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         await module.WaitForCreateAsync(1);
 
         try
@@ -138,7 +135,7 @@ public class ChartCardRendererCallMetricsTests : BunitTestContext
         UseModule(updateResult: false);
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 30, 1);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
 
         Record(series, 20, 2);
         RaiseData();
@@ -155,7 +152,7 @@ public class ChartCardRendererCallMetricsTests : BunitTestContext
         UseModule(updateResult: true, updateFailure: new JSException("renderer rejected the snapshot"));
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 30, 1);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
 
         Record(series, 20, 2);
         RaiseData();
@@ -168,54 +165,26 @@ public class ChartCardRendererCallMetricsTests : BunitTestContext
     }
 
     [Test]
-    public void ApexSeriesUpdate_RecordsTheCompletedCall()
-    {
-        var series = new ChartSeries { DisplayName = "Temp" };
-        Record(series, 30, 1);
-        var cut = RenderCard(Chart(series), ChartRendererKind.Apex);
-
-        cut.WaitForAssertion(
-            () => cut.FindComponents<ApexChart<ChartDataPoint>>().Should().ContainSingle(),
-            TimeSpan.FromSeconds(5));
-
-        Record(series, 20, 2);
-        RaiseData();
-
-        cut.WaitForAssertion(
-            () => _metrics.Received().RecordChartRendererCall("Apex", Arg.Any<TimeSpan>(), false),
-            TimeSpan.FromSeconds(5));
-        JSInterop.Invocations.Should().Contain(invocation => invocation.Identifier == "blazor_apexchart.updateSeries",
-            "the recorded call is the series update the card already performed");
-    }
-
-    [Test]
-    public async Task EChartsUpdate_SupersededGenerationRecordsTheSettledApiOutcome()
+    public async Task UpdateSettledByDisposal_StillRecordsTheApiOutcome()
     {
         var module = UseGatedUpdates();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 30, 1);
-        Record(series, 20, 2);
-        var chart = Chart(series);
-        var cut = RenderCard(chart, ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         await module.WaitForCreateAsync(1);
 
         try
         {
-            Record(series, 10, 3);
+            Record(series, 20, 2);
             RaiseData();
             await module.WaitForUpdateAsync(1);
 
-            cut.Render(parameters => parameters
-                .Add(c => c.Configuration, chart)
-                .Add(c => c.Clock, _clock)
-                .Add(c => c.Renderer, ChartRendererKind.Apex)
-                .Add(c => c.Metrics, _metrics));
-
+            var dispose = cut.InvokeAsync(() => cut.Instance.DisposeAsync().AsTask());
             module.ReleaseAll();
+            await dispose;
 
-            cut.WaitForAssertion(
-                () => _metrics.Received(1).RecordChartRendererCall("ECharts", Arg.Any<TimeSpan>(), false),
-                TimeSpan.FromSeconds(5));
+            _metrics.Received(1).RecordChartRendererCall(
+                "ECharts", Arg.Any<TimeSpan>(), false);
         }
         finally
         {
@@ -224,34 +193,12 @@ public class ChartCardRendererCallMetricsTests : BunitTestContext
     }
 
     [Test]
-    public async Task ApexSeriesUpdate_UnexpectedFailureRecordsAFailedCallAndIsNotSwallowed()
-    {
-        JSInterop.SetupVoid("blazor_apexchart.updateSeries", _ => true)
-            .SetException(new InvalidOperationException("apex interop exploded"));
-        var series = new ChartSeries { DisplayName = "Temp" };
-        Record(series, 30, 1);
-        var cut = RenderCard(Chart(series), ChartRendererKind.Apex);
-
-        cut.WaitForAssertion(
-            () => cut.FindComponents<ApexChart<ChartDataPoint>>().Should().ContainSingle(),
-            TimeSpan.FromSeconds(5));
-
-        Record(series, 20, 2);
-        RaiseData();
-
-        var unhandled = await Renderer.UnhandledException.WaitAsync(TimeSpan.FromSeconds(5));
-        unhandled.Should().BeOfType<InvalidOperationException>("the unexpected failure still reaches the renderer");
-        unhandled.Message.Should().Be("apex interop exploded");
-        _metrics.Received(1).RecordChartRendererCall("Apex", Arg.Any<TimeSpan>(), true);
-    }
-
-    [Test]
     public void CardWithoutMetrics_StillAppliesEChartsUpdates()
     {
         UseModule(updateResult: true);
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 30, 1);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts, withMetrics: false);
+        var cut = RenderCard(Chart(series), withMetrics: false);
 
         Record(series, 20, 2);
         RaiseData();

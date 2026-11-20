@@ -23,18 +23,20 @@
     height: 300px;
 }
 
-/* The ECharts preview sizes itself from this box; the adapter observes it for width changes. */
+/* The chart canvas fills this box; the renderer observes it for width changes. */
 .chart-card-echarts {
     width: 100%;
     height: 300px;
 }
 
 .chart-card-echarts-error {
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
+    justify-content: center;
     gap: 8px;
-    margin: 4px 0 8px;
+    min-height: 300px;
     padding: 12px;
     border: 1px solid var(--mud-palette-warning);
     border-radius: var(--mud-default-borderradius);
@@ -43,6 +45,10 @@
 .chart-card-echarts-error__detail {
     font-family: var(--font-mono);
     overflow-wrap: anywhere;
+    color: var(--mud-palette-text-secondary);
+}
+
+.chart-card-echarts-error__hint {
     color: var(--mud-palette-text-secondary);
 }
 

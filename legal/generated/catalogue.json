@@ -2,32 +2,6 @@
   "schemaVersion": 1,
   "components": [
     {
-      "id": "apex-commons",
-      "name": "Apex Commons JavaScript library",
-      "version": "0.10.0",
-      "license": "Apex Commons Community/Commercial dual license (unresolved)",
-      "copyright": "",
-      "sourceUrl": "https://github.com/apexcharts/projects/tree/main/libs/commons",
-      "documentIds": [
-        "3af1a0dde9ba417ba8dce494675b449ddc203fcb2939d75319a2666c947bf03e"
-      ],
-      "applicability": "runtime",
-      "notes": "Bundled inside js/apexcharts.full.min.js by ApexCharts 8.8.1 and served to the browser. Upstream terms are not resolved by this notice. They carry the same OEM/redistribution condition, and no such entitlement is established here."
-    },
-    {
-      "id": "apexcharts-javascript",
-      "name": "ApexCharts JavaScript library",
-      "version": "8.8.1",
-      "license": "ApexCharts Community/Commercial dual license (unresolved)",
-      "copyright": "",
-      "sourceUrl": "https://github.com/apexcharts/apexcharts.js",
-      "documentIds": [
-        "d3f4eb7ec97c10a740b390ae75c6387170082a73d6dad953e7a8432f399ee47c"
-      ],
-      "applicability": "runtime",
-      "notes": "Bundled by Blazor-ApexCharts 8.0.0 as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim, and served to the browser. That file is byte-identical to the npm apexcharts 8.8.1 full build. Upstream terms are not MIT and are not resolved by this notice. The 8.8.1 terms also require an OEM/redistribution licence to embed the library in a product used by other people, and no such entitlement is established here."
-    },
-    {
       "id": "dotnet-android-runtime",
       "name": ".NET for Android runtime",
       "version": "36.1.118",
@@ -183,21 +157,6 @@
       ],
       "applicability": "runtime",
       "notes": "Installed workload pack Microsoft.MacCatalyst.Runtime.maccatalyst-arm64.net10.0_27.0/27.0.10742. Its SDK licence is byte-identical to the Microsoft.iOS copy reproduced here."
-    },
-    {
-      "id": "nuget:blazor-apexcharts@8.0.0",
-      "name": "Blazor-ApexCharts",
-      "version": "8.0.0",
-      "license": "MIT",
-      "copyright": "Copyright 2022 (c) Joakim Dangården. All rights reserved.",
-      "sourceUrl": "https://apexcharts.github.io/Blazor-ApexCharts/",
-      "documentIds": [
-        "950607e7415c641f9cb136b29607a806e27d6ad5e0d2ecdcd8addcf4dae38a69",
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "d3f4eb7ec97c10a740b390ae75c6387170082a73d6dad953e7a8432f399ee47c"
-      ],
-      "applicability": "runtime",
-      "notes": "The package is MIT. The bundled ApexCharts JavaScript 8.8.1 library and its Apex Commons 0.10.0 code are separately licensed and unresolved."
     },
     {
       "id": "nuget:blazor.lucide@1.0.6",
@@ -678,19 +637,6 @@
     {
       "id": "nuget:microsoft.extensions.hosting.abstractions@10.0.0",
       "name": "Microsoft.Extensions.Hosting.Abstractions",
-      "version": "10.0.0",
-      "license": "MIT",
-      "copyright": "© Microsoft Corporation. All rights reserved.",
-      "sourceUrl": "https://dot.net/",
-      "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
-        "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174"
-      ],
-      "applicability": "runtime"
-    },
-    {
-      "id": "nuget:microsoft.extensions.http@10.0.0",
-      "name": "Microsoft.Extensions.Http",
       "version": "10.0.0",
       "license": "MIT",
       "copyright": "© Microsoft Corporation. All rights reserved.",
@@ -3097,16 +3043,6 @@
       "kind": "license"
     },
     {
-      "id": "3af1a0dde9ba417ba8dce494675b449ddc203fcb2939d75319a2666c947bf03e",
-      "title": "Apex Commons 0.10.0 License (upstream text)",
-      "file": "3af1a0dde9ba417ba8dce494675b449ddc203fcb2939d75319a2666c947bf03e.txt",
-      "sha256": "3af1a0dde9ba417ba8dce494675b449ddc203fcb2939d75319a2666c947bf03e",
-      "sourceUrls": [
-        "https://unpkg.com/apex-commons@0.10.0/LICENSE.md"
-      ],
-      "kind": "license"
-    },
-    {
       "id": "3c76bd4c98a03091ab86a759e591a2c24ddeebc3a1489711c7e763492711798a",
       "title": "Android binding notices - Error Prone annotations",
       "file": "3c76bd4c98a03091ab86a759e591a2c24ddeebc3a1489711c7e763492711798a.txt",
@@ -3305,16 +3241,6 @@
       "kind": "notice"
     },
     {
-      "id": "950607e7415c641f9cb136b29607a806e27d6ad5e0d2ecdcd8addcf4dae38a69",
-      "title": "MIT License",
-      "file": "950607e7415c641f9cb136b29607a806e27d6ad5e0d2ecdcd8addcf4dae38a69.txt",
-      "sha256": "950607e7415c641f9cb136b29607a806e27d6ad5e0d2ecdcd8addcf4dae38a69",
-      "sourceUrls": [
-        "https://licenses.nuget.org/MIT"
-      ],
-      "kind": "license"
-    },
-    {
       "id": "9d030a7bc79f8a3c6129397dbd4b0bb010b6df6b8bab6406ab8ac3def6aa2db6",
       "title": "MIT License",
       "file": "9d030a7bc79f8a3c6129397dbd4b0bb010b6df6b8bab6406ab8ac3def6aa2db6.txt",
@@ -3463,16 +3389,6 @@
       "kind": "notice"
     },
     {
-      "id": "d3f4eb7ec97c10a740b390ae75c6387170082a73d6dad953e7a8432f399ee47c",
-      "title": "ApexCharts 8.8.1 License (upstream text)",
-      "file": "d3f4eb7ec97c10a740b390ae75c6387170082a73d6dad953e7a8432f399ee47c.txt",
-      "sha256": "d3f4eb7ec97c10a740b390ae75c6387170082a73d6dad953e7a8432f399ee47c",
-      "sourceUrls": [
-        "https://unpkg.com/apexcharts@8.8.1/LICENSE.md"
-      ],
-      "kind": "license"
-    },
-    {
       "id": "d7b714319b75ef055fc54c800e49c826589e3b8a4ff25ee081bad0a124eb003f",
       "title": "Microsoft Windows App SDK NOTICE",
       "file": "d7b714319b75ef055fc54c800e49c826589e3b8a4ff25ee081bad0a124eb003f.txt",
@@ -3537,5 +3453,5 @@
       "kind": "notice"
     }
   ],
-  "provenance": "PROVENANCE NOTES\n----------------\n\nStatements about sources that could not be verified from this repository.\nThey are separate from the license texts above.\n\n1. ApexCharts and Apex Commons. The bundled ApexCharts JavaScript library\n   8.8.1, and the Apex Commons 0.10.0 code inside it, are licensed under\n   upstream's dual Community/Commercial terms, not MIT. The library is served\n   as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim,\n   from the Blazor-ApexCharts package.\n\n2. Nerd Fonts. The OpenDyslexic files are patched builds made with the Nerd\n   Fonts patcher, whose license is reproduced above. The patcher version used\n   and the individual licenses of patched-in icon sets are not recorded in\n   this repository, so this notice does not enumerate them.\n\n3. Microsoft.Graphics.Win2D 1.4.0. The package carries no license file. Its\n   package metadata declares a legacy Win2D EULA URL and requires license\n   acceptance; the Win2D repository's LICENSE.txt is MIT and is reproduced\n   above. Which terms apply to the package is not established here.\n\n4. Android binding packages. The third-party notices reproduced above are the\n   notices shipped in the Microsoft binding packages. They identify the\n   licenses under which Microsoft received the upstream Android libraries.\n   The upstream projects' own NOTICE files are not reproduced, and their\n   correspondence with these texts has not been checked.\n\n5. Microsoft package notices. The ASP.NET Core app and components package\n   notices, the Microsoft.Extensions, System and cryptography package\n   notices, the Microsoft.Extensions.Logging and System.Numerics.Tensors\n   package notices, the MAUI notice and the runtime notices are reproduced\n   verbatim. Package-level notices for Microsoft packages not listed in\n   section 1 are not included."
+  "provenance": "PROVENANCE NOTES\n----------------\n\nStatements about sources that could not be verified from this repository.\nThey are separate from the license texts above.\n\n1. Nerd Fonts. The OpenDyslexic files are patched builds made with the Nerd\n   Fonts patcher, whose license is reproduced above. The patcher version used\n   and the individual licenses of patched-in icon sets are not recorded in\n   this repository, so this notice does not enumerate them.\n\n2. Microsoft.Graphics.Win2D 1.4.0. The package carries no license file. Its\n   package metadata declares a legacy Win2D EULA URL and requires license\n   acceptance; the Win2D repository's LICENSE.txt is MIT and is reproduced\n   above. Which terms apply to the package is not established here.\n\n3. Android binding packages. The third-party notices reproduced above are the\n   notices shipped in the Microsoft binding packages. They identify the\n   licenses under which Microsoft received the upstream Android libraries.\n   The upstream projects' own NOTICE files are not reproduced, and their\n   correspondence with these texts has not been checked.\n\n4. Microsoft package notices. The ASP.NET Core app and components package\n   notices, the Microsoft.Extensions, System and cryptography package\n   notices, the Microsoft.Extensions.Logging and System.Numerics.Tensors\n   package notices, the MAUI notice and the runtime notices are reproduced\n   verbatim. Package-level notices for Microsoft packages not listed in\n   section 1 are not included."
 }

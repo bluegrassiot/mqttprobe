@@ -41,7 +41,7 @@ public partial class ChartCard
     // The card sits at its file-length limit, so its export control is composed here.
     private RenderFragment ExportButton => builder =>
     {
-        if (Renderer != ChartRendererKind.ECharts || Configuration.Series.Count == 0)
+        if (Configuration.Series.Count == 0)
             return;
 
         builder.OpenComponent<MudIconButton>(0);
@@ -148,7 +148,6 @@ public partial class ChartCard
 
     private bool IsExportTargetCurrent(int generation) =>
         !_disposed
-        && Renderer == ChartRendererKind.ECharts
         && _echartsReady
         && generation == _rendererGeneration;
 

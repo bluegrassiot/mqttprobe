@@ -97,11 +97,9 @@ public class MetricsStatsChipRendererCallsTests : BunitTestContext
     }
 
     [Test]
-    public void ChartsPanel_ShowsBothRenderers_WithCallCountsSurfacedFailuresAndCallTimes()
+    public void ChartsPanel_ShowsTheRenderer_WithCallCountsSurfacedFailuresAndCallTimes()
     {
         _mockMetrics.GetSnapshot().Returns(CreateSnapshot(
-            new ChartRendererCallMetricsSnapshot("Apex", CompletedCalls: 120, FailedCalls: 3,
-                AverageCallMilliseconds: 2.25, MaximumCallMilliseconds: 12.5, LastCompletedCallAgeSeconds: 4),
             new ChartRendererCallMetricsSnapshot("ECharts", CompletedCalls: 60, FailedCalls: 1,
                 AverageCallMilliseconds: 8.4, MaximumCallMilliseconds: 25, LastCompletedCallAgeSeconds: 75)));
         var (provider, _) = OpenFlyout();
@@ -110,23 +108,17 @@ public class MetricsStatsChipRendererCallsTests : BunitTestContext
         {
             var charts = FindPanel(provider, "Charts");
 
-            var apex = FindRenderer(charts, "Apex");
-            RowValue(apex, "Completed update calls").Should().Be("120");
-            RowValue(apex, "Failures surfaced").Should().Be("3");
-            RowValue(apex, "Call time (avg / max)").Should().Be(
-                $"{2.25.ToString("N2", CultureInfo.CurrentCulture)} / {12.5.ToString("N1", CultureInfo.CurrentCulture)} ms");
-            RowValue(apex, "Last completed call").Should().Be("4s ago");
-            apex.QuerySelectorAll(".metrics-error").Should().NotBeEmpty();
-
             var echarts = FindRenderer(charts, "ECharts");
             RowValue(echarts, "Completed update calls").Should().Be("60");
             RowValue(echarts, "Failures surfaced").Should().Be("1");
+            RowValue(echarts, "Call time (avg / max)").Should().Be(
+                $"{8.4.ToString("N2", CultureInfo.CurrentCulture)} / {25.ToString("N1", CultureInfo.CurrentCulture)} ms");
             RowValue(echarts, "Last completed call").Should().Be("1m 15s ago");
             echarts.QuerySelectorAll(".metrics-error").Should().NotBeEmpty();
 
             charts.TextContent.Should().Contain("Completed calls are renderer API or wrapper calls that finished, whether they returned or threw. They do not confirm the chart redrew.");
-            charts.TextContent.Should().Contain("Call time is the wait for that call to finish. Apex also builds and serializes the series; neither renderer includes paint or end-to-end latency.");
-            charts.TextContent.Should().Contain("Failures are only the ones the renderer surfaced. A call the Apex wrapper skips, or a disconnect it absorbs, still counts as completed.");
+            charts.TextContent.Should().Contain("Call time is the wait for that call to finish. It does not include paint or end-to-end latency.");
+            charts.TextContent.Should().Contain("Failures are only the ones the renderer surfaced.");
             charts.TextContent.Should().Contain("Averages and maximums cover the last 64 completed calls. Counts are session totals and include failures.");
             charts.TextContent.Should().NotContain("Failed calls");
         });
@@ -159,15 +151,15 @@ public class MetricsStatsChipRendererCallsTests : BunitTestContext
     public void ChartsPanel_ShowsNoDataPlaceholders_WhenRendererHasNoReturnedCalls()
     {
         _mockMetrics.GetSnapshot().Returns(CreateSnapshot(
-            new ChartRendererCallMetricsSnapshot("Apex", CompletedCalls: 0, FailedCalls: 0,
+            new ChartRendererCallMetricsSnapshot("ECharts", CompletedCalls: 0, FailedCalls: 0,
                 AverageCallMilliseconds: 0, MaximumCallMilliseconds: 0, LastCompletedCallAgeSeconds: 0)));
         var (provider, _) = OpenFlyout();
 
         provider.WaitForAssertion(() =>
         {
-            var apex = FindRenderer(FindPanel(provider, "Charts"), "Apex");
-            RowValue(apex, "Call time (avg / max)").Should().Be("N/A");
-            RowValue(apex, "Last completed call").Should().Be("N/A");
+            var echarts = FindRenderer(FindPanel(provider, "Charts"), "ECharts");
+            RowValue(echarts, "Call time (avg / max)").Should().Be("N/A");
+            RowValue(echarts, "Last completed call").Should().Be("N/A");
         });
     }
 
@@ -175,7 +167,7 @@ public class MetricsStatsChipRendererCallsTests : BunitTestContext
     public void ChartsPanel_CollapsesOnMenuReopen_AfterBeingExpanded()
     {
         _mockMetrics.GetSnapshot().Returns(CreateSnapshot(
-            new ChartRendererCallMetricsSnapshot("Apex", CompletedCalls: 5, FailedCalls: 0,
+            new ChartRendererCallMetricsSnapshot("ECharts", CompletedCalls: 5, FailedCalls: 0,
                 AverageCallMilliseconds: 2, MaximumCallMilliseconds: 4, LastCompletedCallAgeSeconds: 1)));
         var (provider, cut) = OpenFlyout();
 

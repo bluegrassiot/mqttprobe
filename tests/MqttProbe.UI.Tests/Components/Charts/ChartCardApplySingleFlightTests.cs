@@ -70,13 +70,11 @@ public class ChartCardApplySingleFlightTests : BunitTestContext
     private IRenderedComponent<ChartCardComponent> RenderCard(ChartConfiguration configuration) =>
         Render<ChartCardComponent>(parameters => parameters
             .Add(c => c.Configuration, configuration)
-            .Add(c => c.Clock, _clock)
-            .Add(c => c.Renderer, ChartRendererKind.ECharts));
+            .Add(c => c.Clock, _clock));
 
     private static void Rerender(IRenderedComponent<ChartCardComponent> cut, ChartConfiguration configuration) =>
         cut.Render(parameters => parameters
-            .Add(c => c.Configuration, configuration)
-            .Add(c => c.Renderer, ChartRendererKind.ECharts));
+            .Add(c => c.Configuration, configuration));
 
     private static long Epoch(double secondsAgo) =>
         new DateTimeOffset(_start.UtcDateTime.AddSeconds(-secondsAgo)).ToUnixTimeMilliseconds();
@@ -254,49 +252,6 @@ public class ChartCardApplySingleFlightTests : BunitTestContext
             cut.WaitForAssertion(() => _module.UpdateCount.Should().Be(2), TimeSpan.FromSeconds(5));
             _module.Updates[1].Series[0].Points.Select(point => point[1]).Should().Equal([1, 2, 3],
                 "resuming draws the latest buffer, including data that arrived while paused");
-        }
-        finally
-        {
-            _module.ReleaseAll();
-        }
-    }
-
-    [Test]
-    public async Task RendererSwitchDuringABlockedApply_IgnoresTheLateCompletion()
-    {
-        try
-        {
-            var series = new ChartSeries { DisplayName = "Temp" };
-            Record(series, 30, 1);
-            Record(series, 20, 2);
-            var chart = Chart(series);
-            var cut = await RenderCreatedAsync(chart);
-
-            _module.NextUpdateFailure = new JSException("the replaced chart is gone");
-            Record(series, 10, 3);
-            RaiseData();
-            await _module.WaitForUpdateAsync(1);
-
-            cut.Render(parameters => parameters
-                .Add(c => c.Configuration, chart)
-                .Add(c => c.Renderer, ChartRendererKind.Apex));
-            cut.WaitForAssertion(
-                () => cut.FindComponents<ApexCharts.ApexChart<ChartDataPoint>>().Should().ContainSingle(),
-                TimeSpan.FromSeconds(5));
-
-            Rerender(cut, chart);
-
-            _module.ReleaseAll();
-
-            cut.WaitForAssertion(() => _module.CreateCount.Should().Be(2), TimeSpan.FromSeconds(5));
-            cut.WaitForAssertion(
-                () => cut.FindAll(".chart-card-echarts").Should().ContainSingle(),
-                TimeSpan.FromSeconds(5));
-            cut.FindAll(".chart-card-echarts-error").Should().BeEmpty(
-                "a late failure from the replaced generation must not describe the current chart");
-            _module.Updates.Should().ContainSingle(
-                "the replacement draws the buffered data through its own create");
-            _module.Creates[1].Series[0].Points.Should().HaveCount(3);
         }
         finally
         {

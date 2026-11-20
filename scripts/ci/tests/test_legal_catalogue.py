@@ -501,7 +501,7 @@ class BindingTests(unittest.TestCase):
                     ],
                     "packageFiles": [
                         {
-                            "component": "apexcharts-javascript",
+                            "component": "test-component",
                             "id": "Test.Pkg",
                             "version": "1.0",
                             "path": "js/test.js",
@@ -513,7 +513,7 @@ class BindingTests(unittest.TestCase):
             encoding="utf-8",
         )
         catalogue_data = {
-            "components": [{"id": "dotnet-runtime"}, {"id": "apexcharts-javascript"}],
+            "components": [{"id": "dotnet-runtime"}, {"id": "test-component"}],
             "_records": {
                 ("Test.Pkg", "1.0"): {
                     "id": "Test.Pkg",

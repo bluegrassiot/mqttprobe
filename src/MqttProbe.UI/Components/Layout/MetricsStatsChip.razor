@@ -156,8 +156,8 @@
                             <MudDivider Class="my-2" />
 
                             <MudText Typo="Typo.caption" Class="metrics-note">Completed calls are renderer API or wrapper calls that finished, whether they returned or threw. They do not confirm the chart redrew.</MudText>
-                            <MudText Typo="Typo.caption" Class="metrics-note">Call time is the wait for that call to finish. Apex also builds and serializes the series; neither renderer includes paint or end-to-end latency.</MudText>
-                            <MudText Typo="Typo.caption" Class="metrics-note">Failures are only the ones the renderer surfaced. A call the Apex wrapper skips, or a disconnect it absorbs, still counts as completed.</MudText>
+                            <MudText Typo="Typo.caption" Class="metrics-note">Call time is the wait for that call to finish. It does not include paint or end-to-end latency.</MudText>
+                            <MudText Typo="Typo.caption" Class="metrics-note">Failures are only the ones the renderer surfaced.</MudText>
                             <MudText Typo="Typo.caption" Class="metrics-note">Averages and maximums cover the last 64 completed calls. Counts are session totals and include failures.</MudText>
                         </div>
                     </MudExpansionPanel>

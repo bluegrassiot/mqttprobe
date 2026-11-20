@@ -1,6 +1,4 @@
-using ApexCharts;
 using Microsoft.JSInterop;
-using MqttProbe.Core.Models.Chart;
 using MqttProbe.Core.Models.Configuration;
 using MqttProbe.UI.Services.Formatting;
 
@@ -41,13 +39,6 @@ public partial class ChartCard
 
     private MessageTimePreferences ReadPreferences() =>
         MessageTimePreferences.Normalize(UiSettings.Ui.MessageTime);
-
-    private void ApplyTimeFormatPreferences()
-    {
-        _options.Xaxis.Labels.DatetimeUTC = _preferences.Zone == MessageTimePreferences.ZoneUtc;
-        _options.Xaxis.Labels.Formatter = ChartTimeFormat.AxisFormatter(_preferences);
-        _options.Tooltip.X.Formatter = ChartTimeFormat.TooltipFormatter(_preferences);
-    }
 
     internal async Task EnsureTimeBridgeAsync()
     {
@@ -286,34 +277,6 @@ public partial class ChartCard
     private static long Epoch(DateTime timestamp) =>
         new DateTimeOffset(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
 
-    private async Task OnChartZoomed(ZoomedData<ChartDataPoint> args)
-    {
-        if (args?.IsZoomed == true && args.XAxis?.Min is { } min && args.XAxis.Max is { } max)
-        {
-            _visibleFromMs = (long)Math.Round(min);
-            _visibleToMs = (long)Math.Round(max);
-        }
-        else
-        {
-            _visibleFromMs = null;
-            _visibleToMs = null;
-        }
-
-        _zoneCaptionSignature = "";
-        await RefreshZoneCaptionAsync(force: true);
-    }
-
-    private async Task OnChartScrolled(SelectionData<ChartDataPoint> args)
-    {
-        if (args?.XAxis?.Min is { } min && args.XAxis.Max is { } max)
-        {
-            _visibleFromMs = (long)Math.Round(min);
-            _visibleToMs = (long)Math.Round(max);
-        }
-
-        await RefreshZoneCaptionAsync();
-    }
-
     private void OnUiPreferencesChanged() => _ = InvokeAsync(ApplyUiPreferencesAsync);
 
     private async Task ApplyUiPreferencesAsync()
@@ -330,7 +293,6 @@ public partial class ChartCard
         var zoneChanged = next.Zone != _preferences.Zone;
         _preferences = next;
         _lastFontProfile = fontProfile;
-        ApplyTimeFormatPreferences();
         _pendingOptionsUpdate = true;
 
         if (zoneChanged)

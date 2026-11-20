@@ -83,7 +83,7 @@ export function init(container, theme, options) {
 
 async function loadExport(chartModuleUrl, echartsUrl = fakeEchartsUrl(), cacheToken = '') {
     const source = exportSource
-        .replace('./chart-renderer.js?v=8', chartModuleUrl)
+        .replace('./chart-renderer.js?v=9', chartModuleUrl)
         .replace('./echarts/6.1.0/echarts.esm.min.js', echartsUrl)
         .replace('./chart-csv.js', csvStubUrl())
         .replace('./chart-file-delivery.js', deliveryStubUrl())
@@ -290,7 +290,7 @@ function interopModulePath(source) {
 }
 
 test('the export module reads the renderer through the same versioned module URL as the interop', async () => {
-    assert.match(exportSource, /from '\.\/chart-renderer\.js\?v=8'/,
+    assert.match(exportSource, /from '\.\/chart-renderer\.js\?v=9'/,
         'the export module must share the live renderer registry, not a second unversioned module');
     assert.equal(exportSource.match(/chart-renderer\.js/g)?.length, 1);
 

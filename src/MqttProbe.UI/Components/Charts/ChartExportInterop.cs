@@ -5,7 +5,7 @@ namespace MqttProbe.UI.Components.Charts;
 internal sealed class ChartExportInterop(IJSRuntime js) : IAsyncDisposable
 {
     internal const string ModulePath =
-        "./_content/MqttProbe.UI/js/chart-export.js?v=4";
+        "./_content/MqttProbe.UI/js/chart-export.js?v=5";
 
     // Disposal waits on this gate so an in-flight capture cannot outlive the card.
     private readonly SemaphoreSlim _gate = new(1, 1);

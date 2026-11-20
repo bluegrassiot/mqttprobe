@@ -66,7 +66,6 @@ public sealed class UxMetricsService : IUxMetricsService
     public const int RateWindowSeconds = 60;
     public const int ChartRendererCallWindow = 64;
 
-    private const string ApexRenderer = "Apex";
     private const string EChartsRenderer = "ECharts";
 
     private readonly ILogger<UxMetricsService> _logger;
@@ -88,7 +87,6 @@ public sealed class UxMetricsService : IUxMetricsService
     private long _chartsCreated;
     private long _seriesAddedToExistingCharts;
     private readonly ConcurrentDictionary<string, long> _chartFunnelBySource = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ChartRendererCallBucket _apexCalls = new();
     private readonly ChartRendererCallBucket _echartsCalls = new();
 
     private long _messagesProcessed;
@@ -178,7 +176,6 @@ public sealed class UxMetricsService : IUxMetricsService
     {
         var bucket = renderer switch
         {
-            ApexRenderer => _apexCalls,
             EChartsRenderer => _echartsCalls,
             _ => null,
         };
@@ -308,15 +305,11 @@ public sealed class UxMetricsService : IUxMetricsService
     private List<ChartRendererCallMetricsSnapshot>? BuildChartRendererCalls()
     {
         var nowMs = _tickCount64Ms();
-        var apex = _apexCalls.Snapshot(ApexRenderer, nowMs);
         var echarts = _echartsCalls.Snapshot(EChartsRenderer, nowMs);
-        if (apex is null && echarts is null)
+        if (echarts is null)
             return null;
 
-        var calls = new List<ChartRendererCallMetricsSnapshot>(2);
-        if (apex is not null) calls.Add(apex);
-        if (echarts is not null) calls.Add(echarts);
-        return calls;
+        return [echarts];
     }
 
     private sealed class ChartRendererCallBucket

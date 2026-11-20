@@ -16,18 +16,6 @@ Verify:     python scripts/legal/notices.py check
 
 1. Shipped components
 
-  Apex Commons JavaScript library 0.10.0
-    Licence: Apex Commons Community/Commercial dual license (unresolved)
-    Source: https://github.com/apexcharts/projects/tree/main/libs/commons
-    Texts: Apex Commons 0.10.0 License (upstream text)
-    Note: Bundled inside js/apexcharts.full.min.js by ApexCharts 8.8.1 and served to the browser. Upstream terms are not resolved by this notice. They carry the same OEM/redistribution condition, and no such entitlement is established here.
-
-  ApexCharts JavaScript library 8.8.1
-    Licence: ApexCharts Community/Commercial dual license (unresolved)
-    Source: https://github.com/apexcharts/apexcharts.js
-    Texts: ApexCharts 8.8.1 License (upstream text)
-    Note: Bundled by Blazor-ApexCharts 8.0.0 as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim, and served to the browser. That file is byte-identical to the npm apexcharts 8.8.1 full build. Upstream terms are not MIT and are not resolved by this notice. The 8.8.1 terms also require an OEM/redistribution licence to embed the library in a product used by other people, and no such entitlement is established here.
-
   .NET for Android runtime 36.1.118
     Licence: MIT and third-party terms
     Copyright: Copyright (c) .NET Foundation and Contributors
@@ -107,13 +95,6 @@ Verify:     python scripts/legal/notices.py check
     Source: https://github.com/dotnet/macios
     Texts: Microsoft.iOS SDK License (27.1.10018)
     Note: Installed workload pack Microsoft.MacCatalyst.Runtime.maccatalyst-arm64.net10.0_27.0/27.0.10742. Its SDK licence is byte-identical to the Microsoft.iOS copy reproduced here.
-
-  Blazor-ApexCharts 8.0.0
-    Licence: MIT
-    Copyright: Copyright 2022 (c) Joakim Dangården. All rights reserved.
-    Source: https://apexcharts.github.io/Blazor-ApexCharts/
-    Texts: MIT License; MIT License (generic text); ApexCharts 8.8.1 License (upstream text)
-    Note: The package is MIT. The bundled ApexCharts JavaScript 8.8.1 library and its Apex Commons 0.10.0 code are separately licensed and unresolved.
 
   Blazor.Lucide 1.0.6
     Licence: MIT
@@ -319,12 +300,6 @@ Verify:     python scripts/legal/notices.py check
     Texts: Microsoft.Extensions.Configuration package licence (THIRD-PARTY-NOTICES.TXT); MIT License (generic text)
 
   Microsoft.Extensions.Hosting.Abstractions 10.0.0
-    Licence: MIT
-    Copyright: © Microsoft Corporation. All rights reserved.
-    Source: https://dot.net/
-    Texts: MIT License (generic text); Microsoft.Extensions, System and cryptography packages third-party notices
-
-  Microsoft.Extensions.Http 10.0.0
     Licence: MIT
     Copyright: © Microsoft Corporation. All rights reserved.
     Source: https://dot.net/
@@ -1348,29 +1323,23 @@ PROVENANCE NOTES
 Statements about sources that could not be verified from this repository.
 They are separate from the license texts above.
 
-1. ApexCharts and Apex Commons. The bundled ApexCharts JavaScript library
-   8.8.1, and the Apex Commons 0.10.0 code inside it, are licensed under
-   upstream's dual Community/Commercial terms, not MIT. The library is served
-   as js/apexcharts.full.min.js, loaded through the js/apexcharts.esm.js shim,
-   from the Blazor-ApexCharts package.
-
-2. Nerd Fonts. The OpenDyslexic files are patched builds made with the Nerd
+1. Nerd Fonts. The OpenDyslexic files are patched builds made with the Nerd
    Fonts patcher, whose license is reproduced above. The patcher version used
    and the individual licenses of patched-in icon sets are not recorded in
    this repository, so this notice does not enumerate them.
 
-3. Microsoft.Graphics.Win2D 1.4.0. The package carries no license file. Its
+2. Microsoft.Graphics.Win2D 1.4.0. The package carries no license file. Its
    package metadata declares a legacy Win2D EULA URL and requires license
    acceptance; the Win2D repository's LICENSE.txt is MIT and is reproduced
    above. Which terms apply to the package is not established here.
 
-4. Android binding packages. The third-party notices reproduced above are the
+3. Android binding packages. The third-party notices reproduced above are the
    notices shipped in the Microsoft binding packages. They identify the
    licenses under which Microsoft received the upstream Android libraries.
    The upstream projects' own NOTICE files are not reproduced, and their
    correspondence with these texts has not been checked.
 
-5. Microsoft package notices. The ASP.NET Core app and components package
+4. Microsoft package notices. The ASP.NET Core app and components package
    notices, the Microsoft.Extensions, System and cryptography package
    notices, the Microsoft.Extensions.Logging and System.Numerics.Tensors
    package notices, the MAUI notice and the runtime notices are reproduced

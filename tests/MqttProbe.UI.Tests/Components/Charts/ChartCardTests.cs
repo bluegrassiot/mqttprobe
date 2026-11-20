@@ -29,6 +29,11 @@ public class ChartCardTests : BunitTestContext
         Services.AddSingleton(_chartData);
         Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
         EnsureMudProviders();
+
+        var module = JSInterop.SetupModule(ChartRendererInterop.ModulePath);
+        module.Setup<bool>("createChart", _ => true).SetResult(true);
+        module.Setup<bool>("updateChart", _ => true).SetResult(true);
+        module.Setup<bool>("disposeChart", _ => true).SetResult(true);
     }
 
     private IReadOnlyList<ChartDataPoint> PointsFor(Guid seriesId) =>
@@ -64,6 +69,10 @@ public class ChartCardTests : BunitTestContext
 
     private static string HeaderText(IRenderedComponent<ChartCardComponent> cut) =>
         cut.Find(".mud-card-header-content > .mud-typography-caption").TextContent;
+
+    private ChartRendererSpec CreateSpec(int index = 0) =>
+        JSInterop.Invocations["createChart"][index].Arguments[3]
+            .Should().BeOfType<ChartRendererSpec>().Subject;
 
     [Test]
     public void SeriesWithoutPoints_IsWaitingForData_NotLiveOrStale()
@@ -193,7 +202,7 @@ public class ChartCardTests : BunitTestContext
         var cut = RenderCard(Chart(null, a));
         StatusChipText(cut).Should().Be("Live");
 
-        cut.Find("button[title='Pause live updates (enables zoom/pan/export)']").Click();
+        cut.Find("button[title='Pause live updates (keeps the view still)']").Click();
         cut.WaitForAssertion(() => StatusChipText(cut).Should().Be("Paused"), TimeSpan.FromSeconds(5));
         StatusAgeText(cut).Should().BeNull();
 
@@ -227,7 +236,7 @@ public class ChartCardTests : BunitTestContext
         var cut = RenderCard(Chart(10, a));
         StatusChipText(cut).Should().Be("Live");
 
-        cut.Find("button[title='Pause live updates (enables zoom/pan/export)']").Click();
+        cut.Find("button[title='Pause live updates (keeps the view still)']").Click();
         cut.WaitForAssertion(() => StatusChipText(cut).Should().Be("Paused"), TimeSpan.FromSeconds(5));
         StatusAgeText(cut).Should().BeNull();
 
@@ -239,21 +248,6 @@ public class ChartCardTests : BunitTestContext
             () => StatusChipText(cut).Should().Be("Stale", "resuming evaluates the real receipt time without waiting for a message"),
             TimeSpan.FromSeconds(5));
         StatusAgeText(cut).Should().Be("1m 2s ago", "pausing must not reset receipt times");
-    }
-
-    [Test]
-    public void HoverPauseTakesPrecedence_AndLeavingRestoresFreshness()
-    {
-        var a = new ChartSeries { DisplayName = "Temp" };
-        Record(a, 60);
-        var cut = RenderCard(Chart(10, a));
-        StatusChipText(cut).Should().Be("Stale");
-
-        cut.Find(".chart-card-plot").MouseOver();
-        cut.WaitForAssertion(() => StatusChipText(cut).Should().Be("Paused"), TimeSpan.FromSeconds(5));
-
-        cut.Find(".chart-card-plot").TriggerEvent("onmouseleave", new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
-        cut.WaitForAssertion(() => StatusChipText(cut).Should().Be("Stale"), TimeSpan.FromSeconds(5));
     }
 
     [Test]
@@ -333,26 +327,11 @@ public class ChartCardTests : BunitTestContext
 
         StatusChipText(cut).Should().Be("Stale");
         StatusAgeText(cut).Should().Be("10m 0s ago", "the receipt age ignores the display window");
-        cut.FindComponents<ApexCharts.ApexPointSeries<ChartDataPoint>>().Should().ContainSingle()
-            .Which.Instance.Items.Should().BeEmpty("the point is outside the five-minute display window");
-    }
-
-    [Test]
-    public void PointsWithoutADisplayWindow_ReachApexWithoutACopy()
-    {
-        var series = new ChartSeries { DisplayName = "Temp" };
-        IReadOnlyList<ChartDataPoint> snapshot =
-        [
-            new(_start.UtcDateTime.AddMinutes(-5), 1),
-            new(_start.UtcDateTime, 2)
-        ];
-        _chartData.GetPoints(series.Id).Returns(snapshot);
-
-        var cut = RenderCard(Chart(null, series));
-
-        var items = cut.FindComponents<ApexCharts.ApexPointSeries<ChartDataPoint>>()
-            .Should().ContainSingle().Which.Instance.Items;
-        items.Should().BeSameAs(snapshot, "an unfiltered snapshot needs no further copy");
+        cut.WaitForAssertion(
+            () => JSInterop.Invocations["createChart"].Should().ContainSingle(),
+            TimeSpan.FromSeconds(5));
+        CreateSpec().Series.Should().ContainSingle()
+            .Which.Points.Should().BeEmpty("the point is outside the five-minute display window");
     }
 
     [Test]

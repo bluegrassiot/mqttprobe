@@ -152,8 +152,6 @@ class LegalCatalogueTests(unittest.TestCase):
     def test_distributed_components_are_attributed(self):
         names = {component["name"] for component in self.catalogue["components"]}
         for marker in (
-            "Blazor-ApexCharts",
-            "ApexCharts JavaScript library",
             "MQTTnet",
             "SparkplugNet",
             "Google.Protobuf",
@@ -232,7 +230,6 @@ class LegalCatalogueTests(unittest.TestCase):
             )
         for entry in bindings["packageFiles"]:
             self.assertIn(entry["component"], component_ids)
-        self.assertIn("apexcharts.esm.js", {entry["path"].split("/")[-1] for entry in bindings["packageFiles"]})
 
     def test_sparkplug_modification_and_source_are_stated(self):
         component = self.components["sparkplug-b-generated-code"]
@@ -243,8 +240,6 @@ class LegalCatalogueTests(unittest.TestCase):
         self.assertIn("MQTTProbe public repository", component["notes"])
 
     def test_unresolved_terms_are_not_allowlisted(self):
-        apex = self.components["apexcharts-javascript"]
-        self.assertIn("unresolved", apex["license"])
         win2d = self.components["nuget:microsoft.graphics.win2d@1.4.0"]
         self.assertIn("Unresolved", win2d["license"])
         self.assertIn("EULA", win2d["notes"])
@@ -266,6 +261,9 @@ class LegalCatalogueTests(unittest.TestCase):
             "protobuf-net contributors",
             "HOW MQTTPROBE STANDS",
             "SCOPE NOTES",
+            "ApexCharts",
+            "Apex Commons",
+            "Blazor-ApexCharts",
         ):
             self.assertNotIn(marker, text)
 
@@ -380,7 +378,6 @@ class LegalIndexTests(unittest.TestCase):
     def test_provenance_survives(self):
         text = (ROOT / "NOTICES").read_text(encoding="utf-8")
         for marker in (
-            "ApexCharts",
             "Nerd Fonts",
             "Microsoft.Graphics.Win2D",
             "Android binding packages",

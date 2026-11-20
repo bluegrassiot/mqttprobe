@@ -1,5 +1,3 @@
-using ApexCharts;
-using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.JSInterop;
@@ -48,7 +46,7 @@ public class ChartCardRendererTests : BunitTestContext
         _module = JSInterop.SetupModule(ChartRendererInterop.ModulePath);
     }
 
-    private void AllowAdapterCalls()
+    private void AllowRendererCalls()
     {
         _module.Setup<bool>("createChart", _ => true).SetResult(true);
         _module.Setup<bool>("updateChart", _ => true).SetResult(true);
@@ -63,7 +61,7 @@ public class ChartCardRendererTests : BunitTestContext
             ? (points[0].Timestamp, points[^1].Timestamp)
             : null;
 
-    private GatedChartModule GateAdapterCreation()
+    private GatedChartModule GateChartCreation()
     {
         var module = new GatedChartModule();
         _runtime.Module = module;
@@ -77,21 +75,15 @@ public class ChartCardRendererTests : BunitTestContext
         points.Add(new ChartDataPoint(_clock.GetUtcNow().UtcDateTime.AddSeconds(-secondsAgo), value));
     }
 
-    private IRenderedComponent<ChartCardComponent> RenderCard(
-        ChartConfiguration configuration,
-        ChartRendererKind renderer = ChartRendererKind.Apex,
-        Action? onRollback = null) =>
+    private IRenderedComponent<ChartCardComponent> RenderCard(ChartConfiguration configuration) =>
         Render<ChartCardComponent>(parameters => parameters
             .Add(c => c.Configuration, configuration)
-            .Add(c => c.Clock, _clock)
-            .Add(c => c.Renderer, renderer)
-            .Add(c => c.OnRendererRollback, EventCallback.Factory.Create(this, () => onRollback?.Invoke())));
+            .Add(c => c.Clock, _clock));
 
-    private void Rerender(IRenderedComponent<ChartCardComponent> cut, ChartConfiguration configuration, ChartRendererKind renderer) =>
+    private void Rerender(IRenderedComponent<ChartCardComponent> cut, ChartConfiguration configuration) =>
         cut.Render(parameters => parameters
             .Add(c => c.Configuration, configuration)
-            .Add(c => c.Clock, _clock)
-            .Add(c => c.Renderer, renderer));
+            .Add(c => c.Clock, _clock));
 
     private static ChartConfiguration Chart(params ChartSeries[] series) => new()
     {
@@ -120,27 +112,9 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
-    public void DefaultRenderer_KeepsApexAndNeverLoadsTheEChartsModule()
+    public void RendersTheChartWithTheProductionSeries()
     {
-        var series = new ChartSeries { DisplayName = "Temp" };
-        Record(series, 1, 21.5);
-
-        var cut = RenderCard(Chart(series));
-
-        cut.WaitForAssertion(
-            () => cut.FindComponents<ApexChart<ChartDataPoint>>().Should().ContainSingle(),
-            TimeSpan.FromSeconds(5));
-        cut.FindAll(".chart-card-echarts").Should().BeEmpty();
-        JSInterop.Invocations.Identifiers.Should().NotContain("createChart");
-        JSInterop.Invocations.Should().NotContain(invocation =>
-            invocation.Identifier == "import"
-            && Equals(invocation.Arguments[0], ChartRendererInterop.ModulePath));
-    }
-
-    [Test]
-    public void EChartsSelection_RendersTheAdapterWithTheProductionSeries()
-    {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var temp = new ChartSeries { DisplayName = "Temp", Color = "#F97316" };
         var flow = new ChartSeries { DisplayName = "Flow", Color = "#A78BFA" };
         Record(temp, 3, 21.5);
@@ -149,11 +123,10 @@ public class ChartCardRendererTests : BunitTestContext
         var chart = Chart(temp, flow);
         chart.Type = MqttProbe.Core.Models.Chart.ChartType.Bar;
 
-        var cut = RenderCard(chart, ChartRendererKind.ECharts);
+        var cut = RenderCard(chart);
 
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
         cut.FindAll(".chart-card-echarts").Should().ContainSingle();
-        cut.FindComponents<ApexChart<ChartDataPoint>>().Should().BeEmpty();
 
         var spec = CreateSpec();
         spec.Type.Should().Be("bar");
@@ -171,15 +144,15 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
-    public void EChartsSelection_KeepsIrregularTimestampsExactlyAsBuffered()
+    public void KeepsIrregularTimestampsExactlyAsBuffered()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 37, 1);
         Record(series, 33, 2);
         Record(series, 4, 3);
 
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
 
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
         var points = CreateSpec().Series[0].Points;
@@ -189,15 +162,15 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
-    public void EChartsSelection_KeepsDuplicateDisplayNamesAsDistinctSeries()
+    public void KeepsDuplicateDisplayNamesAsDistinctSeries()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var first = new ChartSeries { DisplayName = "Temp", Color = "#F97316" };
         var second = new ChartSeries { DisplayName = "Temp", Color = "#A78BFA" };
         Record(first, 1, 21.5);
         Record(second, 1, 22.5);
 
-        var cut = RenderCard(Chart(first, second), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(first, second));
 
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
         var spec = CreateSpec();
@@ -207,26 +180,26 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
-    public void EChartsSelection_SendsTheStandardFontProfileByDefault()
+    public void SendsTheStandardFontProfileByDefault()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 1, 21.5);
 
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
 
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
         CreateSpec().FontProfile.Should().Be(FontProfiles.Standard);
     }
 
     [Test]
-    public void AccessibleFontProfile_ReachesTheAdapterAndIsReappliedWhenItChanges()
+    public void AccessibleFontProfile_ReachesTheRendererAndIsReappliedWhenItChanges()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         _ui.Ui.FontProfile = FontProfiles.Accessible;
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 1, 21.5);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
         CreateSpec().FontProfile.Should().Be(FontProfiles.Accessible);
 
@@ -240,9 +213,9 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
-    public void TimeWindowChange_ReappliesTheAdapterWithTheFilteredPoints()
+    public void TimeWindowChange_ReappliesTheRendererWithTheFilteredPoints()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var series = new ChartSeries { DisplayName = "Temp" };
         var now = DateTime.UtcNow;
         _points[series.Id] =
@@ -251,21 +224,21 @@ public class ChartCardRendererTests : BunitTestContext
             new ChartDataPoint(now.AddSeconds(-10), 2)
         ];
         var chart = Chart(series);
-        var cut = RenderCard(chart, ChartRendererKind.ECharts);
+        var cut = RenderCard(chart);
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
         CreateSpec().Series[0].Points.Should().HaveCount(2);
 
         chart.TimeWindowMinutes = 1;
-        Rerender(cut, chart, ChartRendererKind.ECharts);
+        Rerender(cut, chart);
 
         cut.WaitForAssertion(() => _module.VerifyInvoke("updateChart", 1), TimeSpan.FromSeconds(5));
         UpdateSpec().Series[0].Points.Should().ContainSingle().Which[1].Should().Be(2);
     }
 
     [Test]
-    public async Task TimeWindowChange_ResetsThePinnedAdapterViewportAndTheZoneCaption()
+    public async Task TimeWindowChange_ResetsThePinnedRendererViewportAndTheZoneCaption()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var transition = new DateTimeOffset(DateTime.UtcNow.AddMinutes(-2)).ToUnixTimeMilliseconds();
         _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneLocal };
         _formatter.ZoneLabel = "America/New_York";
@@ -279,7 +252,7 @@ public class ChartCardRendererTests : BunitTestContext
             new ChartDataPoint(DateTime.UtcNow.AddMinutes(-1), 2)
         ]);
         var chart = Chart(series);
-        var cut = RenderCard(chart, ChartRendererKind.ECharts);
+        var cut = RenderCard(chart);
         cut.WaitForAssertion(
             () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EDT / EST"),
             TimeSpan.FromSeconds(5));
@@ -290,7 +263,7 @@ public class ChartCardRendererTests : BunitTestContext
             TimeSpan.FromSeconds(5));
 
         chart.TimeWindowMinutes = 30;
-        Rerender(cut, chart, ChartRendererKind.ECharts);
+        Rerender(cut, chart);
 
         cut.WaitForAssertion(() => _module.VerifyInvoke("updateChart", 1), TimeSpan.FromSeconds(5));
         UpdateResetsViewport().Should().BeTrue(
@@ -305,12 +278,12 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
-    public void DataUpdatesReachTheAdapterAndKeepTheApexChartOutOfTheTree()
+    public void DataUpdatesReachTheRendererWithoutRebuildingThePlot()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 3, 21.5);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
 
         Record(series, 0, 23);
@@ -319,68 +292,51 @@ public class ChartCardRendererTests : BunitTestContext
         cut.WaitForAssertion(() => _module.VerifyInvoke("updateChart", 1), TimeSpan.FromSeconds(5));
         UpdateSpec().Series[0].Points.Should().HaveCount(2);
         UpdateSpec().Series[0].Points[1].Should().Equal(Epoch(0), 23);
-        cut.FindComponents<ApexChart<ChartDataPoint>>().Should().BeEmpty();
         JSInterop.Invocations.Identifiers.Should().NotContain("requestAnimationFrame");
     }
 
     [Test]
-    public void SwitchingBackToApexKeepsBufferedDataAndTheSavedConfiguration()
+    public async Task ChartCreationFailure_ShowsAnAccessibleErrorWithRetry()
     {
-        AllowAdapterCalls();
-        var series = new ChartSeries { DisplayName = "Temp" };
-        Record(series, 3, 21.5);
-        Record(series, 1, 22.25);
-        var chart = Chart(series);
-        var cut = RenderCard(chart, ChartRendererKind.ECharts);
-        cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
-
-        Rerender(cut, chart, ChartRendererKind.Apex);
-
-        cut.WaitForAssertion(
-            () => cut.FindComponents<ApexPointSeries<ChartDataPoint>>().Should().ContainSingle(),
-            TimeSpan.FromSeconds(5));
-        var items = cut.FindComponent<ApexPointSeries<ChartDataPoint>>().Instance.Items;
-        items.Select(point => point.Value).Should()
-            .Equal([21.5, 22.25], "history is read from the untouched buffer");
-        cut.Instance.Configuration.Should().BeSameAs(chart);
-        chart.Series.Should().ContainSingle().Which.Id.Should().Be(series.Id);
-        cut.FindAll(".chart-card-echarts").Should().BeEmpty();
-        _module.VerifyInvoke("disposeChart", 1);
-    }
-
-    [Test]
-    public void AdapterFailure_IsVisibleAndOffersARollbackToApex()
-    {
-        _module.Setup<bool>("updateChart", _ => true).SetResult(true);
-        _module.Setup<bool>("disposeChart", _ => true).SetResult(true);
-        _module.Setup<bool>("createChart", _ => true)
-            .SetException(new JSException("Failed to fetch dynamically imported module"));
-        var rolledBack = false;
+        var module = GateChartCreation();
+        module.FailNextCreate(new JSException("Failed to fetch dynamically imported module"));
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 1, 21.5);
 
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts, () => rolledBack = true);
+        var cut = RenderCard(Chart(series));
+        await module.CreateStarted.WaitAsync(TimeSpan.FromSeconds(5));
+        module.ReleaseCreate();
 
         cut.WaitForAssertion(
             () => cut.FindAll(".chart-card-echarts-error").Should().ContainSingle(),
             TimeSpan.FromSeconds(5));
-        cut.Markup.Should().Contain("ECharts could not start");
-        cut.Markup.Should().Contain("Failed to fetch dynamically imported module");
-        cut.FindComponents<ApexChart<ChartDataPoint>>().Should().BeEmpty(
+        var error = cut.Find(".chart-card-echarts-error");
+        error.GetAttribute("role").Should().Be("alert");
+        error.TextContent.Should().Contain("The chart could not draw.");
+        error.TextContent.Should().Contain("Failed to fetch dynamically imported module");
+        error.TextContent.Should().Contain("reload the page");
+        cut.FindAll(".chart-card-echarts").Should().BeEmpty(
             "a broken renderer must not silently look like an empty chart");
+        cut.FindAll(".chart-card-plot").Should().ContainSingle("the plot area keeps the card's layout");
 
         cut.Find(".chart-card-echarts-error button").Click();
 
-        rolledBack.Should().BeTrue("the card asks its host for the Apex renderer");
+        cut.WaitForAssertion(
+            () => cut.FindAll(".chart-card-echarts-error").Should().BeEmpty(),
+            TimeSpan.FromSeconds(5));
+        cut.FindAll(".chart-card-echarts").Should().ContainSingle();
+        cut.WaitForAssertion(
+            () => module.Creates.Should().HaveCount(2, "retrying creates a fresh chart instance"),
+            TimeSpan.FromSeconds(5));
     }
 
     [Test]
-    public async Task DisposingTheCardReleasesTheAdapterInstance()
+    public async Task DisposingTheCardReleasesTheChartInstance()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 1, 21.5);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
 
         await cut.Instance.DisposeAsync();
@@ -390,124 +346,66 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
-    public void SwitchingRenderers_DoesNotLeaveDuplicateAdapterInstances()
+    public void RemovingEverySeriesDisposesTheChartAndAddingThemBackCreatesANewChart()
     {
-        AllowAdapterCalls();
-        var series = new ChartSeries { DisplayName = "Temp" };
-        Record(series, 1, 21.5);
-        var chart = Chart(series);
-        var cut = RenderCard(chart, ChartRendererKind.Apex);
-        cut.WaitForAssertion(
-            () => cut.FindComponents<ApexChart<ChartDataPoint>>().Should().ContainSingle(),
-            TimeSpan.FromSeconds(5));
-
-        Rerender(cut, chart, ChartRendererKind.ECharts);
-        cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
-
-        Rerender(cut, chart, ChartRendererKind.Apex);
-        cut.WaitForAssertion(() => _module.VerifyInvoke("disposeChart", 1), TimeSpan.FromSeconds(5));
-
-        Rerender(cut, chart, ChartRendererKind.ECharts);
-        cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 2), TimeSpan.FromSeconds(5));
-        _module.VerifyInvoke("disposeChart", 1);
-        cut.FindComponents<ApexChart<ChartDataPoint>>().Should().BeEmpty();
-    }
-
-    [Test]
-    public void RemovingEverySeriesDisposesTheAdapterAndAddingThemBackCreatesANewChart()
-    {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 1, 21.5);
         var withSeries = Chart(series);
-        var cut = RenderCard(withSeries, ChartRendererKind.ECharts);
+        var cut = RenderCard(withSeries);
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
         var firstElement = JSInterop.Invocations["createChart"][0].Arguments[0];
 
-        Rerender(cut, Chart(), ChartRendererKind.ECharts);
+        Rerender(cut, Chart());
 
         cut.WaitForAssertion(() => _module.VerifyInvoke("disposeChart", 1), TimeSpan.FromSeconds(5));
         cut.FindAll(".chart-card-echarts").Should().BeEmpty();
 
-        Rerender(cut, withSeries, ChartRendererKind.ECharts);
+        Rerender(cut, withSeries);
 
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 2), TimeSpan.FromSeconds(5));
         cut.FindAll(".chart-card-echarts").Should().ContainSingle();
         JSInterop.Invocations["createChart"][1].Arguments[0].Should().NotBe(firstElement,
-            "the re-added plot is a new element, so the adapter must draw into it");
+            "the re-added plot is a new element, so the renderer must draw into it");
         CreateSpec(1).Series.Should().ContainSingle();
         JSInterop.Invocations.Identifiers.Should().NotContain("updateChart",
             "the disposed chart must not receive data meant for the new container");
     }
 
     [Test]
-    public void EChartsHover_KeepsLiveUpdatesAndThePauseControl()
+    public async Task StaleCreationFailureAfterReplacingThePlot_RetriesTheCurrentChart()
     {
-        AllowAdapterCalls();
+        var module = GateChartCreation();
+        module.FailNextCreate(new JSException("the detached container cannot host a chart"));
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 1, 21.5);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
-        cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
+        var withSeries = Chart(series);
 
-        cut.Find(".chart-card-plot").MouseOver();
+        var cut = RenderCard(withSeries);
+        await module.CreateStarted.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Rerender(cut, Chart());
+        Rerender(cut, withSeries);
+
+        module.ReleaseCreate();
 
         cut.WaitForAssertion(
-            () => cut.Find(".chart-card-status .mud-chip").TextContent.Trim().Should().Be("Live"),
+            () => module.Creates.Should().HaveCount(2),
             TimeSpan.FromSeconds(5));
-        cut.FindAll("button[title='Resume live updates']").Should().BeEmpty(
-            "hovering must not replace the pause control with a resume control");
-        cut.Find("button[title='Pause live updates (keeps the view still)']").Should().NotBeNull();
-
-        Record(series, 0, 23);
-        _chartData.OnDataUpdated += Raise.Event<Action>();
-
-        cut.WaitForAssertion(() => _module.VerifyInvoke("updateChart", 1), TimeSpan.FromSeconds(5));
-        UpdateSpec().Series[0].Points.Should().HaveCount(2,
-            "an ECharts card keeps applying live data while the pointer is over the plot");
+        cut.WaitForAssertion(
+            () => cut.FindAll(".chart-card-echarts-error").Should().BeEmpty(),
+            TimeSpan.FromSeconds(5));
+        cut.FindAll(".chart-card-echarts").Should().ContainSingle();
+        module.Creates[1].Series.Should().ContainSingle();
     }
 
     [Test]
-    public async Task EChartsManualPause_SurvivesHoverAndPointerLeave()
+    public void PausedChart_DefersUpdatesUntilResumed()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 1, 21.5);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
-        cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
-
-        cut.Find("button[title='Pause live updates (keeps the view still)']").Click();
-        cut.WaitForAssertion(
-            () => cut.Find(".chart-card-status .mud-chip").TextContent.Trim().Should().Be("Paused"),
-            TimeSpan.FromSeconds(5));
-
-        cut.Find(".chart-card-plot").MouseOver();
-        cut.Find(".chart-card-status .mud-chip").TextContent.Trim().Should().Be("Paused");
-        cut.Find("button[title='Resume live updates']").Should().NotBeNull(
-            "the manual pause control stays visible and invokable while hovering");
-
-        cut.Find(".chart-card-plot").TriggerEvent("onmouseleave", new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
-        cut.Find(".chart-card-status .mud-chip").TextContent.Trim().Should().Be("Paused",
-            "a manual pause must outlive the pointer");
-
-        Record(series, 0, 23);
-        _chartData.OnDataUpdated += Raise.Event<Action>();
-        await cut.InvokeAsync(() => { });
-
-        JSInterop.Invocations.Identifiers.Should().NotContain("updateChart",
-            "a manual pause keeps buffered data out of the renderer");
-
-        cut.Find("button[title='Resume live updates']").Click();
-        cut.WaitForAssertion(() => _module.VerifyInvoke("updateChart", 1), TimeSpan.FromSeconds(5));
-        UpdateSpec().Series[0].Points.Should().HaveCount(2);
-    }
-
-    [Test]
-    public void PausedEChartsCard_DefersUpdatesUntilResumed()
-    {
-        AllowAdapterCalls();
-        var series = new ChartSeries { DisplayName = "Temp" };
-        Record(series, 1, 21.5);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
 
         cut.Find("button[title='Pause live updates (keeps the view still)']").Click();
@@ -530,12 +428,12 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
-    public async Task DataArrivingDuringAdapterCreationIsAppliedWhenCreationCompletes()
+    public async Task DataArrivingDuringChartCreationIsAppliedWhenCreationCompletes()
     {
-        var module = GateAdapterCreation();
+        var module = GateChartCreation();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 3, 21.5);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         await module.CreateStarted.WaitAsync(TimeSpan.FromSeconds(5));
         module.Creates[0].Series[0].Points.Should().ContainSingle();
 
@@ -550,12 +448,12 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
-    public async Task TimePreferencesChangingDuringAdapterCreationReachTheNewChart()
+    public async Task TimePreferencesChangingDuringChartCreationReachTheNewChart()
     {
-        var module = GateAdapterCreation();
+        var module = GateChartCreation();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 3, 21.5);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         await module.CreateStarted.WaitAsync(TimeSpan.FromSeconds(5));
 
         _ui.Ui.MessageTime = new MessageTimePreferences
@@ -573,12 +471,12 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
-    public async Task PausedCardDoesNotApplyDataThatArrivesDuringAdapterCreation()
+    public async Task PausedCardDoesNotApplyDataThatArrivesDuringChartCreation()
     {
-        var module = GateAdapterCreation();
+        var module = GateChartCreation();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 3, 21.5);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         await module.CreateStarted.WaitAsync(TimeSpan.FromSeconds(5));
 
         cut.Find("button[title='Pause live updates (keeps the view still)']").Click();
@@ -593,12 +491,12 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
-    public async Task PausingDuringAdapterCreationDefersQueuedDataUntilResume()
+    public async Task PausingDuringChartCreationDefersQueuedDataUntilResume()
     {
-        var module = GateAdapterCreation();
+        var module = GateChartCreation();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 3, 21.5);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         await module.CreateStarted.WaitAsync(TimeSpan.FromSeconds(5));
 
         Record(series, 2, 22);
@@ -630,10 +528,10 @@ public class ChartCardRendererTests : BunitTestContext
     [Test]
     public async Task PreferenceChangesWhilePausedDoNotApplyQueuedData()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 3, 21.5);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
 
         cut.Find("button[title='Pause live updates (keeps the view still)']").Click();
@@ -664,65 +562,12 @@ public class ChartCardRendererTests : BunitTestContext
     }
 
     [Test]
-    public async Task SwitchingRenderersDuringAdapterCreationDisposesTheStaleChart()
+    public void TimePreferenceChange_ReappliesTheRendererWithTheNewClockFormat()
     {
-        var module = GateAdapterCreation();
+        AllowRendererCalls();
         var series = new ChartSeries { DisplayName = "Temp" };
         Record(series, 1, 21.5);
-        var chart = Chart(series);
-        var cut = RenderCard(chart, ChartRendererKind.ECharts);
-        await module.CreateStarted.WaitAsync(TimeSpan.FromSeconds(5));
-
-        Rerender(cut, chart, ChartRendererKind.Apex);
-        module.ReleaseCreate();
-
-        cut.WaitForAssertion(
-            () => cut.FindComponents<ApexPointSeries<ChartDataPoint>>().Should().ContainSingle(),
-            TimeSpan.FromSeconds(5));
-        cut.WaitForAssertion(() => module.Disposed.Should().BeGreaterThan(0), TimeSpan.FromSeconds(5));
-        module.Updates.Should().BeEmpty();
-
-        Rerender(cut, chart, ChartRendererKind.ECharts);
-        cut.WaitForAssertion(() => module.Creates.Should().HaveCount(2), TimeSpan.FromSeconds(5));
-        cut.FindAll(".chart-card-echarts").Should().ContainSingle();
-    }
-
-    [Test]
-    public async Task StaleAdapterCreationFailureAfterSwitchingAwayAndBackDoesNotPoisonTheNewSelection()
-    {
-        var module = GateAdapterCreation();
-        module.FailNextCreate(new JSException("the detached container cannot host a chart"));
-        var series = new ChartSeries { DisplayName = "Temp" };
-        Record(series, 1, 21.5);
-        var chart = Chart(series);
-        var cut = RenderCard(chart, ChartRendererKind.ECharts);
-        await module.CreateStarted.WaitAsync(TimeSpan.FromSeconds(5));
-
-        Rerender(cut, chart, ChartRendererKind.Apex);
-        Rerender(cut, chart, ChartRendererKind.ECharts);
-
-        await cut.InvokeAsync(module.ReleaseCreate);
-        await cut.InvokeAsync(() => { });
-
-        cut.FindAll(".chart-card-echarts-error").Count.Should().Be(0,
-            "a failure from the detached generation must not describe the current selection");
-        cut.WaitForAssertion(() => module.Creates.Should().HaveCount(2), TimeSpan.FromSeconds(5));
-        cut.WaitForAssertion(
-            () => cut.FindAll(".chart-card-echarts").Should().ContainSingle(),
-            TimeSpan.FromSeconds(5));
-        cut.FindAll(".chart-card-echarts-error").Should().BeEmpty(
-            "a failure from the detached generation must not describe the current selection");
-        module.Creates[1].Series[0].Points.Should().ContainSingle(
-            "the new selection draws the buffered data itself");
-    }
-
-    [Test]
-    public void TimePreferenceChange_ReappliesTheAdapterWithTheNewClockFormat()
-    {
-        AllowAdapterCalls();
-        var series = new ChartSeries { DisplayName = "Temp" };
-        Record(series, 1, 21.5);
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         cut.WaitForAssertion(() => _module.VerifyInvoke("createChart", 1), TimeSpan.FromSeconds(5));
 
         _ui.Ui.MessageTime = new MessageTimePreferences
@@ -741,7 +586,7 @@ public class ChartCardRendererTests : BunitTestContext
     [Test]
     public async Task EChartsViewportChangesDriveTheExistingZoneCaption()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var transition = new DateTimeOffset(2026, 11, 1, 6, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
         _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneLocal };
         _formatter.ZoneLabel = "America/New_York";
@@ -755,7 +600,7 @@ public class ChartCardRendererTests : BunitTestContext
             new ChartDataPoint(new DateTime(2026, 11, 1, 6, 2, 0, DateTimeKind.Utc), 2)
         ]);
 
-        var cut = RenderCard(Chart(series), ChartRendererKind.ECharts);
+        var cut = RenderCard(Chart(series));
         cut.WaitForAssertion(
             () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EDT / EST"),
             TimeSpan.FromSeconds(5));
@@ -774,7 +619,7 @@ public class ChartCardRendererTests : BunitTestContext
     [Test]
     public async Task ChangingChartType_ClearsAPinnedViewportAndTheZoneCaption()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var transition = new DateTimeOffset(2026, 11, 1, 6, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
         _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneLocal };
         _formatter.ZoneLabel = "America/New_York";
@@ -788,7 +633,7 @@ public class ChartCardRendererTests : BunitTestContext
             new ChartDataPoint(new DateTime(2026, 11, 1, 6, 2, 0, DateTimeKind.Utc), 2)
         ]);
         var chart = Chart(series);
-        var cut = RenderCard(chart, ChartRendererKind.ECharts);
+        var cut = RenderCard(chart);
         cut.WaitForAssertion(
             () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EDT / EST"),
             TimeSpan.FromSeconds(5));
@@ -799,7 +644,7 @@ public class ChartCardRendererTests : BunitTestContext
             TimeSpan.FromSeconds(5));
 
         chart.Type = MqttProbe.Core.Models.Chart.ChartType.Bar;
-        Rerender(cut, chart, ChartRendererKind.ECharts);
+        Rerender(cut, chart);
 
         cut.WaitForAssertion(
             () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EDT / EST"),
@@ -809,7 +654,7 @@ public class ChartCardRendererTests : BunitTestContext
     [Test]
     public async Task RenamingASeries_KeepsAPinnedViewport()
     {
-        AllowAdapterCalls();
+        AllowRendererCalls();
         var transition = new DateTimeOffset(2026, 11, 1, 6, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
         _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneLocal };
         _formatter.ZoneLabel = "America/New_York";
@@ -823,7 +668,7 @@ public class ChartCardRendererTests : BunitTestContext
             new ChartDataPoint(new DateTime(2026, 11, 1, 6, 2, 0, DateTimeKind.Utc), 2)
         ]);
         var chart = Chart(series);
-        var cut = RenderCard(chart, ChartRendererKind.ECharts);
+        var cut = RenderCard(chart);
         cut.WaitForAssertion(
             () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EDT / EST"),
             TimeSpan.FromSeconds(5));
@@ -834,7 +679,7 @@ public class ChartCardRendererTests : BunitTestContext
             TimeSpan.FromSeconds(5));
 
         series.DisplayName = "Temperature";
-        Rerender(cut, chart, ChartRendererKind.ECharts);
+        Rerender(cut, chart);
 
         cut.WaitForAssertion(() => _module.VerifyInvoke("updateChart", 1), TimeSpan.FromSeconds(5));
         cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EST",
@@ -871,7 +716,6 @@ public class ChartCardRendererTests : BunitTestContext
         internal Task CreateStarted => _createStarted.Task;
         internal List<ChartRendererSpec> Creates { get; } = [];
         internal List<ChartRendererSpec> Updates { get; } = [];
-        internal int Disposed { get; private set; }
 
         internal void ReleaseCreate() => _createGate.TrySetResult();
 
@@ -892,7 +736,6 @@ public class ChartCardRendererTests : BunitTestContext
                     Updates.Add((ChartRendererSpec)args![1]!);
                     return (TValue)(object)true;
                 case "disposeChart":
-                    Disposed++;
                     return (TValue)(object)true;
                 default:
                     return default!;

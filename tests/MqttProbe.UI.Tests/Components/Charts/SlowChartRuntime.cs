@@ -36,8 +36,6 @@ internal sealed class SlowUpdateModule : IJSObjectReference
 
     internal bool HoldUpdates { get; set; } = true;
 
-    internal Exception? NextUpdateFailure { get; set; }
-
     internal ChartRendererSpec[] Creates
     {
         get { lock (_sync) return [.. _creates]; }
@@ -165,7 +163,6 @@ internal sealed class SlowUpdateModule : IJSObjectReference
     private async Task RunUpdateAsync(ChartRendererSpec spec, bool resetViewport)
     {
         TaskCompletionSource? gate = null;
-        Exception? failure;
         lock (_sync)
         {
             _updates.Add(spec);
@@ -173,8 +170,6 @@ internal sealed class SlowUpdateModule : IJSObjectReference
             _inFlight++;
             _maxInFlight = Math.Max(_maxInFlight, _inFlight);
             WakeWaitersLocked();
-            failure = NextUpdateFailure;
-            NextUpdateFailure = null;
             if (HoldUpdates)
             {
                 gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -186,8 +181,6 @@ internal sealed class SlowUpdateModule : IJSObjectReference
         {
             if (gate is not null)
                 await gate.Task;
-            if (failure is not null)
-                throw failure;
         }
         finally
         {

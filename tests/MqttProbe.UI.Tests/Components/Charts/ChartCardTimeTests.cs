@@ -1,5 +1,3 @@
-using System.Text.Json;
-using ApexCharts;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
@@ -39,6 +37,11 @@ public class ChartCardTimeTests : BunitTestContext
         Services.AddSingleton(_ui);
         Services.AddSingleton<IDeviceTimeFormatter>(_formatter);
         EnsureMudProviders();
+
+        var module = JSInterop.SetupModule(ChartRendererInterop.ModulePath);
+        module.Setup<bool>("createChart", _ => true).SetResult(true);
+        module.Setup<bool>("updateChart", _ => true).SetResult(true);
+        module.Setup<bool>("disposeChart", _ => true).SetResult(true);
     }
 
     private IRenderedComponent<ChartCardComponent> RenderCard(params ChartSeries[] series)
@@ -58,8 +61,16 @@ public class ChartCardTimeTests : BunitTestContext
     private static long Epoch(DateTime timestamp) =>
         new DateTimeOffset(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
 
+    private ChartRendererSpec CreateSpec(int index = 0) =>
+        JSInterop.Invocations["createChart"][index].Arguments[3]
+            .Should().BeOfType<ChartRendererSpec>().Subject;
+
+    private ChartRendererSpec UpdateSpec(int index = 0) =>
+        JSInterop.Invocations["updateChart"][index].Arguments[1]
+            .Should().BeOfType<ChartRendererSpec>().Subject;
+
     [Test]
-    public void AxisAndTooltipFormatters_UseTheSelectedLocalTwelveHourClock()
+    public void RendererReceivesTheLocalTwelveHourPreferences()
     {
         _ui.Ui.MessageTime = new MessageTimePreferences
         {
@@ -68,25 +79,17 @@ public class ChartCardTimeTests : BunitTestContext
         };
 
         var cut = RenderCard(new ChartSeries { DisplayName = "Temp" });
-        var options = cut.FindComponent<ApexChart<ChartDataPoint>>().Instance.Options;
 
-        options.Xaxis.Labels.DatetimeUTC.Should().BeFalse("the viewing device zone drives tick placement");
-        options.Xaxis.Labels.MinHeight.Should().Be(30, "a two-line date tick needs room for the time line");
-        options.Xaxis.Labels.Formatter.Should()
-            .Contain("window.mqttProbeTime")
-            .And.Contain("\"zone\":\"local\"")
-            .And.Contain("\"clockFormat\":\"12h\"")
-            .And.Contain("formatAxis");
-        options.Tooltip.X.Formatter.Should()
-            .Contain("window.mqttProbeTime")
-            .And.Contain("\"zone\":\"local\"")
-            .And.Contain("\"clockFormat\":\"12h\"")
-            .And.Contain("formatTooltip");
-        options.Tooltip.X.Format.Should().BeNull("a fixed HH:mm:ss format would ignore the preference");
+        cut.WaitForAssertion(
+            () => JSInterop.Invocations["createChart"].Should().ContainSingle(),
+            TimeSpan.FromSeconds(5));
+        var spec = CreateSpec();
+        spec.Zone.Should().Be(MessageTimePreferences.ZoneLocal);
+        spec.ClockFormat.Should().Be(MessageTimePreferences.ClockFormat12Hour);
     }
 
     [Test]
-    public void AxisAndTooltipFormatters_UseUtcAndTheTwentyFourHourClock()
+    public void RendererReceivesTheUtcTwentyFourHourPreferences()
     {
         _ui.Ui.MessageTime = new MessageTimePreferences
         {
@@ -95,42 +98,13 @@ public class ChartCardTimeTests : BunitTestContext
         };
 
         var cut = RenderCard(new ChartSeries { DisplayName = "Temp" });
-        var options = cut.FindComponent<ApexChart<ChartDataPoint>>().Instance.Options;
 
-        options.Xaxis.Labels.DatetimeUTC.Should().BeTrue("UTC ticks must not shift into the device zone");
-        options.Xaxis.Labels.Formatter.Should()
-            .Contain("\"zone\":\"utc\"")
-            .And.Contain("\"clockFormat\":\"24h\"")
-            .And.Contain("formatAxis");
-        options.Tooltip.X.Formatter.Should()
-            .Contain("\"zone\":\"utc\"")
-            .And.Contain("\"clockFormat\":\"24h\"");
-    }
-
-    [Test]
-    public void AxisFormatter_AddsADateLineAtMidnightAndForMultiDayRanges()
-    {
-        var axis = ChartTimeFormat.AxisFormatter(new MessageTimePreferences());
-        var tooltip = ChartTimeFormat.TooltipFormatter(new MessageTimePreferences());
-
-        axis.Should().StartWith("function(");
-        axis.Should().Contain("formatAxis").And.Contain("formatTooltip");
-        axis.Should().Contain("maxX").And.Contain("minX");
-        axis.Should().Contain("00:00:00");
-        axis.Should().Contain("[date, time]");
-        tooltip.Should().StartWith("function(");
-        tooltip.Should().Contain("Array.isArray(value)");
-        tooltip.Should().Contain("formatTooltip");
-    }
-
-    [Test]
-    public void TooltipFormatter_AcceptsSharedTooltipValues()
-    {
-        var formatter = ChartTimeFormat.TooltipFormatter(new MessageTimePreferences());
-
-        formatter.Should().StartWith("function(");
-        formatter.Should().Contain("Array.isArray(value)");
-        formatter.Should().Contain("formatTooltip");
+        cut.WaitForAssertion(
+            () => JSInterop.Invocations["createChart"].Should().ContainSingle(),
+            TimeSpan.FromSeconds(5));
+        var spec = CreateSpec();
+        spec.Zone.Should().Be(MessageTimePreferences.ZoneUtc);
+        spec.ClockFormat.Should().Be(MessageTimePreferences.ClockFormat24Hour);
     }
 
     [Test]
@@ -145,15 +119,18 @@ public class ChartCardTimeTests : BunitTestContext
 
         var cut = RenderCard(new ChartSeries { DisplayName = "Temp" });
 
-        cut.FindComponents<ApexChart<ChartDataPoint>>().Should()
-            .BeEmpty("formatter callbacks need the shared time bridge first");
+        cut.FindAll(".chart-card-echarts").Should()
+            .BeEmpty("the plot waits for the shared time bridge first");
         cut.FindAll(".chart-card-plot__pending").Should().ContainSingle();
 
         _formatter.BridgeReady = true;
         await cut.InvokeAsync(() => cut.Instance.EnsureTimeBridgeAsync());
 
         cut.WaitForAssertion(
-            () => cut.FindComponents<ApexChart<ChartDataPoint>>().Should().ContainSingle(),
+            () => cut.FindAll(".chart-card-echarts").Should().ContainSingle(),
+            TimeSpan.FromSeconds(5));
+        cut.WaitForAssertion(
+            () => JSInterop.Invocations["createChart"].Should().ContainSingle(),
             TimeSpan.FromSeconds(5));
 
         var zone = cut.FindAll("button.chart-zone-token");
@@ -179,8 +156,10 @@ public class ChartCardTimeTests : BunitTestContext
         _chartData.GetPoints(series.Id).Returns([point]);
 
         var cut = RenderCard(series);
-        var before = cut.FindComponent<ApexPointSeries<ChartDataPoint>>().Instance;
-        var beforeX = before.XValue(point);
+        cut.WaitForAssertion(
+            () => JSInterop.Invocations["createChart"].Should().ContainSingle(),
+            TimeSpan.FromSeconds(5));
+        var beforeX = CreateSpec().Series[0].Points.Should().ContainSingle().Which[0];
         beforeX.Should().Be(new DateTimeOffset(point.Timestamp).ToUnixTimeMilliseconds());
 
         _formatter.ZoneLabel = "Europe/London";
@@ -200,38 +179,15 @@ public class ChartCardTimeTests : BunitTestContext
 
         cut.WaitForAssertion(() =>
         {
-            var options = cut.FindComponent<ApexChart<ChartDataPoint>>().Instance.Options;
-            options.Xaxis.Labels.DatetimeUTC.Should().BeFalse();
-            options.Xaxis.Labels.Formatter.Should()
-                .Contain("\"zone\":\"local\"")
-                .And.Contain("\"clockFormat\":\"12h\"")
-                .And.Contain("formatAxis");
-            options.Tooltip.X.Formatter.Should().Contain("\"clockFormat\":\"12h\"");
-            var update = JSInterop.Invocations.Single(
-                invocation => invocation.Identifier == "blazor_apexchart.updateOptions");
-            var json = update.Arguments[1] as string;
-            json.Should().NotBeNull();
-
-            using var document = JsonDocument.Parse(json!);
-            var root = document.RootElement;
-            var labels = root.GetProperty("xaxis").GetProperty("labels");
-            labels.GetProperty("datetimeUTC").GetBoolean().Should().BeFalse();
-            var axisFormatter = labels.GetProperty("formatter").GetProperty("@eval").GetString();
-            var tooltipFormatter = root.GetProperty("tooltip").GetProperty("x")
-                .GetProperty("formatter").GetProperty("@eval").GetString();
-            axisFormatter.Should()
-                .Contain("formatAxis")
-                .And.Contain("\"zone\":\"local\"")
-                .And.Contain("\"clockFormat\":\"12h\"");
-            tooltipFormatter.Should()
-                .Contain("formatTooltip")
-                .And.Contain("\"zone\":\"local\"")
-                .And.Contain("\"clockFormat\":\"12h\"");
+            JSInterop.Invocations["updateChart"].Should().ContainSingle();
+            var update = UpdateSpec();
+            update.Zone.Should().Be(MessageTimePreferences.ZoneLocal);
+            update.ClockFormat.Should().Be(MessageTimePreferences.ClockFormat12Hour);
             cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("BST");
             cut.Find("button.chart-zone-token").GetAttribute("aria-label").Should().Contain("Europe/London");
         }, TimeSpan.FromSeconds(5));
 
-        cut.FindComponent<ApexPointSeries<ChartDataPoint>>().Instance.XValue(point).Should()
+        UpdateSpec().Series[0].Points.Should().ContainSingle().Which[0].Should()
             .Be(beforeX, "display preferences must not change the stored instant");
     }
 
@@ -314,21 +270,13 @@ public class ChartCardTimeTests : BunitTestContext
             () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EDT / EST"),
             TimeSpan.FromSeconds(5));
 
-        var chart = cut.FindComponent<ApexChart<ChartDataPoint>>().Instance;
-        await cut.InvokeAsync(() => chart.OnZoomed.InvokeAsync(new ZoomedData<ChartDataPoint>
-        {
-            XAxis = new SelectionXAxis
-            {
-                Min = transition,
-                Max = transition + 60_000
-            }
-        }));
+        await cut.InvokeAsync(() => cut.Instance.OnEChartsViewportChanged(transition, transition + 60_000));
 
         cut.WaitForAssertion(
             () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EST"),
             TimeSpan.FromSeconds(5));
 
-        await cut.InvokeAsync(() => chart.OnZoomed.InvokeAsync(new ZoomedData<ChartDataPoint>()));
+        await cut.InvokeAsync(() => cut.Instance.OnEChartsViewportChanged(null, null));
 
         cut.WaitForAssertion(
             () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EDT / EST"),
@@ -423,7 +371,7 @@ public class ChartCardTimeTests : BunitTestContext
             () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EST"),
             TimeSpan.FromSeconds(5));
 
-        cut.Find("button[title='Pause live updates (enables zoom/pan/export)']").Click();
+        cut.Find("button[title='Pause live updates (keeps the view still)']").Click();
         cut.WaitForAssertion(() => SummaryText(cut).Should().Be("Paused"), TimeSpan.FromSeconds(5));
 
         _formatter.ZoneLabel = "UTC";
@@ -435,9 +383,6 @@ public class ChartCardTimeTests : BunitTestContext
         _ui.UiPreferencesChanged += Raise.Event<Action>();
 
         cut.WaitForAssertion(
-            () => cut.FindComponent<ApexChart<ChartDataPoint>>().Instance.Options.Xaxis.Labels.DatetimeUTC.Should().BeTrue(),
-            TimeSpan.FromSeconds(5));
-        cut.WaitForAssertion(
             () => _formatter.FailuresRemaining.Should().Be(0, "the UTC refresh failed once"),
             TimeSpan.FromSeconds(5));
 
@@ -446,6 +391,14 @@ public class ChartCardTimeTests : BunitTestContext
         cut.WaitForAssertion(
             () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("UTC"),
             TimeSpan.FromSeconds(5));
+
+        cut.Find("button[title='Resume live updates']").Click();
+
+        cut.WaitForAssertion(
+            () => JSInterop.Invocations["updateChart"].Should().ContainSingle(),
+            TimeSpan.FromSeconds(5));
+        UpdateSpec().Zone.Should().Be(MessageTimePreferences.ZoneUtc,
+            "the deferred preference change reaches the renderer on resume");
     }
 
     [Test]
@@ -492,7 +445,7 @@ public class ChartCardTimeTests : BunitTestContext
     }
 
     [Test]
-    public async Task ZoneCaption_ThrottledRangeChangeReplacesTheInFlightOldRange()
+    public async Task ZoneCaption_OldInFlightRangeDoesNotReplaceTheLatestViewport()
     {
         var transition = new DateTimeOffset(2026, 11, 1, 6, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
         _ui.Ui.MessageTime = new MessageTimePreferences { Zone = MessageTimePreferences.ZoneLocal };
@@ -516,40 +469,24 @@ public class ChartCardTimeTests : BunitTestContext
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _formatter.Gate = gate;
         var initialRequests = _formatter.Requests.Count;
-        var chart = cut.FindComponent<ApexChart<ChartDataPoint>>().Instance;
 
-        var oldZoom = cut.InvokeAsync(() => chart.OnZoomed.InvokeAsync(new ZoomedData<ChartDataPoint>
-        {
-            XAxis = new SelectionXAxis
-            {
-                Min = transition - (10 * 60_000),
-                Max = transition - (5 * 60_000)
-            }
-        }));
+        var oldZoom = cut.InvokeAsync(() => cut.Instance.OnEChartsViewportChanged(
+            transition - (10 * 60_000), transition - (5 * 60_000)));
         cut.WaitForAssertion(
             () => _formatter.Requests.Should().HaveCount(initialRequests + 1),
             TimeSpan.FromSeconds(5));
 
-        await cut.InvokeAsync(() => chart.OnScrolled.InvokeAsync(new SelectionData<ChartDataPoint>
-        {
-            XAxis = new SelectionXAxis
-            {
-                Min = transition + (5 * 60_000),
-                Max = transition + (10 * 60_000)
-            }
-        }));
+        await cut.InvokeAsync(() => cut.Instance.OnEChartsViewportChanged(
+            transition + (5 * 60_000), transition + (10 * 60_000)));
 
         gate.SetResult();
         await oldZoom;
 
-        cut.Find("button.chart-zone-token").TextContent.Trim().Should()
-            .Be("EDT / EST", "the old in-flight range must not replace the latest pan range");
-
-        await cut.InvokeAsync(() => cut.Instance.Tick());
-
         cut.WaitForAssertion(
             () => cut.Find("button.chart-zone-token").TextContent.Trim().Should().Be("EST"),
             TimeSpan.FromSeconds(5));
+        cut.Find("button.chart-zone-token").TextContent.Trim().Should()
+            .Be("EST", "the old in-flight range must not replace the latest viewport");
     }
 
     [TestCase(true)]
@@ -578,16 +515,9 @@ public class ChartCardTimeTests : BunitTestContext
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _formatter.Gate = gate;
         var initialRequests = _formatter.Requests.Count;
-        var chart = cut.FindComponent<ApexChart<ChartDataPoint>>().Instance;
 
-        var zoom = cut.InvokeAsync(() => chart.OnZoomed.InvokeAsync(new ZoomedData<ChartDataPoint>
-        {
-            XAxis = new SelectionXAxis
-            {
-                Min = transition + (5 * 60_000),
-                Max = transition + (10 * 60_000)
-            }
-        }));
+        var zoom = cut.InvokeAsync(() => cut.Instance.OnEChartsViewportChanged(
+            transition + (5 * 60_000), transition + (10 * 60_000)));
         cut.WaitForAssertion(
             () => _formatter.Requests.Should().HaveCount(initialRequests + 1),
             TimeSpan.FromSeconds(5));
@@ -608,9 +538,9 @@ public class ChartCardTimeTests : BunitTestContext
         if (changeClockFormat)
         {
             cut.WaitForAssertion(
-                () => cut.FindComponent<ApexChart<ChartDataPoint>>().Instance.Options.Tooltip.X.Formatter
-                    .Should().Contain("\"clockFormat\":\"12h\""),
+                () => JSInterop.Invocations["updateChart"].Should().ContainSingle(),
                 TimeSpan.FromSeconds(5));
+            UpdateSpec().ClockFormat.Should().Be(MessageTimePreferences.ClockFormat12Hour);
         }
         else
         {
@@ -766,18 +696,5 @@ public class ChartCardTimeTests : BunitTestContext
         _chartData.DidNotReceive().GetPointBounds(Arg.Any<Guid>());
         epochs.Should().OnlyContain(epoch => epoch == Epoch(inside),
             "a configured window keeps the existing inclusive cutoff and source order");
-    }
-
-    [Test]
-    public void ChartOptions_KeepRotationAutomaticAndReserveEdgePadding()
-    {
-        var cut = RenderCard(new ChartSeries { DisplayName = "Temp" });
-        var options = cut.FindComponent<ApexChart<ChartDataPoint>>().Instance.Options;
-
-        options.Xaxis.Labels.RotateAlways.Should().BeFalse("45 degrees only when the width needs it");
-        options.Xaxis.Labels.HideOverlappingLabels.Should().BeTrue();
-        options.Grid.Padding.Should().NotBeNull();
-        options.Grid.Padding.Left.Should().BeGreaterThan(0);
-        options.Grid.Padding.Right.Should().BeGreaterThan(0);
     }
 }

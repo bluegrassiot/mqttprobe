@@ -1,4 +1,3 @@
-using ApexCharts;
 using Google.Protobuf;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -15,9 +14,7 @@ using MqttProbe.Core.Services.Plugins.Pipeline;
 using MqttProbe.Core.Services.Plugins.Registry;
 using MqttProbe.UI.Services.Formatting;
 using MqttProbe.UI.Tests.TestHelpers;
-using MudBlazor;
 using Org.Eclipse.Tahu.Protobuf;
-using ChartCardComponent = MqttProbe.UI.Components.Charts.ChartCard;
 using ChartsComponent = MqttProbe.UI.Components.Charts.Charts;
 
 namespace MqttProbe.UI.Tests.Components.Charts;
@@ -193,7 +190,7 @@ public class ChartsComponentTests : BunitTestContext
     }
 
     [Test]
-    public void RendererSwitch_StartsOnApexAndSwitchesBackFromECharts()
+    public void Charts_RenderWithoutARendererSelector()
     {
         var configs = new List<ChartConfiguration>
         {
@@ -204,37 +201,13 @@ public class ChartsComponentTests : BunitTestContext
             }
         };
         _mockChartStore.GetCharts(_testConnectionId).Returns(configs);
-        var module = JSInterop.SetupModule(ChartRendererInterop.ModulePath);
-        module.Setup<bool>("createChart", _ => true).SetResult(true);
-        module.Setup<bool>("updateChart", _ => true).SetResult(true);
-        module.Setup<bool>("disposeChart", _ => true).SetResult(true);
 
         var cut = Render<ChartsComponent>();
 
-        cut.FindComponent<ChartCardComponent>().Instance.Renderer.Should().Be(ChartRendererKind.Apex);
-        cut.Markup.Should().Contain("ApexCharts");
-        cut.FindAll(".charts-renderer-note").Should().BeEmpty();
-
-        var select = cut.FindComponent<MudSelect<ChartRendererKind>>();
-        cut.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync(ChartRendererKind.ECharts));
-
-        cut.WaitForAssertion(
-            () => cut.FindAll(".chart-card-echarts").Should().ContainSingle(),
-            TimeSpan.FromSeconds(5));
-        cut.FindComponent<ChartCardComponent>().Instance.Renderer.Should().Be(ChartRendererKind.ECharts);
-        cut.FindAll(".charts-renderer-note").Should().BeEmpty(
-            "the preview notice is no longer shown");
-        module.VerifyInvoke("createChart", 1);
-
-        cut.InvokeAsync(() => cut.FindComponent<MudSelect<ChartRendererKind>>()
-            .Instance.ValueChanged.InvokeAsync(ChartRendererKind.Apex));
-
-        cut.WaitForAssertion(
-            () => cut.FindComponents<ApexChart<ChartDataPoint>>().Should().ContainSingle(),
-            TimeSpan.FromSeconds(5));
-        cut.FindComponent<ChartCardComponent>().Instance.Renderer.Should().Be(ChartRendererKind.Apex);
-        cut.FindAll(".charts-renderer-note").Should().BeEmpty();
-        module.VerifyInvoke("disposeChart", 1);
+        cut.FindAll(".charts-renderer-select").Should().BeEmpty(
+            "ECharts is the only renderer, so there is nothing to choose");
+        cut.Markup.Should().NotContain("ApexCharts");
+        cut.Markup.Should().NotContain("ECharts (preview)");
     }
 }
 
@@ -288,7 +261,20 @@ public class ChartsRealCollectorComponentTests : BunitTestContext
         Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
         Services.AddSingleton<IDeviceTimeFormatter>(new ChartTimeFormatterStub());
         EnsureMudProviders();
+
+        var module = JSInterop.SetupModule(ChartRendererInterop.ModulePath);
+        module.Setup<bool>("createChart", _ => true).SetResult(true);
+        module.Setup<bool>("updateChart", _ => true).SetResult(true);
+        module.Setup<bool>("disposeChart", _ => true).SetResult(true);
     }
+
+    private ChartRendererSpec CreateSpec(int index = 0) =>
+        JSInterop.Invocations["createChart"][index].Arguments[3]
+            .Should().BeOfType<ChartRendererSpec>().Subject;
+
+    private ChartRendererSpec UpdateSpec(int index = 0) =>
+        JSInterop.Invocations["updateChart"][index].Arguments[1]
+            .Should().BeOfType<ChartRendererSpec>().Subject;
 
     [TearDown]
     public void TearDown()
@@ -317,12 +303,15 @@ public class ChartsRealCollectorComponentTests : BunitTestContext
 
         var cut = Render<ChartsComponent>();
 
-        var series = cut.FindComponents<ApexPointSeries<ChartDataPoint>>();
-        series.Should().HaveCount(2);
-        series[0].Instance.Items.Should().ContainSingle()
-            .Which.Value.Should().Be(22.5);
-        series[1].Instance.Items.Should().ContainSingle()
-            .Which.Value.Should().Be(18.25);
+        cut.WaitForAssertion(
+            () => JSInterop.Invocations["createChart"].Should().ContainSingle(),
+            TimeSpan.FromSeconds(5));
+        var spec = CreateSpec();
+        spec.Series.Should().HaveCount(2);
+        spec.Series[0].Id.Should().Be(nodeSeries.Id.ToString());
+        spec.Series[0].Points.Should().ContainSingle().Which[1].Should().Be(22.5);
+        spec.Series[1].Id.Should().Be(deviceSeries.Id.ToString());
+        spec.Series[1].Points.Should().ContainSingle().Which[1].Should().Be(18.25);
         _chartDataService.GetPoints(nodeSeries.Id).Should().ContainSingle();
         _chartDataService.GetPoints(deviceSeries.Id).Should().ContainSingle();
 
@@ -346,8 +335,12 @@ public class ChartsRealCollectorComponentTests : BunitTestContext
             _chartDataService.GetPoints(deviceSeries.Id).Should().BeEmpty();
             cut.Markup.Should().Contain("Connection B chart");
         });
-        cut.FindComponents<ApexPointSeries<ChartDataPoint>>().Should().ContainSingle()
-            .Which.Instance.Items.Should().BeEmpty();
+        cut.WaitForAssertion(
+            () => JSInterop.Invocations["createChart"].Should().HaveCount(2),
+            TimeSpan.FromSeconds(5));
+        var switched = CreateSpec(1);
+        switched.Series.Should().ContainSingle().Which.Id.Should().Be(seriesBId.ToString());
+        switched.Series[0].Points.Should().BeEmpty();
     }
 
     [Test]
@@ -364,8 +357,10 @@ public class ChartsRealCollectorComponentTests : BunitTestContext
         await _handler!(MakeSparkplugArgs(nodeTopic, payload.ToByteArray()));
 
         var cut = Render<ChartsComponent>();
-        cut.FindComponents<ApexPointSeries<ChartDataPoint>>()[0].Instance.Items.Should().ContainSingle()
-            .Which.Value.Should().Be(22.5);
+        cut.WaitForAssertion(
+            () => JSInterop.Invocations["createChart"].Should().ContainSingle(),
+            TimeSpan.FromSeconds(5));
+        CreateSpec().Series[0].Points.Should().ContainSingle().Which[1].Should().Be(22.5);
 
         await _chartSettings.UpdateChartAsync(_testConnectionId, new ChartConfiguration
         {
@@ -381,9 +376,9 @@ public class ChartsRealCollectorComponentTests : BunitTestContext
         cut.WaitForAssertion(() =>
         {
             cut.Markup.Should().Contain("Renamed Chart");
-            cut.FindComponents<ApexPointSeries<ChartDataPoint>>()[0].Instance.Items.Should().ContainSingle()
-                .Which.Value.Should().Be(22.5);
-        });
+            JSInterop.Invocations["updateChart"].Should().ContainSingle();
+            UpdateSpec().Series[0].Points.Should().ContainSingle().Which[1].Should().Be(22.5);
+        }, TimeSpan.FromSeconds(5));
         _chartDataService.GetPoints(nodeSeries.Id).Should().ContainSingle();
     }
 

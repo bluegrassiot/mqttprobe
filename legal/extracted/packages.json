@@ -2,33 +2,6 @@
   "schemaVersion": 1,
   "packages": [
     {
-      "id": "Blazor-ApexCharts",
-      "version": "8.0.0",
-      "metadata": {
-        "license": "MIT",
-        "licenseUrl": "https://licenses.nuget.org/MIT",
-        "licenseInformationOrigin": 0,
-        "projectUrl": "https://apexcharts.github.io/Blazor-ApexCharts/",
-        "copyright": "Copyright 2022 (c) Joakim Dangården. All rights reserved.",
-        "authors": "Joakim Dangården",
-        "validationErrors": []
-      },
-      "documents": [
-        {
-          "title": "MIT License",
-          "sha256": "950607e7415c641f9cb136b29607a806e27d6ad5e0d2ecdcd8addcf4dae38a69",
-          "source": "embedded",
-          "sourcePath": "LICENSE",
-          "sourceUrl": "https://licenses.nuget.org/MIT"
-        }
-      ],
-      "extractor": null,
-      "payload": {
-        "staticwebassets/js/apexcharts.full.min.js": "5cb59f52b4ffd834fd0e600fa13ef3434804533691a520da8b3eb31fdbe96f7f",
-        "staticwebassets/js/apexcharts.esm.js": "6ba286f0357cb13a84d445d7f86eb5a159bb9d2fa622b9d834413404d4e98084"
-      }
-    },
-    {
       "id": "Blazor.Lucide",
       "version": "1.0.6",
       "metadata": {
@@ -907,30 +880,6 @@
       "documents": [
         {
           "title": "Microsoft.Extensions.Hosting.Abstractions package licence (THIRD-PARTY-NOTICES.TXT)",
-          "sha256": "c6926930d0181fa515076603e1305461b1bce5275a8b35337d75d2eef3acad4a",
-          "source": "embedded",
-          "sourcePath": "THIRD-PARTY-NOTICES.TXT",
-          "sourceUrl": "https://licenses.nuget.org/MIT"
-        }
-      ],
-      "extractor": null,
-      "payload": {}
-    },
-    {
-      "id": "Microsoft.Extensions.Http",
-      "version": "10.0.0",
-      "metadata": {
-        "license": "MIT",
-        "licenseUrl": "https://licenses.nuget.org/MIT",
-        "licenseInformationOrigin": 0,
-        "projectUrl": "https://dot.net/",
-        "copyright": "© Microsoft Corporation. All rights reserved.",
-        "authors": "Microsoft",
-        "validationErrors": []
-      },
-      "documents": [
-        {
-          "title": "Microsoft.Extensions.Http package licence (THIRD-PARTY-NOTICES.TXT)",
           "sha256": "c6926930d0181fa515076603e1305461b1bce5275a8b35337d75d2eef3acad4a",
           "source": "embedded",
           "sourcePath": "THIRD-PARTY-NOTICES.TXT",

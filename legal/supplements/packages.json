@@ -12,12 +12,6 @@
     "Microsoft.Web.WebView2"
   ],
   "packages": {
-    "Blazor-ApexCharts@8.0.0": {
-      "documents": [
-        "apexcharts-8-8-1-license-upstream-text"
-      ],
-      "notes": "The package is MIT. The bundled ApexCharts JavaScript 8.8.1 library and its Apex Commons 0.10.0 code are separately licensed and unresolved."
-    },
     "MQTTnet@5.2.0.1603": {
       "license": "MIT"
     },

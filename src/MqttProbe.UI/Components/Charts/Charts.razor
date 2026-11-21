@@ -5,6 +5,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IUxMetricsService? UxMetrics
+@inject IAppInfoService AppInfoService
 @implements IAsyncDisposable
 
 <TabPanelHeader Title="Charts" Icon="@LucideIcons.Activity">
@@ -39,6 +40,7 @@
                 <ChartCard @key="config.Id"
                            Configuration="config"
                            Metrics="UxMetrics"
+                           AllowExport="AppInfoService.SupportsChartExport"
                            OnEdit="EditChart"
                            OnDelete="DeleteChart" />
             }

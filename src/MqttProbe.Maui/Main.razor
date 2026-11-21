@@ -2,6 +2,7 @@
 @using MqttProbe.UI.Components.Layout
 @using MqttProbe.UI.Components.Pages
 @using Index = MqttProbe.UI.Components.Pages.Index
+<div class="@HostClass">
 <CascadingAuthenticationState>
 <Router AppAssembly="@typeof(Main).Assembly"
         AdditionalAssemblies="[typeof(Index).Assembly]"
@@ -12,3 +13,10 @@
     </Found>
 </Router>
 </CascadingAuthenticationState>
+</div>
+
+@code {
+    private static readonly string HostClass = OperatingSystem.IsMacCatalyst()
+        ? "maui-host maui-host--maccatalyst"
+        : "maui-host";
+}

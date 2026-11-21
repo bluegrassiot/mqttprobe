@@ -361,6 +361,9 @@ jobs:
           --self-contained
           --output publish/desktop
 
+      - name: Validate CSS isolation scopes
+        run: python3 scripts/packaging/linux/check-scoped-css.py --publish-dir publish/desktop
+
       - name: Verify legal notices
         run: |
           python3 scripts/legal/notices.py profiles-check --scenario desktop-linux-x64

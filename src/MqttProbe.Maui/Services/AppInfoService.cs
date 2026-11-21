@@ -39,6 +39,9 @@ public class AppInfoService : IAppInfoService
     // mobile host accepts a binary archive.
     public bool SupportsAssemblyPlugins => !OperatingSystem.IsIOS();
 
+    // The Catalyst WebView has no download path for the blob the export script produces.
+    public bool SupportsChartExport => !OperatingSystem.IsMacCatalyst();
+
     public string GetVersion() =>
         AppVersionResolver.Resolve(
             _appVersionProvider,

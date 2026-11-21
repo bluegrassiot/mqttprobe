@@ -15,6 +15,8 @@ public partial class ChartCard
     [Inject] private IDialogService DialogService { get; set; } = null!;
     [Inject] private ISnackbar Snackbar { get; set; } = null!;
 
+    [Parameter] public bool AllowExport { get; set; } = true;
+
     private ChartExportInterop? _exportInterop;
     private string? _capturedExportId;
     private ChartExportInterop? _capturingInterop;
@@ -41,7 +43,7 @@ public partial class ChartCard
     // The card sits at its file-length limit, so its export control is composed here.
     private RenderFragment ExportButton => builder =>
     {
-        if (Configuration.Series.Count == 0)
+        if (!AllowExport || Configuration.Series.Count == 0)
             return;
 
         builder.OpenComponent<MudIconButton>(0);
@@ -58,7 +60,7 @@ public partial class ChartCard
 
     private async Task OpenExportAsync()
     {
-        if (_disposed || !CanOpenExport)
+        if (!AllowExport || _disposed || !CanOpenExport)
             return;
 
         _exportBusy = true;

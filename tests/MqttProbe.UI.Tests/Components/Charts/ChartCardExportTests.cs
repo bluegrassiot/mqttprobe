@@ -91,10 +91,13 @@ public class ChartCardExportTests : BunitTestContext
             [.. series.Select(entry => new ChartExportSeriesSummary(
                 entry.Id.ToString(), entry.DisplayName, entry.Color, 2))]);
 
-    private IRenderedComponent<ChartCardComponent> RenderCard(ChartConfiguration configuration) =>
+    private IRenderedComponent<ChartCardComponent> RenderCard(
+        ChartConfiguration configuration,
+        bool allowExport = true) =>
         Render<ChartCardComponent>(parameters => parameters
             .Add(card => card.Configuration, configuration)
-            .Add(card => card.Clock, _clock));
+            .Add(card => card.Clock, _clock)
+            .Add(card => card.AllowExport, allowExport));
 
     private void WaitForChart(IRenderedComponent<ChartCardComponent> cut) =>
         cut.WaitForAssertion(
@@ -127,6 +130,58 @@ public class ChartCardExportTests : BunitTestContext
         var cut = RenderCard(chart);
         WaitForChart(cut);
         cut.Find("button[title='Export chart data or image']").HasAttribute("disabled").Should().BeFalse();
+    }
+
+    [Test]
+    public void ExportControl_IsAbsentWhenTheCardDisallowsExport()
+    {
+        var series = Series("Temp");
+        var second = Series("Flow", "#A78BFA");
+        Record(series, 2, 21.5);
+        Record(second, 1, 3);
+
+        var cut = RenderCard(Chart(series), allowExport: false);
+        cut.WaitForAssertion(
+            () => _runtime.Renderer.Invoked("createChart").Should().Be(1),
+            TimeSpan.FromSeconds(5));
+
+        // updateChart is only issued once the plot is ready, so it pins readiness without
+        // relying on the control under test.
+        cut.Render(parameters => parameters
+            .Add(card => card.Configuration, Chart(series, second))
+            .Add(card => card.Clock, _clock)
+            .Add(card => card.AllowExport, false));
+        cut.WaitForAssertion(
+            () => _runtime.Renderer.Invoked("updateChart").Should().BeGreaterThan(0),
+            TimeSpan.FromSeconds(5));
+
+        cut.FindAll("button[title*='Export']").Should().BeEmpty(
+            "a disallowed export removes the control instead of disabling it");
+        cut.Markup.Should().NotContain("Export chart");
+        cut.FindAll("button[title='Edit chart']").Should().ContainSingle();
+        cut.FindAll("button[title='Delete chart']").Should().ContainSingle();
+        _runtime.Export.Invoked("captureSnapshot").Should().Be(0);
+    }
+
+    [Test]
+    public void ExportControl_IsRemovedWhenExportIsDisallowedAfterTheChartDraws()
+    {
+        var series = Series("Temp");
+        Record(series, 1, 21.5);
+        var chart = Chart(series);
+
+        var cut = RenderCard(chart);
+        WaitForChart(cut);
+
+        cut.Render(parameters => parameters
+            .Add(card => card.Configuration, chart)
+            .Add(card => card.Clock, _clock)
+            .Add(card => card.AllowExport, false));
+
+        cut.FindAll("button[title*='Export']").Should().BeEmpty(
+            "the ready control is removed, not left behind in a disabled state");
+        cut.Markup.Should().NotContain("Export chart");
+        _runtime.Export.Invoked("captureSnapshot").Should().Be(0);
     }
 
     [Test]

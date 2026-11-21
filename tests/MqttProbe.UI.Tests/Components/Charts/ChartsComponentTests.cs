@@ -9,12 +9,14 @@ using MqttProbe.Core.Services.Chart;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Metrics;
 using MqttProbe.Core.Services.Mqtt;
+using MqttProbe.Core.Services.Platform;
 using MqttProbe.Core.Services.Plugins.BuiltIn;
 using MqttProbe.Core.Services.Plugins.Pipeline;
 using MqttProbe.Core.Services.Plugins.Registry;
 using MqttProbe.UI.Services.Formatting;
 using MqttProbe.UI.Tests.TestHelpers;
 using Org.Eclipse.Tahu.Protobuf;
+using ChartCardComponent = MqttProbe.UI.Components.Charts.ChartCard;
 using ChartsComponent = MqttProbe.UI.Components.Charts.Charts;
 
 namespace MqttProbe.UI.Tests.Components.Charts;
@@ -25,6 +27,7 @@ public class ChartsComponentTests : BunitTestContext
     private IChartSettings _mockChartStore = null!;
     private IChartDataService _mockChartDataService = null!;
     private ISessionState _mockSessionState = null!;
+    private IAppInfoService _mockAppInfo = null!;
     private static readonly Guid _testConnectionId = Guid.NewGuid();
 
     [SetUp]
@@ -46,6 +49,9 @@ public class ChartsComponentTests : BunitTestContext
         Services.AddChartSettings(_mockChartStore);
         Services.AddSingleton(_mockChartDataService);
         Services.AddSingleton(_mockSessionState);
+        _mockAppInfo = Substitute.For<IAppInfoService>();
+        _mockAppInfo.SupportsChartExport.Returns(true);
+        Services.AddSingleton(_mockAppInfo);
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
         Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
 
@@ -65,6 +71,18 @@ public class ChartsComponentTests : BunitTestContext
         cut.Markup.Should().NotContain("indexed path");
         cut.Markup.Should().NotContain("Add to Existing");
         return Task.CompletedTask;
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void ChartCard_ReceivesTheHostChartExportCapability(bool supportsChartExport)
+    {
+        _mockChartStore.GetCharts(_testConnectionId).Returns([new ChartConfiguration { Name = "Temp Chart" }]);
+        _mockAppInfo.SupportsChartExport.Returns(supportsChartExport);
+
+        var cut = Render<ChartsComponent>();
+
+        cut.FindComponent<ChartCardComponent>().Instance.AllowExport.Should().Be(supportsChartExport);
     }
 
     [Test]
@@ -257,6 +275,7 @@ public class ChartsRealCollectorComponentTests : BunitTestContext
         Services.AddChartSettings(_chartSettings);
         Services.AddSingleton<IChartDataService>(_chartDataService);
         Services.AddSingleton(_sessionState);
+        Services.AddSingleton(Substitute.For<IAppInfoService>());
         Services.AddSingleton(Substitute.For<IUxMetricsService>());
         Services.AddUiSettings(SettingsSubstituteRegistration.CreateUiSettings());
         Services.AddSingleton<IDeviceTimeFormatter>(new ChartTimeFormatterStub());

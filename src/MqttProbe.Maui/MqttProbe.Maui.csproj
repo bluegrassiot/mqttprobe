@@ -118,6 +118,11 @@ System.IO.File.WriteAllText(FilePath, content);
 		     via a paired Mac. See that file's import at the top of this project. -->
 	</PropertyGroup>
 
+	<PropertyGroup Condition="'$(Configuration)'=='Release' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+		<!-- The pinned Apple workload generates invalid preserve signatures (dotnet/macios#26969). -->
+		<WarningsNotAsErrors>$(WarningsNotAsErrors);IL2037</WarningsNotAsErrors>
+	</PropertyGroup>
+
 	<PropertyGroup Condition="'$(MqttProbeMacAppStore)' == 'true' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">
 		<DefineConstants>$(DefineConstants);MQTTPROBE_MAC_APP_STORE</DefineConstants>
 		<CodesignEntitlements>Platforms\MacCatalyst\AppStoreEntitlements.plist</CodesignEntitlements>

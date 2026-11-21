@@ -1,10 +1,9 @@
 using Foundation;
 
-namespace MqttProbe
+namespace MqttProbe;
+
+[Register("AppDelegate")]
+public class MacCatalystApplication : MauiUIApplicationDelegate
 {
-    [Register("AppDelegate")]
-    public class AppDelegate : MauiUIApplicationDelegate
-    {
-        protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
-    }
+    protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
 }

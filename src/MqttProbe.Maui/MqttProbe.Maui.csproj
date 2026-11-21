@@ -45,7 +45,7 @@
         <ApplicationVersion>1</ApplicationVersion>
 
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
-        <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+        <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">17.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
@@ -121,6 +121,8 @@ System.IO.File.WriteAllText(FilePath, content);
 	<PropertyGroup Condition="'$(MqttProbeMacAppStore)' == 'true' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">
 		<DefineConstants>$(DefineConstants);MQTTPROBE_MAC_APP_STORE</DefineConstants>
 		<CodesignEntitlements>Platforms\MacCatalyst\AppStoreEntitlements.plist</CodesignEntitlements>
+		<!-- The pinned Apple workload generates invalid preserve signatures (dotnet/macios#26969). -->
+		<WarningsNotAsErrors>$(WarningsNotAsErrors);IL2037</WarningsNotAsErrors>
 	</PropertyGroup>
 
     <PropertyGroup>

@@ -1,5 +1,6 @@
 using Google.Protobuf;
 using MqttProbe.Core.Services.Plugins.BuiltIn;
+using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.PluginContracts;
 using Org.Eclipse.Tahu.Protobuf;
 
@@ -228,6 +229,84 @@ public class SparkplugTopologyExtractorTests
         evt.Metrics.Should().HaveCount(1);
         evt.Metrics[0].Name.Should().Be("Pressure");
         evt.Metrics[0].Value.Should().Be("101");
+    }
+
+    [Test]
+    public void Extract_NcmdNodeRebirth_ReturnsObservedEvent()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics(
+            MakeBoolMetric(SparkplugControlMetrics.NodeRebirth, true),
+            MakeBoolMetric("Node Control/Reboot", false));
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NCMD/eon1", payload);
+
+        var evt = extractor.Extract(envelope)
+            .Should().ContainSingle().Subject.Should().BeOfType<NodeRebirthObservedEvent>().Subject;
+
+        evt.GroupId.Should().Be("mygroup");
+        evt.NodeId.Should().Be("eon1");
+        evt.FormatId.Should().Be("sparkplug-b");
+        evt.Topic.Should().Be("spBv1.0/mygroup/NCMD/eon1");
+        evt.SequenceNumber.Should().BeNull();
+    }
+
+    [Test]
+    public void Extract_NcmdRebirthFalse_ReturnsEmpty()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics(MakeBoolMetric(SparkplugControlMetrics.NodeRebirth, false));
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NCMD/eon1", payload);
+
+        extractor.Extract(envelope).Should().BeEmpty();
+    }
+
+    [Test]
+    public void Extract_NcmdRebirthWrongDatatype_ReturnsEmpty()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics(MakeStringMetric(SparkplugControlMetrics.NodeRebirth, "true"));
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NCMD/eon1", payload);
+
+        extractor.Extract(envelope).Should().BeEmpty();
+    }
+
+    [Test]
+    public void Extract_NcmdRebirthNameNotExact_ReturnsEmpty()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics(MakeBoolMetric("node control/rebirth", true));
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NCMD/eon1", payload);
+
+        extractor.Extract(envelope).Should().BeEmpty();
+    }
+
+    [Test]
+    public void Extract_NcmdUnrelatedCommand_ReturnsEmpty()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics(MakeBoolMetric("Node Control/Reboot", true));
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NCMD/eon1", payload);
+
+        extractor.Extract(envelope).Should().BeEmpty();
+    }
+
+    [Test]
+    public void Extract_DcmdRebirth_ReturnsEmpty()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var payload = MakePayloadWithMetrics(MakeBoolMetric(SparkplugControlMetrics.NodeRebirth, true));
+        var envelope = MakeEnvelope("spBv1.0/mygroup/DCMD/eon1/device1", payload);
+
+        extractor.Extract(envelope).Should().BeEmpty();
+    }
+
+    [Test]
+    public void Extract_NcmdWithoutMetrics_ReturnsEmpty()
+    {
+        var extractor = new SparkplugTopologyExtractor();
+        var envelope = MakeEnvelope("spBv1.0/mygroup/NCMD/eon1", new Payload { Timestamp = 1 });
+
+        extractor.Extract(envelope).Should().BeEmpty();
     }
 
     // --- DBIRTH ---
@@ -499,19 +578,22 @@ public class SparkplugTopologyExtractorTests
     }
 
     [Test]
-    public void Extract_NData_AliasResolvedFromNBirth()
+    public async Task Extract_NData_AliasResolvedFromNBirth()
     {
+        var store = new SparkplugMetricMetadataStore();
         var extractor = new SparkplugTopologyExtractor();
+        var service = new SparkplugTopologyService(metricMetadataStore: store);
 
         // NBIRTH establishes alias 10 -> "Temperature"
         var birthPayload = MakePayloadWithMetrics(
             new Payload.Types.Metric { Name = "Temperature", Alias = 10, Datatype = 3, IntValue = 42 });
-        extractor.Extract(MakeEnvelope("spBv1.0/mygroup/NBIRTH/eon1", birthPayload));
+        await service.ApplyTopologyEventsAsync(
+            extractor.Extract(MakeEnvelope("spBv1.0/mygroup/NBIRTH/eon1", birthPayload)));
 
         // NDATA sends only alias 10 with updated value
         var dataPayload = MakePayloadWithMetrics(
             new Payload.Types.Metric { Alias = 10, Datatype = 3, IntValue = 99 });
-        var events = extractor.Extract(MakeEnvelope("spBv1.0/mygroup/NDATA/eon1", dataPayload));
+        var events = extractor.Extract(MakeEnvelope("spBv1.0/mygroup/NDATA/eon1", dataPayload), store);
 
         events.Should().HaveCount(1);
         var evt = events[0].Should().BeOfType<NodeDataEvent>().Subject;
@@ -521,19 +603,22 @@ public class SparkplugTopologyExtractorTests
     }
 
     [Test]
-    public void Extract_DData_AliasResolvedFromDBirth()
+    public async Task Extract_DData_AliasResolvedFromDBirth()
     {
+        var store = new SparkplugMetricMetadataStore();
         var extractor = new SparkplugTopologyExtractor();
+        var service = new SparkplugTopologyService(metricMetadataStore: store);
 
         // DBIRTH establishes alias 20 -> "Pressure"
         var birthPayload = MakePayloadWithMetrics(
             new Payload.Types.Metric { Name = "Pressure", Alias = 20, Datatype = 10, DoubleValue = 101.3 });
-        extractor.Extract(MakeEnvelope("spBv1.0/mygroup/DBIRTH/eon1/device1", birthPayload));
+        await service.ApplyTopologyEventsAsync(
+            extractor.Extract(MakeEnvelope("spBv1.0/mygroup/DBIRTH/eon1/device1", birthPayload)));
 
         // DDATA sends only alias 20
         var dataPayload = MakePayloadWithMetrics(
             new Payload.Types.Metric { Alias = 20, Datatype = 10, DoubleValue = 102.5 });
-        var events = extractor.Extract(MakeEnvelope("spBv1.0/mygroup/DDATA/eon1/device1", dataPayload));
+        var events = extractor.Extract(MakeEnvelope("spBv1.0/mygroup/DDATA/eon1/device1", dataPayload), store);
 
         events.Should().HaveCount(1);
         var evt = events[0].Should().BeOfType<DeviceDataEvent>().Subject;
@@ -551,31 +636,37 @@ public class SparkplugTopologyExtractorTests
 
         var dataPayload = MakePayloadWithMetrics(
             new Payload.Types.Metric { Alias = 10, Datatype = 3, IntValue = 99 });
-        var events = extractor.Extract(MakeEnvelope("spBv1.0/mygroup/NDATA/eon1", dataPayload));
+        var events = extractor.Extract(
+            MakeEnvelope("spBv1.0/mygroup/NDATA/eon1", dataPayload), new SparkplugMetricMetadataStore());
 
         events.Should().HaveCount(1);
         events[0].Should().BeOfType<NodeDataEvent>().Subject.Metrics.Should().BeEmpty();
     }
 
     [Test]
-    public void Extract_NBirth_ClearsNodeAliasCache()
+    public async Task Extract_NBirth_ClearsNodeAliasCache()
     {
+        var store = new SparkplugMetricMetadataStore();
         var extractor = new SparkplugTopologyExtractor();
+        var service = new SparkplugTopologyService(metricMetadataStore: store);
 
         // First NBIRTH: alias 10 -> "Temperature"
         var birth1 = MakePayloadWithMetrics(
             new Payload.Types.Metric { Name = "Temperature", Alias = 10, Datatype = 3, IntValue = 42 });
-        extractor.Extract(MakeEnvelope("spBv1.0/mygroup/NBIRTH/eon1", birth1));
+        await service.ApplyTopologyEventsAsync(
+            extractor.Extract(MakeEnvelope("spBv1.0/mygroup/NBIRTH/eon1", birth1)));
 
         // Second NBIRTH: alias 10 -> "Humidity" (rebirth changes the mapping)
         var birth2 = MakePayloadWithMetrics(
             new Payload.Types.Metric { Name = "Humidity", Alias = 10, Datatype = 3, IntValue = 55 });
-        extractor.Extract(MakeEnvelope("spBv1.0/mygroup/NBIRTH/eon1", birth2));
+        await service.ApplyTopologyEventsAsync(
+            extractor.Extract(MakeEnvelope("spBv1.0/mygroup/NBIRTH/eon1", birth2)));
 
         // NDATA with alias 10 should resolve to "Humidity"
         var dataPayload = MakePayloadWithMetrics(
             new Payload.Types.Metric { Alias = 10, Datatype = 3, IntValue = 60 });
-        var events = extractor.Extract(MakeEnvelope("spBv1.0/mygroup/NDATA/eon1", dataPayload));
+        var events = extractor.Extract(
+            MakeEnvelope("spBv1.0/mygroup/NDATA/eon1", dataPayload), store);
 
         events[0].Should().BeOfType<NodeDataEvent>().Subject.Metrics[0].Name.Should().Be("Humidity");
     }

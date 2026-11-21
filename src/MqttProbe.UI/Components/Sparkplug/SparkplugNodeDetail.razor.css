@@ -1,0 +1,121 @@
+.spb-node-details {
+    margin-bottom: 16px;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: var(--mud-default-borderradius);
+    background: var(--mud-palette-surface);
+    overflow: hidden;
+}
+
+.spb-node-details ::deep .mud-expand-panel-header {
+    background: var(--mud-palette-action-default-hover);
+}
+
+.spb-node-details ::deep .mud-expand-panel-header:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+.spb-node-details ::deep .mud-expand-panel-content {
+    padding-bottom: 16px;
+}
+
+.spb-timestamps {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 12px;
+}
+
+.spb-timestamps .spb-timestamp {
+    display: grid;
+    grid-template-columns: minmax(0, 128px) minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 12px;
+    min-width: 0;
+    padding: 3px 0;
+}
+
+.spb-timestamp__label {
+    min-width: 0;
+    color: var(--mud-palette-text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.spb-timestamp__label abbr {
+    text-decoration: none;
+    cursor: help;
+}
+
+.spb-timestamps .spb-timestamp__value {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 2px 6px;
+    min-width: 0;
+}
+
+.spb-timestamps .spb-timestamp__parts {
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 2px 5px;
+    min-width: 0;
+}
+
+.spb-timestamps .spb-relative-time {
+    margin-left: 0;
+    color: var(--mud-palette-text-disabled);
+}
+
+.spb-timestamp__hint {
+    color: var(--mud-palette-text-disabled);
+    font-size: 0.68rem;
+}
+
+.spb-timestamp--session {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
+.spb-node-details ::deep .spb-sequence-panel.spb-sequence-strip {
+    padding: 8px 10px;
+    border-radius: 6px;
+}
+
+.spb-node-details ::deep .spb-sequence-strip .spb-sequence-panel__heading {
+    margin-bottom: 4px;
+    gap: 8px;
+}
+
+.spb-node-details ::deep .spb-sequence-strip .spb-sequence-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+}
+
+.spb-node-details ::deep .spb-sequence-strip .spb-sequence-values {
+    gap: 4px 14px;
+    font-size: 0.7rem;
+}
+
+.spb-node-details ::deep .spb-sequence-strip .spb-sequence-explanation,
+.spb-node-details ::deep .spb-sequence-strip .spb-sequence-caveat {
+    margin-top: 4px;
+}
+
+@media (max-width: 599.98px) {
+    .spb-node-details {
+        margin-bottom: 12px;
+    }
+
+    .spb-timestamps .spb-timestamp {
+        grid-template-columns: minmax(0, 106px) minmax(0, 1fr);
+        column-gap: 8px;
+    }
+}
+
+@media (max-width: 359.98px) {
+    .spb-timestamps .spb-timestamp {
+        grid-template-columns: minmax(0, 96px) minmax(0, 1fr);
+    }
+}

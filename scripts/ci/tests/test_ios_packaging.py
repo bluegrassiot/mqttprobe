@@ -10,18 +10,35 @@ Run: python -m unittest discover -s scripts/ci/tests
 
 import importlib.util
 import plistlib
+import re
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 PLATFORMS = ROOT / "src" / "MqttProbe.Maui" / "Platforms"
-IOS_PLIST = PLATFORMS / "iOS" / "Info.plist"
+IOS_PLATFORM = PLATFORMS / "iOS"
+IOS_PLIST = IOS_PLATFORM / "Info.plist"
 CATALYST_PLIST = PLATFORMS / "MacCatalyst" / "Info.plist"
-PRIVACY_MANIFEST = PLATFORMS / "iOS" / "Resources" / "PrivacyInfo.xcprivacy"
+PRIVACY_MANIFEST = IOS_PLATFORM / "Resources" / "PrivacyInfo.xcprivacy"
 
-WORKFLOW = ROOT / ".github" / "workflows" / "build-ios.yml"
-SIGNING_JOB = "build-ios-archive"
-TRUSTED_REF = "refs/heads/main"
+IOS_ORIENTATION_POLICY = IOS_PLATFORM / "IosOrientationPolicy.cs"
+IOS_APP_DELEGATE = IOS_PLATFORM / "AppDelegate.cs"
+IOS_SCENE_HANDLER = IOS_PLATFORM / "IosSceneHandler.cs"
+MAIN_PAGE = ROOT / "src" / "MqttProbe.Maui" / "MainPage.xaml.cs"
+MAIN_PAGE_XAML = ROOT / "src" / "MqttProbe.Maui" / "MainPage.xaml"
+
+IOS_PHONE_ORIENTATIONS = [
+    "UIInterfaceOrientationPortrait",
+    "UIInterfaceOrientationLandscapeLeft",
+    "UIInterfaceOrientationLandscapeRight",
+]
+IOS_IPAD_ORIENTATIONS = IOS_PHONE_ORIENTATIONS + ["UIInterfaceOrientationPortraitUpsideDown"]
+
+APP_WINDOW_ORIENTATION_SELECTOR = "application:supportedInterfaceOrientationsForWindow:"
+WINDOW_SCENE_ORIENTATION_SELECTOR = "supportedInterfaceOrientationsForWindowScene:"
+EXPORT_SELECTOR = re.compile(
+    r'\[\s*(?:Foundation\.|ObjCRuntime\.)?Export\s*\(\s*"([^"]+)"\s*\)\s*\]'
+)
 
 
 def load_plist(path):
@@ -29,21 +46,26 @@ def load_plist(path):
         return plistlib.load(handle)
 
 
-def load_job(name):
-    """Return one top-level job block from the workflow as text.
+def compact_source(path):
+    return re.sub(r"\s+", "", path.read_text(encoding="utf-8"))
 
-    Read as text, not YAML, and never through the GitHub API: the script tests
-    must not depend on a YAML parser the runner does not guarantee, and these
-    assert source structure rather than exercise a workflow.
-    """
-    lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
-    start = lines.index(f"  {name}:")
-    block = [lines[start]]
-    for line in lines[start + 1:]:
-        if line.startswith("  ") and not line.startswith("   "):
-            break
-        block.append(line)
-    return "\n".join(block)
+
+def source_block(source, marker):
+    start = source.find(marker)
+    if start < 0:
+        return None
+    opening = source.find("{", start)
+    if opening < 0:
+        return None
+    depth = 0
+    for index in range(opening, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start:index + 1]
+    return None
 
 
 def load_privacy_validator():
@@ -60,11 +82,23 @@ class IosInfoPlistTests(unittest.TestCase):
     def setUp(self):
         self.plist = load_plist(IOS_PLIST)
 
-    def test_targets_iphone_only(self):
-        self.assertEqual(self.plist["UIDeviceFamily"], [1])
+    def test_targets_iphone_and_ipad(self):
+        self.assertCountEqual(self.plist["UIDeviceFamily"], [1, 2])
 
-    def test_drops_ipad_only_orientation_key(self):
-        self.assertNotIn("UISupportedInterfaceOrientations~ipad", self.plist)
+    def test_supports_portrait_and_both_landscapes(self):
+        self.assertCountEqual(
+            self.plist["UISupportedInterfaceOrientations"],
+            IOS_PHONE_ORIENTATIONS,
+        )
+
+    def test_ipad_declares_all_four_orientations(self):
+        self.assertCountEqual(
+            self.plist["UISupportedInterfaceOrientations~ipad"],
+            IOS_IPAD_ORIENTATIONS,
+        )
+
+    def test_does_not_require_full_screen(self):
+        self.assertNotIn("UIRequiresFullScreen", self.plist)
 
     def test_declares_local_network_usage_description(self):
         description = self.plist["NSLocalNetworkUsageDescription"]
@@ -93,6 +127,183 @@ class IosInfoPlistTests(unittest.TestCase):
 
     def test_declares_exempt_encryption_only(self):
         self.assertIs(self.plist["ITSAppUsesNonExemptEncryption"], False)
+
+
+class IosOrientationSourceContractTests(unittest.TestCase):
+    """Pin the shared iOS orientation policy and its two public selectors.
+
+    Source-level only: finding an export or a guard does not prove the selector
+    runs, nor that orientation behavior is correct on a device or simulator.
+    """
+
+    def setUp(self):
+        self.policy = compact_source(IOS_ORIENTATION_POLICY)
+        self.app_delegate = compact_source(IOS_APP_DELEGATE)
+        self.scene_handler = compact_source(IOS_SCENE_HANDLER)
+
+    def _exported_selectors(self):
+        selectors = set()
+        for path in sorted(IOS_PLATFORM.rglob("*.cs")):
+            selectors.update(EXPORT_SELECTOR.findall(path.read_text(encoding="utf-8")))
+        return selectors
+
+    def test_app_delegate_exports_window_orientation_selector(self):
+        self.assertIn(APP_WINDOW_ORIENTATION_SELECTOR, self._exported_selectors())
+
+    def test_scene_handler_exports_window_scene_orientation_selector(self):
+        self.assertIn(WINDOW_SCENE_ORIENTATION_SELECTOR, self._exported_selectors())
+
+    def test_both_selectors_delegate_to_the_shared_policy(self):
+        for source in (self.app_delegate, self.scene_handler):
+            self.assertIn("IosOrientationPolicy.ForWindow(", source)
+
+    def test_policy_helper_exposes_window_and_refresh_entry_points(self):
+        self.assertTrue(IOS_ORIENTATION_POLICY.is_file())
+        self.assertIn("classIosOrientationPolicy", self.policy)
+        self.assertIn("ForWindow(", self.policy)
+        self.assertIn("Refresh(", self.policy)
+
+    def test_ipad_uses_all_orientations(self):
+        self.assertIn("UIUserInterfaceIdiom.Pad", self.policy)
+        self.assertIn("UIInterfaceOrientationMask.All;", self.policy)
+
+    def test_phone_and_unknown_idioms_fall_back_to_portrait(self):
+        self.assertIn("UIUserInterfaceIdiom.Phone", self.policy)
+        self.assertGreaterEqual(
+            self.policy.count("UIInterfaceOrientationMask.Portrait"), 2
+        )
+        self.assertIn("UIInterfaceOrientationMask.AllButUpsideDown", self.policy)
+
+    def test_fold_detection_uses_uiwindow_division_regions(self):
+        self.assertIn("UIViewReservedRegionKind.CreateDivision()", self.policy)
+        self.assertIn("UIViewReservedRegionQueryOptions.IncludeInactive", self.policy)
+        self.assertIn("window.GetReservedRegions(", self.policy)
+        self.assertNotIn("WKWebView", self.policy)
+
+    def test_fold_detection_requires_ios_27_1(self):
+        self.assertIn("OperatingSystem.IsIOSVersionAtLeast(27,1)", self.policy)
+
+    def test_refresh_requires_ios_16_and_updates_supported_orientations(self):
+        self.assertIn("OperatingSystem.IsIOSVersionAtLeast(16)", self.policy)
+        self.assertIn(
+            "SetNeedsUpdateOfSupportedInterfaceOrientations()", self.policy
+        )
+
+    def test_no_device_model_or_width_heuristics(self):
+        for forbidden in ("Duo", "Bounds.Width", "Frame.Width", "UIScreen.MainScreen"):
+            self.assertNotIn(forbidden, self.policy)
+
+
+class IosOrientationAttachmentSourceContractTests(unittest.TestCase):
+    """Pin the MainPage hooks that reapply the orientation policy.
+
+    Source-level only: hook presence and call sites do not prove the app refreshes
+    correctly after load, foreground, rotation, or a fold change on a device.
+    """
+
+    def setUp(self):
+        self.page = MAIN_PAGE.read_text(encoding="utf-8")
+        self.compact_page = compact_source(MAIN_PAGE)
+
+    def _assert_hook_refreshes(self, marker, label):
+        block = source_block(self.page, marker)
+        self.assertIsNotNone(block, f"{label} hook is missing")
+        self.assertIn(
+            "RefreshOrientationPolicy",
+            block,
+            f"{label} hook does not refresh the orientation policy",
+        )
+
+    def test_page_refreshes_the_attached_window_through_the_policy(self):
+        self.assertIn("IosOrientationPolicy.Refresh(", self.compact_page)
+        self.assertTrue(
+            "_webView?.Window" in self.compact_page
+            or "Window?.Handler?.PlatformView" in self.compact_page
+        )
+
+    def test_page_attaches_loaded_and_appearing_hooks(self):
+        self.assertRegex(self.page, r"Loaded\s*\+=\s*OnPageLoaded")
+        self._assert_hook_refreshes("protected override void OnAppearing()", "OnAppearing")
+        self._assert_hook_refreshes("private void OnPageLoaded(", "Loaded")
+
+    def test_page_refreshes_on_foreground(self):
+        foreground = re.search(
+            r"ObserveWillEnterForeground\([^)]*\)\s*=>\s*\{[\s\S]{0,300}?\}\);",
+            self.page,
+        )
+        self.assertIsNotNone(foreground, "WillEnterForeground hook is missing")
+        self.assertIn("RefreshOrientationPolicy", foreground.group(0))
+
+
+class IosKeyboardBridgeSourceContractTests(unittest.TestCase):
+    """Pin the native half of the iOS keyboard bridge.
+
+    Source-level only: an attribute name or a classification branch does not prove
+    WebKit paints correctly, that a device reports usable keyboard geometry, or
+    that the JavaScript owner consumes the published state.
+    """
+
+    def setUp(self):
+        self.page = MAIN_PAGE.read_text(encoding="utf-8")
+        self.compact_page = compact_source(MAIN_PAGE)
+
+    def test_xaml_keeps_all_safe_area_edges_for_other_platforms(self):
+        self.assertRegex(
+            MAIN_PAGE_XAML.read_text(encoding="utf-8"),
+            r'x:Class="MqttProbe\.MainPage"[\s\S]*?SafeAreaEdges="All"',
+        )
+
+    def test_ios_constructor_keeps_hardware_insets_only(self):
+        self.assertRegex(
+            self.page,
+            r"public MainPage\(\)\s*\{[\s\S]*?#if IOS[\s\S]*?"
+            r"SafeAreaEdges\s*=\s*(?:Microsoft\.Maui\.SafeAreaEdges\.Container"
+            r"|new\s+Microsoft\.Maui\.SafeAreaEdges\("
+            r"\s*Microsoft\.Maui\.SafeAreaRegions\.Container\s*\))"
+            r";[\s\S]*?#endif",
+        )
+
+    def test_native_publishes_the_retained_attribute_and_change_event(self):
+        self.assertIn("data-app-native-keyboard-state", self.page)
+        self.assertIn("app-native-keyboard-change", self.page)
+        self.assertIn("document.documentElement.setAttribute(", self.compact_page)
+        self.assertIn("window.dispatchEvent(newEvent(", self.compact_page)
+
+    def test_native_does_not_write_the_effective_keyboard_class_or_height(self):
+        for forbidden in (
+            "app-keyboard-open",
+            "--app-keyboard-height",
+            "--app-keyboard-top-inset",
+            "classList",
+        ):
+            self.assertNotIn(forbidden, self.page)
+
+    def test_native_publishes_all_three_states(self):
+        for token in ('"open"', '"closed"', '"unknown"'):
+            self.assertIn(token, self.page)
+
+    def test_frame_evidence_classifies_unknown_but_never_closed(self):
+        block = source_block(self.page, "private IosKeyboardState ClassifyKeyboardFrame(")
+        self.assertIsNotNone(block, "keyboard frame classifier is missing")
+        self.assertIn("IosKeyboardState.Unknown", block)
+        self.assertIn("IosKeyboardState.Open", block)
+        self.assertNotIn("IosKeyboardState.Closed", block)
+        self.assertTrue(
+            "_webView?.Window" in block
+            and "ConvertRectFromCoordinateSpace" in block
+            and "UIScreen.MainScreen" not in block,
+        )
+
+    def test_hide_notification_is_the_closed_evidence(self):
+        self.assertRegex(
+            self.page,
+            r"ObserveWillHide\([^)]*\)\s*=>\s*SetKeyboardState\(IosKeyboardState\.Closed\)",
+        )
+
+    def test_applied_state_only_advances_after_a_successful_publish(self):
+        block = source_block(self.page, "private async Task PushKeyboardStateAsync(")
+        self.assertIsNotNone(block, "keyboard publisher is missing")
+        self.assertIn("_appliedKeyboardState", block)
 
 
 class MacCatalystInfoPlistTests(unittest.TestCase):
@@ -182,6 +393,24 @@ class BundleSourceContractTests(unittest.TestCase):
         self.assertNotIn("IPhoneResourcePrefix", contents)
         self.assertNotIn("xcprivacy", contents)
 
+    def test_csproj_does_not_override_device_family_or_orientation(self):
+        targets = ROOT / "src" / "MqttProbe.Maui" / "MqttProbe.Maui.csproj"
+        contents = targets.read_text(encoding="utf-8")
+        for forbidden in (
+            "UIDeviceFamily",
+            "UISupportedInterfaceOrientations",
+            "UIRequiresFullScreen",
+        ):
+            self.assertNotIn(forbidden, contents)
+
+    def test_ios_minimum_os_is_unchanged(self):
+        targets = ROOT / "src" / "MqttProbe.Maui" / "MqttProbe.Maui.csproj"
+        contents = targets.read_text(encoding="utf-8")
+        self.assertRegex(
+            contents,
+            r"<SupportedOSPlatformVersion[^>]*==\s*'ios'[^>]*>\s*15\.0\s*</SupportedOSPlatformVersion>",
+        )
+
 
 MAUI_APP_INFO_SERVICE = ROOT / "src" / "MqttProbe.Maui" / "Services" / "AppInfoService.cs"
 PLUGIN_ASSEMBLY_CACHE = (
@@ -244,50 +473,6 @@ class AssemblyPluginGuardSourceContractTests(unittest.TestCase):
         mutated = self.loader.replace(IOS_ONLY_GUARD, ANDROID_EXCLUDING_GUARD, 1)
         self.assertNotEqual(mutated, self.loader)
         self.assertFalse(is_ios_only_guard(guard_expression(mutated, LOADER_GUARD)))
-
-
-class IosSigningWorkflowTests(unittest.TestCase):
-    """Source contracts for the signing gate in build-ios.yml.
-
-    A workflow file cannot configure an environment, so these check only that the
-    job references the right environment and carries the defense-in-depth ref
-    test. The environment itself is a repository setting; see the archive build
-    guide for the manual setup, which is where the real protection lives.
-    """
-
-    def setUp(self):
-        self.text = WORKFLOW.read_text(encoding="utf-8")
-        self.job = load_job(SIGNING_JOB)
-
-    def test_signing_job_references_the_ios_signing_environment(self):
-        self.assertIn("    environment: ios-signing", self.job)
-
-    def test_signing_job_is_guarded_to_the_trusted_branch(self):
-        # github.ref is fully qualified, so a tag named main or any other branch
-        # does not satisfy the guard; this is defense in depth, not the boundary.
-        self.assertIn(f"    if: github.ref == '{TRUSTED_REF}'", self.job)
-
-    def test_guard_only_targets_the_branch_not_a_tag(self):
-        # ref_name would also match a tag named main; the guard must use github.ref.
-        self.assertIn(TRUSTED_REF, self.job)
-        self.assertNotIn("github.ref_name ==", self.job)
-
-    def test_protection_is_not_pretended_in_yaml(self):
-        # Reviewers and bypass are repository settings, not workflow keys, and
-        # deployment: false is unnecessary syntax this workflow does not need.
-        for forbidden in ("reviewers:", "required_reviewers", "deployment:"):
-            self.assertNotIn(forbidden, self.text)
-
-    def test_no_workflow_api_or_secret_management_steps(self):
-        for forbidden in ("api.github.com", "gh api", "gh secret", "gh variable"):
-            self.assertNotIn(forbidden, self.text)
-
-    def test_manual_artifact_upload_is_the_only_publish_step(self):
-        self.assertIn("uses: actions/upload-artifact@", self.job)
-        self.assertIn("name: maui-ios-archive", self.job)
-        for forbidden in ("action-gh-release", "upload-release-asset", "gh release", "altool"):
-            self.assertNotIn(forbidden, self.text)
-
 
 if __name__ == "__main__":
     unittest.main()

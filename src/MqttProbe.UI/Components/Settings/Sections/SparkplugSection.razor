@@ -65,6 +65,16 @@
     </MudText>
 </div>
 
+<div class="settings-field">
+    <MudSwitch T="bool" Value="@SparkplugSettings.Sparkplug.AllowMetricWrites"
+               ValueChanged="@OnAllowMetricWritesChanged"
+               Color="Color.Primary"
+               Label="Allow metric writes" />
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="settings-caption">
+        Enables writing metric values from the nodes view as NCMD and DCMD commands. Reboot keeps its own switch.
+    </MudText>
+</div>
+
 @code {
     private async Task OnGroupSparkplugTopicsChanged(bool value)
     {
@@ -94,5 +104,10 @@
     private async Task OnAllowNodeRebootChanged(bool value)
     {
         await SparkplugSettings.SetAllowNodeRebootAsync(value);
+    }
+
+    private async Task OnAllowMetricWritesChanged(bool value)
+    {
+        await SparkplugSettings.SetAllowMetricWritesAsync(value);
     }
 }

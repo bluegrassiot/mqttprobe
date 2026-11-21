@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
 using MQTTnet;
+using MqttProbe.Core.Services.Plugins.BuiltIn;
 using MqttProbe.Core.Services.Plugins.Registry;
+using MqttProbe.Core.Services.Sparkplug;
 using MqttProbe.PluginContracts;
 
 namespace MqttProbe.Core.Services.Plugins.Pipeline;
@@ -14,7 +16,9 @@ public sealed class PayloadPipeline(PluginRegistry registry, ILogger<PayloadPipe
 
     public void SwapRegistry(PluginRegistry registry) => _registry = registry;
 
-    public PipelineDecodeResult ProcessInbound(MqttApplicationMessageReceivedEventArgs e)
+    public PipelineDecodeResult ProcessInbound(
+        MqttApplicationMessageReceivedEventArgs e,
+        SparkplugMetricMetadataStore? metadataStore = null)
     {
         var activeRegistry = _registry;
         var diagnostics = new List<string>();
@@ -58,9 +62,13 @@ public sealed class PayloadPipeline(PluginRegistry registry, ILogger<PayloadPipe
             }
 
             var extractor = activeRegistry.FindTopologyExtractor(formatId);
-            var topologyEvents = extractor is null
-                ? []
-                : ExtractTopologyEvents(extractor, envelope, formatId, diagnostics);
+            var topologyEvents = extractor switch
+            {
+                null => [],
+                SparkplugTopologyExtractor builtIn => ExtractTopologyEvents(
+                    () => builtIn.Extract(envelope, metadataStore), formatId, diagnostics),
+                _ => ExtractTopologyEvents(() => extractor.Extract(envelope), formatId, diagnostics)
+            };
 
             return BuildDecodeResult(envelope, topologyEvents, diagnostics);
         }
@@ -105,14 +113,13 @@ public sealed class PayloadPipeline(PluginRegistry registry, ILogger<PayloadPipe
     }
 
     private IReadOnlyList<TopologyEvent> ExtractTopologyEvents(
-        ITopologyExtractor extractor,
-        DecodedPayloadEnvelope envelope,
+        Func<IReadOnlyList<TopologyEvent>> extract,
         string formatId,
         List<string> diagnostics)
     {
         try
         {
-            return extractor.Extract(envelope);
+            return extract();
         }
         catch (Exception ex)
         {

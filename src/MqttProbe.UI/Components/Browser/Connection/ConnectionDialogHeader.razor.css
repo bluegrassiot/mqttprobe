@@ -1,19 +1,61 @@
 .connection-dialog-header {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 16px;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 16px;
     background: var(--mud-palette-surface);
     border-bottom: 1px solid var(--mud-palette-divider);
+    flex-shrink: 0;
+}
+
+.connection-dialog-header__main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    row-gap: 8px;
+    min-width: 0;
 }
 
 /* Scoped rules only match elements this component writes, so MudText and MudSelect need ::deep. */
 .connection-dialog-header ::deep .header-label {
     flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .connection-dialog-header ::deep .mud-select {
-    flex: 1;
+    flex: 1 1 10rem;
+    min-width: 0;
+}
+
+.connection-dialog-header__action {
+    display: flex;
+    flex: 0 0 auto;
+}
+
+.connection-dialog-header__secondary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-height: 32px;
+}
+
+.connection-connecting-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.connection-connecting-status ::deep .mud-typography {
+    white-space: nowrap;
+}
+
+.signal-connecting-sm {
+    width: 26px;
+    height: 26px;
+    animation: signal-breathe 1.6s ease-in-out infinite;
 }
 
 .connection-dialog-actions {
@@ -21,18 +63,17 @@
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
+    margin-left: auto;
 }
 
 @media (max-width: 599px) {
     .connection-dialog-header {
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
         padding: 8px 12px;
     }
 
-    .connection-dialog-header ::deep .header-label {
-        flex-shrink: 0;
+    .connection-dialog-header__main {
+        flex-wrap: wrap;
+        row-gap: 8px;
     }
 
     .connection-dialog-header ::deep .mud-select {
@@ -40,8 +81,15 @@
         min-width: 0;
     }
 
-    .connection-dialog-actions {
+    .connection-dialog-header__action {
         flex: 1 1 100%;
-        justify-content: flex-end;
+    }
+
+    .connection-dialog-header__action ::deep .mud-button-root {
+        width: 100%;
+    }
+
+    .connection-dialog-header__secondary {
+        min-height: 36px;
     }
 }

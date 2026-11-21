@@ -75,20 +75,24 @@ public sealed class MessageStoreReadsTests
     }
 
     [Test]
-    public async Task SlashNormalizedTopic_ReadsSelectedMessages()
+    public async Task RawSlashedTopic_ReadsSelectedMessagesWithoutCollapsing()
     {
         var manager = Substitute.For<IMessageStoreManager>();
-        var selection = State("a/b");
-        var message = new MqttMessage("payload", "a/b", false,
+        var selection = State("a//b");
+        var message = new MqttMessage("payload", "a//b", false,
             MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce);
         manager.GetSelectedTopicState().Returns(selection);
         manager.GetSelectedMessagesAsync(selection.Token, 10)
             .Returns(Task.FromResult<SelectedMessagesSnapshot?>(Snapshot(selection, message)));
 
-        var result = await MessageStoreReads.ReadMessagesAsync(manager, "//a///b//", 10);
+        var result = await MessageStoreReads.ReadMessagesAsync(manager, "a//b", 10);
 
         Assert.That(result, Has.Count.EqualTo(1));
         Assert.That(result[0], Is.SameAs(message));
+
+        var collapsed = await MessageStoreReads.ReadMessagesAsync(manager, "a/b", 10);
+        Assert.That(collapsed, Is.Empty, "a different raw path must not read this selection");
+
         _ = manager.Received(1).GetSelectedMessagesAsync(selection.Token, 10);
     }
 

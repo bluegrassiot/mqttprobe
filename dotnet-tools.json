@@ -3,14 +3,14 @@
   "isRoot": true,
   "tools": {
     "dotnet-reportgenerator-globaltool": {
-      "version": "5.5.11",
+      "version": "5.6.0",
       "commands": [
         "reportgenerator"
       ],
       "rollForward": false
     },
     "jetbrains.resharper.globaltools": {
-      "version": "2026.2.3.1",
+      "version": "2026.3.0",
       "commands": [
         "jb"
       ],
@@ -20,6 +20,13 @@
       "version": "1.0.100",
       "commands": [
         "devskim"
+      ],
+      "rollForward": false
+    },
+    "nuget-license": {
+      "version": "4.0.18",
+      "commands": [
+        "nuget-license"
       ],
       "rollForward": false
     }

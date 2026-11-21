@@ -102,6 +102,25 @@ public class SparkplugNodeAdapterTests
         }
     }
 
+    [TestCase("SendNodeDeathMessage")]
+    [TestCase("PublishNodeAndDeviceBirthsInternal")]
+    public void ReflectedSparkplugNetMethods_StillExist(string methodName)
+    {
+        System.Reflection.MethodInfo? method = null;
+        for (var type = typeof(SparkplugNode); type is not null && method is null; type = type.BaseType)
+        {
+            method = type.GetMethod(
+                methodName,
+                System.Reflection.BindingFlags.NonPublic
+                    | System.Reflection.BindingFlags.Instance
+                    | System.Reflection.BindingFlags.DeclaredOnly);
+        }
+
+        method.Should().NotBeNull("the emulator adapter invokes this SparkplugNet method by name");
+        method!.GetParameters().Should().BeEmpty();
+        method.ReturnType.Should().Be<Task>();
+    }
+
     [Test]
     public async Task PublishMetrics_after_revoke_returns_completed_without_publishing()
     {

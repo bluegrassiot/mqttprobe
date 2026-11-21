@@ -1,6 +1,6 @@
 @namespace MqttProbe.UI.Components.Shared
 
-<div class="app-tabpanel-header @Class">
+<div class="app-tabpanel-header @(HeaderFilters is not null ? "app-tabpanel-header--has-filters" : null) @Class">
     <div class="app-tabpanel-header__row">
         @if (!string.IsNullOrEmpty(Icon))
         {

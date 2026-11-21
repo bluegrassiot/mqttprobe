@@ -2,14 +2,19 @@
 @using System.Text.Json
 @inject IEmulationService EmulationService
 
-<div class="emu-device-row @(IsExpanded ? "emu-device-row--expanded" : "")"
-     @onclick="@(() => OnToggleExpand.InvokeAsync())">
-    <MudIcon Icon="@(IsExpanded ? LucideIcons.ChevronDown : LucideIcons.ChevronRight)" Size="Size.Small"/>
-    <span class="emu-device-id">@Device.DeviceId</span>
-    <span class="emu-device-secondary">
-        @Device.Metrics.Count metric@(Device.Metrics.Count != 1 ? "s" : "")
-    </span>
-    <span @onclick:stopPropagation="true">
+<div class="emu-device-row @(IsExpanded ? "emu-device-row--expanded" : "")">
+    <button type="button" class="emu-device-row__toggle"
+            aria-expanded="@(IsExpanded ? "true" : "false")"
+            aria-controls="@DetailId"
+            @onclick="@(() => OnToggleExpand.InvokeAsync())"
+            @onkeydown="OnToggleKeyDown">
+        <MudIcon Icon="@(IsExpanded ? LucideIcons.ChevronDown : LucideIcons.ChevronRight)" Size="Size.Small"/>
+        <span class="emu-device-id">@Device.DeviceId</span>
+        <span class="emu-device-secondary">
+            @Device.Metrics.Count metric@(Device.Metrics.Count != 1 ? "s" : "")
+        </span>
+    </button>
+    <span class="emu-device-row__actions" @onclick:stopPropagation="true">
         <MudIconButton Icon="@LucideIcons.Copy" Size="Size.Small"
                        title="Duplicate device"
                        Disabled="@EmulationService.IsRunning"
@@ -23,7 +28,7 @@
 
 @if (IsExpanded)
 {
-    <div class="emu-device-detail">
+    <div class="emu-device-detail" id="@DetailId">
         <MudTextField @bind-Value="Device.DeviceId" @bind-Value:after="NotifyChangedAsync"
                       Label="Device ID" Variant="Variant.Outlined" Margin="Margin.Dense"
                       Disabled="@EmulationService.IsRunning"
@@ -53,6 +58,17 @@
     [Parameter] public bool IsExpanded { get; set; }
     [Parameter] public EventCallback OnToggleExpand { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string DetailId => $"emu-device-detail-{Device.Id}";
+
+    private async Task OnToggleKeyDown(KeyboardEventArgs args)
+    {
+        if (args.IsComposing || args.CtrlKey || args.AltKey || args.MetaKey || args.ShiftKey)
+            return;
+
+        if ((args.Key == "ArrowRight" && !IsExpanded) || (args.Key == "ArrowLeft" && IsExpanded))
+            await OnToggleExpand.InvokeAsync();
+    }
 
     private static readonly char[] IllegalIdChars = ['/', '+', '#'];
 

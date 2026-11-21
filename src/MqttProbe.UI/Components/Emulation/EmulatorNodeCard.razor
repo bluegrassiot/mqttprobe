@@ -3,28 +3,31 @@
 @inject IDialogService DialogService
 
 <div class="emu-node-row @(IsExpanded ? "emu-node-row--expanded" : "")">
-    <div class="emu-node-row__main" @onclick="@(() => OnToggleExpand.InvokeAsync())">
-        <div class="d-flex align-center gap-1">
-            <span class="emu-status-dot" style="background:@StatusColor()"></span>
+    <button type="button" class="emu-node-row__toggle"
+            aria-expanded="@(IsExpanded ? "true" : "false")"
+            aria-controls="@EditorId"
+            @onclick="@(() => OnToggleExpand.InvokeAsync())"
+            @onkeydown="OnToggleKeyDown">
+        <span class="emu-node-row__heading d-flex align-center gap-1">
+            <span class="emu-status-dot @StatusClass()"></span>
             <span class="emu-node-id">@Node.NodeId</span>
-            <span class="emu-status-label" style="color:@StatusColor()">@StatusLabel()</span>
-            <MudSpacer/>
-            <span @onclick:stopPropagation="true">
-                <MudIconButton Icon="@LucideIcons.Copy" Size="Size.Small"
-                               title="Duplicate node"
-                               Disabled="@EmulationService.IsRunning"
-                               OnClick="@OpenDuplicateDialogAsync"/>
-                <MudIconButton Icon="@LucideIcons.Trash2" Size="Size.Small" Color="Color.Error"
-                               title="Delete node"
-                               Disabled="@EmulationService.IsRunning"
-                               OnClick="@(() => EmulationService.RemoveNodeAsync(Node.Id))"/>
-            </span>
-        </div>
-        <div class="emu-node-secondary">@SecondaryText</div>
-    </div>
+            <span class="emu-status-label @StatusClass()">@StatusLabel()</span>
+        </span>
+        <span class="emu-node-secondary">@SecondaryText</span>
+    </button>
+    <span class="emu-node-row__actions" @onclick:stopPropagation="true">
+        <MudIconButton Icon="@LucideIcons.Copy" Size="Size.Small"
+                       title="Duplicate node"
+                       Disabled="@EmulationService.IsRunning"
+                       OnClick="@OpenDuplicateDialogAsync"/>
+        <MudIconButton Icon="@LucideIcons.Trash2" Size="Size.Small" Color="Color.Error"
+                       title="Delete node"
+                       Disabled="@EmulationService.IsRunning"
+                       OnClick="@(() => EmulationService.RemoveNodeAsync(Node.Id))"/>
+    </span>
     @if (IsExpanded)
     {
-        <div class="emu-node-editor">
+        <div class="emu-node-editor" id="@EditorId">
             <EmulatorNodeEditor Node="@Node"/>
         </div>
     }
@@ -51,12 +54,23 @@
     private NodeRuntimeStatus Status =>
         EmulationService.IsRunning ? EmulationService.GetStatus(Node.Id) : NodeRuntimeStatus.Idle;
 
-    private string StatusColor() => Status switch
+    private string EditorId => $"emu-node-editor-{Node.Id}";
+
+    private string StatusClass() => Status switch
     {
-        NodeRuntimeStatus.Connected => "var(--mud-palette-success)",
-        NodeRuntimeStatus.Error => "var(--mud-palette-error)",
-        _ => "var(--mud-palette-text-secondary)"
+        NodeRuntimeStatus.Connected => "emu-node-status--connected",
+        NodeRuntimeStatus.Error => "emu-node-status--error",
+        _ => "emu-node-status--idle"
     };
+
+    private async Task OnToggleKeyDown(KeyboardEventArgs args)
+    {
+        if (args.IsComposing || args.CtrlKey || args.AltKey || args.MetaKey || args.ShiftKey)
+            return;
+
+        if ((args.Key == "ArrowRight" && !IsExpanded) || (args.Key == "ArrowLeft" && IsExpanded))
+            await OnToggleExpand.InvokeAsync();
+    }
 
     private string StatusLabel() => Status switch
     {

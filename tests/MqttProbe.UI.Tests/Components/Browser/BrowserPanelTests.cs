@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Mqtt;
@@ -20,7 +21,7 @@ public class BrowserPanelTests : BunitTestContext
         _mockMsgStore = Substitute.For<IMessageStoreManager>();
         _mockMsgStore.RootTopicCount.Returns(0);
 
-        _mockConfig = Substitute.For<IUiSettings>();
+        _mockConfig = SettingsSubstituteRegistration.CreateUiSettings();
         _mockConfig.IsHintDismissed(Arg.Any<string>()).Returns(false);
 
         _mockDialogService = Substitute.For<IDialogService>();
@@ -30,6 +31,7 @@ public class BrowserPanelTests : BunitTestContext
         Services.AddUiSettings(_mockConfig);
         Services.AddSingleton(_mockDialogService);
         Services.AddSingleton(_mockSnackbar);
+        Services.AddSingleton(Substitute.For<ITopicExcludeService>());
 
         ComponentFactories.AddStub<TopicBrowser>();
         ComponentFactories.AddStub<PayloadBrowser>();
@@ -51,153 +53,15 @@ public class BrowserPanelTests : BunitTestContext
     }
 
     [Test]
-    public void ClearMessagesButton_WhenNoStores_IsDisabled()
-    {
-        var cut = Render<BrowserPanel>();
-
-        var btn = cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear"));
-        btn.HasAttribute("disabled").Should().BeTrue();
-    }
-
-    [Test]
-    public void ClearMessagesButton_WhenStoresExist_IsEnabled()
+    public void Header_OffersNoClearAllMessagesControl()
     {
         _mockMsgStore.RootTopicCount.Returns(1);
 
         var cut = Render<BrowserPanel>();
 
-        var btn = cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear"));
-        btn.HasAttribute("disabled").Should().BeFalse();
-    }
-
-    [Test]
-    public async Task ClearMessages_WhenConfirmed_CallsStoreClear()
-    {
-        _mockMsgStore.RootTopicCount.Returns(1);
-        _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask);
-        _mockDialogService.ShowMessageBoxAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(true));
-
-        var cut = Render<BrowserPanel>();
-        var btn = cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear"));
-
-        await cut.InvokeAsync(() => btn.Click());
-
-        _ = _mockMsgStore.Received(1).ClearAllMessages();
-    }
-
-    [Test]
-    public async Task ClearMessages_WhenCancelled_DoesNotCallStoreClear()
-    {
-        _mockMsgStore.RootTopicCount.Returns(1);
-        _mockDialogService.ShowMessageBoxAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(false));
-
-        var cut = Render<BrowserPanel>();
-        var btn = cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear"));
-
-        await cut.InvokeAsync(() => btn.Click());
-
-        _ = _mockMsgStore.DidNotReceive().ClearAllMessages();
-    }
-
-    [Test]
-    public async Task ClearMessages_WhenConfirmed_ShowsSuccessSnackbar()
-    {
-        _mockMsgStore.RootTopicCount.Returns(1);
-        _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask);
-        _mockDialogService.ShowMessageBoxAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(true));
-
-        var cut = Render<BrowserPanel>();
-        var btn = cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear"));
-
-        await cut.InvokeAsync(() => btn.Click());
-
-        _mockSnackbar.Received(1).Add("All stored messages cleared.", Severity.Success,
-            Arg.Any<Action<SnackbarOptions>?>(), Arg.Any<string?>());
-    }
-
-    [Test]
-    public async Task ClearMessages_AfterClear_DisablesButtonOnNextTick()
-    {
-        var rootCount = 1;
-        _mockMsgStore.RootTopicCount.Returns(_ => rootCount);
-
-        _mockDialogService.ShowMessageBoxAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(true));
-
-        _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask)
-            .AndDoes(_ => rootCount = 0);
-
-        var cut = Render<BrowserPanel>();
-        var btn = cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear"));
-
-        btn.HasAttribute("disabled").Should().BeFalse();
-
-        await cut.InvokeAsync(() => btn.Click());
-
-        cut.Instance.OnTimerTick();
-
-        cut.WaitForAssertion(() =>
-        {
-            cut.FindAll("button")
-                .First(b => b.TextContent.Contains("Clear"))
-                .HasAttribute("disabled").Should().BeTrue();
-        });
-    }
-
-    [Test]
-    public async Task ClearMessages_AfterClear_WhenTrafficRestoresCount_ReenablesButtonOnNextTick()
-    {
-        var rootCount = 1;
-        _mockMsgStore.RootTopicCount.Returns(_ => rootCount);
-
-        _mockDialogService.ShowMessageBoxAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DialogOptions>())
-            .Returns(Task.FromResult<bool?>(true));
-
-        _mockMsgStore.ClearAllMessages().Returns(Task.CompletedTask)
-            .AndDoes(_ => rootCount = 0);
-
-        var cut = Render<BrowserPanelWithoutUpdateTimer>();
-
-        cut.FindAll("button").First(b => b.TextContent.Contains("Clear"))
-            .HasAttribute("disabled").Should().BeFalse();
-        cut.FindAll(".mud-chip").Should().HaveCount(1);
-
-        await cut.InvokeAsync(() => cut.FindAll("button")
-            .First(b => b.TextContent.Contains("Clear")).Click());
-
-        cut.FindAll("button").First(b => b.TextContent.Contains("Clear"))
-            .HasAttribute("disabled").Should().BeTrue();
-        cut.FindAll(".mud-chip").Should().BeEmpty();
-
-        rootCount = 1;
-        cut.Instance.OnTimerTick();
-
-        cut.WaitForAssertion(() =>
-        {
-            cut.FindAll("button")
-                .First(b => b.TextContent.Contains("Clear"))
-                .HasAttribute("disabled").Should().BeFalse();
-            cut.FindAll(".mud-chip").Should().HaveCount(1);
-        });
+        cut.FindAll("button")
+            .Should().NotContain(button => button.TextContent.Contains("Clear all messages"),
+                "clearing works on the selected branches, so the global clear is gone");
     }
 
     [Test]
@@ -219,12 +83,53 @@ public class BrowserPanelTests : BunitTestContext
     }
 
     [Test]
+    public void BulkToolbar_IsRenderedWhileMultiSelectIsOn()
+    {
+        var cut = Render<BrowserPanel>();
+
+        cut.FindComponents<TopicBulkToolbar>().Should().ContainSingle();
+    }
+
+    [Test]
+    public void BulkToolbar_StaysAvailableWhenMultiSelectIsOff()
+    {
+        _mockConfig.Ui.TopicTreeMultiSelect = false;
+
+        var cut = Render<BrowserPanel>();
+
+        cut.FindComponents<TopicBulkToolbar>().Should().ContainSingle();
+        cut.FindAll(".topic-bulk-toolbar").Should().BeEmpty("nothing is selected yet");
+    }
+
+    [Test]
     public void MobileLayout_RendersMobileTopicBar()
     {
         var cut = Render<BrowserPanel>();
 
         // MobileTopicBar is stubbed (renders empty), but the mobile layout wrapper exists
         cut.Markup.Should().Contain("browser-mobile-layout");
+    }
+
+    [TestCase(Breakpoint.Md, true)]
+    [TestCase(Breakpoint.Lg, true)]
+    [TestCase(Breakpoint.Sm, false)]
+    [TestCase(Breakpoint.Xs, false)]
+    public void Layout_SelectsDesktopSplitOrMobileLayout_WithoutAnIntermediateStackedSplit(
+        Breakpoint breakpoint, bool desktop)
+    {
+        var cut = RenderPanel(breakpoint);
+
+        if (desktop)
+        {
+            cut.FindComponents<MudSplitPanel>().Should().ContainSingle(
+                "only the desktop layout keeps the resizable split");
+            cut.FindAll(".browser-mobile-layout").Should().BeEmpty();
+        }
+        else
+        {
+            cut.FindComponents<MudSplitPanel>().Should().BeEmpty();
+            cut.FindAll(".browser-mobile-layout").Should().ContainSingle();
+        }
     }
 
     [Test]
@@ -260,8 +165,17 @@ public class BrowserPanelTests : BunitTestContext
         cut.Markup.Should().NotContain("topic-picker-overlay__panel");
     }
 
-    private sealed class BrowserPanelWithoutUpdateTimer : BrowserPanel
+    private IRenderedComponent<BrowserPanel> RenderPanel(Breakpoint breakpoint)
     {
-        protected override System.Threading.Timer? CreateUpdateTimer() => null;
+        var wrapper = Render<CascadingValue<Breakpoint>>(parameters => parameters
+            .Add(value => value.Value, breakpoint)
+            .Add(value => value.IsFixed, true)
+            .Add(value => value.ChildContent, (RenderFragment)(builder =>
+            {
+                builder.OpenComponent<BrowserPanel>(0);
+                builder.CloseComponent();
+            })));
+
+        return wrapper.FindComponent<BrowserPanel>();
     }
 }

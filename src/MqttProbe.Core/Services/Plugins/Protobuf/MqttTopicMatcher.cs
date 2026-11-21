@@ -1,13 +1,11 @@
 using System.Text;
 using MQTTnet;
+using MqttProbe.Core.Services.Mqtt;
 
 namespace MqttProbe.Core.Services.Plugins.Protobuf;
 
 public static class MqttTopicMatcher
 {
-    // MQTT caps topic names and filters at 65,535 bytes of UTF-8, not 65,535 characters.
-    private const int MaxUtf8ByteLength = 65_535;
-
     public static bool Matches(string topic, string filter)
     {
         if (!IsValidFilter(filter))
@@ -20,7 +18,7 @@ public static class MqttTopicMatcher
     {
         if (string.IsNullOrWhiteSpace(filter) ||
             filter.Contains('\0') ||
-            Encoding.UTF8.GetByteCount(filter) > MaxUtf8ByteLength)
+            Encoding.UTF8.GetByteCount(filter) > MqttStringRules.MaxUtf8Bytes)
             return false;
 
         var levels = filter.Split('/');
@@ -35,4 +33,11 @@ public static class MqttTopicMatcher
 
         return true;
     }
+
+    public static bool IsValidTopicName(string? topic) =>
+        !string.IsNullOrEmpty(topic) &&
+        !topic.Contains('\0') &&
+        !topic.Contains('#') &&
+        !topic.Contains('+') &&
+        Encoding.UTF8.GetByteCount(topic) <= MqttStringRules.MaxUtf8Bytes;
 }

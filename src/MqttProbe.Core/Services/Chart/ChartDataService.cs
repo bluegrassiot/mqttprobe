@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MqttProbe.Core.Models.Chart;
+using MqttProbe.Core.Models.Mqtt;
 using MqttProbe.Core.Services.Configuration;
 using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.Core.Services.Plugins.Pipeline;
@@ -12,6 +14,8 @@ namespace MqttProbe.Core.Services.Chart;
 public interface IChartDataService : IDisposable
 {
     public IReadOnlyList<ChartDataPoint> GetPoints(Guid seriesId);
+    public DateTime? GetLastPointTimestamp(Guid seriesId);
+    public (DateTime First, DateTime Last)? GetPointBounds(Guid seriesId);
     public event Action? OnDataUpdated;
     public Task StartAsync();
     public Task StopAsync();
@@ -32,9 +36,13 @@ public class ChartDataService(
     ITopicExcludeService? topicExcludeService = null)
     : IChartDataService
 {
-    private readonly ConcurrentDictionary<Guid, ConcurrentQueue<ChartDataPoint>> _buffers = new();
+    private readonly ConcurrentDictionary<Guid, SeriesState> _seriesStates = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly Lock _stateLock = new();
+    private ImmutableDictionary<Guid, SeriesIdentity> _sources = ImmutableDictionary<Guid, SeriesIdentity>.Empty;
     private Guid _connectionId;
+    private bool _sourcesInitialized;
+    private long _epoch;
     private int _exclusionHooks;
     private int _purgedNotify;
     private readonly ITopicExcludeService? _topicExcludeService = topicExcludeService;
@@ -44,18 +52,45 @@ public class ChartDataService(
 
     public void SetConnection(Guid connectionId)
     {
-        _connectionId = connectionId;
-        _buffers.Clear();
+        lock (_stateLock)
+        {
+            if (_connectionId == connectionId) return;
+
+            _connectionId = connectionId;
+            _epoch++;
+            _seriesStates.Clear();
+            _sources = CaptureSources(connectionId);
+            _sourcesInitialized = true;
+        }
     }
 
     public void ClearBuffers()
     {
-        _buffers.Clear();
+        lock (_stateLock)
+        {
+            _epoch++;
+            _seriesStates.Clear();
+        }
+
         OnDataUpdated?.Invoke();
     }
 
     public IReadOnlyList<ChartDataPoint> GetPoints(Guid seriesId) =>
-        _buffers.TryGetValue(seriesId, out var q) ? [.. q] : [];
+        _seriesStates.TryGetValue(seriesId, out var state) ? [.. state.Buffer] : [];
+
+    public DateTime? GetLastPointTimestamp(Guid seriesId) =>
+        _seriesStates.TryGetValue(seriesId, out var state) ? state.LastTimestamp : null;
+
+    public (DateTime First, DateTime Last)? GetPointBounds(Guid seriesId)
+    {
+        lock (_stateLock)
+        {
+            if (!_seriesStates.TryGetValue(seriesId, out var state) || !state.Buffer.TryPeek(out var first))
+                return null;
+
+            return state.LastTimestamp is { } last ? (first.Timestamp, last) : null;
+        }
+    }
 
     public async Task StartAsync()
     {
@@ -63,8 +98,18 @@ public class ChartDataService(
         try
         {
             if (IsListening) return;
-            client.ApplicationMessageReceivedAsync += MessageHandler;
+
             chartSettings.ChartsChanged += OnChartsChanged;
+
+            lock (_stateLock)
+            {
+                // Without a snapshot the first message captures current charts and sees
+                // stopped-time edits anyway; only a captured map can be stale.
+                if (_sourcesInitialized)
+                    _sources = ReconcileSources(_connectionId);
+            }
+
+            client.ApplicationMessageReceivedAsync += MessageHandler;
             AttachExclusionHooks();
             IsListening = true;
         }
@@ -104,6 +149,8 @@ public class ChartDataService(
 
         _topicExcludeService.PurgeExcludedTopic += OnPurgeExcludedTopic;
         _topicExcludeService.TopicExcluded += OnTopicExcluded;
+        _topicExcludeService.PurgeExcludedSparkplug += OnPurgeExcludedSparkplug;
+        _topicExcludeService.SparkplugExcluded += OnSparkplugExcluded;
     }
 
     private void DetachExclusionHooks()
@@ -116,11 +163,14 @@ public class ChartDataService(
 
         _topicExcludeService.PurgeExcludedTopic -= OnPurgeExcludedTopic;
         _topicExcludeService.TopicExcluded -= OnTopicExcluded;
+        _topicExcludeService.PurgeExcludedSparkplug -= OnPurgeExcludedSparkplug;
+        _topicExcludeService.SparkplugExcluded -= OnSparkplugExcluded;
     }
 
     private Task MessageHandler(MqttApplicationMessageReceivedEventArgs e)
     {
         var topic = e.ApplicationMessage.Topic;
+        var state = CaptureHandlerState();
         IDisposable? exclusionGate = null;
         if (_topicExcludeService is { } excludes)
         {
@@ -135,20 +185,22 @@ public class ChartDataService(
             var payload = result.Envelope.DisplayText;
 
             IReadOnlyDictionary<ulong, string>? aliasNames = null;
+            ISparkplugMetricTypeResolver? sparkplugTypes = null;
             if (result.Envelope.FormatId == "sparkplug-b"
                 && !result.Envelope.IsFailure
-                && sparkplugSettings.Sparkplug.EnrichAliasNames
-                && topologyService is not null)
+                && SparkplugTopologyService.TryParseTopic(topic, out _, out _, out _, out _))
             {
-                aliasNames = SparkplugAliasResolver.Resolve(topic, result.Envelope, topologyService.Groups);
+                sparkplugTypes = new SparkplugChartMetricTypeResolver(topic, topologyService);
+                if (sparkplugSettings.Sparkplug.EnrichAliasNames && topologyService is not null)
+                    aliasNames = SparkplugAliasResolver.Resolve(topic, result.Envelope, topologyService.Groups);
             }
 
-            if (!TryExtractFields(payload, aliasNames, out var fields))
+            if (!TryExtractFields(payload, aliasNames, sparkplugTypes, out var fields))
                 return Task.CompletedTask;
 
             registry.Update(topic, fields);
 
-            var updated = UpdateBuffers(topic, fields, DateTime.UtcNow);
+            var updated = UpdateBuffers(state, topic, fields, DateTime.UtcNow);
 
             // Released before the notification: a subscriber that calls Add would wait on this gate.
             exclusionGate?.Dispose();
@@ -167,10 +219,15 @@ public class ChartDataService(
         return Task.CompletedTask;
     }
 
-    private void OnPurgeExcludedTopic(string filter)
-    {
-        var changed = PurgeChart(filter);
+    private void OnPurgeExcludedTopic(string filter) =>
+        MarkPurged(PurgeChart(topic => TopicExcludeService.Matches(topic, filter)));
 
+    private void OnPurgeExcludedSparkplug(SparkplugTopicExclude rule) =>
+        MarkPurged(PurgeChart(topic =>
+            TopicBranchMatcher.MatchesSparkplug(rule.Scope, rule.MessageType, topic)));
+
+    private void MarkPurged(bool changed)
+    {
         // Notification stays out of the purge itself: it runs while the exclude service
         // holds its locks. One coalesced flag is enough, and a purge whose observer never
         // runs cannot leave per-filter state behind to misfire on a later exclusion.
@@ -178,18 +235,20 @@ public class ChartDataService(
             Interlocked.Exchange(ref _purgedNotify, 1);
     }
 
-    private bool PurgeChart(string filter)
+    private bool PurgeChart(Func<string, bool> predicate)
     {
-        var changed = registry.RemoveMatchingTopic(filter);
+        var changed = registry.RemoveMatchingTopics(predicate);
         foreach (var config in chartSettings.GetCharts(_connectionId))
         {
             foreach (var series in config.Series)
             {
-                if (!TopicExcludeService.Matches(series.Topic, filter)
-                    || !_buffers.TryRemove(series.Id, out _))
+                if (!predicate(series.Topic))
                     continue;
 
-                changed = true;
+                lock (_stateLock)
+                {
+                    changed |= _seriesStates.TryRemove(series.Id, out _);
+                }
             }
         }
 
@@ -198,7 +257,11 @@ public class ChartDataService(
 
     // Runs right after the matching purge on the same thread, so consuming the flag here
     // notifies only when that purge actually changed chart state.
-    private void OnTopicExcluded(string filter)
+    private void OnTopicExcluded(string filter) => NotifyIfPurged();
+
+    private void OnSparkplugExcluded(SparkplugTopicExclude rule) => NotifyIfPurged();
+
+    private void NotifyIfPurged()
     {
         if (Interlocked.Exchange(ref _purgedNotify, 0) != 0)
             OnDataUpdated?.Invoke();
@@ -207,6 +270,7 @@ public class ChartDataService(
     private bool TryExtractFields(
         string? payload,
         IReadOnlyDictionary<ulong, string>? aliasNames,
+        ISparkplugMetricTypeResolver? sparkplugTypes,
         out IReadOnlyDictionary<string, ExtractedField> fields)
     {
         fields = new Dictionary<string, ExtractedField>(StringComparer.Ordinal);
@@ -215,7 +279,7 @@ public class ChartDataService(
 
         try
         {
-            fields = extractor.Extract(payload, aliasNames);
+            fields = extractor.Extract(payload, aliasNames, sparkplugTypes);
         }
         catch
         {
@@ -227,15 +291,98 @@ public class ChartDataService(
 
     private void OnChartsChanged(Guid connectionId)
     {
-        if (connectionId != _connectionId) return;
-        _buffers.Clear();
+        lock (_stateLock)
+        {
+            if (connectionId != _connectionId) return;
+            _sources = ReconcileSources(connectionId);
+            _sourcesInitialized = true;
+        }
+
         OnDataUpdated?.Invoke();
     }
 
-    private bool UpdateBuffers(string topic, IReadOnlyDictionary<string, ExtractedField> fields, DateTime timestamp) =>
-        chartSettings.GetCharts(_connectionId).Any(config => UpdateBuffersForConfiguration(topic, fields, timestamp, config));
+    private ImmutableDictionary<Guid, SeriesIdentity> ReconcileSources(Guid connectionId)
+    {
+        var builder = ImmutableDictionary.CreateBuilder<Guid, SeriesIdentity>();
+
+        foreach (var config in chartSettings.GetCharts(connectionId))
+        {
+            foreach (var series in config.Series)
+            {
+                if (_sources.TryGetValue(series.Id, out var existing)
+                    && string.Equals(existing.Topic, series.Topic, StringComparison.Ordinal)
+                    && string.Equals(existing.JsonPath, series.JsonPath, StringComparison.Ordinal))
+                {
+                    builder[series.Id] = existing with { MaxPoints = config.MaxPoints };
+                    if (_seriesStates.TryGetValue(series.Id, out var state))
+                        state.TrimTo(config.MaxPoints);
+                    continue;
+                }
+
+                if (existing is not null)
+                    _seriesStates.TryRemove(series.Id, out _);
+
+                builder[series.Id] = new SeriesIdentity(new object(), series.Topic, series.JsonPath, config.MaxPoints);
+            }
+        }
+
+        foreach (var (seriesId, _) in _sources)
+        {
+            if (!builder.ContainsKey(seriesId))
+                _seriesStates.TryRemove(seriesId, out _);
+        }
+
+        return builder.ToImmutable();
+    }
+
+    private ImmutableDictionary<Guid, SeriesIdentity> CaptureSources(Guid connectionId)
+    {
+        var builder = ImmutableDictionary.CreateBuilder<Guid, SeriesIdentity>();
+        foreach (var config in chartSettings.GetCharts(connectionId))
+        {
+            foreach (var series in config.Series)
+                builder[series.Id] = new SeriesIdentity(new object(), series.Topic, series.JsonPath, config.MaxPoints);
+        }
+
+        return builder.ToImmutable();
+    }
+
+    private HandlerState CaptureHandlerState()
+    {
+        lock (_stateLock)
+        {
+            if (!_sourcesInitialized)
+            {
+                _sources = CaptureSources(_connectionId);
+                _sourcesInitialized = true;
+            }
+
+            return new HandlerState(_epoch, _connectionId, _sources);
+        }
+    }
+
+    private readonly record struct HandlerState(
+        long Epoch,
+        Guid ConnectionId,
+        ImmutableDictionary<Guid, SeriesIdentity> Sources);
+
+    private sealed record SeriesIdentity(object Token, string Topic, string JsonPath, int MaxPoints);
+
+    private bool UpdateBuffers(
+        HandlerState state,
+        string topic,
+        IReadOnlyDictionary<string, ExtractedField> fields,
+        DateTime timestamp)
+    {
+        var updated = false;
+        foreach (var config in chartSettings.GetCharts(state.ConnectionId))
+            updated |= UpdateBuffersForConfiguration(state, topic, fields, timestamp, config);
+
+        return updated;
+    }
 
     private bool UpdateBuffersForConfiguration(
+        HandlerState state,
         string topic,
         IReadOnlyDictionary<string, ExtractedField> fields,
         DateTime timestamp,
@@ -251,21 +398,78 @@ public class ChartDataService(
             if (!fields.TryGetValue(series.JsonPath, out var extracted))
                 continue;
 
-            EnqueuePoint(series.Id, config.MaxPoints, new ChartDataPoint(timestamp, extracted.Value));
-            updated = true;
+            var point = new ChartDataPoint(timestamp, extracted.Value);
+            if (TryEnqueue(state, series.Id, series.Topic, series.JsonPath, point))
+                updated = true;
         }
 
         return updated;
     }
 
-    private void EnqueuePoint(Guid seriesId, int maxPoints, ChartDataPoint point)
+    private bool TryEnqueue(
+        HandlerState state,
+        Guid seriesId,
+        string topic,
+        string jsonPath,
+        ChartDataPoint point)
     {
-        var buffer = _buffers.GetOrAdd(seriesId, _ => new ConcurrentQueue<ChartDataPoint>());
+        lock (_stateLock)
+        {
+            if (state.Epoch != _epoch)
+                return false;
 
-        while (buffer.Count >= maxPoints)
-            buffer.TryDequeue(out _);
+            if (!state.Sources.TryGetValue(seriesId, out var captured))
+                return false;
 
-        buffer.Enqueue(point);
+            if (!string.Equals(captured.Topic, topic, StringComparison.Ordinal)
+                || !string.Equals(captured.JsonPath, jsonPath, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (!_sources.TryGetValue(seriesId, out var current)
+                || !ReferenceEquals(captured.Token, current.Token))
+            {
+                return false;
+            }
+
+            _seriesStates.GetOrAdd(seriesId, static _ => new SeriesState()).Append(point, current.MaxPoints);
+            return true;
+        }
+    }
+
+    private sealed class SeriesState
+    {
+        private const long NoTicks = 0;
+        // Ticks + 1, so zero means no point yet: one word the lock-free receipt read cannot tear.
+        private long _lastTicks;
+
+        public ConcurrentQueue<ChartDataPoint> Buffer { get; } = new();
+
+        public DateTime? LastTimestamp
+        {
+            get
+            {
+                var ticks = Volatile.Read(ref _lastTicks);
+                return ticks == NoTicks ? null : new DateTime(ticks - 1, DateTimeKind.Utc);
+            }
+        }
+
+        public void Append(ChartDataPoint point, int maxPoints)
+        {
+            Buffer.Enqueue(point);
+            TrimTo(maxPoints);
+            Volatile.Write(ref _lastTicks, point.Timestamp.Ticks + 1);
+        }
+
+        public void TrimTo(int maxPoints)
+        {
+            while (Buffer.Count > maxPoints)
+            {
+                if (!Buffer.TryDequeue(out _))
+                    break;
+            }
+        }
     }
 
     protected virtual void Dispose(bool disposing)

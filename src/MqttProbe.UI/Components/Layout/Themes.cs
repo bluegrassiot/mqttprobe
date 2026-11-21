@@ -128,7 +128,7 @@ public class Themes : IThemes
         {
             PaletteLight = _lightPalette,
             PaletteDark = _darkPalette,
-            LayoutProperties = new LayoutProperties { DefaultBorderRadius = "8px" },
+            LayoutProperties = new LayoutProperties { DefaultBorderRadius = "8px", AppbarHeight = "56px" },
             Typography = BuildTypography(FontInter, FontDisplay)
         };
     }

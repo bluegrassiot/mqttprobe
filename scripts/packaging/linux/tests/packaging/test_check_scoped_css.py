@@ -42,7 +42,7 @@ def _mk(files: dict[str, str], dll_scopes: list[str] | None = None,
 
 _HOST = "MqttProbe.Desktop.styles.css"
 _UI_BUNDLE = "_content/MqttProbe.UI/MqttProbe.UI.a1b2c3d4e5.bundle.scp.css"
-_IDX_6LINKS = (
+_IDX_LINKS = (
     '<!DOCTYPE html><html><head>'
     '<link rel="icon" href="favicon.svg" type="image/svg+xml" />'
     '<link href="_content/MqttProbe.UI/css/fonts.css" rel="stylesheet" />'
@@ -50,7 +50,6 @@ _IDX_6LINKS = (
     '<link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />'
     '<link href="_content/MqttProbe.UI/css/components.css" rel="stylesheet" />'
     f'<link href="{_HOST}" rel="stylesheet" />'
-    '<link rel="stylesheet" href="_content/Blazor-ApexCharts/css/apexcharts.css" />'
     '</head></html>'
 )
 _IMP = f"@import '{_UI_BUNDLE}';"
@@ -78,7 +77,7 @@ class TestLoadingChain(unittest.TestCase):
         self.assertIn("index.html", r.errors[0])
 
     def test_missing_styles_css(self):
-        r = _c.check(_mk({"index.html": _IDX_6LINKS}))
+        r = _c.check(_mk({"index.html": _IDX_LINKS}))
         self.assertIn("host stylesheet", r.errors[0])
 
     def test_no_stylesheet_link(self):
@@ -91,8 +90,8 @@ class TestLoadingChain(unittest.TestCase):
                            _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"}, dll_scopes=["aaaaaaaaaa"]))
         self.assertEqual(r.outcome, _c.Outcome.STRUCTURAL)
 
-    def test_six_links_penultimate_host(self):
-        files = {"index.html": _IDX_6LINKS, _HOST: _IMP,
+    def test_host_link_present(self):
+        files = {"index.html": _IDX_LINKS, _HOST: _IMP,
                  _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"}
         self.assertTrue(_pass(files, ["aaaaaaaaaa"]))
 
@@ -127,13 +126,13 @@ class TestLoadingChain(unittest.TestCase):
 
 class TestImportScanning(unittest.TestCase):
     def test_no_ui_import(self):
-        r = _c.check(_mk({"index.html": _IDX_6LINKS, _HOST: "@import 'x.css';"}))
+        r = _c.check(_mk({"index.html": _IDX_LINKS, _HOST: "@import 'x.css';"}))
         self.assertEqual(r.outcome, _c.Outcome.STRUCTURAL)
         self.assertIn("no active @import", r.errors[0])
 
     def test_unrelated_then_ui_passes(self):
         css = f"@import '_content/Other/lib.css';\n{_IMP}"
-        files = {"index.html": _IDX_6LINKS, _HOST: css,
+        files = {"index.html": _IDX_LINKS, _HOST: css,
                  "_content/Other/lib.css": "body{}",
                  _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"}
         self.assertTrue(_pass(files, ["aaaaaaaaaa"]))
@@ -141,7 +140,7 @@ class TestImportScanning(unittest.TestCase):
     def test_commented_import_ignored(self):
         active = "_content/MqttProbe.UI/MqttProbe.UI.a1.bundle.scp.css"
         css = f"/* @import '{active}'; */\n@import '{active}';"
-        files = {"index.html": _IDX_6LINKS, _HOST: css,
+        files = {"index.html": _IDX_LINKS, _HOST: css,
                  active: ".n[b-aaaaaaaaaa]{color:red}"}
         self.assertTrue(_pass(files, ["aaaaaaaaaa"]))
 
@@ -149,7 +148,7 @@ class TestImportScanning(unittest.TestCase):
         ok = "_content/MqttProbe.UI/MqttProbe.UI.ok.bundle.scp.css"
         bad = "_content/MqttProbe.UI/MqttProbe.UI.bad.bundle.scp.css"
         css = f"/* @import '{ok}'; */\n@import '{bad}';"
-        files = {"index.html": _IDX_6LINKS, _HOST: css,
+        files = {"index.html": _IDX_LINKS, _HOST: css,
                  ok: ".n[b-aaaaaaaaaa]{color:red}",
                  bad: ".n[b-rrv9egykja]{color:red}"}
         errors = _fail(files, dll_scopes=["aaaaaaaaaa"])
@@ -158,14 +157,14 @@ class TestImportScanning(unittest.TestCase):
     def test_string_import_ignored(self):
         active = "_content/MqttProbe.UI/MqttProbe.UI.a1.bundle.scp.css"
         css = f"@import '{active}';\nbody {{ background: url('{active}'); }}"
-        files = {"index.html": _IDX_6LINKS, _HOST: css,
+        files = {"index.html": _IDX_LINKS, _HOST: css,
                  active: ".n[b-aaaaaaaaaa]{color:red}"}
         self.assertTrue(_pass(files, ["aaaaaaaaaa"]))
 
     def test_late_import_after_rule_structural(self):
         active = "_content/MqttProbe.UI/MqttProbe.UI.a1.bundle.scp.css"
         css = f"body {{ color: red; }}\n@import '{active}';"
-        r = _c.check(_mk({"index.html": _IDX_6LINKS, _HOST: css,
+        r = _c.check(_mk({"index.html": _IDX_LINKS, _HOST: css,
                            active: ".n[b-aaaaaaaaaa]{color:red}"},
                           dll_scopes=["aaaaaaaaaa"]))
         self.assertEqual(r.outcome, _c.Outcome.STRUCTURAL)
@@ -175,7 +174,7 @@ class TestImportScanning(unittest.TestCase):
         a1 = "_content/MqttProbe.UI/MqttProbe.UI.a1.bundle.scp.css"
         a2 = "_content/MqttProbe.UI/MqttProbe.UI.a2.bundle.scp.css"
         css = f"@import '{a1}';\n@import '{a2}';"
-        files = {"index.html": _IDX_6LINKS, _HOST: css,
+        files = {"index.html": _IDX_LINKS, _HOST: css,
                  a1: ".n[b-aaaaaaaaaa]{color:red}",
                  a2: ".n[b-bbbbbbbbbb]{color:red}"}
         r = _c.check(_mk(files, dll_scopes=["aaaaaaaaaa", "bbbbbbbbbb"]))
@@ -184,7 +183,7 @@ class TestImportScanning(unittest.TestCase):
 
     def test_nested_ui_import_structural(self):
         css = f"@media screen {{\n@import '{_UI_BUNDLE}';\n}}"
-        files = {"index.html": _IDX_6LINKS, _HOST: css,
+        files = {"index.html": _IDX_LINKS, _HOST: css,
                  _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"}
         r = _c.check(_mk(files, dll_scopes=["aaaaaaaaaa"]))
         self.assertEqual(r.outcome, _c.Outcome.STRUCTURAL)
@@ -192,12 +191,12 @@ class TestImportScanning(unittest.TestCase):
 
     def test_non_bundle_rejected(self):
         css = "@import '_content/MqttProbe.UI/styles.css';"
-        r = _c.check(_mk({"index.html": _IDX_6LINKS, _HOST: css}))
+        r = _c.check(_mk({"index.html": _IDX_LINKS, _HOST: css}))
         self.assertEqual(r.outcome, _c.Outcome.STRUCTURAL)
 
     def test_path_escape_rejected(self):
         css = "@import '_content/MqttProbe.UI/../../etc/passwd';"
-        r = _c.check(_mk({"index.html": _IDX_6LINKS, _HOST: css}))
+        r = _c.check(_mk({"index.html": _IDX_LINKS, _HOST: css}))
         self.assertEqual(r.outcome, _c.Outcome.STRUCTURAL)
 
 
@@ -266,75 +265,75 @@ class TestScopeExtraction(unittest.TestCase):
 
 class TestDllMatching(unittest.TestCase):
     def test_utf16le(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"},
                  dll_bytes=_dll("aaaaaaaaaa"))
         self.assertTrue(_c.check(d).ok)
 
     def test_ascii_token(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"},
                  dll_bytes=b"some b-aaaaaaaaaa text")
         self.assertTrue(_c.check(d).ok)
 
     def test_bare_suffix_no_match(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"},
                  dll_bytes=b"aaaaaaaaaa")
         self.assertEqual(_c.check(d).outcome, _c.Outcome.MISMATCH)
 
     def test_longer_utf16_no_match(self):
         longer = "b-aaaaaaaaaax"
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"},
                  dll_bytes=longer.encode("utf-16-le"))
         self.assertEqual(_c.check(d).outcome, _c.Outcome.MISMATCH)
 
     def test_longer_ascii_no_match(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"},
                  dll_bytes=b"b-aaaaaaaaaax")
         self.assertEqual(_c.check(d).outcome, _c.Outcome.MISMATCH)
 
     def test_embedded_valid(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"},
                  dll_bytes=b"<div b-aaaaaaaaaa>")
         self.assertTrue(_c.check(d).ok)
 
     def test_xb_prefix_no_match(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"},
                  dll_bytes=b"xb-aaaaaaaaaa")
         self.assertEqual(_c.check(d).outcome, _c.Outcome.MISMATCH)
 
     def test_utf16_boundary_before(self):
         xb = "xb-aaaaaaaaaa"
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"},
                  dll_bytes=xb.encode("utf-16-le"))
         self.assertEqual(_c.check(d).outcome, _c.Outcome.MISMATCH)
 
     def test_missing_dll(self):
-        r = _c.check(_mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        r = _c.check(_mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                            _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"}))
         self.assertEqual(r.outcome, _c.Outcome.STRUCTURAL)
         self.assertIn("MqttProbe.UI.dll", r.errors[0])
 
     def test_underscore_suffix_no_match(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"},
                  dll_bytes=b"b-aaaaaaaaaa_extra")
         self.assertEqual(_c.check(d).outcome, _c.Outcome.MISMATCH)
 
     def test_dash_suffix_no_match(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"},
                  dll_bytes=b"b-aaaaaaaaaa-extra")
         self.assertEqual(_c.check(d).outcome, _c.Outcome.MISMATCH)
 
     def test_underscore_suffix_utf16_no_match(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"},
                  dll_bytes="b-aaaaaaaaaa_extra".encode("utf-16-le"))
         self.assertEqual(_c.check(d).outcome, _c.Outcome.MISMATCH)
@@ -342,14 +341,14 @@ class TestDllMatching(unittest.TestCase):
 
 class TestUnrelatedBundles(unittest.TestCase):
     def test_unrelated_matching_no_mask(self):
-        files = {"index.html": _IDX_6LINKS, _HOST: _IMP,
+        files = {"index.html": _IDX_LINKS, _HOST: _IMP,
                  _UI_BUNDLE: ".n[b-rrv9egykja]{color:red}",
                  "_content/X/y.bundle.scp.css": ".n[b-aaaaaaaaaa]{color:red}"}
         errors = _fail(files, dll_scopes=["aaaaaaaaaa"])
         self.assertTrue(any("rrv9egykja" in e for e in errors))
 
     def test_unrelated_mismatched_ignored(self):
-        files = {"index.html": _IDX_6LINKS, _HOST: _IMP,
+        files = {"index.html": _IDX_LINKS, _HOST: _IMP,
                  _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}",
                  "_content/X/y.bundle.scp.css": ".n[b-rrv9egykja]{color:red}"}
         self.assertTrue(_pass(files, ["aaaaaaaaaa"]))
@@ -357,7 +356,7 @@ class TestUnrelatedBundles(unittest.TestCase):
 
 class TestResultOutcome(unittest.TestCase):
     def test_pass(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"}, dll_scopes=["aaaaaaaaaa"])
         r = _c.check(d)
         self.assertEqual(r.outcome, _c.Outcome.PASS)
@@ -365,7 +364,7 @@ class TestResultOutcome(unittest.TestCase):
         self.assertEqual(r.errors, [])
 
     def test_mismatch(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-rrv9egykja]{color:red}"}, dll_scopes=["aaaaaaaaaa"])
         r = _c.check(d)
         self.assertEqual(r.outcome, _c.Outcome.MISMATCH)
@@ -386,14 +385,14 @@ class TestCLIReturnCodes(unittest.TestCase):
         )
 
     def test_pass_returns_0(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-aaaaaaaaaa]{color:red}"}, dll_scopes=["aaaaaaaaaa"])
         r = self._run(d)
         self.assertEqual(r.returncode, 0)
         self.assertIn("PASS", r.stdout)
 
     def test_mismatch_returns_1(self):
-        d = _mk({"index.html": _IDX_6LINKS, _HOST: _IMP,
+        d = _mk({"index.html": _IDX_LINKS, _HOST: _IMP,
                   _UI_BUNDLE: ".n[b-rrv9egykja]{color:red}"}, dll_scopes=["aaaaaaaaaa"])
         r = self._run(d)
         self.assertEqual(r.returncode, 1)

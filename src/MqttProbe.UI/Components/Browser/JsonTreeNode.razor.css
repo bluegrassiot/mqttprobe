@@ -1,6 +1,17 @@
+.json-node {
+    display: contents;
+    --json-node-depth: var(--json-descendant-depth, 0);
+}
+
 .json-row {
+    --json-descendant-depth: calc(var(--json-node-depth) + 1);
     display: block;
+    margin-left: calc(var(--json-descendant-depth) * 14px);
     white-space: nowrap;
+}
+
+.json-close {
+    margin-left: calc(var(--json-node-depth) * 14px);
 }
 
 .json-key {

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Emulation;
 using MqttProbe.Core.Services.Emulation;
@@ -44,10 +45,59 @@ public class EmulatorNodeCardTests : BunitTestContext
         EnsureMudProviders();
     }
 
-    private IRenderedComponent<EmulatorNodeCard> RenderCard(bool isExpanded = false) =>
-        Render<EmulatorNodeCard>(ps => ps
-            .Add(p => p.Node, _node)
-            .Add(p => p.IsExpanded, isExpanded));
+    private IRenderedComponent<EmulatorNodeCard> RenderCard(bool isExpanded = false, Action? onToggle = null) =>
+        Render<EmulatorNodeCard>(ps =>
+        {
+            ps.Add(p => p.Node, _node)
+                .Add(p => p.IsExpanded, isExpanded);
+            if (onToggle is not null)
+                ps.Add(p => p.OnToggleExpand, EventCallback.Factory.Create(this, onToggle));
+        });
+
+    [Test]
+    public void CollapsedRow_ExposesNativeToggleWithExpandedStateAndControls()
+    {
+        var cut = RenderCard();
+
+        var toggle = cut.Find("button.emu-node-row__toggle");
+        toggle.GetAttribute("type").Should().Be("button");
+        toggle.GetAttribute("aria-expanded").Should().Be("false");
+        toggle.GetAttribute("tabindex").Should().BeNull();
+        toggle.HasAttribute("disabled").Should().BeFalse();
+
+        var controlledId = toggle.GetAttribute("aria-controls");
+        controlledId.Should().NotBeNullOrWhiteSpace();
+        cut.FindAll(".emu-node-row__toggle .emu-node-row__actions").Should().BeEmpty(
+            "duplicate and delete must stay outside the toggle");
+
+        var actions = cut.Find(".emu-node-row__actions");
+        actions.QuerySelector("button[title='Duplicate node']").Should().NotBeNull();
+        actions.QuerySelector("button[title='Delete node']").Should().NotBeNull();
+    }
+
+    [Test]
+    public void ToggleButton_Click_InvokesOnToggleExpandOnce()
+    {
+        var toggles = 0;
+        var cut = RenderCard(onToggle: () => toggles++);
+
+        cut.Find("button.emu-node-row__toggle").Click();
+
+        toggles.Should().Be(1);
+    }
+
+    [Test]
+    public async Task NodeActions_Click_DoesNotToggleTheCard()
+    {
+        var toggles = 0;
+        var cut = RenderCard(onToggle: () => toggles++);
+
+        cut.Find("button[title='Delete node']").Click();
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        await _mockService.Received(1).RemoveNodeAsync(_node.Id);
+        toggles.Should().Be(0, "delete must not expand or collapse the node");
+    }
 
     [Test]
     public void CollapsedRow_ShowsSecondaryLineWithTypeGroupCountsAndRate()
@@ -84,6 +134,10 @@ public class EmulatorNodeCardTests : BunitTestContext
         var cut = RenderCard(isExpanded: true);
 
         cut.FindComponents<EmulatorNodeEditor>().Should().ContainSingle();
+        cut.Find(".emu-node-editor").Id.Should().Be(
+            cut.Find("button.emu-node-row__toggle").GetAttribute("aria-controls"));
+        cut.FindAll(".emu-node-row__toggle .emu-node-editor").Should().BeEmpty(
+            "editing fields must stay outside the disclosure button");
     }
 
     [Test]
@@ -151,7 +205,8 @@ public class EmulatorNodeCardTests : BunitTestContext
         var cut = RenderCard();
 
         cut.Markup.Should().Contain("CONNECTED");
-        cut.Find(".emu-status-dot").GetAttribute("style").Should().Contain("--mud-palette-success");
+        cut.Find(".emu-status-dot").ClassList.Should().Contain("emu-node-status--connected");
+        cut.Find(".emu-status-label").ClassList.Should().Contain("emu-node-status--connected");
     }
 
     [Test]
@@ -163,7 +218,8 @@ public class EmulatorNodeCardTests : BunitTestContext
         var cut = RenderCard();
 
         cut.Markup.Should().Contain("ERROR");
-        cut.Find(".emu-status-dot").GetAttribute("style").Should().Contain("--mud-palette-error");
+        cut.Find(".emu-status-dot").ClassList.Should().Contain("emu-node-status--error");
+        cut.Find(".emu-status-label").ClassList.Should().Contain("emu-node-status--error");
     }
 }
 

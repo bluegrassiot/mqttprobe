@@ -1,0 +1,57 @@
+.quick-add-dialog-body {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.quick-add-field-info {
+    background: var(--mud-palette-background-gray);
+    border: 1px solid var(--mud-palette-lines-default);
+    overflow-wrap: anywhere;
+}
+
+.quick-add-field-info ::deep .quick-add-field-info__name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.quick-add-field-info ::deep .quick-add-field-info__meta {
+    font-family: var(--font-mono);
+    overflow-wrap: anywhere;
+}
+
+.quick-add-chart-option {
+    cursor: pointer;
+    border: 2px solid var(--mud-palette-lines-default);
+    background: transparent;
+}
+
+.quick-add-chart-option--selected {
+    border-color: var(--mud-palette-primary);
+    background: var(--mud-palette-action-default-hover);
+}
+
+.quick-add-chart-option__body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.quick-add-chart-option ::deep .quick-add-chart-option__name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.quick-add-timeout-row {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+}
+
+.quick-add-timeout {
+    flex: 1 1 180px;
+    min-width: 0;
+}
+
+.quick-add-timeout-error {
+    flex: 1 1 100%;
+}

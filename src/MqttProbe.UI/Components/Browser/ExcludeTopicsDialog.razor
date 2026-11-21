@@ -1,0 +1,43 @@
+@using System.Collections.Immutable
+@inherits ComponentBase
+
+<MudDialog DefaultFocus="DefaultFocus.None">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Exclude selected topics</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="topic-target-dialog__lead">
+            Exclude the selected topics?
+        </MudText>
+        <TopicTargetList Topics="Labels"/>
+    </DialogContent>
+    <DialogActions>
+        <AppTertiaryButton @ref="_cancelButton" Class="topic-target-dialog__cancel" OnClick="Cancel">Cancel</AppTertiaryButton>
+        <AppDestructiveButton Class="topic-target-dialog__confirm" OnClick="Confirm"
+                              StartIcon="@LucideIcons.EyeOff">
+            Exclude @CountLabel
+        </AppDestructiveButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public IReadOnlyList<TopicBranchTarget> Topics { get; set; } = [];
+
+    private ImmutableArray<string> Labels => [.. Topics.Select(TopicBranchTargetDisplay.Label)];
+
+    private AppTertiaryButton? _cancelButton;
+
+    private string CountLabel => Topics.Count == 1 ? "1 topic" : $"{Topics.Count} topics";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _cancelButton is not null)
+            await _cancelButton.FocusAsync();
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(Topics));
+}

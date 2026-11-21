@@ -68,6 +68,68 @@ public class SessionStateTests
     }
 
     [Test]
+    public void CaptureSelectedConnection_AdvancesRevisionOnlyForAcceptedTransitions()
+    {
+        var first = new Connection { Name = "First" };
+        _sessionState.SelectedConnection = first;
+        var (_, initialRevision) = _sessionState.CaptureSelectedConnection();
+
+        _sessionState.SelectedConnection = first.Clone();
+        var (_, unchangedRevision) = _sessionState.CaptureSelectedConnection();
+
+        var second = new Connection { Name = "Second" };
+        _sessionState.SelectedConnection = second;
+        var (captured, changedRevision) = _sessionState.CaptureSelectedConnection();
+
+        unchangedRevision.Should().Be(initialRevision, "an equivalent assignment is not a transition");
+        changedRevision.Should().Be(initialRevision + 1);
+        captured.Should().BeSameAs(second);
+    }
+
+    [Test]
+    public void TryExecuteForSelectedConnection_ExecutesOnlyForTheCapturedRevision()
+    {
+        var first = new Connection { Name = "First" };
+        _sessionState.SelectedConnection = first;
+        var (_, revision) = _sessionState.CaptureSelectedConnection();
+        var executions = 0;
+
+        _sessionState.TryExecuteForSelectedConnection(
+            first.Id, revision, () => ++executions, out var result).Should().BeTrue();
+        result.Should().Be(1);
+
+        _sessionState.SelectedConnection = new Connection { Name = "Second" };
+        _sessionState.TryExecuteForSelectedConnection(
+            first.Id, revision, () => ++executions, out var staleResult).Should().BeFalse();
+
+        executions.Should().Be(1);
+        staleResult.Should().Be(0);
+    }
+
+    [Test]
+    public void SelectedConnectionChanged_HandlerCanReenterSelectionWithoutDeadlock()
+    {
+        var first = new Connection { Name = "First" };
+        var second = new Connection { Name = "Second" };
+        var third = new Connection { Name = "Third" };
+        _sessionState.SelectedConnection = first;
+        long observedRevision = -1;
+
+        _sessionState.SelectedConnectionChanged += changed =>
+        {
+            if (ReferenceEquals(changed, second))
+                _sessionState.SelectedConnection = third;
+
+            observedRevision = _sessionState.CaptureSelectedConnection().Revision;
+        };
+
+        _sessionState.SelectedConnection = second;
+
+        _sessionState.SelectedConnection.Should().BeSameAs(third);
+        observedRevision.Should().Be(3);
+    }
+
+    [Test]
     public void TakeActiveCertificateResource_ReturnsAndClearsTheActiveResource()
     {
         var resource = new CertificateSessionResource();

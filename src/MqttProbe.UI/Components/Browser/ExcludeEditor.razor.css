@@ -8,13 +8,13 @@
     overflow: hidden;
 }
 
-.exclude-editor:focus-visible {
-    outline: 2px solid var(--mud-palette-primary);
-    outline-offset: 2px;
-}
-
 .exclude-editor ::deep .mud-expand-panel-header {
     background: var(--mud-palette-action-default-hover);
+}
+
+.exclude-editor ::deep .mud-expand-panel-header:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
 }
 
 .exclude-editor-add-row {

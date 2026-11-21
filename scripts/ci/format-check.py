@@ -259,6 +259,18 @@ def _extract_real_errors(output: str) -> list[str]:
     return [l.strip() for l in output.splitlines() if REAL_ERROR_LINE.search(l)]
 
 
+def _report_workspace_diagnostics(args: list[str], full_tree: bool) -> None:
+    diagnostic_args = [*args, "--verbosity", "diagnostic"]
+    if "--verify-no-changes" not in diagnostic_args:
+        diagnostic_args.append("--verify-no-changes")
+    result = _run_dotnet(diagnostic_args, cwd=None if full_tree else ROOT)
+    output = f"{result.stdout}\n{result.stderr}"
+    print("    Diagnostic detail only (result unchanged):")
+    for line in output.splitlines():
+        if line.strip():
+            print(f"      {line.strip()}")
+
+
 def _is_netsdk1147_only(output: str) -> bool:
     """True when NETSDK1147 is present and every error diagnostic is NETSDK1147.
 
@@ -356,6 +368,7 @@ def main(argv: list[str] | None = None) -> None:
                 for line in output.splitlines():
                     if WORKSPACE_WARN.search(line):
                         print(f"    {line.strip()}")
+                _report_workspace_diagnostics(args, full_tree)
                 failed += 1
                 style_failed = True
                 break
@@ -402,6 +415,7 @@ def main(argv: list[str] | None = None) -> None:
             for line in output.splitlines():
                 if WORKSPACE_WARN.search(line):
                     print(f"    {line.strip()}")
+            _report_workspace_diagnostics(args, full_tree)
             failed += 1
             continue
 

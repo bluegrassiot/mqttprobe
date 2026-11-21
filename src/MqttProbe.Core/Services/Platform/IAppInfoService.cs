@@ -14,4 +14,6 @@ public interface IAppInfoService
     // data, so hosts that bar user-supplied code still import them. This narrows only
     // the binary half; the loader and inspector guards refuse assemblies independently.
     public bool SupportsAssemblyPlugins => true;
+
+    public bool SupportsChartExport => true;
 }

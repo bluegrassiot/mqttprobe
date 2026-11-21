@@ -42,6 +42,7 @@ public static class MqttProbeServiceRegistration
         services.AddMqttProbeCharts();
         services.AddMqttProbeUiNotifications();
         services.AddScoped<MqttProbe.UI.Components.Browser.ITopicSelectionStore, MqttProbe.UI.Components.Browser.MessageStoreSelectionAdapter>();
+        services.AddScoped<MqttProbe.UI.Services.Formatting.IDeviceTimeFormatter, MqttProbe.UI.Services.Formatting.DeviceTimeFormatterInterop>();
         return services;
     }
 }

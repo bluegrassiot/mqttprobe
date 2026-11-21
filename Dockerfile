@@ -35,6 +35,8 @@ COPY src/MqttProbe.UI/ src/MqttProbe.UI/
 COPY src/MqttProbe.Core/ src/MqttProbe.Core/
 COPY src/MqttProbe.PluginContracts/ src/MqttProbe.PluginContracts/
 COPY external/SparkplugNet/ external/SparkplugNet/
+COPY ["LICENSE", "."]
+COPY ["legal/generated/", "legal/generated/"]
 ARG VERSION=0.0.0
 WORKDIR "/src/src/MqttProbe.Web"
 # DisableGitVersionTask: the SparkplugNet submodule uses GitVersion.MsBuild, but the

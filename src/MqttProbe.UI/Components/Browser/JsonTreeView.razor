@@ -1,11 +1,13 @@
-@implements IDisposable
+@implements IAsyncDisposable
 @using System.Text.Json
 @using Microsoft.Extensions.Logging
+@using Microsoft.JSInterop
 @inject ILogger<JsonTreeView> Logger
+@inject IJSRuntime Js
 
 @if (_doc != null)
 {
-    <div class="json-tree-root">
+    <div class="json-tree-root" @ref="_rootElement">
         <JsonTreeNode @key="_renderKey" Element="_doc.RootElement" Depth="0" AutoExpandDepth="@_autoExpandDepth"
                       JsonPath="" OnAddToChart="OnAddToChart" AliasNames="@AliasNames"/>
     </div>
@@ -29,6 +31,9 @@ else if (_parseFailed)
     private string? _lastJson;
     private bool _parseFailed;
     private int _autoExpandDepth = DefaultAutoExpandDepth;
+    private ElementReference _rootElement;
+    private JsonTreeKeyboardInterop? _keyboard;
+    private bool _attached;
 
     public bool HasExpandableContent => _doc is { } doc && doc.RootElement.ValueKind switch
     {
@@ -72,6 +77,28 @@ else if (_parseFailed)
         InvokeAsync(StateHasChanged);
     }
 
+    private JsonTreeKeyboardInterop Keyboard => _keyboard ??= new JsonTreeKeyboardInterop(Js);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var rendered = _doc is not null && _rootElement.Context is not null;
+        if (rendered == _attached)
+            return;
+
+        _attached = rendered;
+        try
+        {
+            if (rendered)
+                await Keyboard.AttachAsync(_rootElement);
+            else
+                await Keyboard.DetachAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is gone; the browser drops the listener with the page.
+        }
+    }
+
     protected override void OnParametersSet()
     {
         if (Json == _lastJson) return;
@@ -95,5 +122,22 @@ else if (_parseFailed)
         }
     }
 
-    public void Dispose() => _doc?.Dispose();
+    public async ValueTask DisposeAsync()
+    {
+        if (_keyboard is not null)
+        {
+            try
+            {
+                await _keyboard.DetachAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit is gone; the browser drops the listener with the page.
+            }
+
+            await _keyboard.DisposeAsync();
+        }
+
+        _doc?.Dispose();
+    }
 }

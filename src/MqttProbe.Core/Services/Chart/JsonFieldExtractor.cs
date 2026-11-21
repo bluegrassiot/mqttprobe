@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
+using MqttProbe.Core.Models.Chart;
+using MqttProbe.Core.Services.Sparkplug;
 
 namespace MqttProbe.Core.Services.Chart;
 
@@ -9,22 +11,39 @@ public interface IJsonFieldExtractor
 {
     public IReadOnlyDictionary<string, ExtractedField> Extract(string jsonPayload);
     public IReadOnlyDictionary<string, ExtractedField> Extract(string jsonPayload, IReadOnlyDictionary<ulong, string>? aliasNames);
+    public IReadOnlyDictionary<string, ExtractedField> Extract(
+        string jsonPayload,
+        IReadOnlyDictionary<ulong, string>? aliasNames,
+        ISparkplugMetricTypeResolver? sparkplugTypes);
 }
 
 public class JsonFieldExtractor : IJsonFieldExtractor
 {
     public IReadOnlyDictionary<string, ExtractedField> Extract(string jsonPayload) =>
-        Extract(jsonPayload, null);
+        Extract(jsonPayload, null, null);
 
     public IReadOnlyDictionary<string, ExtractedField> Extract(
-        string jsonPayload, IReadOnlyDictionary<ulong, string>? aliasNames)
+        string jsonPayload, IReadOnlyDictionary<ulong, string>? aliasNames) =>
+        Extract(jsonPayload, aliasNames, null);
+
+    public IReadOnlyDictionary<string, ExtractedField> Extract(
+        string jsonPayload,
+        IReadOnlyDictionary<ulong, string>? aliasNames,
+        ISparkplugMetricTypeResolver? sparkplugTypes)
     {
         var result = new Dictionary<string, ExtractedField>(StringComparer.Ordinal);
         if (string.IsNullOrWhiteSpace(jsonPayload)) return result;
 
         // Skip any leading non-JSON prefix (e.g. "--" framing markers)
         var jsonStart = jsonPayload.IndexOfAny(['{', '[']);
-        if (jsonStart < 0) return result;
+        if (jsonStart < 0)
+        {
+            if (ChartFieldPaths.TryParseRootNumber(jsonPayload, out var rootValue))
+                result[ChartFieldPaths.Root] = new ExtractedField(rootValue);
+
+            return result;
+        }
+
         if (jsonStart > 0) jsonPayload = jsonPayload[jsonStart..];
 
         try
@@ -38,7 +57,7 @@ public class JsonFieldExtractor : IJsonFieldExtractor
 
             var options = new JsonDocumentOptions { AllowTrailingCommas = true };
             using var doc = JsonDocument.Parse(jsonPayload, options);
-            Walk(doc.RootElement, "", result, aliasNames);
+            Walk(doc.RootElement, "", result, aliasNames, sparkplugTypes);
         }
         catch
         {
@@ -50,16 +69,17 @@ public class JsonFieldExtractor : IJsonFieldExtractor
     private static void Walk(
         JsonElement element, string prefix,
         Dictionary<string, ExtractedField> result,
-        IReadOnlyDictionary<ulong, string>? aliasNames)
+        IReadOnlyDictionary<ulong, string>? aliasNames,
+        ISparkplugMetricTypeResolver? sparkplugTypes)
     {
         switch (element.ValueKind)
         {
             case JsonValueKind.Object:
-                WalkObject(element, prefix, result, aliasNames);
+                WalkObject(element, prefix, result, aliasNames, sparkplugTypes);
                 break;
 
             case JsonValueKind.Array:
-                WalkArray(element, prefix, result, aliasNames);
+                WalkArray(element, prefix, result, aliasNames, sparkplugTypes);
                 break;
 
             case JsonValueKind.Number:
@@ -83,18 +103,20 @@ public class JsonFieldExtractor : IJsonFieldExtractor
     private static void WalkObject(
         JsonElement element, string prefix,
         Dictionary<string, ExtractedField> result,
-        IReadOnlyDictionary<ulong, string>? aliasNames)
+        IReadOnlyDictionary<ulong, string>? aliasNames,
+        ISparkplugMetricTypeResolver? sparkplugTypes)
     {
         foreach (var prop in element.EnumerateObject())
-            Walk(prop.Value, BuildChildPath(prefix, prop.Name), result, aliasNames);
+            Walk(prop.Value, BuildChildPath(prefix, prop.Name), result, aliasNames, sparkplugTypes);
     }
 
     private static void WalkArray(
         JsonElement element, string prefix,
         Dictionary<string, ExtractedField> result,
-        IReadOnlyDictionary<ulong, string>? aliasNames)
+        IReadOnlyDictionary<ulong, string>? aliasNames,
+        ISparkplugMetricTypeResolver? sparkplugTypes)
     {
-        if (TryExtractNamedValueArray(element, out var pairs))
+        if (TryExtractNamedValueArray(element, sparkplugTypes, out var pairs))
         {
             foreach (var (name, value, contextJson) in pairs)
                 result[BuildChildPath(prefix, name)] = new ExtractedField(value, contextJson);
@@ -105,7 +127,7 @@ public class JsonFieldExtractor : IJsonFieldExtractor
         var didAliasExtraction = false;
 
         if (aliasNames is not null
-            && TryExtractAliasValueArray(element, aliasNames, out var aliasPairs))
+            && TryExtractAliasValueArray(element, aliasNames, sparkplugTypes, out var aliasPairs))
         {
             foreach (var (name, value, contextJson) in aliasPairs)
                 result[BuildChildPath(prefix, name)] = new ExtractedField(value, contextJson);
@@ -113,7 +135,7 @@ public class JsonFieldExtractor : IJsonFieldExtractor
             didAliasExtraction = true;
         }
         else if (aliasNames is not null
-                 && TryExtractMixedValueArray(element, aliasNames, out var mixedPairs))
+                 && TryExtractMixedValueArray(element, aliasNames, sparkplugTypes, out var mixedPairs))
         {
             foreach (var (name, value, contextJson) in mixedPairs)
                 result[BuildChildPath(prefix, name)] = new ExtractedField(value, contextJson);
@@ -125,10 +147,32 @@ public class JsonFieldExtractor : IJsonFieldExtractor
         // chart configurations that use raw array-index paths.
         var index = 0;
         foreach (var item in element.EnumerateArray())
-            Walk(item, $"{prefix}[{index++}]", result, null);
+        {
+            var itemPrefix = $"{prefix}[{index++}]";
+            Walk(item, itemPrefix, result, null, sparkplugTypes);
+            if (sparkplugTypes is not null && item.ValueKind == JsonValueKind.Object)
+                DecodeIndexedIntegerFields(item, itemPrefix, result, sparkplugTypes);
+        }
 
         if (didAliasExtraction)
             return;
+    }
+
+    private static void DecodeIndexedIntegerFields(
+        JsonElement item,
+        string itemPrefix,
+        Dictionary<string, ExtractedField> result,
+        ISparkplugMetricTypeResolver sparkplugTypes)
+    {
+        foreach (var prop in item.EnumerateObject())
+        {
+            if (!IsIntegerValueFieldName(prop.Name) || !TryReadRawInteger(prop.Value, out var rawValue))
+                continue;
+
+            var datatype = ResolveMetricDatatype(item, sparkplugTypes) ?? 0;
+            result[BuildChildPath(itemPrefix, prop.Name)] =
+                new ExtractedField((double)SparkplugMetricValueConverter.DecodeInteger(datatype, rawValue));
+        }
     }
 
     private static string BuildChildPath(string prefix, string name) =>
@@ -155,7 +199,9 @@ public class JsonFieldExtractor : IJsonFieldExtractor
     }
 
     private static bool TryExtractNamedValueArray(
-        JsonElement array, out List<(string name, double value, string? contextJson)> pairs)
+        JsonElement array,
+        ISparkplugMetricTypeResolver? sparkplugTypes,
+        out List<(string name, double value, string? contextJson)> pairs)
     {
         pairs = [];
         var sawNamedMetric = false;
@@ -169,7 +215,7 @@ public class JsonFieldExtractor : IJsonFieldExtractor
 
             sawNamedMetric = true;
 
-            if (!TryGetMetricValue(item, out var value))
+            if (!TryGetMetricValue(item, sparkplugTypes, out var value))
                 continue;
 
             pairs.Add((name, value, item.GetRawText()));
@@ -181,6 +227,7 @@ public class JsonFieldExtractor : IJsonFieldExtractor
     private static bool TryExtractAliasValueArray(
         JsonElement array,
         IReadOnlyDictionary<ulong, string> aliasNames,
+        ISparkplugMetricTypeResolver? sparkplugTypes,
         out List<(string name, double value, string? contextJson)> pairs)
     {
         pairs = [];
@@ -198,7 +245,7 @@ public class JsonFieldExtractor : IJsonFieldExtractor
 
             sawAliasMetric = true;
 
-            if (!TryGetMetricValue(item, out var value))
+            if (!TryGetMetricValue(item, sparkplugTypes, out var value))
                 continue;
 
             pairs.Add((resolvedName, value, item.GetRawText()));
@@ -210,6 +257,7 @@ public class JsonFieldExtractor : IJsonFieldExtractor
     private static bool TryExtractMixedValueArray(
         JsonElement array,
         IReadOnlyDictionary<ulong, string> aliasNames,
+        ISparkplugMetricTypeResolver? sparkplugTypes,
         out List<(string name, double value, string? contextJson)> pairs)
     {
         pairs = [];
@@ -235,7 +283,7 @@ public class JsonFieldExtractor : IJsonFieldExtractor
 
             sawResolvable = true;
 
-            if (!TryGetMetricValue(item, out var value))
+            if (!TryGetMetricValue(item, sparkplugTypes, out var value))
                 continue;
 
             pairs.Add((resolvedName, value, item.GetRawText()));
@@ -292,11 +340,28 @@ public class JsonFieldExtractor : IJsonFieldExtractor
         return false;
     }
 
-    private static bool TryGetMetricValue(JsonElement item, out double value)
+    private static bool TryGetMetricValue(
+        JsonElement item,
+        ISparkplugMetricTypeResolver? sparkplugTypes,
+        out double value)
     {
         value = 0;
-        foreach (var propValue in item.EnumerateObject().Where(prop => IsMetricValueFieldName(prop.Name)).Select(prop => prop.Value))
+        foreach (var prop in item.EnumerateObject())
         {
+            if (!IsMetricValueFieldName(prop.Name))
+                continue;
+
+            var propValue = prop.Value;
+
+            if (sparkplugTypes is not null
+                && IsIntegerValueFieldName(prop.Name)
+                && TryReadRawInteger(propValue, out var rawValue))
+            {
+                var datatype = ResolveMetricDatatype(item, sparkplugTypes) ?? 0;
+                value = (double)SparkplugMetricValueConverter.DecodeInteger(datatype, rawValue);
+                return true;
+            }
+
             if (propValue.ValueKind == JsonValueKind.Number && propValue.TryGetDouble(out var parsedValue))
             {
                 value = parsedValue;
@@ -320,6 +385,50 @@ public class JsonFieldExtractor : IJsonFieldExtractor
 
         return false;
     }
+
+    private static uint? ResolveMetricDatatype(JsonElement item, ISparkplugMetricTypeResolver sparkplugTypes)
+    {
+        if (TryGetMetricDatatype(item, out var datatype) && datatype != 0)
+            return datatype;
+
+        TryGetMetricAlias(item, out var alias);
+        var name = TryGetMetricName(item, out var metricName) ? metricName : null;
+        return sparkplugTypes.Resolve(alias, name);
+    }
+
+    private static bool TryGetMetricDatatype(JsonElement item, out uint datatype)
+    {
+        datatype = 0;
+        foreach (var prop in item.EnumerateObject())
+        {
+            if (prop.Name != "datatype")
+                continue;
+
+            if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetUInt32(out datatype))
+                return true;
+
+            if (prop.Value.ValueKind == JsonValueKind.String
+                && uint.TryParse(prop.Value.GetString(), NumberStyles.None, CultureInfo.InvariantCulture, out datatype))
+                return true;
+
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool TryReadRawInteger(JsonElement value, out ulong rawValue)
+    {
+        rawValue = 0;
+        if (value.ValueKind == JsonValueKind.Number)
+            return value.TryGetUInt64(out rawValue);
+
+        return value.ValueKind == JsonValueKind.String
+            && ulong.TryParse(value.GetString(), NumberStyles.None, CultureInfo.InvariantCulture, out rawValue);
+    }
+
+    private static bool IsIntegerValueFieldName(string propertyName) =>
+        propertyName is "int_value" or "long_value" or "intValue" or "longValue";
 
     private static bool IsMetricValueFieldName(string propertyName) =>
         propertyName is "value" or "int_value" or "float_value" or "double_value" or "long_value" or "boolean_value"

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MqttProbe.UI.Components.Browser.Connection;
 
@@ -167,6 +168,42 @@ public class ConnectionDialogViewportInteropTests
         module.DisposeCount.Should().Be(1, "and it must not be released twice");
     }
 
+    [Test]
+    public async Task RememberAndRestoreFocus_UseTheDialogsModuleAndContentElement()
+    {
+        var runtime = new FakeJSRuntime();
+        var interop = new ConnectionDialogViewportInterop(runtime);
+
+        var attach = interop.AttachAsync(default);
+        runtime.CompleteImport();
+        await attach;
+
+        var content = new ElementReference("dialog-content");
+        await interop.RememberFocusAsync(content);
+        var restored = await interop.RestoreFocusAsync(content);
+
+        restored.Should().BeFalse("the recording module reports that no previous focus was restored");
+        runtime.State.Invocations.Should().Equal("attach", "rememberFocus", "restoreFocus");
+        runtime.State.FocusArguments.Should().Equal(content, content);
+    }
+
+    [Test]
+    public async Task RememberAndRestoreFocus_WithoutAModule_AreANoOp()
+    {
+        var runtime = new FakeJSRuntime();
+        var interop = new ConnectionDialogViewportInterop(runtime);
+
+        var attach = interop.AttachAsync(default);
+        runtime.CompleteImportWithoutModule();
+        await attach;
+
+        await interop.RememberFocusAsync(default);
+        var restored = await interop.RestoreFocusAsync(default);
+
+        restored.Should().BeFalse();
+        runtime.State.Invocations.Should().BeEmpty();
+    }
+
     private sealed class FakeJSRuntime : IJSRuntime
     {
         private readonly Queue<TaskCompletionSource<IJSObjectReference?>> _pending = new();
@@ -215,6 +252,8 @@ public class ConnectionDialogViewportInteropTests
         internal HashSet<int> Active { get; } = [];
 
         internal List<int> Detached { get; } = [];
+
+        internal List<ElementReference> FocusArguments { get; } = [];
 
         internal int Attach()
         {
@@ -267,6 +306,12 @@ public class ConnectionDialogViewportInteropTests
 
             if (identifier == "detach" && args is { Length: > 0 } && args[0] is int token)
                 state.Detach(token);
+
+            if (identifier is "rememberFocus" or "restoreFocus")
+            {
+                state.Invocations.Add(identifier);
+                state.FocusArguments.Add((ElementReference)args![0]!);
+            }
 
             return default;
         }

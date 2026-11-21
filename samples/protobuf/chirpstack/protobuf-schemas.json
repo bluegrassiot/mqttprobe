@@ -39,6 +39,31 @@
       "files": [ "integration/integration.proto" ],
       "topicPattern": "application/+/device/+/command/down",
       "messageType": "integration.DownlinkCommand"
+    },
+    {
+      "files": [ "gw/gw.proto" ],
+      "topicPattern": "+/gateway/+/event/up",
+      "messageType": "gw.UplinkFrame"
+    },
+    {
+      "files": [ "gw/gw.proto" ],
+      "topicPattern": "+/gateway/+/event/stats",
+      "messageType": "gw.GatewayStats"
+    },
+    {
+      "files": [ "gw/gw.proto" ],
+      "topicPattern": "+/gateway/+/event/ack",
+      "messageType": "gw.DownlinkTxAck"
+    },
+    {
+      "files": [ "gw/gw.proto" ],
+      "topicPattern": "+/gateway/+/command/down",
+      "messageType": "gw.DownlinkFrame"
+    },
+    {
+      "files": [ "gw/gw.proto" ],
+      "topicPattern": "+/gateway/+/state/conn",
+      "messageType": "gw.ConnState"
     }
   ]
 }

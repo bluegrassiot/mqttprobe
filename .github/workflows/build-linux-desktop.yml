@@ -33,9 +33,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       - name: Restore NuGet cache
         uses: actions/cache@v6

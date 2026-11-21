@@ -23,6 +23,9 @@ tests/
 **/*.md
 **/*.txt
 
+# MqttProbe.UI embeds the generated licence texts at build time.
+!legal/generated/texts/*.txt
+
 # .editorconfig is deliberately NOT ignored: EnforceCodeStyleInBuild makes it a
 # build input, and without it the analyzer severities it sets (MA0048 = none and
 # 20 others) revert to defaults that TreatWarningsAsErrors turns into errors.

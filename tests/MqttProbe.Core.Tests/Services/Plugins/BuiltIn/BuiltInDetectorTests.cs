@@ -45,6 +45,7 @@ public class BuiltInDetectorTests
         new EmptyPayloadDetector().FormatId.Should().Be("empty");
         new SparkplugPayloadDetector().FormatId.Should().Be("sparkplug-b");
         new MessagePackPayloadDetector().FormatId.Should().Be("messagepack");
+        new CborPayloadDetector().FormatId.Should().Be("cbor");
         new BinaryPayloadDetector().FormatId.Should().Be("binary");
         new JsonPayloadDetector().FormatId.Should().Be("json");
         new XmlPayloadDetector().FormatId.Should().Be("xml");
@@ -59,6 +60,7 @@ public class BuiltInDetectorTests
         new EmptyPayloadDetector().DisplayName.Should().Be("Empty");
         new SparkplugPayloadDetector().DisplayName.Should().Be("Sparkplug B");
         new MessagePackPayloadDetector().DisplayName.Should().Be("MessagePack");
+        new CborPayloadDetector().DisplayName.Should().Be("CBOR");
         new BinaryPayloadDetector().DisplayName.Should().Be("Binary");
         new JsonPayloadDetector().DisplayName.Should().Be("JSON");
         new XmlPayloadDetector().DisplayName.Should().Be("XML");
@@ -73,6 +75,7 @@ public class BuiltInDetectorTests
         new EmptyPayloadDetector().Priority.Should().Be(1000);
         new SparkplugPayloadDetector().Priority.Should().Be(900);
         new MessagePackPayloadDetector().Priority.Should().Be(800);
+        new CborPayloadDetector().Priority.Should().Be(750);
         new BinaryPayloadDetector().Priority.Should().Be(700);
         new JsonPayloadDetector().Priority.Should().Be(600);
         new XmlPayloadDetector().Priority.Should().Be(500);
@@ -87,16 +90,17 @@ public class BuiltInDetectorTests
     public void Registry_DetectorsAreOrderedByPriorityDescending()
     {
         var registry = BuildRegistry();
-        registry.Detectors.Should().HaveCount(9);
+        registry.Detectors.Should().HaveCount(10);
         registry.Detectors[0].FormatId.Should().Be("empty");
         registry.Detectors[1].FormatId.Should().Be("sparkplug-b");
         registry.Detectors[2].FormatId.Should().Be("messagepack");
-        registry.Detectors[3].FormatId.Should().Be("binary");
-        registry.Detectors[4].FormatId.Should().Be("json");
-        registry.Detectors[5].FormatId.Should().Be("xml");
-        registry.Detectors[6].FormatId.Should().Be("hex");
-        registry.Detectors[7].FormatId.Should().Be("base64");
-        registry.Detectors[8].FormatId.Should().Be("plaintext");
+        registry.Detectors[3].FormatId.Should().Be("cbor");
+        registry.Detectors[4].FormatId.Should().Be("binary");
+        registry.Detectors[5].FormatId.Should().Be("json");
+        registry.Detectors[6].FormatId.Should().Be("xml");
+        registry.Detectors[7].FormatId.Should().Be("hex");
+        registry.Detectors[8].FormatId.Should().Be("base64");
+        registry.Detectors[9].FormatId.Should().Be("plaintext");
     }
 
     // --- Empty ---

@@ -5,16 +5,93 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
 
 jobs:
+  # Nothing from the checkout runs before the tag commit is proven to be on main.
+  verify-release:
+    name: Verify release tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      commit: ${{ steps.resolve.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag name
+        id: tag
+        env:
+          RAW_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$RAW_TAG" =~ ^v(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})$ ]]; then
+            echo "::error::Ref '$RAW_TAG' cannot be released. Use vX.Y.Z with three canonical numeric parts, no leading zeros, each 0-9999 (for example v1.2.3); pre-release suffixes, build metadata, and bare versions are rejected."
+            exit 1
+          fi
+          IFS=. read -r major minor patch <<< "${RAW_TAG#v}"
+          if [ "$major" -eq 0 ] && [ "$minor" -eq 0 ] && [ "$patch" -eq 0 ]; then
+            echo "::error::Tag $RAW_TAG is the csproj placeholder version and cannot be released. Tag the commit with the real marketing version."
+            exit 1
+          fi
+          echo "version=$RAW_TAG" >> "$GITHUB_OUTPUT"
+          echo "Validated release tag $RAW_TAG"
+
+      - name: Resolve tag commit
+        id: resolve
+        env:
+          RAW_TAG: ${{ steps.tag.outputs.version }}
+          EVENT_SHA: ${{ github.sha }}
+        run: |
+          TAG_COMMIT=$(git rev-parse --verify "refs/tags/${RAW_TAG}^{commit}")
+          EVENT_COMMIT=$(git rev-parse --verify "${EVENT_SHA}^{commit}")
+          if [ "$TAG_COMMIT" != "$EVENT_COMMIT" ]; then
+            echo "::error::Tag $RAW_TAG resolves to $TAG_COMMIT, but this run was triggered for $EVENT_COMMIT. The tag was moved after the run started. Start a new release run from the current tag instead of re-running this one."
+            exit 1
+          fi
+          echo "commit=$TAG_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Tag $RAW_TAG resolves to commit $TAG_COMMIT"
+
+      - name: Require the tag commit on main
+        env:
+          RAW_TAG: ${{ steps.tag.outputs.version }}
+          TAG_COMMIT: ${{ steps.resolve.outputs.commit }}
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          if [ "$(git rev-parse --is-shallow-repository)" != "false" ]; then
+            echo "::error::The checkout is shallow, so ancestry cannot be proven. fetch-depth must stay 0 in this job."
+            exit 1
+          fi
+          if ! git fetch --no-tags --prune origin '+refs/heads/main:refs/remotes/origin/main'; then
+            echo "::error::Could not fetch origin/main, so this run cannot prove that $RAW_TAG is on main. Refusing to release on an unverified ref."
+            exit 1
+          fi
+          if ! git rev-parse --verify 'refs/remotes/origin/main^{commit}' > /dev/null; then
+            echo "::error::No origin/main in this checkout, so it cannot be shown that $RAW_TAG is on main. A release must be cut from main."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$TAG_COMMIT" origin/main; then
+            echo "::error::Tag $RAW_TAG points at $TAG_COMMIT, which is not contained in origin/main. Only commits merged to main may be released: merge the commit first, then tag it."
+            exit 1
+          fi
+          echo "Tag $RAW_TAG at $TAG_COMMIT is contained in origin/main."
+
   # ── Build Web ───────────────────────────────────────────────────────────────
 
   build-web:
     name: Build (Web / ${{ matrix.rid }})
+    needs: verify-release
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     permissions:
@@ -35,9 +112,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
+      - uses: ./.github/actions/setup-dotnet-workload
 
       - name: Restore NuGet cache
         uses: actions/cache@v6
@@ -61,6 +136,18 @@ jobs:
           -p:Version=${{ steps.version.outputs.value }}
           --output publish/web
 
+      - name: Verify legal notices (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python3 scripts/legal/notices.py profiles-check --scenario web-${{ matrix.rid }}
+          python3 scripts/legal/notices.py verify --scenario web-${{ matrix.rid }}
+
+      - name: Verify legal notices (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          python scripts/legal/notices.py profiles-check --scenario web-${{ matrix.rid }}
+          python scripts/legal/notices.py verify --scenario web-${{ matrix.rid }}
+
       - name: Archive (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -82,6 +169,7 @@ jobs:
 
   build-docker:
     name: Build (Docker)
+    needs: verify-release
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
@@ -141,6 +229,7 @@ jobs:
 
   build-maui-windows:
     name: Build (MAUI Windows)
+    needs: verify-release
     runs-on: windows-latest
     timeout-minutes: 45
     permissions:
@@ -153,7 +242,6 @@ jobs:
       - uses: ./.github/actions/setup-dotnet-workload
         with:
           workload: maui-windows
-          workload-version: '10.0.402'
 
       - name: Extract version
         id: version
@@ -222,6 +310,7 @@ jobs:
 
   build-maui-android:
     name: Build (MAUI Android)
+    needs: verify-release
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -231,7 +320,7 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/setup-java@v6.1.0
+      - uses: actions/setup-java@v6.2.0
         with:
           distribution: 'microsoft'
           java-version: '17'
@@ -246,7 +335,6 @@ jobs:
       - uses: ./.github/actions/setup-dotnet-workload
         with:
           workload: maui-android
-          workload-version: '10.0.402'
 
       - name: Extract version
         id: version
@@ -322,6 +410,7 @@ jobs:
 
   build-macos-desktop:
     name: Build (Desktop macOS)
+    needs: verify-release
     uses: ./.github/workflows/build-macos-desktop.yml
     permissions:
       contents: read
@@ -333,17 +422,38 @@ jobs:
 
   build-desktop-linux:
     name: Build (Desktop Linux)
+    needs: verify-release
     uses: ./.github/workflows/build-linux-desktop.yml
     permissions:
       contents: read
     with:
       version: ${{ github.ref_name }}
 
+  build-ios-testflight:
+    name: Build (iOS TestFlight)
+    needs: verify-release
+    uses: ./.github/workflows/build-ios.yml
+    permissions:
+      contents: read
+    with:
+      version: ${{ needs.verify-release.outputs.version }}
+    secrets: inherit
+
+  build-macos-testflight:
+    name: Build (Mac Catalyst TestFlight)
+    needs: verify-release
+    uses: ./.github/workflows/build-macos-app-store.yml
+    permissions:
+      contents: read
+    with:
+      version: ${{ needs.verify-release.outputs.version }}
+    secrets: inherit
+
   # ── Create GitHub Release ───────────────────────────────────────────────────
 
   create-release:
     name: Create Release
-    needs: [build-web, build-docker, build-desktop-linux, build-maui-windows, build-macos-desktop, build-maui-android]
+    needs: [verify-release, build-web, build-docker, build-desktop-linux, build-maui-windows, build-macos-desktop, build-maui-android, build-ios-testflight, build-macos-testflight]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -407,6 +517,9 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: desktop-linux-third-party-sources
+
+      - name: Package ChirpStack schema plugin
+        run: python3 scripts/ci/package-schema-plugin.py --output-dir .
 
       - name: Fail on duplicate release asset names
         run: |

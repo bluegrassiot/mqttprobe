@@ -35,12 +35,9 @@
                     var t = topic;
                     var fields = FieldRegistry.GetFields(t).Where(f => FieldMatchesSearch(t, f)).ToList();
 
-                    <!-- Topic header -->
-                    <div class="px-2 pt-2 pb-1 d-flex align-center gap-1">
-                        <MudIcon Icon="@LucideIcons.Hash" Size="Size.Small"
-                                 Style="color:var(--mud-palette-text-secondary); font-size:14px"/>
-                        <MudText Typo="Typo.caption"
-                                 Style="font-weight:700; font-family:var(--font-mono); color:var(--mud-palette-text-secondary)">
+                    <div class="chart-field-topic-header px-2 pt-2 pb-1 d-flex align-center gap-1">
+                        <MudIcon Icon="@LucideIcons.Hash" Size="Size.Small" Class="chart-field-topic-icon"/>
+                        <MudText Typo="Typo.caption" Class="chart-field-topic-name">
                             @t
                         </MudText>
                     </div>
@@ -54,28 +51,27 @@
                         var showFullPath = !string.Equals(label, f.JsonPath, StringComparison.Ordinal);
                         var isExpanded = _expanded.Contains(key);
 
-                        <div class="@($"px-2 py-1 mx-1 mb-1 rounded")"
+                        <div class="@RowClass(isSelected) px-2 py-1 mx-1 mb-1 rounded"
                              role="button" tabindex="0"
-                             style="@RowStyle(isSelected) cursor:pointer"
                              @onclick="() => ToggleField(key, f)"
                              @onkeydown="(e => HandleFieldKeySelection(e, key, f))">
                             <div class="d-flex align-center">
                                 <MudCheckBox T="bool" Value="@isSelected" ReadOnly="true"
                                              Dense="true" Color="Color.Primary" Class="mr-2"
                                              @onclick:stopPropagation="true"/>
-                                <div class="flex-grow-1" style="min-width:0">
-                                    <MudText Typo="Typo.body2" Style="font-weight:600">@label</MudText>
+                                <div class="chart-field-main flex-grow-1">
+                                    <MudText Typo="Typo.body2" Class="chart-field-label">@label</MudText>
                                     @if (showFullPath)
                                     {
                                         <MudText Typo="Typo.caption" Color="Color.Secondary"
-                                                 Style="font-family:var(--font-mono); display:block">@f.JsonPath</MudText>
+                                                 Class="chart-field-path">@f.JsonPath</MudText>
                                     }
                                 </div>
-                                <div class="text-right ml-3 mr-1" style="flex-shrink:0">
-                                    <MudText Typo="Typo.body2" Style="font-family:var(--font-mono); font-weight:500">
+                                <div class="chart-field-value text-right ml-3 mr-1">
+                                    <MudText Typo="Typo.body2" Class="chart-field-value-number">
                                         @FormatValue(f.LastValue)
                                     </MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="display:block">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="chart-field-value-time">
                                         @DisplayHelpers.GetRelativeTime(f.LastSeen)
                                     </MudText>
                                 </div>
@@ -166,11 +162,7 @@
 
     private void Cancel() => MudDialog.Cancel();
 
-    internal static string GetShortLabel(string jsonPath)
-    {
-        var lastDot = jsonPath.LastIndexOf('.');
-        return lastDot >= 0 ? jsonPath[(lastDot + 1)..] : jsonPath;
-    }
+    internal static string GetShortLabel(string jsonPath) => ChartSeriesLabels.LastPathSegment(jsonPath);
 
     internal static string FormatValue(double v)
     {
@@ -180,7 +172,6 @@
         return Math.Abs(v % 1) < Epsilon ? v.ToString("N0") : v.ToString("G6");
     }
 
-    internal static string RowStyle(bool selected) => selected
-        ? "background:var(--mud-palette-primary-lighten); border:1px solid var(--mud-palette-primary); "
-        : "border:1px solid transparent; ";
+    internal static string RowClass(bool selected) =>
+        selected ? "chart-field-option chart-field-option--selected" : "chart-field-option";
 }

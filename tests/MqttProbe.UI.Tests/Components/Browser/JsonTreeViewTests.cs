@@ -1,5 +1,7 @@
 using System.Text.Json;
+using AngleSharp.Dom;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using MqttProbe.Core.Models.Chart;
 using MqttProbe.UI.Tests.TestHelpers;
 
@@ -11,7 +13,7 @@ public class JsonTreeViewTests : BunitTestContext
     [Test]
     public void NullJson_RendersEmpty()
     {
-        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, (string?)null));
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, null));
         cut.FindAll(".json-tree-root").Should().BeEmpty();
     }
 
@@ -157,6 +159,123 @@ public class JsonTreeViewTests : BunitTestContext
         cut.FindAll(".json-preview").Should().BeEmpty();
     }
 
+    private static IElement CollapsedToggle(IRenderedComponent<JsonTreeView> cut) =>
+        cut.FindAll(".json-toggle").First(toggle => toggle.GetAttribute("aria-expanded") == "false");
+
+    [Test]
+    public void ArrowRight_ExpandsACollapsedObject()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":{"b":{"c":"deep"}}}"""));
+
+        CollapsedToggle(cut).KeyDown("ArrowRight");
+
+        cut.FindAll(".json-preview").Should().BeEmpty();
+        cut.FindAll(".json-key").Select(e => e.TextContent).Should().Contain("\"c\"");
+    }
+
+    [Test]
+    public void ArrowLeft_CollapsesAnExpandedObject()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"name":"Alice"}"""));
+
+        cut.Find(".json-toggle").KeyDown("ArrowLeft");
+
+        cut.Find(".json-toggle").GetAttribute("aria-expanded").Should().Be("false");
+        cut.FindAll(".json-string").Should().BeEmpty();
+        cut.FindAll(".json-preview").Should().ContainSingle();
+    }
+
+    [Test]
+    public void ArrowRight_OnAnExpandedNode_IsIdempotent()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"name":"Alice"}"""));
+
+        cut.Find(".json-toggle").KeyDown("ArrowRight");
+        cut.Find(".json-toggle").KeyDown("ArrowRight");
+
+        cut.Find(".json-toggle").GetAttribute("aria-expanded").Should().Be("true");
+        cut.FindAll(".json-preview").Should().BeEmpty();
+    }
+
+    [Test]
+    public void ArrowLeft_OnACollapsedNode_IsIdempotent()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":{"b":{"c":"deep"}}}"""));
+
+        CollapsedToggle(cut).KeyDown("ArrowLeft");
+
+        CollapsedToggle(cut).GetAttribute("aria-expanded").Should().Be("false");
+        cut.FindAll(".json-preview").Should().ContainSingle();
+    }
+
+    [Test]
+    public void ArrowKeys_ToggleACollapsedArray()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":{"b":[1,2]}}"""));
+        cut.FindAll(".json-preview").Should().ContainSingle();
+
+        CollapsedToggle(cut).KeyDown("ArrowRight");
+        cut.FindAll(".json-preview").Should().BeEmpty();
+        cut.FindAll(".json-number").Should().HaveCount(2);
+
+        cut.FindAll(".json-toggle").Last().KeyDown("ArrowLeft");
+        cut.FindAll(".json-preview").Should().ContainSingle();
+        cut.FindAll(".json-number").Should().BeEmpty();
+    }
+
+    [Test]
+    public void RenderedTree_LoadsTheExpanderKeyboardModule()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":1}"""));
+
+        cut.FindAll(".json-tree-root").Should().ContainSingle();
+        JSInterop.Invocations.Should().Contain(invocation =>
+            invocation.Identifier == "import"
+            && Equals(invocation.Arguments[0], "./_content/MqttProbe.UI/js/json-tree-keyboard.js"));
+    }
+
+    [TestCase("Control")]
+    [TestCase("Alt")]
+    [TestCase("Meta")]
+    [TestCase("Shift")]
+    public void ModifiedArrow_DoesNotToggle(string modifier)
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":{"b":{"c":"deep"}}}"""));
+
+        CollapsedToggle(cut).KeyDown(new KeyboardEventArgs
+        {
+            Key = "ArrowRight",
+            CtrlKey = modifier == "Control",
+            AltKey = modifier == "Alt",
+            MetaKey = modifier == "Meta",
+            ShiftKey = modifier == "Shift"
+        });
+
+        cut.FindAll(".json-preview").Should().ContainSingle();
+    }
+
+    [Test]
+    public void ArrowKey_DuringImeComposition_DoesNotToggle()
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":{"b":{"c":"deep"}}}"""));
+
+        CollapsedToggle(cut).KeyDown(new KeyboardEventArgs { Key = "ArrowRight", IsComposing = true });
+
+        cut.FindAll(".json-preview").Should().ContainSingle();
+    }
+
+    [TestCase("Enter")]
+    [TestCase(" ")]
+    [TestCase("Tab")]
+    public void OtherKeys_LeaveExpansionToTheNativeButton(string key)
+    {
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, """{"a":{"b":{"c":"deep"}}}"""));
+
+        CollapsedToggle(cut).KeyDown(key);
+
+        cut.FindAll(".json-preview").Should().ContainSingle();
+    }
+
     [Test]
     public void CollapsedNode_ShowsPreviewInMarkup()
     {
@@ -268,7 +387,7 @@ public class JsonTreeViewTests : BunitTestContext
         ChartFieldSelection? captured = null;
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, """{"temp":23.4}""")
-            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, chartFieldSelection => captured = chartFieldSelection)));
 
         await cut.Find(".json-chart-btn").ClickAsync(new());
 
@@ -293,7 +412,7 @@ public class JsonTreeViewTests : BunitTestContext
 
         var button = cut.Find(".json-chart-btn");
         button.GetAttribute("title").Should().Be("Add to chart");
-        button.QuerySelector(".json-chart-btn__label")!.TextContent.Should().Contain("ADD TO CHART");
+        button.QuerySelector(".json-chart-btn__label")!.TextContent.Should().Contain("CHART");
     }
 
     [Test]
@@ -302,7 +421,7 @@ public class JsonTreeViewTests : BunitTestContext
         ChartFieldSelection? captured = null;
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, """{"device":{"temp":23.4}}""")
-            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, chartFieldSelection => captured = chartFieldSelection)));
 
         // "device" is at depth 1 → auto-expanded; "temp" is a number leaf → button visible
         await cut.Find(".json-chart-btn").ClickAsync(new());
@@ -321,13 +440,30 @@ public class JsonTreeViewTests : BunitTestContext
         cut.FindAll(".json-chart-btn").Should().ContainSingle();
     }
 
+    [TestCase("stringValue")]
+    [TestCase("string_value")]
+    public async Task SparkplugStringValue_NumericString_UsesIndexedPathAndShortSeriesName(string propertyName)
+    {
+        ChartFieldSelection? captured = null;
+        var cut = Render<JsonTreeView>(p => p
+            .Add(x => x.Json, $$"""{"metrics":[{"name":"Batch Count","datatype":12,"{{propertyName}}":"42"}]}""")
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, chartFieldSelection => captured = chartFieldSelection)));
+        await cut.InvokeAsync(() => cut.Instance.ExpandAll());
+
+        var button = cut.Find(".json-chart-btn");
+        await button.ClickAsync(new());
+
+        captured.Should().Be(new ChartFieldSelection($"metrics[0].{propertyName}"));
+        PayloadBrowser.ChartLabel(captured!).Should().Be(propertyName);
+    }
+
     [Test]
     public async Task SparkplugValue_InvokesCallbackWithMetricNameAsSeriesName()
     {
         ChartFieldSelection? captured = null;
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, """{"metrics":[{"name":"Metric-1","datatype":10,"doubleValue":66.36}]}""")
-            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, chartFieldSelection => captured = chartFieldSelection)));
         await cut.InvokeAsync(() => cut.Instance.ExpandAll());
 
         await cut.Find(".json-chart-btn").ClickAsync(new());
@@ -341,7 +477,7 @@ public class JsonTreeViewTests : BunitTestContext
         ChartFieldSelection? captured = null;
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, """{"metrics":[{"datatype":10,"doubleValue":66.36}]}""")
-            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, chartFieldSelection => captured = chartFieldSelection)));
         await cut.InvokeAsync(() => cut.Instance.ExpandAll());
 
         await cut.Find(".json-chart-btn").ClickAsync(new());
@@ -415,7 +551,7 @@ public class JsonTreeViewTests : BunitTestContext
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, """{"metrics":[{"alias":42,"doubleValue":3.14}]}""")
             .Add(x => x.AliasNames, aliasNames)
-            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, p => captured = p)));
+            .Add(x => x.OnAddToChart, EventCallback.Factory.Create<ChartFieldSelection>(this, chartFieldSelection => captured = chartFieldSelection)));
         await cut.InvokeAsync(() => cut.Instance.ExpandAll());
 
         await cut.Find(".json-chart-btn").ClickAsync(new());
@@ -433,7 +569,7 @@ public class JsonTreeViewTests : BunitTestContext
     [Test]
     public void HasExpandableContent_False_WhenJsonIsNull()
     {
-        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, (string?)null));
+        var cut = Render<JsonTreeView>(p => p.Add(x => x.Json, null));
         cut.Instance.HasExpandableContent.Should().BeFalse();
     }
 
@@ -564,7 +700,7 @@ public class JsonTreeViewTests : BunitTestContext
     {
         var cut = Render<JsonTreeView>(p => p
             .Add(x => x.Json, """{"metrics":[{"alias":42,"doubleValue":3.14}]}""")
-            .Add(x => x.AliasNames, (IReadOnlyDictionary<ulong, string>?)null));
+            .Add(x => x.AliasNames, null));
         cut.InvokeAsync(() => cut.Instance.ExpandAll());
 
         cut.Markup.Should().NotContain("(resolved)");

@@ -303,43 +303,127 @@ public class MessageStoreManagerTests
     }
 
     [Test]
-    public void AddMessage_LeadingSlash_NormalizesToCleanPath()
+    public void AddMessage_LeadingSlash_PreservesEmptyRootLevel()
     {
         _messageStoreManager.AddMessage("/sensors/temp", new MqttMessage());
 
-        var sensors = _messageStoreManager.GetTopicTreeSnapshot().Roots.Should()
-            .ContainSingle(node => node.FullTopic == "sensors").Subject;
-        sensors.Children.Should().ContainSingle(node => node.FullTopic == "sensors/temp");
+        var root = _messageStoreManager.GetTopicTreeSnapshot().Roots.Should().ContainSingle().Subject;
+        root.FullTopic.Should().BeEmpty();
+        var sensors = root.Children.Should().ContainSingle().Subject;
+        sensors.FullTopic.Should().Be("/sensors");
+        sensors.Children.Should().ContainSingle().Which.FullTopic.Should().Be("/sensors/temp");
         _messageStoreManager.RootTopicCount.Should().Be(1);
     }
 
     [Test]
-    public void AddMessage_TrailingSlash_NormalizesToCleanPath()
+    public void AddMessage_TrailingSlash_PreservesEmptyLeafLevel()
     {
         _messageStoreManager.AddMessage("sensors/temp/", new MqttMessage());
 
         var temp = _messageStoreManager.GetTopicTreeSnapshot().Roots.Single().Children.Single();
         temp.FullTopic.Should().Be("sensors/temp");
-        temp.MessageCount.Should().Be(1);
-        temp.HasDirectMessages.Should().BeTrue();
+        temp.HasDirectMessages.Should().BeFalse();
+
+        var leaf = temp.Children.Should().ContainSingle().Subject;
+        leaf.FullTopic.Should().Be("sensors/temp/");
+        leaf.MessageCount.Should().Be(1);
+        leaf.HasDirectMessages.Should().BeTrue();
     }
 
     [Test]
-    public void AddMessage_DoubleSlash_NormalizesToCleanPath()
+    public void AddMessage_DoubleSlash_PreservesEmptyMiddleLevel()
     {
         _messageStoreManager.AddMessage("a//b", new MqttMessage());
 
         var a = _messageStoreManager.GetTopicTreeSnapshot().Roots.Single();
         a.FullTopic.Should().Be("a");
-        a.Children.Should().ContainSingle().Which.FullTopic.Should().Be("a/b");
+        var empty = a.Children.Should().ContainSingle().Subject;
+        empty.FullTopic.Should().Be("a/");
+        empty.Children.Should().ContainSingle().Which.FullTopic.Should().Be("a//b");
     }
 
     [Test]
-    public void AddMessage_AllSlashes_Rejected_StoreRemainsEmpty()
+    public void AddMessage_AllSlashes_PreservesEmptyLevels()
     {
         _messageStoreManager.AddMessage("///", new MqttMessage());
 
-        _messageStoreManager.RootTopicCount.Should().Be(0);
+        _messageStoreManager.RootTopicCount.Should().Be(1);
+        var root = _messageStoreManager.GetTopicTreeSnapshot().Roots.Should().ContainSingle().Subject;
+        root.FullTopic.Should().BeEmpty();
+        var leaf = root.Children.Single().Children.Single().Children.Should().ContainSingle().Subject;
+        leaf.FullTopic.Should().Be("///");
+        leaf.HasDirectMessages.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task ClearMessagesForBranchesAsync_RemovesCoveredMessagesOnly()
+    {
+        _messageStoreManager.AddMessage("a/b", new MqttMessage());
+        _messageStoreManager.AddMessage("a/bc", new MqttMessage());
+
+        var removed = await _messageStoreManager.ClearMessagesForBranchesAsync(
+            [new TopicBranchTarget(TopicBranchKind.Raw, "a/b")]);
+
+        removed.Should().Be(1);
+        _messageStoreManager.TotalStoredMessages.Should().Be(1);
+    }
+
+    [Test]
+    public async Task ClearMessagesForBranchesAsync_WithToken_IsAtomicallyBoundToSelection()
+    {
+        var session = new SessionState { SelectedConnection = new Connection() };
+        using var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        using var manager = CreateManager(excludes);
+        manager.AddMessage("a/b", new MqttMessage());
+        manager.AddMessage("a/bc", new MqttMessage());
+        var token = excludes.CaptureConnectionToken();
+
+        var cleared = await manager.ClearMessagesForBranchesAsync(
+            [new TopicBranchTarget(TopicBranchKind.Raw, "a/b")], token);
+
+        cleared.Applied.Should().BeTrue();
+        cleared.ClearedMessages.Should().Be(1);
+        manager.TotalStoredMessages.Should().Be(1);
+
+        var stale = token with { SelectionRevision = token.SelectionRevision + 1 };
+        var rejected = await manager.ClearMessagesForBranchesAsync(
+            [new TopicBranchTarget(TopicBranchKind.Raw, "a/bc")], stale);
+
+        rejected.Applied.Should().BeFalse();
+        rejected.ClearedMessages.Should().Be(0);
+        manager.TotalStoredMessages.Should().Be(1);
+    }
+
+    [Test]
+    public async Task ClearMessagesForBranchesAsync_WithToken_ZeroRemovalIsAnAppliedSuccess()
+    {
+        var session = new SessionState { SelectedConnection = new Connection() };
+        using var excludes = new TopicExcludeService(
+            Substitute.For<ILogger<TopicExcludeService>>(),
+            Substitute.For<IConnectionSettings>(), session);
+        using var manager = CreateManager(excludes);
+
+        var result = await manager.ClearMessagesForBranchesAsync(
+            [new TopicBranchTarget(TopicBranchKind.Raw, "missing")],
+            excludes.CaptureConnectionToken());
+
+        result.Applied.Should().BeTrue();
+        result.ClearedMessages.Should().Be(0);
+    }
+
+    [Test]
+    public async Task ClearMessagesForBranchesAsync_WithoutExcludeService_FailsClosed()
+    {
+        using var manager = CreateManager(excludes: null);
+
+        var result = await manager.ClearMessagesForBranchesAsync(
+            [new TopicBranchTarget(TopicBranchKind.Raw, "a/b")],
+            new TopicExcludeConnectionToken(1, Guid.NewGuid()));
+
+        result.Applied.Should().BeFalse();
+        result.ClearedMessages.Should().Be(0);
     }
 
     [Test]
@@ -360,9 +444,30 @@ public class MessageStoreManagerTests
         _messageStoreManager.AddMessage("/sensors/temp", msg);
 
         _messageStoreManager.SelectTopic("sensors/temp");
+        var clean = _messageStoreManager.GetSelectedTopicState();
+        (await _messageStoreManager.GetSelectedMessagesAsync(clean.Token, 10))!
+            .Messages.Should().BeEmpty("the cleaned path is a different node");
+
+        _messageStoreManager.SelectTopic("/sensors/temp");
         var selection = _messageStoreManager.GetSelectedTopicState();
         (await _messageStoreManager.GetSelectedMessagesAsync(selection.Token, 10))!
             .Messages.Should().ContainSingle().Which.Should().BeSameAs(msg);
+    }
+
+    private static MessageStoreManager CreateManager(ITopicExcludeService? excludes)
+    {
+        var performance = Substitute.For<IPerformanceSettings>();
+        performance.Performance.Returns(new AppConfiguration().Performance);
+        var sparkplug = Substitute.For<ISparkplugSettings>();
+        sparkplug.Sparkplug.Returns(new SparkplugSettings { EnrichAliasNames = true });
+        return new MessageStoreManager(
+            Substitute.For<IMqttManagedClient>(),
+            Substitute.For<ILogger<MessageStoreManager>>(),
+            performance,
+            Substitute.For<IUxMetricsService>(),
+            TestPipelineHelper.BuildBuiltInPipeline(),
+            sparkplug,
+            topicExcludeService: excludes);
     }
 
     private sealed class NonPumpingSynchronizationContext : SynchronizationContext

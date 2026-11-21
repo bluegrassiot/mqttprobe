@@ -23,6 +23,9 @@ mqttprobe-web-win-x64-{{VERSION}}.zip
 mqttprobe-windows-{{VERSION}}.zip
 mqttprobe-android-{{VERSION}}.apk
 
+# ChirpStack protobuf schema package, versioned from its sample manifest
+chirpstack-*.zip
+
 # Linux desktop (Photino): the plain zip predates the AppImage and still needs
 # WebKitGTK installed, because only the AppImage bundles it.
 mqttprobe-desktop-linux-x64-{{VERSION}}.zip

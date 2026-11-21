@@ -267,4 +267,35 @@ public class AliasAwareKnownMetricStorageTests
 
         result.Should().BeEmpty();
     }
+
+    [Test]
+    public void FilterMetrics_DeviceCommand_DeviceRebirth_SurvivesWithoutBeingANodeMetric()
+    {
+        var storage = new AliasAwareKnownMetricStorage(new[] { new Metric("Temperature", DataType.Double, 1.0) });
+        var rebirth = new Metric("Device Control/Rebirth", DataType.Boolean, true);
+        var unknown = new Metric("Unknown", DataType.Boolean, true);
+
+        var result = storage.FilterMetrics(new[] { rebirth, unknown }, SparkplugMessageType.DeviceCommand).ToList();
+
+        result.Should().ContainSingle().Which.Should().BeSameAs(rebirth);
+    }
+
+    [TestCase(SparkplugMessageType.NodeCommand)]
+    [TestCase(SparkplugMessageType.DeviceData)]
+    public void FilterMetrics_DeviceRebirth_OutsideDeviceCommands_IsStillFiltered(SparkplugMessageType messageType)
+    {
+        var storage = new AliasAwareKnownMetricStorage(new[] { new Metric("Temperature", DataType.Double, 1.0) });
+        var rebirth = new Metric("Device Control/Rebirth", DataType.Boolean, true);
+
+        storage.FilterMetrics(new[] { rebirth }, messageType).Should().BeEmpty();
+    }
+
+    [Test]
+    public void FilterMetrics_DeviceCommand_DeviceRebirthWithWrongType_IsDropped()
+    {
+        var storage = new AliasAwareKnownMetricStorage(new[] { new Metric("Temperature", DataType.Double, 1.0) });
+        var notBoolean = new Metric("Device Control/Rebirth", DataType.Int32, 1);
+
+        storage.FilterMetrics(new[] { notBoolean }, SparkplugMessageType.DeviceCommand).Should().BeEmpty();
+    }
 }

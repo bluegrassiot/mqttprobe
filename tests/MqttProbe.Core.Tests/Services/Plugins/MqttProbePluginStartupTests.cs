@@ -19,8 +19,8 @@ public class MqttProbePluginStartupTests
         var registry = MqttProbePluginStartup.BuildPluginRegistry(config, loggerFactory);
 
         registry.Should().NotBeNull();
-        registry.Detectors.Should().HaveCount(9);
-        registry.Decoders.Should().HaveCount(9);
+        registry.Detectors.Should().HaveCount(10);
+        registry.Decoders.Should().HaveCount(10);
         registry.Encoders.Should().HaveCount(3);
         registry.TopologyExtractors.Should().HaveCount(1);
     }
@@ -58,6 +58,7 @@ public class MqttProbePluginStartupTests
         registry.FindDecoder("base64").Should().NotBeNull();
         registry.FindDecoder("binary").Should().NotBeNull();
         registry.FindDecoder("messagepack").Should().NotBeNull();
+        registry.FindDecoder("cbor").Should().NotBeNull();
         registry.FindDecoder("sparkplug-b").Should().NotBeNull();
         registry.FindDecoder("empty").Should().NotBeNull();
     }
@@ -96,8 +97,8 @@ public class MqttProbePluginStartupTests
 
         act.Should().NotThrow();
         var registry = act();
-        registry.Detectors.Should().HaveCount(9);
-        registry.Decoders.Should().HaveCount(9);
+        registry.Detectors.Should().HaveCount(10);
+        registry.Decoders.Should().HaveCount(10);
     }
 
     [Test]
@@ -109,7 +110,7 @@ public class MqttProbePluginStartupTests
         var registry = MqttProbePluginStartup.BuildPluginRegistry(config, loggerFactory);
 
         // Built-ins still present; disabled ID recorded in diagnostics.
-        registry.Detectors.Should().HaveCount(9);
+        registry.Detectors.Should().HaveCount(10);
         registry.Diagnostics.Should().Contain(d =>
             d.Source == "some-disabled-plugin" &&
             d.Message.Contains("disabled"));

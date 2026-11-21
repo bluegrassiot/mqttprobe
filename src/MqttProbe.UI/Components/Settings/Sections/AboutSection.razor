@@ -1,6 +1,7 @@
 @namespace MqttProbe.UI.Components.Settings
 @inject IAppInfoService AppInfoService
 @inject IUpdateService UpdateService
+@inject IDialogService DialogService
 
 <MudText Typo="Typo.body2" Color="Color.Secondary">
     MQTTProbe — the MQTT diagnostic tool built for IIoT.
@@ -8,25 +9,47 @@
 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
     Version @_version
 </MudText>
-@if (IsIosHost)
-{
-    <div class="about-links">
+<div class="about-links">
+    <MudText Typo="Typo.subtitle1" HtmlTag="h6" Class="about-links__heading">Support</MudText>
+    <div class="about-links__items">
         <a class="about-links__link"
-           href="@PrivacyPolicyUri"
+           href="@ContactEmailUri"
+           data-testid="contact-email-link">
+            <MudIcon Icon="@LucideIcons.Send" Size="Size.Small" aria-hidden="true" />
+            <span class="about-links__label">@ContactEmailAddress</span>
+        </a>
+        <a class="about-links__link"
+           href="@SupportUri"
            target="_blank"
            rel="noopener noreferrer"
-           aria-label="Privacy policy (opens in a new tab)"
-           data-testid="privacy-policy-link">
-            <MudIcon Icon="@LucideIcons.ShieldCheck" Size="Size.Small" aria-hidden="true" />
-            <span class="about-links__label">Privacy policy</span>
+           aria-label="Support website (opens in a new tab)"
+           data-testid="support-website-link">
+            <MudIcon Icon="@LucideIcons.Info" Size="Size.Small" aria-hidden="true" />
+            <span class="about-links__label">Support website</span>
             <MudIcon Icon="@LucideIcons.ExternalLink" Size="Size.Small" Class="about-links__external"
                      aria-hidden="true" />
         </a>
-        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="about-links__hint">
-            What MQTTProbe stores and sends on your device.
-        </MudText>
     </div>
-}
+    @if (IsIosHost)
+    {
+        <div class="about-links__privacy">
+            <a class="about-links__link"
+               href="@PrivacyPolicyUri"
+               target="_blank"
+               rel="noopener noreferrer"
+               aria-label="Privacy policy (opens in a new tab)"
+               data-testid="privacy-policy-link">
+                <MudIcon Icon="@LucideIcons.ShieldCheck" Size="Size.Small" aria-hidden="true" />
+                <span class="about-links__label">Privacy policy</span>
+                <MudIcon Icon="@LucideIcons.ExternalLink" Size="Size.Small" Class="about-links__external"
+                         aria-hidden="true" />
+            </a>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="about-links__hint">
+                What MQTTProbe stores and sends on your device.
+            </MudText>
+        </div>
+    }
+</div>
 
 @if (UpdateService.IsSupported)
 {
@@ -64,6 +87,19 @@
     </div>
 }
 
+<div class="about-legal">
+    <button type="button"
+            class="about-legal__button"
+            data-testid="open-source-licences-button"
+            @onclick="OpenLicencesAsync">
+        <MudIcon Icon="@LucideIcons.FileText" Size="Size.Small" aria-hidden="true" />
+        <span class="about-legal__label">Open-source licences</span>
+    </button>
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="about-legal__hint">
+        Licences for MQTTProbe and the components it includes.
+    </MudText>
+</div>
+
 @code {
     private string _version = string.Empty;
     private bool _checkingForUpdate;
@@ -75,6 +111,12 @@
     protected override void OnInitialized()
     {
         _version = AppInfoService.GetVersion();
+    }
+
+    private async Task OpenLicencesAsync()
+    {
+        await DialogService.ShowAsync<LicencesDialog>(null, new DialogParameters<LicencesDialog>(),
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
     }
 
     private async Task CheckForUpdatesAsync()

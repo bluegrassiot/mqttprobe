@@ -117,4 +117,43 @@ public class MqttMessageTests
         };
         msg.FormatId.Should().Be("json");
     }
+
+    [Test]
+    public void V5Properties_DefaultToNull()
+    {
+        var msg = new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce);
+
+        msg.ContentType.Should().BeNull();
+        msg.ResponseTopic.Should().BeNull();
+        msg.CorrelationData.Should().BeNull();
+        msg.MessageExpiryInterval.Should().BeNull();
+        msg.PayloadFormatIndicator.Should().BeNull();
+        msg.UserProperties.Should().BeNull();
+    }
+
+    [Test]
+    public void V5Properties_RoundTripThroughJson()
+    {
+        var original = new MqttMessage("p", "t", false, MqttQualityOfServiceLevel.AtMostOnce)
+        {
+            ContentType = "application/json",
+            ResponseTopic = "reply/here",
+            CorrelationData = [1, 2, 3],
+            MessageExpiryInterval = 60,
+            PayloadFormatIndicator = MqttPayloadFormatIndicator.CharacterData,
+            UserProperties = [new MqttMessageUserProperty("site", "lab"), new MqttMessageUserProperty("schema", "v1")]
+        };
+
+        var copy = JsonSerializer.Deserialize<MqttMessage>(JsonSerializer.Serialize(original));
+
+        copy.Should().NotBeNull();
+        copy!.ContentType.Should().Be("application/json");
+        copy.ResponseTopic.Should().Be("reply/here");
+        copy.CorrelationData.Should().Equal(1, 2, 3);
+        copy.MessageExpiryInterval.Should().Be(60u);
+        copy.PayloadFormatIndicator.Should().Be(MqttPayloadFormatIndicator.CharacterData);
+        copy.UserProperties.Should().Equal(
+            new MqttMessageUserProperty("site", "lab"),
+            new MqttMessageUserProperty("schema", "v1"));
+    }
 }

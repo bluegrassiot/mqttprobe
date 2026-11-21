@@ -29,6 +29,7 @@ public class SparkplugSettings
     public int RebirthCooldownSeconds { get; set; } = 30;
     public bool EnrichAliasNames { get; set; } = true;
     public bool AllowNodeReboot { get; set; }
+    public bool AllowMetricWrites { get; set; }
     public int ReorderTimeoutMilliseconds
     {
         get => _reorderTimeoutMilliseconds;
@@ -54,6 +55,8 @@ public class UiPreferences
     public string Theme { get; set; } = "dark";
     public bool AutoResubscribe { get; set; } = true;
     public bool GroupSparkplugTopicsByNodeAndDevice { get; set; } = true;
+    public bool TopicTreeMultiSelect { get; set; } = true;
+    public MessageTimePreferences MessageTime { get; set; } = new();
 
     public List<string> DismissedHints { get; set; } = [];
 }

@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "scenarios": [
+    {
+      "name": "web-framework-dependent",
+      "project": "src/MqttProbe.Web/MqttProbe.Web.csproj",
+      "framework": "net10.0",
+      "selfContained": false,
+      "host": "any"
+    },
+    {
+      "name": "web-win-x64",
+      "project": "src/MqttProbe.Web/MqttProbe.Web.csproj",
+      "framework": "net10.0",
+      "runtimeIdentifier": "win-x64",
+      "selfContained": false,
+      "host": "windows"
+    },
+    {
+      "name": "web-linux-x64",
+      "project": "src/MqttProbe.Web/MqttProbe.Web.csproj",
+      "framework": "net10.0",
+      "runtimeIdentifier": "linux-x64",
+      "selfContained": false,
+      "host": "linux"
+    },
+    {
+      "name": "web-linux-arm64",
+      "project": "src/MqttProbe.Web/MqttProbe.Web.csproj",
+      "framework": "net10.0",
+      "runtimeIdentifier": "linux-arm64",
+      "selfContained": false,
+      "host": "linux"
+    },
+    {
+      "name": "desktop-linux-x64",
+      "project": "src/MqttProbe.Desktop/MqttProbe.Desktop.csproj",
+      "framework": "net10.0",
+      "runtimeIdentifier": "linux-x64",
+      "selfContained": true,
+      "host": "linux"
+    },
+    {
+      "name": "maui-windows",
+      "project": "src/MqttProbe.Maui/MqttProbe.Maui.csproj",
+      "framework": "net10.0-windows10.0.19041.0",
+      "selfContained": false,
+      "host": "windows"
+    },
+    {
+      "name": "maui-android",
+      "project": "src/MqttProbe.Maui/MqttProbe.Maui.csproj",
+      "framework": "net10.0-android",
+      "selfContained": false,
+      "host": "any"
+    },
+    {
+      "name": "desktop-osx-arm64",
+      "project": "src/MqttProbe.Desktop/MqttProbe.Desktop.csproj",
+      "framework": "net10.0",
+      "runtimeIdentifier": "osx-arm64",
+      "selfContained": true,
+      "host": "macos"
+    },
+    {
+      "name": "maui-ios-arm64",
+      "project": "src/MqttProbe.Maui/MqttProbe.Maui.csproj",
+      "framework": "net10.0-ios",
+      "runtimeIdentifier": "ios-arm64",
+      "selfContained": false,
+      "host": "ios"
+    },
+    {
+      "name": "maui-maccatalyst",
+      "project": "src/MqttProbe.Maui/MqttProbe.Maui.csproj",
+      "framework": "net10.0-maccatalyst",
+      "runtimeIdentifiers": ["maccatalyst-x64", "maccatalyst-arm64"],
+      "selfContained": false,
+      "host": "macos"
+    },
+    {
+      "name": "maui-maccatalyst-app-store",
+      "project": "src/MqttProbe.Maui/MqttProbe.Maui.csproj",
+      "framework": "net10.0-maccatalyst",
+      "runtimeIdentifiers": ["maccatalyst-x64", "maccatalyst-arm64"],
+      "selfContained": false,
+      "host": "macos",
+      "msbuildProperties": {
+        "MqttProbeMacAppStore": "true"
+      }
+    }
+  ]
+}

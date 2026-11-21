@@ -13,25 +13,20 @@ public sealed class TopicTreeObservedHistoryPruningTests
     public void ChildlessEvictedRawAlias_CanonicalExcludeKeepsTheUnmatchedHistory()
     {
         var store = CreateStore(maxMessages: 1);
-        store.Add("root//tip", Message("alias", 1, "root//tip"));
+        store.Add("root//tip", Message("slashed", 1, "root//tip"));
         store.Add("other", Message("other", 2, "other"));
 
         var before = store.GetTopicTreeSnapshot();
-        var tip = before.Roots.Single(node => node.FullTopic == "root").Children.Single();
-        tip.HasDirectMessages.Should().BeFalse("the alias message was evicted");
+        var tip = Node(before, "root//tip");
+        tip.HasDirectMessages.Should().BeFalse("the message was evicted");
         tip.HasObservedDirectTopic.Should().BeTrue();
 
         store.RemoveMatchingTopic("root/tip");
         var after = store.GetTopicTreeSnapshot();
 
-        after.Should().NotBeSameAs(before, "the purge invalidated the cached snapshot");
-        after.Version.Should().BeGreaterThan(before.Version);
-
-        var kept = after.Roots.Single(node => node.FullTopic == "root").Children.Single();
-        kept.FullTopic.Should().Be("root/tip");
-        kept.HasDirectMessages.Should().BeFalse();
-        kept.HasObservedDirectTopic.Should().BeTrue(
-            "the canonical filter matched the path, but not the recorded raw alias");
+        after.Should().BeSameAs(before, "the cleaned path is not the raw path, so nothing matches");
+        Node(after, "root//tip").HasObservedDirectTopic.Should().BeTrue(
+            "the raw path keeps its history; the cleaned spelling is a different node");
     }
 
     [Test]
@@ -100,56 +95,62 @@ public sealed class TopicTreeObservedHistoryPruningTests
     public void PurgingTheLastMatchingHistory_PrunesTheEmptyAncestry()
     {
         var store = CreateStore(maxMessages: 1);
-        store.Add("root//tip", Message("alias", 1, "root//tip"));
-        store.Add("root/tip", Message("canonical", 2, "root/tip"));
+        store.Add("root//tip", Message("slashed", 1, "root//tip"));
+        store.Add("root/tip", Message("plain", 2, "root/tip"));
         store.Add("other", Message("other", 3, "other"));
 
-        var tip = store.GetTopicTreeSnapshot().Roots.Single(node => node.FullTopic == "root")
-            .Children.Single();
-        tip.HasDirectMessages.Should().BeFalse("both raw names were evicted");
-        tip.HasObservedDirectTopic.Should().BeTrue();
+        var before = store.GetTopicTreeSnapshot();
+        Node(before, "root//tip").HasDirectMessages.Should().BeFalse("both messages were evicted");
+        Node(before, "root//tip").HasObservedDirectTopic.Should().BeTrue();
+        Node(before, "root/tip").HasObservedDirectTopic.Should().BeTrue();
 
         store.RemoveMatchingTopic("root//tip");
-        store.GetTopicTreeSnapshot().Roots.Single(node => node.FullTopic == "root")
-            .Children.Single().HasObservedDirectTopic.Should().BeTrue(
-                "the canonical name is still recorded");
+        var afterFirst = store.GetTopicTreeSnapshot();
+        AllNodes(afterFirst).Should().NotContain(node => node.FullTopic == "root//tip");
+        Node(afterFirst, "root/tip").HasObservedDirectTopic.Should().BeTrue(
+            "the sibling raw path is a different node");
 
         store.RemoveMatchingTopic("root/tip");
-        store.GetTopicTreeSnapshot().Roots.Should().NotContain(node => node.FullTopic == "root",
+        var afterSecond = store.GetTopicTreeSnapshot();
+        afterSecond.Roots.Should().NotContain(node => node.FullTopic == "root",
             "the last recorded raw name retired, so the emptied ancestry is pruned");
-        store.TopicNodeCount.Should().Be(1);
+        store.TopicNodeCount.Should().Be(1, "only the other root survives");
     }
 
     [Test]
     public void RetainedHistoryChangesNoCounter()
     {
         var store = CreateStore(maxMessages: 1);
-        store.Add("root//tip", Message("alias", 1, "root//tip"));
+        store.Add("root//tip", Message("slashed", 1, "root//tip"));
         store.Add("other", Message("other", 2, "other"));
 
-        var before = store.GetTopicTreeSnapshot();
-        store.TopicNodeCount.Should().Be(3, "root, root/tip and other");
+        store.TopicNodeCount.Should().Be(4, "root, the empty level, root//tip and other");
         store.TotalStoredMessages.Should().Be(1);
 
         store.RemoveMatchingTopic("root/tip");
 
-        store.TopicNodeCount.Should().Be(3, "history alone does not add or remove nodes");
+        store.TopicNodeCount.Should().Be(4, "an exclude that matches nothing changes no counter");
         store.TotalStoredMessages.Should().Be(1, "an exclude that matches nothing removes no message");
     }
 
     [Test]
     public void RetainedHistoryStillConsumesTheNodeLimit()
     {
-        var store = CreateStore(maxMessages: 1, maxTopicNodes: 2);
-        store.Add("root//tip", Message("alias", 1, "root//tip"));
+        var store = CreateStore(maxMessages: 1, maxTopicNodes: 4);
+        store.Add("root//tip", Message("slashed", 1, "root//tip"));
         store.Add("other", Message("other", 2, "other"));
 
-        store.TopicNodeCount.Should().Be(2, "the rejected add did not create a node");
+        store.TopicNodeCount.Should().Be(4, "root, the empty level, root//tip and other");
+        store.TotalStoredMessages.Should().Be(1, "the slashed message was evicted");
+
+        store.Add("another", Message("blocked", 3, "another"));
+
+        store.TopicNodeCount.Should().Be(4, "history-only nodes still consume the node budget");
         store.TotalStoredMessages.Should().Be(1);
 
-        store.Add("root//tip", Message("later", 2, "root//tip"));
-        store.TopicNodeCount.Should().Be(2);
-        store.TotalStoredMessages.Should().Be(1, "the alias message replaced the evicted one in place");
+        store.Add("root//tip", Message("later", 4, "root//tip"));
+
+        store.TotalStoredMessages.Should().Be(1, "the existing path accepts a message without new nodes");
     }
 
     [Test]
@@ -169,6 +170,15 @@ public sealed class TopicTreeObservedHistoryPruningTests
         root.Children.Single().FullTopic.Should().Be("root/tip");
         root.Children.Single().HasObservedDirectTopic.Should().BeTrue();
     }
+
+    private static IEnumerable<TopicNodeSnapshot> AllNodes(TopicTreeSnapshot tree) =>
+        tree.Roots.SelectMany(Flatten);
+
+    private static IEnumerable<TopicNodeSnapshot> Flatten(TopicNodeSnapshot node) =>
+        node.Children.SelectMany(Flatten).Prepend(node);
+
+    private static TopicNodeSnapshot Node(TopicTreeSnapshot tree, string fullTopic) =>
+        AllNodes(tree).Single(node => node.FullTopic == fullTopic);
 
     private static TopicTreeStore CreateStore(int maxMessages = 100, int maxTopicNodes = 100)
     {

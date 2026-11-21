@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using MqttProbe.Core.Models.Emulation;
 using MqttProbe.Core.Models.Mqtt;
@@ -6,6 +7,7 @@ using MqttProbe.Core.Services.Mqtt;
 using MqttProbe.UI.Components.Emulation;
 using MqttProbe.UI.Tests.TestHelpers;
 using MudBlazor;
+using MudBlazor.Extensions;
 
 namespace MqttProbe.UI.Tests.Components.Emulation;
 
@@ -16,14 +18,30 @@ public class EmulationPanelTests : BunitTestContext
     private List<EmulatorNodeConfig> _nodes = null!;
     private IDialogService _mockDialogService = null!;
     private ISnackbar _mockSnackbar = null!;
+    private ISessionState _mockSessionState = null!;
+    private Connection _selectedConnection = null!;
+    private readonly Dictionary<Guid, int> _intervalsByConnection = [];
+    private Guid _boundConnectionId;
 
     [SetUp]
     public void SetupMocks()
     {
         _nodes = [];
+        _selectedConnection = new Connection();
+        _boundConnectionId = Guid.Empty;
+        _intervalsByConnection.Clear();
         _mockService = Substitute.For<IEmulationService>();
         _mockService.Nodes.Returns(_ => _nodes);
-        _mockService.PublishIntervalMs.Returns(500);
+        _mockService.When(s => s.SetConnection(Arg.Any<Guid>()))
+            .Do(ci => _boundConnectionId = ci.Arg<Guid>());
+        _mockService.PublishIntervalMs.Returns(_ =>
+            _intervalsByConnection.TryGetValue(_boundConnectionId, out var intervalMs) ? intervalMs : 500);
+        _mockService.SetPublishIntervalAsync(Arg.Any<int>())
+            .Returns(ci =>
+            {
+                _intervalsByConnection[_boundConnectionId] = ci.Arg<int>();
+                return Task.CompletedTask;
+            });
         _mockService.IsRunning.Returns(false);
         Services.AddSingleton(_mockService);
         _mockDialogService = Substitute.For<IDialogService>();
@@ -31,9 +49,9 @@ public class EmulationPanelTests : BunitTestContext
         _mockSnackbar = Substitute.For<ISnackbar>();
         Services.AddSingleton(_mockSnackbar);
 
-        var mockSessionState = Substitute.For<ISessionState>();
-        mockSessionState.SelectedConnection.Returns(new Connection());
-        Services.AddSingleton(mockSessionState);
+        _mockSessionState = Substitute.For<ISessionState>();
+        _mockSessionState.SelectedConnection.Returns(_ => _selectedConnection);
+        Services.AddSingleton(_mockSessionState);
 
         EnsureMudProviders();
     }
@@ -57,6 +75,11 @@ public class EmulationPanelTests : BunitTestContext
 
         return node;
     }
+
+    private static MudNumericField<int> IntervalField(IRenderedComponent<EmulationPanel> cut) =>
+        cut.FindComponents<MudNumericField<int>>()
+            .Single(f => f.Instance.Label == "Publish interval (ms)")
+            .Instance;
 
     // ── Pre-existing tests (unchanged from upstream) ──────────────────────
 
@@ -298,6 +321,77 @@ public class EmulationPanelTests : BunitTestContext
     }
 
     [Test]
+    public void IntervalField_InitialRender_BindsSelectedConnectionsSavedInterval()
+    {
+        _intervalsByConnection[_selectedConnection.Id] = 200;
+
+        var cut = Render<EmulationPanel>();
+
+        IntervalField(cut).GetState(x => x.Value).Should().Be(200);
+        _mockService.Received(1).SetConnection(_selectedConnection.Id);
+    }
+
+    [Test]
+    public void IntervalField_InitialRender_NoSavedInterval_FallsBackToDefault()
+    {
+        var cut = Render<EmulationPanel>();
+
+        IntervalField(cut).GetState(x => x.Value).Should().Be(500);
+        _mockService.Received(1).SetConnection(_selectedConnection.Id);
+    }
+
+    [Test]
+    public void IntervalField_ConnectionSwitch_BindsNewConnectionsInterval()
+    {
+        _intervalsByConnection[_selectedConnection.Id] = 200;
+        var cut = Render<EmulationPanel>();
+        IntervalField(cut).GetState(x => x.Value).Should().Be(200);
+
+        var connectionB = new Connection();
+        _intervalsByConnection[connectionB.Id] = 750;
+        _selectedConnection = connectionB;
+        _mockSessionState.SelectedConnectionChanged += Raise.Event<Action<Connection>>(connectionB);
+
+        cut.WaitForAssertion(() =>
+        {
+            IntervalField(cut).GetState(x => x.Value).Should().Be(750);
+            _mockService.Received(1).SetConnection(connectionB.Id);
+        });
+    }
+
+    [Test]
+    public async Task IntervalField_ConnectionSwitch_DoesNotPersistPreviousInterval()
+    {
+        _intervalsByConnection[_selectedConnection.Id] = 200;
+        var cut = Render<EmulationPanel>();
+
+        var connectionB = new Connection();
+        _intervalsByConnection[connectionB.Id] = 750;
+        _selectedConnection = connectionB;
+        _mockSessionState.SelectedConnectionChanged += Raise.Event<Action<Connection>>(connectionB);
+
+        cut.WaitForAssertion(() => IntervalField(cut).GetState(x => x.Value).Should().Be(750));
+        await cut.InvokeAsync(() => Task.CompletedTask);
+
+        await _mockService.DidNotReceive().SetPublishIntervalAsync(Arg.Any<int>());
+        _intervalsByConnection[connectionB.Id].Should().Be(750);
+    }
+
+    [Test]
+    public async Task IntervalField_UserEdit_SurvivesUnrelatedServiceStateChanged()
+    {
+        _intervalsByConnection[_selectedConnection.Id] = 200;
+        var cut = Render<EmulationPanel>();
+
+        await cut.InvokeAsync(() => IntervalField(cut).ValueChanged.InvokeAsync(250));
+
+        _intervalsByConnection[_selectedConnection.Id] = 900;
+        _mockService.StateChanged += Raise.Event<Action>();
+
+        cut.WaitForAssertion(() => IntervalField(cut).GetState(x => x.Value).Should().Be(250));
+    }
+
+    [Test]
     public void CollapsedNodes_RenderNoWaveformPreviews()
     {
         _nodes.Add(Node("Press-01", metricsPerDevice: 3));
@@ -309,16 +403,79 @@ public class EmulationPanelTests : BunitTestContext
     }
 
     [Test]
+    public async Task NodeToggle_ArrowKeysExpandAndCollapseIdempotently()
+    {
+        _nodes.Add(Node("Press-01"));
+        var cut = Render<EmulationPanel>();
+
+        cut.Find("button.emu-node-row__toggle").GetAttribute("aria-expanded").Should().Be("false");
+
+        await cut.Find("button.emu-node-row__toggle").KeyDownAsync("ArrowRight");
+        cut.FindAll(".emu-node-editor").Should().ContainSingle();
+        cut.Find("button.emu-node-row__toggle").GetAttribute("aria-expanded").Should().Be("true");
+
+        await cut.Find("button.emu-node-row__toggle").KeyDownAsync("ArrowRight");
+        cut.FindAll(".emu-node-editor").Should().ContainSingle("Right on an expanded node is a no-op");
+
+        await cut.Find("button.emu-node-row__toggle").KeyDownAsync("ArrowLeft");
+        cut.FindAll(".emu-node-editor").Should().BeEmpty();
+        cut.Find("button.emu-node-row__toggle").GetAttribute("aria-expanded").Should().Be("false");
+
+        await cut.Find("button.emu-node-row__toggle").KeyDownAsync("ArrowLeft");
+        cut.FindAll(".emu-node-editor").Should().BeEmpty("Left on a collapsed node is a no-op");
+
+        var toggle = cut.Find("button.emu-node-row__toggle");
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", CtrlKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowLeft", AltKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", ShiftKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", MetaKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", IsComposing = true });
+        cut.FindAll(".emu-node-editor").Should().BeEmpty("modifiers and IME composition stay untouched");
+    }
+
+    [Test]
+    public async Task DeviceToggle_ArrowKeysExpandAndCollapseIdempotently()
+    {
+        _nodes.Add(Node("Press-01"));
+        var cut = Render<EmulationPanel>();
+        await cut.Find("button.emu-node-row__toggle").ClickAsync();
+
+        cut.Find("button.emu-device-row__toggle").GetAttribute("aria-expanded").Should().Be("false");
+
+        await cut.Find("button.emu-device-row__toggle").KeyDownAsync("ArrowRight");
+        cut.FindAll(".emu-device-detail").Should().ContainSingle();
+        cut.Find("button.emu-device-row__toggle").GetAttribute("aria-expanded").Should().Be("true");
+
+        await cut.Find("button.emu-device-row__toggle").KeyDownAsync("ArrowRight");
+        cut.FindAll(".emu-device-detail").Should().ContainSingle("Right on an expanded device is a no-op");
+
+        await cut.Find("button.emu-device-row__toggle").KeyDownAsync("ArrowLeft");
+        cut.FindAll(".emu-device-detail").Should().BeEmpty();
+        cut.Find("button.emu-device-row__toggle").GetAttribute("aria-expanded").Should().Be("false");
+
+        await cut.Find("button.emu-device-row__toggle").KeyDownAsync("ArrowLeft");
+        cut.FindAll(".emu-device-detail").Should().BeEmpty("Left on a collapsed device is a no-op");
+
+        var toggle = cut.Find("button.emu-device-row__toggle");
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", CtrlKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", AltKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", ShiftKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", MetaKey = true });
+        await toggle.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight", IsComposing = true });
+        cut.FindAll(".emu-device-detail").Should().BeEmpty("modifiers and IME composition stay untouched");
+    }
+
+    [Test]
     public void ExpandedDevice_RendersExactlyItsOwnPreviews()
     {
         _nodes.Add(Node("Press-01", devices: 2, metricsPerDevice: 2));
         _nodes.Add(Node("Press-02", metricsPerDevice: 3));
         var cut = Render<EmulationPanel>();
 
-        cut.FindAll(".emu-node-row__main")[0].Click();
+        cut.FindAll(".emu-node-row__toggle")[0].Click();
         cut.FindAll(".emu-waveform").Should().BeEmpty();
 
-        cut.FindAll(".emu-device-row")[0].Click();
+        cut.FindAll(".emu-device-row__toggle")[0].Click();
 
         cut.FindAll(".emu-waveform").Should().HaveCount(2);
     }

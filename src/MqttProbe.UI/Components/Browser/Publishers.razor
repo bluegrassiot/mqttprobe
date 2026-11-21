@@ -4,12 +4,14 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.Extensions.Logging
 @using MqttProbe.Core.Services.Security
+@implements IDisposable
 @inject IMqttManagedClient ManagedMqttClient
 @inject ILogger<Publishers> Logger
 @inject ISnackbar Snackbar
 @inject IAppInfoService AppInfoService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IUxMetricsService? UxMetrics
+@inject ISessionState SessionState
 
 <TabPanelHeader Title="Publish" Icon="@LucideIcons.Send">
     <HeaderActions>
@@ -84,6 +86,13 @@
                 </MudAlert>
             </MudItem>
         }
+
+        @if (IsV5Connection)
+        {
+            <MudItem xs="12">
+                <PublishPropertiesEditor Draft="_properties"/>
+            </MudItem>
+        }
     </MudGrid>
 </div>
 
@@ -93,6 +102,28 @@
     private static readonly JsonSerializerOptions _indentedJsonOptions = new() { WriteIndented = true };
 
     private MqttMessage _message = new();
+    private PublishPropertiesDraft _properties = new();
+
+    internal PublishPropertiesDraft PropertiesForTests => _properties;
+
+    private bool IsV5Connection => SessionState.SelectedConnection.MqttVersion == MqttVersion.V5;
+
+    protected override void OnInitialized()
+    {
+        SessionState.SelectedConnectionChanged += OnSelectedConnectionChanged;
+    }
+
+    private void OnSelectedConnectionChanged(MqttProbe.Core.Models.Mqtt.Connection _) => InvokeAsync(() =>
+    {
+        if (!IsV5Connection)
+            _properties.Clear();
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        SessionState.SelectedConnectionChanged -= OnSelectedConnectionChanged;
+    }
 
     private async Task PublishMessage()
     {
@@ -104,12 +135,13 @@
             return;
         }
 
-        var appMsg = new MqttApplicationMessageBuilder()
-            .WithTopic(_message.Topic)
-            .WithPayload(_message.Payload)
-            .WithQualityOfServiceLevel(_message.QualityOfServiceLevel)
-            .WithRetainFlag(_message.RetainedMessage)
-            .Build();
+        if (_properties.ValidationError is { } validationError)
+        {
+            Snackbar.Add(validationError, Severity.Warning);
+            return;
+        }
+
+        var appMsg = OutboundMessageMapper.Build(_properties.ToMessage(_message), SessionState.SelectedConnection.MqttVersion);
 
         try
         {
@@ -118,6 +150,12 @@
 
             Snackbar.Add($"Published to {_message.Topic}", Severity.Success,
                 cfg => { cfg.ShowCloseIcon = true; cfg.VisibleStateDuration = 2000; });
+        }
+        catch (NotSupportedException ex)
+        {
+            UxMetrics?.RecordPublishOutcome(success: false);
+            Logger.LogError(ex, "Broker session rejected MQTT 5 properties for topic {Topic}", _message.Topic);
+            Snackbar.Add("The broker session does not support the MQTT 5 properties on this message.", Severity.Error);
         }
         catch (Exception ex)
         {
@@ -153,6 +191,16 @@
             try
             {
                 _message = JsonSerializer.Deserialize<MqttMessage>(jsonString) ?? new MqttMessage();
+                if (IsV5Connection)
+                {
+                    _properties = PublishPropertiesDraft.From(_message);
+                }
+                else
+                {
+                    _message = new MqttMessage(_message.Payload ?? string.Empty, _message.Topic ?? string.Empty,
+                        _message.RetainedMessage, _message.QualityOfServiceLevel);
+                    _properties = new PublishPropertiesDraft();
+                }
             }
             catch (Exception e)
             {

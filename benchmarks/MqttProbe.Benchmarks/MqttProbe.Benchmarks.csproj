@@ -17,6 +17,7 @@
         <PackageReference Include="Google.Protobuf" />
         <PackageReference Include="MessagePack" />
         <PackageReference Include="MQTTnet" VersionOverride="5.2.0.1603" />
+        <PackageReference Include="System.Formats.Cbor" />
     </ItemGroup>
 
     <ItemGroup>

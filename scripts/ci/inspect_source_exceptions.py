@@ -1,10 +1,12 @@
 """Source-line exception definitions and matcher for the inspect gate.
 
-Extracted from inspect.py to keep that module within the repository's
-500-line limit.  Public symbols are re-exported by inspect.py so existing
-callers (including the test suite) do not need to change.
+Extracted from inspect.py to keep the scan pipeline there focused.  Public
+symbols are re-exported by inspect.py so existing callers (including the test
+suite) do not need to change.
 """
 
+import hashlib
+import re
 import subprocess
 from pathlib import Path
 
@@ -100,6 +102,59 @@ def is_source_line_exception(finding, root):
         if actual != exception["content"]:
             return False  # content changed: fail closed
         return True
+    return False
+
+
+# DS137138 also fires on the W3C XML namespace URIs inside the vendored ECharts
+# ES module bundle. They name SVG and XML vocabularies and are never fetched; the
+# minified line cannot carry a suppression comment. The entry pins the whole file
+# by SHA-256, so any edit retires the exception instead of inheriting it.
+# The bundle ships as .js because the Windows static content provider reports
+# .mjs as application/octet-stream, which WebView2 rejects for module scripts.
+VENDOR_NAMESPACE_EXCEPTIONS = [
+    {
+        "rule": "DS137138",
+        "file": "src/MqttProbe.UI/wwwroot/js/echarts/6.1.0/echarts.esm.min.js",
+        "line": 45,
+        # echarts@6.1.0 dist/echarts.esm.min.js, 1121654 bytes.
+        "sha256": "28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da",  # DevSkim: ignore DS173237 public upstream bundle digest
+        "urls": {
+            "http://www.w3.org/2000/svg",  # DevSkim: ignore DS137138 XML namespace
+            "http://www.w3.org/1999/xlink",  # DevSkim: ignore DS137138 XML namespace
+            "http://www.w3.org/2000/xmlns/",  # DevSkim: ignore DS137138 XML namespace
+            "http://www.w3.org/XML/1998/namespace",  # DevSkim: ignore DS137138 XML namespace
+        },
+    },
+]
+
+# Suffix characters stay in the token: a URL followed by ;telemetry, a comma or a
+# closing paren must not read back as the bare namespace.
+HTTP_TOKEN = re.compile(r"http://[^\s\"'`<>]*")  # DevSkim: ignore DS137138 matches url tokens
+
+
+def namespace_url_tokens(line):
+    return set(HTTP_TOKEN.findall(line))
+
+
+def is_vendor_namespace_exception(finding, root):
+    for exception in VENDOR_NAMESPACE_EXCEPTIONS:
+        if finding["rule"] != exception["rule"] or finding["file"] != exception["file"]:
+            continue
+        if finding["line"] != exception["line"]:
+            continue
+        try:
+            data = (root / exception["file"]).read_bytes()
+        except (OSError, ValueError):
+            return False
+        if hashlib.sha256(data).hexdigest() != exception["sha256"]:
+            return False
+        try:
+            lines = data.decode("utf-8").splitlines()
+        except UnicodeDecodeError:
+            return False
+        if not 0 < exception["line"] <= len(lines):
+            return False
+        return namespace_url_tokens(lines[exception["line"] - 1]) == exception["urls"]
     return False
 
 

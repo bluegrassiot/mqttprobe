@@ -1,0 +1,161 @@
+@namespace MqttProbe.UI.Components.Sparkplug
+@using System.Text.Encodings.Web
+@using System.Text.Json
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@LucideIcons.Pencil" Class="mr-2"/>
+            Write metric
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <div class="write-metric-body">
+            <div class="write-metric-info pa-2 mb-3 rounded">
+                <MudText Typo="Typo.subtitle2" Class="write-metric-info__name">@MetricName</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="write-metric-info__meta">
+                    @Topic · @DataType
+                </MudText>
+                @if (!IsStringType)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="write-metric-info__meta">
+                        Current value: @CurrentValue
+                    </MudText>
+                }
+            </div>
+
+            @if (DataType == "bool")
+            {
+                <MudToggleGroup T="string" Value="@_value" ValueChanged="@OnValueChanged"
+                                Color="Color.Primary" SelectionMode="SelectionMode.SingleSelection"
+                                Class="write-metric-bool">
+                    <MudToggleItem Value="@("true")">true</MudToggleItem>
+                    <MudToggleItem Value="@("false")">false</MudToggleItem>
+                </MudToggleGroup>
+            }
+            else if (IsStringType)
+            {
+                <MudTextField T="string" Value="@_value" ValueChanged="@OnValueChanged"
+                              Label="New value" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Immediate="true" AutoFocus="true"
+                              Lines="6" Sizing="InputSizing.Auto" MaxLines="16"
+                              Class="write-metric-text" />
+                <div class="d-flex align-center gap-2 mt-1 flex-wrap">
+                    <AppSecondaryButton Size="Size.Small" StartIcon="@LucideIcons.Sparkles"
+                                        title="Pretty-print the value when it is valid JSON"
+                                        OnClick="FormatJson">
+                        Format
+                    </AppSecondaryButton>
+                    @if (_formatFailed)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Not valid JSON, so nothing was changed.
+                        </MudText>
+                    }
+                </div>
+            }
+            else
+            {
+                <MudTextField T="string" Value="@_value" ValueChanged="@OnValueChanged"
+                              Label="New value" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Immediate="true" AutoFocus="true"
+                              Error="@ShowError" ErrorText="@_error"
+                              Class="write-metric-value" />
+            }
+
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">@HelpText</MudText>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <AppTertiaryButton MinWidth="true" title="Cancel without sending" OnClick="@(() => MudDialog.Cancel())">
+            Cancel
+        </AppTertiaryButton>
+        <AppPrimaryButton MinWidth="true" title="Send the command"
+                          Disabled="@(!IsValid)"
+                          OnClick="Send">
+            Send
+        </AppPrimaryButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private static readonly JsonSerializerOptions _formatOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string Topic { get; set; } = string.Empty;
+    [Parameter] public string MetricName { get; set; } = string.Empty;
+    [Parameter] public string DataType { get; set; } = string.Empty;
+    [Parameter] public string CurrentValue { get; set; } = string.Empty;
+    [Parameter] public string InitialValue { get; set; } = string.Empty;
+
+    private string _value = string.Empty;
+    private string _error = string.Empty;
+    private bool _initialized;
+    private bool _edited;
+    private bool _formatFailed;
+
+    private bool IsStringType => DataType is "string" or "text";
+
+    private bool IsValid => _error.Length == 0;
+
+    private bool ShowError => !IsValid && (_edited || _value.Length > 0);
+
+    private string HelpText => DataType switch
+    {
+        "bool" => "Choose the value to send.",
+        "string" or "text" => "Sent exactly as entered, including whitespace. JSON is not required.",
+        "float" or "double" => "Decimal number using . as the separator.",
+        "datetime" => "Unix time in milliseconds.",
+        "uuid" => "UUID in the standard 8-4-4-4-12 form.",
+        _ => "Whole number within the range of the data type."
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (_initialized)
+            return;
+
+        _initialized = true;
+        _value = InitialValue;
+        Validate();
+    }
+
+    private void OnValueChanged(string? value)
+    {
+        _value = value ?? string.Empty;
+        _edited = true;
+        _formatFailed = false;
+        Validate();
+    }
+
+    private void Validate()
+    {
+        SparkplugMetricValueEncoder.TryEncode(DataType, _value, out _, out var error);
+        _error = error;
+    }
+
+    private void FormatJson()
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(_value);
+            _value = JsonSerializer.Serialize(document, _formatOptions);
+            _formatFailed = false;
+        }
+        catch (JsonException)
+        {
+            _formatFailed = true;
+        }
+    }
+
+    private void Send()
+    {
+        if (IsValid)
+            MudDialog.Close(DialogResult.Ok(_value));
+    }
+}

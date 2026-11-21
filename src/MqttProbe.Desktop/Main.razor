@@ -3,6 +3,7 @@
 @using MqttProbe.UI.Components.Layout
 @using MqttProbe.UI.Components.Pages
 @using Index = MqttProbe.UI.Components.Pages.Index
+<div class="@HostClass">
 <CascadingAuthenticationState>
 <Router AppAssembly="@typeof(Main).Assembly"
         AdditionalAssemblies="[typeof(Index).Assembly]"
@@ -13,3 +14,12 @@
     </Found>
 </Router>
 </CascadingAuthenticationState>
+</div>
+
+@code {
+    // The desktop host wraps the router so a platform marker can sit above the app shell;
+    // display: contents keeps the wrapper out of the layout chain.
+    private static readonly string HostClass = OperatingSystem.IsLinux()
+        ? "desktop-host desktop-host--linux"
+        : "desktop-host";
+}

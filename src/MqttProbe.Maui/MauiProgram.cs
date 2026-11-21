@@ -55,7 +55,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IAppInfoService, AppInfoService>();
 #if WINDOWS
         builder.Services.AddSingleton<IUpdateService, WinUI.VelopackUpdateService>();
-#elif MACCATALYST
+#elif MACCATALYST && !MQTTPROBE_MAC_APP_STORE
         builder.Services.AddSingleton<IUpdateService, MacVelopackUpdateService>();
 #else
         builder.Services.AddSingleton<IUpdateService, NoOpUpdateService>();

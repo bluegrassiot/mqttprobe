@@ -46,10 +46,13 @@ internal static class TopicSnapshotBuilder
         {
             var normalized = Normalize(topic);
             var current = this;
-            var path = string.Empty;
-            foreach (var segment in normalized.Split('/'))
+            var segments = normalized.Split('/');
+            for (var index = 0; index < segments.Length; index++)
             {
-                path = path.Length == 0 ? segment : path + "/" + segment;
+                var segment = segments[index];
+                // The path is the joined prefix, so a leading empty level keeps its slash
+                // instead of being read as "no path yet".
+                var path = string.Join('/', segments.Take(index + 1));
                 if (!current._children.TryGetValue(segment, out var child))
                 {
                     child = new Node(segment, path);

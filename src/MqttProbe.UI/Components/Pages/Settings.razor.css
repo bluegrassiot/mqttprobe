@@ -58,7 +58,11 @@
 .settings-nav-item:focus-visible {
     color: var(--mud-palette-text-primary);
     background-color: var(--mud-palette-action-default-hover);
-    outline: none;
+}
+
+.settings-nav-item:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
 }
 
 .settings-nav-item.active {

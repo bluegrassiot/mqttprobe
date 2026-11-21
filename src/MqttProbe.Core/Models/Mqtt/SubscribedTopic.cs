@@ -7,7 +7,7 @@ public sealed class SubscribedTopic : IEquatable<SubscribedTopic>
     public string Topic { get; set; } = string.Empty;
 
     public MqttQualityOfServiceLevel QualityOfServiceLevel { get; set; } =
-        MqttQualityOfServiceLevel.AtLeastOnce;
+        MqttQualityOfServiceLevel.AtMostOnce;
 
     public bool Equals(SubscribedTopic? other) =>
         other is not null &&

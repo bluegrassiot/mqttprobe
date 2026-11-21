@@ -28,6 +28,7 @@ public sealed class Connection : IEquatable<Connection>
     [System.Text.Json.Serialization.JsonConverter(typeof(SubscribedTopicsJsonConverter))]
     public List<SubscribedTopic> SubscribedTopics { get; set; } = [];
     public List<string> TopicExcludes { get; set; } = [];
+    public List<SparkplugTopicExclude> SparkplugTopicExcludes { get; set; } = [];
 
     public Connection CloneWithoutPassword()
     {
@@ -47,6 +48,7 @@ public sealed class Connection : IEquatable<Connection>
             })
             .ToList();
         clone.TopicExcludes = [.. TopicExcludes];
+        clone.SparkplugTopicExcludes = [.. SparkplugTopicExcludes];
         return clone;
     }
 
@@ -74,7 +76,8 @@ public sealed class Connection : IEquatable<Connection>
                ClientCertificateAssetId == other.ClientCertificateAssetId &&
                CleanStart == other.CleanStart &&
                SessionExpiryIntervalSeconds == other.SessionExpiryIntervalSeconds &&
-               TopicExcludes.SequenceEqual(other.TopicExcludes, StringComparer.Ordinal);
+               TopicExcludes.SequenceEqual(other.TopicExcludes, StringComparer.Ordinal) &&
+               SparkplugTopicExcludes.SequenceEqual(other.SparkplugTopicExcludes);
     }
 
     public override bool Equals(object? obj) => Equals(obj as Connection);
@@ -102,6 +105,8 @@ public sealed class Connection : IEquatable<Connection>
         hash.Add(SessionExpiryIntervalSeconds);
         foreach (var topic in TopicExcludes)
             hash.Add(topic, StringComparer.Ordinal);
+        foreach (var exclude in SparkplugTopicExcludes)
+            hash.Add(exclude);
         return hash.ToHashCode();
     }
 }

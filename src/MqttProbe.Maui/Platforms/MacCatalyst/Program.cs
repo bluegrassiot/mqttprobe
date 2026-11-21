@@ -1,14 +1,17 @@
 using UIKit;
+#if !MQTTPROBE_MAC_APP_STORE
 using Velopack;
+#endif
 
-namespace MqttProbe
+namespace MqttProbe;
+
+public static class Program
 {
-    public class Program
+    private static void Main(string[] args)
     {
-        static void Main(string[] args)
-        {
-            VelopackApp.Build().Run();
-            UIApplication.Main(args, null, typeof(AppDelegate));
-        }
+#if !MQTTPROBE_MAC_APP_STORE
+        VelopackApp.Build().Run();
+#endif
+        UIApplication.Main(args, null, typeof(MacCatalystApplication));
     }
 }

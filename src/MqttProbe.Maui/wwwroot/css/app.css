@@ -60,3 +60,12 @@ html, body, #app {
         padding-left: env(safe-area-inset-left);
     }
 }
+
+.maui-host {
+    display: contents;
+}
+
+/* Keep row controls clear of the WebKit overlay scrollbar. */
+.maui-host--maccatalyst .topic-browser-panel .topic-tree-wrap {
+    padding-right: 16px;
+}

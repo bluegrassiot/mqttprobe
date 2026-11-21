@@ -11,7 +11,7 @@ public interface ISubscriptionManager : IDisposable
 {
     public IReadOnlyList<SubscribedTopic> Subscriptions { get; }
     public Task Remove(IReadOnlyList<string> topics);
-    public Task Add(string topic, MqttQualityOfServiceLevel qos = MqttQualityOfServiceLevel.AtLeastOnce);
+    public Task Add(string topic, MqttQualityOfServiceLevel qos = MqttQualityOfServiceLevel.AtMostOnce);
     public void ClearActiveSubscriptions();
 }
 
@@ -89,7 +89,7 @@ public class SubscriptionManager : ISubscriptionManager
         }
     }
 
-    public async Task Add(string topic, MqttQualityOfServiceLevel qos = MqttQualityOfServiceLevel.AtLeastOnce)
+    public async Task Add(string topic, MqttQualityOfServiceLevel qos = MqttQualityOfServiceLevel.AtMostOnce)
     {
         if (!MqttTopicMatcher.IsValidFilter(topic))
         {

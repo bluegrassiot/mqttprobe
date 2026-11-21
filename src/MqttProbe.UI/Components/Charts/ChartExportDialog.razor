@@ -1,0 +1,256 @@
+@using System.Text
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@LucideIcons.Download" Class="mr-2" />Export chart
+        </MudText>
+        @if (!string.IsNullOrWhiteSpace(ChartName))
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@ChartName</MudText>
+        }
+    </TitleContent>
+    <DialogContent>
+        <div class="chart-export">
+            <section class="chart-export__section" aria-labelledby="chart-export-series-heading">
+                <div class="chart-export__section-head">
+                    <MudText Typo="Typo.subtitle2" id="chart-export-series-heading">Series to include</MudText>
+                    <span class="chart-export__selection-actions">
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
+                                   Disabled="@(_busy || _series.Count == 0)" OnClick="SelectAll">Select all</MudButton>
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
+                                   Disabled="@(_busy || _series.Count == 0)" OnClick="ClearAll">Clear</MudButton>
+                    </span>
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="chart-export__summary" aria-live="polite">@SelectionSummary</MudText>
+
+                @if (_series.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        This chart has no series to export.
+                    </MudAlert>
+                }
+                else
+                {
+                    <div class="chart-export__series-list">
+                        @foreach (var option in _series)
+                        {
+                            var item = option;
+                            <div class="chart-export__series">
+                                <MudCheckBox T="bool" @bind-Value="item.Selected" Dense="true"
+                                             Color="Color.Primary" Disabled="@_busy"
+                                             Class="chart-export__check">
+                                    <span class="chart-export__series-text">
+                                        <span class="chart-export__name-line">
+                                            <svg class="chart-export__swatch" width="12" height="12"
+                                                 viewBox="0 0 12 12" aria-hidden="true">
+                                                <rect width="12" height="12" rx="3" fill="@item.Color" />
+                                            </svg>
+                                            <span class="chart-export__name">@item.Name</span>
+                                        </span>
+                                        <span class="chart-export__meta">
+                                            @if (item.Hint is not null)
+                                            {
+                                                <span class="chart-export__hint">@item.Hint</span>
+                                            }
+                                            <span class="chart-export__count">@item.CountLabel</span>
+                                        </span>
+                                    </span>
+                                </MudCheckBox>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="chart-export__section" aria-labelledby="chart-export-format-heading">
+                <MudText Typo="Typo.subtitle2" id="chart-export-format-heading">Format</MudText>
+                <div class="chart-export__formats">
+                    <MudToggleGroup T="string" @bind-Value="_format"
+                                    SelectionMode="SelectionMode.SingleSelection"
+                                    Color="Color.Primary" Disabled="@_busy">
+                        <MudToggleItem Value="@CsvFormat">CSV</MudToggleItem>
+                        <MudToggleItem Value="@PngFormat">PNG</MudToggleItem>
+                        <MudToggleItem Value="@SvgFormat">SVG</MudToggleItem>
+                    </MudToggleGroup>
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatHint</MudText>
+                <div class="chart-export__filename">
+                    <span class="chart-export__filename-label">File name</span>
+                    <span class="app-mono">@FileName</span>
+                </div>
+            </section>
+
+            @if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" role="alert">
+                    <MudText Typo="Typo.body2">@_error</MudText>
+                    @if (_errorDetail is not null)
+                    {
+                        <MudText Typo="Typo.caption" Class="chart-export__error-detail">@_errorDetail</MudText>
+                    }
+                </MudAlert>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <AppTertiaryButton MinWidth="true" Disabled="@_busy" OnClick="Cancel">Cancel</AppTertiaryButton>
+        <AppPrimaryButton MinWidth="true" Disabled="@(!CanExport)" OnClick="ExportSelected">
+            @if (_busy)
+            {
+                <span class="chart-export__spinner" aria-hidden="true">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Inherit" />
+                </span>
+                <span>Exporting…</span>
+            }
+            else
+            {
+                <span>Export</span>
+            }
+        </AppPrimaryButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private const string CsvFormat = "csv";
+    private const string PngFormat = "png";
+    private const string SvgFormat = "svg";
+    private const int MaxBaseNameLength = 60;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string ChartName { get; set; } = "";
+    [Parameter] public IReadOnlyList<SeriesOption>? Series { get; set; }
+    [Parameter] public Func<ExportRequest, Task>? Export { get; set; }
+    [Parameter] public TimeProvider Clock { get; set; } = TimeProvider.System;
+
+    private readonly List<SeriesOption> _series = [];
+    private string _format = CsvFormat;
+    private string _fileStamp = "";
+    private bool _busy;
+    private string? _error;
+    private string? _errorDetail;
+
+    public sealed class SeriesOption
+    {
+        public string Id { get; init; } = "";
+        public string Name { get; init; } = "";
+        public string Color { get; init; } = "#64748B";
+        public int PointCount { get; init; }
+        public string? Hint { get; init; }
+        public bool Selected { get; set; } = true;
+
+        internal string CountLabel => PointCount switch
+        {
+            0 => "No points",
+            1 => "1 point",
+            _ => $"{PointCount} points",
+        };
+    }
+
+    public sealed record ExportRequest(string[] SeriesIds, string Format, string FileName);
+
+    protected override void OnInitialized()
+    {
+        _fileStamp = Clock.GetUtcNow().ToString("yyyyMMdd-HHmmss");
+        _series.AddRange((Series ?? []).Select(option => new SeriesOption
+        {
+            Id = option.Id,
+            Name = option.Name,
+            Color = option.Color,
+            PointCount = option.PointCount,
+            Hint = option.Hint,
+        }));
+    }
+
+    private bool CanExport => !_busy && Export is not null && _series.Any(option => option.Selected);
+
+    private string SelectionSummary => _series.Count == 0
+        ? "Nothing to select"
+        : $"{_series.Count(option => option.Selected)} of {_series.Count} series selected · this does not change the chart";
+
+    private string FormatHint => _format switch
+    {
+        PngFormat => "An image of the selected series using the captured chart view and zoom.",
+        SvgFormat => "A scalable image of the selected series using the captured chart view and zoom.",
+        _ => "A wide table: timestamp, UTC offset, then each selected series. Spreadsheet apps may need a date import step.",
+    };
+
+    private string FileName =>
+        $"{BaseName(ChartName)}-{_fileStamp}Z.{ExtensionFor(_format)}";
+
+    private static string ExtensionFor(string format) => format switch
+    {
+        PngFormat => "png",
+        SvgFormat => "svg",
+        _ => "csv",
+    };
+
+    private static string BaseName(string chartName)
+    {
+        var builder = new StringBuilder(chartName.Length);
+        foreach (var character in chartName.Trim())
+        {
+            var unsafeCharacter = char.IsControl(character)
+                || char.IsWhiteSpace(character)
+                || "<>:\"/\\|?*".Contains(character);
+            var next = unsafeCharacter ? '-' : character;
+            if (next == '-' && (builder.Length == 0 || builder[^1] == '-'))
+                continue;
+
+            builder.Append(next);
+        }
+
+        var cleaned = builder.ToString().Trim('-');
+        if (cleaned.Length == 0)
+            return "chart";
+
+        return cleaned.Length > MaxBaseNameLength
+            ? cleaned[..MaxBaseNameLength].Trim('-')
+            : cleaned;
+    }
+
+    private void SelectAll() => SetAllSelected(true);
+
+    private void ClearAll() => SetAllSelected(false);
+
+    private void SetAllSelected(bool selected)
+    {
+        if (_busy) return;
+
+        foreach (var option in _series)
+            option.Selected = selected;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task ExportSelected()
+    {
+        if (!CanExport) return;
+
+        _busy = true;
+        _error = null;
+        _errorDetail = null;
+        StateHasChanged();
+
+        try
+        {
+            var request = new ExportRequest(
+                [.. _series.Where(option => option.Selected).Select(option => option.Id)],
+                _format,
+                FileName);
+            await Export!.Invoke(request);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            _error = "The export could not finish. Check your downloads before trying again.";
+            _errorDetail = ex.Message;
+            StateHasChanged();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

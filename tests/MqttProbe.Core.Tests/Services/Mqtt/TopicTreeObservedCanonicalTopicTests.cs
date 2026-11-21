@@ -13,26 +13,26 @@ namespace MqttProbe.Core.Tests.Services.Mqtt;
 [TestFixture]
 public sealed class TopicTreeObservedCanonicalTopicTests
 {
-    [TestCase("root//tip")]
-    [TestCase("root///tip")]
-    [TestCase("/root/tip")]
-    [TestCase("root/tip/")]
-    public async Task AliasOnlySpelling_IsObservedButNotCanonical(string topic)
+    [TestCase("root//tip", "root")]
+    [TestCase("root///tip", "root")]
+    [TestCase("/root/tip", "")]
+    [TestCase("root/tip/", "root")]
+    public async Task RawSpelling_KeepsItsOwnStructuralPath(string topic, string expectedRoot)
     {
         using var harness = await Harness.StartAsync();
-        await harness.PublishAsync(topic, "alias");
+        await harness.PublishAsync(topic, "payload");
 
         var tree = harness.Manager.GetTopicTreeSnapshot();
-        var root = tree.Roots.Single();
-        root.FullTopic.Should().Be("root");
-        root.HasObservedDirectTopic.Should().BeFalse("the prefix itself was never published to");
-        root.HasObservedCanonicalTopic.Should().BeFalse();
+        tree.Roots.Select(node => node.FullTopic).Should().Equal(expectedRoot);
 
-        var tip = root.Children.Single();
-        tip.FullTopic.Should().Be("root/tip");
+        var tip = Node(tree, topic);
+        tip.HasDirectMessages.Should().BeTrue();
         tip.HasObservedDirectTopic.Should().BeTrue();
-        tip.HasObservedCanonicalTopic.Should().BeFalse(
-            "the published spelling is an alias, not the supported endpoint shape");
+        tip.HasObservedCanonicalTopic.Should().BeTrue("the recorded raw name is the node's own path");
+
+        AllNodes(tree).Where(node => node.HasDirectMessages).Select(node => node.FullTopic)
+            .Should().ContainSingle().Which.Should()
+            .Be(topic, "no cleaned spelling is merged onto this node");
     }
 
     [Test]
@@ -65,7 +65,7 @@ public sealed class TopicTreeObservedCanonicalTopicTests
     }
 
     [Test]
-    public async Task MixedSpellingsCoalesceIntoOneNode()
+    public async Task MixedSpellingsStayOnDistinctNodes()
     {
         using var harness = await Harness.StartAsync();
         await harness.PublishAsync("root//tip", "alias");
@@ -73,30 +73,29 @@ public sealed class TopicTreeObservedCanonicalTopicTests
         await harness.PublishAsync("root///tip", "other-alias");
 
         var tree = harness.Manager.GetTopicTreeSnapshot();
-        var root = tree.Roots.Single();
-        root.Children.Should().ContainSingle("every spelling normalizes onto one node");
-        root.TopicCount.Should().Be(1);
-        harness.Manager.TopicNodeCount.Should().Be(2);
+        tree.Roots.Single().FullTopic.Should().Be("root");
 
-        var tip = root.Children.Single();
-        tip.MessageCount.Should().Be(3, "one node holds every spelling's message");
-        tip.HasObservedDirectTopic.Should().BeTrue();
-        tip.HasObservedCanonicalTopic.Should().BeTrue();
+        AllNodes(tree).Where(node => node.HasDirectMessages).Select(node => node.FullTopic)
+            .Should().BeEquivalentTo(["root//tip", "root/tip", "root///tip"]);
+        harness.Manager.TopicNodeCount.Should().Be(6, "each raw level is its own node");
+
+        Node(tree, "root/tip").MessageCount.Should().Be(1, "no other spelling merges onto it");
+        Node(tree, "root//tip").HasObservedDirectTopic.Should().BeTrue();
+        Node(tree, "root///tip").HasObservedDirectTopic.Should().BeTrue();
     }
 
     [Test]
-    public async Task CanonicalExclude_RetiresOnlyTheCanonicalNameAndKeepsTheNode()
+    public async Task RawExclude_RetiresOnlyThatPathAndKeepsTheSibling()
     {
         using var harness = await Harness.StartAsync(maxStoredMessages: 2);
-        await harness.PublishAsync("root//tip", "alias");
-        await harness.PublishAsync("root/tip", "canonical");
+        await harness.PublishAsync("root//tip", "slashed");
+        await harness.PublishAsync("root/tip", "plain");
         await harness.PublishAsync("other", "other");
         await harness.PublishAsync("other", "other-again");
 
         var before = harness.Manager.GetTopicTreeSnapshot();
-        var tipBefore = before.Roots.Single(node => node.FullTopic == "root").Children.Single();
-        tipBefore.HasDirectMessages.Should().BeFalse("both spellings were expired by retention");
-        tipBefore.HasObservedCanonicalTopic.Should().BeTrue();
+        Node(before, "root/tip").HasDirectMessages.Should().BeFalse("both spellings were expired by retention");
+        Node(before, "root/tip").HasObservedCanonicalTopic.Should().BeTrue();
 
         (await harness.Excludes.Add("root/tip")).IsValid.Should().BeTrue();
         var after = harness.Manager.GetTopicTreeSnapshot();
@@ -104,12 +103,11 @@ public sealed class TopicTreeObservedCanonicalTopicTests
         after.Should().NotBeSameAs(before, "the purge invalidated the cached snapshot");
         after.Version.Should().BeGreaterThan(before.Version);
 
-        var tip = after.Roots.Single(node => node.FullTopic == "root").Children.Single();
-        tip.FullTopic.Should().Be("root/tip");
-        tip.HasObservedDirectTopic.Should().BeTrue("the alias raw name is still recorded");
-        tip.HasObservedCanonicalTopic.Should().BeFalse("the canonical raw name retired");
+        AllNodes(after).Should().NotContain(node => node.FullTopic == "root/tip");
+        Node(after, "root//tip").HasObservedDirectTopic.Should().BeTrue(
+            "the sibling raw path is a different node and keeps its history");
         harness.Manager.TotalStoredMessages.Should().Be(2,
-            "retention holds two, and neither is the excluded canonical message");
+            "retention holds two, and neither is the excluded message");
     }
 
     [Test]
@@ -130,21 +128,20 @@ public sealed class TopicTreeObservedCanonicalTopicTests
     }
 
     [Test]
-    public async Task CanonicalRepublish_RestoresTheCanonicalFlagAfterACanonicalExclude()
+    public async Task ExcludedRawPath_RecreatesOnRepublish()
     {
         using var harness = await Harness.StartAsync();
-        await harness.PublishAsync("root//tip", "alias");
-        await harness.PublishAsync("root/tip", "canonical");
+        await harness.PublishAsync("root//tip", "slashed");
+        await harness.PublishAsync("root/tip", "plain");
 
         (await harness.Excludes.Add("root/tip")).IsValid.Should().BeTrue();
-        harness.Manager.GetTopicTreeSnapshot().Roots.Single(node => node.FullTopic == "root")
-            .Children.Single().HasObservedCanonicalTopic.Should().BeFalse();
+        AllNodes(harness.Manager.GetTopicTreeSnapshot())
+            .Should().NotContain(node => node.FullTopic == "root/tip");
 
         (await harness.Excludes.Remove(["root/tip"])).IsValid.Should().BeTrue();
         await harness.PublishAsync("root/tip", "republished");
 
-        var tip = harness.Manager.GetTopicTreeSnapshot().Roots.Single(node => node.FullTopic == "root")
-            .Children.Single();
+        var tip = Node(harness.Manager.GetTopicTreeSnapshot(), "root/tip");
         tip.HasDirectMessages.Should().BeTrue();
         tip.HasObservedDirectTopic.Should().BeTrue();
         tip.HasObservedCanonicalTopic.Should().BeTrue();
@@ -207,6 +204,15 @@ public sealed class TopicTreeObservedCanonicalTopicTests
         hasDirectMessages.Should().BeTrue();
         children.Should().BeEmpty();
     }
+
+    private static IEnumerable<TopicNodeSnapshot> AllNodes(TopicTreeSnapshot tree) =>
+        tree.Roots.SelectMany(Flatten);
+
+    private static IEnumerable<TopicNodeSnapshot> Flatten(TopicNodeSnapshot node) =>
+        node.Children.SelectMany(Flatten).Prepend(node);
+
+    private static TopicNodeSnapshot Node(TopicTreeSnapshot tree, string fullTopic) =>
+        AllNodes(tree).Single(node => node.FullTopic == fullTopic);
 
     private static MqttApplicationMessageReceivedEventArgs MakeArgs(string? topic, string payload)
     {

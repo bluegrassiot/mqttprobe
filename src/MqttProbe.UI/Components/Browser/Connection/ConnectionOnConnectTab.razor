@@ -30,8 +30,10 @@
                         OnRemove="@OnRemove" />
 
     <ExcludeEditor Items="@ExcludedItems"
+                   SparkplugItems="@ExcludedSparkplugItems"
                    OnAdd="@OnExcludeAdd"
-                   OnRemove="@OnExcludeRemove" />
+                   OnRemove="@OnExcludeRemove"
+                   OnRemoveSparkplug="@OnExcludeSparkplugRemove" />
 </div>
 
 @code {
@@ -42,6 +44,8 @@
     [Parameter] public EventCallback<IReadOnlyList<string>> OnRemove { get; set; }
 
     [Parameter, EditorRequired] public List<string> ExcludedItems { get; set; } = [];
+    [Parameter] public IReadOnlyList<SparkplugTopicExclude> ExcludedSparkplugItems { get; set; } = [];
     [Parameter] public Func<string, Task<bool>> OnExcludeAdd { get; set; } = _ => Task.FromResult(true);
     [Parameter] public EventCallback<IReadOnlyList<string>> OnExcludeRemove { get; set; }
+    [Parameter] public Func<SparkplugTopicExclude, Task> OnExcludeSparkplugRemove { get; set; } = _ => Task.CompletedTask;
 }

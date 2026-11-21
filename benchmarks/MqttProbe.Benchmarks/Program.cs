@@ -1,5 +1,6 @@
 using MqttProbe.Benchmarks;
 using MqttProbe.Benchmarks.Models;
+using MqttProbe.Benchmarks.V5Traffic;
 
 if (args.Length > 0 && args[0] is "-h" or "--help" or "help")
 {
@@ -7,14 +8,20 @@ if (args.Length > 0 && args[0] is "-h" or "--help" or "help")
     return;
 }
 
+if (args.Length > 0 && args[0].Equals("v5-traffic", StringComparison.OrdinalIgnoreCase))
+{
+    Environment.ExitCode = await V5TrafficCommand.RunAsync(args[1..]);
+    return;
+}
+
 if (args.Length > 0 && !args[0].Equals("publish", StringComparison.OrdinalIgnoreCase))
 {
-    Console.WriteLine($"ERROR: unknown command '{args[0]}'. Use 'publish' or '--help'.");
+    Console.WriteLine($"ERROR: unknown command '{args[0]}'. Use 'publish', 'v5-traffic' or '--help'.");
     Environment.ExitCode = 1;
     return;
 }
 
-// No args or "publish" — proceed to publish path
+// No args or "publish": proceed to publish path
 var flagStart = args.Length > 0 && args[0].Equals("publish", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
 
 var host = Environment.GetEnvironmentVariable("MQTT_BENCHMARK_HOST") ?? "localhost";
@@ -78,7 +85,7 @@ if (!allSupplied)
 {
     if (!InteractivePrompt.IsInteractive)
     {
-        // stdin redirected — use defaults silently for missing values
+        // stdin redirected: use defaults silently for missing values
     }
     else
     {
@@ -127,12 +134,16 @@ static void PrintUsage()
 {
     var formatNames = string.Join(", ", Enum.GetNames<PayloadFormat>());
 
-    Console.WriteLine("MqttProbe Payload Publisher");
+    Console.WriteLine("MqttProbe Benchmarks");
     Console.WriteLine();
     Console.WriteLine("Usage:");
     Console.WriteLine("  dotnet run -c Release -- publish [options]");
+    Console.WriteLine("  dotnet run -c Release -- v5-traffic [options]");
     Console.WriteLine();
     Console.WriteLine("Running without any flags launches interactive mode.");
+    Console.WriteLine("The v5-traffic verb publishes MQTT v5 property scenarios and has its own options. Use:");
+    Console.WriteLine("  dotnet run -c Release -- v5-traffic --help");
+    Console.WriteLine("  dotnet run -c Release -- v5-traffic --list");
     Console.WriteLine();
     Console.WriteLine("Options:");
     Console.WriteLine("  --host <hostname>       MQTT broker hostname (default: localhost, or MQTT_BENCHMARK_HOST env var)");
@@ -150,4 +161,5 @@ static void PrintUsage()
     Console.WriteLine("  dotnet run -c Release -- publish --concurrency 8 --count 10000");
     Console.WriteLine("  dotnet run -c Release -- publish --host 192.168.1.100 --port 1883");
     Console.WriteLine("  dotnet run -c Release -- publish --format Sparkplug,Json");
+    Console.WriteLine("  dotnet run -c Release -- v5-traffic --scenario duplicate-user-properties");
 }

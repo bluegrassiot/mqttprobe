@@ -13,7 +13,7 @@ using MqttProbe.PluginContracts;
 
 namespace MqttProbe.Core.Services.Mqtt;
 
-public class MessageStoreManager : IMessageStoreManager
+public partial class MessageStoreManager : IMessageStoreManager
 {
     private readonly IMqttManagedClient _client;
     private readonly ILogger<MessageStoreManager> _logger;
@@ -26,6 +26,7 @@ public class MessageStoreManager : IMessageStoreManager
     private readonly InboundRateLimiter _rateLimiter;
     private readonly SparkplugAliasEnricher _aliasEnricher;
     private readonly ITopicExcludeService? _topicExcludeService;
+    private readonly SparkplugMetricMetadataStore? _metricMetadataStore;
     private readonly Lock _lifecycleSync = new();
     private CancellationTokenSource? _sequenceMonitorCts;
     private Task _sequenceMonitorTask = Task.CompletedTask;
@@ -38,7 +39,8 @@ public class MessageStoreManager : IMessageStoreManager
         ISparkplugTopologyService? topologyService = null,
         ISparkplugCommandService? commandService = null,
         ITopicExcludeService? topicExcludeService = null,
-        ISubscriptionManager? subscriptionManager = null)
+        ISubscriptionManager? subscriptionManager = null,
+        SparkplugMetricMetadataStore? metricMetadataStore = null)
     {
         _client = client;
         _logger = logger;
@@ -48,6 +50,7 @@ public class MessageStoreManager : IMessageStoreManager
         _topologyService = topologyService;
         _commandService = commandService;
         _topicExcludeService = topicExcludeService;
+        _metricMetadataStore = metricMetadataStore;
         _store = new TopicTreeStore(performanceSettings, logger);
         _rateLimiter = new InboundRateLimiter(performanceSettings, metrics, logger);
         _aliasEnricher = new SparkplugAliasEnricher(sparkplugSettings, topologyService);
@@ -56,6 +59,8 @@ public class MessageStoreManager : IMessageStoreManager
         {
             _topicExcludeService.PurgeExcludedTopic += OnPurgeExcludedTopic;
             _topicExcludeService.TopicExcluded += OnTopicExcluded;
+            _topicExcludeService.PurgeExcludedSparkplug += OnPurgeExcludedSparkplug;
+            _topicExcludeService.SparkplugExcluded += OnSparkplugExcluded;
         }
     }
 
@@ -71,6 +76,10 @@ public class MessageStoreManager : IMessageStoreManager
 
     public bool TryClearSelection(long treeVersion, SelectedTopicState expectedSelection) =>
         _store.TryClearSelection(treeVersion, expectedSelection);
+
+    public bool TryReplaceSelection(
+        long treeVersion, SelectedTopicState expectedSelection, TopicSelection? replacement) =>
+        _store.TryReplaceSelection(treeVersion, expectedSelection, replacement);
 
     public Task<SelectedMessagesSnapshot?> GetSelectedMessagesAsync(SelectedTopicToken expectedSelection, int limit) =>
         Task.FromResult(_store.GetSelectedMessages(expectedSelection, limit));
@@ -113,6 +122,8 @@ public class MessageStoreManager : IMessageStoreManager
             {
                 _topicExcludeService.PurgeExcludedTopic -= OnPurgeExcludedTopic;
                 _topicExcludeService.TopicExcluded -= OnTopicExcluded;
+                _topicExcludeService.PurgeExcludedSparkplug -= OnPurgeExcludedSparkplug;
+                _topicExcludeService.SparkplugExcluded -= OnSparkplugExcluded;
             }
 
             // Never raise TopologyChanged from teardown. A purge can still be mid-flight,
@@ -237,6 +248,25 @@ public class MessageStoreManager : IMessageStoreManager
         return Task.CompletedTask;
     }
 
+    public Task<int> ClearMessagesForTopicsAsync(IReadOnlyList<string> fullTopics) =>
+        Task.FromResult(_store.ClearMessagesForTopics(fullTopics));
+
+    public Task<int> ClearMessagesForBranchesAsync(IReadOnlyList<TopicBranchTarget> branches) =>
+        Task.FromResult(_store.ClearMessagesForBranches(branches));
+
+    public Task<TopicBranchClearResult> ClearMessagesForBranchesAsync(
+        IReadOnlyList<TopicBranchTarget> branches, TopicExcludeConnectionToken token)
+    {
+        if (_topicExcludeService is null)
+            return Task.FromResult(new TopicBranchClearResult(false, 0));
+
+        var applied = _topicExcludeService.TryExecuteForConnection(
+            token, () => _store.ClearMessagesForBranches(branches), out var removed);
+        return Task.FromResult(applied
+            ? new TopicBranchClearResult(true, removed)
+            : new TopicBranchClearResult(false, 0));
+    }
+
     internal void AddMessage(string fullTopic, MqttMessage message) => _store.Add(fullTopic, message);
 
     private Task MessageHandler(MqttApplicationMessageReceivedEventArgs arg)
@@ -280,7 +310,7 @@ public class MessageStoreManager : IMessageStoreManager
 
             try
             {
-                var result = _pipeline.ProcessInbound(arg);
+                var result = _pipeline.ProcessInbound(arg, _metricMetadataStore);
                 var payloadText = result.Envelope.DisplayText;
                 formatId = result.Envelope.FormatId;
 
@@ -289,14 +319,12 @@ public class MessageStoreManager : IMessageStoreManager
                 if (result.TopologyEvents.Count > 0)
                     await ApplyTopologyEventsAsync(result.TopologyEvents, connectionEpoch, subscriptionSnapshot).ConfigureAwait(false);
 
+                var sparkplugMetricNames = SparkplugAliasResolver.ResolveMetricNames(
+                    topic, result.Envelope, _topologyService?.Groups);
                 var aliasNames = _aliasEnricher.Resolve(topic, result);
 
-                message = new MqttMessage(payloadText, topic,
-                    arg.ApplicationMessage.Retain, arg.ApplicationMessage.QualityOfServiceLevel)
-                {
-                    AliasNames = aliasNames,
-                    FormatId = formatId
-                };
+                message = InboundMessageMapper.Map(arg.ApplicationMessage, payloadText, topic, aliasNames, formatId,
+                    sparkplugMetricNames);
 
                 AddMessage(topic, message);
             }
@@ -435,38 +463,6 @@ public class MessageStoreManager : IMessageStoreManager
                                     && Array.IndexOf(segments, "#") <= 4;
         return (deviceWildcard || broadTerminalWildcard)
                && MqttTopicMatcher.Matches($"spBv1.0/{groupId}/{verb}/{nodeId}/__sequence_probe__", filter);
-    }
-
-    // Trusted purger: runs while the exclude service holds its lock, so topology removal
-    // must stay silent here. A purge running inline with Add/Remove also holds the operation
-    // semaphore; a purge finished later from a reader release holds no semaphore at all.
-    private void OnPurgeExcludedTopic(string filter)
-    {
-        _store.RemoveMatchingTopic(filter);
-        // ReSharper disable once InconsistentlySynchronizedField
-        if (_topologyService?.RemoveMatchingTopicSilent(filter) > 0)
-            Interlocked.Exchange(ref _topologyChangedPending, 1);
-    }
-
-    // Observer phase: no locks and no semaphore held, so a TopologyChanged subscriber may
-    // re-enter the exclude service.
-    private void OnTopicExcluded(string filter) => FlushTopologyChanged();
-
-    // Teardown never gets here: it drops its pending notification instead of raising
-    // publicly while a purge may still be in flight.
-    private void FlushTopologyChanged()
-    {
-        if (Interlocked.Exchange(ref _topologyChangedPending, 0) == 0)
-            return;
-
-        try
-        {
-            _topologyService?.RaiseTopologyChanged();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "TopologyChanged subscriber failed after an excluded topic purge");
-        }
     }
 
     private void LogPipelineDiagnostics(string topic, IReadOnlyList<string> diagnostics)

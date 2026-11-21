@@ -323,6 +323,87 @@ class TestShellSafeguards(unittest.TestCase):
             self.assertIn(term, content)
 
 
+def _workload_block() -> str:
+    lines = SH_SCRIPT.read_text(encoding="utf-8").splitlines()
+    start = next(
+        i for i, line in enumerate(lines)
+        if line.startswith('if [[ -n "$WORKLOAD_VERSION" ]]')
+    )
+    end = next(i for i in range(start + 1, len(lines)) if lines[i] == "fi")
+    return "\n".join(lines[start:end + 1])
+
+
+def _bash_path(path) -> str:
+    p = str(path)
+    if os.name == "nt" and len(p) > 1 and p[1] == ":":
+        return f"/mnt/{p[0].lower()}{p[2:].replace(chr(92), '/')}"
+    return p
+
+
+class TestWorkloadSetBootstrap(unittest.TestCase):
+    def _run(self, workload_version, dotnet_exit=0):
+        if not _has_bash():
+            self.skipTest("bash not available")
+        tmpdir = Path(tempfile.mkdtemp(prefix="workload-bootstrap-"))
+        self.addCleanup(shutil.rmtree, tmpdir, ignore_errors=True)
+        work = tmpdir / "work"
+        work.mkdir()
+        trace = tmpdir / "dotnet-trace"
+        harness = tmpdir / "harness.sh"
+        harness.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            f'dotnet() {{ printf "%s|" "$PWD" >> "{_bash_path(trace)}"; '
+            f'printf "%s " "$@" >> "{_bash_path(trace)}"; '
+            f'printf "\\n" >> "{_bash_path(trace)}"; return {dotnet_exit}; }}\n'
+            f'WORK="{_bash_path(work)}"\n'
+            f'WORKLOAD_VERSION="{workload_version}"\n'
+            f"{_workload_block()}\n"
+            "echo REACHED_AFTER\n",
+            encoding="utf-8", newline="\n",
+        )
+        result = subprocess.run(
+            ["bash", _bash_path(harness)],
+            capture_output=True, text=True, timeout=30,
+        )
+        trace_text = trace.read_text(encoding="utf-8") if trace.exists() else ""
+        return result, trace_text
+
+    def test_pinned_set_installs_from_snapshot_root_before_publish(self):
+        result, trace = self._run("10.0.403")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("REACHED_AFTER", result.stdout)
+        self.assertIn("workload update --source https://api.nuget.org/v3/index.json", trace)
+        self.assertTrue(trace.split("|", 1)[0].endswith("/work"), trace)
+        self.assertNotIn("--version", trace)
+
+    def test_unpinned_snapshot_skips_the_workload_update(self):
+        result, trace = self._run("")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("REACHED_AFTER", result.stdout)
+        self.assertEqual(trace, "")
+
+    def test_workload_update_failure_stops_the_build(self):
+        result, trace = self._run("10.0.403", dotnet_exit=7)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("FATAL: dotnet workload update failed", result.stdout)
+        self.assertNotIn("REACHED_AFTER", result.stdout)
+        self.assertIn("workload update", trace)
+
+    def test_bootstrap_precedes_publish_and_honours_the_snapshot_pin(self):
+        content = SH_SCRIPT.read_text(encoding="utf-8")
+        update = content.index("dotnet workload update --source")
+        self.assertLess(update, content.index("dotnet publish"))
+        line = content[content.rindex("\n", 0, update) + 1:content.index("\n", update)]
+        self.assertIn('cd "$WORK"', line)
+        self.assertIn("--source https://api.nuget.org/v3/index.json", line)
+        self.assertNotIn("--version", line)
+        self.assertEqual(content.count("dotnet workload update --source"), 1)
+        self.assertNotIn("dotnet workload install", content)
+        self.assertIn(".get('workloadVersion'", content)
+        self.assertEqual(content.count('if [[ -n "$WORKLOAD_VERSION" ]]'), 1)
+
+
 # ── Syntax checks ───────────────────────────────────────────────────────────
 
 

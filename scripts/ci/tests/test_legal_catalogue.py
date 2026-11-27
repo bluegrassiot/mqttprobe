@@ -389,6 +389,50 @@ class OverrideTests(unittest.TestCase):
         self.assertIsNone(catalogue.reviewed_exception("Vendor.Lib", "2.0", packages))
 
 
+class SupplementSourceTests(unittest.TestCase):
+    def test_sparkplugnet_is_recorded_once_as_a_nuget_package(self):
+        supplements = ROOT / "legal" / "supplements"
+        components = json.loads((supplements / "components.json").read_text(encoding="utf-8"))
+        self.assertFalse(
+            [entry for entry in components["components"] if entry["name"].lower() == "sparkplugnet"]
+        )
+        packages = json.loads((supplements / "packages.json").read_text(encoding="utf-8"))
+        entry = packages["packages"]["SparkplugNet@1.5.0"]
+        self.assertNotIn("license", entry)
+        self.assertIn("SeppPenner/SparkplugNet", entry["sourceUrl"])
+        expressions = json.loads((supplements / "expressions.json").read_text(encoding="utf-8"))
+        self.assertIn("mit-license-generic-text", expressions["licenses"]["MIT"])
+
+    def test_sparkplugnet_package_uses_the_curated_mit_attribution(self):
+        documents, supplements, expressions, _, digest = tiny_document_set(fixture(self))
+        packages, _, _ = catalogue.load_overrides()
+        record = {
+            "id": "SparkplugNet",
+            "version": "1.5.0",
+            "metadata": {
+                "license": "MIT",
+                "licenseInformationOrigin": 0,
+                "licenseUrl": "https://licenses.nuget.org/MIT",
+                "projectUrl": "https://www.nuget.org/packages/SparkplugNet/",
+                "copyright": "Copyright © Hämmer Electronics",
+                "authors": "SeppPenner",
+                "validationErrors": [],
+            },
+            "documents": [],
+            "extractor": None,
+            "payload": {},
+        }
+        component = catalogue.load_extracted_package(
+            record, documents, expressions, supplements, packages, [], []
+        )
+        self.assertEqual(component["id"], "nuget:sparkplugnet@1.5.0")
+        self.assertEqual(component["license"], "MIT")
+        self.assertEqual(component["copyright"], "Copyright © Hämmer Electronics")
+        self.assertEqual(component["sourceUrl"], "https://github.com/SeppPenner/SparkplugNet")
+        self.assertEqual(component["documentIds"], [digest])
+        self.assertIn("upstream repository", component["notes"])
+
+
 class CheckInputTests(unittest.TestCase):
     def _patched_tree(self, test):
         root = fixture(test)
@@ -599,6 +643,46 @@ class ProfileTests(unittest.TestCase):
         lf.write_bytes(b'{\n  "a": 1\n}\n')
         crlf.write_bytes(b'{\r\n  "a": 1\r\n}\r\n')
         self.assertEqual(profiles.hash_dependency_file(lf), profiles.hash_dependency_file(crlf))
+
+    def test_declared_submodules_come_from_gitmodules(self):
+        root = fixture(self)
+        (root / ".gitmodules").write_text(
+            '[submodule "external/One"]\n'
+            "\tpath = external/One\n"
+            "\turl = https://example.test/one.git\n"
+            '[submodule "Two"]\n'
+            "\tpath = src/Two\n"
+            "\turl = https://example.test/two.git\n"
+            "[core]\n"
+            "\tpath = ignored\n",
+            encoding="utf-8",
+        )
+        with mock.patch.object(profiles, "ROOT", root):
+            self.assertEqual(profiles.declared_submodules(), ["external/One", "src/Two"])
+
+    def test_declared_submodules_absent_is_empty(self):
+        root = fixture(self)
+        with mock.patch.object(profiles, "ROOT", root):
+            self.assertEqual(profiles.declared_submodules(), [])
+
+    def test_input_fingerprint_pins_only_checked_out_submodules(self):
+        root = fixture(self)
+        (root / ".gitmodules").write_text(
+            '[submodule "external/One"]\n\tpath = external/One\n'
+            '[submodule "external/Two"]\n\tpath = external/Two\n',
+            encoding="utf-8",
+        )
+        (root / "external/One/src").mkdir(parents=True)
+        (root / "external/Two/src").mkdir(parents=True)
+        commits = {"external/One": "a" * 40, "external/Two": None}
+        with mock.patch.object(profiles, "ROOT", root), \
+             mock.patch.object(
+                 profiles,
+                 "submodule_head",
+                 side_effect=lambda path: commits[path.relative_to(root).as_posix()],
+             ):
+            fingerprint = profiles.input_fingerprint()
+        self.assertEqual(fingerprint["submodules"], {"external/One": "a" * 40})
 
     def test_compare_detects_added_missing_changed_and_input_drift(self):
         committed = {

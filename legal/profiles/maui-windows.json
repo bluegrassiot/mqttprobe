@@ -13,19 +13,17 @@
   "inputs": {
     "files": {
       "global.json": "a4c16f708b406a9d1c56bdd74a46c730277d3e3ddc825efd6baed2e692bc60bf",
-      "Directory.Packages.props": "e9e6e10ba26674fbe1e0fec138e78c8178620c875e690c02d7c1fc61699da3ab",
-      "Directory.Build.props": "5b030b22a23b70b4378434208e44693013479cd56b981d331429dbf85c596621",
+      "Directory.Packages.props": "3589e2766dec1129caeab74ad579894697808bc3a6733e043aac145a421501d0",
+      "Directory.Build.props": "40c79227bebb29cfd1b9043918a97548a84ff41a3ec53c8173aa323b1b4649fe",
       ".github/actions/setup-dotnet-workload/action.yml": "e3f7736c4e8887df3019c24fea10702dcd5a6be3381679792148b66e238d0464",
-      "src/MqttProbe.Core/MqttProbe.Core.csproj": "f17a0c8eaa5569f8bf877669173f5260700013ece29639e6dee0a30d49ede2ec",
+      "src/MqttProbe.Core/MqttProbe.Core.csproj": "80ed8220a9bc4e1cdbf7ff3ba46a293634a53ce36cfb3aacf11b05fe3f8d88a1",
       "src/MqttProbe.Desktop/MqttProbe.Desktop.csproj": "83d7bdfd02fa814797b5b66b3f09bbe4bacb7585d8d849ad883b399a20cf2da7",
       "src/MqttProbe.Maui/MqttProbe.Maui.csproj": "42e5a2021b324aed964ba56ccbd0228758bbdf14ea07d4cf0ec54191f9cedfe0",
       "src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj": "ad64a32de96245d593d3c03f9ca581d8affce7f0d147e3947a08a6a6d2797612",
       "src/MqttProbe.UI/MqttProbe.UI.csproj": "0915a9674613a0c49b5296c5eaa08b1959c3af0baff7d4be35c8dd8af5cc5e48",
       "src/MqttProbe.Web/MqttProbe.Web.csproj": "235a7f45c35d0d50d8201f9be0eab8475f90163eb43296aed78d687dd419eea6"
     },
-    "submodules": {
-      "external/SparkplugNet": "95366c3915db71bdf661c5ea29f2fc87c2da5866"
-    },
+    "submodules": {},
     "sdk": "10.0.403"
   },
   "packages": [
@@ -380,6 +378,11 @@
       "sha512": "jGLAZUjheSURfe0T/dJYGUrMOrLt1fxaInpChq75YJvrywsxFoUKK/EM6PSfTjkt4pbaq2ywIQjgQzhrmmj5Ow=="
     },
     {
+      "id": "SparkplugNet",
+      "version": "1.5.0",
+      "sha512": "pPoNh4BLcRvlj+/AAdxXecfbTtn9FBkIXC8pqq+9nA45a9Cn//9nfFDHDL8OmiuDtSo9ns6sbZlFy1tqq0GMdQ=="
+    },
+    {
       "id": "System.Collections.Immutable",
       "version": "11.0.0",
       "sha512": "Z3pTTvMGhsThIfPDboJDwBY+yCqfNCpYyL4fcPCNo4rVYhlS7Kmg4nkABanRYRSVDPZ3qiXPdGymBzMDuawPNg=="
@@ -436,8 +439,8 @@
     },
     {
       "id": "protobuf-net",
-      "version": "3.2.56",
-      "sha512": "4IPJeTYAMNewlN8MDaFkcmR/9hLhJeo9eARnTh104zh7mf+vXT2gu5MUfUnkSQU+CH578Q6vcdU7LQDQPG6eaw=="
+      "version": "3.4.40",
+      "sha512": "Gds96uOs0bZlDfLIYHRMee1xmrWxUTLM9HSOlDzUmyzkTGDcMWw3Lgx9TPUxD94r+/E/Y9OEL5Cf3PiTHn9bfw=="
     },
     {
       "id": "protobuf-net.Core",

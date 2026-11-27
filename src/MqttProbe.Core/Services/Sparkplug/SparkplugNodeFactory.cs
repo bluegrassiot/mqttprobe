@@ -33,11 +33,9 @@ public interface ISparkplugNodeFactory
         CancellationToken cancellationToken = default);
 }
 
-// Tracks metrics by alias so alias-only NDATA/DDATA metrics survive FilterMetrics.
-// SparkplugNet's AddVersionBMetric stores name+alias metrics only in knownMetricsByName,
-// leaving knownMetricsByAlias empty. ShouldVersionBMetricBeAdded then rejects alias-only
-// data metrics because the alias lookup fails. FilterMetrics is overridden here to accept
-// alias-only data metrics whose alias+datatype match a birth-registered metric.
+// Tracks metrics by alias and keeps two metric kinds that SparkplugNet's FilterMetrics
+// would drop: alias-only NDATA/DDATA values (matched on alias and datatype) and the
+// DCMD "Device Control/Rebirth" control, which is filtered against node metrics.
 internal sealed class AliasAwareKnownMetricStorage : SparkplugBase<Metric>.KnownMetricStorage
 {
     private readonly ConcurrentDictionary<ulong, DataType> _knownAliases = new();
@@ -190,8 +188,9 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
     {
         try
         {
-            // Not SparkplugNet's Rebirth: it publishes an NDEATH first, which a rebirth must not do.
-            await InvokeNodeMethod("PublishNodeAndDeviceBirthsInternal").ConfigureAwait(false);
+            // Not SparkplugNet's Rebirth: older versions publish an NDEATH first, which a rebirth must not do.
+            // The bool selects republishing known device births alongside the node birth.
+            await InvokeNodeMethod("PublishNodeAndDeviceBirthsInternal", true).ConfigureAwait(false);
         }
         catch (MQTTnet.Exceptions.MqttClientDisconnectedException ex)
         {
@@ -253,7 +252,7 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
 
     public Task PublishNodeDeathMessage() => InvokeNodeMethod("SendNodeDeathMessage");
 
-    private Task InvokeNodeMethod(string name)
+    private Task InvokeNodeMethod(string name, params object?[] arguments)
     {
         System.Reflection.MethodInfo? method = null;
         for (var type = _node.GetType(); type is not null; type = type.BaseType)
@@ -268,7 +267,7 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
         }
 
         if (method is not null)
-            return (Task)method.Invoke(_node, null)!;
+            return (Task)method.Invoke(_node, arguments)!;
 
         throw new InvalidOperationException(
             $"SparkplugNet method '{name}' was not found via reflection. " +
@@ -283,9 +282,8 @@ internal sealed class SparkplugNodeAdapter : ISparkplugNode
         // SparkplugNet takes IEnumerable<T> everywhere except this one method,
         // which requires a List<T>.
         await _node.PublishDeviceBirthMessage(metrics.ToList(), deviceId);
-        // SparkplugNet creates a plain KnownMetricStorage for the device, which
-        // lacks alias tracking. Replace with alias-aware version so DDATA
-        // alias-only metrics survive FilterMetrics.
+        // SparkplugNet installs a plain KnownMetricStorage for the device; keep the
+        // alias-aware one so the device's DCMD rebirth control survives FilterMetrics.
         _node.KnownDevices[deviceId] = new AliasAwareKnownMetricStorage(metrics);
     }
 

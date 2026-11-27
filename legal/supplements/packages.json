@@ -15,6 +15,10 @@
     "MQTTnet@5.2.0.1603": {
       "license": "MIT"
     },
+    "SparkplugNet@1.5.0": {
+      "sourceUrl": "https://github.com/SeppPenner/SparkplugNet",
+      "notes": "Package metadata points at the nuget.org page; this is the upstream repository."
+    },
     "Microsoft.Graphics.Win2D@1.4.0": {
       "license": "Unresolved: package metadata declares a legacy Win2D EULA and the repository license is MIT",
       "documents": [

@@ -27,7 +27,6 @@ updates:
           - "major"
         patterns:
           - "*"
-    # Optional: keep MQTTnet on v4 while SparkplugNet is incompatible with v5
     ignore:
       - dependency-name: "MQTTnet"
         update-types: ["version-update:semver-major"]

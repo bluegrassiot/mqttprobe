@@ -2146,6 +2146,30 @@
       "payload": {}
     },
     {
+      "id": "SparkplugNet",
+      "version": "1.5.0",
+      "metadata": {
+        "license": "MIT",
+        "licenseUrl": "https://licenses.nuget.org/MIT",
+        "licenseInformationOrigin": 0,
+        "projectUrl": "https://www.nuget.org/packages/SparkplugNet/",
+        "copyright": "Copyright © Hämmer Electronics",
+        "authors": "SeppPenner",
+        "validationErrors": []
+      },
+      "documents": [
+        {
+          "title": "MIT License",
+          "sha256": "f0e795ff3b1cb0e8cfc28086928101f7a259239f9aa0964f0a371915636a3d79",
+          "source": "embedded",
+          "sourcePath": "License.txt",
+          "sourceUrl": "https://licenses.nuget.org/MIT"
+        }
+      ],
+      "extractor": null,
+      "payload": {}
+    },
+    {
       "id": "System.Collections.Immutable",
       "version": "11.0.0",
       "metadata": {
@@ -5333,12 +5357,12 @@
     },
     {
       "id": "protobuf-net",
-      "version": "3.2.56",
+      "version": "3.4.40",
       "metadata": {
         "license": "Apache-2.0",
         "licenseUrl": "https://licenses.nuget.org/Apache-2.0",
         "licenseInformationOrigin": 0,
-        "projectUrl": "https://github.com/protobuf-net/protobuf-net",
+        "projectUrl": "https://protobuf-net.dev/",
         "copyright": "See https://github.com/protobuf-net/protobuf-net",
         "authors": "Marc Gravell",
         "validationErrors": []

@@ -1171,7 +1171,12 @@ public class EmulationServiceTests
         var convertMethod = converterType.GetMethods(BindingFlags.Public | BindingFlags.Static)
             .First(m => m.Name == "ConvertVersionBPayload"
                         && m.GetParameters()[0].ParameterType != typeof(Payload));
-        var payload = (Payload)convertMethod.Invoke(null, new object[] { protoPayload })!;
+        // Reflection does not apply optional parameter defaults; Type.Missing does.
+        var convertArgs = new object?[convertMethod.GetParameters().Length];
+        convertArgs[0] = protoPayload;
+        for (var i = 1; i < convertArgs.Length; i++)
+            convertArgs[i] = Type.Missing;
+        var payload = (Payload)convertMethod.Invoke(null, convertArgs)!;
 
         return payload.Metrics[0];
     }

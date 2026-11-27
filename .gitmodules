@@ -1,3 +1,0 @@
-[submodule "external/SparkplugNet"]
-	path = external/SparkplugNet
-	url = https://github.com/bluegrassiot/SparkplugNet.git

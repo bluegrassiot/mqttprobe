@@ -589,10 +589,17 @@ Verify:     python scripts/legal/notices.py check
     Source: https://protobuf-net.dev/
     Texts: Apache License 2.0
 
-  protobuf-net 3.2.56
+  protobuf-net 3.4.40
     Licence: Apache-2.0
-    Source: https://github.com/protobuf-net/protobuf-net
+    Source: https://protobuf-net.dev/
     Texts: Apache License 2.0
+
+  SparkplugNet 1.5.0
+    Licence: MIT
+    Copyright: Copyright © Hämmer Electronics
+    Source: https://github.com/SeppPenner/SparkplugNet
+    Texts: MIT License (generic text); MIT License
+    Note: Package metadata points at the nuget.org page; this is the upstream repository.
 
   System.Collections.Immutable 11.0.0
     Licence: MIT
@@ -1237,13 +1244,6 @@ Verify:     python scripts/legal/notices.py check
     Source: https://github.com/eclipse/tahu
     Texts: Eclipse Public License 2.0
     Note: Generated from the Eclipse Tahu protocol buffer definition. MQTTProbe extends the upstream #pragma warning disable list; there are no functional changes. Source is available from the MQTTProbe public repository under EPL-2.0.
-
-  SparkplugNet 1.4.1
-    Licence: MIT
-    Copyright: Copyright (c) Hämmer Electronics
-    Source: https://github.com/HaeMmer/SparkplugNet
-    Texts: MIT License (generic text)
-    Note: Consumed from the external/SparkplugNet git submodule as a project reference.
 
   tslib 2.3.0
     Licence: 0BSD

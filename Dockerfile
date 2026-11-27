@@ -15,38 +15,26 @@ COPY ["Directory.Build.props", "."]
 # severities (MA0048 = none and 20 others) that TreatWarningsAsErrors would
 # otherwise promote to build errors here but nowhere else.
 COPY [".editorconfig", "."]
-# Build-isolation config for the vendored SparkplugNet submodule (see
-# external/Directory.Build.props): keeps the fork on its own settings, off central
-# package management, and off GitVersion (no .git in the Docker build context).
-COPY ["external/Directory.Packages.props", "external/"]
-COPY ["external/Directory.Build.props", "external/"]
-COPY ["external/Directory.Build.targets", "external/"]
 # Project files first so `restore` is cached independently of source changes.
-# Paths mirror the repo layout so the Web -> UI -> Core -> PluginContracts -> SparkplugNet
+# Paths mirror the repo layout so the Web -> UI -> Core -> PluginContracts
 # ProjectReferences resolve.
 COPY ["src/MqttProbe.Web/MqttProbe.Web.csproj", "src/MqttProbe.Web/"]
 COPY ["src/MqttProbe.UI/MqttProbe.UI.csproj", "src/MqttProbe.UI/"]
 COPY ["src/MqttProbe.Core/MqttProbe.Core.csproj", "src/MqttProbe.Core/"]
 COPY ["src/MqttProbe.PluginContracts/MqttProbe.PluginContracts.csproj", "src/MqttProbe.PluginContracts/"]
-COPY ["external/SparkplugNet/src/SparkplugNet/SparkplugNet.csproj", "external/SparkplugNet/src/SparkplugNet/"]
 RUN dotnet restore "src/MqttProbe.Web/MqttProbe.Web.csproj"
 COPY src/MqttProbe.Web/ src/MqttProbe.Web/
 COPY src/MqttProbe.UI/ src/MqttProbe.UI/
 COPY src/MqttProbe.Core/ src/MqttProbe.Core/
 COPY src/MqttProbe.PluginContracts/ src/MqttProbe.PluginContracts/
-COPY external/SparkplugNet/ external/SparkplugNet/
 COPY ["LICENSE", "."]
 COPY ["legal/generated/", "legal/generated/"]
 ARG VERSION=0.0.0
 WORKDIR "/src/src/MqttProbe.Web"
-# DisableGitVersionTask: the SparkplugNet submodule uses GitVersion.MsBuild, but the
-# Docker build context has no .git (.dockerignore excludes it). A global property is
-# guaranteed to win regardless of import ordering, so the submodule build never touches git.
 RUN dotnet publish "MqttProbe.Web.csproj" -c Release -o /app/publish \
     /p:UseAppHost=false \
     /p:DebugType=none \
     /p:DebugSymbols=false \
-    /p:DisableGitVersionTask=true \
     /p:Version=$VERSION
 
 FROM base AS final

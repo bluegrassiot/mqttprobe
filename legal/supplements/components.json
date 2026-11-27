@@ -59,18 +59,6 @@
       ]
     },
     {
-      "id": "sparkplugnet",
-      "name": "SparkplugNet",
-      "version": "1.4.1",
-      "license": "MIT",
-      "copyright": "Copyright (c) Hämmer Electronics",
-      "sourceUrl": "https://github.com/HaeMmer/SparkplugNet",
-      "documents": [
-        "mit-license-generic-text"
-      ],
-      "notes": "Consumed from the external/SparkplugNet git submodule as a project reference."
-    },
-    {
       "id": "sparkplug-b-generated-code",
       "name": "Sparkplug B generated code (SparkplugBProtobuf.cs)",
       "version": "e33d56d2f427",

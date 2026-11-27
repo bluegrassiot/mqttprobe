@@ -1353,12 +1353,12 @@
       "applicability": "runtime"
     },
     {
-      "id": "nuget:protobuf-net@3.2.56",
+      "id": "nuget:protobuf-net@3.4.40",
       "name": "protobuf-net",
-      "version": "3.2.56",
+      "version": "3.4.40",
       "license": "Apache-2.0",
       "copyright": "",
-      "sourceUrl": "https://github.com/protobuf-net/protobuf-net",
+      "sourceUrl": "https://protobuf-net.dev/",
       "documentIds": [
         "72ca46e8f4fa7f7074ad74ae27ee32685ce79198b81da109c0131bf62eb622e8"
       ],
@@ -1377,6 +1377,20 @@
       "applicability": "build",
       "notes": "Build-only analyzer. Its nested license file is retained from the package payload.",
       "licenseSourceUrl": "https://aka.ms/deprecateLicenseUrl"
+    },
+    {
+      "id": "nuget:sparkplugnet@1.5.0",
+      "name": "SparkplugNet",
+      "version": "1.5.0",
+      "license": "MIT",
+      "copyright": "Copyright © Hämmer Electronics",
+      "sourceUrl": "https://github.com/SeppPenner/SparkplugNet",
+      "documentIds": [
+        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77",
+        "f0e795ff3b1cb0e8cfc28086928101f7a259239f9aa0964f0a371915636a3d79"
+      ],
+      "applicability": "runtime",
+      "notes": "Package metadata points at the nuget.org page; this is the upstream repository."
     },
     {
       "id": "nuget:system.collections.immutable@11.0.0",
@@ -2960,19 +2974,6 @@
       "notes": "Generated from the Eclipse Tahu protocol buffer definition. MQTTProbe extends the upstream #pragma warning disable list; there are no functional changes. Source is available from the MQTTProbe public repository under EPL-2.0."
     },
     {
-      "id": "sparkplugnet",
-      "name": "SparkplugNet",
-      "version": "1.4.1",
-      "license": "MIT",
-      "copyright": "Copyright (c) Hämmer Electronics",
-      "sourceUrl": "https://github.com/HaeMmer/SparkplugNet",
-      "documentIds": [
-        "ade4999f04711c7f8df29759ad4a521f23c64082c6debec5c6773705a69d4a77"
-      ],
-      "applicability": "runtime",
-      "notes": "Consumed from the external/SparkplugNet git submodule as a project reference."
-    },
-    {
       "id": "tslib-javascript",
       "name": "tslib",
       "version": "2.3.0",
@@ -3451,6 +3452,16 @@
       "sha256": "ec3eb57c0496cebafb5c3d030a709b31fdc057dfa819da2fc6692df4c4d39174",
       "sourceUrls": [],
       "kind": "notice"
+    },
+    {
+      "id": "f0e795ff3b1cb0e8cfc28086928101f7a259239f9aa0964f0a371915636a3d79",
+      "title": "MIT License",
+      "file": "f0e795ff3b1cb0e8cfc28086928101f7a259239f9aa0964f0a371915636a3d79.txt",
+      "sha256": "f0e795ff3b1cb0e8cfc28086928101f7a259239f9aa0964f0a371915636a3d79",
+      "sourceUrls": [
+        "https://licenses.nuget.org/MIT"
+      ],
+      "kind": "license"
     }
   ],
   "provenance": "PROVENANCE NOTES\n----------------\n\nStatements about sources that could not be verified from this repository.\nThey are separate from the license texts above.\n\n1. Nerd Fonts. The OpenDyslexic files are patched builds made with the Nerd\n   Fonts patcher, whose license is reproduced above. The patcher version used\n   and the individual licenses of patched-in icon sets are not recorded in\n   this repository, so this notice does not enumerate them.\n\n2. Microsoft.Graphics.Win2D 1.4.0. The package carries no license file. Its\n   package metadata declares a legacy Win2D EULA URL and requires license\n   acceptance; the Win2D repository's LICENSE.txt is MIT and is reproduced\n   above. Which terms apply to the package is not established here.\n\n3. Android binding packages. The third-party notices reproduced above are the\n   notices shipped in the Microsoft binding packages. They identify the\n   licenses under which Microsoft received the upstream Android libraries.\n   The upstream projects' own NOTICE files are not reproduced, and their\n   correspondence with these texts has not been checked.\n\n4. Microsoft package notices. The ASP.NET Core app and components package\n   notices, the Microsoft.Extensions, System and cryptography package\n   notices, the Microsoft.Extensions.Logging and System.Numerics.Tensors\n   package notices, the MAUI notice and the runtime notices are reproduced\n   verbatim. Package-level notices for Microsoft packages not listed in\n   section 1 are not included."

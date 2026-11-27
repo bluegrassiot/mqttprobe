@@ -24,6 +24,7 @@
         <!-- Aliased: Google.Protobuf and protobuf-net.Reflection collide -->
         <PackageReference Include="protobuf-net.Reflection" Aliases="ProtoReflection" />
         <PackageReference Include="MQTTnet" />
+        <PackageReference Include="SparkplugNet" />
         <PackageReference Include="SonarAnalyzer.CSharp">
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -35,7 +36,6 @@
 
     <ItemGroup>
         <ProjectReference Include="..\MqttProbe.PluginContracts\MqttProbe.PluginContracts.csproj" />
-        <ProjectReference Include="..\..\external\SparkplugNet\src\SparkplugNet\SparkplugNet.csproj" />
     </ItemGroup>
 
 </Project>

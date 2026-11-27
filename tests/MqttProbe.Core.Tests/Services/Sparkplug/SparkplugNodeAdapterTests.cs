@@ -117,8 +117,17 @@ public class SparkplugNodeAdapterTests
         }
 
         method.Should().NotBeNull("the emulator adapter invokes this SparkplugNet method by name");
-        method!.GetParameters().Should().BeEmpty();
-        method.ReturnType.Should().Be<Task>();
+        typeof(Task).IsAssignableFrom(method!.ReturnType).Should().BeTrue();
+
+        if (methodName == "PublishNodeAndDeviceBirthsInternal")
+        {
+            method.GetParameters().Should().HaveCount(1);
+            method.GetParameters()[0].ParameterType.Should().Be<bool>();
+        }
+        else
+        {
+            method.GetParameters().Should().BeEmpty();
+        }
     }
 
     [Test]

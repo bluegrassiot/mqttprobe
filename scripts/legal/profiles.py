@@ -148,6 +148,37 @@ def hash_dependency_file(path):
     return sha256_bytes(text.encode("utf-8"))
 
 
+def declared_submodules():
+    path = ROOT / ".gitmodules"
+    if not path.is_file():
+        return []
+    names = []
+    in_submodule = False
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        entry = line.strip()
+        if entry.startswith("["):
+            in_submodule = entry.startswith("[submodule ")
+            continue
+        key, separator, value = entry.partition("=")
+        if in_submodule and separator and key.strip() == "path" and value.strip():
+            names.append(safe_relative(value.strip()).as_posix())
+    return names
+
+
+def submodule_head(path):
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout.strip() or None
+
+
 def input_fingerprint():
     files = {}
     for relative in FINGERPRINT_FILES:
@@ -156,26 +187,19 @@ def input_fingerprint():
             files[relative] = hash_dependency_file(path)
     for path in sorted((ROOT / "src").glob("*/*.csproj")):
         files[path.relative_to(ROOT).as_posix()] = hash_dependency_file(path)
-    submodule = {}
-    for name in ("external/SparkplugNet",):
+    submodules = {}
+    for name in declared_submodules():
         path = ROOT / name
-        if (path / ".git").exists() or (path / "src").is_dir():
-            try:
-                result = subprocess.run(
-                    ["git", "rev-parse", "HEAD"],
-                    cwd=path,
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                submodule[name] = result.stdout.strip()
-            except (OSError, subprocess.CalledProcessError):
-                pass
+        if not ((path / ".git").exists() or (path / "src").is_dir()):
+            continue
+        commit = submodule_head(path)
+        if commit:
+            submodules[name] = commit
     try:
         sdk = read_json(ROOT / "global.json")["sdk"]["version"]
     except (KeyError, LegalError):
         sdk = None
-    return {"files": files, "submodules": submodule, "sdk": sdk}
+    return {"files": files, "submodules": submodules, "sdk": sdk}
 
 
 def compare(committed, current):

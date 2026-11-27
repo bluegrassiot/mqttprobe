@@ -212,7 +212,12 @@ public class MtlsIntegrationTests
                         var convertMethod = converterType.GetMethods(BindingFlags.Public | BindingFlags.Static)
                             .First(m => m.Name == "ConvertVersionBPayload"
                                         && m.GetParameters()[0].ParameterType != typeof(Payload));
-                        var sparkplugPayload = (Payload)convertMethod.Invoke(null, [protoPayload])!;
+                        // Reflection does not apply optional parameter defaults; Type.Missing does.
+                        var convertArgs = new object?[convertMethod.GetParameters().Length];
+                        convertArgs[0] = protoPayload;
+                        for (var i = 1; i < convertArgs.Length; i++)
+                            convertArgs[i] = Type.Missing;
+                        var sparkplugPayload = (Payload)convertMethod.Invoke(null, convertArgs)!;
 
                         if (sparkplugPayload.Metrics.Count > 0
                             && sparkplugPayload.Metrics.Any(m =>

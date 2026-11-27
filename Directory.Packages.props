@@ -21,9 +21,9 @@
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="11.0.0" />
     <PackageVersion Include="System.Threading.RateLimiting" Version="11.0.0" />
     <!-- MQTTnet 5.2.x. ManagedClient is removed (replaced by the in-house
-         IMqttManagedClient wrapper). SparkplugNet is consumed via the
-         external/SparkplugNet git submodule ProjectReference (same MQTTnet pin). -->
+         IMqttManagedClient wrapper). SparkplugNet 1.5.0 targets the same MQTTnet pin. -->
     <PackageVersion Include="MQTTnet" Version="5.2.0.1603" />
+    <PackageVersion Include="SparkplugNet" Version="1.5.0" />
     <!-- ============================================================ -->
     <!-- ASP.NET Core / Web                                           -->
     <!-- ============================================================ -->

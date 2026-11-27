@@ -17,7 +17,7 @@ Bug fixes and small improvements are welcome. For larger changes, open an issue 
 ### Setup
 
 1. Install [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-2. Clone the repo with submodules: `git clone --recurse-submodules https://github.com/bluegrassiot/mqttprobe`. If you already cloned without that flag, run `git submodule update --init --recursive`.
+2. Clone the repo: `git clone https://github.com/bluegrassiot/mqttprobe`. Dependencies come from NuGet, so there is nothing else to initialize.
 3. Run tests: `dotnet test`
 
 Maintainers publishing the iOS or Mac Catalyst app to TestFlight should follow
@@ -97,7 +97,7 @@ git add <intended-files>
 Target coverage: `dotnet format style` runs against `MqttProbe.slnx` on Windows
 (full solution, requires MAUI workloads to be installed) and
 `MqttProbe.NoMaui.slnf` plus the MAUI project best-effort on other platforms.
-`LucideIcons.cs`, `SparkplugBProtobuf.cs`, and `external/**` are always excluded.
+`LucideIcons.cs` and `SparkplugBProtobuf.cs` are always excluded.
 
 ### Tests and Coverage
 

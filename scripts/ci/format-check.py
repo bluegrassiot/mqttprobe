@@ -47,9 +47,7 @@ SUBCOMMANDS = ["whitespace", "style"]
 # this focused pass separate so ordinary style fixes retain their existing scope.
 TARGETED_STYLE_DIAGNOSTICS = ["IDE0005"]
 
-# external/ holds vendored git submodules (e.g. SparkplugNet fork); they keep
-# their own upstream code style and must not be reformatted by mqttprobe rules.
-EXCLUDES = ["**/LucideIcons.cs", "**/SparkplugBProtobuf.cs", "external/**"]
+EXCLUDES = ["**/LucideIcons.cs", "**/SparkplugBProtobuf.cs"]
 
 if sys.platform == "win32":
     TARGETS = [

@@ -17,12 +17,6 @@ if ($existingInstance) {
     throw "Close the existing Desktop process (PID $($existingInstance.ProcessId)) before building the simulation."
 }
 
-Write-Host "Initializing pinned submodules in $repositoryRoot"
-& git -C $repositoryRoot submodule update --init --recursive
-if ($LASTEXITCODE -ne 0) {
-    throw "Submodule initialization failed with exit code $LASTEXITCODE"
-}
-
 Write-Host 'Building Debug Desktop'
 & dotnet build $project --configuration Debug
 if ($LASTEXITCODE -ne 0) {

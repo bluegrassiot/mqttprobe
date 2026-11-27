@@ -66,7 +66,7 @@ def _run_ps1(*args, timeout=60):
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
-def _make_fixture_repo(tmpdir: Path, include_submodule=False) -> Path:
+def _make_fixture_repo(tmpdir: Path) -> Path:
     repo = tmpdir / "repo"
     repo.mkdir()
     subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True)
@@ -83,27 +83,6 @@ def _make_fixture_repo(tmpdir: Path, include_submodule=False) -> Path:
     (scripts_linux / "check-scoped-css.py").write_text("import sys\nsys.exit(0)\n", encoding="utf-8")
     shutil.copy2(PS1_SCRIPT, repo / "scripts" / "packaging" / "build-linux-appimage.ps1")
     shutil.copy2(SH_SCRIPT, scripts_linux / "build-clean-appimage.sh")
-
-    if include_submodule:
-        bare = tmpdir / "bare-sub"
-        subprocess.run(["git", "init", "--bare", str(bare)], capture_output=True, check=True)
-        work_sub = tmpdir / "work-sub"
-        subprocess.run(
-            ["git", "-c", "protocol.file.allow=always", "clone", str(bare), str(work_sub)],
-            capture_output=True, check=True,
-        )
-        subprocess.run(["git", "config", "user.email", "s@s"], cwd=work_sub, capture_output=True, check=True)
-        subprocess.run(["git", "config", "user.name", "S"], cwd=work_sub, capture_output=True, check=True)
-        (work_sub / "README.md").write_text("sub", encoding="utf-8")
-        subprocess.run(["git", "add", "-A"], cwd=work_sub, capture_output=True, check=True)
-        subprocess.run(["git", "commit", "-m", "init"], cwd=work_sub, capture_output=True, check=True)
-        subprocess.run(["git", "push"], cwd=work_sub, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "-c", "protocol.file.allow=always",
-             "-c", "user.email=t@t", "-c", "user.name=T",
-             "submodule", "add", str(bare), "external/TestSub"],
-            cwd=repo, capture_output=True, check=True,
-        )
 
     subprocess.run(["git", "add", "-A"], cwd=repo, capture_output=True, check=True)
     subprocess.run(["git", "commit", "-m", "initial"], cwd=repo, capture_output=True, check=True)
@@ -199,16 +178,6 @@ class TestSourceSafeguards(unittest.TestCase):
     def test_archive_uses_output_flag(self):
         self.assertIn("--output=", PS1_SCRIPT.read_text(encoding="utf-8"))
 
-    def test_submodules_json_not_tsv(self):
-        content = PS1_SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("submodules.json", content)
-        self.assertNotIn("submodules.txt", content)
-        self.assertIn("ConvertTo-Json", content)
-
-    def test_gitmodules_from_committed_sha(self):
-        content = PS1_SCRIPT.read_text(encoding="utf-8")
-        self.assertIn('show "${SourceSHA}:.gitmodules"', content)
-
     def test_ls_tree_recursive(self):
         self.assertIn("ls-tree -r", PS1_SCRIPT.read_text(encoding="utf-8"))
 
@@ -257,53 +226,27 @@ class TestToolingOverlay(unittest.TestCase):
         self.assertIn('ls-tree -r $SourceSHA', content)
 
 
-# ── Dirty submodule rejection ───────────────────────────────────────────────
-
-
-class TestDirtySubmodule(unittest.TestCase):
-    def test_dirty_submodule_rejects_in_dirty_mode(self):
-        content = PS1_SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("Dirty submodule", content)
-        self.assertIn("throw", content)
-
-    def test_no_warning_for_dirty_in_default_mode(self):
-        """Default mode should not check for dirty submodules at all."""
-        content = PS1_SCRIPT.read_text(encoding="utf-8")
-        # The dirty check should only be inside the IncludeWorkingTreeChanges block
-        lines = content.splitlines()
-        in_dirty_mode = False
-        for line in lines:
-            stripped = line.strip()
-            if "IncludeWorkingTreeChanges" in stripped and "{" in stripped:
-                in_dirty_mode = True
-            if in_dirty_mode and "Dirty submodule" in stripped:
-                break  # Found inside the block
-        else:
-            # If we didn't find it, it's outside the block - that's wrong
-            pass
-
-
 # ── Shell script safeguards ─────────────────────────────────────────────────
 
 
 class TestShellSafeguards(unittest.TestCase):
     def test_no_git_revparse_in_archive(self):
         content = SH_SCRIPT.read_text(encoding="utf-8")
-        section = content[content.find("Extracting source"):content.find("Initializing submodules")]
+        section = content[content.find("Extracting source"):content.find("Step 3")]
         self.assertNotIn("git rev-parse HEAD", section)
 
     def test_git_apply_no_init_needed(self):
         content = SH_SCRIPT.read_text(encoding="utf-8")
         self.assertNotIn("git init .", content)
 
-    def test_safe_directory_per_invocation(self):
-        content = SH_SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("safe.directory=", content)
-        self.assertNotIn("safe.directory '*'", content)
+    def test_submodule_references_removed(self):
+        for script in [PS1_SCRIPT, SH_SCRIPT]:
+            content = script.read_text(encoding="utf-8")
+            self.assertNotIn("submodules.json", content, f"{script.name}")
+            self.assertNotIn(".gitmodules", content, f"{script.name}")
 
-    def test_submodules_json_and_metadata(self):
+    def test_metadata_and_artifacts(self):
         content = SH_SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("submodules.json", content)
         self.assertIn("json.dump", content)
         self.assertIn("source_commit", content)
         self.assertIn("MQTTProbe.AppImage", content)
@@ -477,38 +420,6 @@ class TestFixtureRepoInvocation(unittest.TestCase):
         )
         combined = (r.stdout + r.stderr).lower()
         self.assertNotIn("could not find repo root", combined)
-
-
-# ── Submodule fixture ───────────────────────────────────────────────────────
-
-
-class TestSubmoduleFixture(unittest.TestCase):
-    def setUp(self):
-        if not _has_powershell():
-            self.skipTest("PowerShell not available")
-        self.tmpdir = Path(tempfile.mkdtemp(prefix="clean-appimage-sub-"))
-        self.repo = _make_fixture_repo(self.tmpdir, include_submodule=True)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdir, ignore_errors=True)
-
-    def test_gitlink_committed(self):
-        r = subprocess.run(
-            ["git", "ls-tree", "-r", "HEAD"],
-            cwd=self.repo, capture_output=True, text=True, check=True,
-        )
-        self.assertIn("160000 commit", r.stdout)
-
-    def test_gitmodules_in_committed_tree(self):
-        r = subprocess.run(
-            ["git", "show", "HEAD:.gitmodules"],
-            cwd=self.repo, capture_output=True, text=True, check=True,
-        )
-        self.assertIn("TestSub", r.stdout)
-        self.assertIn("url", r.stdout.lower())
-
-    def test_readme_exists(self):
-        self.assertTrue((LINUX_DIR / "README.md").exists())
 
 
 # ── No global git config + archive/metadata gates ────────────────────────────

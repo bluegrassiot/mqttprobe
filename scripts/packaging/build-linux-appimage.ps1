@@ -3,8 +3,8 @@
     Build a clean Linux AppImage inside a disposable Docker container.
 
 .DESCRIPTION
-    Freezes HEAD SHA, extracts submodule gitlinks, runs the AppImage build
-    pipeline inside ubuntu:22.04. Default: committed snapshot only.
+    Freezes HEAD SHA, runs the AppImage build pipeline inside ubuntu:22.04.
+    Default: committed snapshot only.
     Use -IncludeWorkingTreeChanges for tracked diffs + named tooling overlay.
 
 .PARAMETER Version         Required. SemVer version string.
@@ -248,60 +248,13 @@ try {
     [System.IO.File]::WriteAllText((Join-Path $scratchDir "archive-hash.txt"), $archiveHash.ToLower(), $utf8NoBom)
     Write-Host "Archive: $([math]::Round($archiveSize / 1MB, 1)) MB, SHA256: $($archiveHash.Substring(0,16))..." -ForegroundColor Gray
 
-    # ── Submodule metadata (JSON from frozen SHA) ───────────────────────────
-
-    Write-Host "`n=== Extracting submodule metadata ===" -ForegroundColor Cyan
-    $submodulesFile = Join-Path $scratchDir "submodules.json"
-
-    $gitTreeLines = Invoke-Native "git ls-tree -r" {
-        git -C $RepoRoot ls-tree -r $SourceSHA
-    }
-    $gitmodLines = Invoke-Native "git show .gitmodules" {
-        git -C $RepoRoot show "${SourceSHA}:.gitmodules"
-    }
-    $gitmodContent = $gitmodLines -join "`n"
-
-    $submoduleEntries = @()
-    foreach ($line in $gitTreeLines) {
-        if ($line -match '^160000\s+commit\s+([0-9a-f]{40})\s+(.+)$') {
-            $commit = $Matches[1]
-            $path = $Matches[2]
-            $urlMatch = [regex]::Match(
-                $gitmodContent,
-                "(?s)\[submodule `"$([regex]::Escape($path))`"\].*?url\s*=\s*(\S+)"
-            )
-            if (-not $urlMatch.Success) {
-                throw "No URL in .gitmodules for submodule $path"
-            }
-            $submoduleEntries += @{
-                path = $path; url = $urlMatch.Groups[1].Value.Trim(); commit = $commit
-            }
-            Write-Host "  $path -> $commit" -ForegroundColor Gray
-        }
-    }
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($submodulesFile,
-        (ConvertTo-Json -InputObject $submoduleEntries -Depth 3), $utf8NoBom)
-    Write-Host "Submodules: $($submoduleEntries.Count) entries" -ForegroundColor Gray
-
-    # ── Working tree changes (tracked only, reject dirty submodules) ────────
+    # ── Working tree changes (tracked only) ─────────────────────────────────
 
     $patchFile = Join-Path $scratchDir "changes.patch"
     [System.IO.File]::WriteAllBytes($patchFile, [byte[]]@())
 
     if ($IncludeWorkingTreeChanges) {
         Write-Host "`n=== Capturing tracked changes ===" -ForegroundColor Cyan
-
-        # Reject dirty submodules
-        foreach ($sm in $submoduleEntries) {
-            $dirtyCheck = Invoke-Native "git diff submodule $($sm.path)" {
-                git -C $RepoRoot diff --submodule=short HEAD -- $sm.path
-            }
-            $dirtyText = $dirtyCheck -join "`n"
-            if ($dirtyText -match '\+') {
-                throw "Dirty submodule: $($sm.path). Commit or stash changes first."
-            }
-        }
 
         # Binary diff for tracked changes
         Invoke-Native "git diff --binary" {
@@ -359,13 +312,6 @@ try {
             $preserveScratch = $true
             throw "PrepareOnly: MqttProbe.slnx not found"
         }
-        if ($submoduleEntries.Count -gt 0) {
-            $subGit = Join-Path (Join-Path (Join-Path $workDir "external") "SparkplugNet") ".git"
-            if (-not (Test-Path -LiteralPath $subGit)) {
-                $preserveScratch = $true
-                throw "PrepareOnly: submodule .git not found"
-            }
-        }
         $allHashes = (Get-ChildItem -LiteralPath $workDir -Recurse -File |
             Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash } | Sort-Object) -join ""
         $fingerprint = [BitConverter]::ToString(
@@ -376,7 +322,6 @@ try {
         Write-Host "`n=== PrepareOnly: materialized ===" -ForegroundColor Green
         Write-Host "SHA:           $SourceSHA" -ForegroundColor Green
         Write-Host "Version:       $cleanVersion" -ForegroundColor Green
-        Write-Host "Submodules:    $($submoduleEntries.Count)" -ForegroundColor Green
         Write-Host "Patch:         $((Get-Item -LiteralPath $patchFile).Length) bytes" -ForegroundColor Green
         Write-Host "Snapshot hash: $fingerprint" -ForegroundColor Green
         Write-Host "Scratch:       $scratchDir" -ForegroundColor Green

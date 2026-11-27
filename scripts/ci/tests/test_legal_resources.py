@@ -231,6 +231,17 @@ class LegalCatalogueTests(unittest.TestCase):
         for entry in bindings["packageFiles"]:
             self.assertIn(entry["component"], component_ids)
 
+    def test_sparkplugnet_is_a_single_nuget_component(self):
+        matches = [
+            component
+            for component in self.catalogue["components"]
+            if component["name"] == "SparkplugNet"
+        ]
+        self.assertEqual([component["id"] for component in matches], ["nuget:sparkplugnet@1.5.0"])
+        self.assertEqual(matches[0]["license"], "MIT")
+        self.assertIn("Hämmer Electronics", matches[0]["copyright"])
+        self.assertIn("SeppPenner/SparkplugNet", matches[0]["sourceUrl"])
+
     def test_sparkplug_modification_and_source_are_stated(self):
         component = self.components["sparkplug-b-generated-code"]
         self.assertIn("e33d56d2", component["version"])

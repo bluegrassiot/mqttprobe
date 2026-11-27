@@ -185,7 +185,6 @@ jobs:
         with:
           ref: ${{ needs.validate-source.outputs.source_sha }}
           fetch-depth: 0
-          submodules: recursive
           persist-credentials: false
 
       - name: Preflight required secrets

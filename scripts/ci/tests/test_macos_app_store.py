@@ -207,7 +207,7 @@ class AppleWorkflowInputTests(unittest.TestCase):
                 self.assertIn(
                     "ref: ${{ needs.validate-source.outputs.source_sha }}", job
                 )
-                self.assertIn("submodules: recursive", job)
+                self.assertNotIn("submodules:", job)
                 self.assertIn("persist-credentials: false", job)
                 self.assertIn("permissions:\n      contents: read", job)
 

@@ -10,13 +10,18 @@ every host shows the same text without network access.
 - `legal/generated/texts/<sha>.txt` holds the normalized full texts. The file
   name is the SHA-256 of the UTF-8 text with LF line endings.
 - `legal/profiles/<host>.json` records the reviewed NuGet graph for one publish
-  target: package id, version, sha512 and the dependency input fingerprints.
+  target: package id, version, sha512 and the dependency input fingerprints,
+  including the commit of each submodule declared in `.gitmodules`. Removing a
+  submodule is a reviewed profile change.
 - `legal/extracted/packages.json` records the normalized nuget-license metadata
   and extracted package texts for every profile package. `check` reads only this
   file and `legal/supplements`, never the NuGet cache or the tool.
 - `legal/supplements/` holds hand-reviewed inputs: split source texts, SPDX
   expression mappings, non-NuGet components, exact package exceptions, and
   `bindings.json` for fonts, generated source, bundled JavaScript and SDK pins.
+  A dependency that resolves as a NuGet package is recorded once, from the
+  package graph. Add a `components.json` entry only for content that is not a
+  package, or the notice set lists it twice.
   `import_notices.py` is the one-time migrator that produced the split texts
   from the previous root `NOTICES`; it is not part of normal regeneration.
   If you edit a file under `supplements/texts`, update its `sha256` in
@@ -104,8 +109,14 @@ Apple targets ios-arm64 and maccatalyst with both RIDs, and
 maui-maccatalyst-app-store. CI checks the matching profile after each publish
 job, including the Apple publish jobs.
 
-The Apple profiles were exported on a Mac with the pinned SDK, Xcode and
-workloads. To regenerate them, use a Mac checkout at the same commit:
+A profile is a NuGet inventory, not a build record. An Apple profile is only
+valid when it comes from a restore of the same scenario with the pinned SDK and
+matching Apple workload packs, and the macOS publish job's `profiles-check`
+confirms it. A Mac is required to build and sign the app, not to compute the
+inventory. Never hand-edit a profile or copy one RID's graph to another; if the
+macOS check disagrees, re-export on macOS.
+
+To regenerate, use a checkout at the same commit and restore the pinned tools:
 
 ```
 dotnet --version                  # must print 10.0.403

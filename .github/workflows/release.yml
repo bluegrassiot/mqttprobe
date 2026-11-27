@@ -109,8 +109,6 @@ jobs:
             os: windows-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: true
 
       - uses: ./.github/actions/setup-dotnet-workload
 
@@ -177,8 +175,6 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -236,8 +232,6 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: true
 
       - uses: ./.github/actions/setup-dotnet-workload
         with:
@@ -317,8 +311,6 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-        with:
-          submodules: true
 
       - uses: actions/setup-java@v6.3.0
         with:
@@ -459,8 +451,7 @@ jobs:
       contents: write
     steps:
       # Full history and tags: git-cliff diffs the previous tag against this one
-      # to build the changelog, and a shallow clone would leave it empty. No
-      # submodules, because only commit messages are read.
+      # to build the changelog, and a shallow clone would leave it empty.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
